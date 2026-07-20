@@ -1,0 +1,2 @@
+ALTER TABLE "thread_runs"
+ADD COLUMN IF NOT EXISTS "stream" BOOLEAN DEFAULT false;

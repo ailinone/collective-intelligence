@@ -1,0 +1,64 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin-Tiny Model Configuration — CPU smoke test
+# ============================================================================
+# Minimal model (~500K parameters) for pipeline validation on CPU.
+# NOT for production — used to prove the training/eval/serving pipeline works.
+#
+# Parameter count:
+#   Embedding:     4096 * 64                    =    262,144
+#   Per-layer:     ~120K (attention + MLP + norms)
+#   2 layers:      ~240K
+#   Final norm:    64
+#   Total:         ~502,272 parameters
+# ============================================================================
+
+model:
+  name: "ailin-tiny"
+  architecture: "decoder_only_transformer"
+  family: "ailin"
+  variant: "smoke-test"
+
+  # Core dimensions (minimal)
+  hidden_size: 64
+  num_layers: 2
+  num_attention_heads: 4
+  num_key_value_heads: 2    # GQA 2:1
+  intermediate_size: 172    # ~2.7x hidden_size for SwiGLU
+  vocab_size: 4096          # Tiny vocab for fast smoke test
+  max_position_embeddings: 512
+
+  # Positional encoding
+  position_embedding_type: "rope"
+  rope_theta: 10000.0
+
+  # Normalization
+  norm_type: "rmsnorm"
+  layer_norm_eps: 1.0e-5
+
+  # Activation
+  hidden_act: "silu"
+  use_gated_mlp: true
+
+  # Attention
+  attention_dropout: 0.0
+  attention_bias: false
+  use_flash_attention: false   # CPU — no flash attention
+
+  # Embeddings
+  tie_word_embeddings: true
+  embedding_dropout: 0.0
+
+  # Initialization
+  initializer_range: 0.02
+
+  # Training
+  dtype: "float32"    # CPU training — no bf16

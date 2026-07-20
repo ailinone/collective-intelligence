@@ -1,0 +1,41 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M07 — Qwen2.5-Math-1.5B (reasoning, Tier 2)
+inherits: "_shared.yaml"
+
+model_id: "m07"
+display_name: "Coord M07 — Qwen2.5-Math-1.5B (reasoning)"
+base_model: "Qwen/Qwen2.5-Math-1.5B"
+architecture: "decoder_only_transformer"
+family: "qwen2.5-math"
+tier: 2
+specialty: "reasoning"
+
+fine_tune:
+  method: "lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 3
+  learning_rate: 1.5e-4         # math-pretrained base — preserve math knowledge
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["analysis", "reasoning", "math"]
+  max_examples_per_label: 5000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048           # math chains can be longer
+
+audit:
+  scheduler_name_format: "coord-m07-qwen2.5-math-1.5b"

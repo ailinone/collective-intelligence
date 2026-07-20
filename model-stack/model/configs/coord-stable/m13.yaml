@@ -1,0 +1,43 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M13 — Qwen2.5-7B (generalist, Tier 4 — ensemble anchor)
+inherits: "_shared.yaml"
+
+model_id: "m13"
+display_name: "Coord M13 — Qwen2.5-7B (generalist)"
+base_model: "Qwen/Qwen2.5-7B"
+architecture: "decoder_only_transformer"
+family: "qwen2.5"
+tier: 4
+specialty: "generalist"
+notes: "Anchor of the ensemble — best balance of cost and quality."
+
+fine_tune:
+  method: "lora"
+  rank: 64                       # higher rank for tier-4 anchor quality
+  alpha: 128
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 2                  # large base — fewer epochs to avoid overfit
+  learning_rate: 1.0e-4
+  micro_batch_size: 2            # 7B requires smaller microbatch
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_strategy"
+  max_examples_per_label: 8000   # anchor benefits from broader data
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+
+audit:
+  scheduler_name_format: "coord-m13-qwen2.5-7b"

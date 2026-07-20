@@ -1,0 +1,30 @@
+{
+  "model": "ailin-micro",
+  "param_count": 17504,
+  "version": "v0.0.1-smoke",
+  "timestamp": "2026-03-21T14:20:04.117308+00:00",
+  "training": {
+    "steps": 20,
+    "final_loss": 5.53952169418335,
+    "initial_loss": 5.539989948272705,
+    "loss_decreased": true,
+    "wall_sec": 0.14,
+    "tokens": 2560
+  },
+  "eval": {
+    "perplexity": 259.64,
+    "generation_success": true
+  },
+  "pipeline_stages": [
+    "build",
+    "train",
+    "checkpoint",
+    "eval",
+    "register",
+    "report"
+  ],
+  "verdict": {
+    "pipeline_operational": true,
+    "all_stages_completed": true
+  }
+}

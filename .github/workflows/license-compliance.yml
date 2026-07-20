@@ -1,0 +1,37 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+name: License Compliance
+
+# Prevents license-coverage decay: every push/PR must keep the SPDX headers and
+# REUSE manifest complete. Runs entirely on public infrastructure, no secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  spdx-headers:
+    name: SPDX header coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: Verify every source file carries an SPDX header
+        run: node scripts/add-copyright-headers.mjs --check
+
+  reuse:
+    name: REUSE compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: REUSE lint (machine-verifiable license coverage)
+        uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6

@@ -1,0 +1,52 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M19 — JetMoE-8B (reasoning sparse, Tier 5)
+inherits: "_shared.yaml"
+
+model_id: "m19"
+display_name: "Coord M19 — JetMoE-8B (reasoning sparse)"
+base_model: "jetmoe/jetmoe-8b"
+architecture: "moe_decoder"
+family: "jetmoe"
+tier: 5
+specialty: "reasoning"
+notes: "Budget-trained MoE — validates cost-effective MoE thesis."
+
+moe:
+  num_experts: 8
+  experts_per_token: 2
+  router_aux_loss_weight: 0.005
+  sparse_attention: true            # JetMoE has sparse attention layers too
+
+fine_tune:
+  method: "moe_lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["gate_proj", "up_proj", "down_proj"]
+  freeze_router: false
+
+training:
+  num_epochs: 2
+  learning_rate: 1.0e-4
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["analysis", "reasoning", "math"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048
+
+audit:
+  scheduler_name_format: "coord-m19-jetmoe-8b"

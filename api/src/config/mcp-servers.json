@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_comment": "MCP server configuration for Ailin CI. Loaded by mcp-client-service.ts when MCP_SERVERS_CONFIG env var is not set.",
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": "stdio",
+      "command": "node",
+      "args": [
+        "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "/app"
+      ],
+      "safeForStrategies": true,
+      "category": "file"
+    }
+  ]
+}

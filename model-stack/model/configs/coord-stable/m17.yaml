@@ -1,0 +1,50 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M17 — OLMoE-1B-7B (generalist sparse, Tier 5)
+inherits: "_shared.yaml"
+
+model_id: "m17"
+display_name: "Coord M17 — OLMoE-1B-7B (generalist sparse)"
+base_model: "allenai/OLMoE-1B-7B-0125"
+architecture: "moe_decoder"
+family: "olmoe"
+tier: 5
+specialty: "generalist"
+notes: "Fully open — Allen AI published weights, data, and pretraining recipe."
+
+moe:
+  num_experts: 64
+  experts_per_token: 8
+  router_aux_loss_weight: 0.01     # OLMoE training recipe
+
+fine_tune:
+  method: "moe_lora"               # PEFT MoE LoRA — LoRA per expert
+  rank: 16                         # per-expert rank
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["gate_proj", "up_proj", "down_proj"]
+  freeze_router: false             # let router adapt to coordinator task
+
+training:
+  num_epochs: 2
+  learning_rate: 1.0e-4
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_strategy"
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048
+
+audit:
+  scheduler_name_format: "coord-m17-olmoe-1b-7b"

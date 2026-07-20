@@ -1,0 +1,131 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Base pretraining dataset mix for Ailin-1B
+# ============================================================================
+# This manifest describes the composition of the pretraining corpus.
+# Each source is weighted to balance diversity, quality, and domain coverage.
+# Total target: ~300B tokens across all sources.
+# ============================================================================
+
+mix_config:
+  seed: 42
+  temperature: 1.0
+  total_tokens: 300_000_000_000  # 300B tokens
+  max_repetition: 2.0
+  shuffle_buffer_size: 500_000
+
+sources:
+  # --- Web text (general knowledge) ---
+  - name: refined-web
+    path: data/processed/refined-web.jsonl
+    weight: 40.0
+    max_epochs: 1.0
+    description: "High-quality filtered web text (FineWeb/RefinedWeb style)"
+
+  - name: common-crawl-filtered
+    path: data/processed/cc-filtered.jsonl
+    weight: 15.0
+    max_epochs: 1.0
+    description: "Common Crawl subset after quality filtering and dedup"
+
+  # --- Books and long-form ---
+  - name: books-open
+    path: data/processed/books-open.jsonl
+    weight: 8.0
+    max_epochs: 2.0
+    description: "Open-license books (Project Gutenberg, Open Library)"
+
+  # --- Academic and scientific ---
+  - name: arxiv-papers
+    path: data/processed/arxiv.jsonl
+    weight: 6.0
+    max_epochs: 1.5
+    description: "ArXiv papers (LaTeX source, filtered for quality)"
+
+  - name: wikipedia-en
+    path: data/processed/wikipedia-en.jsonl
+    weight: 5.0
+    max_epochs: 2.0
+    description: "English Wikipedia articles (latest dump)"
+
+  # --- Code ---
+  - name: github-code
+    path: data/processed/github-code.jsonl
+    weight: 10.0
+    max_epochs: 1.0
+    description: "GitHub code (permissively licensed, quality filtered)"
+
+  - name: stack-overflow
+    path: data/processed/stackoverflow.jsonl
+    weight: 3.0
+    max_epochs: 1.5
+    description: "Stack Overflow Q&A pairs"
+
+  # --- Math and reasoning ---
+  - name: math-corpus
+    path: data/processed/math.jsonl
+    weight: 4.0
+    max_epochs: 2.0
+    description: "Mathematical text, proofs, and problem sets"
+
+  # --- Conversational / instruction-like ---
+  - name: reddit-filtered
+    path: data/processed/reddit-filtered.jsonl
+    weight: 5.0
+    max_epochs: 1.0
+    description: "Reddit high-quality threads (filtered by score and length)"
+
+  # --- Multilingual (secondary) ---
+  - name: multilingual-web
+    path: data/processed/multilingual-web.jsonl
+    weight: 4.0
+    max_epochs: 1.0
+    description: "Multilingual web text (top 20 languages by resource)"
+
+# Quality thresholds applied during curation
+quality_requirements:
+  min_document_length_tokens: 50
+  max_document_length_tokens: 100000
+  min_language_confidence: 0.85
+  max_perplexity: 8000
+  dedup_threshold_lexical: 0.8
+  dedup_threshold_semantic: 0.92
+  pii_action: redact
+  contamination_benchmarks:
+    - mmlu
+    - humaneval
+    - gsm8k
+    - hellaswag
+    - arc_challenge
+    - winogrande
+  contamination_ngram_size: 13
+  contamination_threshold: 0.5
+
+# Data processing pipeline order
+pipeline:
+  - step: ingest
+    description: "Download and normalize to standard JSONL schema"
+  - step: quality_filter
+    description: "Apply length, language, repetition, special-char, perplexity filters"
+  - step: pii_filter
+    description: "Detect and redact PII patterns"
+  - step: lexical_dedup
+    description: "MinHash LSH deduplication (within each source)"
+  - step: semantic_dedup
+    description: "Embedding-based deduplication (within each source)"
+  - step: contamination_check
+    description: "Check and remove benchmark-contaminated samples"
+  - step: cross_source_dedup
+    description: "Cross-source deduplication"
+  - step: mix
+    description: "Weighted mixing with temperature sampling"
+  - step: tokenize
+    description: "Tokenize with BPE-32k tokenizer"

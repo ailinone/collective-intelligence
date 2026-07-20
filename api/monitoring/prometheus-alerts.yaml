@@ -1,0 +1,564 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Prometheus Alerting Rules - Ailin Dev API
+# 
+# Enterprise-grade monitoring alerts
+# Deploy to: Prometheus Alertmanager or Google Cloud Monitoring
+#
+# Severity Levels:
+# - critical: Page on-call engineer immediately (P0)
+# - warning: Create ticket, investigate within 4h (P1)
+# - info: Log for review, no immediate action (P2)
+
+groups:
+  # ==============================================================================
+  # API Health & Availability
+  # ==============================================================================
+  - name: api_health
+    interval: 30s
+    rules:
+      - alert: APIDown
+        expr: up{job="ailin-dev-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Ailin Dev API is down"
+          description: "API has been unreachable for 2 minutes. All traffic affected."
+          runbook: "https://example.com/runbooks/api-down.md"
+          action: "Check Cloud Run service status, review logs, restart if needed"
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(ailin_dev_http_request_errors_total{job="ailin-dev-api"}[5m]))
+            /
+            sum(rate(ailin_dev_http_requests_total{job="ailin-dev-api"}[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High error rate (>1%)"
+          description: "Error rate is {{ $value | humanizePercentage }} over last 5 minutes"
+          runbook: "Check logs for error types, review recent deployments"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(ailin_dev_http_request_duration_seconds_bucket{job="ailin-dev-api"}[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High p99 latency (>5s)"
+          description: "p99 latency is {{ $value }}s over last 5 minutes"
+          runbook: "Check database slow queries, review provider API latency"
+
+  # ==============================================================================
+  # Database
+  # ==============================================================================
+  # NOTE: Connection-pool saturation, disk-usage and replication-lag alerts were
+  # removed here because they depend on a PostgreSQL exporter (`database_*` /
+  # `pg_*` series) that is NOT currently scraped — the `postgres` job in
+  # monitoring/prometheus.yml has an empty target list. They were permanently
+  # non-firing (referenced metrics the app never emits). Re-add them once
+  # postgres-exporter is wired as a scrape target, using its real metric names.
+  # The app itself only exposes query-level DB metrics (`ailin_dev_db_*`), so
+  # that is all this group can alert on today.
+  - name: database
+    interval: 30s
+    rules:
+      - alert: SlowQueryDetected
+        expr: increase(ailin_dev_db_slow_queries_total{job="ailin-dev-api"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Frequent slow queries (>500ms)"
+          description: "{{ $value }} slow queries in last 5 minutes"
+          action: "Review query logs, add indexes, optimize N+1 queries"
+
+  # ==============================================================================
+  # Cache
+  # ==============================================================================
+  # NOTE: Redis-server health/memory alerts (`redis_up`, `redis_memory_*`) were
+  # removed because they require redis-exporter, whose `redis` job in
+  # monitoring/prometheus.yml has an empty target list (never scraped). The app
+  # exposes its own application-level cache hit/miss counters (`ailin_dev_cache_*`,
+  # emitted by src/cache/cache-service.ts), so the cache-efficiency alert is
+  # remapped onto those real series. Re-add the Redis-server alerts once
+  # redis-exporter is added as a scrape target.
+  - name: cache
+    interval: 30s
+    rules:
+      - alert: HighCacheMissRate
+        expr: |
+          (
+            sum(rate(ailin_dev_cache_misses_total{job="ailin-dev-api"}[5m]))
+            /
+            (
+              sum(rate(ailin_dev_cache_hits_total{job="ailin-dev-api"}[5m]))
+              +
+              sum(rate(ailin_dev_cache_misses_total{job="ailin-dev-api"}[5m]))
+            )
+          ) > 0.7
+        for: 10m
+        labels:
+          severity: info
+          component: cache
+        annotations:
+          summary: "High cache miss rate (>70%)"
+          description: "Cache efficiency low: {{ $value | humanizePercentage }} misses"
+          action: "Review cache key strategy, increase TTLs, warm up cache"
+
+  # ==============================================================================
+  # Provider APIs (External Dependencies)
+  # ==============================================================================
+  - name: providers
+    interval: 1m
+    rules:
+      # Per-model execution outcomes are recorded by the orchestration base
+      # strategy (recordModelExecution -> ci_model_execution_total{provider,success}),
+      # which is the real emitted signal for provider reliability.
+      - alert: ProviderHighErrorRate
+        expr: |
+          (
+            sum by (provider) (rate(ci_model_execution_total{job="ailin-dev-api", success="false"}[5m]))
+            /
+            sum by (provider) (rate(ci_model_execution_total{job="ailin-dev-api"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: providers
+        annotations:
+          summary: "High error rate for provider {{ $labels.provider }}"
+          description: "{{ $value | humanizePercentage }} errors for {{ $labels.provider }}"
+          action: "Check provider status page, enable fallback models, contact provider support"
+
+      # provider_error_class_total is emitted by the operability provider-health
+      # registry; `rate_limited` is a real ProviderErrorClass value. Labelled by
+      # providerId (not provider).
+      - alert: ProviderRateLimitHit
+        expr: increase(provider_error_class_total{job="ailin-dev-api", errorClass="rate_limited"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: providers
+        annotations:
+          summary: "Provider {{ $labels.providerId }} rate limit hit frequently"
+          description: "{{ $value }} rate limit errors in 5 minutes"
+          action: "Enable request queuing, use fallback providers, upgrade provider tier"
+
+  # ==============================================================================
+  # Resource Utilization
+  # ==============================================================================
+  - name: resources
+    interval: 1m
+    rules:
+      # cAdvisor/container_* series are not scraped (no cadvisor job). Use the
+      # app's own prom-client default metrics instead (collectDefaultMetrics with
+      # the `ailin_dev_` prefix): process CPU seconds and Node.js heap usage.
+      - alert: HighCPUUsage
+        expr: |
+          avg(rate(ailin_dev_process_cpu_seconds_total{job="ailin-dev-api"}[5m])) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: compute
+        annotations:
+          summary: "High CPU usage (>80%)"
+          description: "CPU usage at {{ $value | humanizePercentage }}"
+          action: "Scale horizontally (more instances) or vertically (more CPU)"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            ailin_dev_nodejs_heap_size_used_bytes{job="ailin-dev-api"}
+            /
+            ailin_dev_nodejs_heap_size_total_bytes{job="ailin-dev-api"}
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          component: compute
+        annotations:
+          summary: "High memory usage (>90%)"
+          description: "Heap usage at {{ $value | humanizePercentage }}"
+          action: "Check for memory leaks, increase memory limit, restart if needed"
+
+      - alert: InstanceCountLow
+        expr: count(up{job="ailin-dev-api"} == 1) < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: compute
+        annotations:
+          summary: "Less than 2 API instances running"
+          description: "Only {{ $value }} instances available (no redundancy)"
+          action: "Check auto-scaling config, increase min-instances if needed"
+
+  # ==============================================================================
+  # Business Metrics
+  # ==============================================================================
+  - name: business
+    interval: 5m
+    rules:
+      - alert: RequestVolumeSpike
+        expr: |
+          (
+            sum(rate(ailin_dev_http_requests_total{job="ailin-dev-api"}[5m]))
+            /
+            sum(rate(ailin_dev_http_requests_total{job="ailin-dev-api"}[1h] offset 1h))
+          ) > 3
+        for: 10m
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "Request volume 3x higher than usual"
+          description: "Current: {{ $value }}x normal traffic"
+          action: "Verify legitimacy (marketing campaign, DDoS?), prepare to scale"
+
+      # ailin_dev_llm_cost_usd_total is a monotonic USD counter emitted per
+      # provider/model (src/services/modality-cost.ts). rate() gives $/sec, ×3600
+      # for the $/hour threshold.
+      - alert: UnusuallyHighCosts
+        expr: |
+          sum(rate(ailin_dev_llm_cost_usd_total{job="ailin-dev-api"}[1h])) * 3600 > 100
+        for: 30m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "Provider costs unusually high (>$100/hour)"
+          description: "Burning ${{ $value }}/hour"
+          action: "Check for runaway usage, verify no abuse, review expensive models"
+
+  # ==============================================================================
+  # Security
+  # ==============================================================================
+  - name: security
+    interval: 1m
+    rules:
+      # No dedicated auth_failures_total/auth_attempts_total metrics exist; HTTP
+      # 401 responses are the real emitted signal (ailin_dev_http_requests_total
+      # carries a bounded status_code label from the Fastify onResponse hook).
+      - alert: HighAuthenticationFailureRate
+        expr: |
+          (
+            sum(rate(ailin_dev_http_requests_total{job="ailin-dev-api", status_code="401"}[5m]))
+            /
+            sum(rate(ailin_dev_http_requests_total{job="ailin-dev-api"}[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High authentication failure rate (>50%)"
+          description: "{{ $value | humanizePercentage }} of requests returning 401"
+          action: "Check for brute force attacks, review suspicious IPs, enable Cloud Armor"
+
+      # There is no rate_limit_bypass metric; a spike of HTTP 429s is the real
+      # emitted indicator of abusive/suspicious traffic hammering the limiter.
+      - alert: SuspiciousRateLimitSpike
+        expr: increase(ailin_dev_http_requests_total{job="ailin-dev-api", status_code="429"}[5m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Suspicious spike in rate-limited (429) requests"
+          description: "{{ $value }} rate-limited requests in 5 minutes"
+          action: "SECURITY INCIDENT - Review logs, block IPs, investigate API key compromise"
+
+  # ==============================================================================
+  # Coord-stable shadow wire (Phase 2c)
+  # ==============================================================================
+  # These rules consume the metrics emitted by api/src/core/coordination/
+  # ensemble-shadow-metrics.ts — the shadow wire fires fire-and-forget
+  # against coord-serving on every strategy decision. None of these
+  # alerts page on dev (CI_ENSEMBLE_COORDINATOR_ENABLED defaults to
+  # false in production); they only fire after the operator flips the
+  # wire on. When training data quality drops or coord-serving is
+  # unhealthy, these are the canary alerts.
+  - name: coord_stable_shadow
+    interval: 1m
+    rules:
+      - alert: CoordShadowHighErrorRate
+        expr: |
+          (
+            sum by (strategy) (rate(coord_ensemble_shadow_calls_total{kind=~"error|timeout"}[5m]))
+            /
+            sum by (strategy) (rate(coord_ensemble_shadow_calls_total[5m]))
+          ) > 0.20
+        for: 5m
+        labels:
+          severity: warning
+          component: coord-stable
+        annotations:
+          summary: "Coord-stable shadow error rate >20% on {{ $labels.strategy }}"
+          description: "{{ $value | humanizePercentage }} shadow calls failing for strategy {{ $labels.strategy }}. coord-serving may be down or overloaded."
+          action: "Check coord-serving health (curl http://coord-serving:8090/health), inspect coord_ensemble_shadow_calls_total{kind} breakdown, review circuit breaker state"
+
+      - alert: CoordShadowCircuitOpen
+        expr: |
+          sum by (strategy) (rate(coord_ensemble_shadow_calls_total{kind="error"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          component: coord-stable
+        annotations:
+          summary: "Coord-stable circuit breaker likely OPEN on {{ $labels.strategy }}"
+          description: "Sustained {{ $value }} error/sec on strategy {{ $labels.strategy }}. The shadow wire's circuit breaker probably tripped — production traffic is safe (heuristic still drives decisions) but training data is being lost."
+          action: "Restore coord-serving health to allow breaker recovery (HALF_OPEN takes 30s after error stops). Confirm via coord_ensemble_shadow_calls_total{kind=\"success\"} returning."
+
+      - alert: CoordShadowHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, strategy) (rate(coord_ensemble_shadow_latency_seconds_bucket[5m]))
+          ) > 2.0
+        for: 10m
+        labels:
+          severity: warning
+          component: coord-stable
+        annotations:
+          summary: "Coord-stable shadow p95 latency >2s on {{ $labels.strategy }}"
+          description: "{{ $value }}s p95 latency. Shadow is fire-and-forget so user requests aren't blocked, but sustained slowness wastes resources and risks circuit-breaker trips."
+          action: "Check coord-serving CPU/memory, inspect coord_ensemble_shadow_confidence histogram (low confidence = cascade exhausting all 6 tiers per request)"
+
+      - alert: CoordShadowAccuracyDrop
+        expr: |
+          (
+            sum by (strategy) (rate(coord_ensemble_shadow_role_match_total{match="true"}[1h]))
+            /
+            sum by (strategy) (rate(coord_ensemble_shadow_role_match_total[1h]))
+          ) < 0.70
+        for: 30m
+        labels:
+          severity: warning
+          component: coord-stable
+        annotations:
+          summary: "Coord-stable ensemble-vs-heuristic agreement <70% on {{ $labels.strategy }}"
+          description: "Only {{ $value | humanizePercentage }} of shadow decisions matched the heuristic over the last hour. Either the ensemble has degraded (model drift / config bug) or the heuristic itself changed and shadow is calibrated to the old behavior."
+          action: "Run model-stack/evals/compare_evaluations.py against the latest sft-coord JSONL to quantify the divergence; consider promoting/rolling back the ensemble champion"
+
+---
+
+## 📞 Alert Routing
+
+### Slack Integration
+
+```yaml
+# alertmanager.yml
+route:
+  receiver: 'slack-default'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'pagerduty-oncall'
+      continue: true
+    
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+    
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+    
+    - match:
+        severity: info
+      receiver: 'slack-info'
+
+receivers:
+  - name: 'pagerduty-oncall'
+    pagerduty_configs:
+      - service_key: '<pagerduty-key>'
+        description: '{{ .GroupLabels.alertname }} - {{ .Annotations.summary }}'
+  
+  - name: 'slack-critical'
+    slack_configs:
+      - api_url: '<webhook-url>'
+        channel: '#incidents'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ .Annotations.description }}'
+  
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url: '<webhook-url>'
+        channel: '#monitoring'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+  
+  - name: 'slack-info'
+    slack_configs:
+      - api_url: '<webhook-url>'
+        channel: '#monitoring'
+        title: 'ℹ️ INFO: {{ .GroupLabels.alertname }}'
+```
+
+---
+
+## 🚀 Deployment
+
+### Option 1: Prometheus Alertmanager (Self-Hosted)
+
+```bash
+# Install Prometheus
+helm install prometheus prometheus-community/prometheus \
+  --set alertmanager.enabled=true
+
+# Apply alert rules
+kubectl apply -f monitoring/prometheus-alerts.yaml
+```
+
+### Option 2: Google Cloud Monitoring (Managed)
+
+```bash
+# Create alert policies via gcloud
+gcloud alpha monitoring policies create \
+  --notification-channels=<channel-id> \
+  --display-name="API High Error Rate" \
+  --condition-threshold-value=0.01 \
+  --condition-threshold-duration=300s \
+  --condition-filter='resource.type="cloud_run_revision" AND metric.type="run.googleapis.com/request_count"'
+```
+
+### Option 3: Grafana Cloud (Managed)
+
+1. Sign up at https://grafana.com/products/cloud/
+2. Connect Prometheus datasource
+3. Import alert rules
+4. Configure contact points (Slack, PagerDuty, email)
+
+---
+
+## 📊 Alert Tuning
+
+### Avoid False Positives
+
+**Too Sensitive:**
+```yaml
+# ❌ BAD: Alert on every single error
+expr: ailin_dev_http_request_errors_total > 0
+```
+
+**Properly Tuned:**
+```yaml
+# ✅ GOOD: Alert on sustained high error rate
+expr: (rate(ailin_dev_http_request_errors_total[5m]) / rate(ailin_dev_http_requests_total[5m])) > 0.01
+for: 5m
+```
+
+### Avoid Alert Fatigue
+
+**Best Practices:**
+1. **Use `for` clause:** Wait for sustained issues (not transient spikes)
+2. **Set realistic thresholds:** Based on actual baseline metrics
+3. **Group related alerts:** Don't alert on symptoms AND root cause
+4. **Document runbooks:** Every alert should have fix instructions
+
+---
+
+## 🎯 SLA-Based Alerts
+
+### 99.9% Uptime SLA
+
+Allows 8.76 hours downtime/year = ~43 minutes/month
+
+**Alert if approaching SLA breach:**
+
+```yaml
+- alert: SLABudgetBurning
+  expr: |
+    (
+      sum(increase(ailin_dev_http_request_errors_total{job="ailin-dev-api"}[30d]))
+      /
+      sum(increase(ailin_dev_http_requests_total{job="ailin-dev-api"}[30d]))
+    ) > 0.001
+  labels:
+    severity: warning
+  annotations:
+    summary: "Approaching 99.9% uptime SLA limit"
+    description: "Error budget: {{ $value | humanizePercentage }} used this month"
+```
+
+---
+
+## 📈 Metrics to Track (Prometheus)
+
+**RED Method (Requests, Errors, Duration):**
+- `ailin_dev_http_requests_total` - Request count
+- `ailin_dev_http_request_errors_total` - Error count
+- `ailin_dev_http_request_duration_seconds` - Latency histogram
+
+**USE Method (Utilization, Saturation, Errors):**
+- `ailin_dev_process_cpu_seconds_total` - CPU utilization (prom-client default)
+- `ailin_dev_nodejs_heap_size_used_bytes` - Heap memory utilization (prom-client default)
+- `ailin_dev_process_resident_memory_bytes` - RSS memory
+
+**Custom Business Metrics:**
+- `ailin_dev_llm_cost_usd_total` - Provider/LLM costs
+- `ci_model_execution_total` - Per-model executions (provider reliability)
+- `ci_model_selection_total` - Model-selection decisions by reason
+- `provider_error_class_total` - Provider errors by class (e.g. rate_limited)
+
+---
+
+## 🔗 Integration
+
+### Send Alerts to Multiple Channels
+
+**Critical (P0):**
+- PagerDuty → Pages on-call engineer
+- Slack #incidents → Notifies team
+- Email → Sends to ops@example.com
+
+**Warning (P1):**
+- Slack #monitoring → Creates ticket
+- Jira → Auto-creates issue
+
+**Info (P2):**
+- Slack #monitoring → Logs for review
+
+---
+
+## ✅ Testing Alerts
+
+```bash
+# Trigger test alert
+curl -X POST http://localhost:9093/api/v1/alerts \
+  -H "Content-Type: application/json" \
+  -d '[{
+    "labels": {
+      "alertname": "TestAlert",
+      "severity": "info"
+    },
+    "annotations": {
+      "summary": "Test alert - please ignore"
+    }
+  }]'
+
+# Verify alert reaches Slack/PagerDuty
+```
+
+---
+
+**Owner:** SRE Team  
+**Review:** Quarterly (tune thresholds based on actual metrics)  
+**Last Updated:** December 4, 2025
+

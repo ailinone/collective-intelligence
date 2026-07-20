@@ -1,0 +1,25 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Bug report
+description: A reproducible defect in the engine
+labels: [bug]
+body:
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Include the request (curl/SDK snippet) and your docker/.env shape (NO real keys).
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Expected vs actual }
+    validations: { required: true }
+  - type: textarea
+    id: meta
+    attributes:
+      label: ailin_metadata of the failing response (if any)
+      description: The provenance envelope usually pinpoints the strategy/model at fault.
+  - type: input
+    id: version
+    attributes: { label: "Version / commit (curl /source → version field)" }
+    validations: { required: true }

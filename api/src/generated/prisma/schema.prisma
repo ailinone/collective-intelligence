@@ -1,0 +1,2280 @@
+// Ailin Dev API - Database Schema
+// PostgreSQL with Prisma ORM
+// Updated for Prisma 7.x compatibility
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  // Note: postgresqlExtensions is still a preview feature in Prisma 7
+  previewFeatures = ["postgresqlExtensions"]
+  // Explicitly generate CommonJS for compatibility with our CommonJS build
+  // This ensures the generated client uses require() instead of import
+  engineType      = "library"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [pgcrypto, pg_trgm]
+}
+
+// ============================================
+// Organizations & Users
+// ============================================
+
+model Organization {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  slug         String?  @unique // URL-friendly identifier for tenant discovery
+  tier         String   @default("free") // free, pro, team, enterprise
+  status       String   @default("active") // active, suspended, deleted
+  statusReason String?  @map("status_reason")
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  users               User[]
+  invites             OrganizationInvite[]
+  deviceFlows         AuthDeviceFlow[]
+  apiKeys             ApiKey[]
+  usageQuotas         UsageQuota[]
+  requestLogs         RequestLog[]
+  modelConfigs        ModelConfig[]
+  codebaseProjects    CodebaseProject[]
+  billingProfile      BillingProfile?
+  invoices            Invoice[]
+  subscriptions       BillingSubscription[]
+  usageEvents         UsageEvent[]
+  userRoles           UserRole[]
+  securityAuditLogs   SecurityAuditLog[]
+  taskPreferences     TaskPreference[]
+  performanceMetrics  ModelPerformanceMetric[]
+  selectionStrategies ModelSelectionStrategy[]
+  fineTuningJobs      FineTuningJob[]
+  collectiveRuns      CollectiveRun[]
+  projects            Project[]
+  moderationPolicies  ModerationPolicy[]
+
+  @@map("organizations")
+}
+
+// Project — resource-layer sub-entity within an Organization.
+//
+// Scope: container for resources consumed by a single application or use-case
+// (API keys, deploys, telemetry). Org owns members + billing; Project owns
+// resources. Slug is unique per-org (two orgs can both have "customer-portal").
+//
+// Status enum is intentionally minimal (active | archived). Archived = soft
+// delete with archivedAt timestamp; hard delete is admin-only via a separate
+// flow. The `settings` JSON column is an extensibility escape hatch — region,
+// default model, webhook URLs etc. can land there without schema migrations.
+model Project {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  slug           String
+  description    String?   @db.Text
+  status         String    @default("active") // active | archived
+  settings       Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  archivedAt     DateTime? @map("archived_at")
+  createdBy      String    @map("created_by") @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("projects")
+}
+
+// ModerationPolicy — per-tenant custom content-moderation policy (F3/F1 §P6).
+//
+// A policy layers org-specific category thresholds (and optional custom
+// categories) on top of the base OpenAI-style /v1/moderations result. When a
+// request passes `policy_id`, the policy is loaded (org-scoped) and applied:
+// any category whose base score meets/exceeds the org threshold is re-flagged,
+// and the configured `action` (flag | block) drives the response semantics.
+//
+// Design notes:
+//   - `thresholds` JSON maps a category key (e.g. "hate", "violence", or a
+//     custom category name) → number in [0,1]. A score ≥ threshold trips it.
+//   - `customCategories` JSON (optional) declares org-defined categories that
+//     don't exist in the base provider taxonomy; their score is keyword/regex
+//     matched at apply time (see moderation-policy-service applyPolicy).
+//   - `action` is minimal enum: 'flag' (annotate only) | 'block' (caller MUST
+//     reject the content). DB CHECK enforces the enum — fail loud on drift.
+//   - `enabled=false` short-circuits application (policy is inert but kept for
+//     audit / re-enable) — apply treats it as a no-op pass-through.
+//   - Scoped per-org; uniqueness of (organizationId, name) prevents duplicate
+//     policy names within a tenant without colliding across tenants.
+model ModerationPolicy {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  name             String
+  thresholds       Json     @default("{}")
+  customCategories Json?    @map("custom_categories")
+  action           String   @default("flag") // flag | block
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([organizationId, enabled])
+  @@map("moderation_policies")
+}
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String    @unique @db.Citext
+  name           String
+  passwordHash   String    @map("password_hash") // bcrypt hashed password
+  organizationId String    @map("organization_id") @db.Uuid
+  role           String    @default("viewer")
+  status         String    @default("active") // active, suspended, inactive
+  statusReason   String?   @map("status_reason")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdInvites    OrganizationInvite[] @relation("InviteCreatedBy")
+  acceptedInvites   OrganizationInvite[] @relation("InviteAcceptedBy")
+  deviceFlows       AuthDeviceFlow[]
+  apiKeys           ApiKey[]
+  userRoles         UserRole[]
+  securityAuditLogs SecurityAuditLog[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("users")
+}
+
+model OrganizationInvite {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  token          String    @unique
+  email          String?
+  role           String    @default("viewer")
+  status         String    @default("pending") // pending, accepted, expired, revoked
+  expiresAt      DateTime? @map("expires_at")
+  acceptedAt     DateTime? @map("accepted_at")
+  acceptedById   String?   @map("accepted_by_id") @db.Uuid
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  acceptedBy   User?        @relation("InviteAcceptedBy", fields: [acceptedById], references: [id])
+
+  @@index([token])
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+  @@map("organization_invites")
+}
+
+model AuthDeviceFlow {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deviceCode     String    @unique
+  userCode       String    @unique
+  organizationId String    @map("organization_id") @db.Uuid
+  idpProvider    String
+  status         String    @default("pending") // pending, completed, denied, expired
+  userId         String?   @map("user_id") @db.Uuid
+  expiresAt      DateTime  @map("expires_at")
+  interval       Int       @default(5) // Poll interval in seconds
+  lastPolledAt   DateTime? @map("last_polled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([deviceCode])
+  @@index([userCode])
+  @@index([organizationId])
+  @@index([status])
+  @@map("auth_device_flows")
+}
+
+model ApiKey {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  keyHash        String  @map("key_hash") // bcrypt hashed API key
+  keyPrefix      String  @map("key_prefix") // First 15 chars for lookup (e.g., "ak_live_abc123")
+  quickHash      String? @map("quick_hash") // SHA-256 for fast lookup (v5.0)
+  userId         String  @map("user_id") @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  status         String  @default("active") // active, rotating, revoked, expired (v5.0: added 'rotating')
+  statusReason   String? @map("status_reason")
+
+  // Usage tracking
+  lastUsedAt    DateTime @default(now()) @map("last_used_at")
+  requestCount  Int      @default(0) @map("request_count") // v5.0
+  lastRequestIp String?  @map("last_request_ip") // v5.0
+
+  // Expiration
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Rotation tracking (v5.0)
+  rotatedAt     DateTime? @map("rotated_at")
+  revokedAt     DateTime? @map("revoked_at")
+  rotationCount Int       @default(0) @map("rotation_count")
+  previousKeyId String?   @map("previous_key_id") @db.Uuid
+  nextKeyId     String?   @map("next_key_id") @db.Uuid
+
+  // Security (v5.0)
+  ipWhitelist String[] @default([]) @map("ip_whitelist")
+  permissions Json? // Fine-grained permissions
+
+  // Auto-rotation config (v5.0)
+  autoRotate           Boolean @default(false) @map("auto_rotate")
+  rotationIntervalDays Int?    @map("rotation_interval_days")
+  gracePeriodDays      Int     @default(7) @map("grace_period_days")
+
+  // Metadata
+  metadata Json?
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rotationLogs ApiKeyRotationLog[]
+
+  @@index([keyPrefix])
+  @@index([quickHash])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([status, expiresAt])
+  @@map("api_keys")
+}
+
+// v5.0: API Key Rotation Audit Trail
+model ApiKeyRotationLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  apiKeyId    String   @map("api_key_id") @db.Uuid
+  action      String // 'created' | 'rotated' | 'revoked' | 'expired'
+  reason      String? // Manual, scheduled, security incident
+  oldKeyId    String?  @map("old_key_id") @db.Uuid
+  newKeyId    String?  @map("new_key_id") @db.Uuid
+  performedBy String?  @map("performed_by") @db.Uuid // User ID if manual
+  performedAt DateTime @default(now()) @map("performed_at")
+  metadata    Json?
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId])
+  @@index([performedAt])
+  @@map("api_key_rotation_logs")
+}
+
+// ============================================
+// Models & Providers
+// ============================================
+
+model Provider {
+  id              String    @id @db.VarChar(64)
+  name            String    @unique // openai, anthropic, google, deepseek, xai, mistral, cohere
+  displayName     String    @map("display_name")
+  status          String    @default("active") // active, maintenance, disabled
+  health          Json      @default("{}")
+  metadata        Json      @default("{}")
+  modelCount      Int       @default(0) @map("model_count")
+  lastDiscoveryAt DateTime? @map("last_discovery_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  models Model[]
+
+  @@map("providers")
+}
+
+model Model {
+  // Deterministic surrogate PK: MD5(provider_id + ':' + id)[0:25]
+  // Allows the same model ID (e.g. "gpt-4o") to exist under multiple providers.
+  uid             String    @id @db.VarChar(32)
+  id              String    @db.VarChar(128)
+  providerId      String    @map("provider_id") @db.VarChar(64)
+  name            String // gpt-4o, claude-3-opus-20240229, etc.
+  displayName     String    @map("display_name")
+  contextWindow   Int       @map("context_window")
+  maxOutputTokens Int       @map("max_output_tokens")
+  inputCostPer1k  Decimal   @map("input_cost_per_1k") @db.Decimal(10, 6)
+  outputCostPer1k Decimal   @map("output_cost_per_1k") @db.Decimal(10, 6)
+  capabilities    Json      @default("[]") // DEPRECATED — derived projection of capabilityUris. Read capabilityUris instead.
+  performance     Json      @default("{}") // { latency, throughput, quality }
+  status          String    @default("active") // active, deprecated, disabled
+  metadata        Json      @default("{}")
+  usageCount      Int       @default(0) @map("usage_count")
+  lastSyncedAt    DateTime? @map("last_synced_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // ─── ADR-022 / HCRA (2026-04-20) ───────────────────────────────────────
+  // Primary capability index. URIs reference capability_ontology(uri).
+  // The bandit recall layer (L5/L10) filters by intersecting this array
+  // with the required-capability set from the request context. A GIN index
+  // on the physical column backs the filter; GIN over confidence JSONB
+  // backs confidence-weighted ranking.
+  capabilityUris       String[]  @default([]) @map("capability_uris")
+  capabilityConfidence Json      @default("{}") @map("capability_confidence") // {uri: 0..1}
+  capabilitySources    Json      @default("{}") @map("capability_sources") // {uri: [source,...]}
+  capabilityUpdatedAt  DateTime? @map("capability_updated_at")
+
+  // ─── L2 Model Equivalence (2026-04-14) + ADR-022 embedding versioning ──
+  // 384-dim embedding from the on-the-fly n-gram pipeline (phase 1) or a
+  // produced-by-service embedder (phase 2). Marked Unsupported because
+  // Prisma has no first-class pgvector type — reads/writes use $queryRaw.
+  // The HNSW cosine-ops index is partial (status = 'active') and backs
+  // similarity queries for cross-provider equivalence lookup.
+  embedding          Unsupported("vector(384)")? // pgvector — HNSW partial index on (status='active')
+  embeddingModel     String?                     @map("embedding_model") @db.VarChar(64)
+  embeddingUpdatedAt DateTime?                   @map("embedding_updated_at")
+
+  // ─── ADR-023 / Inventory Lifecycle Policy (2026-04-24) ────────────────
+  // Freshness-of-observation bucket derived from updated_at, orthogonal to
+  // `status` (catalog availability). Populated by scripts/hcra-lifecycle-classify.ts
+  // using the canonical CASE expression in src/capability/inventory-lifecycle-policy.ts.
+  // SLO-grade coverage queries MUST filter on lifecycle_status='active'; raw
+  // status='active' is retained for historical comparisons only. The partial
+  // index on lifecycle_status (WHERE status='active') backs hot-path lookups.
+  lifecycleStatus      String?   @map("lifecycle_status") @db.VarChar(16)
+  lifecycleReason      String?   @map("lifecycle_reason")
+  lifecycleEvaluatedAt DateTime? @map("lifecycle_evaluated_at")
+
+  provider     Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  modelConfigs ModelConfig[]
+  health       ModelHealth?
+
+  // Multi-provider: same model ID across different providers
+  @@unique([id, providerId])
+  @@unique([providerId, name])
+  @@index([providerId, status]) // Common: filter by provider and status
+  @@index([status, usageCount]) // Common: filter active models by popularity
+  @@index([providerId, status, usageCount]) // Optimize complex filters
+  @@index([lastSyncedAt]) // For discovery sync queries
+  @@index([updatedAt]) // For change tracking and cache invalidation
+  @@map("models")
+}
+
+model ModelConfig {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  modelId        String   @map("model_id") @db.VarChar(128) // Kept for auditing/queries
+  modelUid       String?  @map("model_uid") @db.VarChar(32) // FK to models.uid
+  alias          String? // Custom name for this model
+  priority       Int      @default(100) // Higher = preferred
+  enabled        Boolean  @default(true)
+  config         Json     @default("{}") // Custom parameters
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  model        Model?       @relation(fields: [modelUid], references: [uid], onDelete: Cascade)
+
+  @@unique([organizationId, modelId])
+  @@index([organizationId])
+  @@index([modelId])
+  @@map("model_configs")
+}
+
+model ModelHealth {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId             String   @map("model_id") @db.VarChar(128) // Kept for auditing/queries
+  modelUid            String?  @unique @map("model_uid") @db.VarChar(32) // FK to models.uid
+  status              String   @default("healthy") // healthy, degraded, down
+  latencyMs           Int?     @map("latency_ms")
+  errorRate           Float?   @map("error_rate")
+  availability        Float?   @map("availability")
+  loadFactor          Float?   @map("load_factor")
+  lastCheckedAt       DateTime @default(now()) @map("last_checked_at")
+  consecutiveFailures Int      @default(0) @map("consecutive_failures")
+  metadata            Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  model Model? @relation(fields: [modelUid], references: [uid], onDelete: Cascade)
+
+  @@unique([modelId])
+  @@index([status])
+  @@index([lastCheckedAt])
+  @@map("model_health")
+}
+
+// ============================================
+// Request Logs & Analytics
+// ============================================
+
+model RequestLog {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  requestId      String @unique @map("request_id")
+  endpoint       String
+  method         String
+
+  // Orchestration details
+  strategyId   String? @map("strategy_id")
+  strategyName String? @map("strategy_name")
+  modelsUsed   Json    @default("[]") @map("models_used") // Array of model IDs
+  modelCount   Int     @default(1) @map("model_count")
+
+  // Primary model (for compatibility)
+  modelId String? @map("model_id") @db.VarChar(128)
+
+  // Performance
+  durationMs  Int  @map("duration_ms")
+  queueTimeMs Int? @map("queue_time_ms")
+
+  // Tokens
+  inputTokens  Int @default(0) @map("input_tokens")
+  outputTokens Int @default(0) @map("output_tokens")
+  totalTokens  Int @default(0) @map("total_tokens")
+
+  // Cost
+  costUsd Decimal @map("cost_usd") @db.Decimal(10, 6)
+
+  // Quality
+  qualityScore Decimal? @map("quality_score") @db.Decimal(3, 2)
+
+  // Request/Response
+  request  Json @default("{}")
+  response Json @default("{}")
+
+  // Error handling
+  status       String  @default("success") // success, error, timeout
+  errorCode    String? @map("error_code")
+  errorMessage String? @map("error_message")
+
+  // Metadata
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Sharding (for massive scale: 10,000+ developers)
+  shardId Int? @map("shard_id") // Generated from organization_id hash
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Note: model FK was removed in 20260410_multi_provider_models migration.
+  // modelId is retained as a plain text reference for auditing — no FK constraint.
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([requestId])
+  @@index([strategyId])
+  @@index([createdAt(sort: Desc)])
+  // getRuntimeSignals (models-routes.ts): WHERE endpoint = ... AND created_at > now()-48h,
+  // refreshed every 60s. See migration 20260711000000 for the partition-aware
+  // production application procedure (the live table is partitioned by month).
+  @@index([endpoint, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([shardId]) // Critical for shard-aware queries
+  @@index([shardId, organizationId, createdAt(sort: Desc)]) // Composite for best performance
+  @@map("request_logs")
+}
+
+// ============================================
+// Ailin¹ Collective Coordination Layer (F1.5)
+// ============================================
+// Persistence for sensitivity-consensus (and future collective)
+// strategy runs. A `CollectiveRun` represents one full multi-round
+// coordination attempt; a `CollectiveSignal` is one agent's
+// decision+sensitivity emission within a specific round.
+// PII has already been redacted at the validator boundary
+// (see signal-validator.ts) before any field reaches this table.
+
+model CollectiveRun {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  requestId      String? @map("request_id") // links back to RequestLog when run is part of a chat completion
+  strategy       String  @db.VarChar(64)
+  config         Json    @default("{}") // CoordinationConfig snapshot at run start
+
+  // Outcome
+  rounds           Int
+  stopReason       String  @map("stop_reason") @db.VarChar(64)
+  convergenceScore Decimal @default(0) @map("convergence_score") @db.Decimal(4, 3)
+  decisionFlipRate Decimal @default(0) @map("decision_flip_rate") @db.Decimal(4, 3)
+  dissent          Decimal @default(0) @db.Decimal(4, 3)
+
+  // Resource accounting
+  totalCostUsd   Decimal @default(0) @map("total_cost_usd") @db.Decimal(10, 6)
+  totalLatencyMs Int     @default(0) @map("total_latency_ms")
+  totalTokens    Int     @default(0) @map("total_tokens")
+
+  // Final decision
+  finalDecisionType String?  @map("final_decision_type") @db.VarChar(64)
+  finalConfidence   Decimal? @map("final_confidence") @db.Decimal(3, 2)
+
+  // Free-form audit / dominantSensitivities / criticalVariables / etc.
+  metadata Json @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signals      CollectiveSignal[]
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([requestId])
+  @@index([strategy])
+  @@map("collective_runs")
+}
+
+model CollectiveSignal {
+  id    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId String @map("run_id") @db.Uuid
+  round Int
+
+  // Agent identification
+  agentId    String  @map("agent_id") @db.VarChar(128)
+  modelId    String  @map("model_id") @db.VarChar(128)
+  providerId String  @map("provider_id") @db.VarChar(64)
+  role       String? @db.VarChar(32)
+
+  // Decision (PII-redacted upstream by signal-validator)
+  decisionType       String  @map("decision_type") @db.VarChar(64)
+  decisionValue      Json    @map("decision_value")
+  decisionConfidence Decimal @map("decision_confidence") @db.Decimal(3, 2)
+  decisionRationale  String? @map("decision_rationale")
+
+  // Sensitivities (Sensitivity[] — array of structured signals)
+  sensitivities Json @default("[]")
+
+  // Per-call metrics
+  latencyMs    Int?     @map("latency_ms")
+  inputTokens  Int?     @map("input_tokens")
+  outputTokens Int?     @map("output_tokens")
+  costUsd      Decimal? @map("cost_usd") @db.Decimal(10, 6)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run CollectiveRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, round])
+  @@index([modelId])
+  @@map("collective_signals")
+}
+
+// ============================================
+// Auto-Learning System
+// ============================================
+
+model LearningData {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bucket     String @db.VarChar(50) // '2025-11-04-10'
+  taskType   String @map("task_type") @db.VarChar(50)
+  complexity String @db.VarChar(20)
+
+  // Aggregated metrics
+  count        Int     @default(0)
+  successCount Int     @default(0) @map("success_count")
+  avgQuality   Decimal @default(0) @map("avg_quality") @db.Decimal(3, 2)
+  avgCost      Decimal @default(0) @map("avg_cost") @db.Decimal(10, 6)
+  avgLatency   Int     @default(0) @map("avg_latency")
+
+  // Strategy distribution (compact JSON)
+  strategyDistribution Json @default("{}") @map("strategy_distribution") // {"parallel": 45, "sequential": 30}
+
+  // Top patterns (only top 5)
+  topPatterns Json @default("[]") @map("top_patterns")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([bucket, taskType, complexity])
+  @@index([bucket])
+  @@index([taskType, complexity])
+  @@map("learning_data")
+}
+
+// ============================================
+// Sharding Configuration
+// ============================================
+
+model ShardConfig {
+  shardId      Int      @id @map("shard_id")
+  shardName    String   @map("shard_name") @db.VarChar(50)
+  status       String   @default("active") // active, readonly, maintenance, disabled
+  orgCount     Int      @default(0) @map("org_count")
+  requestCount BigInt   @default(0) @map("request_count")
+  totalSizeMb  Decimal  @default(0) @map("total_size_mb") @db.Decimal(10, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("shard_config")
+}
+
+// ============================================
+// Usage & Quotas
+// ============================================
+
+model UsageQuota {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  period         String // daily, monthly, yearly
+  periodStart    DateTime @map("period_start")
+  periodEnd      DateTime @map("period_end")
+
+  // Limits
+  requestLimit Int      @map("request_limit")
+  tokenLimit   BigInt?  @map("token_limit")
+  costLimitUsd Decimal? @map("cost_limit_usd") @db.Decimal(10, 2)
+  fileLimit    Int?     @map("file_limit")
+
+  // Current usage
+  requestCount Int     @default(0) @map("request_count")
+  tokenCount   BigInt  @default(0) @map("token_count")
+  costUsd      Decimal @default(0) @map("cost_usd") @db.Decimal(10, 6)
+  fileCount    Int     @default(0) @map("file_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, period, periodStart])
+  @@index([organizationId, periodStart])
+  @@map("usage_quotas")
+}
+
+model CodebaseProject {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  externalId      String   @map("external_id")
+  rootPath        String   @map("root_path")
+  defaultBranch   String?  @map("default_branch")
+  latestCommitSha String?  @map("latest_commit_sha")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  files        CodebaseFile[]
+  dependencies CodebaseDependency[]
+  checkpoints  CodebaseCheckpoint[]
+
+  @@unique([organizationId, externalId, defaultBranch])
+  @@index([organizationId])
+  @@map("codebase_projects")
+}
+
+model CodebaseFile {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId      String   @map("project_id") @db.Uuid
+  path           String
+  sizeBytes      BigInt   @map("size_bytes")
+  checksum       String
+  lastModifiedAt DateTime @map("last_modified_at")
+  language       String?
+  executable     Boolean  @default(false)
+  encoding       String?
+  content        String   @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  project            CodebaseProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  symbols            CodebaseSymbol[]
+  sourceDependencies CodebaseDependency[] @relation("SourceFile")
+  targetDependencies CodebaseDependency[] @relation("TargetFile")
+
+  @@unique([projectId, path])
+  @@index([projectId, checksum])
+  @@index([projectId, path])
+  @@index([language])
+  @@map("codebase_files")
+}
+
+model CodebaseSymbol {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fileId        String   @map("file_id") @db.Uuid
+  name          String
+  qualifiedName String?  @map("qualified_name")
+  type          String // function, class, variable, method, interface, enum, constant, type, import, export
+  kind          String?
+  startLine     Int      @map("start_line")
+  endLine       Int      @map("end_line")
+  startColumn   Int?     @map("start_column")
+  endColumn     Int?     @map("end_column")
+  signature     String?
+  documentation String?
+  visibility    String? // public, private, protected, internal
+  isAsync       Boolean  @default(false) @map("is_async")
+  isStatic      Boolean  @default(false) @map("is_static")
+  isExported    Boolean  @default(false) @map("is_exported")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  file               CodebaseFile         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  sourceDependencies CodebaseDependency[] @relation("SourceSymbol")
+  targetDependencies CodebaseDependency[] @relation("TargetSymbol")
+
+  @@index([fileId])
+  @@index([type])
+  @@index([name])
+  @@index([fileId, type])
+  @@index([isExported])
+  @@map("codebase_symbols")
+}
+
+model CodebaseDependency {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId      String   @map("project_id") @db.Uuid
+  sourceFileId   String   @map("source_file_id") @db.Uuid
+  targetFileId   String?  @map("target_file_id") @db.Uuid
+  sourceSymbolId String?  @map("source_symbol_id") @db.Uuid
+  targetSymbolId String?  @map("target_symbol_id") @db.Uuid
+  dependencyType String   @map("dependency_type") // import, export, call, inherit, implement, reference, type_reference
+  importPath     String?  @map("import_path")
+  isExternal     Boolean  @default(false) @map("is_external")
+  isDynamic      Boolean  @default(false) @map("is_dynamic")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  project      CodebaseProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFile   CodebaseFile    @relation("SourceFile", fields: [sourceFileId], references: [id], onDelete: Cascade)
+  targetFile   CodebaseFile?   @relation("TargetFile", fields: [targetFileId], references: [id], onDelete: SetNull)
+  sourceSymbol CodebaseSymbol? @relation("SourceSymbol", fields: [sourceSymbolId], references: [id], onDelete: Cascade)
+  targetSymbol CodebaseSymbol? @relation("TargetSymbol", fields: [targetSymbolId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([sourceFileId])
+  @@index([targetFileId])
+  @@index([dependencyType])
+  @@index([sourceFileId, targetFileId])
+  @@map("codebase_dependencies")
+}
+
+model CodebaseCheckpoint {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  branch          String
+  commitSha       String?   @map("commit_sha")
+  fileCount       Int       @default(0) @map("file_count")
+  symbolCount     Int       @default(0) @map("symbol_count")
+  dependencyCount Int       @default(0) @map("dependency_count")
+  totalLines      Int       @default(0) @map("total_lines")
+  totalSizeBytes  BigInt    @default(0) @map("total_size_bytes")
+  fileHashes      Json      @default("{}") @map("file_hashes")
+  status          String    @default("pending") // pending, indexing, completed, failed
+  errorMessage    String?   @map("error_message")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  project CodebaseProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, branch])
+  @@index([projectId])
+  @@index([status])
+  @@map("codebase_checkpoints")
+}
+
+model BillingProfile {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId         String   @unique @map("organization_id") @db.Uuid
+  billingEmail           String   @map("billing_email")
+  paymentMethod          String?  @map("payment_method")
+  defaultPaymentMethodId String?  @map("default_payment_method_id")
+  autoPay                Boolean  @default(false) @map("auto_pay")
+  taxRate                Decimal? @map("tax_rate") @db.Decimal(6, 3)
+  currency               String   @default("USD")
+  metadata               Json?    @default("{}")
+  stripeCustomerId       String?  @map("stripe_customer_id")
+  stripePortalUrl        String?  @map("stripe_portal_url")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plans        BillingPlan[]
+
+  @@map("billing_profiles")
+}
+
+/// I1 fix (ADR/RFC-006): Invoice with saga status tracking.
+/// Status flow: pending_stripe_sync → stripe_synced → finalized → paid
+///                                  ↘ stripe_sync_failed (recoverable by reconciliation job)
+model Invoice {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String    @map("organization_id") @db.Uuid
+  periodStart           DateTime  @map("period_start")
+  periodEnd             DateTime  @map("period_end")
+  subtotal              Decimal   @db.Decimal(14, 4)
+  tax                   Decimal   @db.Decimal(14, 4)
+  total                 Decimal   @db.Decimal(14, 4)
+  currency              String
+  status                String    @default("pending_stripe_sync")
+  dueDate               DateTime  @map("due_date")
+  hostedInvoiceUrl      String?   @map("hosted_invoice_url")
+  stripeInvoiceId       String?   @map("stripe_invoice_id")
+  stripePaymentIntentId String?   @map("stripe_payment_intent_id")
+  stripeCustomerId      String?   @map("stripe_customer_id")
+  lastSyncedAt          DateTime? @map("last_synced_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  paidAt                DateTime? @map("paid_at")
+  lastError             String?   @map("last_error") @db.Text
+  metadata              Json?     @default("{}")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        InvoiceItem[]
+
+  @@index([organizationId, periodStart])
+  @@index([status])
+  @@index([status, updatedAt])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId      String  @map("invoice_id") @db.Uuid
+  description    String
+  quantity       Int
+  unitPrice      Decimal @map("unit_price") @db.Decimal(14, 4)
+  total          Decimal @db.Decimal(14, 4)
+  metadata       Json?   @default("{}")
+  stripePriceId  String? @map("stripe_price_id")
+  billingPriceId String? @map("billing_price_id") @db.Uuid
+
+  invoice Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  price   BillingPrice? @relation(fields: [billingPriceId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([billingPriceId])
+  @@map("invoice_items")
+}
+
+model BillingSubscription {
+  id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId               String    @map("organization_id") @db.Uuid
+  plan                         String
+  status                       String    @default("active")
+  billingCycle                 String    @map("billing_cycle")
+  amount                       Decimal   @db.Decimal(14, 4)
+  currency                     String    @default("USD")
+  startDate                    DateTime  @map("start_date")
+  endDate                      DateTime? @map("end_date")
+  paymentMethodId              String?   @map("payment_method_id")
+  priceId                      String?   @map("price_id") @db.Uuid
+  metadata                     Json?     @default("{}")
+  currentPeriodStart           DateTime? @map("current_period_start")
+  currentPeriodEnd             DateTime? @map("current_period_end")
+  cancelAtPeriodEnd            Boolean   @default(false) @map("cancel_at_period_end")
+  stripeSubscriptionId         String?   @map("stripe_subscription_id")
+  stripeCustomerId             String?   @map("stripe_customer_id")
+  stripeStatus                 String?   @map("stripe_status")
+  stripeDefaultPaymentMethodId String?   @map("stripe_default_payment_method_id")
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  price        BillingPrice? @relation(fields: [priceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([stripeSubscriptionId])
+  @@index([priceId])
+  @@map("billing_subscriptions")
+}
+
+model BillingPlan {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String?  @map("organization_id") @db.Uuid
+  name            String
+  description     String?
+  tier            String?
+  status          String   @default("active")
+  features        Json?    @default("{}")
+  trialDays       Int?     @map("trial_days")
+  stripeProductId String?  @map("stripe_product_id")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization BillingProfile? @relation(fields: [organizationId], references: [organizationId], onDelete: SetNull)
+  prices       BillingPrice[]
+
+  @@unique([stripeProductId])
+  @@index([organizationId])
+  @@index([tier, status])
+  @@map("billing_plans")
+}
+
+model BillingPrice {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  billingPlanId String   @map("billing_plan_id") @db.Uuid
+  stripePriceId String?  @unique @map("stripe_price_id")
+  currency      String   @default("USD")
+  amount        Decimal  @db.Decimal(14, 4)
+  billingCycle  String   @map("billing_cycle")
+  intervalCount Int      @default(1) @map("interval_count")
+  usageType     String   @default("licensed") @map("usage_type")
+  taxBehavior   String?  @map("tax_behavior")
+  active        Boolean  @default(true)
+  metadata      Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  plan          BillingPlan           @relation(fields: [billingPlanId], references: [id], onDelete: Cascade)
+  subscriptions BillingSubscription[]
+  invoiceItems  InvoiceItem[]
+
+  @@index([billingPlanId, active])
+  @@map("billing_prices")
+}
+
+model UsageEvent {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  teamId         String?  @map("team_id")
+  userId         String?  @map("user_id")
+  eventType      String   @map("event_type")
+  metadata       Json?    @default("{}")
+  timestamp      DateTime @default(now())
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, timestamp])
+  @@index([eventType])
+  @@map("usage_events")
+}
+
+model AuthLoginChallenge {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String    @db.Citext
+  organizationId String?   @map("organization_id") @db.Uuid
+  codeHash       String    @map("code_hash")
+  status         String    @default("pending")
+  expiresAt      DateTime  @map("expires_at")
+  lastSentAt     DateTime? @map("last_sent_at")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  verifiedAt     DateTime? @map("verified_at")
+  metadata       Json?     @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([email, status])
+  @@index([organizationId])
+  @@map("auth_login_challenges")
+}
+
+// ============================================
+// Auto-Learning System
+// ============================================
+
+model LearningBucket {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bucketTime DateTime @map("bucket_time") // Hourly bucket
+
+  // Strategy performance
+  strategyId   String @map("strategy_id")
+  strategyName String @map("strategy_name")
+
+  // Aggregated metrics
+  executionCount Int @default(0) @map("execution_count")
+  successCount   Int @default(0) @map("success_count")
+  errorCount     Int @default(0) @map("error_count")
+
+  // Performance
+  avgDurationMs Int      @map("avg_duration_ms")
+  avgCostUsd    Decimal  @map("avg_cost_usd") @db.Decimal(10, 6)
+  avgQuality    Decimal? @map("avg_quality") @db.Decimal(3, 2)
+
+  // Tokens
+  totalTokens BigInt @default(0) @map("total_tokens")
+
+  // Compact insights
+  insights Json @default("{}") // Compressed learning data
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([strategyId, bucketTime])
+  @@index([bucketTime(sort: Desc)])
+  @@index([strategyId])
+  @@map("learning_buckets")
+}
+
+model StrategyWeight {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskType          String   @map("task_type")
+  complexity        String   @map("complexity")
+  strategy          String
+  weight            Decimal  @default(1.0) @db.Decimal(10, 6)
+  successRate       Decimal  @default(0.0) @map("success_rate") @db.Decimal(10, 6)
+  avgQuality        Decimal  @default(0.0) @map("avg_quality") @db.Decimal(10, 6)
+  avgCostEfficiency Decimal  @default(0.0) @map("avg_cost_efficiency") @db.Decimal(10, 6)
+  sampleCount       Int      @default(0) @map("sample_count")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([taskType, complexity, strategy])
+  @@index([taskType, complexity])
+  @@map("strategy_weights")
+}
+
+// ============================================
+// Cache Metadata (Redis metadata tracked in DB)
+// ============================================
+
+model CacheEntry {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cacheKey  String    @unique @map("cache_key")
+  layer     String // memory, redis-local, redis-global, cdn
+  hitCount  Int       @default(0) @map("hit_count")
+  lastHitAt DateTime? @map("last_hit_at")
+  expiresAt DateTime  @map("expires_at")
+  sizeBytes Int       @map("size_bytes")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([layer, hitCount(sort: Desc)])
+  @@map("cache_entries")
+}
+
+model SecretAccessLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event        String
+  secretKey    String   @map("secret_key")
+  providerId   String   @map("provider_id")
+  providerType String   @map("provider_type")
+  success      Boolean
+  cacheHit     Boolean  @map("cache_hit")
+  durationMs   Int?     @map("duration_ms")
+  errorMessage String?  @map("error_message")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([secretKey])
+  @@index([createdAt])
+  @@map("secret_access_logs")
+}
+
+model ManagedSecret {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  secretKey           String    @unique @map("secret_key")
+  providerId          String    @map("provider_id")
+  length              Int
+  intervalDays        Int       @map("interval_days")
+  rotateAutomatically Boolean   @default(true) @map("rotate_automatically")
+  lastRotatedAt       DateTime? @map("last_rotated_at")
+  metadata            Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([providerId])
+  @@map("managed_secrets")
+}
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  permissions     RolePermission[]
+  userAssignments UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  category    String   @default("general")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  roleId         String   @map("role_id") @db.Uuid
+  assignedBy     String?  @map("assigned_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId, roleId])
+  @@index([organizationId])
+  @@map("user_roles")
+}
+
+model SecurityAuditLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType      String   @map("event_type")
+  severity       String
+  message        String
+  userId         String?  @map("user_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([eventType])
+  @@index([createdAt])
+  // queryAuditEvents (org-governance-service.ts) filters by organizationId
+  // ordered by createdAt desc, paginated — the most common access pattern for
+  // this ever-growing table. A composite index lets Postgres index-scan
+  // directly instead of combining two single-column indexes.
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("security_audit_logs")
+}
+
+model DiscoveryLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  timestamp DateTime @default(now())
+  status    String // success, partial, failed
+  source    String // Name of the discovery source
+  message   String
+  details   Json     @default("{}") // Full discovery results
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([timestamp])
+  @@index([status])
+  @@index([source])
+  @@map("discovery_logs")
+}
+
+// ============================================
+// Dynamic Model Selection System
+// ============================================
+
+model TaskPreference {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  taskType       String   @map("task_type") // TaskType enum value
+  modelIds       String[] @map("model_ids") // Ordered list of preferred model IDs
+  capabilities   String[] @map("capabilities") // Required capabilities for this task
+  priority       Int      @default(1) // Higher = more important
+  isActive       Boolean  @default(true) @map("is_active")
+  performance    Float? // Average performance score (0-1)
+  costEfficiency Float?   @map("cost_efficiency") // Cost per quality unit
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([taskType])
+  @@index([isActive])
+  @@map("task_preferences")
+}
+
+model ModelPerformanceMetric {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  modelId        String  @map("model_id") // Model ID from catalog
+  taskType       String  @map("task_type") // TaskType enum value
+  provider       String // Provider name
+  region         String? // AWS region, GCP zone, etc.
+
+  // Performance metrics
+  responseTime    Float  @map("response_time") // Average response time in ms
+  tokenThroughput Float  @map("token_throughput") // Tokens per second
+  successRate     Float  @map("success_rate") // 0-1, success rate
+  qualityScore    Float? @map("quality_score") // 0-1, subjective quality rating
+  costPerToken    Float? @map("cost_per_token") // Cost per 1K tokens
+
+  // Time-series data
+  timeBucket DateTime @map("time_bucket") // Rounded to hour/day for aggregation
+  bucketSize String   @default("hour") @map("bucket_size") // hour, day, week
+
+  // Aggregation data
+  requestCount Int   @default(1) @map("request_count")
+  totalTokens  Int   @default(0) @map("total_tokens")
+  totalCost    Float @default(0) @map("total_cost")
+
+  // Context
+  contextSize Int?   @map("context_size") // Average context length
+  temperature Float? // Temperature used
+  metadata    Json? // Additional context
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([modelId])
+  @@index([taskType])
+  @@index([provider])
+  @@index([timeBucket])
+  @@index([bucketSize])
+  @@map("model_performance_metrics")
+}
+
+model ModelSelectionStrategy {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  name           String // Strategy name (e.g., "cost_optimized", "quality_first")
+  description    String?
+
+  // Strategy configuration
+  priorityFactors Json  @map("priority_factors") // Weights for different selection factors
+  constraints     Json? // Hard constraints
+  fallbackRules   Json? @map("fallback_rules") // What to do when preferred models unavailable
+
+  // Usage tracking
+  isDefault  Boolean   @default(false) @map("is_default")
+  usageCount Int       @default(0) @map("usage_count")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([isDefault])
+  @@map("model_selection_strategies")
+}
+
+// ============================================
+// Files & Multimodal Assets
+// ============================================
+
+model File {
+  id             String   @id
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  filename       String
+  purpose        String // fine-tune, assistants, batch, vision, user_data
+  bytes          Int
+  contentType    String   @map("content_type")
+  gcsPath        String   @map("gcs_path")
+  gcsUrl         String?  @map("gcs_url")
+  status         String   @default("uploaded") // uploaded, processing, processed, error, deleted
+  statusDetails  String?  @map("status_details")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  assistantFiles   AssistantFile[]
+  vectorStoreFiles VectorStoreFile[]
+
+  @@index([organizationId, purpose])
+  @@index([organizationId, createdAt])
+  @@index([status])
+  @@map("files")
+}
+
+model Batch {
+  id                     String    @id
+  organizationId         String    @map("organization_id") @db.Uuid
+  userId                 String?   @map("user_id") @db.Uuid
+  endpoint               String
+  inputFileId            String    @map("input_file_id")
+  outputFileId           String?   @map("output_file_id")
+  errorFileId            String?   @map("error_file_id")
+  status                 String    @default("validating") // validating, in_progress, finalizing, completed, failed, expired, cancelling, cancelled
+  completionWindow       String    @map("completion_window")
+  requestCountsTotal     Int       @map("request_counts_total")
+  requestCountsCompleted Int       @map("request_counts_completed")
+  requestCountsFailed    Int       @map("request_counts_failed")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  inProgressAt           DateTime? @map("in_progress_at")
+  expiresAt              DateTime  @map("expires_at")
+  finalizingAt           DateTime? @map("finalizing_at")
+  completedAt            DateTime? @map("completed_at")
+  failedAt               DateTime? @map("failed_at")
+  expiredAt              DateTime? @map("expired_at")
+  cancellingAt           DateTime? @map("cancelling_at")
+  cancelledAt            DateTime? @map("cancelled_at")
+  metadata               Json?
+  errors                 Json?
+
+  @@index([organizationId, status])
+  @@index([status, createdAt])
+  @@map("batches")
+}
+
+// ============================================
+// Fine-tuning API (OpenAI-compatible)
+// ============================================
+
+model FineTuningJob {
+  id               String    @id
+  organizationId   String    @map("organization_id") @db.Uuid
+  userId           String?   @map("user_id") @db.Uuid
+  provider         String // "openai", "google", etc.
+  providerJobId    String    @map("provider_job_id") // External job ID from provider
+  model            String // Base model ID (e.g., "gpt-3.5-turbo")
+  fineTunedModel   String?   @map("fine_tuned_model") // Resulting fine-tuned model ID
+  trainingFileId   String    @map("training_file_id")
+  validationFileId String?   @map("validation_file_id")
+  status           String // "validating_files", "queued", "running", "succeeded", "failed", "cancelled"
+  hyperparameters  Json // { n_epochs, batch_size, learning_rate_multiplier }
+  integrations     Json? // Array of integration configs
+  resultFiles      String[]  @default([]) @map("result_files")
+  trainedTokens    Int?      @map("trained_tokens")
+  seed             Int?
+  error            Json? // { message, code, param }
+  estimatedFinish  Int?      @map("estimated_finish") // Unix timestamp
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  finishedAt       DateTime? @map("finished_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([providerJobId])
+  @@index([status])
+  @@map("fine_tuning_jobs")
+}
+
+// ============================================
+// Assistants API (OpenAI-compatible)
+// ============================================
+
+model Assistant {
+  id             String   @id
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  name           String?
+  description    String?
+  model          String // Model ID (e.g., "gpt-4o", "auto")
+  instructions   String?
+  tools          Json     @default("[]") // Array of tool definitions
+  toolResources  Json?    @map("tool_resources") // code_interpreter, file_search config
+  metadata       Json     @default("{}")
+  temperature    Float?
+  topP           Float?   @map("top_p")
+  responseFormat Json?    @map("response_format")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  threads Thread[]
+  files   AssistantFile[]
+
+  @@index([organizationId])
+  @@index([organizationId, userId])
+  @@map("assistants")
+}
+
+model AssistantFile {
+  id          String   @id
+  assistantId String   @map("assistant_id")
+  fileId      String   @map("file_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  assistant Assistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  file      File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([assistantId, fileId])
+  @@index([assistantId])
+  @@index([fileId])
+  @@map("assistant_files")
+}
+
+model Thread {
+  id             String   @id
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  assistantId    String?  @map("assistant_id")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  assistant Assistant?      @relation(fields: [assistantId], references: [id], onDelete: SetNull)
+  messages  ThreadMessage[]
+  runs      ThreadRun[]
+
+  @@index([organizationId])
+  @@index([organizationId, userId])
+  @@index([assistantId])
+  @@map("threads")
+}
+
+model ThreadMessage {
+  id          String   @id
+  threadId    String   @map("thread_id")
+  role        String // "user", "assistant", "system", "tool"
+  content     Json // Array of content parts (text, image, etc.)
+  fileIds     String[] @default([]) @map("file_ids")
+  assistantId String?  @map("assistant_id")
+  runId       String?  @map("run_id")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  thread Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  run    ThreadRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([threadId])
+  @@index([threadId, createdAt])
+  @@index([runId])
+  @@map("thread_messages")
+}
+
+model ThreadRun {
+  id                  String    @id
+  threadId            String    @map("thread_id")
+  assistantId         String    @map("assistant_id")
+  status              String // "queued", "in_progress", "requires_action", "cancelling", "cancelled", "failed", "completed", "expired"
+  model               String? // Model ID used for this run
+  instructions        String?
+  tools               Json      @default("[]") // Tools available for this run
+  toolResources       Json?     @map("tool_resources")
+  metadata            Json      @default("{}")
+  temperature         Float?
+  topP                Float?    @map("top_p")
+  maxPromptTokens     Int?      @map("max_prompt_tokens")
+  maxCompletionTokens Int?      @map("max_completion_tokens")
+  truncationStrategy  Json?     @map("truncation_strategy")
+  toolChoice          Json?     @map("tool_choice")
+  responseFormat      Json?     @map("response_format")
+  parallelToolCalls   Boolean?  @default(true) @map("parallel_tool_calls")
+  stream              Boolean?  @default(false)
+  incompleteDetails   Json?     @map("incomplete_details")
+  usage               Json? // { prompt_tokens, completion_tokens, total_tokens }
+  temperatureLast     Float?    @map("temperature_last")
+  topPLast            Float?    @map("top_p_last")
+  startedAt           DateTime? @map("started_at")
+  expiresAt           DateTime? @map("expires_at")
+  cancelledAt         DateTime? @map("cancelled_at")
+  failedAt            DateTime? @map("failed_at")
+  completedAt         DateTime? @map("completed_at")
+  requiredAction      Json?     @map("required_action") // { type, submit_tool_outputs }
+  lastError           Json?     @map("last_error")
+  fileIds             String[]  @default([]) @map("file_ids")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  thread      Thread                @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  messages    ThreadMessage[]
+  checkpoints ThreadRunCheckpoint[]
+  steps       ThreadRunStep[]
+
+  @@index([threadId])
+  @@index([threadId, createdAt])
+  @@index([assistantId])
+  @@index([status])
+  @@map("thread_runs")
+}
+
+model ThreadRunCheckpoint {
+  id                  String   @id
+  runId               String   @map("run_id")
+  checkpointNumber    Int      @map("checkpoint_number")
+  model               String
+  instructions        String?
+  tools               Json     @default("[]")
+  toolResources       Json?    @map("tool_resources")
+  metadata            Json     @default("{}")
+  temperature         Float?
+  topP                Float?   @map("top_p")
+  maxPromptTokens     Int?     @map("max_prompt_tokens")
+  maxCompletionTokens Int?     @map("max_completion_tokens")
+  truncationStrategy  Json?    @map("truncation_strategy")
+  toolChoice          Json?    @map("tool_choice")
+  responseFormat      Json?    @map("response_format")
+  parallelToolCalls   Boolean? @default(true) @map("parallel_tool_calls")
+  usage               Json? // { prompt_tokens, completion_tokens, total_tokens }
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  run ThreadRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([runId, checkpointNumber])
+  @@map("thread_run_checkpoints")
+}
+
+model ThreadRunStep {
+  id          String    @id
+  runId       String    @map("run_id")
+  type        String // "message_creation", "tool_calls"
+  status      String // "in_progress", "completed", "failed", "cancelled", "expired"
+  stepDetails Json      @map("step_details") // Step-specific details (message_creation, tool_calls)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  failedAt    DateTime? @map("failed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  expiresAt   DateTime? @map("expires_at")
+  metadata    Json      @default("{}")
+
+  run ThreadRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([runId, createdAt])
+  @@map("thread_run_steps")
+}
+
+// ============================================
+// Vector Stores (OpenAI-compatible)
+// ============================================
+
+model VectorStore {
+  id             String    @id
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  name           String?
+  status         String    @default("in_progress") // in_progress, completed, expired
+  expiresAfter   Json?     @map("expires_after") // { anchor: "last_active_at", days: number }
+  expiresAt      DateTime? @map("expires_at")
+  lastActiveAt   DateTime? @map("last_active_at")
+  metadata       Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  files  VectorStoreFile[]
+  chunks VectorStoreChunk[]
+
+  @@index([organizationId])
+  @@index([organizationId, userId])
+  @@index([status])
+  @@map("vector_stores")
+}
+
+model VectorStoreFile {
+  id            String   @id
+  vectorStoreId String   @map("vector_store_id")
+  fileId        String   @map("file_id")
+  status        String   @default("in_progress") // in_progress, completed, failed, cancelled
+  lastError     String?  @map("last_error")
+  chunkCount    Int      @default(0) @map("chunk_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  vectorStore VectorStore        @relation(fields: [vectorStoreId], references: [id], onDelete: Cascade)
+  file        File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  chunks      VectorStoreChunk[]
+
+  @@unique([vectorStoreId, fileId])
+  @@index([vectorStoreId])
+  @@index([fileId])
+  @@index([status])
+  @@map("vector_store_files")
+}
+
+// Per-chunk embeddings for real vector search (RAG foundation, F3/F1 §P4).
+// Reuses the same pgvector(384) + HNSW cosine infrastructure as HCRA
+// capability-search. Embeddings are written/queried via raw SQL through the
+// shared capability pg.Pool because Prisma has no first-class pgvector type.
+model VectorStoreChunk {
+  id                String                      @id
+  vectorStoreId     String                      @map("vector_store_id")
+  fileId            String                      @map("file_id")
+  vectorStoreFileId String                      @map("vector_store_file_id")
+  organizationId    String                      @map("organization_id") @db.Uuid
+  chunkIndex        Int                         @map("chunk_index")
+  content           String
+  // 384-dim embedding produced by the HCRA embedder (OpenAI 3-small @384 or a
+  // TEI sidecar). Marked Unsupported because Prisma has no pgvector type;
+  // reads/writes go through $queryRaw / the capability pg.Pool. The HNSW
+  // cosine-ops index backs similarity search.
+  embedding         Unsupported("vector(384)")?
+  embeddingModel    String?                     @map("embedding_model") @db.VarChar(64)
+  metadata          Json                        @default("{}")
+  createdAt         DateTime                    @default(now()) @map("created_at")
+
+  vectorStore     VectorStore     @relation(fields: [vectorStoreId], references: [id], onDelete: Cascade)
+  vectorStoreFile VectorStoreFile @relation(fields: [vectorStoreFileId], references: [id], onDelete: Cascade)
+
+  @@index([vectorStoreId])
+  @@index([vectorStoreFileId])
+  @@index([fileId])
+  @@index([organizationId])
+  @@map("vector_store_chunks")
+}
+
+// ============================================
+// Context Caching
+// ============================================
+
+model CachedContext {
+  id             String   @id
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  name           String
+  messages       Json // Array of ChatMessage objects
+  tokenCount     Int      @map("token_count")
+  hash           String // Content hash for deduplication
+  ttl            String // '5min', '1h', '24h'
+  createdAt      DateTime @default(now()) @map("created_at")
+  expiresAt      DateTime @map("expires_at")
+  lastAccessedAt DateTime @map("last_accessed_at")
+  accessCount    Int      @default(0) @map("access_count")
+  metadata       Json     @default("{}")
+
+  @@index([organizationId])
+  @@index([organizationId, expiresAt])
+  @@index([hash])
+  @@map("cached_contexts")
+}
+
+// ============================================
+// Semantic Memory (Vector Store)
+// ============================================
+
+/// Semantic memory store for Collective Intelligence
+/// Stores embeddings for semantic search and retrieval
+/// Requires pgvector extension: CREATE EXTENSION IF NOT EXISTS vector;
+model SemanticMemory {
+  id             String                       @id
+  organizationId String                       @map("organization_id") @db.Uuid
+  userId         String?                      @map("user_id") @db.Uuid
+  type           String // 'episodic', 'semantic', 'procedural'
+  content        String                       @db.Text
+  embedding      Unsupported("vector(1536)")? // pgvector type
+  metadata       Json                         @default("{}")
+  importance     Float                        @default(0.5)
+  accessCount    Int                          @default(0) @map("access_count")
+  lastAccessedAt DateTime                     @default(now()) @map("last_accessed_at")
+  createdAt      DateTime                     @default(now()) @map("created_at")
+  expiresAt      DateTime?                    @map("expires_at")
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@index([organizationId, userId])
+  @@index([type])
+  @@index([expiresAt])
+  @@map("semantic_memories")
+}
+
+// Semantic response cache (scale-to-100k Phase 5, issue #150) — replaces the
+// prior Redis-only implementation, which stored every org's entries in one
+// Redis SET and, on every lookup, fetched EVERY member (up to
+// maxEntriesPerOrg, default 10,000) and computed cosine similarity in
+// application code: an O(N) scan, both in Redis round-trips and CPU.
+//
+// Reuses the SAME pgvector(384) + HNSW(vector_cosine_ops) infrastructure as
+// vector_store_chunks / semantic_memories — reads/writes go through the
+// shared capability pg.Pool via raw SQL (`embedding <=> $1::vector`) because
+// Prisma has no first-class pgvector type. The HNSW index makes the
+// similarity search sub-linear instead of scanning every candidate row.
+model SemanticCacheEntry {
+  id              String                      @id
+  organizationId  String                      @map("organization_id") @db.Uuid
+  requestHash     String                      @map("request_hash") // exact-match fast path
+  strategyKey     String                      @map("strategy_key")
+  model           String
+  // 384-dim embedding (capability embedder — same one backing RAG/HCRA
+  // search). NULL when the fallback (non-provider) embedding was used, so
+  // those entries are excluded from ANN search (exact-match hash lookup
+  // still works via requestHash).
+  embedding       Unsupported("vector(384)")?
+  embeddingModel  String?                     @map("embedding_model") @db.VarChar(64)
+  originalRequest String                      @map("original_request") @db.Text // truncated, for display/debugging
+  response        Json // the cached ChatResponse
+  hitCount        Int                         @default(0) @map("hit_count")
+  tokensSaved     Int                         @default(0) @map("tokens_saved")
+  costSavedUsd    Decimal                     @default(0) @map("cost_saved_usd") @db.Decimal(12, 6)
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  expiresAt       DateTime                    @map("expires_at")
+
+  @@index([organizationId, requestHash])
+  @@index([organizationId, strategyKey, expiresAt])
+  @@index([expiresAt]) // TTL sweep
+  @@map("semantic_cache_entries")
+}
+
+// ============================================
+// Broadcast Infrastructure (ADR-014 ... ADR-020)
+// ============================================
+// Sends trace envelopes to external observability platforms via transactional
+// outbox. Migration `20260417150110_broadcast_infrastructure` created 6
+// physical tables; code consumes 4 via Prisma Client (this block) + 2 via
+// raw SQL (broadcast_processed_trace partitioned table, routing_event
+// partitioned table). The `deliveries` relation is intentionally one-way
+// (Broadcast writer never loads destinations by envelope; it filters by
+// tenant). Partial unique indexes (DLQ active, outbox request_id) live in
+// migrations 20260420120000 and 20260421000000 — Prisma @@unique cannot
+// express WHERE, so they remain schema-level invariants documented here.
+
+/// Immutable trace envelopes for broadcast pipeline (ADR-014). 7-day retention.
+model BroadcastTraceOutbox {
+  envelopeId                String    @id @map("envelope_id") @db.Uuid
+  schemaVersion             String    @map("schema_version") @db.VarChar(16)
+  organizationId            String?   @map("organization_id") @db.Uuid
+  userId                    String?   @map("user_id") @db.Uuid
+  apiKeyId                  String?   @map("api_key_id") @db.Uuid
+  resolutionScope           String    @map("resolution_scope") @db.VarChar(16) // 'organization' | 'user' | 'chatroom'
+  envelope                  Json
+  occurredAt                DateTime  @map("occurred_at") @db.Timestamptz
+  drainedAt                 DateTime? @map("drained_at") @db.Timestamptz
+  destinationsResolvedCount Int?      @map("destinations_resolved_count")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  // 2026-04-21 idempotency — partial-unique `WHERE request_id IS NOT NULL`
+  // enforced via raw migration (broadcast_trace_outbox_request_id_unique).
+  requestId                 String?   @map("request_id") @db.VarChar(128)
+
+  deliveries BroadcastDelivery[]
+
+  @@index([createdAt]) // poller drain scan (partial in DB: WHERE drained_at IS NULL)
+  @@index([organizationId, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([occurredAt]) // retention cleanup (partial in DB: WHERE drained_at IS NOT NULL)
+  @@map("broadcast_trace_outbox")
+}
+
+/// Tenant-scoped observability destination configs, KMS-encrypted (ADR-017, ADR-020).
+model BroadcastDestination {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantType      String  @map("tenant_type") @db.VarChar(16) // 'organization' | 'user'
+  tenantId        String  @map("tenant_id") @db.Uuid
+  destinationType String  @map("destination_type") @db.VarChar(32) // 'langfuse' | 'datadog' | 'webhook' | 'otlp_collector' | ...
+  name            String  @db.VarChar(128)
+  enabled         Boolean @default(true)
+
+  // ADR-017 envelope encryption
+  configCiphertext  Bytes  @map("config_ciphertext")
+  configIv          Bytes  @map("config_iv")
+  configAuthTag     Bytes  @map("config_auth_tag")
+  configAad         String @map("config_aad")
+  configDekWrapped  Bytes  @map("config_dek_wrapped")
+  configKekResource String @map("config_kek_resource")
+
+  // ADR-018 filtering/sampling
+  apiKeyFilter Json    @default("[]") @map("api_key_filter")
+  samplingRate Decimal @default(1.0) @map("sampling_rate") @db.Decimal(5, 4)
+
+  // ADR-016 privacy mode
+  privacyMode         Boolean @default(false) @map("privacy_mode")
+  privacyCustomFields Json    @default("[]") @map("privacy_custom_fields")
+
+  releaseStatus String    @default("stable") @map("release_status") @db.VarChar(16) // 'alpha' | 'beta' | 'stable' | 'deprecated'
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz
+
+  deliveries BroadcastDelivery[]
+  dlqEntries BroadcastDlqEntry[]
+
+  @@index([tenantType, tenantId, destinationType]) // poller resolution (partial in DB: enabled=TRUE AND deleted_at IS NULL)
+  @@index([tenantType, tenantId]) // quota enforcement
+  @@map("broadcast_destination")
+}
+
+/// Per-destination delivery state for each envelope.
+model BroadcastDelivery {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  envelopeId     String    @map("envelope_id") @db.Uuid
+  destinationId  String    @map("destination_id") @db.Uuid
+  status         String    @db.VarChar(16) // 'pending' | 'sent' | 'failed' | 'dlq' | 'sampled_out'
+  attempts       Int       @default(0)
+  lastErrorClass String?   @map("last_error_class") @db.VarChar(32)
+  lastError      String?   @map("last_error") @db.Text
+  firstAttemptAt DateTime? @map("first_attempt_at") @db.Timestamptz
+  lastAttemptAt  DateTime? @map("last_attempt_at") @db.Timestamptz
+  sentAt         DateTime? @map("sent_at") @db.Timestamptz
+  nextRetryAt    DateTime? @map("next_retry_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  envelope    BroadcastTraceOutbox @relation(fields: [envelopeId], references: [envelopeId], onDelete: Cascade)
+  destination BroadcastDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@unique([envelopeId, destinationId])
+  @@index([status, nextRetryAt]) // retry worker (partial in DB: status IN ('pending', 'failed'))
+  @@index([destinationId, status, lastAttemptAt]) // ops dashboards
+  @@map("broadcast_delivery")
+}
+
+/// Dead-letter queue for permanently failed broadcast deliveries (ADR-019).
+/// 2026-04-20 partial-unique `(envelope_id, destination_id) WHERE replayed_at IS NULL`
+/// enforced via raw migration (broadcast_dlq_active_envelope_destination_unique).
+model BroadcastDlqEntry {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  envelopeId       String    @map("envelope_id") @db.Uuid
+  destinationId    String    @map("destination_id") @db.Uuid
+  envelopeSnapshot Json      @map("envelope_snapshot")
+  errorClass       String    @map("error_class") @db.VarChar(32)
+  errorMessage     String    @map("error_message") @db.Text
+  errorContext     Json      @default("{}") @map("error_context")
+  totalAttempts    Int       @map("total_attempts")
+  firstAttemptedAt DateTime  @map("first_attempted_at") @db.Timestamptz
+  deadLetteredAt   DateTime  @default(now()) @map("dead_lettered_at") @db.Timestamptz
+  replayedAt       DateTime? @map("replayed_at") @db.Timestamptz
+  replayedByUserId String?   @map("replayed_by_user_id") @db.Uuid
+
+  destination BroadcastDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@index([destinationId, deadLetteredAt])
+  @@index([deadLetteredAt]) // unreplayed scan (partial in DB: WHERE replayed_at IS NULL)
+  @@map("broadcast_dlq")
+}
+
+// ============================================
+// Decision Audit Trail (BL-08)
+// ============================================
+
+/// Records every routing decision for traceability and governance.
+/// Answers: "why was strategy X chosen for request Y?"
+model DecisionAudit {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId                 String   @unique @map("request_id")
+  organizationId            String   @map("organization_id") @db.Uuid
+  taskType                  String   @map("task_type")
+  complexity                String
+  requestedStrategy         String?  @map("requested_strategy")
+  triageIntent              String?  @map("triage_intent")
+  triageComplexity          String?  @map("triage_complexity")
+  triageConfidence          Float?   @map("triage_confidence")
+  triageRecommendedStrategy String?  @map("triage_recommended_strategy")
+  strategyScores            Json     @default("{}") @map("strategy_scores")
+  selectedStrategy          String   @map("selected_strategy")
+  selectionReason           String   @map("selection_reason") // explicit, triage, archive, pareto, bandit, scored, fallback
+  modelsConsidered          String[] @map("models_considered")
+  modelsSelected            String[] @map("models_selected")
+  // Enhanced fields for closed-loop system
+  decisionSource            String?  @map("decision_source") // triage, archive, pareto, bandit, heuristic, explicit
+  decisionConfidence        Float?   @map("decision_confidence")
+  expectedQuality           Float?   @map("expected_quality")
+  expectedLatencyMs         Int?     @map("expected_latency_ms")
+  expectedCostUsd           Float?   @map("expected_cost_usd")
+  candidateDetails          Json?    @map("candidate_details") // [{strategy, source, score, confidence}]
+  inputHash                 String?  @map("input_hash") // hash of input for consistency analysis
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId])
+  @@index([selectedStrategy])
+  @@index([decisionSource])
+  @@index([createdAt])
+  @@map("decision_audit")
+}
+
+// ============================================
+// Knowledge Graph Edges (BL-10)
+// ============================================
+
+/// Lightweight directed graph of execution relationships.
+/// Tracks model↔task, model↔model, and strategy↔model co-occurrence
+/// quality for knowledge-driven model/strategy selection.
+model KnowledgeEdge {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId  String   @map("source_id")
+  targetId  String   @map("target_id")
+  edgeType  String   @map("edge_type") // model_task, model_model, strategy_model
+  weight    Float    @default(0.0) // Averaged quality score
+  hitCount  Int      @default(0) @map("hit_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sourceId, targetId, edgeType])
+  @@index([sourceId, edgeType])
+  @@index([targetId, edgeType])
+  @@index([edgeType, weight(sort: Desc)])
+  @@map("knowledge_edges")
+}
+
+// ============================================
+// Workflow Executions (BL-07)
+// ============================================
+
+/// Persists workflow execution state so that long-running workflows
+/// can resume after process restart or crash.
+model WorkflowExecution {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId     String    @map("workflow_id")
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  status         String    @default("running") // running, completed, failed, cancelled
+  currentStepIdx Int       @default(0) @map("current_step_idx")
+  totalSteps     Int       @map("total_steps")
+  variables      Json      @default("{}")
+  stepResults    Json      @default("[]") @map("step_results")
+  error          String?
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@index([workflowId])
+  @@index([status])
+  @@map("workflow_executions")
+}
+
+// ============================================
+// Closed-Loop Adaptive System (SOTA Audit)
+// ============================================
+// These tables form the backbone of the enterprise-grade
+// self-evaluation, drift detection, and learning validation system.
+
+/// Links each decision to its measured execution outcome.
+/// Enables: regret calculation, learning validation, drift detection.
+/// One execution_outcome per decision_trace (1:1).
+model ExecutionOutcome {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  decisionTraceId    String   @unique @map("decision_trace_id")
+  strategy           String
+  startedAt          DateTime @map("started_at")
+  finishedAt         DateTime @map("finished_at")
+  latencyMs          Int      @map("latency_ms")
+  costUsd            Decimal  @default(0) @map("cost_usd") @db.Decimal(10, 6)
+  totalTokens        Int      @default(0) @map("total_tokens")
+  success            Boolean
+  failureReason      String?  @map("failure_reason")
+  retries            Int      @default(0)
+  fallbackUsed       Boolean  @default(false) @map("fallback_used")
+  escalationUsed     Boolean  @default(false) @map("escalation_used")
+  qualityScore       Decimal? @map("quality_score") @db.Decimal(5, 4)
+  qualityDimensions  Json?    @map("quality_dimensions") // {correctness, completeness, clarity, efficiency, relevance}
+  feedbackIterations Int      @default(1) @map("feedback_iterations")
+  modelsUsed         String[] @map("models_used")
+  observedMetrics    Json     @default("{}") @map("observed_metrics") // raw measured values
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([strategy])
+  @@index([success])
+  @@index([createdAt])
+  @@index([qualityScore])
+  // learning-validation.ts / drift-detection.ts filter by strategy + a
+  // created_at window (baseline vs. comparison) — a composite index lets
+  // Postgres index-scan directly instead of bitmap-AND-ing the two single
+  // indexes above.
+  @@index([strategy, createdAt])
+  @@map("execution_outcomes")
+}
+
+/// Records shadow evaluation comparisons between strategies.
+/// Enables: regret calculation, competitive benchmarking evidence.
+model ShadowEvaluation {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  decisionTraceId   String   @map("decision_trace_id")
+  taskType          String   @map("task_type")
+  complexity        String
+  chosenStrategy    String   @map("chosen_strategy")
+  chosenQuality     Decimal  @map("chosen_quality") @db.Decimal(5, 4)
+  chosenLatencyMs   Int      @map("chosen_latency_ms")
+  chosenCostUsd     Decimal  @map("chosen_cost_usd") @db.Decimal(10, 6)
+  shadowStrategy    String   @map("shadow_strategy")
+  shadowQuality     Decimal  @map("shadow_quality") @db.Decimal(5, 4)
+  shadowLatencyMs   Int      @map("shadow_latency_ms")
+  shadowCostUsd     Decimal  @map("shadow_cost_usd") @db.Decimal(10, 6)
+  qualityRegret     Decimal  @map("quality_regret") @db.Decimal(5, 4) // shadow_quality - chosen_quality
+  winnerStrategy    String   @map("winner_strategy")
+  comparisonSummary Json     @default("{}") @map("comparison_summary")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([taskType, complexity])
+  @@index([chosenStrategy])
+  @@index([shadowStrategy])
+  @@index([createdAt])
+  @@map("shadow_evaluations")
+}
+
+/// Aggregated strategy performance per time window.
+/// Enables: trend analysis, competitive benchmarking, drift detection baseline.
+model StrategyPerformanceSnapshot {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  strategy        String
+  taskType        String   @map("task_type")
+  complexity      String
+  timeWindow      String   @map("time_window") // e.g., '2026-03-31', '2026-W14', '2026-03'
+  windowType      String   @map("window_type") // 'daily', 'weekly', 'monthly'
+  sampleSize      Int      @map("sample_size")
+  winRate         Decimal  @map("win_rate") @db.Decimal(5, 4)
+  avgQuality      Decimal  @map("avg_quality") @db.Decimal(5, 4)
+  avgLatencyMs    Int      @map("avg_latency_ms")
+  avgCostUsd      Decimal  @map("avg_cost_usd") @db.Decimal(10, 6)
+  successRate     Decimal  @map("success_rate") @db.Decimal(5, 4)
+  avgRegret       Decimal  @default(0) @map("avg_regret") @db.Decimal(5, 4)
+  qualityP10      Decimal  @default(0) @map("quality_p10") @db.Decimal(5, 4)
+  qualityP90      Decimal  @default(0) @map("quality_p90") @db.Decimal(5, 4)
+  stabilityIndex  Decimal  @default(0) @map("stability_index") @db.Decimal(5, 4)
+  driftScore      Decimal  @default(0) @map("drift_score") @db.Decimal(5, 4)
+  confidenceScore Decimal  @default(0) @map("confidence_score") @db.Decimal(5, 4)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([strategy, taskType, complexity, timeWindow, windowType])
+  @@index([strategy, taskType, complexity])
+  @@index([timeWindow])
+  @@index([createdAt])
+  @@map("strategy_performance_snapshots")
+}
+
+/// Drift detection events — when the system detects performance or behavior changes.
+model DriftEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  driftType     String    @map("drift_type") // performance, decision, context, evaluation
+  scopeType     String    @map("scope_type") // strategy, niche, global
+  scopeKey      String    @map("scope_key") // e.g., 'single|code-generation|medium' or 'global'
+  severity      String // low, medium, high, critical
+  baselineValue Decimal   @map("baseline_value") @db.Decimal(10, 6)
+  currentValue  Decimal   @map("current_value") @db.Decimal(10, 6)
+  deltaPercent  Decimal   @map("delta_percent") @db.Decimal(10, 4)
+  evidence      Json      @default("{}") // detailed drift evidence
+  detectedAt    DateTime  @default(now()) @map("detected_at")
+  actionTaken   String?   @map("action_taken") // alert, rollback, suspend, none
+  resolvedAt    DateTime? @map("resolved_at")
+  status        String    @default("open") // open, acknowledged, resolved, false_positive
+
+  @@index([driftType])
+  @@index([scopeType, scopeKey])
+  @@index([severity])
+  @@index([detectedAt])
+  @@index([status])
+  @@map("drift_events")
+}
+
+/// Rollback events — when the system reverts to a previous state.
+model RollbackEvent {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  triggerEventId   String?   @map("trigger_event_id") @db.Uuid // drift_event.id
+  scopeType        String    @map("scope_type") // strategy, niche, global
+  scopeKey         String    @map("scope_key")
+  previousPolicy   Json      @map("previous_policy") // state before rollback
+  newPolicy        Json      @map("new_policy") // state after rollback
+  reason           String
+  expectedRecovery String?   @map("expected_recovery")
+  executedAt       DateTime  @default(now()) @map("executed_at")
+  validatedAt      DateTime? @map("validated_at")
+  validationResult Json?     @map("validation_result") // post-rollback metrics
+
+  @@index([scopeType, scopeKey])
+  @@index([executedAt])
+  @@map("rollback_events")
+}
+
+/// Learning validation reports — proves the system is actually learning.
+model LearningValidationReport {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scopeType         String   @map("scope_type") // strategy, niche, global
+  scopeKey          String   @map("scope_key")
+  baselineWindow    String   @map("baseline_window") // e.g., '2026-W12'
+  comparisonWindow  String   @map("comparison_window") // e.g., '2026-W13'
+  baselineMetrics   Json     @map("baseline_metrics") // {avgQuality, avgCost, successRate, ...}
+  comparisonMetrics Json     @map("comparison_metrics")
+  improvementDelta  Json     @map("improvement_delta") // per-metric deltas
+  regressions       Json     @default("[]") // [{metric, delta, severity}]
+  learningVelocity  Decimal  @map("learning_velocity") @db.Decimal(10, 6)
+  stabilityIndex    Decimal  @map("stability_index") @db.Decimal(5, 4)
+  validated         Boolean  @default(false) // true = improvement is statistically significant
+  verdict           String   @default("inconclusive") // improving, stable, degrading, inconclusive
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([scopeType, scopeKey])
+  @@index([verdict])
+  @@index([createdAt])
+  @@map("learning_validation_reports")
+}
+
+// ============================================
+// Comparative Experiment Framework
+// ============================================
+// Structured comparison of Mode A (single model) vs Mode B (collective
+// intelligence) vs Mode C (adaptive system) across task types.
+
+/// A comparative experiment run.
+model Experiment {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  description     String?
+  config          Json // ExperimentConfig — modes, tasks, repetitions, budget
+  state           String    @default("pending") // pending, running, paused, completed, failed
+  progress        Json      @default("{}") // {completed, total, currentTaskIndex, currentMode, totalCostUsd, errors}
+  totalExecutions Int       @default(0) @map("total_executions")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  executions ExperimentExecution[]
+
+  @@index([state])
+  @@index([createdAt])
+  @@map("experiments")
+}
+
+/// A single execution within a comparative experiment.
+model ExperimentExecution {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId       String   @map("experiment_id") @db.Uuid
+  taskIndex          Int      @map("task_index")
+  repetition         Int
+  executionMode      String   @map("execution_mode") // single-model, collective, adaptive
+  strategy           String // actual strategy used
+  model              String? // specific model (for single-model mode)
+  taskType           String   @map("task_type")
+  complexity         String
+  domain             String?
+  prompt             String
+  // Metrics
+  qualityScore       Decimal? @map("quality_score") @db.Decimal(5, 4)
+  costUsd            Decimal  @default(0) @map("cost_usd") @db.Decimal(10, 6)
+  latencyMs          Int      @map("latency_ms")
+  totalTokens        Int      @default(0) @map("total_tokens")
+  success            Boolean
+  modelsUsed         String[] @map("models_used")
+  phase              String   @default("frozen") // sanity-check, warmup, frozen, confirmation
+  // Judge details
+  judgeScore         Decimal? @map("judge_score") @db.Decimal(5, 4)
+  judgeRubric        String?  @map("judge_rubric")
+  // Full response with metadata (complete output for analysis/publication)
+  responseSummary    String?  @map("response_summary") @db.Text
+  // Structured metadata (Hardening Bloco H): machine-parseable JSON with
+  // subcalls, cost normalization, retry info, degradation trace, error classification.
+  // This replaces the fragile string-in-responseSummary approach.
+  structuredMetadata Json?    @map("structured_metadata") @db.JsonB
+  // Failure classification (Hardening Bloco I): actionable failure mode
+  failureMode        String?  @map("failure_mode")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  experiment Experiment @relation(fields: [experimentId], references: [id])
+
+  @@index([experimentId])
+  @@index([executionMode])
+  @@index([taskType, complexity])
+  @@index([strategy])
+  @@index([phase])
+  @@index([createdAt])
+  @@map("experiment_executions")
+}
+
+// ============================================
+// Feedback Extraction Pipeline (API → Model-Stack)
+// ============================================
+
+/// Tracks extraction watermarks for idempotent, resumable data export.
+/// One row per extraction type (outcomes, shadow_evaluations).
+model FeedbackExtractionState {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  extractionType   String   @unique @map("extraction_type") // 'outcomes', 'shadow'
+  lastWatermark    DateTime @default(dbgenerated("'1970-01-01T00:00:00Z'::timestamptz")) @map("last_watermark")
+  lastExtractionId String?  @map("last_extraction_id")
+  rowsExtracted    BigInt   @default(0) @map("rows_extracted")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("feedback_extraction_state")
+}
+
+// ============================================
+// Transactional Outbox (C1 fix — ADR-001)
+// Eliminates dual-write between DB persist and event publish.
+// Events are written here inside the same $transaction as business data.
+// A background poller publishes and marks as delivered.
+// ============================================
+
+model DomainEventOutbox {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  aggregateId   String    @map("aggregate_id")
+  aggregateType String    @map("aggregate_type") @db.VarChar(64)
+  eventName     String    @map("event_name") @db.VarChar(128)
+  eventVersion  Int       @default(1) @map("event_version")
+  payload       Json
+  metadata      Json?     @default("{}")
+  occurredAt    DateTime  @map("occurred_at")
+  publishedAt   DateTime? @map("published_at")
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([publishedAt, createdAt])
+  @@index([attempts])
+  @@map("domain_event_outbox")
+}
+
+// ============================================
+// Webhook Idempotency (I2 fix — ADR-007)
+// Prevents duplicate processing of inbound webhooks.
+// ============================================
+
+model ProcessedWebhookEvent {
+  eventId     String   @id @map("event_id") @db.VarChar(128)
+  eventType   String   @map("event_type") @db.VarChar(64)
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
+/// Audit trail for every extraction run.
+model FeedbackExtractionLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  extractionId   String   @unique @map("extraction_id")
+  extractionType String   @map("extraction_type")
+  watermarkStart DateTime @map("watermark_start")
+  watermarkEnd   DateTime @map("watermark_end")
+  rowCount       Int      @map("row_count")
+  filePath       String   @map("file_path")
+  fileSha256     String   @map("file_sha256") @db.Char(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([extractionType])
+  @@index([createdAt])
+  @@map("feedback_extraction_log")
+}
+
+// ============================================
+// Prepaid wallet — organization credit balance + an append-only ledger.
+// Metered `<strategy>:<tier>` requests HOLD the worst-case charge at the 402 gate
+// and DEBIT the actual charge (user tokens × tier rate) after execution. Backed by
+// RAW SQL (prepaid-wallet-prisma-store.ts) so it ships ahead of a client regen.
+// Migration: 20260619000000_prepaid_wallet.
+// ============================================
+
+model OrganizationBalance {
+  organizationId String   @id @map("organization_id")
+  balanceUsd     Decimal  @default(0) @map("balance_usd") @db.Decimal(18, 6)
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@map("organization_balance")
+}
+
+model CreditTransaction {
+  id              BigInt   @id @default(autoincrement())
+  organizationId  String   @map("organization_id")
+  kind            String
+  amountUsd       Decimal  @map("amount_usd") @db.Decimal(18, 6)
+  balanceAfterUsd Decimal  @map("balance_after_usd") @db.Decimal(18, 6)
+  requestId       String?  @map("request_id")
+  description     String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([requestId])
+  @@map("credit_transaction")
+}
+
+// Persisted operability overlay (Camada 1a / prove-before-advertise).
+// The ProviderOperabilityHub is otherwise in-memory and forgets every restart,
+// which is why a freshly-restarted process reports "0 healthy providers". This
+// table persists the DERIVED operability state per provider with a per-state TTL
+// (auth_failed/no_credits long, healthy short) so the hub can rehydrate the last
+// known state on boot instead of resetting to `unknown`. Runtime events always
+// take precedence over this overlay; expired rows are ignored on read.
+model ProviderOperabilitySnapshot {
+  providerKey String   @id @map("provider_key")
+  state       String
+  reasonCode  String   @map("reason_code")
+  isNative    Boolean  @default(false) @map("is_native")
+  observedAt  DateTime @map("observed_at")
+  expiresAt   DateTime @map("expires_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([expiresAt])
+  @@map("provider_operability_snapshots")
+}

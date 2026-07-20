@@ -1,0 +1,32 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# NLLB-200 Translation Sidecar — PyTorch CPU, greedy decoding
+# ~700ms per sentence, 200 languages, correct output quality
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install --no-cache-dir \
+    transformers==4.47.1 \
+    sentencepiece==0.2.0 \
+    fastapi==0.115.6 \
+    "uvicorn[standard]==0.34.0" \
+    huggingface-hub==0.27.1 \
+    accelerate==1.2.1
+
+COPY nllb-server.py /app/server.py
+
+EXPOSE 8087
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -sf http://localhost:8087/health || exit 1
+CMD ["python", "/app/server.py"]

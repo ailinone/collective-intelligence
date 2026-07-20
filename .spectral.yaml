@@ -1,0 +1,74 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+extends:
+  - "spectral:oas"
+
+rules:
+  security-requirement-root-or-semantics:
+    description: Root security requirements must use OR semantics (one scheme per requirement object).
+    severity: error
+    given: "$.security[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          maxProperties: 1
+
+  security-requirement-operation-or-semantics:
+    description: Operation security requirements must use OR semantics (one scheme per requirement object).
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace].security[*]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          maxProperties: 1
+
+  response-200-must-have-content:
+    description: 200 responses must declare content.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace].responses['200']"
+    then:
+      function: truthy
+      field: content
+
+  response-201-must-have-content:
+    description: 201 responses must declare content.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace].responses['201']"
+    then:
+      function: truthy
+      field: content
+
+  response-202-must-have-content:
+    description: 202 responses must declare content.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace].responses['202']"
+    then:
+      function: truthy
+      field: content
+
+  response-429-retry-after-required:
+    description: Shared 429 response must define Retry-After header.
+    severity: error
+    given: "$.components.responses.TooManyRequests.headers"
+    then:
+      function: truthy
+      field: Retry-After
+
+  response-503-retry-after-required:
+    description: 503 responses must define Retry-After header.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace].responses['503'].headers"
+    then:
+      function: truthy
+      field: Retry-After

@@ -1,0 +1,3078 @@
+{
+  "GET /v1/admin/users": {
+    "sourceFile": "admin\\admin-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/admin/users/:id": {
+    "sourceFile": "admin\\admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/api-keys/rotate/:keyId": {
+    "sourceFile": "admin\\api-key-rotation-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/api-keys/rotation-status": {
+    "sourceFile": "admin\\api-key-rotation-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/api-keys/auto-rotate/enable": {
+    "sourceFile": "admin\\api-key-rotation-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/api-keys/rotation-logs": {
+    "sourceFile": "admin\\api-key-rotation-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/benchmark/status": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/benchmark/run": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/benchmark/runs": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "List recent benchmark runs (most recent first)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/admin/benchmark/runs/:runId": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get detailed results of a specific benchmark run",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      }
+    }
+  },
+  "GET /v1/admin/benchmark/reward-integrity": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get reward integrity results from recent runs (OI-02)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/gaming-signals": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get all gaming signals detected across recent runs",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/bandit": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get Thompson Sampling bandit state and Success-Story status (OI-03)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "taskType": {
+            "type": "string",
+            "nullable": true
+          },
+          "complexity": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/admin/benchmark/bandit/snapshots": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "List Success-Story snapshots for auto-rollback inspection",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/admin/benchmark/bandit/snapshot": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/benchmark/suite-stats": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get benchmark suite coverage statistics",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/archive": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get MAP-Elites configuration archive state (OI-06)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "taskType": {
+            "type": "string",
+            "nullable": true
+          },
+          "complexity": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/admin/benchmark/archive/recommend": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get strategy recommendation from archive for a specific niche",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "taskType",
+          "complexity",
+          "preference"
+        ],
+        "properties": {
+          "taskType": {
+            "type": "string"
+          },
+          "complexity": {
+            "type": "string"
+          },
+          "preference": {
+            "type": "string",
+            "enum": [
+              "speed",
+              "cost",
+              "quality",
+              "balanced",
+              "adaptive"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/admin/benchmark/triage": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get triage calibrator state, rules, and calibration history (OI-07)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/admin/benchmark/triage/calibrate": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Force a triage calibration pass",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/admin/benchmark/triage/reset-rules": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Reset all triage correction rules (emergency valve)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/quality-targets": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get all cached adaptive quality target profiles with recommendations (OI-08)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/admin/benchmark/quality-targets/refresh": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Force refresh of all adaptive quality target profiles from DB (OI-08)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/pareto": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get current Pareto frontier snapshot across all niches (OI-09)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/pareto/history": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get Pareto evaluation history for trend analysis (OI-09)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/admin/benchmark/knowledge-graph": {
+    "sourceFile": "admin\\benchmark-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Benchmark"
+      ],
+      "description": "Get knowledge graph statistics including benchmark and archive data (OI-11)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "GET /admin/queues/dlq": {
+    "sourceFile": "admin\\dlq-routes.ts",
+    "schema": null
+  },
+  "GET /admin/queues/dlq/:queue": {
+    "sourceFile": "admin\\dlq-routes.ts",
+    "schema": null
+  },
+  "POST /admin/queues/dlq/:queue/:jobId/replay": {
+    "sourceFile": "admin\\dlq-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/evaluation/drift": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "POST /v1/admin/evaluation/drift/detect": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "GET /v1/admin/evaluation/learning": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "POST /v1/admin/evaluation/learning/validate": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "GET /v1/admin/evaluation/outcomes": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "nullable": true
+          },
+          "hours": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 168,
+            "default": 24
+          },
+          "limit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/admin/evaluation/health": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "GET /v1/admin/evaluation/shadow": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "GET /v1/admin/evaluation/competitive": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "GET /v1/admin/evaluation/rollbacks": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "POST /v1/admin/evaluation/pipeline": {
+    "sourceFile": "admin\\evaluation-admin-routes.ts",
+    "schema": {
+      "tags": [
+        "Admin",
+        "Evaluation"
+      ]
+    }
+  },
+  "POST /v1/admin/experiment/create": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/run": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/status": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/pause": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/results": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/analysis": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/report": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/history": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/suite": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/go-no-go": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/calibrate-judge": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/c3-configs": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/c3-create": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/admin/experiment/c3/benchmark": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/c3/pilot": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/c3/main": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/c3/ablation": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "POST /v1/admin/experiment/c3/full": {
+    "sourceFile": "admin\\experiment-admin-routes.ts",
+    "schema": null
+  },
+  "GET /v1/api-keys": {
+    "sourceFile": "api-keys\\api-keys-routes-clean.ts",
+    "schema": {
+      "tags": [
+        "API Keys"
+      ],
+      "description": "List user API keys",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/api-keys/:keyId/rotate": {
+    "sourceFile": "api-keys\\api-keys-routes-clean.ts",
+    "schema": {
+      "tags": [
+        "API Keys"
+      ],
+      "description": "Rotate API key",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "keyId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "keyId"
+        ]
+      },
+      "body": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/assistants": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "GET /v1/assistants/:assistant_id": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "POST /v1/assistants/:assistant_id": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/assistants/:assistant_id": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "GET /v1/assistants": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "POST /v1/assistants/:assistant_id/files": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "GET /v1/assistants/:assistant_id/files": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "GET /v1/assistants/:assistant_id/files/:file_id": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/assistants/:assistant_id/files/:file_id": {
+    "sourceFile": "assistants\\assistants-routes.ts",
+    "schema": null
+  },
+  "POST /v1/audio/speech": {
+    "sourceFile": "audio\\audio-routes.ts",
+    "schema": null
+  },
+  "POST /v1/audio/transcriptions": {
+    "sourceFile": "audio\\audio-routes.ts",
+    "schema": null
+  },
+  "POST /v1/audio/translations": {
+    "sourceFile": "audio\\audio-routes.ts",
+    "schema": null
+  },
+  "POST /v1/auth/challenge": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/email-challenge": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/register": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/login": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": {
+      "tags": [
+        "Auth"
+      ],
+      "description": "Complete authentication",
+      "body": {
+        "type": "object"
+      }
+    }
+  },
+  "POST /v1/auth/login-with-code": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/logout": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/refresh": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "GET /v1/auth/api-keys": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/api-keys": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "DELETE /v1/auth/api-keys/:id": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/auth/test-db": {
+    "sourceFile": "auth\\auth-routes-clean.ts",
+    "schema": {
+      "hide": true,
+      "tags": [
+        "Debug"
+      ],
+      "description": "Test database connectivity (requires authentication)",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/batches": {
+    "sourceFile": "batches\\batches-routes.ts",
+    "schema": null
+  },
+  "GET /v1/batches/:batch_id": {
+    "sourceFile": "batches\\batches-routes.ts",
+    "schema": null
+  },
+  "POST /v1/batches/:batch_id/cancel": {
+    "sourceFile": "batches\\batches-routes.ts",
+    "schema": null
+  },
+  "GET /v1/batches": {
+    "sourceFile": "batches\\batches-routes.ts",
+    "schema": null
+  },
+  "GET /v1/cache/value": {
+    "sourceFile": "cache\\cache-routes.ts",
+    "schema": null
+  },
+  "POST /v1/cache/value": {
+    "sourceFile": "cache\\cache-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/cache/value": {
+    "sourceFile": "cache\\cache-routes.ts",
+    "schema": null
+  },
+  "POST /v1/cache/clear": {
+    "sourceFile": "cache\\cache-routes.ts",
+    "schema": null
+  },
+  "GET /v1/cache/stats": {
+    "sourceFile": "cache\\cache-routes.ts",
+    "schema": null
+  },
+  "POST /v1/capabilities/:capability/execute": {
+    "sourceFile": "capabilities\\capabilities-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "Universal capability execution endpoint with capability-plan driven dispatch, fallback execution paths, and normalized result envelope."
+    }
+  },
+  "POST /v1/capabilities/:capability/stream": {
+    "sourceFile": "capabilities\\capabilities-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "Universal capability streaming endpoint. Stream-capable capabilities are proxied to streaming-compatible routes."
+    }
+  },
+  "GET /v1/capabilities/:capability/health": {
+    "sourceFile": "capabilities\\capabilities-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "Capability health and operability report with inventory, runnable coverage, and dependency diagnostics."
+    }
+  },
+  "GET /v1/capabilities": {
+    "sourceFile": "capabilities\\capabilities-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "List complete capability matrix with execution metadata and dependency hints."
+    }
+  },
+  "GET /v1/capabilities/ontology/search": {
+    "sourceFile": "capabilities\\capabilities-search-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "Hybrid lexical + vector search over the capability ontology. Returns RRF-fused hits with provenance of which path matched."
+    }
+  },
+  "GET /v1/capabilities/models/search": {
+    "sourceFile": "capabilities\\capabilities-search-routes.ts",
+    "schema": {
+      "tags": [
+        "Capabilities"
+      ],
+      "description": "Hybrid lexical + vector + capability-filter search over the model catalog. Use require_capabilities for hard filters and prefers_capabilities for soft boost."
+    }
+  },
+  "POST /v1/chat/completions": {
+    "sourceFile": "chat\\chat-routes.ts",
+    "schema": null
+  },
+  "POST /v1/code/execute": {
+    "sourceFile": "code-execution\\code-execution-routes.ts",
+    "schema": null
+  },
+  "POST /v1/codebase/analysis": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Sync code analysis from CLI",
+      "description": "Upload symbols and dependencies extracted by CLI Tree-sitter parser",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "files",
+          "isIncremental"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "commitSha": {
+            "type": "string"
+          },
+          "isIncremental": {
+            "type": "boolean"
+          },
+          "previousChecksum": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "filePath",
+                "symbols",
+                "dependencies",
+                "checksum",
+                "lineCount"
+              ],
+              "properties": {
+                "filePath": {
+                  "type": "string"
+                },
+                "checksum": {
+                  "type": "string"
+                },
+                "lineCount": {
+                  "type": "integer"
+                },
+                "symbols": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "type",
+                      "startLine",
+                      "endLine"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "qualifiedName": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "function",
+                          "class",
+                          "variable",
+                          "method",
+                          "interface",
+                          "enum",
+                          "constant",
+                          "type",
+                          "import",
+                          "export"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "startLine": {
+                        "type": "integer"
+                      },
+                      "endLine": {
+                        "type": "integer"
+                      },
+                      "startColumn": {
+                        "type": "integer"
+                      },
+                      "endColumn": {
+                        "type": "integer"
+                      },
+                      "signature": {
+                        "type": "string"
+                      },
+                      "documentation": {
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "type": "string",
+                        "enum": [
+                          "public",
+                          "private",
+                          "protected",
+                          "internal"
+                        ]
+                      },
+                      "isAsync": {
+                        "type": "boolean"
+                      },
+                      "isStatic": {
+                        "type": "boolean"
+                      },
+                      "isExported": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "dependencies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "sourceFilePath",
+                      "dependencyType"
+                    ],
+                    "properties": {
+                      "sourceFilePath": {
+                        "type": "string"
+                      },
+                      "targetFilePath": {
+                        "type": "string"
+                      },
+                      "sourceSymbolName": {
+                        "type": "string"
+                      },
+                      "targetSymbolName": {
+                        "type": "string"
+                      },
+                      "dependencyType": {
+                        "type": "string",
+                        "enum": [
+                          "import",
+                          "export",
+                          "call",
+                          "inherit",
+                          "implement",
+                          "reference",
+                          "type_reference"
+                        ]
+                      },
+                      "importPath": {
+                        "type": "string"
+                      },
+                      "isExternal": {
+                        "type": "boolean"
+                      },
+                      "isDynamic": {
+                        "type": "boolean"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/search/semantic": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Semantic search across codebase",
+      "description": "Search using full-text and trigram matching for both content and symbols",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 2
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "includeSymbols": {
+            "type": "boolean",
+            "default": true
+          },
+          "includeContent": {
+            "type": "boolean",
+            "default": true
+          },
+          "symbolTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/symbols": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Get symbols for a file",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "filePath"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/references": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Find symbol references",
+      "description": "Find all definitions and usages of a symbol across the codebase",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "symbolName"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "symbolName": {
+            "type": "string"
+          },
+          "symbolType": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/dependencies": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Get dependency graph",
+      "description": "Get import/export dependency graph for project or specific file",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 2
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/checkpoint": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Get checkpoint status",
+      "description": "Get indexing checkpoint for incremental sync",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/stats": {
+    "sourceFile": "codebase\\codebase-analysis-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase Analysis"
+      ],
+      "summary": "Get project statistics",
+      "description": "Get file, symbol, and dependency counts with distributions",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/codebase/sync": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Synchronize codebase chunk",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "rootPath",
+          "files",
+          "sequence",
+          "totalSequences",
+          "isFinalChunk"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "rootPath": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "commitSha": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalSequences": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "isFinalChunk": {
+            "type": "boolean"
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "size",
+                "checksum",
+                "lastModified"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "checksum": {
+                  "type": "string"
+                },
+                "lastModified": {
+                  "type": "integer"
+                },
+                "language": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "encoding": {
+                  "type": "string",
+                  "enum": [
+                    "utf-8",
+                    "base64"
+                  ]
+                },
+                "executable": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/search/codebase": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Search codebase",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 2
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "fileTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "includeContext": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/codebase/analysis/sync": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Sync code analysis results (symbols, dependencies)",
+      "description": "Receives parsed symbols and dependencies from CLI Tree-sitter analysis",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "files",
+          "isIncremental"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "commitSha": {
+            "type": "string"
+          },
+          "isIncremental": {
+            "type": "boolean"
+          },
+          "previousChecksum": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "filePath",
+                "symbols",
+                "dependencies",
+                "checksum",
+                "lineCount"
+              ],
+              "properties": {
+                "filePath": {
+                  "type": "string"
+                },
+                "checksum": {
+                  "type": "string"
+                },
+                "lineCount": {
+                  "type": "integer"
+                },
+                "symbols": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "type",
+                      "startLine",
+                      "endLine"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "qualifiedName": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "startLine": {
+                        "type": "integer"
+                      },
+                      "endLine": {
+                        "type": "integer"
+                      },
+                      "startColumn": {
+                        "type": "integer"
+                      },
+                      "endColumn": {
+                        "type": "integer"
+                      },
+                      "signature": {
+                        "type": "string"
+                      },
+                      "documentation": {
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "type": "string"
+                      },
+                      "isAsync": {
+                        "type": "boolean"
+                      },
+                      "isStatic": {
+                        "type": "boolean"
+                      },
+                      "isExported": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "dependencies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "sourceFilePath",
+                      "dependencyType"
+                    ],
+                    "properties": {
+                      "sourceFilePath": {
+                        "type": "string"
+                      },
+                      "targetFilePath": {
+                        "type": "string"
+                      },
+                      "sourceSymbolName": {
+                        "type": "string"
+                      },
+                      "targetSymbolName": {
+                        "type": "string"
+                      },
+                      "dependencyType": {
+                        "type": "string"
+                      },
+                      "importPath": {
+                        "type": "string"
+                      },
+                      "isExternal": {
+                        "type": "boolean"
+                      },
+                      "isDynamic": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/codebase/search/semantic": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Semantic search across codebase",
+      "description": "Search symbols, content, and dependencies with semantic understanding",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "query"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 2
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "includeSymbols": {
+            "type": "boolean",
+            "default": true
+          },
+          "includeContent": {
+            "type": "boolean",
+            "default": true
+          },
+          "symbolTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/symbols/references": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Find all references to a symbol",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "symbolName"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "symbolName": {
+            "type": "string"
+          },
+          "symbolType": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/codebase/files/symbols": {
+    "sourceFile": "codebase\\codebase-routes.ts",
+    "schema": {
+      "tags": [
+        "Codebase"
+      ],
+      "summary": "Get symbols for a specific file",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "filePath"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/collective-intelligence/learning-scope": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "POST /v1/memory": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "POST /v1/memory/search": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "GET /v1/memory/stats": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/memory/:memoryId": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "POST /v1/workflows/create": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "POST /v1/workflows/execute": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "GET /v1/reasoning/:requestId": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "GET /v1/reasoning/:requestId/explain": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "GET /v1/critique/config": {
+    "sourceFile": "collective-intelligence\\ci-routes.ts",
+    "schema": null
+  },
+  "POST /v1/caching/contexts": {
+    "sourceFile": "context-caching\\context-caching-routes.ts",
+    "schema": null
+  },
+  "GET /v1/caching/contexts": {
+    "sourceFile": "context-caching\\context-caching-routes.ts",
+    "schema": null
+  },
+  "GET /v1/caching/contexts/:context_id": {
+    "sourceFile": "context-caching\\context-caching-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/caching/contexts/:context_id": {
+    "sourceFile": "context-caching\\context-caching-routes.ts",
+    "schema": null
+  },
+  "POST /v1/caching/contexts/:context_id/use": {
+    "sourceFile": "context-caching\\context-caching-routes.ts",
+    "schema": null
+  },
+  "POST /v1/embeddings": {
+    "sourceFile": "embeddings\\embeddings-routes.ts",
+    "schema": null
+  },
+  "POST /v1/embeddings/create": {
+    "sourceFile": "embeddings\\embeddings-routes.ts",
+    "schema": null
+  },
+  "GET /v1/enterprise/billing/config": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Get billing configuration",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/enterprise/billing/payment-methods": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": null
+  },
+  "POST /v1/enterprise/billing/payment-methods/setup-intent": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Create payment method setup intent",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/enterprise/billing/payment-methods/attach": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Attach payment method to organization",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "properties": {
+          "paymentMethodId": {
+            "type": "string"
+          },
+          "setDefault": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paymentMethodId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "DELETE /v1/enterprise/billing/payment-methods/:paymentMethodId": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Detach payment method",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/enterprise/billing/plans": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "List available billing plans",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "refresh": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/enterprise/billing/invoices": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "List invoices",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "GET /v1/enterprise/billing/invoices/:invoiceId": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": null
+  },
+  "POST /v1/enterprise/billing/invoices/:invoiceId/pay": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Mark invoice as paid",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "params": {
+        "type": "object",
+        "required": [
+          "invoiceId"
+        ],
+        "properties": {
+          "invoiceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/enterprise/billing/subscriptions": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "List subscriptions",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/enterprise/billing/subscriptions/:subscriptionId/cancel": {
+    "sourceFile": "enterprise\\billing-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Cancel subscription",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/billing/webhooks/stripe": {
+    "sourceFile": "enterprise\\billing-webhooks.ts",
+    "schema": {
+      "hide": true
+    }
+  },
+  "GET /v1/enterprise/quotas": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "List usage quotas for the organization",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ]
+    }
+  },
+  "POST /v1/enterprise/quotas": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Configure usage quotas",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "limits"
+        ],
+        "properties": {
+          "organizationId": {
+            "type": "string"
+          },
+          "limits": {
+            "type": "object",
+            "required": [
+              "period"
+            ],
+            "properties": {
+              "period": {
+                "type": "string",
+                "enum": [
+                  "minute",
+                  "hour",
+                  "day",
+                  "month"
+                ]
+              },
+              "maxRequests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxCost": {
+                "type": "number",
+                "minimum": 0
+              },
+              "maxFiles": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxFileSize": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/enterprise/quotas/check": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Check if an operation fits within quota limits",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "minute",
+              "hour",
+              "day",
+              "month"
+            ]
+          },
+          "operation": {
+            "type": "object",
+            "properties": {
+              "requests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cost": {
+                "type": "number",
+                "minimum": 0
+              },
+              "files": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/enterprise/quotas/usage": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Record quota usage for an operation",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "minute",
+              "hour",
+              "day",
+              "month"
+            ]
+          },
+          "operation": {
+            "type": "object",
+            "properties": {
+              "requests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cost": {
+                "type": "number",
+                "minimum": 0
+              },
+              "files": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/enterprise/quotas/reset": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Reset quota usage for the current period",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "minute",
+              "hour",
+              "day",
+              "month"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/enterprise/quotas/current": {
+    "sourceFile": "enterprise\\quotas-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Get current quota usage for the active period",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "minute",
+              "hour",
+              "day",
+              "month"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/enterprise/usage/events": {
+    "sourceFile": "enterprise\\usage-analytics-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Record usage analytics events",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "body": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "eventType"
+              ],
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "teamId": {
+                  "type": "string"
+                },
+                "eventType": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "integer"
+                },
+                "metadata": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/enterprise/usage/metrics": {
+    "sourceFile": "enterprise\\usage-analytics-routes.ts",
+    "schema": {
+      "tags": [
+        "Enterprise"
+      ],
+      "summary": "Get aggregated usage analytics metrics",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "integer"
+          },
+          "end": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/chat/completions/extended-thinking": {
+    "sourceFile": "extended-thinking\\extended-thinking-routes.ts",
+    "schema": null
+  },
+  "POST /v1/chat/completions/ultra-thinking": {
+    "sourceFile": "extended-thinking\\extended-thinking-routes.ts",
+    "schema": null
+  },
+  "POST /v1/files": {
+    "sourceFile": "files\\files-routes.ts",
+    "schema": null
+  },
+  "GET /v1/files": {
+    "sourceFile": "files\\files-routes.ts",
+    "schema": null
+  },
+  "GET /v1/files/:file_id": {
+    "sourceFile": "files\\files-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/files/:file_id": {
+    "sourceFile": "files\\files-routes.ts",
+    "schema": null
+  },
+  "GET /v1/files/:file_id/content": {
+    "sourceFile": "files\\files-routes.ts",
+    "schema": null
+  },
+  "POST /v1/fine_tuning/jobs": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "GET /v1/fine_tuning/jobs": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "GET /v1/fine_tuning/jobs/:job_id": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "POST /v1/fine_tuning/jobs/:job_id/cancel": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "GET /v1/fine_tuning/jobs/:job_id/events": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "GET /v1/fine_tuning/jobs/:job_id/checkpoints": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/fine_tuning/jobs/:job_id": {
+    "sourceFile": "fine-tuning\\fine-tuning-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps/search": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps/geocode": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps/reverse-geocode": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps/directions": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps/place-details": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/google-maps": {
+    "sourceFile": "google-maps\\google-maps-routes.ts",
+    "schema": null
+  },
+  "GET /v1/health/providers": {
+    "sourceFile": "health\\provider-health-routes.ts",
+    "schema": null
+  },
+  "GET /v1/health/providers/:providerName": {
+    "sourceFile": "health\\provider-health-routes.ts",
+    "schema": null
+  },
+  "POST /v1/images/generations": {
+    "sourceFile": "images\\images-routes.ts",
+    "schema": null
+  },
+  "POST /v1/images/edits": {
+    "sourceFile": "images\\images-routes.ts",
+    "schema": null
+  },
+  "POST /v1/images/variations": {
+    "sourceFile": "images\\images-routes.ts",
+    "schema": null
+  },
+  "GET /v1/jobs": {
+    "sourceFile": "jobs\\jobs-routes.ts",
+    "schema": null
+  },
+  "GET /v1/jobs/:id": {
+    "sourceFile": "jobs\\jobs-routes.ts",
+    "schema": null
+  },
+  "GET /.well-known/jwks.json": {
+    "sourceFile": "jwks-routes.ts",
+    "schema": null
+  },
+  "GET /console/api/v1/jwks": {
+    "sourceFile": "jwks-routes.ts",
+    "schema": null
+  },
+  "GET /internal/jwks/status": {
+    "sourceFile": "jwks-routes.ts",
+    "schema": null
+  },
+  "GET /metrics": {
+    "sourceFile": "metrics\\metrics-route.ts",
+    "schema": null
+  },
+  "GET /metrics/prompts": {
+    "sourceFile": "metrics\\metrics-route.ts",
+    "schema": null
+  },
+  "POST /v1/models/configure": {
+    "sourceFile": "models\\models-config-routes.ts",
+    "schema": null
+  },
+  "GET /v1/models": {
+    "sourceFile": "models\\models-routes.ts",
+    "schema": null
+  },
+  "GET /v1/models/list": {
+    "sourceFile": "models\\models-routes.ts",
+    "schema": null
+  },
+  "GET /v1/models/:id": {
+    "sourceFile": "models\\models-routes.ts",
+    "schema": null
+  },
+  "POST /v1/moderations": {
+    "sourceFile": "moderations\\moderations-routes.ts",
+    "schema": null
+  },
+  "GET /v1/nonce": {
+    "sourceFile": "nonce-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/health": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/strategies": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/models": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/learning": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/cache": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/ci/dashboard/overview": {
+    "sourceFile": "observability\\ci-dashboard-routes.ts",
+    "schema": null
+  },
+  "GET /v1/orchestration/strategies": {
+    "sourceFile": "orchestration\\orchestration-routes.ts",
+    "schema": null
+  },
+  "GET /v1/organizations": {
+    "sourceFile": "organization\\organization-routes-clean.ts",
+    "schema": {
+      "tags": [
+        "Organizations"
+      ],
+      "description": "List organizations",
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "free",
+              "pro",
+              "enterprise"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/organizations/:id": {
+    "sourceFile": "organization\\organization-routes-clean.ts",
+    "schema": null
+  },
+  "PUT /v1/organizations/:id": {
+    "sourceFile": "organization\\organization-routes-clean.ts",
+    "schema": null
+  },
+  "GET /v1/organizations/:id/members": {
+    "sourceFile": "organization\\organization-routes-clean.ts",
+    "schema": null
+  },
+  "DELETE /v1/organizations/:id/members/:userId": {
+    "sourceFile": "organization\\organization-routes-clean.ts",
+    "schema": null
+  },
+  "PATCH /v1/organization/settings": {
+    "sourceFile": "organization\\organization-settings-routes.ts",
+    "schema": null
+  },
+  "POST /v1/pdf/analyze": {
+    "sourceFile": "pdf\\pdf-routes.ts",
+    "schema": null
+  },
+  "GET /v1/providers": {
+    "sourceFile": "providers\\providers-routes.ts",
+    "schema": null
+  },
+  "GET /v1/providers/:id": {
+    "sourceFile": "providers\\providers-routes.ts",
+    "schema": null
+  },
+  "GET /v1/queue/status/:id": {
+    "sourceFile": "queue\\queue-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/queue/status/:id": {
+    "sourceFile": "queue\\queue-routes.ts",
+    "schema": null
+  },
+  "POST /v1/realtime/session": {
+    "sourceFile": "realtime\\realtime-routes.ts",
+    "schema": {
+      "tags": [
+        "Realtime"
+      ],
+      "summary": "Create realtime session",
+      "description": "Creates an ephemeral session with a short-lived token for WebSocket connection. The token is embedded in the wsUrl so credentials are not exposed in the WebSocket URL.",
+      "body": {
+        "type": "object",
+        "properties": {
+          "modalities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/realtime": {
+    "sourceFile": "realtime\\realtime-routes.ts",
+    "schema": {
+      "tags": [
+        "Realtime"
+      ],
+      "summary": "Realtime WebSocket API",
+      "description": "WebSocket endpoint for realtime bidirectional streaming. Supports OpenAI Realtime API and Google Live API. Provides bidirectional audio streaming, function calling, and interruptions. Automatically selects the best provider based on model capabilities.",
+      "security": [
+        {
+          "bearerAuth": []
+        },
+        {
+          "apiKeyAuth": []
+        }
+      ],
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Model ID or \"auto\" for dynamic selection"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/responses": {
+    "sourceFile": "responses\\responses-routes.ts",
+    "schema": null
+  },
+  "GET /v1/responses/:response_id": {
+    "sourceFile": "responses\\responses-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/responses/:response_id": {
+    "sourceFile": "responses\\responses-routes.ts",
+    "schema": null
+  },
+  "POST /v1/search": {
+    "sourceFile": "search\\search-routes.ts",
+    "schema": null
+  },
+  "POST /v1/grounding/extract": {
+    "sourceFile": "search\\search-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/threads/:thread_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id/messages": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/messages": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id/runs": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/runs": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/runs/:run_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/messages/:message_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id/messages/:message_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/threads/:thread_id/messages/:message_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id/runs/:run_id/submit_tool_outputs": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/threads/:thread_id/runs/:run_id/cancel": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/runs/:run_id/steps": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "GET /v1/threads/:thread_id/runs/:run_id/steps/:step_id": {
+    "sourceFile": "threads\\threads-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/search-replace": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/grep": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/list-directory": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/file-search": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/batch-search-replace": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/apply-multi-file-changes": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/status": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/commit": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/diff": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/push": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/pull": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/create-branch": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/merge": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/rebase": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/git/resolve-conflict": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/codebase-search": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/semantic-search": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/find-symbol-references": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/analyze-codebase": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/dependency-graph": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/explore-codebase": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/extract-function": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/rename-symbol": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/extract-variable": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/inline-function": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/heal-file": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/detect-errors": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/validate-code": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/generate-tests": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/analyze-image": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/compare-images": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/extract-code-from-screenshot": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/todos/create": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/todos/update": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/todos/check": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/todos/list": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/workflows/execute": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "GET /v1/tools/workflows": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/workflows/register": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/reader": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/search": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/embeddings": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/rerank": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/classify": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/segment": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/jina/deepsearch": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/tools/web-search": {
+    "sourceFile": "tools\\tools-routes.ts",
+    "schema": null
+  },
+  "POST /v1/translation/session": {
+    "sourceFile": "translation\\translation-routes.ts",
+    "schema": {
+      "tags": [
+        "Translation"
+      ],
+      "summary": "Create real-time translation session",
+      "description": "Creates a Palabra.ai translation session with LiveKit WebRTC room credentials. The client connects directly to the LiveKit room for low-latency bidirectional audio translation.",
+      "body": {
+        "type": "object",
+        "required": [
+          "sourceLanguage",
+          "targetLanguages"
+        ],
+        "properties": {
+          "sourceLanguage": {
+            "type": "string",
+            "description": "Source language code (e.g., \"pt\", \"en\", \"es\")"
+          },
+          "targetLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Target language codes (e.g., [\"en\", \"es\", \"fr\"])"
+          },
+          "voiceId": {
+            "type": "string",
+            "description": "Voice ID for TTS output (default: \"default_low\")"
+          },
+          "sentenceSplitterEnabled": {
+            "type": "boolean",
+            "description": "Enable sentence splitting (default: true)"
+          },
+          "translatePartialTranscriptions": {
+            "type": "boolean",
+            "description": "Translate partial transcriptions (default: false)"
+          }
+        }
+      }
+    }
+  },
+  "DELETE /v1/translation/session/:id": {
+    "sourceFile": "translation\\translation-routes.ts",
+    "schema": {
+      "tags": [
+        "Translation"
+      ],
+      "summary": "Delete translation session",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  },
+  "POST /v1/translation/text": {
+    "sourceFile": "translation\\translation-routes.ts",
+    "schema": {
+      "tags": [
+        "Translation"
+      ],
+      "summary": "Translate text (NLLB-200)",
+      "description": "Fast text-to-text translation via self-hosted NLLB-200. ~50ms per sentence, 200+ languages.",
+      "body": {
+        "type": "object",
+        "required": [
+          "text",
+          "target_lang"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to translate"
+          },
+          "source_lang": {
+            "type": "string",
+            "description": "Source language ISO 639-1 (e.g., \"en\"). Auto-detected if omitted."
+          },
+          "target_lang": {
+            "type": "string",
+            "description": "Target language ISO 639-1 (e.g., \"pt\", \"ja\", \"es\")"
+          }
+        }
+      }
+    }
+  },
+  "POST /v1/translation/batch": {
+    "sourceFile": "translation\\translation-routes.ts",
+    "schema": {
+      "tags": [
+        "Translation"
+      ],
+      "summary": "Batch translate texts",
+      "body": {
+        "type": "object",
+        "required": [
+          "texts",
+          "target_lang"
+        ],
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "source_lang": {
+            "type": "string"
+          },
+          "target_lang": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "GET /v1/translation/languages": {
+    "sourceFile": "translation\\translation-routes.ts",
+    "schema": {
+      "tags": [
+        "Translation"
+      ],
+      "summary": "List supported translation languages"
+    }
+  },
+  "GET /v1/usage/stats": {
+    "sourceFile": "usage\\usage-routes.ts",
+    "schema": null
+  },
+  "GET /v1/users": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "GET /v1/users/:id": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "PUT /v1/users/:id": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "PATCH /v1/users/:id": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/users/:id": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "POST /v1/users/:id/change-password": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "GET /v1/users/:id/api-keys": {
+    "sourceFile": "user\\user-management-routes.ts",
+    "schema": null
+  },
+  "GET /v1/user/profile": {
+    "sourceFile": "user\\user-routes-clean.ts",
+    "schema": null
+  },
+  "PUT /v1/user/profile": {
+    "sourceFile": "user\\user-routes-clean.ts",
+    "schema": null
+  },
+  "POST /v1/vector_stores": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "GET /v1/vector_stores": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "GET /v1/vector_stores/:vector_store_id": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "POST /v1/vector_stores/:vector_store_id": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/vector_stores/:vector_store_id": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "POST /v1/vector_stores/:vector_store_id/files": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "GET /v1/vector_stores/:vector_store_id/files": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "DELETE /v1/vector_stores/:vector_store_id/files/:file_id": {
+    "sourceFile": "vector-stores\\vector-stores-routes.ts",
+    "schema": null
+  },
+  "POST /v1/videos/generations": {
+    "sourceFile": "videos\\videos-routes.ts",
+    "schema": null
+  }
+}

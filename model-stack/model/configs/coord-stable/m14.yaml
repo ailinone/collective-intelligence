@@ -1,0 +1,43 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M14 — Qwen2.5-Coder-7B (code, Tier 4)
+inherits: "_shared.yaml"
+
+model_id: "m14"
+display_name: "Coord M14 — Qwen2.5-Coder-7B (code)"
+base_model: "Qwen/Qwen2.5-Coder-7B"
+architecture: "decoder_only_transformer"
+family: "qwen2.5-coder"
+tier: 4
+specialty: "code"
+
+fine_tune:
+  method: "lora"
+  rank: 64
+  alpha: 128
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 2
+  learning_rate: 1.0e-4
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["code-generation", "refactoring", "debugging", "code-review"]
+  max_examples_per_label: 7000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+
+audit:
+  scheduler_name_format: "coord-m14-qwen2.5-coder-7b"

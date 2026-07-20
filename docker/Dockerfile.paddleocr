@@ -1,0 +1,141 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# PaddleOCR Sidecar — Multilingual OCR (80+ languages, CPU-native)
+#
+# Endpoints:
+#   GET  /health            → Health check
+#   GET  /v1/models         → List OCR models
+#   POST /v1/document/ocr   → OCR on uploaded image (multipart or base64)
+#
+# PaddlePaddle runs CPU-only by default. No GPU required.
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libsm6 libxext6 libxrender1 libgl1-mesa-glx curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    paddlepaddle==3.0.* \
+    paddleocr==2.9.* \
+    fastapi==0.115.* \
+    uvicorn[standard]==0.32.* \
+    python-multipart \
+    Pillow \
+    numpy
+
+COPY <<'PYEOF' /app/server.py
+"""PaddleOCR sidecar with OpenAI-style API."""
+
+import os
+import io
+import json
+import base64
+import logging
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from PIL import Image
+import numpy as np
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("paddleocr-sidecar")
+
+app = FastAPI(title="PaddleOCR Sidecar")
+
+ocr_engine = None
+OCR_LANG = os.environ.get("OCR_LANG", "en")
+
+
+def get_ocr():
+    global ocr_engine
+    if ocr_engine is None:
+        from paddleocr import PaddleOCR
+        ocr_engine = PaddleOCR(use_angle_cls=True, lang=OCR_LANG, use_gpu=False, show_log=False)
+        log.info(f"PaddleOCR initialized with lang={OCR_LANG}")
+    return ocr_engine
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "lang": OCR_LANG}
+
+
+@app.get("/v1/models")
+def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {"id": f"paddleocr-{OCR_LANG}", "object": "model", "owned_by": "local", "type": "ocr"},
+        ],
+    }
+
+
+@app.post("/v1/document/ocr")
+async def ocr_endpoint(
+    file: UploadFile | None = File(None),
+    image_base64: str | None = Form(None),
+    lang: str | None = Form(None),
+):
+    """Run OCR on an uploaded image or base64-encoded image."""
+    global ocr_engine
+
+    # Override language if requested (reinitializes engine)
+    if lang and lang != OCR_LANG:
+        from paddleocr import PaddleOCR
+        ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang, use_gpu=False, show_log=False)
+
+    engine = get_ocr()
+
+    # Decode image
+    if file:
+        img_bytes = await file.read()
+    elif image_base64:
+        img_bytes = base64.b64decode(image_base64)
+    else:
+        raise HTTPException(400, "Provide 'file' (multipart) or 'image_base64' (form field)")
+
+    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    img_np = np.array(img)
+
+    # Run OCR
+    result = engine.ocr(img_np, cls=True)
+
+    # Format response
+    lines = []
+    full_text_parts = []
+    if result and result[0]:
+        for line_data in result[0]:
+            box, (text, confidence) = line_data
+            lines.append({
+                "text": text,
+                "confidence": round(confidence, 4),
+                "bbox": [[int(p[0]), int(p[1])] for p in box],
+            })
+            full_text_parts.append(text)
+
+    return {
+        "text": "\n".join(full_text_parts),
+        "lines": lines,
+        "line_count": len(lines),
+        "lang": lang or OCR_LANG,
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8084)
+PYEOF
+
+EXPOSE 8084
+
+CMD ["python", "server.py"]

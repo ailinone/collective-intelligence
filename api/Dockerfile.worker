@@ -1,0 +1,60 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+####
+# Dedicated Worker Container for BullMQ processing
+# Mirrors the main API build pipeline but uses a specific entrypoint.
+####
+
+FROM node:20-alpine AS dependencies
+
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN pnpm install --frozen-lockfile --prod=false
+
+FROM node:20-alpine AS builder
+
+RUN apk add --no-cache openssl \
+  && npm install -g pnpm@9
+
+WORKDIR /app
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
+
+RUN pnpm prisma generate
+RUN pnpm build
+RUN pnpm prune --prod
+
+FROM node:20-alpine AS production
+
+RUN apk add --no-cache dumb-init openssl
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+
+USER nodejs
+
+ENV NODE_ENV=production
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/workers/queue-runner.js"]
+
+

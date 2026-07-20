@@ -1,0 +1,475 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Docker Compose for Ailin Collective Intelligence API
+
+name: ${COMPOSE_PROJECT_NAME:-ci}
+
+services:
+  # Ailin Dev API Application
+  api:
+    build:
+      context: ..
+      # WHY: Keep Dockerfile path relative to build context to prevent runtime
+      # startup failures when docker compose resolves paths on Windows.
+      dockerfile: api/Dockerfile
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}api
+    restart: unless-stopped
+    ports:
+      - "${DEV_API_PORT:-3000}:3000"
+    # env_file is NOT used here to allow GCP Secret Manager to load secrets
+    # GCP Secret Manager loads secrets at runtime and injects them into process.env
+    # If you use env_file, variables in .env will prevent GCP from loading secrets
+    # (loadSecretsIntoEnv skips variables that already exist in process.env)
+    # For local dev without GCP, uncomment env_file line and remove GCP config
+    # env_file is NOT used here to allow GCP Secret Manager to load secrets
+    # GCP Secret Manager loads secrets at runtime and injects them into process.env
+    # If you use env_file, variables in .env will prevent GCP from loading secrets
+    # (loadSecretsIntoEnv skips variables that already exist in process.env)
+    # For local dev without GCP, uncomment env_file line and remove GCP config
+    # env_file:
+    #   - .env
+    volumes:
+      # WHY: Prisma 7 CLI auto-loads prisma.config.ts from app root during
+      # migration bootstrap; mount it to ensure DATABASE_URL is resolved.
+      - ../api/prisma/prisma.config.ts:/app/prisma.config.ts:ro
+      # Mount GCP credentials for Secret Manager access.
+      #
+      # The default below resolves to the standard user-OAuth ADC location
+      # (created by `gcloud auth application-default login`). Works for new
+      # contributors without extra setup, but the refresh_token expires
+      # after ~7 days of non-use, hitting "Reauthentication failed" loops.
+      #
+      # PERMANENT (recommended for dev/CI/local servers): override
+      # GCP_CREDENTIALS_PATH in docker/.env to point at a service-account
+      # key JSON. SA keys carry an embedded private_key and never expire
+      # until rotated. Example for this repo:
+      #   GCP_CREDENTIALS_PATH=/path/to/your/service-account-key.json
+      # (use a service account granted the Secret Manager Accessor role).
+      #
+      # Production: use Workload Identity Federation or attached SA via
+      # metadata server — do NOT depend on this mount.
+      - ${GCP_CREDENTIALS_PATH:-~/.config/gcloud/application_default_credentials.json}:/app/gcp-credentials.json:ro
+    environment:
+      NODE_ENV: development
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ci-api}
+      PORT: 3000
+      # WHY: Dockerfile may bake non-semver APP_VERSION (e.g. branch tag) via
+      # --build-arg APP_VERSION; runtime validateConfig requires semver. Allow
+      # compose-time override so an arbitrary build tag does not block boot.
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-unknown}
+      # WHY: Default to GCP Secret Manager for shared runtime parity; keep env
+      # fallback configurable for local/offline workflows.
+      SECRETS_PROVIDER_PRIMARY: ${SECRETS_PROVIDER_PRIMARY:-gcp}
+      SECRETS_PROVIDER_FALLBACK: ${SECRETS_PROVIDER_FALLBACK:-}
+      SECRETS_GCP_FAIL_FAST: ${SECRETS_GCP_FAIL_FAST:-false}
+      # Dev default: do NOT make GCP authoritative. The dev box may not have
+      # routing to secretmanager.googleapis.com, and authoritative mode would
+      # otherwise hit a 60s timeout PER secret on boot (130+ secrets =
+      # multi-hour boot). Production overrides this to true via
+      # docker-compose.production.yml since the swarm has GCP egress.
+      SECRETS_GCP_AUTHORITATIVE: ${SECRETS_GCP_AUTHORITATIVE:-false}
+      # WHY: Keep API datasource credentials aligned with postgres service
+      # defaults to avoid bootstrap/auth failures during migrations.
+      DATABASE_URL: postgresql://${DB_USER:-ci_user}:${DB_PASSWORD:-ci_password}@postgres:5432/${DB_DATABASE:-ci_db}
+      DATABASE_AUTO_MIGRATE: "true"
+      DB_SLOW_QUERY_MS: ${DB_SLOW_QUERY_MS:-5000}
+      IN_DOCKER: "true"
+      # Model discovery controls (allow disabling heavy background discovery during evals)
+      MODEL_CATALOG_AUTO_SYNC: ${MODEL_CATALOG_AUTO_SYNC:-true}
+      MODEL_DISCOVERY_AUTO_SYNC: ${MODEL_DISCOVERY_AUTO_SYNC:-true}
+      MODEL_DISCOVERY_RUN_ON_START: ${MODEL_DISCOVERY_RUN_ON_START:-true}
+      MODEL_DISCOVERY_INTERVAL_MINUTES: ${MODEL_DISCOVERY_INTERVAL_MINUTES:-60}
+      # Skip per-plugin auto-discovery during registerPlugin (provider-plugin-system.ts:259).
+      # When the periodic runner already covers full discovery, this is a duplicate that
+      # blocks HTTP bind for ~99 catalog plugins.
+      SKIP_PER_PLUGIN_DISCOVERY: ${SKIP_PER_PLUGIN_DISCOVERY:-false}
+      AGGREGATOR_DISCOVERY_TIMEOUT_MS: ${AGGREGATOR_DISCOVERY_TIMEOUT_MS:-120000}
+      NATIVE_DISCOVERY_TIMEOUT_MS: ${NATIVE_DISCOVERY_TIMEOUT_MS:-10000}
+      # HCRA L3 capability-search embedder (TEI / OpenAI-compatible).
+      # When unset, capability search silently degrades to lexical-only
+      # (TF-IDF over model names) and the vector arm of the RRF fusion is
+      # dead — the symptom that surfaced in Phase 6 runtime evidence
+      # 2026-04-30 (matchedBy:["lexical"], score≈0.016 for every hit).
+      # Point this at a TEI (text-embeddings-inference) container serving
+      # BAAI/bge-small-en-v1.5 at 384 dims, matching EMBEDDING_DIMS in
+      # api/src/capability/embeddings/embedder.ts.
+      HCRA_EMBEDDER_URL: ${HCRA_EMBEDDER_URL:-}
+      HCRA_EMBEDDER_MODEL: ${HCRA_EMBEDDER_MODEL:-BAAI/bge-small-en-v1.5}
+      HCRA_EMBEDDER_DIMS: ${HCRA_EMBEDDER_DIMS:-384}
+      REDIS_URL: redis://${REDIS_HOST:-ci-redis}:${REDIS_PORT:-6379}
+      REDIS_GLOBAL_URL: redis://${REDIS_GLOBAL_HOST:-ci-redis-global}:${REDIS_GLOBAL_PORT:-6379}
+      REDIS_HOST: ${REDIS_HOST:-ci-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      GCS_FILES_BUCKET: ${GCS_FILES_BUCKET:-your-gcs-bucket}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-your-gcs-bucket}
+      # GCP Secret Manager Configuration
+      # Application Default Credentials will be loaded from the mounted file
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-credentials.json
+      GCP_SECRETS_PROJECT_ID: ${GCP_SECRETS_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a strong random value - openssl rand -base64 48 - the app refuses weak or default secrets}
+      # WHY: Federated auth with ailin-accounts uses a dedicated shared secret
+      # instead of reusing ci-api primary JWT secret across services.
+      AILIN_SHARED_JWT_SECRET: ${AILIN_SHARED_JWT_SECRET:?Set AILIN_SHARED_JWT_SECRET to a strong random value - openssl rand -base64 48}
+      AUTH_FEDERATION_ENABLED: ${AUTH_FEDERATION_ENABLED:-true}
+      AUTH_FEDERATION_ISSUER: ${AUTH_FEDERATION_ISSUER:-https://ailin.id}
+      AUTH_FEDERATION_AUDIENCE: ${AUTH_FEDERATION_AUDIENCE:-ailin-dev-api}
+      AUTH_FEDERATION_AUTO_PROVISION_USERS: ${AUTH_FEDERATION_AUTO_PROVISION_USERS:-true}
+      AUTH_FEDERATION_AUTO_PROVISION_ORGS: ${AUTH_FEDERATION_AUTO_PROVISION_ORGS:-true}
+      # Experiment framework self-call token (experiment runner calls /v1/chat/completions on itself)
+      EVAL_BEARER_TOKEN: ${EVAL_BEARER_TOKEN:-}
+      # Debate strategy internal timeout — align with experiment runner fetch timeout (300s)
+      DEBATE_TIMEOUT_MS: ${DEBATE_TIMEOUT_MS:-300000}
+      # Fixed judge model for benchmark consistency (default: auto)
+      EXPERIMENT_JUDGE_MODEL: ${EXPERIMENT_JUDGE_MODEL:-openai/gpt-4o}
+      # Experiment distributed scheduler — worker pool sizes per class
+      EXP_WORKERS_SINGLE: ${EXP_WORKERS_SINGLE:-5}
+      EXP_WORKERS_COLLECTIVE: ${EXP_WORKERS_COLLECTIVE:-3}
+      EXP_WORKERS_HEAVY: ${EXP_WORKERS_HEAVY:-2}
+      # LLM Provider API Keys are loaded from GCP Secret Manager at runtime
+      # GCP Secret Manager loads secrets and injects them into process.env via loadSecretsIntoEnv()
+      # This allows secrets to be managed securely in GCP Secret Manager
+      # For local dev without GCP, set SECRETS_PROVIDER_PRIMARY=env and use env_file above
+      #
+      # 2026-05-06 fix: previously each <PROVIDER>_API_KEY was redeclared here as
+      # `${VAR:-}`. docker-compose precedence is `environment:` > `env_file:`,
+      # so when the host shell did not export the var, the explicit empty
+      # default SILENTLY OVERRODE the value loaded from `api/.gcp-secrets.env`
+      # via the override.yml `env_file:`. Removing the overrides lets the
+      # env_file (or runtime GCP loader) populate process.env transparently.
+      # If a developer needs to inject a one-off key for a single run, they
+      # can still export it in their shell — docker compose will pass it
+      # through automatically (host env propagates by name) without the
+      # explicit declaration here zeroing the env_file source.
+      FRIENDLI_TEAM_ID: ${FRIENDLI_TEAM_ID:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_HUB_BASE_URL: ${NVIDIA_HUB_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      AIHUBMIX_BASE_URL: ${AIHUBMIX_BASE_URL:-https://aihubmix.com/v1}
+      NOVITA_BASE_URL: ${NOVITA_BASE_URL:-https://api.novita.ai/openai/v1}
+      MOONSHOT_BASE_URL: ${MOONSHOT_BASE_URL:-https://api.moonshot.ai/v1}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      JINA_API_BASE_URL: ${JINA_API_BASE_URL:-https://api.jina.ai/v1}
+      JINA_DEEPSEARCH_BASE_URL: ${JINA_DEEPSEARCH_BASE_URL:-https://deepsearch.jina.ai/v1}
+      JINA_READER_BASE_URL: ${JINA_READER_BASE_URL:-https://r.jina.ai}
+      JINA_SEARCH_BASE_URL: ${JINA_SEARCH_BASE_URL:-https://s.jina.ai}
+      FRIENDLI_BASE_URL: ${FRIENDLI_BASE_URL:-https://api.friendli.ai/serverless/v1}
+      AIML_BASE_URL: ${AIML_BASE_URL:-https://api.aimlapi.com/v1}
+      AIML_MODELS_BASE_URL: ${AIML_MODELS_BASE_URL:-https://api.aimlapi.com}
+      IMAGEROUTER_BASE_URL: ${IMAGEROUTER_BASE_URL:-https://api.imagerouter.io}
+      # Additional Hub Providers — base URLs only (api keys come via env_file)
+      COMETAPI_BASE_URL: ${COMETAPI_BASE_URL:-https://api.cometapi.com/v1}
+      NANOGPT_BASE_URL: ${NANOGPT_BASE_URL:-https://nano-gpt.com/api/v1}
+      REQUESTY_BASE_URL: ${REQUESTY_BASE_URL:-https://router.requesty.ai/v1}
+      AI302_BASE_URL: ${AI302_BASE_URL:-https://api.302.ai/v1}
+      POE_BASE_URL: ${POE_BASE_URL:-https://api.poe.com/v1}
+      ROUTEWAY_BASE_URL: ${ROUTEWAY_BASE_URL:-https://api.routeway.ai/v1}
+      # Vertex AI — non-secret config only
+      VERTEX_AI_PROJECT_ID: ${VERTEX_AI_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
+      # Azure OpenAI — non-secret config only
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      # AWS Bedrock — region only (creds come via env_file)
+      AWS_BEDROCK_REGION: ${AWS_BEDROCK_REGION:-us-east-1}
+      # Oracle OCI — region only
+      OCI_REGION: ${OCI_REGION:-us-ashburn-1}
+      # Ollama (local LLM server, OpenAI-compatible)
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      # Local CPU Inference Sidecars (set URLs to enable; leave empty to disable)
+      LOCAL_LLAMA_URL: ${LOCAL_LLAMA_URL:-}
+      LOCAL_KOBOLD_URL: ${LOCAL_KOBOLD_URL:-}
+      LOCAL_EMBEDDINGS_URL: ${LOCAL_EMBEDDINGS_URL:-}
+      LOCAL_OCR_URL: ${LOCAL_OCR_URL:-}
+      LOCAL_DOCLING_URL: ${LOCAL_DOCLING_URL:-}
+      LOCAL_PIPER_URL: ${LOCAL_PIPER_URL:-}
+      SELF_HOSTED_STT_URL: ${SELF_HOSTED_STT_URL:-}
+      SELF_HOSTED_TTS_URL: ${SELF_HOSTED_TTS_URL:-}
+      LOCAL_NLLB_URL: ${LOCAL_NLLB_URL:-}
+      LOCAL_COSYVOICE_URL: ${LOCAL_COSYVOICE_URL:-}
+      # Other services — secrets removed (REDIS_PASSWORD, SMTP_PASS, STRIPE_*)
+      # Same env_file precedence fix as the LLM API keys above. These come
+      # from `api/.gcp-secrets.env` (override) or GCP Secret Manager at
+      # runtime instead of being pinned to empty here.
+      # Gateway Middleware Configuration
+      QUOTA_SERVICE_URL: ${QUOTA_SERVICE_URL:-http://quota-service:5004}
+      SIGNATURE_VERIFIER_URL: ${SIGNATURE_VERIFIER_URL:-http://signature-verifier:5005}
+      QUOTA_SERVICE_TIMEOUT: ${QUOTA_SERVICE_TIMEOUT:-5000}
+      SIGNATURE_VERIFIER_TIMEOUT: ${SIGNATURE_VERIFIER_TIMEOUT:-5000}
+      # Operator-side mirror of DEFAULT_QUOTA_SKIP_ROUTES in
+      # api/src/middleware/gateway_middleware.ts (Caminho C — boot invariant).
+      # The api boot guard (assertOperationalRouteInvariant) crashes if any
+      # canonical operational route is missing from the RESOLVED runtime list.
+      # Keep these two lists in sync; if you add a route here, also add it to
+      # OPERATIONAL_ROUTES in api/src/config/operational-routes.ts.
+      GATEWAY_QUOTA_SKIP_ROUTES: ${GATEWAY_QUOTA_SKIP_ROUTES:-/health,/metrics,/v1/enterprise/quotas,/v1/hcra/health,/.well-known/jwks.json,/console/api/v1/jwks,/v1/status}
+      SENSITIVE_ROUTES: ${SENSITIVE_ROUTES:-/payment,/billing,/admin,/console/api/admin}
+      # WHY: Disable external gateway quota/signature checks in local compose
+      # so authentication integration tests can exercise JWT validation paths.
+      GATEWAY_MIDDLEWARE_ENABLED: ${GATEWAY_MIDDLEWARE_ENABLED:-false}
+      # MCP Server Configuration — filesystem server for tool-use strategies
+      MCP_SERVERS_CONFIG: >-
+        [{"name":"filesystem","transport":"stdio","command":"node","args":["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js","/app"],"safeForStrategies":true,"category":"file"}]
+      # Balance-aware model selection: providers are not excluded globally.
+      # Discovery checks balances and models get balanceStatus ('has-credits'|'no-credits'|'unknown'|'local').
+      # Selection soft-scores instead of hard-excluding (see dynamic-model-selector.ts).
+      # Coordinator-stable shadow wire — fire-and-forget HTTP to coord-serving
+      # so the 5 strategies (debate, tri-role, expert-panel, consensus,
+      # parallel-race) emit (request, decision) tuples for F3.3 SFT staging.
+      # Disabled by default in production; enabled in compose so dev traffic
+      # populates teacher_traces locally.
+      CI_ENSEMBLE_COORDINATOR_ENABLED: ${CI_ENSEMBLE_COORDINATOR_ENABLED:-true}
+      CI_ENSEMBLE_COORDINATOR_URL: ${CI_ENSEMBLE_COORDINATOR_URL:-http://coord-serving:8090/v1/ensemble/decide}
+      CI_ENSEMBLE_COORDINATOR_TIMEOUT_MS: ${CI_ENSEMBLE_COORDINATOR_TIMEOUT_MS:-5000}
+      CI_ENSEMBLE_COORDINATOR_SHADOW_MODE: ${CI_ENSEMBLE_COORDINATOR_SHADOW_MODE:-true}
+      CI_ENSEMBLE_COORDINATOR_FALLBACK_ON_ERROR: ${CI_ENSEMBLE_COORDINATOR_FALLBACK_ON_ERROR:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      coord-serving:
+        condition: service_healthy
+    healthcheck:
+      # WHY: Runtime image does not include curl; use Node.js native fetch
+      # for deterministic health probes and accurate compose health status.
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ailin-network
+
+  # Coordinator-stable serving (Phase 2c — teacher-proxy / mock-cascade /
+  # mock-deterministic). Lightweight FastAPI image without GPU deps.
+  # Modes: TEACHER_PROXY (default, calls back to api triage),
+  #        MOCK_DETERMINISTIC (canned single-vote — fast contract test),
+  #        MOCK_CASCADE (real cascade aggregator + synthetic 24-vote executors —
+  #                      drop-in for REAL_ENSEMBLE, swap mock executors for vLLM).
+  coord-serving:
+    build:
+      context: ..
+      dockerfile: model-stack/Dockerfile.coord-serving
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}coord-serving
+    restart: unless-stopped
+    ports:
+      - "${COORD_SERVING_PORT:-8090}:8090"
+    environment:
+      COORD_SERVING_MODE: ${COORD_SERVING_MODE:-MOCK_CASCADE}
+      # When mode=TEACHER_PROXY, the proxy calls back to the api service
+      # for real coordination decisions via /v1/chat/completions. The URL
+      # uses the api service's docker-network DNS name, NOT the published
+      # port — coord-serving sits on the same ailin-network.
+      COORD_TEACHER_CI_API_URL: ${COORD_TEACHER_CI_API_URL:-http://api:3000}
+      COORD_TEACHER_AUTH_TOKEN: ${COORD_TEACHER_AUTH_TOKEN:-}
+      COORD_TEACHER_TIMEOUT_SECONDS: ${COORD_TEACHER_TIMEOUT_SECONDS:-5.0}
+      COORD_TEACHER_LOG_PAYLOADS: ${COORD_TEACHER_LOG_PAYLOADS:-false}
+      # Daily-rotation JSONL traces. Volume-mounted so dev can synthesize
+      # SFT records and run the offline evaluator against captured data.
+      COORD_TEACHER_TRACES_DIR: /var/lib/coord-stable/teacher-traces
+      # Bearer token gating /v1/ensemble/decide. Empty in dev — same
+      # token MUST be set on the api side as CI_ENSEMBLE_COORDINATOR_TOKEN
+      # if enabled.
+      COORD_SERVING_AUTH_TOKEN: ${COORD_SERVING_AUTH_TOKEN:-}
+      # CORS allowed origins (comma-separated). Default `*` in dev.
+      # Production should set to api hostname only.
+      COORD_SERVING_ALLOWED_ORIGINS: ${COORD_SERVING_ALLOWED_ORIGINS:-*}
+      LOG_LEVEL: ${COORD_LOG_LEVEL:-INFO}
+    volumes:
+      # Shared volume so the api container (or a host-side data-prep job)
+      # can read the JSONL files coord-serving writes.
+      - coord_traces:/var/lib/coord-stable/teacher-traces
+    networks:
+      - ailin-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # PostgreSQL Database with pgvector extension for semantic memory
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_DATABASE:-ci_db}
+      - POSTGRES_USER=${DB_USER:-ci_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-ci_password}
+      - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:--E UTF8 --locale=en_US.utf8}
+    ports:
+      - "${DEV_DB_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Migrations are handled by the API service (DATABASE_AUTO_MIGRATE=true).
+      # Do NOT mount Prisma migrations into initdb.d — it creates tables without
+      # the _prisma_migrations tracking table, causing P3005 on subsequent starts.
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-ci_user} -d ${DB_DATABASE:-ci_db}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ailin-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}redis
+    restart: unless-stopped
+    ports:
+      - "${DEV_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ${NETWORK_NAME:-ailin-network}
+      - ${DEV_NETWORK_NAME:-ci-network}
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Redis Global (for distributed cache)
+  redis-global:
+    image: redis:7-alpine
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}redis-global
+    restart: unless-stopped
+    ports:
+      # WHY: Parameterize host port to avoid clashes with other local stacks
+      # and keep docker compose evidence reproducible across environments.
+      - "${DEV_REDIS_GLOBAL_PORT:-6382}:6379"
+    volumes:
+      - redis_global_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - ailin-network
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}prometheus
+    restart: unless-stopped
+    ports:
+      - "${DEV_PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      # WHY: Mount the actual Prometheus config file (not an empty directory)
+      # so the monitoring container can boot reliably in local compose runs.
+      - ../api/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - ${NETWORK_NAME:-ailin-network}
+      - ${DEV_NETWORK_NAME:-ci-network}
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Grafana (Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}grafana
+    restart: unless-stopped
+    ports:
+      - "${DEV_GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - ailin-network
+
+  # Jaeger (Distributed Tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ${CONTAINER_NAME_PREFIX:-ci-}jaeger
+    restart: unless-stopped
+    ports:
+      - "${DEV_JAEGER_ZIPKIN_UDP:-5775}:5775/udp"
+      - "${DEV_JAEGER_AGENT_UDP1:-6831}:6831/udp"
+      - "${DEV_JAEGER_AGENT_UDP2:-6832}:6832/udp"
+      - "${DEV_JAEGER_CONFIG_HTTP:-5778}:5778"
+      - "${DEV_JAEGER_UI_PORT:-16686}:16686" # Jaeger UI
+      - "${DEV_JAEGER_COLLECTOR_HTTP:-14268}:14268" # Collector HTTP
+      - "${DEV_JAEGER_COLLECTOR_GRPC:-14250}:14250" # Collector gRPC
+      - "${DEV_JAEGER_ZIPKIN_HTTP:-9411}:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - ${NETWORK_NAME:-ailin-network}
+      - ${DEV_NETWORK_NAME:-ci-network}
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+volumes:
+  postgres_data:
+  redis_data:
+  redis_global_data:
+  prometheus_data:
+  grafana_data:
+  coord_traces:
+
+
+networks:
+  ailin-network:
+    external: ${NETWORK_EXTERNAL:-true}
+  ci-network:
+    external: ${DEV_NETWORK_EXTERNAL:-false}
+    driver: bridge

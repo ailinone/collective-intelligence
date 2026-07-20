@@ -1,0 +1,25 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+allowBuilds:
+  '@playwright/browser-chromium': set this to true or false
+  '@prisma/engines': set this to true or false
+  '@sentry-internal/node-cpu-profiler': set this to true or false
+  '@swc/core': set this to true or false
+  bcrypt: set this to true or false
+  better-sqlite3: set this to true or false
+  cpu-features: set this to true or false
+  esbuild: set this to true or false
+  msgpackr-extract: set this to true or false
+  onnxruntime-node: set this to true or false
+  prisma: set this to true or false
+  promptfoo: set this to true or false
+  protobufjs: set this to true or false
+  sharp: set this to true or false
+  ssh2: set this to true or false

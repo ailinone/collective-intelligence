@@ -1,0 +1,52 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M20 — DeepSeek-V2-Lite (routing/safety sparse, Tier 5)
+inherits: "_shared.yaml"
+
+model_id: "m20"
+display_name: "Coord M20 — DeepSeek-V2-Lite (routing/safety sparse)"
+base_model: "deepseek-ai/DeepSeek-V2-Lite"
+architecture: "moe_decoder"
+family: "deepseek-v2"
+tier: 5
+specialty: "routing_safety"
+
+moe:
+  num_experts: 64
+  experts_per_token: 6
+  shared_experts: 2                 # DeepSeek-V2 distinctive feature
+  router_aux_loss_weight: 0.01
+
+fine_tune:
+  method: "moe_lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["gate_proj", "up_proj", "down_proj"]
+  freeze_shared_experts: false      # adapt the always-on experts too
+  freeze_router: false
+
+training:
+  num_epochs: 2
+  learning_rate: 1.0e-4
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["safety", "moderation", "routing"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048
+
+audit:
+  scheduler_name_format: "coord-m20-deepseek-v2-lite"

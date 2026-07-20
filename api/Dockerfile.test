@@ -1,0 +1,34 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Dockerfile for running API test suite with dev dependencies
+# Build context: api/ (.). Use from repo root: docker build -f api/Dockerfile.test api/
+
+FROM node:20-alpine
+
+RUN apk add --no-cache python3 py3-pip make g++ build-base pkgconf openssl git \
+    && ln -sf python3 /usr/bin/python
+
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+COPY prisma ./prisma
+COPY src ./src
+COPY tests ./tests
+COPY tsconfig.json vitest.config.ts vitest.integration.config.ts vitest.unit.config.ts ./
+
+RUN pnpm install --no-frozen-lockfile \
+    && pnpm exec prisma generate
+
+ENV NODE_ENV=test
+ENV CI=1
+
+CMD ["pnpm", "test"]

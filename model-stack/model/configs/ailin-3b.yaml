@@ -1,0 +1,60 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin-3B Model Configuration
+# ============================================================================
+# Mid-range model in the Ailin family. Chinchilla-optimal for ~60B tokens.
+#
+# Parameter count:
+#   Embedding:     32000 * 3072                  =   98,304,000
+#   Per-layer (GQA 8:1):
+#     Q:           3072 * 3072                   =    9,437,184
+#     KV:          3072 * 2 * 384                =    2,359,296
+#     O:           3072 * 3072                   =    9,437,184
+#     Gate+Up:     3072 * 8192 * 2               =   50,331,648
+#     Down:        8192 * 3072                   =   25,165,824
+#     Norms:       2 * 3072                      =        6,144
+#     Per-layer:                                 =   96,737,280
+#   32 layers:     32 * 96,737,280               = 3,095,592,960
+#   Final norm:    3072
+#   Total:         ~3,193,900,032 (~3.19B parameters)
+# ============================================================================
+
+model:
+  name: "ailin-3b"
+  architecture: "decoder_only_transformer"
+  family: "ailin"
+  variant: "base"
+
+  hidden_size: 3072
+  num_layers: 32
+  num_attention_heads: 24
+  num_key_value_heads: 8     # GQA 3:1
+  intermediate_size: 8192    # ~2.7x hidden_size
+  vocab_size: 32000
+  max_position_embeddings: 8192
+
+  position_embedding_type: "rope"
+  rope_theta: 500000.0
+
+  norm_type: "rmsnorm"
+  layer_norm_eps: 1.0e-5
+
+  hidden_act: "silu"
+  use_gated_mlp: true
+
+  attention_dropout: 0.0
+  attention_bias: false
+  use_flash_attention: true
+
+  tie_word_embeddings: false
+  embedding_dropout: 0.0
+  initializer_range: 0.02
+  dtype: "bfloat16"

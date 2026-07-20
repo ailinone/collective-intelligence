@@ -1,0 +1,70 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Multi-stage Dockerfile for Ailin Dev API
+# Self-contained API build (executed from api/ directory)
+
+# Stage 1: Build (with development dependencies)
+FROM node:20-alpine AS builder
+
+RUN apk add --no-cache python3 py3-pip py3-setuptools make g++ build-base pkgconf openssl git \
+    && ln -sf python3 /usr/bin/python \
+    && npm install -g pnpm@9
+
+ENV CXXFLAGS="-fexceptions $CXXFLAGS"
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Copy source code
+COPY src ./src
+COPY prisma ./prisma
+COPY tsconfig.json ./
+
+# Install dependencies and build
+RUN pnpm install --frozen-lockfile && \
+    pnpm exec prisma generate && \
+    pnpm build
+
+# Stage 2: Production runtime image
+FROM node:20-alpine AS production
+
+# Install dumb-init (proper signal handling) and OpenSSL (Prisma runtime)
+RUN apk add --no-cache dumb-init openssl
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+# Copy runtime artefacts from builder
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Switch to non-root user
+USER nodejs
+
+# Expose ports
+EXPOSE 3000 9464
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start application
+CMD ["node", "dist/index.js"]
