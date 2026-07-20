@@ -10,7 +10,7 @@
 # Dockerfile for running API test suite with dev dependencies
 # Build context: api/ (.). Use from repo root: docker build -f api/Dockerfile.test api/
 
-FROM node:20-alpine
+FROM node:26-alpine
 
 RUN apk add --no-cache python3 py3-pip make g++ build-base pkgconf openssl git \
     && ln -sf python3 /usr/bin/python

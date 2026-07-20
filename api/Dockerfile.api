@@ -11,7 +11,7 @@
 # Self-contained API build (executed from api/ directory)
 
 # Stage 1: Build (with development dependencies)
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 RUN apk add --no-cache python3 py3-pip py3-setuptools make g++ build-base pkgconf openssl git \
     && ln -sf python3 /usr/bin/python \
@@ -35,7 +35,7 @@ RUN pnpm install --frozen-lockfile && \
     pnpm build
 
 # Stage 2: Production runtime image
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 
 # Install dumb-init (proper signal handling) and OpenSSL (Prisma runtime)
 RUN apk add --no-cache dumb-init openssl

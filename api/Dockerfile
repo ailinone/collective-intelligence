@@ -11,7 +11,7 @@
 # Build context is parent directory (..), so paths must be prefixed with api/
 
 # Stage 1: Build (with development dependencies)
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 ARG APP_VERSION=0.1.0
 ARG GIT_COMMIT_SHA=local-dev
@@ -87,7 +87,7 @@ RUN set -e && \
     du -sh dist/
 
 # Stage 2: Production (minimal runtime)
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 
 ARG APP_VERSION=0.1.0
 ARG GIT_COMMIT_SHA=local-dev
