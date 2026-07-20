@@ -34,7 +34,6 @@ export default defineConfig({
     sequence: {
       concurrent: false,
     },
-    threads: false,
     include: [
       // Mocked, hermetic security suites: negative-auth matrix, auth-claims
       // regression, and RBAC require-permission middleware enforcement.

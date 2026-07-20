@@ -32,6 +32,42 @@ interface OpenAICompatibleHubModelFetcherConfig {
 
 type RawModelRecord = Record<string, unknown>;
 
+/**
+ * Gap-fill for providers whose /models endpoint omits context/pricing fields
+ * entirely, so every model would otherwise fall back to the generic 8192
+ * context / $0 pricing defaults below. `zai` (bigmodel.cn's GLM API) is one
+ * such provider — verified 2026-07-20 against real-pricing hub listings
+ * (openrouter/fastrouter/friendli/gmi/chutes) for the same GLM models, since
+ * bigmodel.cn's own /v1/models response carries neither field. This ranked
+ * these models last on every context-window-first selection (e.g.
+ * `resolveTopTierModels` in c3-experiment-configs.ts), effectively excluding
+ * GLM from top-tier comparisons regardless of the model's real capability.
+ * Applied ONLY when the fetched value is still the generic fallback (see
+ * call site) — a real, provider-supplied value always wins.
+ *
+ * Values are openrouter's published per-token pricing for the same GLM
+ * models (independently cross-checked against fastrouter/vercel-ai-gateway/
+ * phala/huggingface listings already in the catalog, which agree within a
+ * normal cross-reseller margin) — not estimated ratios.
+ */
+const HUB_METADATA_GAP_FILL: Record<
+  string,
+  Record<string, { contextWindow: number; inputCostPer1M: number; outputCostPer1M: number }>
+> = {
+  zai: {
+    'glm-4.5': { contextWindow: 131_072, inputCostPer1M: 0.6, outputCostPer1M: 2.2 },
+    'glm-4.5-air': { contextWindow: 131_072, inputCostPer1M: 0.13, outputCostPer1M: 0.85 },
+    'glm-4.6': { contextWindow: 202_752, inputCostPer1M: 0.5, outputCostPer1M: 2.0 },
+    'glm-4.7': { contextWindow: 202_752, inputCostPer1M: 0.4, outputCostPer1M: 1.75 },
+    'glm-5': { contextWindow: 202_752, inputCostPer1M: 0.95, outputCostPer1M: 2.55 },
+    'glm-5.1': { contextWindow: 202_752, inputCostPer1M: 0.966, outputCostPer1M: 3.036 },
+    'glm-5.2': { contextWindow: 1_048_576, inputCostPer1M: 0.965, outputCostPer1M: 3.032 },
+    'glm-5-turbo': { contextWindow: 202_752, inputCostPer1M: 1.2, outputCostPer1M: 4.0 },
+  },
+};
+
+const HUB_FETCHER_DEFAULT_CONTEXT_WINDOW = 8192;
+
 function normalizeHubModelId(rawModelId: string): string {
   const trimmed = rawModelId.trim();
   if (!trimmed) {
@@ -244,14 +280,14 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     const displayName =
       this.extractString(rawModel, ['display_name', 'displayName', 'name', 'title']) || modelId;
 
-    const contextWindow =
+    let contextWindow =
       this.extractNumber(rawModel, [
         'context_window',
         'contextWindow',
         'context_length',
         'max_context_length',
         'maxContextLength',
-      ]) || 8192;
+      ]) || HUB_FETCHER_DEFAULT_CONTEXT_WINDOW;
 
     const maxOutputTokens =
       this.extractNumber(rawModel, [
@@ -281,6 +317,21 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     }
 
     const pricing = this.extractPricing(rawModel);
+
+    // Gap-fill: only when the provider's own response left both context and
+    // pricing at their generic defaults (i.e. it supplied neither field) —
+    // never overrides a real, provider-supplied value.
+    const gapFill = HUB_METADATA_GAP_FILL[this.providerName]?.[modelId];
+    if (
+      gapFill &&
+      contextWindow === HUB_FETCHER_DEFAULT_CONTEXT_WINDOW &&
+      pricing.inputCostPer1M === 0 &&
+      pricing.outputCostPer1M === 0
+    ) {
+      contextWindow = gapFill.contextWindow;
+      pricing.inputCostPer1M = gapFill.inputCostPer1M;
+      pricing.outputCostPer1M = gapFill.outputCostPer1M;
+    }
 
     return {
       id: modelId,

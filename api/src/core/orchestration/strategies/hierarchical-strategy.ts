@@ -17,28 +17,30 @@ import type {
 } from '@/types';
 import { logger } from '@/utils/logger';
 
-interface ExecutionPlanStage {
-  owner: 'manager' | 'worker';
-  description: string;
-}
-
-interface ExecutionPlan {
-  summary: string;
-  stages: ExecutionPlanStage[];
-}
-
 /**
- * Hierarchical Delegation Strategy
+ * Hierarchical Delegation Strategy — HONEST SINGLE-MODEL STUB (2026-07-11)
  *
- * Manager model breaks down task and delegates to worker models.
- * Efficient for complex multi-step tasks.
+ * The manager→worker delegation this strategy is *named* for is NOT implemented.
+ * `execute()` runs ONLY the manager (the single pinned / highest-quality model)
+ * against the original request. No worker is ever dispatched and there is no
+ * manager synthesis of worker output. It is, today, a single-model passthrough.
  *
- * Process:
- * 1. Manager analyzes task and creates execution plan
- * 2. Delegates subtasks to worker models
- * 3. Aggregates results
+ * The metadata now reports that honestly instead of advertising a fake plan and
+ * a `workers` list of models that never run:
+ *   - `planCreated: false` — no real plan drives execution
+ *   - `stub: true`         — delegation not implemented
+ *   - no `workers` key      — nothing but the manager executes
+ *   - `minModels: 1`        — so the router does NOT classify it as a real
+ *                             collective (orchestration-engine sets
+ *                             isCollectiveStrategy = minModels > 1), which in
+ *                             turn suppresses collective framing, the streaming
+ *                             observer, and single-vs-CI divergence handling.
  *
- * Best for: Complex tasks that can be decomposed
+ * It is already excluded from the c3 benchmark arms via
+ * NON_COLLECTIVE_BENCHMARK_STRATEGIES, so this is product-path honesty only.
+ *
+ * When real delegation lands, restore the collective metadata (planCreated:true,
+ * a real workers list, minModels>=2) alongside the dispatch + synthesis logic.
  */
 export class HierarchicalStrategy extends BaseStrategy {
   getMetadata(): StrategyMetadata {
@@ -47,12 +49,14 @@ export class HierarchicalStrategy extends BaseStrategy {
       name: 'hierarchical',
       displayName: 'Hierarchical Delegation',
       description:
-        'Manager model delegates subtasks to workers. Efficient for complex multi-step tasks.',
-      minModels: 2,
-      maxModels: 5,
-      estimatedCostMultiplier: 2.0,
-      estimatedQualityBoost: 0.22,
-      estimatedDurationMultiplier: 1.4,
+        'STUB: currently runs a single manager model (worker delegation not yet implemented).',
+      // Single-model passthrough today. minModels:1 keeps the router from
+      // treating it as a real collective (isCollectiveStrategy = minModels > 1).
+      minModels: 1,
+      maxModels: 1,
+      estimatedCostMultiplier: 1.0, // one model runs
+      estimatedQualityBoost: 0.0, // no collective boost — single model
+      estimatedDurationMultiplier: 1.0,
       suitableFor: ['code-generation', 'refactoring', 'analysis'],
     };
   }
@@ -62,15 +66,11 @@ export class HierarchicalStrategy extends BaseStrategy {
     const models = this.getEligibleModels(context);
     const requestLog = logger.child({ strategy: 'hierarchical', requestId: context.requestId });
 
-    if (models.length < 2) {
-      throw new Error('Hierarchical strategy requires at least 2 models');
+    if (models.length < 1) {
+      throw new Error('Hierarchical strategy requires at least 1 model');
     }
 
-    // Pin biases the manager slot (highest-status role — analyzes,
-    // delegates, synthesizes). Workers are the next-best models by
-    // quality, drawn from the fallback pool. Manager is the only
-    // role whose identity affects the final output: workers
-    // contribute proposals but the manager owns the synthesis.
+    // Pin biases the manager slot — the only model that actually runs today.
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       requestLog.warn(
@@ -82,13 +82,7 @@ export class HierarchicalStrategy extends BaseStrategy {
       );
     }
     const manager = preference.pinnedExecutor ?? this.selectManager(models);
-    const workers = models.filter((m) => m.id !== manager.id).slice(0, 3);
 
-    // Manager creates plan
-    const plan = await this.createExecutionPlan(manager, request, context);
-    requestLog.debug({ stages: plan.stages.length }, 'Execution plan created');
-
-    // Execute (simplified: single execution for now)
     if (!this.getAdapterForModel) {
       throw new Error('getAdapterForModel not injected by orchestration engine');
     }
@@ -96,7 +90,7 @@ export class HierarchicalStrategy extends BaseStrategy {
     if (!adapter) {
       throw new Error(`No adapter found for model: ${manager.id}`);
     }
-    this.emitObserverEvent(context, { type: 'phase_start', models: [manager.name || manager.id], summary: `Hierarchical: manager executing plan.` });
+    this.emitObserverEvent(context, { type: 'phase_start', models: [manager.name || manager.id], summary: `Hierarchical: manager executing task.` });
 
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     const reasoningEnabled = this.isReasoningEnabled(request);
@@ -117,9 +111,11 @@ export class HierarchicalStrategy extends BaseStrategy {
       qualityScore: 0.85,
       metadata: {
         manager: manager.id,
-        workers: workers.map((w) => w.id),
-        planCreated: true,
-        planSummary: plan.summary,
+        // HONEST metadata: single-model stub. No plan drives execution and no
+        // worker is dispatched, so we do NOT advertise planCreated:true or a
+        // `workers` list of models that never ran (see class doc).
+        planCreated: false,
+        stub: true,
         ...(execution.reasoning ? { reasoning_traces: [{ model_id: execution.modelId, model_name: execution.modelName, role: execution.role, reasoning: execution.reasoning, reasoning_tokens: execution.reasoningTokens }] } : {}),
       },
     };
@@ -129,45 +125,5 @@ export class HierarchicalStrategy extends BaseStrategy {
     return [...models].sort(
       (a, b) => (b.performance?.quality || 0.8) - (a.performance?.quality || 0.8)
     )[0];
-  }
-
-  private async createExecutionPlan(
-    manager: Model,
-    request: ChatRequest,
-    context: OrchestrationContext
-  ): Promise<ExecutionPlan> {
-    const lastUserMessage = [...request.messages]
-      .reverse()
-      .find((message) => message.role === 'user' && typeof message.content === 'string');
-
-    const summary = `Manager ${manager.name} orchestrates task "${context.taskType}" for request ${context.requestId}.`;
-
-    const stages: ExecutionPlanStage[] = [
-      {
-        owner: 'manager',
-        description: `Decompose the requirement${
-          lastUserMessage ? ` "${(lastUserMessage.content as string).slice(0, 80)}"` : ''
-        } into clear subtasks.`,
-      },
-      {
-        owner: 'worker',
-        description: context.preferSpeed
-          ? 'Dispatch fastest worker to deliver a first-pass solution with low latency.'
-          : 'Dispatch highest quality worker to craft a detailed response.',
-      },
-      {
-        owner: 'manager',
-        description: 'Review worker output, synthesize improvements, and validate constraints.',
-      },
-    ];
-
-    if (Array.isArray(request.tools) && request.tools.length > 0) {
-      stages.splice(2, 0, {
-        owner: 'worker',
-        description: `Execute required tools (${request.tools.map((tool) => tool.function.name).join(', ')}) and feed results back to the manager.`,
-      });
-    }
-
-    return { summary, stages };
   }
 }

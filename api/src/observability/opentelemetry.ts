@@ -12,8 +12,8 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME, ATTR_DEPLOYMENT_ENVIRONMENT_NAME } from '@opentelemetry/semantic-conventions';
 import { config, isDevelopment } from '@/config';
 import { logger } from '@/utils/logger';
 
@@ -58,10 +58,10 @@ export async function initializeOpenTelemetry(): Promise<void> {
 
   diag.setLogger(new DiagConsoleLogger(), isDevelopment ? DiagLogLevel.DEBUG : DiagLogLevel.ERROR);
 
-  const resource = Resource.default().merge(
-    new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: config.observability.serviceName,
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: config.env,
+  const resource = defaultResource().merge(
+    resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: config.observability.serviceName,
+      [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: config.env,
     })
   );
 
@@ -70,7 +70,6 @@ export async function initializeOpenTelemetry(): Promise<void> {
     resource,
     instrumentations: [
       getNodeAutoInstrumentations({
-        '@opentelemetry/instrumentation-fastify': { enabled: true },
         '@opentelemetry/instrumentation-http': { enabled: true },
         '@opentelemetry/instrumentation-pino': { enabled: true },
       }),
