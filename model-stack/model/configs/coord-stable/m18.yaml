@@ -1,0 +1,50 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M18 — Qwen1.5-MoE-A2.7B (code sparse, Tier 5)
+inherits: "_shared.yaml"
+
+model_id: "m18"
+display_name: "Coord M18 — Qwen1.5-MoE-A2.7B (code sparse)"
+base_model: "Qwen/Qwen1.5-MoE-A2.7B"
+architecture: "moe_decoder"
+family: "qwen1.5-moe"
+tier: 5
+specialty: "code"
+
+moe:
+  num_experts: 60
+  experts_per_token: 4
+  router_aux_loss_weight: 0.01
+
+fine_tune:
+  method: "moe_lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["gate_proj", "up_proj", "down_proj"]
+  freeze_router: false
+
+training:
+  num_epochs: 2
+  learning_rate: 1.0e-4
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["code-generation", "refactoring", "debugging"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048
+
+audit:
+  scheduler_name_format: "coord-m18-qwen1.5-moe"

@@ -1,0 +1,241 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+##
+## Grafana Alerting Rules — Collective Intelligence Platform
+##
+## Import via Grafana UI (Alerting > Alert rules > Import)
+## or provision via grafana.ini provisioning/alerting.
+##
+## Required contact points:
+##   - ci-ops: Slack/PagerDuty channel for on-call
+##
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: ci-quality-degradation
+    folder: Collective Intelligence
+    interval: 5m
+    rules:
+      ##
+      ## CRITICAL: Strategy quality drops below 0.60 (median, 15m window)
+      ##
+      - uid: ci-alert-quality-degradation
+        title: "Strategy quality degradation"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: >-
+                histogram_quantile(0.5,
+                  sum(rate(ci_strategy_quality_score_bucket[15m])) by (le, strategy)
+                )
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: min
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [0.60] }
+        noDataState: OK
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: >-
+            Strategy {{ $labels.strategy }} median quality dropped below 0.60
+            (current: {{ $value | printf "%.2f" }}).
+          description: >-
+            This indicates a significant regression in response quality.
+            Check recent deployments, model availability, and champion/challenger logs.
+        labels:
+          severity: critical
+          team: ci-ops
+
+      ##
+      ## WARNING: Champion/Challenger rejected a promotion (degradation detected)
+      ##
+      - uid: ci-alert-champion-challenger-rejection
+        title: "Champion/Challenger rejected promotion"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: >-
+                increase(ci_champion_challenger_rejections_total[1h])
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: sum
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: OK
+        for: 0s
+        annotations:
+          summary: >-
+            Champion/Challenger framework rejected a weight promotion for
+            {{ $labels.strategy }} on {{ $labels.task_type }}/{{ $labels.complexity }}.
+            Reason: {{ $labels.reason }}.
+          description: >-
+            The benchmark challenger performed worse than the current champion.
+            No weight update was applied. Review continuous-benchmark-job logs.
+        labels:
+          severity: warning
+          team: ci-ops
+
+      ##
+      ## CRITICAL: Circuit breaker opened for a provider
+      ##
+      - uid: ci-alert-circuit-breaker-open
+        title: "Provider circuit breaker opened"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: ci_circuit_breaker_state == 1
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: max
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: >-
+            Circuit breaker OPEN for provider {{ $labels.provider }}.
+            All requests to this provider are being short-circuited.
+          description: >-
+            The provider has exceeded error thresholds. Traffic is being routed
+            to healthy providers. Check provider status page and error logs.
+        labels:
+          severity: critical
+          team: ci-ops
+
+      ##
+      ## WARNING: Strategy weights are stale (> 14 days since last update)
+      ##
+      - uid: ci-alert-stale-weights
+        title: "Strategy weights are stale"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: ci_strategy_weight_age_days > 14
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: max
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: OK
+        for: 1h
+        annotations:
+          summary: >-
+            Strategy weight for {{ $labels.strategy }} ({{ $labels.task_type }}/{{ $labels.complexity }})
+            has not been updated in {{ $value | printf "%.0f" }} days.
+          description: >-
+            This suggests the continuous benchmark job may not be running,
+            or no traffic is flowing for this task type. Check cron schedule
+            and benchmark job logs.
+        labels:
+          severity: warning
+          team: ci-ops
+
+      ##
+      ## WARNING: Model quality dropped below 0.50 (possible model degradation)
+      ##
+      - uid: ci-alert-model-quality-drop
+        title: "Model quality below threshold"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: >-
+                histogram_quantile(0.5,
+                  sum(rate(ci_model_quality_score_bucket[15m])) by (le, model_id)
+                )
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: min
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [0.50] }
+        noDataState: OK
+        execErrState: OK
+        for: 15m
+        annotations:
+          summary: >-
+            Model {{ $labels.model_id }} quality dropped below 0.50
+            (current: {{ $value | printf "%.2f" }}).
+          description: >-
+            The model may be experiencing degraded performance or a provider
+            issue. The model performance tracker will automatically reduce
+            its selection priority.
+        labels:
+          severity: warning
+          team: ci-ops

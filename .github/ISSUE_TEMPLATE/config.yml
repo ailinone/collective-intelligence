@@ -1,0 +1,10 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ailinone/collective-intelligence/security/advisories/new
+    about: NEVER open a public issue for a vulnerability — use private reporting.
+  - name: Questions & independent benchmark results
+    url: https://github.com/ailinone/collective-intelligence/discussions
+    about: Discussions is the place for questions and for sharing evaluation results (positive or negative).

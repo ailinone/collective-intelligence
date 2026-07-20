@@ -1,0 +1,102 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ──────────────────────────────────────────────────────────────
+# Ailin-1B  Pre-training Configuration
+# ──────────────────────────────────────────────────────────────
+
+run_name: ailin-1b-pretrain
+seed: 42
+
+# ── Model ─────────────────────────────────────────────────────
+model:
+  name: ailin-1b
+  hidden_size: 2048
+  num_attention_heads: 16
+  num_key_value_heads: 4          # GQA
+  num_hidden_layers: 24
+  intermediate_size: 5504
+  vocab_size: 32000
+  max_position_embeddings: 4096
+  rms_norm_eps: 1.0e-5
+  rope_theta: 10000.0
+  tie_word_embeddings: false
+  attention_dropout: 0.0
+  hidden_dropout: 0.0
+
+# ── Optimizer ─────────────────────────────────────────────────
+optimizer:
+  name: adamw
+  lr: 3.0e-4
+  weight_decay: 0.1
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+
+# ── Scheduler ─────────────────────────────────────────────────
+scheduler:
+  name: cosine
+  warmup_steps: 2000
+  min_lr_ratio: 0.1                # final lr = lr * min_lr_ratio
+
+# ── Batch / Accumulation ─────────────────────────────────────
+training:
+  global_batch_size: 512
+  micro_batch_size: 4
+  gradient_accumulation_steps: 128
+  max_steps: 100000
+  max_seq_length: 4096
+  gradient_clipping: 1.0
+
+# ── Precision ─────────────────────────────────────────────────
+precision:
+  dtype: bf16
+  tf32: true                      # use TF32 for matmuls on Ampere+
+
+# ── Checkpointing ────────────────────────────────────────────
+checkpointing:
+  save_interval: 1000
+  save_dir: ./checkpoints/ailin-1b
+  keep_last_n: 5
+  keep_best_k: 3                  # by val loss
+  save_optimizer: true
+
+# ── Evaluation ────────────────────────────────────────────────
+evaluation:
+  eval_interval: 500
+  eval_steps: 50                  # number of eval batches
+  metrics:
+    - val_loss
+    - perplexity
+
+# ── Logging ───────────────────────────────────────────────────
+logging:
+  log_interval: 10
+  wandb:
+    enabled: true
+    project: ailin-pretrain
+    entity: null                  # set via WANDB_ENTITY
+    tags:
+      - 1b
+      - pretrain
+
+# ── Data ──────────────────────────────────────────────────────
+data:
+  train_path: ./data/pretrain/train
+  val_path: ./data/pretrain/val
+  tokenizer: ./tokenizer/ailin-32k
+  num_workers: 8
+  prefetch_factor: 4
+  shuffle_buffer: 10000
+
+# ── Distributed ───────────────────────────────────────────────
+distributed:
+  backend: nccl
+  strategy: deepspeed
+  deepspeed_config: ../distributed/deepspeed_config.json
+  gradient_checkpointing: true

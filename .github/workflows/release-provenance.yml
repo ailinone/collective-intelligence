@@ -1,0 +1,64 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+name: Release Provenance
+
+# Cryptographic provenance for every release — the GPL-compatible way to prove
+# origin: (1) an SPDX SBOM of the exact tree (the machine-readable fingerprint
+# to diff a suspected fork against), and (2) a SLSA build-provenance
+# attestation signed via GitHub's Sigstore integration. Anyone can verify with:
+#   gh attestation verify <artifact> --repo ailinone/collective-intelligence
+#
+# `workflow_dispatch` runs the EXACT same build+SBOM+attest pipeline as a real
+# release (dry-run equivalence); only the final "attach to release" step is
+# release-only, because there is no release object to attach to otherwise.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write # Sigstore keyless signing
+  attestations: write # actions/attest-build-provenance
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build source archive (the released artifact)
+        run: |
+          git archive --format=tar.gz -o "ci-source-${GITHUB_REF_NAME:-snapshot}.tar.gz" HEAD
+          sha256sum ci-source-*.tar.gz > SHA256SUMS
+
+      - name: Generate SPDX SBOM (fail-closed)
+        run: |
+          set -euo pipefail
+          pipx install reuse
+          reuse spdx -o sbom.spdx
+          # A release without a valid SBOM must not ship: verify the output is
+          # a non-empty SPDX document instead of papering over a tool failure.
+          test -s sbom.spdx
+          grep -q 'SPDXVersion' sbom.spdx
+
+      - name: Attest build provenance (SLSA, signed via Sigstore)
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            ci-source-*.tar.gz
+            sbom.spdx
+
+      - name: Attach artifacts to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" ci-source-*.tar.gz sbom.spdx SHA256SUMS --clobber

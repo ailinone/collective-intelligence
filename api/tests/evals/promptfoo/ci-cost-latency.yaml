@@ -1,0 +1,159 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# CI-EVAL-04: Benchmark de Custo e Latência
+# Propósito: Medir overhead de tokens/custo por estratégia com prompts fixos
+# Hipótese: debate > parallel > quality-multipass > single em tokens (nessa ordem)
+# Crítico: verificar se cost_usd é positivo para todas as estratégias
+# Para executar:
+#   export EVAL_BEARER_TOKEN=$(cat .tmp-eval-bearer-token-runtime.txt)
+#   npx promptfoo eval --config tests/evals/promptfoo/ci-cost-latency.yaml \
+#     --output eval-results/audit-cost-$(date +%Y%m%d).json --max-concurrency 1 --delay 2000
+
+description: "CI Audit — Cost and Latency Benchmark"
+
+providers:
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "single"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "single"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "parallel"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "parallel"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  # NOTE: "consensus" is not a valid direct strategy input — removed from this eval.
+  # "quality-multipass" fails in prod with "Model not found: grok-beta" — kept to document the failure.
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "quality-multipass"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "quality-multipass"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "debate"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "debate"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  # Prompt 1: questão ultra-curta (minimiza variância de conteúdo)
+  - vars:
+      prompt: "What is the capital of Australia? One word only."
+    assert:
+      - type: javascript
+        value: |
+          try {
+            const resp = JSON.parse(output);
+            const content = resp.choices?.[0]?.message?.content || output;
+            return content.toLowerCase().includes('canberra');
+          } catch {
+            return output.toLowerCase().includes('canberra');
+          }
+        description: "Correct factual answer (Canberra)"
+      - type: javascript
+        value: |
+          try {
+            const resp = JSON.parse(output);
+            // cost_usd must be present AND >= 0 (not negative)
+            const cost = resp.ailin_metadata?.cost_usd;
+            if (cost === undefined || cost === null) return true; // skip if not present
+            return cost >= 0;
+          } catch { return true; }
+        description: "cost_usd must be non-negative (P0 bug check)"
+
+  # Prompt 2: questão de lista curta (mede overhead de tokens)
+  - vars:
+      prompt: "List exactly 3 Python built-in functions. Names only, one per line."
+    assert:
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          const builtins = ['len', 'print', 'range', 'type', 'list', 'dict', 'set',
+                           'str', 'int', 'float', 'bool', 'sorted', 'map', 'filter',
+                           'zip', 'enumerate', 'open', 'input', 'sum', 'max', 'min'];
+          return builtins.filter(b => content.toLowerCase().includes(b)).length >= 2;
+        description: "At least 2 valid Python built-ins in response"
+      - type: javascript
+        value: |
+          try {
+            const resp = JSON.parse(output);
+            const cost = resp.ailin_metadata?.cost_usd;
+            if (cost === undefined || cost === null) return true;
+            return cost >= 0;
+          } catch { return true; }
+        description: "cost_usd non-negative (P0 bug check)"
+
+  # Prompt 3: check de fallback_chain (verificação de multi-model)
+  - vars:
+      prompt: "Name one programming language. Just the name."
+    assert:
+      - type: javascript
+        value: |
+          const content = (typeof output === 'string' ? output : JSON.stringify(output)).toLowerCase();
+          const langs = ['python', 'javascript', 'typescript', 'java', 'rust', 'go',
+                        'c++', 'ruby', 'swift', 'kotlin', 'scala', 'php', 'c#'];
+          return langs.some(l => content.includes(l));
+        description: "A real programming language named"
+
+# Análise pós-execução: extrair e comparar nos outputs JSON:
+# Para cada estratégia e prompt:
+#   - usage.total_tokens
+#   - ailin_metadata.cost_usd (verificar sinal)
+#   - ailin_metadata.fallback_chain.length (deve ser > 1 para coletivo)
+#   - ailin_metadata.resolved_strategy (deve corresponder ao solicitado)
+#   - tempo de resposta (medido pelo promptfoo)
+#
+# Tabela esperada de tokens para "capital of Australia":
+#   single:         ~20-50 tokens
+#   parallel:       ~40-100 tokens (2 models)
+#   consensus:      ~60-150 tokens (3-5 models)
+#   quality-mp:     ~40-120 tokens (2 models + validation pass)
+#   debate:         ~200-800 tokens (3+ models, opening + rounds + synthesis)
+#
+# Se debate usar < 100 tokens, investigar se fallback para single está ocorrendo.

@@ -1,0 +1,13 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Feature request
+description: A concrete improvement with a use case
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: What problem does this solve? }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed approach (optional) }

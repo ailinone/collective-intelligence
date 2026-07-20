@@ -1,0 +1,194 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ONNX Runtime Embeddings + Reranker Sidecar
+# Serves embedding and reranking models via OpenAI-compatible API.
+#
+# Endpoints:
+#   GET  /health           → Health check
+#   GET  /v1/models        → List loaded models
+#   POST /v1/embeddings    → Generate embeddings (OpenAI format)
+#   POST /v1/rerank        → Rerank passages (Cohere/Jina format)
+#
+# Models must be pre-exported to ONNX and mounted at /models/
+# Example: optimum-cli export onnx --model BAAI/bge-small-en-v1.5 /models/bge-small-en-v1.5/
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    fastapi==0.115.* \
+    uvicorn[standard]==0.32.* \
+    onnxruntime==1.20.* \
+    numpy \
+    tokenizers \
+    transformers
+
+COPY <<'PYEOF' /app/server.py
+"""ONNX Runtime Embeddings + Reranker server with OpenAI-compatible API."""
+
+import os
+import json
+import time
+import logging
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("onnx-embeddings")
+
+app = FastAPI(title="ONNX Embeddings + Reranker")
+
+# ── Globals ──────────────────────────────────────
+sessions: dict = {}
+tokenizers_cache: dict = {}
+MODELS_DIR = Path("/models")
+
+
+def load_model(model_name: str):
+    """Load ONNX model + tokenizer lazily."""
+    if model_name in sessions:
+        return sessions[model_name], tokenizers_cache[model_name]
+
+    model_dir = MODELS_DIR / model_name
+    onnx_path = model_dir / "model.onnx"
+    if not onnx_path.exists():
+        # Try quantized variant
+        onnx_path = model_dir / "model_quantized.onnx"
+    if not onnx_path.exists():
+        raise FileNotFoundError(f"No ONNX model found in {model_dir}")
+
+    import onnxruntime as ort
+    opts = ort.SessionOptions()
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    opts.intra_op_num_threads = int(os.environ.get("ORT_THREADS", "4"))
+    session = ort.InferenceSession(str(onnx_path), opts, providers=["CPUExecutionProvider"])
+    sessions[model_name] = session
+
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+    tokenizers_cache[model_name] = tokenizer
+
+    log.info(f"Loaded model: {model_name} from {onnx_path}")
+    return session, tokenizer
+
+
+def embed(texts: list[str], model_name: str) -> list[list[float]]:
+    """Run embedding inference."""
+    session, tokenizer = load_model(model_name)
+    encoded = tokenizer(texts, padding=True, truncation=True, max_length=512, return_tensors="np")
+    inputs = {k: v for k, v in encoded.items() if k in [i.name for i in session.get_inputs()]}
+    outputs = session.run(None, inputs)
+    # Use CLS token or mean pooling
+    embeddings = outputs[0]
+    if embeddings.ndim == 3:
+        # Mean pooling over sequence length
+        mask = encoded["attention_mask"]
+        embeddings = (embeddings * mask[:, :, np.newaxis]).sum(axis=1) / mask.sum(axis=1, keepdims=True)
+    # Normalize
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-12)
+    embeddings = embeddings / norms
+    return embeddings.tolist()
+
+
+# ── Models ───────────────────────────────────────
+
+class EmbeddingRequest(BaseModel):
+    input: str | list[str]
+    model: str = ""
+    encoding_format: str = "float"
+
+class RerankRequest(BaseModel):
+    query: str
+    documents: list[str]
+    model: str = ""
+    top_n: Optional[int] = None
+
+
+# ── Endpoints ────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "models_loaded": list(sessions.keys())}
+
+
+@app.get("/v1/models")
+def list_models():
+    available = []
+    if MODELS_DIR.exists():
+        for d in MODELS_DIR.iterdir():
+            if d.is_dir() and (d / "model.onnx").exists() or (d / "model_quantized.onnx").exists():
+                is_reranker = "reranker" in d.name or "cross-encoder" in d.name or "ms-marco" in d.name
+                available.append({
+                    "id": d.name,
+                    "object": "model",
+                    "owned_by": "local",
+                    "type": "reranker" if is_reranker else "embedding",
+                })
+    return {"object": "list", "data": available}
+
+
+@app.post("/v1/embeddings")
+def create_embeddings(req: EmbeddingRequest):
+    model_name = req.model or os.environ.get("EMBEDDING_MODEL", "bge-small-en-v1.5")
+    texts = [req.input] if isinstance(req.input, str) else req.input
+
+    try:
+        vectors = embed(texts, model_name)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Model '{model_name}' not found in /models/")
+
+    return {
+        "object": "list",
+        "model": model_name,
+        "data": [
+            {"object": "embedding", "index": i, "embedding": v}
+            for i, v in enumerate(vectors)
+        ],
+        "usage": {"prompt_tokens": sum(len(t.split()) for t in texts), "total_tokens": sum(len(t.split()) for t in texts)},
+    }
+
+
+@app.post("/v1/rerank")
+def rerank(req: RerankRequest):
+    model_name = req.model or os.environ.get("RERANKER_MODEL", "ms-marco-MiniLM-L-6-v2")
+
+    try:
+        session, tokenizer = load_model(model_name)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Reranker '{model_name}' not found in /models/")
+
+    pairs = [[req.query, doc] for doc in req.documents]
+    encoded = tokenizer(pairs, padding=True, truncation=True, max_length=512, return_tensors="np")
+    inputs = {k: v for k, v in encoded.items() if k in [i.name for i in session.get_inputs()]}
+    outputs = session.run(None, inputs)
+    scores = outputs[0].flatten().tolist()
+
+    results = [{"index": i, "relevance_score": s} for i, s in enumerate(scores)]
+    results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    if req.top_n:
+        results = results[: req.top_n]
+
+    return {"results": results, "model": model_name}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8086)
+PYEOF
+
+EXPOSE 8086
+
+CMD ["python", "server.py"]

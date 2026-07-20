@@ -1,0 +1,60 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin-7B Model Configuration
+# ============================================================================
+# Large model in the Ailin family. Chinchilla-optimal for ~140B tokens.
+#
+# Parameter count:
+#   Embedding:     32000 * 4096                  =  131,072,000
+#   Per-layer (GQA 4:1):
+#     Q:           4096 * 4096                   =   16,777,216
+#     KV:          4096 * 2 * 1024               =    8,388,608
+#     O:           4096 * 4096                   =   16,777,216
+#     Gate+Up:     4096 * 11008 * 2              =   90,177,536
+#     Down:        11008 * 4096                  =   45,088,768
+#     Norms:       2 * 4096                      =        8,192
+#     Per-layer:                                 =  177,217,536
+#   32 layers:     32 * 177,217,536              = 5,670,961,152
+#   Final norm:    4096
+#   Total:         ~5,802,037,248 (~5.8B non-emb, ~6.9B total)
+# ============================================================================
+
+model:
+  name: "ailin-7b"
+  architecture: "decoder_only_transformer"
+  family: "ailin"
+  variant: "base"
+
+  hidden_size: 4096
+  num_layers: 32
+  num_attention_heads: 32
+  num_key_value_heads: 8     # GQA 4:1
+  intermediate_size: 11008   # ~2.7x hidden_size
+  vocab_size: 32000
+  max_position_embeddings: 8192
+
+  position_embedding_type: "rope"
+  rope_theta: 500000.0
+
+  norm_type: "rmsnorm"
+  layer_norm_eps: 1.0e-5
+
+  hidden_act: "silu"
+  use_gated_mlp: true
+
+  attention_dropout: 0.0
+  attention_bias: false
+  use_flash_attention: true
+
+  tie_word_embeddings: false
+  embedding_dropout: 0.0
+  initializer_range: 0.02
+  dtype: "bfloat16"

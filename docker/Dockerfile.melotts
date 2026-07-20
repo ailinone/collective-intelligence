@@ -1,0 +1,72 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# MeloTTS — CPU TTS with OpenAI-compatible API
+# Based on https://github.com/myshell-ai/MeloTTS/blob/main/Dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libsndfile1 git curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip && \
+    git clone --depth 1 https://github.com/myshell-ai/MeloTTS.git /app/melotts && \
+    cd /app/melotts && pip install --no-cache-dir -e . && \
+    python -m unidic download
+
+COPY <<'PYEOF' /app/server.py
+import json, io, os
+import soundfile as sf
+from flask import Flask, request, Response, jsonify
+
+app = Flask(__name__)
+tts_engine = None
+
+def get_tts():
+    global tts_engine
+    if tts_engine is None:
+        from melo.api import TTS
+        tts_engine = TTS(language='EN', device='cpu')
+    return tts_engine
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'})
+
+@app.route('/v1/audio/speech', methods=['POST'])
+def speech():
+    tts = get_tts()
+    data = json.loads(request.data)
+    text = data.get('input', '')
+    speed = data.get('speed', 1.0)
+    speaker_ids = tts.hps.data.spk2id
+    speaker = list(speaker_ids.keys())[0]
+    buf = io.BytesIO()
+    tts.tts_to_file(text, speaker_ids[speaker], buf, speed=speed, format='wav')
+    buf.seek(0)
+    return Response(buf.read(), mimetype='audio/wav')
+
+@app.route('/v1/models', methods=['GET'])
+def models():
+    return jsonify({'data': [{'id': 'melotts', 'object': 'model'}]})
+
+if __name__ == '__main__':
+    get_tts()  # warmup
+    print('MeloTTS ready on :8000')
+    app.run(host='0.0.0.0', port=8000)
+PYEOF
+
+RUN pip install --no-cache-dir flask gunicorn
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -sf http://localhost:8000/health || exit 1
+CMD ["python", "/app/server.py"]

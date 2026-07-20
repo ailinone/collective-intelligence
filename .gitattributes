@@ -1,0 +1,9 @@
+# Shell scripts must use LF line endings so they execute on Linux CI runners.
+# Without this, Windows checkouts produce CRLF that breaks `#!/usr/bin/env bash`.
+*.sh text eol=lf
+
+# Same for yaml/dockerfile/makefile — consumed by Linux tooling
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Makefile text eol=lf

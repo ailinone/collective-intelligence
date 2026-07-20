@@ -1,0 +1,69 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# NeuTTS Air — Ultra-fast TTS with voice cloning
+# Apache 2.0, CPU capable, ~100ms latency
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libsndfile1 git curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir transformers soundfile flask numpy huggingface_hub
+
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('neuphonic/neutts-air', local_dir='/app/model')" || echo "Model download deferred to runtime"
+
+COPY <<'PYEOF' /app/server.py
+import json, io, os
+import soundfile as sf
+import numpy as np
+from flask import Flask, request, Response, jsonify
+
+app = Flask(__name__)
+model = None
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'})
+
+@app.route('/v1/audio/speech', methods=['POST'])
+def speech():
+    global model
+    data = json.loads(request.data)
+    text = data.get('input', '')
+    # NeuTTS Air inference
+    try:
+        if model is None:
+            from transformers import AutoProcessor, AutoModel
+            model = {'processor': AutoProcessor.from_pretrained('/app/model'), 'model': AutoModel.from_pretrained('/app/model')}
+        inputs = model['processor'](text, return_tensors='pt')
+        with __import__('torch').no_grad():
+            output = model['model'].generate(**inputs)
+        audio_np = output.cpu().numpy().squeeze()
+        buf = io.BytesIO()
+        sf.write(buf, audio_np, 22050, format='WAV')
+        buf.seek(0)
+        return Response(buf.read(), mimetype='audio/wav')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/v1/models', methods=['GET'])
+def models():
+    return jsonify({'data': [{'id': 'neutts-air', 'object': 'model'}]})
+
+if __name__ == '__main__':
+    print('NeuTTS Air ready on :8000')
+    app.run(host='0.0.0.0', port=8000)
+PYEOF
+
+EXPOSE 8000
+CMD ["python", "/app/server.py"]

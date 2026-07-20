@@ -1,0 +1,135 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin-1B Model Configuration
+# ============================================================================
+# GPT-style decoder-only transformer, ~1.1B parameters.
+#
+# Parameter count breakdown:
+#   Embedding:         vocab_size * hidden_size             = 32000 * 2048      =   65,536,000
+#   Per-layer:
+#     Q projection:    hidden_size * hidden_size             = 2048 * 2048        =    4,194,304
+#     KV projection:   hidden_size * 2 * (kv_heads * head_dim) = 2048 * 2 * 512 =    2,097,152
+#     Output proj:     hidden_size * hidden_size             = 2048 * 2048       =    4,194,304
+#     Gate proj:       hidden_size * intermediate_size      = 2048 * 5504        =   11,272,192
+#     Up proj:         hidden_size * intermediate_size      = 2048 * 5504        =   11,272,192
+#     Down proj:       intermediate_size * hidden_size      = 5504 * 2048        =   11,272,192
+#     RMSNorm (x2):    2 * hidden_size                      = 2 * 2048           =        4,096
+#     Per-layer total:                                                           =   50,597,888
+#   All layers:        24 * 50,597,888                                           = 1,214,349,312
+#   Final RMSNorm:     hidden_size                                               =        2,048
+#   LM head (tied):    0 (weight-tied with embedding)
+#   -------------------------------------------------------------------------
+#   Total:             ~1,279,887,360 (~1.28B parameters)
+#   Non-embedding:     ~1,214,351,360 (~1.21B parameters)
+# ============================================================================
+
+model:
+  name: "ailin-1b"
+  architecture: "decoder_only_transformer"
+
+  # Core dimensions
+  hidden_size: 2048
+  num_layers: 24
+  num_attention_heads: 16
+  num_key_value_heads: 4    # GQA 4:1 ratio — reduces KV cache 4x vs MHA
+  intermediate_size: 5504   # ~2.7x hidden_size for SwiGLU (compensating for gating)
+  vocab_size: 32000
+  max_position_embeddings: 4096
+
+  # Positional encoding
+  position_embedding_type: "rope"
+  rope_theta: 10000.0
+  rope_scaling: null   # Set to {"type": "linear", "factor": 2.0} for context extension
+
+  # Normalization
+  norm_type: "rmsnorm"
+  layer_norm_eps: 1.0e-5
+
+  # Activation
+  hidden_act: "silu"     # SiLU/Swish for SwiGLU
+  use_gated_mlp: true    # SwiGLU = gated MLP with SiLU
+
+  # Attention
+  attention_dropout: 0.0
+  attention_bias: false   # No bias in attention projections (LLaMA style)
+  use_flash_attention: true
+
+  # Embeddings
+  tie_word_embeddings: true
+  embedding_dropout: 0.0
+
+  # Initialization
+  initializer_range: 0.02
+  use_scaled_init: true   # Scale residual stream init by 1/sqrt(2*n_layers)
+
+  # Gradient checkpointing
+  gradient_checkpointing: true
+
+  # Precision
+  dtype: "bfloat16"
+  use_mixed_precision: true
+
+# Training hyperparameters
+training:
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 3.0e-4
+  min_learning_rate: 3.0e-5   # 10% of peak LR
+  weight_decay: 0.1
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_epsilon: 1.0e-8
+  max_grad_norm: 1.0
+
+  # Schedule
+  lr_scheduler: "cosine"
+  warmup_steps: 2000
+  total_steps: 150000        # ~300B tokens / (4M tokens per step)
+  cooldown_steps: 1000
+
+  # Batch size
+  micro_batch_size: 4
+  gradient_accumulation_steps: 32
+  global_batch_size: 512      # micro * grad_accum * num_gpus
+  sequence_length: 4096
+  tokens_per_step: 2097152    # global_batch * seq_len ≈ 2M tokens/step
+
+  # Data
+  num_workers: 8
+  pin_memory: true
+  prefetch_factor: 2
+
+  # Checkpointing
+  save_interval_steps: 1000
+  eval_interval_steps: 500
+  log_interval_steps: 10
+
+  # Distributed
+  distributed_backend: "nccl"
+  deepspeed_stage: 2
+  activation_checkpointing: true
+
+# Evaluation
+evaluation:
+  benchmarks:
+    - name: "hellaswag"
+      shots: 0
+    - name: "arc_easy"
+      shots: 0
+    - name: "arc_challenge"
+      shots: 25
+    - name: "winogrande"
+      shots: 5
+    - name: "mmlu"
+      shots: 5
+    - name: "gsm8k"
+      shots: 5
+  eval_batch_size: 16

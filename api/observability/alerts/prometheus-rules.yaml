@@ -1,0 +1,42 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+groups:
+  - name: ailin-api-service
+    rules:
+      - alert: AilinHighLatency
+        expr: histogram_quantile(0.95, sum(rate(ailin_dev_http_request_duration_seconds_bucket[5m])) by (le)) > 1.5
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Ailin API p95 latency above 1.5s"
+          description: "Latency has exceeded the SLO for the last 10 minutes. Investigate provider response times, Redis and database health."
+
+      - alert: AilinQueueBacklog
+        expr: ailin_dev_queue_size{queue_name="chat-requests"} > 5000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Queue backlog exceeding threshold"
+          description: "BullMQ chat-requests queue has accumulated more than 5000 jobs for 5 minutes. Consider scaling workers or throttling ingress."
+
+      - alert: AilinCacheDegraded
+        expr: sum(rate(ailin_dev_cache_hits_total[5m])) / (sum(rate(ailin_dev_cache_hits_total[5m])) + sum(rate(ailin_dev_cache_misses_total[5m]))) < 0.4
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Cache hit ratio below 40%"
+          description: "Multi-layer cache hit rate dropped below 40%. Investigate Redis health, invalidation storms or configuration changes."
+

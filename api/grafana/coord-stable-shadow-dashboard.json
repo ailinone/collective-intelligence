@@ -1,0 +1,149 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "title": "Shadow call rate per strategy",
+      "description": "rate(coord_ensemble_shadow_calls_total[5m]) by (strategy, kind). Spikes in `kind=error` or `kind=timeout` indicate coord-serving health issues.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (strategy, kind) (rate(coord_ensemble_shadow_calls_total[5m]))",
+          "legendFormat": "{{strategy}} / {{kind}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "title": "Ensemble-vs-heuristic role agreement (live SLI)",
+      "description": "Fraction of successful shadow calls where the ensemble's role matched the heuristic's. Floor near 1.0 = ensemble reproduces production. A sustained drop = ensemble is genuinely different (could be either direction; check confidence + per-strategy breakdown).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (strategy) (rate(coord_ensemble_shadow_role_match_total{match=\"true\"}[5m])) / sum by (strategy) (rate(coord_ensemble_shadow_role_match_total[5m]))",
+          "legendFormat": "{{strategy}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.7 },
+              { "color": "green", "value": 0.85 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "title": "Shadow latency p50 / p95 / p99 per strategy",
+      "description": "Quantiles of end-to-end shadow latency. p99 climbing above 2s with MOCK_CASCADE = coord-serving overload. With TEACHER_PROXY mode, expect higher baseline since each call hits triage's LLM.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, strategy) (rate(coord_ensemble_shadow_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{strategy}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, strategy) (rate(coord_ensemble_shadow_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{strategy}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, strategy) (rate(coord_ensemble_shadow_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{strategy}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "title": "Ensemble confidence distribution heatmap",
+      "description": "Winner-share confidence per successful shadow call. Left-skewed at 1.0 = cascade is short-circuiting too aggressively (Tier 1 unanimous). Centered ~0.5 = the cascade is exhausting all 6 tiers without convergence (likely high-dissent context). A healthy distribution is right-shoulder-heavy with a long tail toward 0.5.",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(coord_ensemble_shadow_confidence_bucket[5m]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "title": "Circuit-open rate (alert candidate)",
+      "description": "Fraction of shadow calls that fast-failed via the circuit breaker. Any sustained value > 0 means coord-serving is unreachable enough that the breaker is OPEN. Pages oncall.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (strategy) (rate(coord_ensemble_shadow_calls_total{kind=\"error\"}[5m])) / sum by (strategy) (rate(coord_ensemble_shadow_calls_total[5m]))",
+          "legendFormat": "error rate {{strategy}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.05 },
+              { "color": "red", "value": 0.20 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["coord-stable", "shadow", "phase-2c"],
+  "templating": {
+    "list": [
+      {
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "label": "Datasource",
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "Coord-stable Shadow Wire (Phase 2c)",
+  "uid": "coord-stable-shadow",
+  "version": 1
+}

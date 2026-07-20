@@ -1,0 +1,359 @@
+{
+  "generatedAt": "2026-05-12T20:21:27.377Z",
+  "decisionsByUsage": {
+    "excluded": 2235,
+    "usable_for_training": 283
+  },
+  "sampleDecisions": [
+    {
+      "executionId": "5f2e875d-1f79-4fbe-a06d-f4f8281afd6a",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "a89b8cf2-01eb-44e0-b88c-422bc86fd544",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "ccff3be8-2580-47c1-a776-09bbef636683",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "e3a9d0c2-9891-4a0e-a64f-2ff90c77ba99",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "900e9a73-5471-478f-90b7-6c136b8d7186",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "19941ae6-dd36-4fdd-b1fe-754c7dfa9217",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "12dd000a-1fce-425e-949a-4853dd23885b",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "f35d8632-9678-4678-b869-8741f79dbf91",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "90a0836c-cd5d-4e38-acd7-748662c9bde6",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "f521c84f-b594-4217-8a20-8d852e285abb",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "3258594f-aad7-4988-a5c2-d981f8bcc3fa",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "57b3f8a2-096d-4d35-9494-beb354cc5eda",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "7c9754d2-3a4f-4ffc-ba61-2d0180507cd3",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "07c3371f-824e-4c44-abd4-3453dfdbb65f",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "4e95940f-761e-4243-ac79-680fd354c5dd",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "f5fa62cc-674b-45f9-80a7-86a888a022c1",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "0b6f6344-8d33-4339-99b6-a7ad19d5ab2d",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "2eaa6b5c-14c2-40fe-9d4f-fdeb28496ba4",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "31e9394d-f170-488a-9d04-533ffd2823f1",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "819f072e-94b1-41f8-80e5-37fa61f7a5c9",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "8d2686c9-5264-47b7-8019-4fc229dcc4c0",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "df12fba8-71d4-4542-93a9-be6961c723c8",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "b0f24e7d-cfd2-48a3-8f0d-df0ba17eff8d",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "0efc9841-314f-4b36-b24b-c91294fb0a69",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "d2e85331-7ca0-4136-9d3a-96b2ff2b793a",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "a09aeb83-903c-46b7-ab5a-04722330f732",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "4c5033eb-2ea0-477a-a138-3d9651a1383d",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "a8d091e5-540a-4458-8037-9919188effa9",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "3e3fa92f-2272-4765-a540-fd17c6b696ff",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "f21e5f7b-9291-41b4-b5f6-cd50e1493c39",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "858a1b5d-9643-445f-96a5-42b555aa9985",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "bbc8b2a5-1efe-4ea8-a81a-319124b3d8b2",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "0511dfbb-590d-43bd-b308-fcfaf5c4a4e0",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "9d70673d-0bf2-4e74-b660-3f765f08ef04",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "be048543-8b56-4448-bb76-605afd2439c3",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "90f81c33-1803-46d5-952d-e75ecb3ca55f",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "802b5e0c-373b-4802-b062-ca281873ca63",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "a8434f81-0418-472b-8acf-b452546d0698",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "760385b7-c12c-4c50-9f73-edc4bd3edad0",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "118c1985-6482-4286-a81d-9dadfa5e8ff2",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "3384b5af-60e4-43e8-94b8-086adf6a36ad",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "cbda9015-16df-4e93-a6fb-ae9a135cae67",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "0686b434-3703-4e3b-b685-89d1bc96e621",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "5bb224ec-bb4b-45da-bffe-d44b55ec6695",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "a31fb441-a0aa-4c34-b490-627b9fa93075",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "05238eb9-6c0b-47e6-a741-da58fb962c88",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "e2985cd2-380c-4345-a4cf-f3fb49ccd196",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "9f0d80bc-3baf-4f11-9ea5-bcbd3105f500",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "464931b0-0572-4675-beac-70d2956bb41e",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    },
+    {
+      "executionId": "0c5196f8-13e8-434e-850a-8cc404bd2514",
+      "usage": "excluded",
+      "reasons": [
+        "missing_models_used"
+      ]
+    }
+  ]
+}

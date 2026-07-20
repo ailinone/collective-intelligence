@@ -1,0 +1,650 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# =============================================================================
+# Ailin Coordinator Stable — 24-model ensemble registry
+# =============================================================================
+# This is a SEPARATE registry from `catalog.yaml` (which holds the ailin-*
+# family of models we pretrain from scratch). The coordinator stable is
+# composed of EXTERNAL open-source bases that we fine-tune (typically via
+# LoRA + distillation from CI gateway logs) to act as routing/coordination
+# specialists for the F4.1 audit substrate landed in api/.
+#
+# The 24-model design is structured as a 6×4 matrix:
+#
+#                 │ Encoder │ Dense ≤1B │ Dense 1-3B │ Dense 3-9B │ MoE Light │ MoE Heavy │
+#   ──────────────┼─────────┼───────────┼────────────┼────────────┼───────────┼───────────┤
+#   Generalist    │   m01   │   m05     │   m09      │   m13      │   m17     │   m21     │
+#   Code          │   m02   │   m06     │   m10      │   m14      │   m18     │   m22     │
+#   Reasoning     │   m03   │   m07     │   m11      │   m15      │   m19     │   m23     │
+#   Routing/Safety│   m04   │   m08     │   m12      │   m16      │   m20     │   m24     │
+#
+# Voting: tiered cascade — Tier 1 (encoders) decides 70-80% alone via
+# confidence threshold; only ambiguous cases escalate through Tier 2-6.
+# See model-stack/serving/aggregation/tiered_voter.py.
+#
+# Audit substrate: each vote produces a RoleDecision with `schedulerName`
+# and `decisionReason` that lands in collective_signals.decision_value
+# (see api/src/core/orchestration/strategies/tri-role-collective-strategy.ts
+# and api/src/core/coordination/collective-run-repository.ts).
+# =============================================================================
+
+version: "1.0.0"
+family: "coordinator-stable"
+total_models: 24
+
+# Voting / cascade configuration ---------------------------------------------
+ensemble:
+  voting_strategy: "weighted_bayesian_majority"
+  cascade:
+    # Tier confidence thresholds — if reached, lower tiers don't run.
+    # Calibrated empirically; tune via shadow-eval after first training run.
+    tier_1_confidence_threshold: 0.85
+    tier_2_confidence_threshold: 0.80
+    tier_3_confidence_threshold: 0.75
+    tier_4_confidence_threshold: 0.70
+    tier_5_confidence_threshold: 0.65
+    # Tier 6 always runs to completion when reached (ambiguity floor).
+  tier_weights:
+    # Weight applied to each tier's contribution in the final vote.
+    # Tier 4 (dense 3-9B) is the "anchor" — best balance of cost and quality.
+    # MoE Heavy (Tier 6) is bounded so it never single-handedly overrides.
+    tier_1: 0.10
+    tier_2: 0.15
+    tier_3: 0.20
+    tier_4: 0.25
+    tier_5: 0.20
+    tier_6: 0.10
+  dissent:
+    # Dissent threshold (count of models disagreeing with majority) that
+    # triggers escalation to the next tier. Bounded by tier_*_confidence
+    # threshold above; whichever fires first.
+    escalate_threshold: 2
+
+# Audit shape — what each vote must produce -----------------------------------
+vote_schema:
+  required_fields:
+    - role          # the chosen RoleDecision.role
+    - reason        # short stable token (e.g. "after-solver", "quality-fallback")
+    - scheduler     # this model's identifier (e.g. "coord-m01-modernbert")
+    - confidence    # 0.0 - 1.0 self-reported probability
+  optional_fields:
+    - rationale     # free-form justification (sanitized)
+    - features      # extracted features the model used (for debugging)
+
+# =============================================================================
+# Models — 24 entries
+# =============================================================================
+models:
+  # ---------------------------------------------------------------------------
+  # Tier 1 — Encoders (≤200M params, latency <10ms, always-on hot path)
+  # ---------------------------------------------------------------------------
+  m01:
+    display_name: "Coord M01 — ModernBERT (generalist encoder)"
+    base_model: "answerdotai/ModernBERT-base"
+    base_param_count: 149_000_000
+    architecture: "encoder_only"
+    family: "modernbert"
+    license: "Apache-2.0"
+    tier: 1
+    specialty: "generalist"
+    serving_priority: "hot"
+    purpose: "Fast first-pass classifier for high-confidence routing decisions"
+    fine_tune_method: "lora"
+    fine_tune_target_layers: ["attention", "classifier_head"]
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 0.30
+      vram_int4_gb: 0.10
+      expected_latency_ms: 5
+      expected_qps: 2000
+    promotion_eligible: true
+    notes: "Hot-loaded. Runs on every request as Tier 1."
+
+  m02:
+    display_name: "Coord M02 — CodeBERT (code-specialist encoder)"
+    base_model: "microsoft/codebert-base"
+    base_param_count: 125_000_000
+    architecture: "encoder_only"
+    family: "roberta"
+    license: "MIT"
+    tier: 1
+    specialty: "code"
+    serving_priority: "hot"
+    purpose: "Code-task fast classifier — distinguishes code from prose"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 0.25
+      vram_int4_gb: 0.10
+      expected_latency_ms: 5
+      expected_qps: 2000
+    promotion_eligible: true
+
+  m03:
+    display_name: "Coord M03 — DeBERTa-v3 (reasoning-specialist encoder)"
+    base_model: "microsoft/deberta-v3-base"
+    base_param_count: 184_000_000
+    architecture: "encoder_only"
+    family: "deberta"
+    license: "MIT"
+    tier: 1
+    specialty: "reasoning"
+    serving_priority: "hot"
+    purpose: "Reasoning/math fast classifier — disentangled attention helps"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 0.37
+      vram_int4_gb: 0.12
+      expected_latency_ms: 7
+      expected_qps: 1800
+    promotion_eligible: true
+
+  m04:
+    display_name: "Coord M04 — MiniLM (routing/safety encoder)"
+    base_model: "sentence-transformers/all-MiniLM-L12-v2"
+    base_param_count: 33_000_000
+    architecture: "encoder_only"
+    family: "minilm"
+    license: "Apache-2.0"
+    tier: 1
+    specialty: "routing_safety"
+    serving_priority: "hot"
+    purpose: "Tiny safety/triage classifier for fast-path routing decisions"
+    fine_tune_method: "full"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 0.07
+      vram_int4_gb: 0.03
+      expected_latency_ms: 3
+      expected_qps: 4000
+    promotion_eligible: true
+
+  # ---------------------------------------------------------------------------
+  # Tier 2 — Dense ≤1B (latency ~50ms, hot-loaded)
+  # ---------------------------------------------------------------------------
+  m05:
+    display_name: "Coord M05 — SmolLM2-360M (generalist)"
+    base_model: "HuggingFaceTB/SmolLM2-360M"
+    base_param_count: 360_000_000
+    architecture: "decoder_only_transformer"
+    family: "smollm2"
+    license: "Apache-2.0"
+    tier: 2
+    specialty: "generalist"
+    serving_priority: "hot"
+    purpose: "Fast generalist generator for ambiguous Tier-1 cases"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 0.72
+      vram_int4_gb: 0.25
+      expected_latency_ms: 30
+      expected_qps: 400
+    promotion_eligible: true
+
+  m06:
+    display_name: "Coord M06 — Qwen2.5-Coder-0.5B (code)"
+    base_model: "Qwen/Qwen2.5-Coder-0.5B"
+    base_param_count: 494_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5-coder"
+    license: "Apache-2.0"
+    tier: 2
+    specialty: "code"
+    serving_priority: "hot"
+    purpose: "Code-task fast generator — Qwen-Coder series strong at small scale"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 1.0
+      vram_int4_gb: 0.35
+      expected_latency_ms: 40
+      expected_qps: 350
+    promotion_eligible: true
+
+  m07:
+    display_name: "Coord M07 — Qwen2.5-Math-1.5B (reasoning)"
+    base_model: "Qwen/Qwen2.5-Math-1.5B"
+    base_param_count: 1_540_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5-math"
+    license: "Apache-2.0"
+    tier: 2
+    specialty: "reasoning"
+    serving_priority: "hot"
+    purpose: "Math/reasoning fast generator — pretrained on math corpus"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 3.1
+      vram_int4_gb: 1.0
+      expected_latency_ms: 60
+      expected_qps: 200
+    promotion_eligible: true
+
+  m08:
+    display_name: "Coord M08 — TinyLlama-1.1B (routing/safety)"
+    base_model: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    base_param_count: 1_100_000_000
+    architecture: "decoder_only_transformer"
+    family: "llama-arch"
+    license: "Apache-2.0"
+    tier: 2
+    specialty: "routing_safety"
+    serving_priority: "hot"
+    purpose: "LLaMA-architecture diversity at 1B scale for routing/safety class"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 2.2
+      vram_int4_gb: 0.7
+      expected_latency_ms: 50
+      expected_qps: 250
+    promotion_eligible: true
+
+  # ---------------------------------------------------------------------------
+  # Tier 3 — Dense 1-3B (latency ~150ms, hot-loaded)
+  # ---------------------------------------------------------------------------
+  m09:
+    display_name: "Coord M09 — Qwen2.5-1.5B (generalist)"
+    base_model: "Qwen/Qwen2.5-1.5B"
+    base_param_count: 1_540_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5"
+    license: "Apache-2.0"
+    tier: 3
+    specialty: "generalist"
+    serving_priority: "hot"
+    purpose: "Best-in-class small generalist; high pretraining quality"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 3.1
+      vram_int4_gb: 1.0
+      expected_latency_ms: 100
+      expected_qps: 150
+    promotion_eligible: true
+
+  m10:
+    display_name: "Coord M10 — Qwen2.5-Coder-1.5B (code)"
+    base_model: "Qwen/Qwen2.5-Coder-1.5B"
+    base_param_count: 1_540_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5-coder"
+    license: "Apache-2.0"
+    tier: 3
+    specialty: "code"
+    serving_priority: "hot"
+    purpose: "Code-task strong reasoning at 1.5B scale"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 3.1
+      vram_int4_gb: 1.0
+      expected_latency_ms: 110
+      expected_qps: 140
+    promotion_eligible: true
+
+  m11:
+    display_name: "Coord M11 — SmolLM2-1.7B (reasoning)"
+    base_model: "HuggingFaceTB/SmolLM2-1.7B"
+    base_param_count: 1_710_000_000
+    architecture: "decoder_only_transformer"
+    family: "smollm2"
+    license: "Apache-2.0"
+    tier: 3
+    specialty: "reasoning"
+    serving_priority: "hot"
+    purpose: "Distillation-friendly base, designed for fine-tuning"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 3.4
+      vram_int4_gb: 1.1
+      expected_latency_ms: 120
+      expected_qps: 130
+    promotion_eligible: true
+
+  m12:
+    display_name: "Coord M12 — LLaMA-3.2-1B (routing/safety)"
+    base_model: "meta-llama/Llama-3.2-1B"
+    base_param_count: 1_230_000_000
+    architecture: "decoder_only_transformer"
+    family: "llama-3"
+    license: "Llama-3 license (commercial OK <700M MAU)"
+    tier: 3
+    specialty: "routing_safety"
+    serving_priority: "hot"
+    purpose: "LLaMA-3 architecture diversity at 1B; alignment-aware base"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 2.5
+      vram_int4_gb: 0.8
+      expected_latency_ms: 100
+      expected_qps: 150
+    license_caveat: "Free up to 700M MAU; review Llama license before commercial deploy"
+    promotion_eligible: true
+
+  # ---------------------------------------------------------------------------
+  # Tier 4 — Dense 3-9B (latency ~400ms, warm-loaded)
+  # ---------------------------------------------------------------------------
+  m13:
+    display_name: "Coord M13 — Qwen2.5-7B (generalist)"
+    base_model: "Qwen/Qwen2.5-7B"
+    base_param_count: 7_620_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5"
+    license: "Apache-2.0"
+    tier: 4
+    specialty: "generalist"
+    serving_priority: "warm"
+    purpose: "Anchor of the ensemble — strongest dense generalist at affordable scale"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 15.0
+      vram_int4_gb: 4.5
+      expected_latency_ms: 350
+      expected_qps: 40
+    promotion_eligible: true
+
+  m14:
+    display_name: "Coord M14 — Qwen2.5-Coder-7B (code)"
+    base_model: "Qwen/Qwen2.5-Coder-7B"
+    base_param_count: 7_620_000_000
+    architecture: "decoder_only_transformer"
+    family: "qwen2.5-coder"
+    license: "Apache-2.0"
+    tier: 4
+    specialty: "code"
+    serving_priority: "warm"
+    purpose: "Code expert at 7B; complements smaller code coordinators"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 15.0
+      vram_int4_gb: 4.5
+      expected_latency_ms: 380
+      expected_qps: 35
+    promotion_eligible: true
+
+  m15:
+    display_name: "Coord M15 — DeepSeek-Math-7B (reasoning)"
+    base_model: "deepseek-ai/deepseek-math-7b-base"
+    base_param_count: 6_910_000_000
+    architecture: "decoder_only_transformer"
+    family: "deepseek-math"
+    license: "MIT (model license)"
+    tier: 4
+    specialty: "reasoning"
+    serving_priority: "warm"
+    purpose: "Math/reasoning specialist — strong CoT at 7B"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 14.0
+      vram_int4_gb: 4.0
+      expected_latency_ms: 380
+      expected_qps: 35
+    promotion_eligible: true
+
+  m16:
+    display_name: "Coord M16 — Phi-3.5-mini-3.8B (routing/safety)"
+    base_model: "microsoft/Phi-3.5-mini-instruct"
+    base_param_count: 3_820_000_000
+    architecture: "decoder_only_transformer"
+    family: "phi-3.5"
+    license: "MIT"
+    tier: 4
+    specialty: "routing_safety"
+    serving_priority: "warm"
+    purpose: "Strong instruction-following at 3.8B; alignment-tuned out-of-the-box"
+    fine_tune_method: "lora"
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 7.6
+      vram_int4_gb: 2.4
+      expected_latency_ms: 250
+      expected_qps: 60
+    promotion_eligible: true
+
+  # ---------------------------------------------------------------------------
+  # Tier 5 — MoE Light (active params ≤3B; latency ~600ms, warm-loaded)
+  # ---------------------------------------------------------------------------
+  m17:
+    display_name: "Coord M17 — OLMoE-1B-7B (generalist sparse)"
+    base_model: "allenai/OLMoE-1B-7B-0125"
+    base_param_count: 6_900_000_000
+    base_active_params: 1_300_000_000
+    architecture: "moe_decoder"
+    family: "olmoe"
+    license: "Apache-2.0"
+    tier: 5
+    specialty: "generalist"
+    serving_priority: "warm"
+    purpose: "Fully-open MoE — Allen AI published weights + data + recipes"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 64
+      experts_per_token: 8
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 14.0
+      vram_int4_gb: 4.0
+      expected_latency_ms: 500
+      expected_qps: 25
+    promotion_eligible: true
+    notes: "Filosoficamente alinhado: dataset + receita publicados — auditável."
+
+  m18:
+    display_name: "Coord M18 — Qwen1.5-MoE-A2.7B (code sparse)"
+    base_model: "Qwen/Qwen1.5-MoE-A2.7B"
+    base_param_count: 14_300_000_000
+    base_active_params: 2_700_000_000
+    architecture: "moe_decoder"
+    family: "qwen1.5-moe"
+    license: "Apache-2.0"
+    tier: 5
+    specialty: "code"
+    serving_priority: "warm"
+    purpose: "Sparse code expert with low active-param cost"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 60
+      experts_per_token: 4
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 28.6
+      vram_int4_gb: 8.0
+      expected_latency_ms: 550
+      expected_qps: 22
+    promotion_eligible: true
+
+  m19:
+    display_name: "Coord M19 — JetMoE-8B (reasoning sparse)"
+    base_model: "jetmoe/jetmoe-8b"
+    base_param_count: 8_000_000_000
+    base_active_params: 2_200_000_000
+    architecture: "moe_decoder"
+    family: "jetmoe"
+    license: "Apache-2.0"
+    tier: 5
+    specialty: "reasoning"
+    serving_priority: "warm"
+    purpose: "Budget-efficient MoE; trained for ~1/10 cost of comparable models"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 8
+      experts_per_token: 2
+      sparse_attention: true
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 16.0
+      vram_int4_gb: 4.5
+      expected_latency_ms: 480
+      expected_qps: 26
+    promotion_eligible: true
+    notes: "Validates the budget MoE training thesis for our own coord-* family."
+
+  m20:
+    display_name: "Coord M20 — DeepSeek-V2-Lite (routing/safety sparse)"
+    base_model: "deepseek-ai/DeepSeek-V2-Lite"
+    base_param_count: 15_700_000_000
+    base_active_params: 2_400_000_000
+    architecture: "moe_decoder"
+    family: "deepseek-v2"
+    license: "MIT (model license)"
+    tier: 5
+    specialty: "routing_safety"
+    serving_priority: "warm"
+    purpose: "DeepSeek MoE architecture diversity — different router design"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 64
+      experts_per_token: 6
+      shared_experts: 2
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 31.4
+      vram_int4_gb: 8.5
+      expected_latency_ms: 580
+      expected_qps: 20
+    promotion_eligible: true
+
+  # ---------------------------------------------------------------------------
+  # Tier 6 — MoE Heavy (active params ≥6B; latency ~1500ms, cold-loaded)
+  # Activated only on dissent at lower tiers (~2% of requests)
+  # ---------------------------------------------------------------------------
+  m21:
+    display_name: "Coord M21 — Mixtral-8x7B-Instruct (generalist heavy)"
+    base_model: "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    base_param_count: 46_700_000_000
+    base_active_params: 12_900_000_000
+    architecture: "moe_decoder"
+    family: "mixtral"
+    license: "Apache-2.0"
+    tier: 6
+    specialty: "generalist"
+    serving_priority: "cold"
+    purpose: "Premium fallback for genuinely ambiguous decisions"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 8
+      experts_per_token: 2
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 93.4
+      vram_int4_gb: 25.0
+      expected_latency_ms: 1200
+      expected_qps: 8
+    promotion_eligible: true
+    notes: "Already alignment-tuned; skip an SFT pass."
+
+  m22:
+    display_name: "Coord M22 — DeepSeek-Coder-V2-Lite (code heavy)"
+    base_model: "deepseek-ai/DeepSeek-Coder-V2-Lite-Base"
+    base_param_count: 16_000_000_000
+    base_active_params: 2_400_000_000
+    architecture: "moe_decoder"
+    family: "deepseek-coder-v2"
+    license: "MIT (model license)"
+    tier: 6
+    specialty: "code"
+    serving_priority: "cold"
+    purpose: "Code-specialist heavy — DeepSeek-Coder-V2 strong at code reasoning"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 64
+      experts_per_token: 6
+      shared_experts: 2
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 32.0
+      vram_int4_gb: 9.0
+      expected_latency_ms: 1100
+      expected_qps: 9
+    promotion_eligible: true
+
+  m23:
+    display_name: "Coord M23 — Phi-3.5-MoE (reasoning heavy)"
+    base_model: "microsoft/Phi-3.5-MoE-instruct"
+    base_param_count: 60_400_000_000
+    base_active_params: 6_600_000_000
+    architecture: "moe_decoder"
+    family: "phi-3.5-moe"
+    license: "MIT"
+    tier: 6
+    specialty: "reasoning"
+    serving_priority: "cold"
+    purpose: "MS Research's best MoE — strong reasoning + alignment-tuned"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 16
+      experts_per_token: 2
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 120.8
+      vram_int4_gb: 30.0
+      expected_latency_ms: 1500
+      expected_qps: 6
+    promotion_eligible: true
+
+  m24:
+    display_name: "Coord M24 — DBRX-base (routing/safety heavy)"
+    base_model: "databricks/dbrx-base"
+    base_param_count: 132_000_000_000
+    base_active_params: 36_000_000_000
+    architecture: "moe_decoder"
+    family: "dbrx"
+    license: "Databricks Open Model License"
+    tier: 6
+    specialty: "routing_safety"
+    serving_priority: "cold"
+    purpose: "Top-end fallback — only consulted when full-stack disagrees"
+    fine_tune_method: "moe_lora"
+    moe_config:
+      num_experts: 16
+      experts_per_token: 4
+    serving_profile:
+      dtype: "bfloat16"
+      vram_bf16_gb: 264.0
+      vram_int4_gb: 70.0
+      expected_latency_ms: 2200
+      expected_qps: 3
+    license_caveat: "Databricks license imposes restrictions on uses competing with Databricks; review before commercial deploy"
+    promotion_eligible: true
+    notes: "Cold-start only. Single-host inference requires 1× H200 141GB or 2× A100 80GB."
+
+# =============================================================================
+# Aggregate stats — auto-computable but cached here for documentation
+# =============================================================================
+stats:
+  total_models: 24
+  by_tier:
+    tier_1: 4   # encoders
+    tier_2: 4   # dense ≤1B
+    tier_3: 4   # dense 1-3B
+    tier_4: 4   # dense 3-9B
+    tier_5: 4   # MoE light
+    tier_6: 4   # MoE heavy
+  by_specialty:
+    generalist: 6
+    code: 6
+    reasoning: 6
+    routing_safety: 6
+  total_base_params: ~427_000_000_000
+  total_active_params_per_inference: ~125_000_000_000  # if all 24 ran simultaneously
+  realistic_active_params_per_request: ~5_000_000_000  # tier-1 only in ~75% of cases
+  vram_steady_state_int4_gb: 6.0   # tiers 1-3 always loaded
+  vram_peak_int4_gb: 190.0          # if all 24 cold-loaded simultaneously
+  unique_architectural_families: 13
+  fully_open_apache_mit: 22         # of 24 (LLaMA-3.2 + DBRX have caveats)

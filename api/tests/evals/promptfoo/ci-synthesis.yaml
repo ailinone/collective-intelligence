@@ -1,0 +1,187 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# CI-EVAL-02: Síntese Ambígua — Onde Coletivo Deve Ganhar
+# Propósito: Tarefas onde múltiplas perspectivas genuinamente agregam valor
+# Hipótese: debate e expert-panel devem superar single em llm-rubric >= 0.05 margin
+# Para executar:
+#   export EVAL_BEARER_TOKEN=$(cat .tmp-eval-bearer-token-runtime.txt)
+#   npx promptfoo eval --config tests/evals/promptfoo/ci-synthesis.yaml \
+#     --output eval-results/audit-synthesis-$(date +%Y%m%d).json --max-concurrency 1 --delay 5000
+
+description: "CI Audit — Ambiguous Synthesis (Collective Intelligence Value)"
+
+providers:
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "single"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "single"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "debate"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "debate"
+        quality_target: 0.95
+        max_tokens: 2048
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  # NOTE: "consensus" is not a valid strategy input — only accessible via triage routing.
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "auto-triage"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "auto"
+        max_tokens: 2048
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "quality-multipass"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "quality-multipass"
+        max_tokens: 2048
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  # ── Escolha tecnológica com trade-offs ──────────────────────────────
+  - vars:
+      prompt: |
+        A startup wants to choose between PostgreSQL, MongoDB, and DynamoDB for a new SaaS product.
+        They expect 10,000 users at launch and 1M in year 2. Write-heavy workload, complex queries,
+        multi-tenant. Recommend one and justify. Address the scale trajectory explicitly.
+    assert:
+      - type: llm-rubric
+        value: |
+          The response makes a clear recommendation with justification that covers:
+          (1) the specific write-heavy workload mentioned,
+          (2) the scale trajectory from 10k to 1M users,
+          (3) at least two trade-offs against the alternatives.
+          It does not contradict itself. Recommendation is actionable.
+        threshold: 0.75
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          return content.length > 300;
+        description: "Substantive response (> 300 chars)"
+
+  # ── Code review com crítica e identificação de bugs ─────────────────
+  - vars:
+      prompt: |
+        Review this Python code and identify ALL bugs. Be exhaustive:
+        ```python
+        def find_max(lst):
+            max_val = 0
+            for i in range(len(lst)):
+                if lst[i] > max_val:
+                    max_val = lst[i]
+            return max_val
+        ```
+    assert:
+      - type: llm-rubric
+        value: |
+          The review identifies at minimum:
+          (1) the initialization bug where max_val=0 fails for all-negative input lists,
+          (2) the style issue of using range(len()) instead of direct iteration.
+          Bonus: notes empty list causes no error but returns 0 which is wrong.
+          Must NOT hallucinate bugs that don't exist in the code.
+        threshold: 0.8
+
+  # ── Análise de trade-offs técnicos ──────────────────────────────────
+  - vars:
+      prompt: |
+        A team of 5 engineers wants to migrate a 2M-line PHP monolith to microservices.
+        They have 18 months. List the top 3 risks in order of severity and propose a concrete
+        mitigation for each risk.
+    assert:
+      - type: llm-rubric
+        value: |
+          Response lists exactly 3 risks in priority order. Each has a specific, actionable
+          mitigation. Risks are non-trivial. At least one risk addresses team/organizational
+          factors, not just technical ones. No fictional risks invented.
+        threshold: 0.75
+
+  # ── Análise ética multi-perspectiva ─────────────────────────────────
+  - vars:
+      prompt: |
+        Explain the trolley problem from three distinct ethical frameworks: utilitarian,
+        deontological, and virtue ethics. Where do they agree and where do they disagree?
+    assert:
+      - type: llm-rubric
+        value: |
+          Response accurately represents all three frameworks without conflating them.
+          Correctly describes utilitarian's harm minimization, deontological constraint
+          against using persons as means, and virtue ethics' focus on character.
+          Identifies at least one point of agreement and one of disagreement.
+        threshold: 0.8
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          const frameworks = ['utilitarian', 'deontolog', 'virtue'];
+          return frameworks.every(f => content.toLowerCase().includes(f));
+        description: "All 3 frameworks mentioned"
+
+  # ── Decomposição de sistema ──────────────────────────────────────────
+  - vars:
+      prompt: |
+        Design the data model for a ride-sharing app like Uber. Include: Users, Drivers, Trips,
+        Payments, and Ratings. For each entity, list its most important 5 fields and the key
+        relationships between entities.
+    assert:
+      - type: llm-rubric
+        value: |
+          Response covers all 5 entities. Each has at least 5 fields. Key relationships between
+          User-Trip, Driver-Trip, Trip-Payment, and Trip-Rating are described. No fictional
+          entities. Model is internally consistent.
+        threshold: 0.75
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          const entities = ['user', 'driver', 'trip', 'payment', 'rating'];
+          return entities.every(e => content.toLowerCase().includes(e));
+        description: "All 5 entities present"
+
+# Métricas a observar manualmente:
+# 1. Qual estratégia tem maior llm-rubric score em média?
+# 2. O debate score é >= single + 0.05 em tarefas de síntese?
+# 3. O token count do debate é consistente com multi-model (> 3x single)?
+# 4. Os tempos de resposta são coerentes com multi-model?

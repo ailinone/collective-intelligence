@@ -1,0 +1,97 @@
+{
+  "models": [
+    {
+      "id": "openai-gpt-4.1-backend",
+      "provider": "openai",
+      "providerModelId": "gpt-4.1",
+      "capabilities": [
+        "chat",
+        "code_generation",
+        "debugging",
+        "code_review",
+        "refactoring",
+        "backend_suite"
+      ],
+      "type": "text",
+      "config": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKeyRef": "OPENAI_API_KEY",
+        "extra": {
+          "languageProfile": {
+            "languages": {
+              "primary": "typescript",
+              "secondary": ["javascript", "python"],
+              "frameworks": ["express", "fastify", "nestjs"],
+              "level": "expert"
+            },
+            "multiLanguage": true,
+            "role": "backend"
+          }
+        }
+      }
+    },
+    {
+      "id": "anthropic-claude-frontend",
+      "provider": "anthropic",
+      "providerModelId": "claude-3.5-sonnet",
+      "capabilities": [
+        "chat",
+        "code_generation",
+        "debugging",
+        "code_review",
+        "refactoring",
+        "frontend_suite"
+      ],
+      "type": "text",
+      "config": {
+        "baseUrl": "https://api.anthropic.com/v1",
+        "apiKeyRef": "ANTHROPIC_API_KEY",
+        "extra": {
+          "languageProfile": {
+            "languages": {
+              "primary": "typescript",
+              "secondary": ["javascript"],
+              "frameworks": ["react", "next.js", "vue"],
+              "level": "expert"
+            },
+            "multiLanguage": false,
+            "role": "frontend"
+          }
+        }
+      }
+    },
+    {
+      "id": "openai-gpt-4-data-science",
+      "provider": "openai",
+      "providerModelId": "gpt-4.1",
+      "capabilities": [
+        "chat",
+        "code_generation",
+        "debugging",
+        "code_review",
+        "code_interpreter",
+        "mathematical_problem_solving",
+        "data_extraction",
+        "analysis",
+        "data_science_suite"
+      ],
+      "type": "text",
+      "config": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKeyRef": "OPENAI_API_KEY",
+        "extra": {
+          "languageProfile": {
+            "languages": {
+              "primary": "python",
+              "secondary": [],
+              "frameworks": ["pandas", "numpy", "scikit-learn", "matplotlib"],
+              "level": "expert"
+            },
+            "multiLanguage": false,
+            "role": "data_science"
+          }
+        }
+      }
+    }
+  ]
+}

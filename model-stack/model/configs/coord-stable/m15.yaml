@@ -1,0 +1,43 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M15 — DeepSeek-Math-7B (reasoning, Tier 4)
+inherits: "_shared.yaml"
+
+model_id: "m15"
+display_name: "Coord M15 — DeepSeek-Math-7B (reasoning)"
+base_model: "deepseek-ai/deepseek-math-7b-base"
+architecture: "decoder_only_transformer"
+family: "deepseek-math"
+tier: 4
+specialty: "reasoning"
+
+fine_tune:
+  method: "lora"
+  rank: 64
+  alpha: 128
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 2
+  learning_rate: 8.0e-5         # math-pretrained — preserve carefully
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["analysis", "reasoning", "math"]
+  max_examples_per_label: 7000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+
+audit:
+  scheduler_name_format: "coord-m15-deepseek-math-7b"
