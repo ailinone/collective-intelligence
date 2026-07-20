@@ -1,0 +1,51 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M21 — Mixtral-8x7B-Instruct (generalist heavy, Tier 6)
+inherits: "_shared.yaml"
+
+model_id: "m21"
+display_name: "Coord M21 — Mixtral-8x7B-Instruct (generalist heavy)"
+base_model: "mistralai/Mixtral-8x7B-Instruct-v0.1"
+architecture: "moe_decoder"
+family: "mixtral"
+tier: 6
+specialty: "generalist"
+notes: "Already instruct-aligned — light fine-tune preserves alignment."
+
+moe:
+  num_experts: 8
+  experts_per_token: 2
+  router_aux_loss_weight: 0.001    # Mixtral uses very small aux loss
+
+fine_tune:
+  method: "moe_lora"
+  rank: 32                          # higher rank for tier-6 quality
+  alpha: 64
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["w1", "w2", "w3"]   # Mixtral expert naming
+  freeze_router: true               # preserve original routing — Mixtral is already alignment-tuned
+
+training:
+  num_epochs: 1                     # very light fine-tune to preserve instruct alignment
+  learning_rate: 3.0e-5
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+
+data:
+  partition_strategy: "by_strategy"
+  max_examples_per_label: 4000      # less data — alignment-preserving
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+  tensor_parallel_size: 2           # 47B requires multi-GPU even quantized
+
+audit:
+  scheduler_name_format: "coord-m21-mixtral-8x7b-instruct"

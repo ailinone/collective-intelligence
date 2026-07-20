@@ -1,0 +1,147 @@
+{
+  "$schema": "internal://provider-runtime-baseline/v2",
+  "capturedAt": "2026-04-29T00:00:00Z",
+  "phase": "phase-0-sealed",
+  "commit": "846b7ba",
+  "_v1_to_v2_changeset": "v2 adds the post-c85b844 snapshot under `inventoryPostFix`; v1 numbers (pre-c85b844) are preserved under `inventoryPreFix` because `prompt-sota-bright-stroustrup §Phase 7` requires a stable baseline to diff against, and erasing the pre-fix state would orphan the existing diff anchors in phase-7-prod-parity-baseline.md.",
+  "containerStartedAt": "2026-04-28T22:54:00Z",
+  "containerImageDigest": "sha256:682434aceb875b04eff91254566f1c8dab549bf625f3c71a9ceb19c2396a64d3",
+  "containerName": "ci-api",
+  "boot": {
+    "httpBindWindowSeconds": 149,
+    "pluginsRegistered": 36,
+    "pluginsSkipped": 24,
+    "pluginsFailed": 21,
+    "catalogTotal": 81,
+    "bootGatesActive": {
+      "MODEL_CATALOG_AUTO_SYNC": "false",
+      "MODEL_DISCOVERY_AUTO_SYNC": "false",
+      "MODEL_DISCOVERY_RUN_ON_START": "false",
+      "SKIP_PER_PLUGIN_DISCOVERY": "true",
+      "AGGREGATOR_DISCOVERY_TIMEOUT_MS": "120000",
+      "NATIVE_DISCOVERY_TIMEOUT_MS": "10000"
+    }
+  },
+  "inventoryPostFix": {
+    "_capturedAt": "2026-04-28T22:58:26Z",
+    "_capturedAfter": "c85b844 (aggregator → openrouter misattribution fix)",
+    "_source": "provider-runtime-inventory-2026-04-28.md",
+    "dbModelsTotal": 64409,
+    "v1ModelsRunnable": 64045,
+    "v1ModelsAll": 64409,
+    "v1ModelsFilteredOut": 364,
+    "distinctProvidersInDb": 51,
+    "topProvidersByModelCount": [
+      { "provider": "huggingface", "models": 58092, "_note": "Pre-fix this was attributed to openrouter; c85b844 corrected resolveSourceExecutionProvider() name-substring shortcut" },
+      { "provider": "orqai",       "models":   819 },
+      { "provider": "nanogpt",     "models":   633 },
+      { "provider": "cometapi",    "models":   574 },
+      { "provider": "aiml",        "models":   524 },
+      { "provider": "requesty",    "models":   448 },
+      { "provider": "poe",         "models":   380 },
+      { "provider": "openrouter",  "models":   371 },
+      { "provider": "edenai",      "models":   358 },
+      { "provider": "aihubmix",    "models":   218 }
+    ],
+    "huggingFaceContribution": { "models": 58092, "shareOfTotal": 0.9019 },
+    "capabilityCardinalities": {
+      "vision": 1534, "embedding": 495, "tts": 144, "reasoning": 1541
+    },
+    "discoveryComplianceDistribution": {
+      "compliant-dynamic-discovery": 62,
+      "compliant-deployment-discovery": 1,
+      "compliant-machine-readable-official-catalog": 3,
+      "non-compliant-hardcoded-inventory": 9,
+      "non-compliant-no-machine-readable-discovery": 2,
+      "non-compliant-runtime-not-materialized": 7,
+      "not-applicable-non-model-surface": 4,
+      "self-hosted-runtime-dependent": 8
+    }
+  },
+  "inventoryPreFix": {
+    "_capturedAt": "2026-04-28T15:05:00Z",
+    "_capturedBefore": "c85b844 fix — preserved here as the v1 reference; numbers were misattributed (HF Hub models showed under provider_id='openrouter' due to name-substring shortcut in resolveSourceExecutionProvider)",
+    "dbModelsTotal": 65730,
+    "v1ModelsRunnable": 65357,
+    "v1ModelsAll": 65730,
+    "v1ModelsFilteredOut": 373,
+    "distinctProvidersInDb": 53
+  },
+  "topProvidersByModelCountPreFix": [
+    { "provider": "openrouter", "models": 58471, "_misattribution": "true — actually 58,079 huggingface + 392 openrouter-aggregator" },
+    { "provider": "nanogpt", "models": 955 },
+    { "provider": "orqai", "models": 789 },
+    { "provider": "aiml", "models": 761 },
+    { "provider": "aihubmix", "models": 683 },
+    { "provider": "cometapi", "models": 671 },
+    { "provider": "requesty", "models": 465 },
+    { "provider": "poe", "models": 393 },
+    { "provider": "edenai", "models": 350 },
+    { "provider": "routeway", "models": 196 },
+    { "provider": "nvidia-hub", "models": 193 },
+    { "provider": "nvidia", "models": 193 },
+    { "provider": "alibaba", "models": 154 },
+    { "provider": "deepinfra", "models": 154 },
+    { "provider": "openai", "models": 132 }
+  ],
+  "topDiscoverySourcesByModelCount": [
+    { "source": "huggingface-hub", "models": 58079 },
+    { "source": "nanogpt-hub", "models": 907 },
+    { "source": "orqai-hub", "models": 789 },
+    { "source": "aiml-hub", "models": 764 },
+    { "source": "aihubmix-hub", "models": 733 },
+    { "source": "cometapi-hub", "models": 668 },
+    { "source": "requesty-hub", "models": 465 },
+    { "source": "poe-hub", "models": 392 },
+    { "source": "openrouter-aggregator", "models": 389 },
+    { "source": "edenai-hub", "models": 350 },
+    { "source": "nvidia-first-party", "models": 251 },
+    { "source": "routeway-hub", "models": 196 },
+    { "source": "alibaba-native", "models": 154 },
+    { "source": "catalog-deepinfra", "models": 154 },
+    { "source": "nvidia-hub-catalog", "models": 135 }
+  ],
+  "huggingFaceContribution": {
+    "models": 58079,
+    "shareOfTotal": 0.8836
+  },
+  "failedPlugins": [
+    "ai302",
+    "anyscale",
+    "azure-openai",
+    "bytez",
+    "cloudflare-workers-ai",
+    "featherless-ai",
+    "gemini-openai",
+    "github-models",
+    "inworld",
+    "lambda-ai",
+    "nebius",
+    "nscale",
+    "qianfan",
+    "scaleway",
+    "siliconflow",
+    "stepfun",
+    "togetherai",
+    "v0",
+    "vercel-ai-gateway",
+    "volcano",
+    "zai"
+  ],
+  "notes": [
+    "openrouter (58,471) by provider name aggregates HuggingFace Hub (58,079) plus the openrouter-aggregator native source (389) under one provider_id — that grouping is intentional but worth flagging in Phase 1's matrix.",
+    "Skip taxonomy is encoded in catalog-loader.ts but not surfaced as structured logs at boot — Phase 1 captures skip reasons by re-walking the catalog rather than scraping logs.",
+    "All 21 failed plugins are wired in PROVIDER_SECRETS / ENV_VAR_TO_PROVIDER / LLM_PROVIDER_ENV_VARS per sublote-e1 invariant test. Failures are operational (GCP secret missing or invalid), not structural.",
+    "DB upsert layer logs 'Unknown provider, skipping' for HF Hub models whose provider_id is not in the catalog — those are model rows that get dropped at upsert time. Fine for now."
+  ],
+  "phase0Files": [
+    "api/src/providers/provider-plugin-system.ts",
+    "api/src/services/central-model-discovery-service.ts",
+    "api/src/services/model-discovery-runner.ts",
+    "api/src/services/model-fetchers/hf-hub-model-fetcher.ts",
+    "api/src/services/model-fetchers/bytez-native-model-fetcher.ts",
+    "api/src/providers/openai-compatible-hub/openai-compatible-hub-adapter.ts",
+    "docker/docker-compose.yml",
+    ".gitignore"
+  ]
+}

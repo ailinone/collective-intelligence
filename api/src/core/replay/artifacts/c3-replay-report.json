@@ -1,0 +1,128 @@
+{
+  "exportMetadata": {
+    "exportedAt": "2026-05-12T19:22:37.267Z",
+    "source": "read_only_db_export",
+    "rowCounts": {
+      "executions": 283,
+      "experiments": 17
+    },
+    "filters": {
+      "onlyWithJudgeScore": true,
+      "onlyCompletedExecutions": false
+    },
+    "schemaVersion": "8b5-v1",
+    "sanitisation": {
+      "strippedColumns": [
+        "prompt",
+        "response_summary",
+        "judge_rubric",
+        "structured_metadata"
+      ]
+    }
+  },
+  "split": {
+    "strategy": "by_experiment_id",
+    "trainCount": 210,
+    "holdoutCount": 73,
+    "trainExperimentIds": [
+      "026f3469-18fd-4c28-9b32-d380d9191866",
+      "063ab870-0010-4ffb-913f-cbf4d1e633f9",
+      "07f44f46-3c8b-4fa4-a14b-58f56d7ae343",
+      "091f63ea-f0ce-425a-8bd3-2437571da5e1",
+      "134c1ff7-77bf-4a98-ab2d-f926b94f6160",
+      "3a9cd986-af70-40d0-a576-bd156341c5a0",
+      "5a470e86-c501-4a40-9da6-1f8d88528888",
+      "7d6e5b5d-65e0-4210-af5a-2dd5832e909f",
+      "7e12dd90-f188-495e-a1f6-448becb8497e",
+      "81ad3d65-07fb-4add-a4b4-311776bf226f",
+      "8f29c40d-24cd-4175-a715-367a33faa645",
+      "98130260-47f3-4cc3-8a4d-eb4e5e2e5f89"
+    ],
+    "holdoutExperimentIds": [
+      "9a1f31fd-76b2-4248-8b4c-9c8157c055f5",
+      "c2bbb7c9-fe07-45c4-8675-f70a9ef040b0",
+      "c5222b41-b087-478a-b400-17b1d8f30e79",
+      "cf113a23-c1ad-451b-8e41-3e086f07620d",
+      "dac3fe46-43da-41a4-92da-c00890470096"
+    ],
+    "leakageWarnings": []
+  },
+  "globalMetrics": {
+    "totalHoldoutRows": 73,
+    "evaluatedRows": 73,
+    "excludedDueToMissingBaseline": 0,
+    "pareto_win_rate": 0.8767123287671232,
+    "quality_ge_single_rate": 0.958904109589041,
+    "cost_le_single_rate": 0.9178082191780822,
+    "quality_and_cost_success_rate": 0.8767123287671232,
+    "avg_expected_judge_delta": -0.14438356164383565,
+    "avg_expected_cost_delta": -0.1794645792563603,
+    "median_expected_judge_delta": -0.06999999999999995,
+    "median_expected_cost_delta": -0.002109085714285714,
+    "expected_quality_per_dollar_delta": 52.382268411663205,
+    "single_fallback_rate": 0.1232876712328767,
+    "unjustified_collective_avoided_total": 3,
+    "modality_mismatch_avoided_total": 0,
+    "harmful_model_avoided_total": 0,
+    "multi_mini_pool_avoided_total": 0,
+    "expensive_consensus_avoided_total": 1,
+    "cheap_good_preserved_total": 64,
+    "pair_winner_selected_total": 64,
+    "insufficient_data_rejected_total": 6,
+    "expected_vs_observed_judge_error": 0.40328767123287657,
+    "cost_prediction_error": 0.04821133933463797,
+    "coverage_rate": 1
+  },
+  "metricsByTaskType": [
+    {
+      "taskType": "code-generation",
+      "holdoutCount": 64,
+      "structuralExpectedJudgeMean": 1,
+      "paretoExpectedJudgeMean": 0.9299999999999998,
+      "singleBaselineJudgeMean": 0.5481343283582092,
+      "structuralExpectedCostMean": 0.0064350000000000076,
+      "paretoExpectedCostMean": 0.004325914285714278,
+      "singleBaselineCostMean": 0.024200880597014918,
+      "quality_and_cost_success_rate": 1,
+      "single_fallback_rate": 0,
+      "harmful_model_avoided_total": 0,
+      "modality_mismatch_avoided_total": 0
+    },
+    {
+      "taskType": "document-understanding",
+      "holdoutCount": 6,
+      "structuralExpectedJudgeMean": 1,
+      "paretoExpectedJudgeMean": 0.49000000000000005,
+      "singleBaselineJudgeMean": 0.44818181818181824,
+      "structuralExpectedCostMean": 1.853,
+      "paretoExpectedCostMean": 0.17369220000000005,
+      "singleBaselineCostMean": 0.004920272727272728,
+      "quality_and_cost_success_rate": 0,
+      "single_fallback_rate": 1,
+      "harmful_model_avoided_total": 0,
+      "modality_mismatch_avoided_total": 0
+    },
+    {
+      "taskType": "reasoning",
+      "holdoutCount": 3,
+      "structuralExpectedJudgeMean": 1,
+      "paretoExpectedJudgeMean": 0,
+      "singleBaselineJudgeMean": 0.585,
+      "structuralExpectedCostMean": 0.9633619999999999,
+      "paretoExpectedCostMean": 0,
+      "singleBaselineCostMean": 0.008848375,
+      "quality_and_cost_success_rate": 0,
+      "single_fallback_rate": 1,
+      "harmful_model_avoided_total": 0,
+      "modality_mismatch_avoided_total": 0
+    }
+  ],
+  "approval": {
+    "approved": false,
+    "reasons": [
+      "quality_and_cost_success_rate_ok:0.877",
+      "expected_vs_observed_judge_error_high:0.403"
+    ]
+  },
+  "generatedAt": "2026-05-12T19:22:56.198Z"
+}

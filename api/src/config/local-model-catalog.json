@@ -1,0 +1,2621 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-04-05",
+  "totalModels": 140,
+  "summary": {
+    "byProvider": {
+      "local-llama": 31,
+      "ollama": 12,
+      "local-kobold": 19,
+      "openvino": 99,
+      "local-embeddings": 15,
+      "custom": 20,
+      "local-docling": 8,
+      "local-ocr": 1,
+      "local-piper": 1
+    },
+    "byCapability": {
+      "chat": 58,
+      "text_generation": 58,
+      "reasoning": 4,
+      "code_generation": 9,
+      "vision": 22,
+      "image_understanding": 22,
+      "ocr": 20,
+      "document_parsing": 20,
+      "image_generation": 11,
+      "image_editing": 10,
+      "image_upscaling": 10,
+      "speech_to_text": 9,
+      "text_to_speech": 13,
+      "audio_generation": 4,
+      "music_generation": 4,
+      "video_generation": 6,
+      "video_understanding": 6,
+      "embeddings": 5,
+      "reranking": 4,
+      "tool_use": 4
+    }
+  },
+  "models": [
+    {
+      "id": "llama-family-llama-2-3-3-1-3-2-3-3-openllama",
+      "family": "Llama family (Llama 2/3/3.1/3.2/3.3, OpenLLaMA)",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "local-llama",
+        "ollama",
+        "local-kobold",
+        "openvino"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Varia por release",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "tinyllama",
+      "family": "TinyLlama",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama",
+        "ollama"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização",
+      "ollamaModel": "tinyllama"
+    },
+    {
+      "id": "mistral-family",
+      "family": "Mistral family",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "local-llama",
+        "openvino",
+        "ollama"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0 / varia por variante",
+      "cpuStatus": "Confirmado em CPU via quantização",
+      "ollamaModel": "mistral:7b"
+    },
+    {
+      "id": "mixtral",
+      "family": "Mixtral",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / variante",
+      "cpuStatus": "Confirmado em CPU, mas impraticável"
+    },
+    {
+      "id": "gemma-family",
+      "family": "Gemma family",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "ollama"
+      ],
+      "formats": [
+        "SBS/SFP artifacts do gemma.cpp",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Gemma terms / varia por release",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen-family-dense-text",
+      "family": "Qwen family (dense text)",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "local-llama",
+        "openvino",
+        "ollama"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "phi-family",
+      "family": "Phi family",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "local-embeddings",
+        "openvino",
+        "ollama"
+      ],
+      "formats": [
+        "ONNX",
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "MIT / Microsoft Research License / varia por release",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo",
+      "ollamaModel": "phi3:mini"
+    },
+    {
+      "id": "falcon-family",
+      "family": "Falcon family",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF em parte da família"
+      ],
+      "license": "TII Falcon license / varia",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "gpt-2-distilgpt2",
+      "family": "GPT-2 / distilgpt2",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX",
+        "Safetensors/PyTorch"
+      ],
+      "license": "MIT",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "gpt-j-gpt-neo-gpt-neox-pythia",
+      "family": "GPT-J / GPT-Neo / GPT-NeoX / Pythia",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF",
+        "PyTorch/ONNX em variantes"
+      ],
+      "license": "Apache-2.0 / MIT / varia",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "olmo-family",
+      "family": "OLMo family",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "local-llama"
+      ],
+      "formats": [
+        "GGUF"
+      ],
+      "license": "Apache-2.0 / AllenAI terms",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "opt",
+      "family": "OPT",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX",
+        "Safetensors"
+      ],
+      "license": "OPT license / Meta research license",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "mpt",
+      "family": "MPT",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0 / MosaicML terms",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "dbrx-jamba",
+      "family": "DBRX / Jamba",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Databricks / AI21 licenses",
+      "cpuStatus": "Confirmado em CPU, mas impraticável"
+    },
+    {
+      "id": "baichuan-aquila",
+      "family": "Baichuan / Aquila",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "eventualmente GGUF"
+      ],
+      "license": "Varia por modelo",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "bloom-bloomz",
+      "family": "Bloom / BloomZ",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX"
+      ],
+      "license": "BigScience RAIL",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "aya-command-r",
+      "family": "Aya / Command-R",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "eventualmente GGUF"
+      ],
+      "license": "Cohere license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "decilm-exaone-jais-orion-xglm-xverse-yi-stablelm",
+      "family": "DeciLM / EXAONE / Jais / Orion / XGLM / Xverse / Yi / StableLM",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Varia por família",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "granite-granite-moe-internlm-minicpm-text",
+      "family": "Granite / Granite-MoE / InternLM / MiniCPM text",
+      "category": "Texto/chat geral",
+      "capabilities": [
+        "chat",
+        "text_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "eventualmente GGUF"
+      ],
+      "license": "Apache-2.0 / IBM Granite / varia",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "deepseek-v2-lite-v3-r1-r1-distill",
+      "family": "DeepSeek-V2-Lite / V3 / R1 / R1 distill",
+      "category": "Texto longo / reasoning / instruct",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "reasoning"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX",
+        "GGUF"
+      ],
+      "license": "DeepSeek model license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwq-qwen3-thinking",
+      "family": "QwQ / Qwen3 Thinking",
+      "category": "Texto longo / reasoning / instruct",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "reasoning"
+      ],
+      "providers": [
+        "openvino",
+        "ollama",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "phi-4-reasoning",
+      "family": "Phi-4-reasoning",
+      "category": "Texto longo / reasoning / instruct",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "reasoning"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Microsoft license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "gpt-oss",
+      "family": "GPT-OSS",
+      "category": "Texto longo / reasoning / instruct",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "reasoning"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Varia",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen2-5-coder",
+      "family": "Qwen2.5-Coder",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo",
+      "ollamaModel": "qwen2.5-coder:1.5b"
+    },
+    {
+      "id": "codellama",
+      "family": "CodeLlama",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "local-llama",
+        "local-embeddings",
+        "ollama"
+      ],
+      "formats": [
+        "GGUF",
+        "ONNX em parte da família"
+      ],
+      "license": "Llama 2 community / Meta terms",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "codegemma",
+      "family": "CodeGemma",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "SBS/SFP",
+        "Safetensors"
+      ],
+      "license": "Gemma terms",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo",
+      "ollamaModel": "codegemma:2b"
+    },
+    {
+      "id": "codegen-codegen2",
+      "family": "CodeGen / CodeGen2",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "BSD-3-Clause / Salesforce license",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "starcoder-starchat-octocoder",
+      "family": "StarCoder / StarChat / OctoCoder",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "eventualmente GGUF"
+      ],
+      "license": "BigCode OpenRAIL-M / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "starcoder2",
+      "family": "StarCoder2",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "BigCode OpenRAIL-M / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo",
+      "ollamaModel": "starcoder2:3b"
+    },
+    {
+      "id": "codeparrot",
+      "family": "CodeParrot",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / HF terms",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "deepseek-coder-deepseek-coder-v2-lite",
+      "family": "DeepSeek-Coder / DeepSeek-Coder-V2-Lite",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF em alguns checkpoints"
+      ],
+      "license": "DeepSeek license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "refact-codeshell",
+      "family": "Refact / CodeShell",
+      "category": "Código",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "code_generation"
+      ],
+      "providers": [
+        "local-llama",
+        "local-kobold",
+        "ollama"
+      ],
+      "formats": [
+        "GGUF"
+      ],
+      "license": "Varia por família",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "llava-1-5",
+      "family": "LLaVA 1.5",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "LLaVA license / varied",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "llava-next",
+      "family": "LLaVA-NeXT",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF em parte do ecossistema"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "llava-next-video",
+      "family": "LLaVA-NeXT-Video",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "video-llava",
+      "family": "Video-LLaVA",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "LLaVA license / varied",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "videollama3",
+      "family": "VideoLLaMA3",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "llama-3-2-vision",
+      "family": "Llama 3.2 Vision",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Llama 3.2 Community / Meta terms",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "gemma-3-multimodal",
+      "family": "Gemma 3 multimodal",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "SBS/SFP",
+        "GGUF"
+      ],
+      "license": "Gemma terms",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen2-vl",
+      "family": "Qwen2-VL",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "qwen2-5-vl",
+      "family": "Qwen2.5-VL",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "qwen3-vl",
+      "family": "Qwen3-VL",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "pixtral-mistral-small-3-1",
+      "family": "Pixtral / Mistral Small 3.1",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "local-llama"
+      ],
+      "formats": [
+        "GGUF"
+      ],
+      "license": "Mistral license / varies",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "internvl2-2-5-3",
+      "family": "InternVL2 / 2.5 / 3",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "minicpm-v-family",
+      "family": "MiniCPM-V family",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama",
+        "ollama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF",
+        "int4/AWQ"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "minicpm-o-family",
+      "family": "MiniCPM-o family",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF",
+        "ONNX/Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "smolvlm-smolvlm2",
+      "family": "SmolVLM / SmolVLM2",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "local-llama",
+        "local-docling"
+      ],
+      "formats": [
+        "GGUF",
+        "Transformers"
+      ],
+      "license": "Apache-2.0 / Hugging Face OpenRAIL? varies",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "nanollava-mobilevlm-yi-vl-bunny-moondream2",
+      "family": "nanoLLaVA / MobileVLM / Yi-VL / Bunny / Moondream2",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-llama"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "GGUF"
+      ],
+      "license": "Varia",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "phi-3-vision-phi-3-5-vision",
+      "family": "Phi-3-Vision / Phi-3.5-Vision",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX"
+      ],
+      "license": "Microsoft license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "phi-4-multimodal",
+      "family": "Phi-4-Multimodal",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-docling"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Microsoft license",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "ultravox-voxtral",
+      "family": "Ultravox / Voxtral",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "local-llama"
+      ],
+      "formats": [
+        "GGUF"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "deepseek-vl2",
+      "family": "DeepSeek-VL2",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "DeepSeek license / varies",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "florence-2",
+      "family": "Florence-2",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "MIT / Microsoft license",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen2-5-omni-qwen3-omni-qwen2-audio-seallm-audio",
+      "family": "Qwen2.5-Omni / Qwen3-Omni / Qwen2-Audio / SeaLLM-Audio",
+      "category": "Multimodal / vision-language",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "vision",
+        "image_understanding"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors",
+        "eventualmente GGUF/ONNX comunitários"
+      ],
+      "license": "Varia",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "docling-standard-pdf-pipeline",
+      "family": "Docling standard PDF pipeline",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-docling"
+      ],
+      "formats": [
+        "PyPI package",
+        "transformers",
+        "ONNX/OpenVINO/Paddle backends conforme etapa"
+      ],
+      "license": "MIT / project-specific",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "docling-layout-models",
+      "family": "Docling layout models",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "docling-ibm-models"
+      ],
+      "license": "Project-specific",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "tableformer",
+      "family": "TableFormer",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "docling-ibm-models"
+      ],
+      "license": "Project-specific",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "documentfigureclassifier-v2-5",
+      "family": "DocumentFigureClassifier-v2.5",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-docling"
+      ],
+      "formats": [
+        "Transformers"
+      ],
+      "license": "Project-specific",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "docling-ocr-engines",
+      "family": "Docling OCR engines",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "CLI/Python",
+        "ONNX",
+        "Paddle",
+        "PyTorch"
+      ],
+      "license": "Varia por engine",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "granite-docling-258m",
+      "family": "Granite-Docling-258M",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "ollama",
+        "local-docling"
+      ],
+      "formats": [
+        "Safetensors / Transformers"
+      ],
+      "license": "Apache-2.0 / IBM terms",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "smoldocling-256m",
+      "family": "SmolDocling-256M",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-docling"
+      ],
+      "formats": [
+        "Safetensors / Transformers"
+      ],
+      "license": "Varia",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "codeformulav2",
+      "family": "CodeFormulaV2",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-docling"
+      ],
+      "formats": [
+        "Transformers"
+      ],
+      "license": "Varia",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "paddleocr-family",
+      "family": "PaddleOCR family",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Paddle model",
+        "inference model"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "paddleocr-vl",
+      "family": "PaddleOCR-VL",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-llama"
+      ],
+      "formats": [
+        "Paddle model",
+        "VLM checkpoints"
+      ],
+      "license": "Apache-2.0 / Paddle license",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "pp-structurev3",
+      "family": "PP-StructureV3",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-ocr"
+      ],
+      "formats": [
+        "Paddle models"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "mineru",
+      "family": "MinerU",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Python package / internal models"
+      ],
+      "license": "AGPL/varia por componentes",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "donut",
+      "family": "Donut",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "MIT / varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "nougat",
+      "family": "Nougat",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "MIT / varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "trocr",
+      "family": "TrOCR",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "MIT / Microsoft",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "colpali",
+      "family": "ColPali",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "Apache-2.0 / varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "colqwen2",
+      "family": "ColQwen2",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "Apache-2.0 / varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "got-ocr2",
+      "family": "GOT-OCR2",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors",
+        "community ONNX/other ports"
+      ],
+      "license": "Varies",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "deepseek-ocr-3b",
+      "family": "DeepSeek-OCR-3B",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "local-docling"
+      ],
+      "formats": [
+        "N/A / API preset"
+      ],
+      "license": "DeepSeek terms",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "openvino-ocr-pipeline-text-detection-recognition",
+      "family": "OpenVINO OCR pipeline (text detection + recognition)",
+      "category": "Document AI / OCR / PDF",
+      "capabilities": [
+        "ocr",
+        "document_parsing"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-diffusion-1-x",
+      "family": "Stable Diffusion 1.x",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Diffusers pipeline"
+      ],
+      "license": "CreativeML OpenRAIL-M / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-diffusion-2-x",
+      "family": "Stable Diffusion 2.x",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Diffusers pipeline"
+      ],
+      "license": "OpenRAIL++ / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "sdxl",
+      "family": "SDXL",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Diffusers pipeline"
+      ],
+      "license": "OpenRAIL++ / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "sdxl-turbo",
+      "family": "SDXL-Turbo",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX in some flows"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-diffusion-3-3-5",
+      "family": "Stable Diffusion 3 / 3.5",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Stability AI / model-specific",
+      "cpuStatus": "Confirmado em CPU, mas impraticável"
+    },
+    {
+      "id": "flux-1",
+      "family": "FLUX.1",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Black Forest Labs / model-specific",
+      "cpuStatus": "Confirmado em CPU, mas impraticável"
+    },
+    {
+      "id": "latent-consistency-models-lcm",
+      "family": "Latent Consistency Models (LCM)",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "tiny-sd",
+      "family": "Tiny-SD",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-diffusion-nano-2-1",
+      "family": "Stable Diffusion Nano 2.1",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen-image",
+      "family": "Qwen-Image",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors",
+        "Diffusers pipeline"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "z-image-z-image-turbo",
+      "family": "Z-Image / Z-Image-Turbo",
+      "category": "Geração de imagem",
+      "capabilities": [
+        "image_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Diffusers/Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-diffusion-inpainting",
+      "family": "Stable Diffusion Inpainting",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "OpenRAIL / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "sdxl-inpainting",
+      "family": "SDXL Inpainting",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "controlnet-stable-diffusion",
+      "family": "ControlNet + Stable Diffusion",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "lcm-lora-controlnet",
+      "family": "LCM-LoRA + ControlNet",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "ip-adapter-stable-diffusion",
+      "family": "IP-Adapter + Stable Diffusion",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "paint-by-example",
+      "family": "Paint by Example",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "gmcnn",
+      "family": "GMCNN",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "single-image-super-resolution-1032",
+      "family": "single-image-super-resolution-1032",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "paddlegan-realsr",
+      "family": "PaddleGAN RealSR",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "z-image-edit-qwen-image-editing-modes",
+      "family": "Z-Image-Edit / Qwen-Image editing modes",
+      "category": "Edição de imagem / inpainting / upscaling",
+      "capabilities": [
+        "image_editing",
+        "image_upscaling"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "Safetensors",
+        "Diffusers",
+        "IR/OpenVINO em ports"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "whisper",
+      "family": "Whisper",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "MIT",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "distil-whisper",
+      "family": "Distil-Whisper",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "whisper-cpp",
+      "family": "whisper.cpp",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "ggml custom binary",
+        "quantized ggml/gguf-like artifacts"
+      ],
+      "license": "MIT",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "quartznet-15x5",
+      "family": "QuartzNet 15x5",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "vosk",
+      "family": "Vosk",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Vosk models / Kaldi format"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "deepspeech",
+      "family": "DeepSpeech",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "PBMM / scorer / model checkpoints"
+      ],
+      "license": "MPL-2.0",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "qwen3-asr",
+      "family": "Qwen3-ASR",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "fun-asr-nano",
+      "family": "Fun-ASR-Nano",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors/HF model"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "minicpm-o-speech-recognition-side",
+      "family": "MiniCPM-o speech recognition side",
+      "category": "Speech-to-text",
+      "capabilities": [
+        "speech_to_text"
+      ],
+      "providers": [
+        "local-kobold",
+        "openvino"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "speecht5",
+      "family": "SpeechT5",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "MIT / Microsoft",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "bark",
+      "family": "Bark",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "MIT / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "parler-tts",
+      "family": "Parler-TTS",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "piper",
+      "family": "Piper",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "local-piper",
+        "local-embeddings"
+      ],
+      "formats": [
+        "ONNX + .onnx.json voice configs"
+      ],
+      "license": "MIT (runtime); licenças das vozes variam",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "coqui-tts-vits",
+      "family": "Coqui TTS / VITS",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "PyTorch checkpoints / TTS model zoo"
+      ],
+      "license": "MPL-2.0 / varies",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "xtts",
+      "family": "XTTS",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "PyTorch checkpoints"
+      ],
+      "license": "Coqui license / model-specific",
+      "cpuStatus": "Confirmado em CPU nativo"
+    },
+    {
+      "id": "qwen3-tts",
+      "family": "Qwen3-TTS",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "cosyvoice-fun-cosyvoice-3-0",
+      "family": "CosyVoice / Fun-CosyVoice 3.0",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "ONNX",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "kokoro",
+      "family": "Kokoro",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "local-embeddings",
+        "local-kobold"
+      ],
+      "formats": [
+        "ONNX",
+        "fp32",
+        "voicepacks"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "outetts",
+      "family": "OuteTTS",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "local-kobold"
+      ],
+      "formats": [
+        "GGUF",
+        "Safetensors"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "dia",
+      "family": "Dia",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "local-kobold"
+      ],
+      "formats": [
+        "Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "freevc",
+      "family": "FreeVC",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "minicpm-o-speech-generation-side",
+      "family": "MiniCPM-o speech generation side",
+      "category": "Text-to-speech / voice",
+      "capabilities": [
+        "text_to_speech"
+      ],
+      "providers": [
+        "local-kobold",
+        "openvino"
+      ],
+      "formats": [
+        "GGUF",
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "musicgen",
+      "family": "MusicGen",
+      "category": "Música / áudio generativo",
+      "capabilities": [
+        "audio_generation",
+        "music_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Safetensors"
+      ],
+      "license": "CC-BY-NC? / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "ace-step",
+      "family": "ACE-Step",
+      "category": "Música / áudio generativo",
+      "capabilities": [
+        "audio_generation",
+        "music_generation"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "Diffusers/Safetensors"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "audiogen",
+      "family": "AudioGen",
+      "category": "Música / áudio generativo",
+      "capabilities": [
+        "audio_generation",
+        "music_generation"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "Safetensors / PyTorch"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Não confirmado"
+    },
+    {
+      "id": "bark-non-speech-audio-side",
+      "family": "Bark non-speech audio side",
+      "category": "Música / áudio generativo",
+      "capabilities": [
+        "audio_generation",
+        "music_generation"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "MIT / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "ltx-video",
+      "family": "LTX-Video",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "zeroscope",
+      "family": "ZeroScope",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "stable-video-diffusion",
+      "family": "Stable Video Diffusion",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "wan2-1",
+      "family": "Wan2.1",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "IR/OpenVINO"
+      ],
+      "license": "Apache-2.0 / model-specific",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "wan2-2",
+      "family": "Wan2.2",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "openvino",
+        "local-kobold"
+      ],
+      "formats": [
+        "IR/OpenVINO",
+        "model-specific formats"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "minicpm-v-4-5-video-understanding",
+      "family": "MiniCPM-V-4.5 (video understanding)",
+      "category": "Vídeo generativo / vídeo understanding",
+      "capabilities": [
+        "video_generation",
+        "video_understanding"
+      ],
+      "providers": [
+        "local-llama"
+      ],
+      "formats": [
+        "GGUF"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via quantização"
+    },
+    {
+      "id": "bge-family",
+      "family": "BGE family",
+      "category": "Embeddings",
+      "capabilities": [
+        "embeddings"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors/PyTorch exportável"
+      ],
+      "license": "Diversas; frequentemente Apache-2.0 nos checkpoints BAAI",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "sentence-transformers-minilm-mpnet-roberta-family",
+      "family": "Sentence-Transformers MiniLM / MPNet / RoBERTa family",
+      "category": "Embeddings",
+      "capabilities": [
+        "embeddings"
+      ],
+      "providers": [
+        "local-embeddings",
+        "openvino"
+      ],
+      "formats": [
+        "ONNX",
+        "OV IR",
+        "safetensors/PyTorch exportável"
+      ],
+      "license": "Apache-2.0",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "mixedbread-embeddings",
+      "family": "mixedbread embeddings",
+      "category": "Embeddings",
+      "capabilities": [
+        "embeddings"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença do checkpoint",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "uae-large-multilingual-e5-family",
+      "family": "UAE-Large / multilingual-e5 family",
+      "category": "Embeddings",
+      "capabilities": [
+        "embeddings"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença do checkpoint",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen3-embedding",
+      "family": "Qwen3-Embedding",
+      "category": "Embeddings",
+      "capabilities": [
+        "embeddings"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença Qwen",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "cross-encoder-ms-marco-minilm-tinybert-family",
+      "family": "cross-encoder ms-marco MiniLM / TinyBERT family",
+      "category": "Rerankers",
+      "capabilities": [
+        "reranking"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Apache-2.0 / licença do checkpoint",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "bge-reranker-v2-m3",
+      "family": "bge-reranker-v2-m3",
+      "category": "Rerankers",
+      "capabilities": [
+        "reranking"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença do checkpoint",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "modernbert-rerankers",
+      "family": "ModernBERT rerankers",
+      "category": "Rerankers",
+      "capabilities": [
+        "reranking"
+      ],
+      "providers": [
+        "openvino",
+        "local-embeddings"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença do checkpoint",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "qwen3-reranker",
+      "family": "Qwen3-Reranker",
+      "category": "Rerankers",
+      "capabilities": [
+        "reranking"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "OV IR",
+        "ONNX",
+        "safetensors exportável"
+      ],
+      "license": "Licença Qwen",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "jan-cli-modelo-local-pilha",
+      "family": "Jan CLI + modelo local (pilha)",
+      "category": "Agentes locais / pilhas agentic",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "tool_use"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "formats": [
+        "GGUF",
+        "formatos MLX"
+      ],
+      "license": "Licença da pilha + licença do modelo",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "openvino-qwen-agent-mcp-agent-pilha",
+      "family": "OpenVINO + Qwen-Agent MCP agent (pilha)",
+      "category": "Agentes locais / pilhas agentic",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "tool_use"
+      ],
+      "providers": [
+        "openvino"
+      ],
+      "formats": [
+        "OV IR",
+        "safetensors exportado via OpenVINO"
+      ],
+      "license": "Licenças da pilha/modelo",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "open-webui-backend-local-pilha",
+      "family": "Open WebUI + backend local (pilha)",
+      "category": "Agentes locais / pilhas agentic",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "tool_use"
+      ],
+      "providers": [
+        "ollama",
+        "local-llama"
+      ],
+      "formats": [
+        "Depende do backend: GGUF",
+        "ONNX",
+        "OV IR",
+        "safetensors"
+      ],
+      "license": "BSD-3-Clause / licença do backend/modelo",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    },
+    {
+      "id": "koboldcpp-multimodal-agentic-stack",
+      "family": "KoboldCpp multimodal/agentic stack",
+      "category": "Agentes locais / pilhas agentic",
+      "capabilities": [
+        "chat",
+        "text_generation",
+        "tool_use"
+      ],
+      "providers": [
+        "local-llama",
+        "local-kobold"
+      ],
+      "formats": [
+        "GGUF",
+        "formatos adicionais integrados pelo stack"
+      ],
+      "license": "AGPL-3.0 / licenças dos modelos",
+      "cpuStatus": "Confirmado em CPU via runtime/port alternativo"
+    }
+  ]
+}

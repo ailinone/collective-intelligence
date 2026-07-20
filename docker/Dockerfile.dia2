@@ -1,0 +1,65 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Dia 2B — Dialogue TTS/STS model
+# Apache 2.0, GPU recommended, CPU possible
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libsndfile1 git curl ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir flask numpy soundfile transformers huggingface_hub dac
+
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('nari-labs/Dia2-2B', local_dir='/app/model')" || echo "Model download deferred"
+
+COPY <<'PYEOF' /app/server.py
+import json, io, os
+import numpy as np
+import soundfile as sf
+from flask import Flask, request, Response, jsonify
+
+app = Flask(__name__)
+model = None
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'})
+
+@app.route('/v1/audio/speech', methods=['POST'])
+def speech():
+    global model
+    data = json.loads(request.data)
+    text = data.get('input', '')
+    try:
+        if model is None:
+            from dia.model import Dia
+            model = Dia.from_pretrained('/app/model', compute_dtype='float32')
+        output = model.generate(text, use_torch_compile=False, verbose=False)
+        buf = io.BytesIO()
+        sf.write(buf, output, 44100, format='WAV')
+        buf.seek(0)
+        return Response(buf.read(), mimetype='audio/wav')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/v1/models', methods=['GET'])
+def models():
+    return jsonify({'data': [{'id': 'dia2-2b', 'object': 'model'}]})
+
+if __name__ == '__main__':
+    print('Dia 2B ready on :8000')
+    app.run(host='0.0.0.0', port=8000)
+PYEOF
+
+EXPOSE 8000
+CMD ["python", "/app/server.py"]

@@ -1,0 +1,79 @@
+{
+  "captured_at": "2026-04-29T14:15:11-03:00",
+  "phase": "Caminho-C closure / Phase 6 local rebuild",
+  "image_sha_short": "9f8fe4b58e28",
+  "wiring_commit": "af9c4a4",
+  "build_strategy": "docker compose build --no-cache api",
+  "container_bind_time_seconds": 155,
+  "activation_chain_seconds": {
+    "reseed": 0.74,
+    "embeddings": 10.3,
+    "bootstrap": 682.1,
+    "materialise": 234.7,
+    "total": 927.84
+  },
+  "pre_state": {
+    "ontology_rows": 60,
+    "ontology_with_embedding": 60,
+    "active_assertions": 0,
+    "models_with_hcra_uris": 0
+  },
+  "post_state": {
+    "ontology_rows": 66,
+    "ontology_with_embedding": 66,
+    "active_assertions": 105229,
+    "models_total": 64799,
+    "models_with_hcra_uris": 64795,
+    "models_skipped_in_bootstrap": 4
+  },
+  "ontology_coverage_by_category": {
+    "task": 47,
+    "modality": 7,
+    "tool": 7,
+    "meta": 4,
+    "safety": 1
+  },
+  "assertion_sources": [
+    { "source": "name-regex", "n": 105229 }
+  ],
+  "capability_search_smoke_tests": {
+    "endpoint": "GET /v1/capabilities/ontology/search",
+    "backend": "CapabilitySearchService singleton (Caminho-C Stage 4)",
+    "results": {
+      "vision": {
+        "http": 200,
+        "count": 3,
+        "top_uri": "http://ailin.dev/cap/v1/vision",
+        "top_score": 0.0164,
+        "matched_by": ["lexical"]
+      },
+      "reranking": {
+        "http": 200,
+        "count": 3,
+        "top_uri": "http://ailin.dev/cap/v1/reranking",
+        "top_score": 0.0164,
+        "matched_by": ["lexical"]
+      },
+      "safety": {
+        "http": 200,
+        "count": 3,
+        "top_uri": "http://ailin.dev/cap/v1/safety",
+        "top_score": 0.0164,
+        "matched_by": ["lexical"]
+      },
+      "long_context": {
+        "http": 200,
+        "count": 3,
+        "top_uri": "http://ailin.dev/cap/v1/long_context",
+        "top_score": 0.0164,
+        "matched_by": ["lexical"]
+      }
+    },
+    "notes": "All 4 probes return canonical URI as top hit. RRF score 0.0164 = 1/(60+1) = rank-1 normalization. Vector half is wired but lexical dominates these straightforward slug-matching queries. The activation script's bash parser reported count=json-err due to MSYS path resolution issues with Windows node; counts confirmed independently via stdin-piped node."
+  },
+  "regression_test_added": {
+    "file": "api/src/routes/capabilities/__tests__/capabilities-search-routes-wiring.test.ts",
+    "assertions": 5,
+    "purpose": "lock the wiring contract so the import + invocation cannot silently disappear from src/index.ts"
+  }
+}

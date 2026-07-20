@@ -1,0 +1,82 @@
+{
+  "id": null,
+  "uid": "ailin-queue-health",
+  "title": "Ailin API - Queue Health",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["ailin", "queue", "bullmq"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "ailin_dev_queue_size{queue_name=\"chat-requests\"}",
+          "legendFormat": "chat-requests"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 5000 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Job Wait Time (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ailin_dev_queue_wait_time_seconds_bucket{queue_name=\"chat-requests\"}[5m])) by (le))",
+          "legendFormat": "p95 wait"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Jobs Processed / Failed",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "increase(ailin_dev_queue_processed_total{queue_name=\"chat-requests\",status=\"completed\"}[5m])",
+          "legendFormat": "completed"
+        },
+        {
+          "expr": "increase(ailin_dev_queue_processed_total{queue_name=\"chat-requests\",status=\"failed\"}[5m])",
+          "legendFormat": "failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" }
+}
+

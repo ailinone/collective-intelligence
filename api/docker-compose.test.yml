@@ -1,0 +1,116 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Docker Compose for Test Environment
+# Used by testcontainers or manual test setup
+#
+# Run tests with real API keys from GCP (project YOUR_GCP_PROJECT_ID):
+#   Set GCP_CREDENTIALS_PATH to your application_default_credentials.json path.
+#   PowerShell: .\scripts\run-tests-docker-compose.ps1
+#   Or: $env:GCP_CREDENTIALS_PATH="$env:USERPROFILE\.config\gcloud\application_default_credentials.json"; $env:GCP_SECRETS_PROJECT_ID="YOUR_GCP_PROJECT_ID"; docker compose -f docker-compose.test.yml up test --abort-on-container-exit
+
+services:
+  # PostgreSQL Database for Tests
+  postgres-test:
+    image: pgvector/pgvector:pg16
+    container_name: ailin-test-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ailin_dev_test
+      POSTGRES_USER: ailin_dev
+      POSTGRES_PASSWORD: ailin_dev_password
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.utf8"
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ailin_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ailin-test-network
+
+  # Redis Cache for Tests
+  redis-test:
+    image: redis:7-alpine
+    container_name: ailin-test-redis
+    restart: unless-stopped
+    ports:
+      - "6371:6379"
+    volumes:
+      - redis_test_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ailin-test-network
+
+  # Redis Global for Tests (distributed cache)
+  redis-global-test:
+    image: redis:7-alpine
+    container_name: ailin-test-redis-global
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_global_test_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ailin-test-network
+
+  # Test runner: runs pnpm test with real API keys from GCP Secret Manager
+  # Requires GCP_CREDENTIALS_PATH (path to application_default_credentials.json)
+  # GCP project for secrets: GCP_SECRETS_PROJECT_ID (set to your GCP project id)
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: ailin-test-runner
+    environment:
+      NODE_ENV: test
+      TEST_USE_REAL_API_KEYS: "true"
+      TEST_USE_LOCAL_SERVICES: "true"
+      GCP_SECRETS_PROJECT_ID: ${GCP_SECRETS_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-credentials.json
+      DATABASE_URL: postgresql://ailin_dev:ailin_dev_password@postgres-test:5432/ailin_dev_test
+      REDIS_URL: redis://redis-test:6379
+      REDIS_HOST: redis-test
+      REDIS_PORT: "6379"
+      JWT_SECRET: ${JWT_SECRET:-test-jwt-secret-min-32-chars-long}
+    volumes:
+      - ${GCP_CREDENTIALS_PATH:-.gcp-credentials-placeholder}:/app/gcp-credentials.json:ro
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - ailin-test-network
+    profiles:
+      - test
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+  redis_global_test_data:
+
+networks:
+  ailin-test-network:
+    driver: bridge

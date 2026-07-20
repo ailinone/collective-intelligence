@@ -1,0 +1,125 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# =============================================================================
+# Shared defaults for coordinator-stable fine-tune configs
+# =============================================================================
+# All 24 coord-stable configs (m01..m24) inherit from these defaults via
+# the `from_yaml_with_inheritance` loader (see model_spec.py).
+#
+# Per-model files only need to override fields that differ from these
+# defaults — typically `base_model`, `tier`, `specialty`, LoRA target
+# layers, and dataset partitioning.
+# =============================================================================
+
+# Fine-tune method — most coordinators use LoRA on top of an external base.
+# MoE coordinators (Tier 5-6) use moe_lora variant from PEFT.
+fine_tune:
+  method: "lora"            # lora | moe_lora | full
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  bias: "none"              # none | all | lora_only
+  target_modules:           # default for LLaMA-arch; override per family
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+  modules_to_save: []       # extra modules trained in full (e.g. classifier head)
+
+# Training hyperparams — distillation from F3.3 export typically uses these
+training:
+  optimizer: "adamw"
+  learning_rate: 2.0e-4
+  min_learning_rate: 2.0e-5
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  lr_scheduler: "cosine"
+  num_epochs: 3
+  micro_batch_size: 4
+  gradient_accumulation_steps: 4
+  max_seq_length: 2048
+  precision: "bfloat16"
+  gradient_checkpointing: true
+  flash_attention_2: true
+
+# Data — sourced from F3.3 export pipeline, partitioned by specialty
+data:
+  source: "ci-api-feedback-export"
+  format: "sft_messages"
+  partition_strategy: "by_specialty"        # by_specialty | by_strategy | random
+  min_quality_score: 0.80
+  min_dimension_score: 0.65
+  max_examples_per_label: 5000
+  validation_split: 0.05
+  test_split: 0.05
+  contamination_check: true
+
+# Distillation — when using teacher (triage-service) outputs as labels
+distillation:
+  enabled: true
+  teacher_endpoint: "ci-api://triage-service"
+  loss: "cross_entropy_on_decision"          # focuses on RoleDecision.role label
+  temperature: 1.0
+  alpha_distill: 0.7                         # 70% teacher loss, 30% ground truth (when both available)
+
+# Evaluation — compared against triage-service shadow on held-out data
+evaluation:
+  shadow_eval_against: "ci-api://triage-service"
+  metrics:
+    - name: "decision_accuracy"
+      target: 0.90
+    - name: "tier_aware_routing_quality"     # measures whether decisions help downstream
+      target: 0.85
+    - name: "calibration_brier_score"        # confidence well-calibrated
+      target: 0.10                           # lower is better
+    - name: "latency_p50_ms"
+      target: null                           # tier-specific; see catalog
+  promotion_thresholds:
+    min_decision_accuracy: 0.85
+    max_calibration_brier: 0.15
+
+# Audit substrate — fields each model MUST emit per inference (matches the
+# schema in collective_signals.decision_value defined by F4.1 substrate)
+audit:
+  required_output_fields:
+    - "role"
+    - "scheduler"
+    - "reason"
+    - "confidence"
+  scheduler_name_format: "coord-{model_id}-{base_family}"
+  reason_vocabulary:                          # stable token set; trainer learns these
+    - "task-type-match"
+    - "complexity-fit"
+    - "capability-required"
+    - "cost-budget"
+    - "latency-budget"
+    - "diversity-needed"
+    - "fallback-default"
+    - "high-confidence-rule"
+    - "ensemble-dissent"
+    - "specialty-match"
+
+# Serving — vLLM defaults; per-model can override quantization
+serving:
+  engine: "vllm"
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+  quantization: "awq_int4"                    # default; override "none" for tier-1 encoders
+  max_model_len: 2048
+  swap_space_gb: 4
+  health_check_interval_s: 30
+
+# Champion-challenger — promotion policy (mirrors registry/champion_challenger)
+promotion:
+  eligible: true
+  shadow_window_days: 7
+  min_shadow_decisions: 1000
+  improvement_threshold_pp: 2.0               # 2 percentage points over current champion
+  rollback_on_regression: true

@@ -1,0 +1,139 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# CI-EVAL-03: Geração de Código — Corretude e Qualidade
+# Propósito: Medir qualidade de código gerado por coletivo vs single
+# Hipótese: quality-multipass deve produzir código mais correto/completo
+# Para executar:
+#   export EVAL_BEARER_TOKEN=$(cat .tmp-eval-bearer-token-runtime.txt)
+#   npx promptfoo eval --config tests/evals/promptfoo/ci-code.yaml \
+#     --output eval-results/audit-code-$(date +%Y%m%d).json --max-concurrency 1 --delay 3000
+
+description: "CI Audit — Technical Code Generation"
+
+providers:
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "single"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "single"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "quality-multipass"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "quality-multipass"
+        max_tokens: 2048
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "debate"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "debate"
+        max_tokens: 2048
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  # ── TypeScript debounce ─────────────────────────────────────────────
+  - vars:
+      prompt: |
+        Write a TypeScript function with this exact signature:
+        debounce<T extends (...args: unknown[]) => void>(fn: T, delayMs: number): T
+
+        Requirements: returns a debounced version of fn that only calls fn after
+        delayMs milliseconds have passed without new calls. Include only the
+        implementation, no explanation or tests.
+    assert:
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          return content.includes('setTimeout') && content.includes('clearTimeout');
+        description: "Uses timer pair (setTimeout + clearTimeout)"
+      - type: llm-rubric
+        value: |
+          The TypeScript function correctly implements debounce: clears any pending
+          timer when called again, invokes fn after delayMs with correct arguments.
+          Generic signature matches the requirement. No obvious syntax errors.
+        threshold: 0.8
+
+  # ── SQL com agregação ───────────────────────────────────────────────
+  - vars:
+      prompt: |
+        Write a SQL query that finds all customers who placed more than 3 orders in the
+        last 30 days AND have a total order value over $500.
+        Tables: orders(id, customer_id, created_at, amount)
+        Return: customer_id, order_count, total_amount
+        Use standard SQL (PostgreSQL compatible).
+    assert:
+      - type: javascript
+        value: |
+          const content = (typeof output === 'string' ? output : JSON.stringify(output)).toLowerCase();
+          return content.includes('group by') && content.includes('having') &&
+                 content.includes('sum') && content.includes('count');
+        description: "Uses correct SQL aggregation pattern"
+      - type: llm-rubric
+        value: |
+          SQL query uses GROUP BY customer_id, HAVING COUNT(*) > 3 AND SUM(amount) > 500,
+          filters to last 30 days using date comparison on created_at. Returns customer_id
+          and a count and sum. No logical errors.
+        threshold: 0.8
+
+  # ── LRU cache thread-safe em Python ─────────────────────────────────
+  - vars:
+      prompt: |
+        Implement a thread-safe LRU cache in Python with O(1) get and put operations.
+        Capacity is set at construction. Use only Python standard library (no external deps).
+        Show the full class implementation.
+    assert:
+      - type: javascript
+        value: |
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          const hasDataStructure = content.includes('OrderedDict') ||
+            (content.includes('collections') && content.includes('OrderedDict')) ||
+            (content.includes('next') && content.includes('prev'));
+          const hasMethods = content.includes('def get') && content.includes('def put');
+          return hasDataStructure && hasMethods;
+        description: "Uses ordered structure with get/put methods"
+      - type: llm-rubric
+        value: |
+          LRU cache implementation: (1) O(1) get and put via dict + doubly-linked list
+          or OrderedDict, (2) correctly evicts least-recently-used on capacity overflow,
+          (3) is thread-safe using Lock or equivalent. No logical bugs visible.
+        threshold: 0.8
+
+# Métricas a observar:
+# 1. quality-multipass produz código mais correto que single?
+# 2. Quantas passes são usadas pelo quality-multipass?
+# 3. O custo de quality-multipass é ~2.5x single?

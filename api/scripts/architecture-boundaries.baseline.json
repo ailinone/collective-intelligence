@@ -1,0 +1,22 @@
+{
+  "strictRoutePrefixes": [
+    "src/routes/chat/",
+    "src/routes/threads/",
+    "src/routes/tools/"
+  ],
+  "legacyAllowedDirectDbAccessRoutes": [
+    "src/routes/admin/admin-routes.ts",
+    "src/routes/admin/api-key-rotation-routes.ts",
+    "src/routes/auth/auth-routes-clean.ts",
+    "src/routes/health/health-probes.ts",
+    "src/routes/jobs/jobs-routes.ts",
+    "src/routes/models/models-config-routes.ts",
+    "src/routes/observability/ci-dashboard-routes.ts",
+    "src/routes/organization/organization-routes.ts",
+    "src/routes/organization/organization-settings-routes.ts",
+    "src/routes/responses/responses-routes.ts",
+    "src/routes/status/status-routes.ts",
+    "src/routes/usage/usage-routes.ts",
+    "src/routes/user/user-management-routes.ts"
+  ]
+}

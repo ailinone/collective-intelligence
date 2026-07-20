@@ -1,0 +1,42 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M02 — CodeBERT (code-specialist encoder, Tier 1)
+inherits: "_shared.yaml"
+
+model_id: "m02"
+display_name: "Coord M02 — CodeBERT (code-specialist encoder)"
+base_model: "microsoft/codebert-base"
+architecture: "encoder_only"
+family: "roberta"
+tier: 1
+specialty: "code"
+
+fine_tune:
+  method: "lora"
+  rank: 8
+  alpha: 16
+  target_modules: ["query", "key", "value", "dense"]
+  modules_to_save: ["classifier"]
+
+training:
+  num_epochs: 5
+  learning_rate: 5.0e-4
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["code-generation", "refactoring", "debugging"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "none"
+  max_model_len: 512
+
+audit:
+  scheduler_name_format: "coord-m02-codebert"

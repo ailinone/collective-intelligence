@@ -1,0 +1,41 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M08 — TinyLlama-1.1B-Chat (routing/safety, Tier 2)
+inherits: "_shared.yaml"
+
+model_id: "m08"
+display_name: "Coord M08 — TinyLlama-1.1B-Chat (routing/safety)"
+base_model: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+architecture: "decoder_only_transformer"
+family: "llama-arch"
+tier: 2
+specialty: "routing_safety"
+
+fine_tune:
+  method: "lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 3
+  learning_rate: 2.0e-4
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["safety", "moderation", "routing", "general"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 1024
+
+audit:
+  scheduler_name_format: "coord-m08-tinyllama-1.1b"

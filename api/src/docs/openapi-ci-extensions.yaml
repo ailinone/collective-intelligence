@@ -1,0 +1,453 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Collective Intelligence API Extensions
+# OpenAPI 3.0 specification for CI features
+
+openapi: 3.0.3
+info:
+  title: Ailin Collective Intelligence API
+  description: |
+    API endpoints for Collective Intelligence features including:
+    - **Semantic Memory**: Vector store for contextual memory retrieval
+    - **Agentic Workflows**: Multi-step autonomous AI workflows
+    - **Reasoning Transparency**: Explainability for AI decisions
+    - **Self-Critique**: Automatic response quality improvement
+  version: 5.2.0
+
+paths:
+  /v1/memory:
+    post:
+      summary: Store a new semantic memory
+      description: |
+        Store a memory entry with optional embedding generation.
+        Memories are scoped to the organization and can be retrieved by semantic similarity.
+      tags:
+        - Collective Intelligence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: The content to store as memory
+                  example: "User prefers concise code explanations with TypeScript examples"
+                type:
+                  type: string
+                  enum: [episodic, semantic, procedural]
+                  default: semantic
+                  description: |
+                    Memory type:
+                    - episodic: Conversation history, interactions
+                    - semantic: Knowledge, facts, concepts
+                    - procedural: Patterns, procedures, workflows
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: Additional metadata for the memory
+                importance:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.5
+                  description: Importance score (higher = more relevant in retrieval)
+                ttlDays:
+                  type: integer
+                  minimum: 1
+                  default: 90
+                  description: Time-to-live in days
+      responses:
+        '200':
+          description: Memory stored successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "mem_abc123xyz456"
+                  type:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  /v1/memory/search:
+    post:
+      summary: Search memories by semantic similarity
+      description: |
+        Search for relevant memories using vector similarity.
+        Returns memories sorted by relevance score (combination of similarity, importance, and recency).
+      tags:
+        - Collective Intelligence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Search query text
+                  example: "How does the user prefer code examples?"
+                type:
+                  type: string
+                  enum: [episodic, semantic, procedural]
+                  description: Filter by memory type (optional)
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 10
+                minSimilarity:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.7
+                  description: Minimum cosine similarity threshold
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        content:
+                          type: string
+                        type:
+                          type: string
+                        similarity:
+                          type: number
+                          description: Cosine similarity score (0-1)
+                        relevanceScore:
+                          type: number
+                          description: Combined relevance score
+                        metadata:
+                          type: object
+                  count:
+                    type: integer
+
+  /v1/memory/stats:
+    get:
+      summary: Get memory statistics
+      description: Get statistics about semantic memories for the organization
+      tags:
+        - Collective Intelligence
+      responses:
+        '200':
+          description: Memory statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  byType:
+                    type: object
+                    properties:
+                      episodic:
+                        type: integer
+                      semantic:
+                        type: integer
+                      procedural:
+                        type: integer
+                  avgImportance:
+                    type: number
+                  avgAccessCount:
+                    type: number
+
+  /v1/memory/{memoryId}:
+    delete:
+      summary: Delete a memory
+      description: Delete a specific memory by ID
+      tags:
+        - Collective Intelligence
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+
+  /v1/workflows/create:
+    post:
+      summary: Create workflow from natural language
+      description: |
+        Create an agentic workflow by describing the task in natural language.
+        The system will decompose the task into executable steps.
+      tags:
+        - Collective Intelligence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - task
+              properties:
+                task:
+                  type: string
+                  description: Natural language description of the task
+                  example: "Analyze the codebase, identify performance bottlenecks, and suggest optimizations with code examples"
+                tools:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      description:
+                        type: string
+                  description: Available tools for the workflow
+      responses:
+        '200':
+          description: Workflow created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [llm_call, tool_call, condition, loop, parallel, sub_workflow]
+
+  /v1/workflows/execute:
+    post:
+      summary: Execute a workflow
+      description: |
+        Execute a registered workflow or an inline workflow definition.
+        Returns the final output and detailed step results.
+      tags:
+        - Collective Intelligence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workflowId:
+                  type: string
+                  description: ID of a previously registered workflow
+                workflow:
+                  type: object
+                  description: Inline workflow definition (alternative to workflowId)
+                input:
+                  type: object
+                  additionalProperties: true
+                  description: Input variables for the workflow
+      responses:
+        '200':
+          description: Workflow execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflowId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [completed, failed, cancelled, timeout]
+                  finalOutput: {}
+                  totalDuration:
+                    type: integer
+                    description: Total execution time in milliseconds
+                  totalCost:
+                    type: number
+                    description: Total cost in USD
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        stepId:
+                          type: string
+                        status:
+                          type: string
+                        output: {}
+                        error:
+                          type: string
+                        durationMs:
+                          type: integer
+
+  /v1/reasoning/{requestId}:
+    get:
+      summary: Get reasoning trace
+      description: |
+        Get the full reasoning transparency trace for a request.
+        Includes model selection, strategy selection, and quality assessment details.
+      tags:
+        - Collective Intelligence
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reasoning trace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  timestamp:
+                    type: integer
+                  summary:
+                    type: string
+                  modelSelection:
+                    type: object
+                  strategySelection:
+                    type: object
+                  execution:
+                    type: object
+                  quality:
+                    type: object
+        '404':
+          description: Trace not found
+
+  /v1/reasoning/{requestId}/explain:
+    get:
+      summary: Get human-readable explanation
+      description: |
+        Get a human-readable explanation of the AI decision-making process for a request.
+        Useful for debugging, auditing, and user transparency.
+      tags:
+        - Collective Intelligence
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Human-readable explanation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  explanation:
+                    type: string
+                    description: Markdown-formatted explanation
+
+  /v1/critique/config:
+    get:
+      summary: Get self-critique configuration
+      description: Get the current configuration of the self-critique engine
+      tags:
+        - Collective Intelligence
+      responses:
+        '200':
+          description: Critique configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  mode:
+                    type: string
+                    enum: [same-model, cross-model, both]
+                  maxIterations:
+                    type: integer
+                  minQualityThreshold:
+                    type: number
+                  includeImprovement:
+                    type: boolean
+
+components:
+  schemas:
+    MemoryType:
+      type: string
+      enum:
+        - episodic
+        - semantic
+        - procedural
+      description: |
+        Type of memory:
+        - episodic: Conversation history, interactions
+        - semantic: Knowledge, facts, concepts
+        - procedural: Patterns, procedures, workflows
+
+    WorkflowStepType:
+      type: string
+      enum:
+        - llm_call
+        - tool_call
+        - condition
+        - loop
+        - parallel
+        - sub_workflow
+        - human_input
+      description: Type of workflow step
+
+    WorkflowStatus:
+      type: string
+      enum:
+        - completed
+        - failed
+        - cancelled
+        - timeout
+      description: Final status of workflow execution
+

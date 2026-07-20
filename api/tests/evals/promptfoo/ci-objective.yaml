@@ -1,0 +1,165 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# CI-EVAL-01: Perguntas Objetivas — Risco de Alucinação
+# Propósito: Verificar que estratégias coletivas NÃO regridem em accuracy factual
+# Hipótese: Coletivo e single devem empatar ou coletivo levemente superior
+# Providers: single, debate, consensus, quality-multipass
+# Para executar:
+#   export EVAL_BEARER_TOKEN=$(cat .tmp-eval-bearer-token-runtime.txt)
+#   npx promptfoo eval --config tests/evals/promptfoo/ci-objective.yaml \
+#     --output eval-results/audit-objective-$(date +%Y%m%d).json --max-concurrency 1 --delay 3000
+
+description: "CI Audit — Objective Questions (Hallucination Risk Baseline)"
+
+providers:
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "single"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "single"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+      transformResponse: |
+        const r = JSON.parse(output);
+        return JSON.stringify({
+          content: r.choices?.[0]?.message?.content || '',
+          strategy: r.ailin_metadata?.resolved_strategy || 'unknown',
+          model: r.ailin_metadata?.resolved_model || r.model || 'unknown',
+          tokens: r.usage?.total_tokens || 0,
+          cost_usd: r.ailin_metadata?.cost_usd ?? null,
+          fallback_chain: r.ailin_metadata?.fallback_chain || [],
+          cache_hit: r.ailin_metadata?.cache_hit || false
+        });
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "debate"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "debate"
+        max_tokens: 1024
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+      transformResponse: |
+        const r = JSON.parse(output);
+        return JSON.stringify({
+          content: r.choices?.[0]?.message?.content || '',
+          strategy: r.ailin_metadata?.resolved_strategy || 'unknown',
+          model: r.ailin_metadata?.resolved_model || r.model || 'unknown',
+          tokens: r.usage?.total_tokens || 0,
+          cost_usd: r.ailin_metadata?.cost_usd ?? null,
+          fallback_chain: r.ailin_metadata?.fallback_chain || [],
+          debate_moderator: r.ailin_metadata?.debate?.moderator || null,
+          debate_debaters: r.ailin_metadata?.debate?.debaters || [],
+          debate_rounds: r.ailin_metadata?.debate?.rounds || 0
+        });
+
+  # NOTE: "consensus" is not a valid strategy input (only accessible via triage routing).
+  # Testing via strategy="auto" + task_type="code-review" which triage maps to consensus.
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "auto-triage"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "auto"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+  - id: "https://api.ailin.one/v1/chat/completions"
+    label: "quality-multipass"
+    config:
+      method: POST
+      headers:
+        Authorization: "Bearer {{env.EVAL_BEARER_TOKEN}}"
+        Content-Type: "application/json"
+      body:
+        model: "auto"
+        strategy: "quality-multipass"
+        messages:
+          - role: "user"
+            content: "{{prompt}}"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  # ── Factual exacto ──────────────────────────────────────────────────
+  - vars:
+      prompt: "What is the output of Python: list(range(0, 10, 3))? Respond with ONLY the list, nothing else."
+    assert:
+      - type: contains
+        value: "[0, 3, 6, 9]"
+        description: "Exact Python output"
+      - type: javascript
+        value: |
+          try {
+            const r = JSON.parse(output);
+            const content = r.content || output;
+            return content.includes('[0, 3, 6, 9]');
+          } catch { return output.includes('[0, 3, 6, 9]'); }
+        description: "List answer correct"
+
+  - vars:
+      prompt: "What HTTP status code means 'Unprocessable Entity'? Answer with only the number."
+    assert:
+      - type: contains
+        value: "422"
+        description: "Correct HTTP 422 status"
+
+  - vars:
+      prompt: "A store sells apples at $0.50 each and oranges at $0.75 each. I buy 4 apples and 3 oranges. What is the total cost? Answer with only the dollar amount like $X.XX"
+    assert:
+      - type: contains
+        value: "$4.25"
+        description: "Correct arithmetic result"
+
+  - vars:
+      prompt: "What command creates a new git branch called 'feature/x' and immediately switches to it? Answer with only the command."
+    assert:
+      - type: llm-rubric
+        value: "The response contains either 'git checkout -b feature/x' or 'git switch -c feature/x' and nothing significant beyond the command."
+        threshold: 0.8
+
+  - vars:
+      prompt: "In JavaScript, what does Array.prototype.reduce() return when called on an EMPTY array with NO initial value? Answer in one sentence."
+    assert:
+      - type: llm-rubric
+        value: "The response accurately states that calling reduce on an empty array without an initial value throws a TypeError."
+        threshold: 0.8
+
+  - vars:
+      prompt: "What is the maximum size in bytes of a UDP datagram PAYLOAD (not the full packet)? Answer with only the number."
+    assert:
+      - type: contains
+        value: "65507"
+        description: "Correct UDP payload limit"
+
+# Metrics to observe manually from output:
+# 1. Which strategies answer all 6 correctly? (single baseline)
+# 2. Do collective strategies introduce any regressions?
+# 3. Are cost_usd values positive for all strategies?
+# 4. Are fallback_chain lengths > 1 for collective strategies?
+# 5. What is the token ratio debate/single for identical prompts?

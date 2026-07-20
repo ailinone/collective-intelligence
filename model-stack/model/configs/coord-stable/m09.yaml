@@ -1,0 +1,40 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M09 — Qwen2.5-1.5B (generalist, Tier 3)
+inherits: "_shared.yaml"
+
+model_id: "m09"
+display_name: "Coord M09 — Qwen2.5-1.5B (generalist)"
+base_model: "Qwen/Qwen2.5-1.5B"
+architecture: "decoder_only_transformer"
+family: "qwen2.5"
+tier: 3
+specialty: "generalist"
+
+fine_tune:
+  method: "lora"
+  rank: 32                       # higher rank for tier-3 quality
+  alpha: 64
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 3
+  learning_rate: 1.5e-4
+
+data:
+  partition_strategy: "by_strategy"
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 2048
+
+audit:
+  scheduler_name_format: "coord-m09-qwen2.5-1.5b"

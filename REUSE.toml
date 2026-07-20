@@ -1,0 +1,86 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# REUSE machine-readable licensing manifest — https://reuse.software
+#
+# Source files in this project carry their own SPDX headers. This manifest
+# declares copyright + license for the files that CANNOT carry a comment header
+# (data, config, lockfiles, binaries), so that `reuse lint` reports the whole
+# tree as compliant. See LICENSE for the full AGPL-3.0-or-later terms.
+
+version = 1
+
+SPDX-PackageName = "Collective Intelligence Engine (ci)"
+SPDX-PackageSupplier = "Ailin One, Inc. <compliance@ailin.one>"
+SPDX-PackageDownloadLocation = "https://github.com/ailinone/collective-intelligence"
+
+# --- Root metadata / ignore / hook files that cannot carry an inline SPDX tag ---
+[[annotations]]
+path = [
+  "NOTICE",
+  "**/.gitignore", "**/.gitattributes", "**/.dockerignore", "**/.prettierignore",
+  "**/.gcloudignore", "**/.eslintignore", "**/.npmignore", "**/.gitkeep",
+  "**/.husky/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Example / test env templates (dummy values, shipped for onboarding) -------
+# api/.env.production carries no secrets (those live in GCP Secret Manager) but
+# is a reference/template file same as the others, just named for its target
+# deploy environment rather than "*.example".
+[[annotations]]
+path = ["**/.env.example", "**/.env.example.*", "**/.env.test", "**/.env.*.example", "**/.env.production"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Structured data / config with no comment syntax ---------------------------
+[[annotations]]
+path = ["**/*.json", "**/*.jsonl", "**/*.csv", "**/*.txt"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Prisma query-engine WASM binaries (third-party, NOT Ailin's work) ---------
+# Emitted by `prisma generate`; upstream is the Prisma engines project.
+[[annotations]]
+path = ["**/*.wasm", "**/*.wasm-base64.js"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Prisma Data, Inc. and contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+# --- Lockfiles and dependency manifests (facts, still under the project license) ---
+[[annotations]]
+path = ["package-lock.json", "**/package-lock.json", "**/pnpm-lock.yaml", "**/poetry.lock", "**/uv.lock"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Model / binary artifacts checked into the tree ----------------------------
+[[annotations]]
+path = ["**/*.safetensors", "**/*.onnx", "**/*.gguf", "**/*.bin"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Prisma-generated client (regenerated; header lives here, not in the files) ---
+[[annotations]]
+path = ["api/src/generated/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# --- Prisma migrations (checksum-tracked SQL; must not be edited in place) ------
+[[annotations]]
+path = ["api/prisma/migrations/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"

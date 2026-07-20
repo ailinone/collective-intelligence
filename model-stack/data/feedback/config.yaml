@@ -1,0 +1,35 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Feedback Pipeline Configuration
+# Controls quality gates, PII settings, and output format
+
+quality_gates:
+  sft:
+    min_quality_score: 0.80
+    min_dimension_score: 0.65  # Each of 5 dimensions must be >= this
+    max_feedback_iterations: 2
+    require_success: true
+  dpo:
+    min_quality_regret: 0.10   # Minimum quality gap between chosen and rejected
+    min_quality_floor: 0.30    # Both sides must be above this
+  staleness:
+    max_age_days: 7
+
+pii:
+  action: "redact"             # redact | remove | none
+  max_residual_rate: 0.01      # Halt if > 1% PII detected after redaction
+
+output:
+  sft_format: "messages"       # messages | alpaca | text
+  dpo_format: "preference"     # preference (prompt/chosen/rejected)
+
+staging:
+  dir: "./data/feedback/staging"
+  sample_size: 20              # Number of examples in the staging report

@@ -1,0 +1,10 @@
+Developer Certificate of Origin 1.1 — license of the document itself
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+(The full text of the Developer Certificate of Origin 1.1 is in DCO.md at the
+repository root; this file records the licensing terms under which that
+document is reproduced, as required by the REUSE specification.)

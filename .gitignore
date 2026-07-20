@@ -1,0 +1,119 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js dependencies and package manager caches
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+
+# Build outputs and temporary caches
+dist/
+build/
+out/
+.cache/
+.tmp/
+tmp/
+temp/
+*.tsbuildinfo
+
+# Test and coverage artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+vitest-report/
+*.lcov
+
+# Logs and local reports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lint-report*.txt
+api/pnpm-test-full-result.txt
+api/test-output.txt
+api/tsc-check-result.txt
+
+# Local evaluation output
+api/eval-results/
+
+# Local environment files (keep shared examples)
+.env
+.env.local
+.env.*.local
+api/.env
+api/.env.local
+api/.env.*.local
+!.env.example
+!.env.example.*
+!api/.env.example
+!api/.env.example.*
+!api/.env.test
+!api/.env.production
+
+# Local production credentials and generated runtime config
+api/production/secrets/
+api/production/config/*.generated
+
+# Local debug payloads and credentials
+# Temp experiment outputs must never land in the repo root (audit P0-6):
+# evidence artifacts belong in reports/experiments/.
+api/.tmp-*
+.tmp-*
+/.tmp-*
+.tmp-eval-*
+tmp-endpoint-sweep/
+api/.ailin-*
+api/.bootstrap-key*
+api/.openai_key*
+**/.gcp-secrets-*
+
+# Local probe scratchpads (per-investigation artifacts, not for VCS)
+api/tmp-probes/
+scripts/probe-results*.json
+
+# Local hidden audit notes (per-investigation, dot-prefixed = personal, not for VCS)
+docs/.AUDIT-*.md
+docs/.EXECUTIVE-SUMMARY-*.md
+docs/.FINAL-COMPLETION-REPORT-*.md
+docs/.VALIDATION-REPORT-*.md
+
+# Local runtime evidence captures (per-boot artefacts, not for VCS)
+.runtime-evidence/
+api/.runtime-evidence/
+
+# Operational feedback export artifacts (per-day exports, not for VCS)
+api/data/feedback-export/
+
+# Claude Code session data
+.claude/
+api/gcp-credentials.json
+api/.gcp-credentials.json
+api/.gcp-credentials
+api/.gcp-secrets.env
+# Cover all .gcp-secrets.env variants — .bak.<date>, .before-fresh-fetch, etc.
+# (the patterns above only matched the bare file / a hyphen-prefixed name, so
+#  rotated backups like .gcp-secrets.env.bak.20260510 were leaking through)
+api/.gcp-secrets.env.*
+**/.gcp-secrets.env*
+# Admin/session credential scratch files (per-session secrets, never for VCS)
+api/.session_admin_key
+**/.session_admin_key
+api/scripts/_session-*
+
+# Runtime task-state dir (not source); was leaking 199 test fixtures into git
+api/.ailin/
+
+# OSS-fork audit workspace (manifests, clearance notes — never for VCS)
+audit_workspace/

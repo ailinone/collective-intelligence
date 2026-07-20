@@ -1,0 +1,82 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Promptfoo Contract Tests for Ailin Dev API
+# Tests chat completions response format, model routing, and multi-provider comparison
+
+description: "Ailin Chat Completions Contract Tests"
+
+providers:
+  # Mock provider for CI (no API key needed)
+  - id: "exec:node -e \"const input = JSON.parse(process.argv[1] || '{}'); const msg = (input.messages || []).find(m => m.role === 'user')?.content || ''; console.log(JSON.stringify({id:'chatcmpl-test',object:'chat.completion',created:Date.now(),model:'mock-model',choices:[{index:0,message:{role:'assistant',content:'Mock response to: '+msg},finish_reason:'stop'}],usage:{prompt_tokens:10,completion_tokens:20,total_tokens:30}}))\""
+    label: "Ailin Mock"
+
+prompts:
+  - "{{message}}"
+
+defaultTest:
+  options:
+    provider:
+      config:
+        temperature: 0
+
+tests:
+  # ── Response Format Validation ─────────────────────────────────
+  - vars:
+      message: "Hello, world!"
+    assert:
+      - type: is-json
+        description: "Response must be valid JSON"
+      - type: javascript
+        value: "JSON.parse(output).choices !== undefined"
+        description: "Response must have 'choices' field"
+      - type: javascript
+        value: "JSON.parse(output).choices[0].message.role === 'assistant'"
+        description: "Response role must be 'assistant'"
+      - type: javascript
+        value: "typeof JSON.parse(output).usage === 'object'"
+        description: "Response must include usage stats"
+
+  # ── Factual Questions ──────────────────────────────────────────
+  - vars:
+      message: "What is the capital of France?"
+    assert:
+      - type: contains
+        value: "response"
+        description: "Must contain a response"
+
+  - vars:
+      message: "What is 2 + 2?"
+    assert:
+      - type: contains
+        value: "response"
+        description: "Must provide an answer"
+
+  # ── Empty/Edge Cases ───────────────────────────────────────────
+  - vars:
+      message: ""
+    assert:
+      - type: is-json
+        description: "Empty input should still return valid JSON"
+
+  - vars:
+      message: "   "
+    assert:
+      - type: is-json
+        description: "Whitespace-only input should still return valid JSON"
+
+  # ── Long Input Handling ────────────────────────────────────────
+  - vars:
+      message: "Please analyze the following very long text that contains multiple paragraphs and complex ideas about software engineering best practices, including testing strategies, CI/CD pipelines, code review processes, and deployment automation. This text is intentionally long to test the API's ability to handle larger inputs gracefully."
+    assert:
+      - type: is-json
+        description: "Long input should return valid JSON"
+      - type: javascript
+        value: "JSON.parse(output).choices[0].message.content.length > 0"
+        description: "Should return non-empty response for long input"

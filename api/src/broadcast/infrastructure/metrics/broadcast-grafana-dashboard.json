@@ -1,0 +1,344 @@
+{
+  "title": "Broadcast Pipeline",
+  "uid": "ailin-broadcast",
+  "tags": ["broadcast", "ailin", "observability"],
+  "timezone": "",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "destination_type",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(ailin_broadcast_deliveries_total, destination_type)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Delivery throughput (req/s) by destination type",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (destination_type, outcome) (rate(ailin_broadcast_deliveries_total{destination_type=~\"$destination_type\"}[1m]))",
+          "legendFormat": "{{destination_type}} / {{outcome}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Delivery latency p50 / p95 / p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, destination_type) (rate(ailin_broadcast_delivery_latency_seconds_bucket{destination_type=~\"$destination_type\"}[5m])))",
+          "legendFormat": "p50 {{destination_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, destination_type) (rate(ailin_broadcast_delivery_latency_seconds_bucket{destination_type=~\"$destination_type\"}[5m])))",
+          "legendFormat": "p95 {{destination_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, destination_type) (rate(ailin_broadcast_delivery_latency_seconds_bucket{destination_type=~\"$destination_type\"}[5m])))",
+          "legendFormat": "p99 {{destination_type}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error rate (permanent + retryable) %",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(ailin_broadcast_deliveries_total{outcome!=\"success\"}[5m])) / clamp_min(sum(rate(ailin_broadcast_deliveries_total[5m])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "DLQ admit rate (1m)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ailin_broadcast_dlq_admits_total[1m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Outbox backlog rows (sampled)",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "ailin_broadcast_outbox_backlog_rows" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Outbox drain lag p95 (seconds)",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ailin_broadcast_outbox_lag_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Sampling decisions (included vs sampled_out)",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by (destination_type, decision) (rate(ailin_broadcast_sampling_decisions_total{destination_type=~\"$destination_type\"}[1m]))",
+          "legendFormat": "{{destination_type}} / {{decision}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Redactions applied (PII / secret / custom)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by (tier) (rate(ailin_broadcast_redactions_total[1m]))",
+          "legendFormat": "{{tier}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "SSRF egress blocks by reason",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(ailin_broadcast_egress_blocked_total[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Attempts to terminal state (histogram)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, destination_type, terminal_state) (rate(ailin_broadcast_delivery_attempts_total_bucket{destination_type=~\"$destination_type\"}[5m])))",
+          "legendFormat": "p95 {{destination_type}} / {{terminal_state}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "GDPR erasures (total)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 28 },
+      "targets": [
+        { "expr": "sum by (subject_kind) (ailin_broadcast_erasures_total)", "legendFormat": "{{subject_kind}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "DLQ replays (total)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 28 },
+      "targets": [
+        { "expr": "sum by (destination_type) (ailin_broadcast_dlq_replays_total)", "legendFormat": "{{destination_type}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Outbox write errors (1m rate)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 28 },
+      "targets": [
+        { "expr": "sum(rate(ailin_broadcast_outbox_writes_total{status=\"error\"}[1m]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Delivery success rate %",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 28 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(ailin_broadcast_deliveries_total{outcome=\"success\"}[5m])) / clamp_min(sum(rate(ailin_broadcast_deliveries_total[5m])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 95 },
+              { "color": "green", "value": 99 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "KEK / KMS (Fase 3.2)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "collapsed": false
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "KEK unwrap rate by result (ok / failed / fast_failed)",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 34 },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(ailin_broadcast_kek_unwraps_total[1m]))",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "description": "ok = KMS call succeeded. failed = KMS call threw. fast_failed = breaker open, no KMS round-trip. A spike in fast_failed indicates the breaker is protecting the poller from a KMS outage — verify KMS health before closing the incident."
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "KEK unwrap latency p50 / p95 / p99",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 34 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(ailin_broadcast_kek_unwrap_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(ailin_broadcast_kek_unwrap_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(ailin_broadcast_kek_unwrap_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "description": "Latency of successful KEK unwrap. Excludes breaker fast-fails (they aren't KMS round-trips). A p95 > 500ms usually precedes a breaker open event."
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "KEK circuit state (0 closed · 1 half_open · 2 open)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 41 },
+      "targets": [
+        { "expr": "ailin_broadcast_kek_circuit_state" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED",    "color": "green"  } } },
+            { "type": "value", "options": { "1": { "text": "HALF-OPEN", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "OPEN",      "color": "red"    } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red",    "value": 2 }
+            ]
+          }
+        }
+      },
+      "description": "A non-zero value here means broadcast deliveries are decoupled from a misbehaving KMS. Envelopes are NOT lost — they sit in the outbox until the breaker closes and get re-dispatched by the next poll tick."
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Envelopes reclaimed (1m rate) — Fase 3.1 safety net",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 41 },
+      "targets": [
+        {
+          "expr": "sum(rate(ailin_broadcast_outbox_writes_total{status=\"error\"}[5m]))",
+          "legendFormat": "outbox write errors"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red",    "value": 0.1 }
+            ]
+          }
+        }
+      },
+      "description": "Claim-and-commit (Fase 3.1) resets drained_at to NULL when dispatch throws. A sustained non-zero value indicates a stranded poller: either a KEK outage that outlasted the in-memory breaker (likely on a different replica), or a resolver DB error."
+    }
+  ]
+}

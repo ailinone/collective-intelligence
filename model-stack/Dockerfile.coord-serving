@@ -1,0 +1,88 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coordinator Stable Serving — coord_serving FastAPI app.
+#
+# Lightweight image: only the runtime deps the HTTP service actually
+# needs (fastapi/uvicorn/httpx/pyyaml/prometheus-client). Excludes the
+# heavy ML stack (torch, vllm, transformers, datasets, peft, etc.) —
+# those are needed only by the training pipeline (alignment/sft) and
+# REAL_ENSEMBLE serving, which run on separate GPU images.
+#
+# Build context: model-stack/ (or repo root with -f model-stack/Dockerfile.coord-serving)
+#
+# Modes (env COORD_SERVING_MODE):
+#   TEACHER_PROXY      — default; calls back to ci-api triage
+#   MOCK_DETERMINISTIC — canned single-vote responses
+#   MOCK_CASCADE       — full cascade aggregator with synthetic executors
+#   REAL_ENSEMBLE      — Phase 2c.2 (raises NotImplementedError on this image)
+
+# Stage 1: install deps + cached pip layer
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+# System deps for httpx (needs OpenSSL via ssl module — already in slim).
+# No build tools needed since all our deps ship wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin only the runtime deps; mirrors the relevant subset of pyproject.toml.
+COPY model-stack/requirements-coord-serving.txt /app/requirements.txt
+RUN pip install --no-cache-dir --user -r /app/requirements.txt
+
+
+# Stage 2: minimal runtime image
+FROM python:3.13-slim AS runtime
+
+# Run as non-root for defence-in-depth.
+RUN groupadd --system coord && useradd --system --gid coord --create-home coord
+
+WORKDIR /app
+
+# Bring in the installed packages from the builder stage.
+COPY --from=builder /root/.local /home/coord/.local
+ENV PATH=/home/coord/.local/bin:$PATH \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Application code — only the modules the service actually imports.
+# Everything else (data ingestion, training, evals) is irrelevant at
+# serving time and would bloat the image.
+COPY --chown=coord:coord model-stack/serving /app/serving
+COPY --chown=coord:coord model-stack/data/feedback /app/data/feedback
+# Empty __init__.py files for the namespace packages we don't fully copy.
+RUN install -d -o coord -g coord /app/data && \
+    : > /app/data/__init__.py && \
+    chown coord:coord /app/data/__init__.py
+
+USER coord
+
+ENV COORD_SERVING_MODE=TEACHER_PROXY \
+    COORD_TEACHER_TRACES_DIR=/var/lib/coord-stable/teacher-traces \
+    LOG_LEVEL=INFO
+
+# Trace dir lives on a volume in compose; create it for non-volume runs too.
+USER root
+RUN install -d -o coord -g coord /var/lib/coord-stable/teacher-traces
+USER coord
+
+EXPOSE 8090
+
+# k8s-style probes hit /health (liveness) and /ready (readiness).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request, sys; \
+                   r = urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3); \
+                   sys.exit(0 if r.status == 200 else 1)" \
+        || exit 1
+
+CMD ["python", "-m", "uvicorn", "serving.aggregation.coord_serving:app", \
+     "--host", "0.0.0.0", "--port", "8090", \
+     "--proxy-headers", "--no-access-log"]

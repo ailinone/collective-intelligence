@@ -1,0 +1,132 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "ailin-model-stack"
+version = "0.1.0"
+description = "Foundation model training stack for Ailin"
+readme = "docs/README.md"
+license = { text = "AGPL-3.0-or-later" }
+requires-python = ">=3.10"
+authors = [{ name = "Ailin Team" }]
+
+dependencies = [
+    "torch>=2.2.0",
+    "transformers>=4.38.0",
+    "datasets>=2.17.0",
+    "tokenizers>=0.15.0",
+    "accelerate>=0.27.0",
+    "deepspeed>=0.14.0",
+    "vllm>=0.3.0",
+    "wandb>=0.16.0",
+    "sentencepiece>=0.2.0",
+    "pydantic>=2.6.0",
+    "click>=8.1.0",
+    "trl>=0.7.0",
+    "lm-eval>=0.4.0",
+    "scipy>=1.12.0",
+    "scikit-learn>=1.4.0",
+    "datasketch>=1.6.0",
+    "xxhash>=3.4.0",
+    "presidio-analyzer>=2.2.0",
+    "presidio-anonymizer>=2.2.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.66.0",
+    "jsonlines>=4.0.0",
+    "pyarrow>=15.0.0",
+    "pandas>=2.2.0",
+    "sentence-transformers>=2.5.0",
+    "faiss-cpu>=1.7.0",
+    "langdetect>=1.0.9",
+    "rich>=13.7.0",
+    "httpx>=0.27.0",
+    "jsonschema>=4.21.0",
+    "hdbscan>=0.8.33",
+    "numpy>=1.26.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "prometheus-client>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
+    "types-PyYAML>=6.0.0",
+    "types-tqdm>=4.66.0",
+    "types-jsonschema>=4.21.0",
+]
+gpu = [
+    "flash-attn>=2.5.0",
+    "faiss-gpu>=1.7.0",
+]
+
+[project.scripts]
+ailin-ingest = "data.ingestion.ingest:cli"
+ailin-dedup-lexical = "data.dedup.lexical_dedup:cli"
+ailin-dedup-semantic = "data.dedup.semantic_dedup:cli"
+ailin-quality-filter = "data.curation.quality_filter:cli"
+ailin-pii-filter = "data.curation.pii_filter:cli"
+ailin-contamination = "data.contamination.detect_contamination:cli"
+ailin-mix = "data.mixing.mix_datasets:cli"
+ailin-train-tokenizer = "tokenizer.training.train_tokenizer:cli"
+ailin-eval-tokenizer = "tokenizer.evaluation.eval_tokenizer:cli"
+ailin-scaling = "model.scaling.scaling_laws:cli"
+
+[tool.setuptools.packages.find]
+include = [
+    "data*", "tokenizer*", "model*", "datasets*",
+    "evals*", "registry*", "flywheel*",
+    "serving*", "pretraining*", "alignment*", "experiments*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# coord_serving.py: Pydantic models intentionally use camelCase to mirror
+# the TypeScript wire contract in
+# api/src/core/coordination/ensemble-coordinator-types.ts. Renaming would
+# break the HTTP contract; using Field(alias=) on every field is noisy
+# duplication. N815 must be suppressed here by design.
+"serving/aggregation/coord_serving.py" = ["N815"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+# Discover tests in:
+#   - tests/                 — legacy / integration test home (may not exist
+#                              on every checkout; pytest tolerates missing
+#                              entries when at least one path resolves).
+#   - <pkg>/__tests__/**     — co-located unit tests next to the modules
+#                              they cover (Phase 2c onwards).
+testpaths = [
+    "tests",
+    "alignment",
+    "data",
+    "evals",
+    "serving",
+]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

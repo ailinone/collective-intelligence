@@ -1,0 +1,87 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Alertmanager Configuration — ci/api
+# G7 fix: Real alertmanager config (replaces placeholder URLs in prometheus-alerts.yaml).
+#
+# SETUP: Replace the environment variables below with real values:
+#   SLACK_WEBHOOK_CRITICAL — Slack incoming webhook for #incidents
+#   SLACK_WEBHOOK_MONITORING — Slack incoming webhook for #monitoring
+#   PAGERDUTY_SERVICE_KEY — PagerDuty Events API v1 service key
+#
+# These can be injected via Docker secrets or env file.
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: "${SLACK_WEBHOOK_MONITORING}"
+
+route:
+  receiver: "slack-default"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: critical
+      receiver: "pagerduty-oncall"
+      continue: true
+
+    - match:
+        severity: critical
+      receiver: "slack-critical"
+
+    - match:
+        severity: warning
+      receiver: "slack-warnings"
+
+    - match:
+        severity: info
+      receiver: "slack-info"
+
+receivers:
+  - name: "slack-default"
+    slack_configs:
+      - channel: "#monitoring"
+        title: "{{ .GroupLabels.alertname }}"
+        text: "{{ .Annotations.description }}"
+        send_resolved: true
+
+  - name: "pagerduty-oncall"
+    pagerduty_configs:
+      - service_key: "${PAGERDUTY_SERVICE_KEY}"
+        description: "{{ .GroupLabels.alertname }} - {{ .Annotations.summary }}"
+
+  - name: "slack-critical"
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_CRITICAL}"
+        channel: "#incidents"
+        title: "CRITICAL: {{ .GroupLabels.alertname }}"
+        text: "{{ .Annotations.description }}\nSeverity: {{ .Labels.severity }}\nInstance: {{ .Labels.instance }}"
+        send_resolved: true
+
+  - name: "slack-warnings"
+    slack_configs:
+      - channel: "#monitoring"
+        title: "WARNING: {{ .GroupLabels.alertname }}"
+        text: "{{ .Annotations.description }}"
+        send_resolved: true
+
+  - name: "slack-info"
+    slack_configs:
+      - channel: "#monitoring"
+        title: "INFO: {{ .GroupLabels.alertname }}"
+        text: "{{ .Annotations.description }}"
+
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname"]

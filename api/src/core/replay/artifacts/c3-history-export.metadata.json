@@ -1,0 +1,21 @@
+{
+  "exportedAt": "2026-05-12T19:22:37.267Z",
+  "source": "read_only_db_export",
+  "rowCounts": {
+    "executions": 283,
+    "experiments": 17
+  },
+  "filters": {
+    "onlyWithJudgeScore": true,
+    "onlyCompletedExecutions": false
+  },
+  "schemaVersion": "8b5-v1",
+  "sanitisation": {
+    "strippedColumns": [
+      "prompt",
+      "response_summary",
+      "judge_rubric",
+      "structured_metadata"
+    ]
+  }
+}

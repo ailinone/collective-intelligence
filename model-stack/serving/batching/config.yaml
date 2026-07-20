@@ -1,0 +1,58 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Continuous batching configuration for vLLM serving runtime.
+# These values are passed to the vLLM scheduler and engine at start-up.
+
+scheduler:
+  # Maximum number of sequences that can be batched together in a single
+  # forward pass.  Higher values improve GPU utilization but increase
+  # per-request latency under load.
+  max_batch_size: 256
+
+  # Number of tokens the scheduler is willing to wait for before forcing
+  # a decode step.  Lower values reduce TTFT at the cost of throughput.
+  max_waiting_tokens: 20
+
+  # Upper bound on concurrently running sequences (across all batches).
+  max_num_seqs: 256
+
+  # Scheduling policy: "fcfs" (first-come-first-served) preserves
+  # request ordering; "priority" allows priority-based preemption.
+  scheduling_policy: fcfs
+
+  # CPU swap space reserved for preempted KV-cache blocks (GiB).
+  swap_space_gb: 4
+
+  # When true, newly arriving prefill requests can share a batch with
+  # in-progress decode requests (chunked prefill).
+  enable_chunked_prefill: true
+
+  # Maximum number of tokens in a single prefill chunk when chunked
+  # prefill is enabled.
+  max_prefill_tokens: 4096
+
+  # Delay (seconds) to accumulate requests before forming a batch.
+  # 0 means dispatch immediately.
+  batch_delay_seconds: 0.0
+
+dynamic_batching:
+  # Whether to dynamically adjust batch size based on current load.
+  enabled: true
+
+  # Minimum batch size; the scheduler never drops below this even under
+  # low load.
+  min_batch_size: 1
+
+  # Scale factor applied to current queue depth to compute target batch
+  # size.  target = min(max_batch_size, queue_depth * scale_factor).
+  scale_factor: 1.0
+
+  # How often (seconds) to re-evaluate the target batch size.
+  adjustment_interval_seconds: 1.0

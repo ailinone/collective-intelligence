@@ -1,0 +1,26 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+checkpoint_path: model-stack/smoke-run/checkpoint
+config_hash: 9b62610093df554e
+created_at: '2026-03-21T14:20:04.118507+00:00'
+eval:
+  generation_success: true
+  perplexity: 259.64
+family: ailin
+model_name: ailin-micro
+param_count: 17504
+promotion: pending
+status: registered
+training:
+  final_loss: 5.53952169418335
+  loss_decreased: true
+  steps: 20
+variant: smoke-test
+version: v0.0.1-smoke

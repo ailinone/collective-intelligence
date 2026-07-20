@@ -1,0 +1,14 @@
+{
+  "totalErrors": 0,
+  "totalWarnings": 0,
+  "strictPaths": [
+    "src/services/auth-service.ts",
+    "src/config/index.ts"
+  ],
+  "strictPrefixes": [
+    "src/routes/chat/",
+    "src/routes/threads/",
+    "src/routes/tools/"
+  ],
+  "rules": {}
+}

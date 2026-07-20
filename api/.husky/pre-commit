@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run type safety validation before commit
+echo "🔍 Running type safety validation..."
+
+cd api
+pnpm typecheck:safety:strict
+
+if [ $? -ne 0 ]; then
+  echo "❌ Type safety validation failed. Please fix violations before committing."
+  exit 1
+fi
+
+echo "✅ Type safety validation passed!"

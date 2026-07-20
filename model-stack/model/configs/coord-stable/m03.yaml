@@ -1,0 +1,42 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M03 — DeBERTa-v3 (reasoning-specialist encoder, Tier 1)
+inherits: "_shared.yaml"
+
+model_id: "m03"
+display_name: "Coord M03 — DeBERTa-v3 (reasoning-specialist encoder)"
+base_model: "microsoft/deberta-v3-base"
+architecture: "encoder_only"
+family: "deberta"
+tier: 1
+specialty: "reasoning"
+
+fine_tune:
+  method: "lora"
+  rank: 8
+  alpha: 16
+  target_modules: ["query_proj", "key_proj", "value_proj", "out_proj"]   # DeBERTa naming
+  modules_to_save: ["classifier"]
+
+training:
+  num_epochs: 5
+  learning_rate: 4.0e-4       # DeBERTa is sensitive — lower than other encoders
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["analysis", "reasoning", "math"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "none"
+  max_model_len: 512
+
+audit:
+  scheduler_name_format: "coord-m03-deberta-v3"

@@ -1,0 +1,145 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Docling Sidecar — PDF/Document → Structured Markdown/JSON (CPU-native)
+#
+# Endpoints:
+#   GET  /health              → Health check
+#   GET  /v1/models           → List document models
+#   POST /v1/document/parse   → Parse PDF/image document (multipart upload)
+#
+# IBM Docling: layout analysis, table extraction, figure classification, OCR.
+# CPU is the default and recommended deployment target.
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libsm6 libxext6 libxrender1 libgl1-mesa-glx \
+    poppler-utils tesseract-ocr curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    docling==2.* \
+    fastapi==0.115.* \
+    uvicorn[standard]==0.32.* \
+    python-multipart
+
+COPY <<'PYEOF' /app/server.py
+"""Docling document parsing sidecar with OpenAI-style API."""
+
+import os
+import io
+import json
+import time
+import tempfile
+import logging
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("docling-sidecar")
+
+app = FastAPI(title="Docling Document Parser")
+
+converter = None
+
+
+def get_converter():
+    """Lazy-load Docling converter (heavy import, ~10s cold start)."""
+    global converter
+    if converter is None:
+        log.info("Initializing Docling converter (first request, please wait)...")
+        from docling.document_converter import DocumentConverter
+        converter = DocumentConverter()
+        log.info("Docling converter ready")
+    return converter
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "converter_loaded": converter is not None}
+
+
+@app.get("/v1/models")
+def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {"id": "docling-standard", "object": "model", "owned_by": "local", "type": "document-parser"},
+        ],
+    }
+
+
+@app.post("/v1/document/parse")
+async def parse_document(
+    file: UploadFile = File(...),
+    output_format: str = Form("markdown"),
+):
+    """
+    Parse a PDF or image document into structured output.
+
+    Args:
+        file: PDF or image file (multipart upload)
+        output_format: "markdown" (default), "json", or "text"
+
+    Returns:
+        Structured document content with tables, figures, metadata.
+    """
+    start = time.time()
+    conv = get_converter()
+
+    # Save uploaded file to temp
+    suffix = Path(file.filename or "document.pdf").suffix
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        result = conv.convert(tmp_path)
+        doc = result.document
+
+        if output_format == "markdown":
+            output = doc.export_to_markdown()
+        elif output_format == "json":
+            output = json.loads(doc.export_to_dict() if hasattr(doc, "export_to_dict") else "{}")
+        else:
+            output = doc.export_to_markdown()
+
+        elapsed = time.time() - start
+
+        return JSONResponse({
+            "content": output,
+            "format": output_format,
+            "pages": getattr(doc, "num_pages", None),
+            "processing_time_seconds": round(elapsed, 2),
+            "filename": file.filename,
+            "model": "docling-standard",
+        })
+
+    except Exception as e:
+        log.error(f"Document parsing failed: {e}")
+        raise HTTPException(500, f"Document parsing failed: {str(e)}")
+
+    finally:
+        os.unlink(tmp_path)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8083)
+PYEOF
+
+EXPOSE 8083
+
+CMD ["python", "server.py"]

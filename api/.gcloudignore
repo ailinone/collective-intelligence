@@ -1,0 +1,205 @@
+# Google Cloud Build ignore file
+# This file controls which files are sent to Google Cloud Build
+# Files listed here will NOT be uploaded to Cloud Build
+
+# ============================================
+# SENSITIVE FILES - CRITICAL TO EXCLUDE
+# ============================================
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+.env.test
+
+# Private keys and certificates
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# Google Cloud credentials
+*gcp-credentials*.json
+*credentials*.json
+*service-account*.json
+
+# ============================================
+# BUILD ARTIFACTS AND DEPENDENCIES
+# ============================================
+
+# Node.js dependencies (will be installed during build)
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Temporary build directories
+temp-build/
+-p/
+
+# ============================================
+# LOGS AND DEBUG FILES
+# ============================================
+
+# Application logs
+*.log
+logs/
+backend-error.log
+backend.log
+build.log
+
+# Test outputs
+test-output.txt
+coverage/
+.nyc_output/
+test-results/
+
+# ============================================
+# DEVELOPMENT AND TESTING FILES
+# ============================================
+
+# Test files
+test-*.ts
+test-*.js
+tmp-db-check.js
+tests/
+vitest.config.ts
+vitest.integration.config.ts
+
+# Development scripts and tools
+build-api.ps1
+setup-*.ps1
+setup-*.sh
+validate-deployment.ps1
+deploy-gcp.ps1
+deploy-gcp.sh
+grant-permissions.ps1
+grant-permissions.sh
+setup-cloud-build-trigger*.ps1
+
+# ============================================
+# DOCUMENTATION AND NON-CODE FILES
+# ============================================
+
+# Documentation (keep only essential README)
+docs/
+*.md
+!README.md
+
+# Docker files (not needed in container)
+# Dockerfile  # REMOVED - needed for Cloud Build
+Dockerfile.worker
+docker-compose.yml
+.dockerignore
+
+# CI/CD configuration
+cloudbuild.yaml
+cloudbuild.api.yaml
+.github/
+.gitlab-ci.yml
+
+# ============================================
+# IDE AND EDITOR FILES
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IntelliJ
+.idea/
+*.iml
+
+# Other editors
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+
+# ============================================
+# OS AND SYSTEM FILES
+# ============================================
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Linux
+*~
+
+# ============================================
+# CACHE AND TEMPORARY FILES
+# ============================================
+
+# Cache directories
+.cache/
+.parcel-cache/
+.turbo/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ============================================
+# MONITORING AND OBSERVABILITY (OPTIONAL)
+# ============================================
+
+# These might be useful for debugging, but can be excluded to reduce build size
+# monitoring/
+# observability/
+
+# ============================================
+# DATABASE MIGRATIONS (SELECTIVE)
+# ============================================
+
+# Keep schema but exclude individual migration SQL files if they're auto-generated
+# Uncomment if you want to exclude migration files:
+# prisma/migrations/**/*.sql
+
+# ============================================
+# SOURCE CONTROL
+# ============================================
+
+# Git (automatically ignored by Cloud Build, but explicit is better)
+.git/
+.gitignore
+.gitattributes
+
+# ============================================
+# BUILD CONFIGURATION
+# ============================================
+
+# Makefile (might be useful for debugging)
+# Makefile
+
+# Package manager lock files (will be installed during build)
+# pnpm-lock.yaml (uncomment if you want to exclude)
+
+# ============================================
+# EXCEPTIONS - FILES TO KEEP
+# ============================================
+
+# Keep these essential files even if they match patterns above
+!.env.example
+!README.md
+!package.json
+!tsconfig.json
+!prisma/schema.prisma
+!src/
+!scripts/

@@ -1,0 +1,44 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M16 — Phi-3.5-mini-3.8B (routing/safety, Tier 4)
+inherits: "_shared.yaml"
+
+model_id: "m16"
+display_name: "Coord M16 — Phi-3.5-mini-3.8B (routing/safety)"
+base_model: "microsoft/Phi-3.5-mini-instruct"
+architecture: "decoder_only_transformer"
+family: "phi-3.5"
+tier: 4
+specialty: "routing_safety"
+notes: "Already alignment-tuned — fine-tune is light touch."
+
+fine_tune:
+  method: "lora"
+  rank: 32                        # smaller rank — instruct base, less to add
+  alpha: 64
+  target_modules: ["qkv_proj", "o_proj", "gate_up_proj", "down_proj"]   # Phi-3 fused QKV
+
+training:
+  num_epochs: 2
+  learning_rate: 5.0e-5           # alignment-preserving low LR
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["safety", "moderation", "routing"]
+  max_examples_per_label: 6000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+
+audit:
+  scheduler_name_format: "coord-m16-phi-3.5-mini"

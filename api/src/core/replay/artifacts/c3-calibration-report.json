@@ -1,0 +1,158 @@
+{
+  "chosenEstimator": "judgeMedian",
+  "evaluations": [
+    {
+      "estimatorName": "judgeMean",
+      "meanAbsoluteError": 0.16548882101660364,
+      "medianAbsoluteError": 0.11645833333333333,
+      "p80AbsoluteError": 0.3336363636363636,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "judgeMedian",
+      "meanAbsoluteError": 0.15170454545454537,
+      "medianAbsoluteError": 0,
+      "p80AbsoluteError": 0.35,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "judgeP80",
+      "meanAbsoluteError": 0.1767293388429751,
+      "medianAbsoluteError": 0.030000000000000027,
+      "p80AbsoluteError": 0.38,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "weightedMedianP80",
+      "meanAbsoluteError": 0.1603805785123965,
+      "medianAbsoluteError": 0.08000000000000007,
+      "p80AbsoluteError": 0.3476,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "lowerConfidenceBound",
+      "meanAbsoluteError": 0.1922548571711666,
+      "medianAbsoluteError": 0.11344707739065353,
+      "p80AbsoluteError": 0.3503903395186902,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "variancePenalizedMean",
+      "meanAbsoluteError": 0.18287201009124043,
+      "medianAbsoluteError": 0.12315096185711201,
+      "p80AbsoluteError": 0.32029217009619165,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "empiricalBayesShrinkage",
+      "meanAbsoluteError": 0.20945455431445356,
+      "medianAbsoluteError": 0.13057692307692276,
+      "p80AbsoluteError": 0.40441176470588236,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "taskTypeCalibrated",
+      "meanAbsoluteError": 0.16548882101660364,
+      "medianAbsoluteError": 0.11645833333333333,
+      "p80AbsoluteError": 0.3336363636363636,
+      "sampleCount": 484
+    },
+    {
+      "estimatorName": "pairAwareCalibrated",
+      "meanAbsoluteError": 0.16548882101660364,
+      "medianAbsoluteError": 0.11645833333333333,
+      "p80AbsoluteError": 0.3336363636363636,
+      "sampleCount": 484
+    }
+  ],
+  "calibratedMetrics": {
+    "evaluatedRows": 73,
+    "expected_vs_observed_judge_error": 0.432054794520548,
+    "expected_vs_observed_judge_median_error": 0.4,
+    "expected_vs_observed_judge_p80_error": 0.7600000000000001,
+    "cost_prediction_error": 0.04809232876712329,
+    "quality_ge_single_rate": 0.8767123287671232,
+    "cost_le_single_rate": 0.9178082191780822,
+    "quality_and_cost_success_rate": 0.8767123287671232,
+    "single_fallback_rate": 1,
+    "coverage_rate": 1,
+    "unjustified_collective_avoided_total": 31,
+    "expensive_consensus_avoided_total": 12,
+    "harmful_model_avoided_total": 0,
+    "modality_mismatch_avoided_total": 0,
+    "multi_mini_pool_avoided_total": 0,
+    "cheap_good_preserved_total": 0,
+    "pair_winner_selected_total": 0,
+    "insufficient_data_rejected_total": 42
+  },
+  "metricsByTaskType": [
+    {
+      "taskType": "code-generation",
+      "sampleCountTrain": 155,
+      "sampleCountHoldout": 64,
+      "bestEstimator": "judgeMedian",
+      "expectedVsObservedError": 0.15768733850129182,
+      "qualityAndCostSuccessRate": 1,
+      "fallbackRate": 1,
+      "approvedForCollective": true,
+      "status": "approved",
+      "reason": "error=0.158<=0.250;success_rate=1.000"
+    },
+    {
+      "taskType": "document-understanding",
+      "sampleCountTrain": 25,
+      "sampleCountHoldout": 6,
+      "bestEstimator": "judgeMedian",
+      "expectedVsObservedError": 0.20185185185185184,
+      "qualityAndCostSuccessRate": 0,
+      "fallbackRate": 1,
+      "approvedForCollective": false,
+      "status": "insufficient_data",
+      "reason": "train=25,holdout=6,minTrain=30,minHoldout=20"
+    },
+    {
+      "taskType": "reasoning",
+      "sampleCountTrain": 13,
+      "sampleCountHoldout": 3,
+      "bestEstimator": "judgeMedian",
+      "expectedVsObservedError": 0.03,
+      "qualityAndCostSuccessRate": 0,
+      "fallbackRate": 1,
+      "approvedForCollective": false,
+      "status": "insufficient_data",
+      "reason": "train=13,holdout=3,minTrain=30,minHoldout=20"
+    }
+  ],
+  "policy": {
+    "maxOverallJudgeError": 0.3,
+    "maxCodeGenerationJudgeError": 0.25,
+    "minQualityAndCostSuccessRate": 0.8,
+    "minQualityGeSingleRate": 0.85,
+    "minCostLeSingleRate": 0.85,
+    "maxCostPredictionError": 0.1,
+    "minCoverageRate": 0.8,
+    "minHoldoutSamplesPerTaskType": 20,
+    "minTrainSamplesPerTaskType": 30
+  },
+  "approval": {
+    "approved": false,
+    "reasons": [
+      "overall_judge_error_high:0.432>=0.3",
+      "approved_task_types:code-generation",
+      "blocked_task_types:document-understanding,reasoning"
+    ],
+    "approvedTaskTypes": [
+      "code-generation"
+    ],
+    "blockedTaskTypes": [
+      "document-understanding",
+      "reasoning"
+    ]
+  },
+  "mvp8b5Baseline": {
+    "expected_vs_observed_judge_error": 0.403,
+    "quality_and_cost_success_rate": 0.877,
+    "cost_prediction_error": 0.048
+  },
+  "generatedAt": "2026-05-12T20:21:38.624Z"
+}

@@ -1,0 +1,23 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /api
+    schedule: { interval: weekly }
+    groups: { minor-and-patch: { update-types: [minor, patch] } }
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /model-stack
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /api
+    schedule: { interval: weekly }

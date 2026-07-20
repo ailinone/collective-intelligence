@@ -1,0 +1,52 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M22 — DeepSeek-Coder-V2-Lite (code heavy, Tier 6)
+inherits: "_shared.yaml"
+
+model_id: "m22"
+display_name: "Coord M22 — DeepSeek-Coder-V2-Lite (code heavy)"
+base_model: "deepseek-ai/DeepSeek-Coder-V2-Lite-Base"
+architecture: "moe_decoder"
+family: "deepseek-coder-v2"
+tier: 6
+specialty: "code"
+
+moe:
+  num_experts: 64
+  experts_per_token: 6
+  shared_experts: 2
+  router_aux_loss_weight: 0.01
+
+fine_tune:
+  method: "moe_lora"
+  rank: 32
+  alpha: 64
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  expert_target_modules: ["gate_proj", "up_proj", "down_proj"]
+  freeze_shared_experts: false
+  freeze_router: false
+
+training:
+  num_epochs: 1
+  learning_rate: 5.0e-5
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["code-generation", "refactoring", "debugging", "code-review"]
+  max_examples_per_label: 5000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+
+audit:
+  scheduler_name_format: "coord-m22-deepseek-coder-v2-lite"

@@ -1,0 +1,25 @@
+﻿{
+  "apiUrl": "https://api.ailin.one",
+  "organizations": [
+    {
+      "name": "Ailin One, Inc.",
+      "ownerEmail": "admin@ailin.one",
+      "ownerName": "Ailin Admin",
+      "ownerPassword": "CHANGE_ME_STRONG_PASSWORD",
+      "tier": "enterprise",
+      "trialDays": 30,
+      "apiKeyName": "Ailin Admin Root Key"
+    },
+    {
+      "name": "Acme Corp",
+      "ownerEmail": "owner@example.com",
+      "ownerName": "Acme Owner",
+      "ownerPassword": "CHANGE_ME_STRONG_PASSWORD",
+      "tier": "enterprise",
+      "trialDays": 30,
+      "apiKeyName": "Acme Corp Root Key"
+    }
+  ]
+}
+
+

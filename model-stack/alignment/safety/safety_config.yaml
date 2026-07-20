@@ -1,0 +1,114 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ──────────────────────────────────────────────────────────────
+# Safety / Refusal Tuning Configuration
+# ──────────────────────────────────────────────────────────────
+
+run_name: ailin-1b-safety
+seed: 42
+
+# ── Base model ────────────────────────────────────────────────
+model:
+  base_model: ./models/ailin-1b-dpo
+  tokenizer: ./tokenizer/ailin-32k
+  torch_dtype: bf16
+  attn_implementation: flash_attention_2
+
+# ── Safety categories ────────────────────────────────────────
+safety:
+  refusal_categories:
+    - violence_and_weapons
+    - self_harm
+    - sexual_content_minors
+    - illegal_activities
+    - personal_information_leakage
+    - malware_and_hacking
+    - fraud_and_deception
+    - hate_speech
+    - regulated_substances
+    - nuclear_biological_chemical
+
+  # Borderline categories (should NOT refuse these)
+  allowed_categories:
+    - general_knowledge
+    - creative_writing_fiction
+    - academic_research
+    - medical_information
+    - legal_information
+    - security_research_educational
+    - historical_events
+
+  # Target refusal rates per category
+  target_refusal_rate:
+    harmful: 0.95          # should refuse >= 95% of harmful requests
+    borderline: 0.10       # should refuse <= 10% of borderline requests
+    benign: 0.02           # should refuse <= 2% of benign requests
+
+# ── Dataset ───────────────────────────────────────────────────
+data:
+  safety_dataset: ./data/safety/refusal_pairs.jsonl
+  helpfulness_dataset: ./data/safety/helpfulness_pairs.jsonl
+  eval_harmful: ./data/safety/eval_harmful.jsonl
+  eval_benign: ./data/safety/eval_benign.jsonl
+  eval_borderline: ./data/safety/eval_borderline.jsonl
+  max_length: 4096
+  safety_ratio: 0.6        # fraction of training data from safety set
+  helpfulness_ratio: 0.4   # fraction from helpfulness preservation set
+
+# ── Training ──────────────────────────────────────────────────
+training:
+  epochs: 2
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 1.0e-6
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  lr_scheduler_type: cosine
+  gradient_clipping: 1.0
+  bf16: true
+  optim: adamw_torch
+
+# ── LoRA ──────────────────────────────────────────────────────
+lora:
+  enabled: true
+  r: 32
+  lora_alpha: 64
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+# ── Checkpointing ────────────────────────────────────────────
+checkpointing:
+  output_dir: ./checkpoints/ailin-1b-safety
+  save_strategy: steps
+  save_steps: 100
+  save_total_limit: 3
+
+# ── Logging ───────────────────────────────────────────────────
+logging:
+  logging_steps: 10
+  report_to: wandb
+  wandb:
+    project: ailin-safety
+    tags:
+      - 1b
+      - safety
+
+# ── Output ────────────────────────────────────────────────────
+output:
+  final_model_dir: ./models/ailin-1b-safety
+  merge_adapters: true

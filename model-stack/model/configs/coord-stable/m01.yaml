@@ -1,0 +1,42 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M01 — ModernBERT (generalist encoder, Tier 1)
+# Inherits from _shared.yaml; overrides below.
+inherits: "_shared.yaml"
+
+model_id: "m01"
+display_name: "Coord M01 — ModernBERT (generalist encoder)"
+base_model: "answerdotai/ModernBERT-base"
+architecture: "encoder_only"
+family: "modernbert"
+tier: 1
+specialty: "generalist"
+
+fine_tune:
+  method: "lora"
+  rank: 8                     # small rank for tier-1 fast classifier
+  alpha: 16
+  target_modules: ["query", "key", "value", "dense"]   # ModernBERT uses different naming
+  modules_to_save: ["classifier"]                       # full-train the classification head
+
+training:
+  num_epochs: 5               # encoder needs more epochs at small rank
+  learning_rate: 5.0e-4       # higher LR for encoder fine-tune
+
+data:
+  partition_strategy: "by_strategy"     # tier-1 needs broad coverage
+  max_examples_per_label: 8000
+
+serving:
+  quantization: "none"        # encoder is already tiny; no need
+  max_model_len: 512
+
+audit:
+  scheduler_name_format: "coord-m01-modernbert"

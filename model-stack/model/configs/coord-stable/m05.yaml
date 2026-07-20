@@ -1,0 +1,40 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M05 — SmolLM2-360M (generalist, Tier 2)
+inherits: "_shared.yaml"
+
+model_id: "m05"
+display_name: "Coord M05 — SmolLM2-360M (generalist)"
+base_model: "HuggingFaceTB/SmolLM2-360M"
+architecture: "decoder_only_transformer"
+family: "smollm2"
+tier: 2
+specialty: "generalist"
+
+fine_tune:
+  method: "lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 3
+  learning_rate: 2.0e-4
+
+data:
+  partition_strategy: "by_strategy"
+  max_examples_per_label: 5000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 1024
+
+audit:
+  scheduler_name_format: "coord-m05-smollm2-360m"

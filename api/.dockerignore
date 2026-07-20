@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+.pnpm-store
+.npm
+.yarn
+.yarn/cache
+.yarn/unplugged
+
+# Build and cache artifacts
+dist
+build
+coverage
+.nyc_output
+test-results
+.cache
+.tmp
+tmp
+temp
+*.tsbuildinfo
+
+# Logs and local reports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+test-output.txt
+pnpm-test-full-result.txt
+tsc-check-result.txt
+
+# Local evaluation output
+eval-results
+
+# Local environment files and credentials
+.env
+.env.local
+.env.*.local
+production/secrets
+production/config/*.generated
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+

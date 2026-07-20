@@ -1,0 +1,41 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M06 — Qwen2.5-Coder-0.5B (code, Tier 2)
+inherits: "_shared.yaml"
+
+model_id: "m06"
+display_name: "Coord M06 — Qwen2.5-Coder-0.5B (code)"
+base_model: "Qwen/Qwen2.5-Coder-0.5B"
+architecture: "decoder_only_transformer"
+family: "qwen2.5-coder"
+tier: 2
+specialty: "code"
+
+fine_tune:
+  method: "lora"
+  rank: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+training:
+  num_epochs: 3
+  learning_rate: 2.0e-4
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["code-generation", "refactoring", "debugging"]
+  max_examples_per_label: 5000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 1024
+
+audit:
+  scheduler_name_format: "coord-m06-qwen2.5-coder-0.5b"

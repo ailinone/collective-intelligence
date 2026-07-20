@@ -1,0 +1,50 @@
+{
+  "name": "ci",
+  "version": "1.0.0",
+  "description": "This repository now uses a hybrid eval strategy:",
+  "main": "index.js",
+  "scripts": {
+    "normalize:openapi:nullable": "node scripts/openapi-normalize-oas30-nullable.cjs",
+    "sync:openapi:public-routes": "node scripts/openapi-sync-public-routes.cjs",
+    "sync:gateway:api-allowlist": "node scripts/sync-gateway-allowlist.cjs",
+    "enforce:openapi:public": "node scripts/openapi-enforce-public-contract.cjs",
+    "quality:openapi:semantic": "node scripts/openapi-semantic-quality-check.cjs",
+    "lint:openapi:redocly": "redocly lint openapi-spec.yaml --config .redocly.yaml && redocly lint openapi-spec.json --config .redocly.yaml",
+    "lint:openapi:spectral": "spectral lint openapi-spec.yaml --ruleset .spectral.yaml && spectral lint openapi-spec.json --ruleset .spectral.yaml",
+    "bundle:openapi": "redocly bundle openapi-spec.yaml --config .redocly.yaml --output dist/openapi.bundle.yaml && redocly bundle openapi-spec.yaml --config .redocly.yaml --output dist/openapi.bundle.json",
+    "generate:openapi:json": "redocly bundle openapi-spec.yaml --config .redocly.yaml --output openapi-spec.json",
+    "generate:docs:endpoints-catalog": "node scripts/generate-endpoints-catalog.cjs",
+    "generate:docs:endpoint-reference": "node scripts/generate-endpoint-reference.cjs",
+    "generate:docs": "npm run generate:docs:endpoints-catalog && npm run generate:docs:endpoint-reference",
+    "parity:openapi": "node scripts/openapi-parity-check.cjs",
+    "parity:openapi:public": "node scripts/openapi-public-route-parity.cjs",
+    "verify:gateway:api-allowlist": "node scripts/verify-gateway-allowlist-parity.cjs",
+    "verify:gateway:no-residuals": "node scripts/verify-canonical-gateway-name.cjs",
+    "verify:docs": "node scripts/docs-verify.cjs",
+    "smoke:docs": "node scripts/docs-smoke.cjs",
+    "check:docs": "npm run verify:docs && npm run smoke:docs",
+    "validate:production:endpoints": "node scripts/validate-production-endpoints.cjs",
+    "validate:endpoints:authenticated": "node scripts/validate-authenticated-endpoints.cjs",
+    "validate:capability:matrix": "node scripts/run-capability-matrix.cjs",
+    "gate:anti-mock": "node scripts/check-anti-mock.cjs",
+    "report:sota:evidence": "node scripts/generate-sota-evidence.cjs",
+    "lint:openapi": "npm run lint:openapi:redocly && npm run lint:openapi:spectral",
+    "check:openapi": "npm run sync:openapi:public-routes && npm run enforce:openapi:public && npm run normalize:openapi:nullable && npm run quality:openapi:semantic && npm run lint:openapi && npm run bundle:openapi && npm run generate:openapi:json && npm run parity:openapi && npm run parity:openapi:public && npm run sync:gateway:api-allowlist && npm run verify:gateway:api-allowlist && npm run verify:gateway:no-residuals"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ailinone/collective-intelligence.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "AGPL-3.0-or-later",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ailinone/collective-intelligence/issues"
+  },
+  "homepage": "https://github.com/ailinone/collective-intelligence#readme",
+  "devDependencies": {
+    "@redocly/cli": "^2.18.2",
+    "@stoplight/spectral-cli": "^6.15.0"
+  }
+}

@@ -1,0 +1,93 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ──────────────────────────────────────────────────────────────
+# Direct Preference Optimization (DPO) Configuration
+# ──────────────────────────────────────────────────────────────
+
+run_name: ailin-1b-dpo
+seed: 42
+
+# ── Model ─────────────────────────────────────────────────────
+model:
+  base_model: ./models/ailin-1b-sft-merged
+  tokenizer: ./tokenizer/ailin-32k
+  torch_dtype: bf16
+  attn_implementation: flash_attention_2
+
+# ── DPO parameters ───────────────────────────────────────────
+dpo:
+  beta: 0.1                        # KL penalty coefficient
+  loss_type: sigmoid               # sigmoid | hinge | ipo
+  label_smoothing: 0.0
+  reference_free: false
+
+# ── Dataset ───────────────────────────────────────────────────
+data:
+  dataset_path: ./data/preference/pairs.jsonl
+  max_length: 4096
+  max_prompt_length: 1024
+  eval_split: 0.05
+  preprocessing_num_workers: 8
+
+# ── Training ──────────────────────────────────────────────────
+training:
+  epochs: 1
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 5.0e-7
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  lr_scheduler_type: cosine
+  gradient_clipping: 1.0
+  bf16: true
+  tf32: true
+  optim: adamw_torch
+
+# ── LoRA (optional) ──────────────────────────────────────────
+lora:
+  enabled: false
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+
+# ── Checkpointing ────────────────────────────────────────────
+checkpointing:
+  output_dir: ./checkpoints/ailin-1b-dpo
+  save_strategy: steps
+  save_steps: 100
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+
+# ── Evaluation ────────────────────────────────────────────────
+evaluation:
+  eval_strategy: steps
+  eval_steps: 50
+
+# ── Logging ───────────────────────────────────────────────────
+logging:
+  logging_steps: 10
+  report_to: wandb
+  wandb:
+    project: ailin-dpo
+    entity: null
+    tags:
+      - 1b
+      - dpo
+
+# ── Output ────────────────────────────────────────────────────
+output:
+  final_model_dir: ./models/ailin-1b-dpo

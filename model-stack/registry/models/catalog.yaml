@@ -1,0 +1,182 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# ============================================================================
+# Ailin Model Catalog
+# ============================================================================
+# Internal catalog of all model variants in the Ailin family.
+# Each entry describes capabilities, serving profiles, and promotion state.
+# ============================================================================
+
+version: "1.0.0"
+family: "ailin"
+
+models:
+  # -------------------------------------------------------------------------
+  # ailin-tiny — Smoke test / pipeline validation
+  # -------------------------------------------------------------------------
+  ailin-tiny:
+    display_name: "Ailin Tiny (smoke test)"
+    param_count: 502272
+    architecture: "decoder_only_transformer"
+    context_window: 512
+    vocab_size: 4096
+    purpose: "Pipeline validation, CI smoke tests, unit testing"
+    status: "experimental"
+    capabilities:
+      - text_generation
+    serving_profiles:
+      cpu_fp32:
+        quantization: "none"
+        dtype: "float32"
+        min_memory_gb: 0.01
+        expected_tps: 500
+    promotion_eligible: false
+    notes: "NOT for production. Used only to prove training/eval/serving pipeline."
+
+  # -------------------------------------------------------------------------
+  # ailin-1b — Compact production model
+  # -------------------------------------------------------------------------
+  ailin-1b:
+    display_name: "Ailin 1B"
+    param_count: 1279887360
+    architecture: "decoder_only_transformer"
+    context_window: 4096
+    vocab_size: 32000
+    purpose: "Compact model for cost-sensitive tasks, edge deployment"
+    status: "development"
+    capabilities:
+      - text_generation
+      - instruction_following
+      - tool_use
+      - reasoning_basic
+    serving_profiles:
+      gpu_bf16:
+        quantization: "none"
+        dtype: "bfloat16"
+        min_memory_gb: 3.0
+        expected_tps: 800
+      gpu_awq_int4:
+        quantization: "awq"
+        dtype: "int4"
+        min_memory_gb: 1.5
+        expected_tps: 1500
+    specializations:
+      reasoning:
+        base_checkpoint: "ailin-1b-base"
+        tuning: "reasoning-focused SFT + DPO"
+        target_improvement: "gsm8k +10pp over base"
+      coding:
+        base_checkpoint: "ailin-1b-base"
+        tuning: "code-focused SFT"
+        target_improvement: "humaneval +8pp over base"
+      safety:
+        base_checkpoint: "ailin-1b-aligned"
+        tuning: "safety refusal + helpfulness preservation"
+        target_improvement: "refusal_rate >= 95%, fp_rate <= 5%"
+    promotion_eligible: true
+    external_baselines:
+      - "llama-3.2-1b"
+      - "qwen2.5-1.5b"
+
+  # -------------------------------------------------------------------------
+  # ailin-3b — Mid-range balanced model
+  # -------------------------------------------------------------------------
+  ailin-3b:
+    display_name: "Ailin 3B"
+    param_count: 3193900032
+    architecture: "decoder_only_transformer"
+    context_window: 8192
+    vocab_size: 32000
+    purpose: "Balanced quality/cost for most production tasks"
+    status: "planned"
+    capabilities:
+      - text_generation
+      - instruction_following
+      - tool_use
+      - reasoning_moderate
+      - coding
+      - long_context
+    serving_profiles:
+      gpu_bf16:
+        quantization: "none"
+        dtype: "bfloat16"
+        min_memory_gb: 7.0
+        expected_tps: 400
+      gpu_awq_int4:
+        quantization: "awq"
+        dtype: "int4"
+        min_memory_gb: 3.5
+        expected_tps: 800
+    specializations:
+      reasoning:
+        base_checkpoint: "ailin-3b-base"
+        tuning: "reasoning-focused SFT + DPO + hard-negative replay"
+        target_improvement: "gsm8k +15pp over base"
+      tool_use:
+        base_checkpoint: "ailin-3b-aligned"
+        tuning: "tool-use SFT with multi-step scenarios"
+        target_improvement: "tool_calling_f1 >= 0.90"
+    promotion_eligible: true
+    external_baselines:
+      - "llama-3.2-3b"
+      - "qwen2.5-3b"
+
+  # -------------------------------------------------------------------------
+  # ailin-7b — High-quality flagship model
+  # -------------------------------------------------------------------------
+  ailin-7b:
+    display_name: "Ailin 7B"
+    param_count: 6933109248
+    architecture: "decoder_only_transformer"
+    context_window: 8192
+    vocab_size: 32000
+    purpose: "Flagship model for highest-quality tasks"
+    status: "planned"
+    capabilities:
+      - text_generation
+      - instruction_following
+      - tool_use
+      - reasoning_advanced
+      - coding_advanced
+      - long_context
+      - groundedness
+    serving_profiles:
+      gpu_bf16:
+        quantization: "none"
+        dtype: "bfloat16"
+        min_memory_gb: 14.0
+        expected_tps: 200
+      gpu_awq_int4:
+        quantization: "awq"
+        dtype: "int4"
+        min_memory_gb: 7.0
+        expected_tps: 500
+      gpu_gptq_int4:
+        quantization: "gptq"
+        dtype: "int4"
+        min_memory_gb: 7.0
+        expected_tps: 450
+    specializations:
+      reasoning:
+        base_checkpoint: "ailin-7b-base"
+        tuning: "reasoning-focused SFT + DPO + hard-negative + ablation-tuned"
+        target_improvement: "gsm8k >= 0.80"
+      coding:
+        base_checkpoint: "ailin-7b-base"
+        tuning: "code-focused SFT + coding-DPO"
+        target_improvement: "humaneval >= 0.60"
+      long_context:
+        base_checkpoint: "ailin-7b-aligned"
+        tuning: "YaRN context extension to 32K"
+        target_improvement: "needle_32k >= 0.90"
+    promotion_eligible: true
+    external_baselines:
+      - "llama-3.1-8b"
+      - "qwen2.5-7b"

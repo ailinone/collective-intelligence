@@ -1,0 +1,747 @@
+{
+  "chosenEstimator": "additive_current",
+  "estimatorEvaluations": [
+    {
+      "estimatorName": "additive_current",
+      "meanAbsoluteError": 0.1607714855701959,
+      "medianAbsoluteError": 0.09000000000000002,
+      "p80AbsoluteError": 0.3467272727272729,
+      "nonFallbackRate": 0.6914893617021277,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "multiplicative_bounded",
+      "meanAbsoluteError": 0.1607714855701959,
+      "medianAbsoluteError": 0.09000000000000002,
+      "p80AbsoluteError": 0.3467272727272729,
+      "nonFallbackRate": 0.6914893617021277,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "capped_additive",
+      "meanAbsoluteError": 0.1607714855701959,
+      "medianAbsoluteError": 0.09000000000000002,
+      "p80AbsoluteError": 0.3467272727272729,
+      "nonFallbackRate": 0.6914893617021277,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "weighted_anchor_support",
+      "meanAbsoluteError": 0.1537263627798088,
+      "medianAbsoluteError": 0.08573264853716317,
+      "p80AbsoluteError": 0.3182123220450632,
+      "nonFallbackRate": 0.40425531914893614,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "pair_aware_direct",
+      "meanAbsoluteError": 0.1630668375569539,
+      "medianAbsoluteError": 0.1047271021623074,
+      "p80AbsoluteError": 0.3314544046870077,
+      "nonFallbackRate": 0.35106382978723405,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "lower_bound_ensemble",
+      "meanAbsoluteError": 0.1567459693393583,
+      "medianAbsoluteError": 0.0847048941344496,
+      "p80AbsoluteError": 0.3266156231096472,
+      "nonFallbackRate": 0.3404255319148936,
+      "sampleCount": 94
+    },
+    {
+      "estimatorName": "conservative_parallel",
+      "meanAbsoluteError": 0.1607714855701959,
+      "medianAbsoluteError": 0.09000000000000002,
+      "p80AbsoluteError": 0.3467272727272729,
+      "nonFallbackRate": 0.6914893617021277,
+      "sampleCount": 94
+    }
+  ],
+  "peerLift": {
+    "globalPeerLift": -0.10393657633292583,
+    "peerLiftByTaskType": {
+      "analysis": -0.09238806785148962,
+      "code-generation": -0.1047271021623074,
+      "document-understanding": -0.11718382161386354,
+      "reasoning": -0.09377205551485514,
+      "general": -0.09238806785148962
+    },
+    "peerLiftByStrategy": {
+      "single": -0.08126874984352858,
+      "consensus": -0.09333209888943185,
+      "tri-role-collective": -0.13656357148692672,
+      "expert-panel": -0.120967356901801,
+      "debate": -0.08045356635009805,
+      "critique-repair": -0.10059023733303696,
+      "parallel": -0.09546375790452905
+    },
+    "confidenceByTaskType": {
+      "analysis": 0.125,
+      "code-generation": 1,
+      "document-understanding": 1,
+      "reasoning": 0.375,
+      "general": 0.125
+    },
+    "sampleCountByTaskType": {
+      "analysis": 1,
+      "code-generation": 78,
+      "document-understanding": 11,
+      "reasoning": 3,
+      "general": 1
+    },
+    "reasons": [
+      "global_peer_lift=-0.1039",
+      "ensemble_examples=94"
+    ]
+  },
+  "marginalGainCalibration": {
+    "chosenPolicy": {
+      "maxTotalGain": 0.1,
+      "maxPerModelGain": 0.03,
+      "minMarginalGain": 0.02,
+      "uncertaintyPenaltyWeight": 0.25,
+      "variancePenaltyWeight": 0.3,
+      "peerLiftMultiplier": 1
+    },
+    "evaluations": [
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.1,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.15,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.2,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.03,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.05,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.25,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.5,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      },
+      {
+        "policy": {
+          "maxTotalGain": 0.25,
+          "maxPerModelGain": 0.08,
+          "minMarginalGain": 0.02,
+          "uncertaintyPenaltyWeight": 0.75,
+          "variancePenaltyWeight": 0.3,
+          "peerLiftMultiplier": 1
+        },
+        "meanAbsoluteError": 0.1607714855701959,
+        "medianAbsoluteError": 0.09000000000000002,
+        "nonFallbackRate": 0.6914893617021277,
+        "sampleCount": 94
+      }
+    ],
+    "chosenEvaluation": {
+      "policy": {
+        "maxTotalGain": 0.1,
+        "maxPerModelGain": 0.03,
+        "minMarginalGain": 0.02,
+        "uncertaintyPenaltyWeight": 0.25,
+        "variancePenaltyWeight": 0.3,
+        "peerLiftMultiplier": 1
+      },
+      "meanAbsoluteError": 0.1607714855701959,
+      "medianAbsoluteError": 0.09000000000000002,
+      "nonFallbackRate": 0.6914893617021277,
+      "sampleCount": 94
+    }
+  },
+  "liftPolicy": {
+    "estimatorName": "additive_current",
+    "maxTotalLift": 0.1,
+    "maxPerAdditionalModelLift": 0.03,
+    "minNonFallbackRate": 0.5,
+    "minExpectedJudgeRatioVsSingle": 1,
+    "maxCostRatioVsSingle": 1,
+    "uncertaintyPenaltyWeight": 0.25,
+    "variancePenaltyWeight": 0.3,
+    "minTrainSamplesForTaskTypeApproval": 30,
+    "minHoldoutSamplesForTaskTypeApproval": 20,
+    "allowTaskTypeApprovalWithFallbackOnly": false
+  },
+  "calibratedMetrics": {
+    "evaluatedRows": 73,
+    "expectedVsObservedJudgeError": 0.38712328767123294,
+    "medianError": 0.29000000000000004,
+    "p80Error": 0.654,
+    "nonFallbackRate": 0.8767123287671232,
+    "fallbackRate": 0.1232876712328767,
+    "qualityAndCostSuccessRate": 0.8767123287671232,
+    "qualityGeSingleRate": 0.958904109589041,
+    "costLeSingleRate": 0.9178082191780822,
+    "costPredictionError": 0.048215679060665366,
+    "taskTypeErrors": {
+      "code-generation": 0.38281249999999967,
+      "document-understanding": 0.32666666666666666,
+      "reasoning": 0.6
+    },
+    "fallbackReasonDistribution": {
+      "below_min_members,ensemble_cost_above_ceiling": 6,
+      "no_accepted_candidates": 3
+    },
+    "coverageRate": 1,
+    "pairWinnerSelectedTotal": 64,
+    "cheapGoodPreservedTotal": 64,
+    "unjustifiedCollectiveAvoidedTotal": 0,
+    "expensiveConsensusAvoidedTotal": 0,
+    "harmfulModelAvoidedTotal": 0,
+    "modalityMismatchAvoidedTotal": 0,
+    "multiMiniPoolAvoidedTotal": 0
+  },
+  "approvalsByTaskType": [
+    {
+      "taskType": "code-generation",
+      "approved": false,
+      "status": "blocked_high_error",
+      "trainSamples": 155,
+      "holdoutSamples": 64,
+      "expectedVsObservedJudgeError": 0.38281249999999967,
+      "qualityAndCostSuccessRate": 1,
+      "costLeSingleRate": 1,
+      "qualityGeSingleRate": 1,
+      "nonFallbackRate": 1,
+      "fallbackRate": 0,
+      "reasons": [
+        "judge_error=0.383>0.25"
+      ]
+    },
+    {
+      "taskType": "document-understanding",
+      "approved": false,
+      "status": "blocked_insufficient_data",
+      "trainSamples": 25,
+      "holdoutSamples": 6,
+      "expectedVsObservedJudgeError": 0.32666666666666666,
+      "qualityAndCostSuccessRate": 0,
+      "costLeSingleRate": 0,
+      "qualityGeSingleRate": 1,
+      "nonFallbackRate": 0,
+      "fallbackRate": 1,
+      "reasons": [
+        "samples:train=25<30_or_holdout=6<20"
+      ]
+    },
+    {
+      "taskType": "reasoning",
+      "approved": false,
+      "status": "blocked_insufficient_data",
+      "trainSamples": 13,
+      "holdoutSamples": 3,
+      "expectedVsObservedJudgeError": 0.6,
+      "qualityAndCostSuccessRate": 0,
+      "costLeSingleRate": 1,
+      "qualityGeSingleRate": 0,
+      "nonFallbackRate": 0,
+      "fallbackRate": 1,
+      "reasons": [
+        "samples:train=13<30_or_holdout=3<20"
+      ]
+    }
+  ],
+  "approval": {
+    "approved": false,
+    "approvedTaskTypes": [],
+    "blockedTaskTypes": [
+      "code-generation",
+      "document-understanding",
+      "reasoning"
+    ],
+    "reasons": [
+      "no_task_type_approved",
+      "blocked_task_types:code-generation,document-understanding,reasoning",
+      "chosen_estimator:additive_current",
+      "calibrated_judge_error:0.387",
+      "non_fallback_rate:0.877"
+    ]
+  },
+  "mvp8b5Baseline": {
+    "expected_vs_observed_judge_error": 0.403,
+    "fallback_rate": 0.123,
+    "quality_and_cost_success_rate": 0.877
+  },
+  "mvp8b6Baseline": {
+    "expected_vs_observed_judge_error": 0.432,
+    "fallback_rate": 1,
+    "quality_and_cost_success_rate": 0.877
+  },
+  "generatedAt": "2026-05-12T20:40:58.550Z"
+}

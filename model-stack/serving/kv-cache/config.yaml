@@ -1,0 +1,50 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# KV-cache configuration for vLLM serving runtime.
+# Controls how attention key/value tensors are stored and evicted.
+
+kv_cache:
+  # Number of tokens per cache block.  Larger blocks waste more memory on
+  # partially-filled blocks; smaller blocks increase bookkeeping overhead.
+  block_size: 16
+
+  # Fraction of GPU memory reserved for the KV cache after model weights
+  # are loaded.  The remainder is available for activations / workspace.
+  gpu_memory_utilization: 0.90
+
+  # CPU swap space (GiB) for offloading KV-cache blocks when GPU memory
+  # is exhausted.  Blocks are swapped back in when the sequence resumes.
+  swap_space: 4
+
+  # Maximum supported context length (tokens).  Sequences longer than
+  # this are rejected at request time.
+  max_model_len: 4096
+
+  # Data type for cached keys and values.  "auto" inherits the model's
+  # native dtype; "fp16" / "bf16" can be forced for memory savings.
+  cache_dtype: auto
+
+eviction:
+  # Policy used when the cache is full and new blocks are needed.
+  #   lru   - evict least-recently-used blocks
+  #   fifo  - evict oldest-allocated blocks
+  policy: lru
+
+  # Watermark (fraction of total GPU KV-cache capacity).  When free
+  # blocks fall below this fraction, preemption / swap-out begins.
+  watermark: 0.01
+
+prefix_caching:
+  # Enable automatic prefix caching.  Sequences that share a common
+  # prompt prefix reuse cached KV blocks, saving both memory and compute.
+  enabled: true
+
+  # Maximum number of prefix blocks kept in cache.  0 = unlimited.
+  max_prefix_blocks: 0

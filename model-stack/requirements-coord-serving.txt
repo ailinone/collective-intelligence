@@ -1,0 +1,23 @@
+# Runtime deps for coord_serving HTTP image.
+# Subset of pyproject.toml — only what the FastAPI app + teacher_proxy +
+# tiered_voter + mock_cascade actually import at request time. Keep this
+# list tight: every line shipped runs in production.
+#
+# When pyproject.toml's [project.dependencies] changes for any of these
+# packages, bump the pin here too. Other model-stack deps (torch/vllm/
+# transformers/peft/datasets) are explicitly NOT installed — they belong
+# in a separate GPU image used by the training pipeline + REAL_ENSEMBLE.
+
+# PINNED (2026-06-11): exact versions to stop the pip resolver backtracking to
+# exhaustion. The loose `>=` ranges resolved fine for months, but a new PyPI
+# release made pip backtrack across httpx versions (all of which require
+# httpcore==1.*) and bail with ResolutionImpossible, breaking the CI image build
+# even though nothing in this file changed. These pins are validated to resolve
+# cleanly in python:3.13-slim (pip install --dry-run, exit 0). Bump deliberately.
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.27.2
+httpcore==1.0.7
+pydantic==2.10.4
+pyyaml==6.0.2
+prometheus-client==0.21.1

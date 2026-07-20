@@ -1,0 +1,47 @@
+# VCS metadata
+.git
+.gitignore
+.github
+
+# Editor/OS files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Root-only files and folders not needed by API image build
+contract-tests
+docker
+lint-report*.txt
+openapi-spec.json
+openapi-spec.yaml
+
+# Dependencies and build/test artifacts
+**/node_modules
+**/.pnpm-store
+**/dist
+**/build
+**/coverage
+**/.nyc_output
+**/test-results
+**/.cache
+**/.tmp
+**/tmp
+**/temp
+**/*.tsbuildinfo
+
+# Logs and generated reports
+**/*.log
+**/pnpm-debug.log*
+api/pnpm-test-full-result.txt
+api/test-output.txt
+api/tsc-check-result.txt
+api/eval-results
+
+# Local environment files and credentials
+**/.env
+**/.env.local
+**/.env.*.local
+api/production/secrets
+api/production/config/*.generated
+

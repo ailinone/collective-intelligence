@@ -1,0 +1,52 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Coord M23 — Phi-3.5-MoE (reasoning heavy, Tier 6)
+inherits: "_shared.yaml"
+
+model_id: "m23"
+display_name: "Coord M23 — Phi-3.5-MoE (reasoning heavy)"
+base_model: "microsoft/Phi-3.5-MoE-instruct"
+architecture: "moe_decoder"
+family: "phi-3.5-moe"
+tier: 6
+specialty: "reasoning"
+notes: "MS Research's MoE flagship — alignment-tuned, strong at reasoning."
+
+moe:
+  num_experts: 16
+  experts_per_token: 2
+  router_aux_loss_weight: 0.001
+
+fine_tune:
+  method: "moe_lora"
+  rank: 32
+  alpha: 64
+  target_modules: ["qkv_proj", "o_proj"]    # Phi-3 fused QKV
+  expert_target_modules: ["gate_up_proj", "down_proj"]
+  freeze_router: true                       # preserve original routing
+
+training:
+  num_epochs: 1
+  learning_rate: 3.0e-5
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+
+data:
+  partition_strategy: "by_specialty"
+  specialty_filter: ["analysis", "reasoning", "math"]
+  max_examples_per_label: 4000
+
+serving:
+  quantization: "awq_int4"
+  max_model_len: 4096
+  tensor_parallel_size: 2                    # 60B needs multi-GPU even quantized
+
+audit:
+  scheduler_name_format: "coord-m23-phi-3.5-moe"
