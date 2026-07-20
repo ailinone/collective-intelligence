@@ -281,6 +281,24 @@ export class TimeoutError extends ApplicationError {
 }
 
 /**
+ * 01C.1B-R/P — Dry-run fail-closed gate errors.
+ *
+ * Thrown by `applyDryRunFailClosedGate` / the real-branch approved-plan
+ * gate in chat-request-processor.ts whenever a request must be refused
+ * BEFORE any orchestration setup or provider call. `billable_execution_blocked`
+ * is the caller-facing guarantee that refusing this request cannot have
+ * incurred any cost — consumers assert on it directly.
+ */
+export class DryRunGateError extends ApplicationError {
+  public readonly billable_execution_blocked = true as const;
+
+  constructor(message: string, statusCode: number, code: string, details?: unknown) {
+    super(message, statusCode, code, details);
+    this.name = 'DryRunGateError';
+  }
+}
+
+/**
  * Check if error is an ApplicationError
  */
 export function isApplicationError(error: unknown): error is ApplicationError {

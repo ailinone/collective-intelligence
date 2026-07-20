@@ -48,7 +48,6 @@ import { SensitivityConsensusStrategy } from './strategies/sensitivity-consensus
 import { TriRoleCollectiveStrategy } from './strategies/tri-role-collective-strategy';
 import { resolveAilinAlias, applyAliasToRequest } from './ailin-alias-resolver';
 import { getROIEstimator } from '@/core/validation/c3/roi-estimator';
-import { createCapabilityInvoker } from './capability-invoker';
 import { ObserverService, createNoOpObserverFeed, buildObserverChunk, buildInlineNarrationChunk } from './observer/observer-service';
 import type { ObserverFeed } from './observer/observer-types';
 import { ProviderRegistry } from '@/providers/provider-registry';
@@ -1356,30 +1355,15 @@ export class OrchestrationEngine {
           // object accepts this extra field at runtime".
           (context as { observerFeed?: typeof observerFeed }).observerFeed = observerFeed;
 
-          // Inject CapabilityInvoker for cross-modal operations.
-          (strategy as { capabilityInvoker?: import('./capability-invoker').CapabilityInvoker }).capabilityInvoker =
-            createCapabilityInvoker({
-              chatHandler: async (messages, options) => {
-                const innerRequest: ChatRequest = {
-                  messages,
-                  model: options?.model ?? request.model,
-                  temperature: options?.temperature,
-                  max_tokens: options?.maxTokens,
-                  stream: false,
-                  // Forward strategy: 'single' when set (e.g. generateFile())
-                  // so the recursive execute() call below skips triage/
-                  // heuristic capability detection entirely — otherwise a
-                  // prompt that re-mentions the original intent can recurse
-                  // without bound (production incident, 2026-07-15).
-                  ...(options?.strategy ? { strategy: options.strategy as ChatRequest['strategy'] } : {}),
-                };
-                const innerResult = await this.execute(innerRequest, context.organizationId, context.userId);
-                return innerResult.finalResponse;
-              },
-              // Audio and translation services are injected at the process() level;
-              // within chat strategies, only the chat handler is needed.
-              context,
-            });
+          // NOTE: cross-modal capability access is provided via `context.invoker`
+          // (built once per request in buildContext(), see createCapabilityInvoker
+          // call there). It used to ALSO be written onto the shared `strategy`
+          // singleton as `strategy.capabilityInvoker` here — a mutable field on an
+          // object reused across every concurrent request for this strategy name,
+          // racy under concurrent load (request A's invoker could be overwritten by
+          // request B's before A read it) and never actually read by any strategy.
+          // Removed rather than fixed in place: `context.invoker` is already the
+          // correct, request-scoped mechanism.
 
           // Memory enrichment: search for relevant memories and inject as context.
           // Base on enrichedRequest (NOT the original request): when the engine
@@ -2739,30 +2723,11 @@ export class OrchestrationEngine {
     }
     (enrichedContext as { observerFeed?: typeof streamObserverFeed }).observerFeed = streamObserverFeed;
 
-    // Inject CapabilityInvoker for streaming path. Single structural cast
-    // (NOT laundered through `unknown`) — strategy is an object and the
-    // `capabilityInvoker` field is a runtime augmentation we own.
-    (strategy as { capabilityInvoker?: import('./capability-invoker').CapabilityInvoker }).capabilityInvoker =
-      createCapabilityInvoker({
-        chatHandler: async (messages, options) => {
-          const innerRequest: ChatRequest = {
-            messages,
-            model: options?.model ?? request.model,
-            temperature: options?.temperature,
-            max_tokens: options?.maxTokens,
-            stream: false,
-            // Forward strategy: 'single' (e.g. generateFile()) so the
-            // recursive execute() call skips triage/heuristic capability
-            // detection — otherwise a prompt that re-mentions the original
-            // intent can recurse without bound (production incident,
-            // 2026-07-15).
-            ...(options?.strategy ? { strategy: options.strategy as ChatRequest['strategy'] } : {}),
-          };
-          const innerResult = await this.execute(innerRequest, enrichedContext.organizationId, enrichedContext.userId);
-          return innerResult.finalResponse;
-        },
-        context: enrichedContext,
-      });
+    // NOTE: see the analogous comment in execute() — cross-modal capability
+    // access comes from `enrichedContext.invoker` (request-scoped, built in
+    // buildContext()). The old `strategy.capabilityInvoker` write here mutated
+    // the shared strategy singleton per-request, which is racy under
+    // concurrent load and was never read by any strategy; removed.
 
     // Memory enrichment for streaming path
     // C3 P0.2: Skip when memory is ablated. When the concurrent
@@ -4989,17 +4954,9 @@ export class OrchestrationEngine {
       return result?.adapter || null;
     };
 
-    // Inject CapabilityInvoker for cross-modal operations
-    type StrategyWithInvoker = BaseStrategy & {
-      capabilityInvoker?: import('./capability-invoker').CapabilityInvoker;
-    };
-    const strategyWithInvoker = strategy as StrategyWithInvoker;
-    // Lazy invoker: created per-call with the current context by the engine.
-    // Here we inject a context-free placeholder that strategies can check
-    // for availability. The real invoker is set per-execution in execute().
-    // For now, we inject it as a factory-ready reference that the engine
-    // will populate when building the execution context.
-    strategyWithInvoker.capabilityInvoker = undefined; // Will be set per-execution
+    // Cross-modal capability access is request-scoped via `context.invoker`
+    // (built per-request in buildContext()), not a field on this shared
+    // strategy singleton — see the comments in execute()/executeStream().
 
     // Inject sibling strategy lookup for meta-strategies (adaptive, war-room)
     type StrategyWithSiblings = BaseStrategy & {

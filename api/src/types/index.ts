@@ -621,6 +621,34 @@ export interface AilinMetadata {
   prompt_variant?: string;
   /** SHA-256 hash (truncated) of the prompt slot values used (for audit). */
   prompt_slot_hash?: string;
+  /**
+   * 01C.1B-R/P — dry-run fail-closed gate + plan-fingerprint parity metadata.
+   * Populated ONLY on responses short-circuited by `applyDryRunFailClosedGate`
+   * (eval.dryRun=true / eval.planOnly=true / eval.executionParityCheck=true).
+   * Absent on every real (billable) execution response.
+   */
+  dryRun?: boolean;
+  /** Sanitized consensus plan snapshot (no prompts/secrets) for the dry-run. */
+  consensusPlan?: unknown;
+  /** One-shot handoff token between a dry-run plan and its later real execution. */
+  executionPlanId?: string;
+  /** SHA-256 over the sanitized plan snapshot — see consensus-plan-fingerprint.ts. */
+  planFingerprint?: string;
+  planSource?: 'dry_run' | 'runtime_planner' | 'approved_dry_run_plan';
+  plannerVersion?: string;
+  registryScope?: 'full_system_registry';
+  probeScope?: 'auxiliary';
+  roleSpecificRetrieval?: boolean;
+  /** True when this response answered an `executionParityCheck=true` request. */
+  executionParityCheck?: boolean;
+  /** True when the recomputed ("would execute") fingerprint matched `approvedPlanFingerprint`. */
+  planFingerprintMatched?: boolean;
+  approvedPlanFingerprint?: string;
+  wouldExecutePlanFingerprint?: string;
+  plannedJudgeModelId?: string | null;
+  wouldExecuteJudgeModelId?: string | null;
+  plannedSynthesizerModelId?: string | null;
+  wouldExecuteSynthesizerModelId?: string | null;
   // Internal tracking (never exposed to client)
   _internal?: {
     actual_models?: string[];

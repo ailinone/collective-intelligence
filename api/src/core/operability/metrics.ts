@@ -65,6 +65,15 @@ export const METRIC_NAMES = Object.freeze({
   CANDIDATE_RESOLUTION_LATENCY_MS: 'candidate_resolution_latency_ms',
   SEMANTIC_RETRY_USED_TOTAL: 'semantic_retry_used_total',
   SEMANTIC_RETRY_FALLBACK_TOTAL: 'semantic_retry_fallback_total',
+  // ─── LLM-judge observability (LLMJudgeEvaluator path) ───────────────────
+  // Emitted by ProviderLLMJudgeClient so the rubric-based judge is as
+  // observable as the consensus/experiment judges. `parseClass` records how
+  // the raw judge output was recovered (ok=clean JSON, salvaged=regex-salvage
+  // of truncated/malformed JSON, or a failure class) so ops can see how often
+  // the judge drifts and how much the tolerant salvage recovers.
+  LLM_JUDGE_RESULT_TOTAL: 'llm_judge_result_total',
+  LLM_JUDGE_LATENCY_MS: 'llm_judge_latency_ms',
+  LLM_JUDGE_SCORE: 'llm_judge_score',
 } as const);
 
 export type MetricName = (typeof METRIC_NAMES)[keyof typeof METRIC_NAMES];
@@ -226,6 +235,23 @@ const METRIC_DEFS: Record<
     kind: 'counter',
     help: 'Cross-provider retry path that fell back to legacy ranking',
     labels: ['reason'],
+  },
+  [METRIC_NAMES.LLM_JUDGE_RESULT_TOTAL]: {
+    kind: 'counter',
+    help: 'LLM-judge outcomes by verdict and how the output was parsed/salvaged',
+    labels: ['verdict', 'parseClass'],
+  },
+  [METRIC_NAMES.LLM_JUDGE_LATENCY_MS]: {
+    kind: 'histogram',
+    help: 'Wall-clock latency of an LLM-judge call, by verdict',
+    labels: ['verdict'],
+    buckets: [50, 100, 250, 500, 1000, 2500, 5000, 10000, 20000, 30000, 60000],
+  },
+  [METRIC_NAMES.LLM_JUDGE_SCORE]: {
+    kind: 'histogram',
+    help: 'Distribution of LLM-judge scores in [0,1], by verdict',
+    labels: ['verdict'],
+    buckets: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
   },
 };
 

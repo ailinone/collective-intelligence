@@ -78,6 +78,12 @@ import {
   executeRegisterWorkflowTool,
   executeExploreCodebaseTool,
 } from '@/services/advanced-tool-execution-service';
+import { getModelRepository } from '@/services/model-repository';
+import { buildConsensusRoleSpecificCandidatePools } from '@/core/orchestration/model-selection/role-specific-candidate-pool-builder';
+import { ConsensusPlanDryRunService } from '@/core/orchestration/strategies/consensus-plan-dry-run-service';
+import type { ConsensusExecutionPlan } from '@/core/orchestration/strategies/consensus-execution-planner';
+import { computePlanFingerprint, type PlanFingerprintResult } from '@/core/orchestration/strategies/consensus-plan-fingerprint';
+import { DryRunGateError } from '@/utils/custom-errors';
 
 export interface ProcessChatRequestParams {
   chatRequest: ChatRequest | ChatRequestWithMetadata;
@@ -1152,6 +1158,342 @@ async function executeReadFileTool(
 
 // Legacy tool implementations removed in favor of dedicated services
 
+// ─── 01C.1B-R/P — Dry-run fail-closed gate ─────────────────────────────────
+//
+// Any request carrying `eval.dryRun=true` / `eval.planOnly=true` must either
+// (a) short-circuit into a real consensus plan (no provider call), or
+// (b) throw an explicit refusal with a stable error code — it must NEVER
+// silently fall through to billable orchestration. The class of bug this
+// closes: a request with `eval.strategy=consensus` and `eval.dryRun=true`
+// but no top-level `strategy` used to reach `single`→anthropic execution.
+//
+// `applyDryRunFailClosedGate` is the single entry point; a second gate
+// (`applyRealBranchApprovedPlanGate`) guards the REAL (dryRun=false) branch
+// of a consensus dynamic-plan request when the caller opts in via
+// `eval.dynamicPlan=true` — it refuses to reach `orchestrationEngine.execute`
+// unless the request carries a plan fingerprint that matches what would
+// execute right now.
+
+interface DryRunEvalBag {
+  dryRun?: boolean;
+  planOnly?: boolean;
+  strategy?: string;
+  dynamicPlan?: boolean;
+  maxJudgeCostUsd?: number;
+  requireStrictPlanExecution?: boolean;
+  executionParityCheck?: boolean;
+  approvedPlanFingerprint?: string;
+  approvedExecutionPlanId?: string;
+  requirePlanFingerprintMatch?: boolean;
+}
+
+function getDryRunEvalBag(chatRequest: ChatRequest): DryRunEvalBag | undefined {
+  return (chatRequest as ChatRequest & { eval?: DryRunEvalBag }).eval;
+}
+
+function resolveEffectiveStrategy(
+  chatRequest: ChatRequest,
+  evalBag: DryRunEvalBag | undefined,
+): string | undefined {
+  if (typeof chatRequest.strategy === 'string' && chatRequest.strategy.trim().length > 0) {
+    return chatRequest.strategy;
+  }
+  return typeof evalBag?.strategy === 'string' && evalBag.strategy.trim().length > 0
+    ? evalBag.strategy
+    : undefined;
+}
+
+export type DryRunGateResult =
+  | { kind: 'continue'; normalizedRequest: ChatRequest; strategySource?: 'eval_normalized' }
+  | { kind: 'short_circuit'; response: ChatResponse; strategySource?: 'eval_normalized' };
+
+/**
+ * Build the real consensus plan + its deterministic fingerprint using the
+ * SAME recipe everywhere (dry-run capture, executionParityCheck recompute,
+ * and the real-branch approved-plan recompute) so an approved fingerprint
+ * always compares against a bit-identical recomputation. NEVER touches a
+ * provider — `ConsensusPlanDryRunService` is pure planning.
+ */
+async function computeConsensusPlanAndFingerprint(params: {
+  chatRequest: ChatRequest;
+  evalBag: DryRunEvalBag | undefined;
+  planSource: 'dry_run' | 'runtime_planner';
+}): Promise<{ plan: ConsensusExecutionPlan; fingerprint: PlanFingerprintResult }> {
+  const { chatRequest, evalBag, planSource } = params;
+  const modelRepo = getModelRepository();
+  // ModelRepository.searchModels declares a mutable `capabilities?: ModelCapability[]`;
+  // ModelRepositoryLike declares `readonly ModelCapability[]` — adapt rather than widen
+  // either real type.
+  const repo: import('@/core/orchestration/model-selection/role-specific-candidate-pool-builder').ModelRepositoryLike = {
+    searchModels: (criteria) =>
+      modelRepo.searchModels({
+        ...criteria,
+        capabilities: criteria.capabilities ? [...criteria.capabilities] : undefined,
+      }),
+  };
+  const pools = await buildConsensusRoleSpecificCandidatePools({
+    repo,
+    maxCostPer1kJudge: evalBag?.maxJudgeCostUsd,
+  });
+
+  const plan = await new ConsensusPlanDryRunService().plan({
+    chatRequest,
+    candidatePool: pools.sharedPool,
+    context: { taskType: 'general' },
+    roleSpecificCandidatePools: {
+      participant: pools.participantPool,
+      synthesizer: pools.synthesizerPool,
+      judge: pools.judgePool,
+      fallback: pools.fallbackPool,
+    },
+  });
+
+  const fingerprint = computePlanFingerprint(
+    {
+      plan,
+      budget: {},
+      strict: evalBag?.requireStrictPlanExecution === true,
+      roleSpecificRetrieval: true,
+    },
+    { planSource },
+  );
+
+  return { plan, fingerprint };
+}
+
+function buildDryRunShortCircuitResponse(
+  requestId: string,
+  plan: ConsensusExecutionPlan,
+  fingerprint: PlanFingerprintResult,
+): ChatResponse {
+  return {
+    id: `chatcmpl-dryrun-${fingerprint.executionPlanId}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: 'consensus-dry-run',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: `[DRY RUN] consensus plan computed for request ${requestId} — no provider call was made.`,
+        },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    ailin_metadata: {
+      strategy_used: 'consensus',
+      models_used: [],
+      model_count: 0,
+      execution_time_ms: 0,
+      cost_usd: 0,
+      cache_hit: false,
+      dryRun: true,
+      consensusPlan: fingerprint.snapshot,
+      executionPlanId: fingerprint.executionPlanId,
+      planFingerprint: fingerprint.planFingerprint,
+      planSource: fingerprint.planSource,
+      plannerVersion: fingerprint.plannerVersion,
+      registryScope: fingerprint.registryScope,
+      probeScope: fingerprint.probeScope,
+      roleSpecificRetrieval: fingerprint.roleSpecificRetrieval,
+    },
+  };
+}
+
+function buildParityShortCircuitResponse(
+  requestId: string,
+  plan: ConsensusExecutionPlan,
+  fingerprint: PlanFingerprintResult,
+  approvedPlanFingerprint: string,
+): ChatResponse {
+  const judgeModelId = plan.judge?.model.id ?? null;
+  const synthesizerModelId = plan.synthesizer?.model.id ?? null;
+  return {
+    id: `chatcmpl-parity-${fingerprint.executionPlanId}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: 'consensus-dry-run',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: `[EXECUTION PARITY CHECK] request ${requestId} — approved plan fingerprint matched, no provider call was made.`,
+        },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    ailin_metadata: {
+      strategy_used: 'consensus',
+      models_used: [],
+      model_count: 0,
+      execution_time_ms: 0,
+      cost_usd: 0,
+      cache_hit: false,
+      dryRun: true,
+      executionParityCheck: true,
+      planFingerprintMatched: true,
+      approvedPlanFingerprint,
+      wouldExecutePlanFingerprint: fingerprint.planFingerprint,
+      plannedJudgeModelId: judgeModelId,
+      wouldExecuteJudgeModelId: judgeModelId,
+      plannedSynthesizerModelId: synthesizerModelId,
+      wouldExecuteSynthesizerModelId: synthesizerModelId,
+      executionPlanId: fingerprint.executionPlanId,
+      planFingerprint: fingerprint.planFingerprint,
+    },
+  };
+}
+
+/**
+ * Fail-closed gate for `eval.dryRun=true` / `eval.planOnly=true` consensus
+ * requests. Also normalizes `eval.strategy` onto the top-level `strategy`
+ * field when the caller omitted it (harmless for non-dry-run requests —
+ * `eval.strategy` has no other production reader today).
+ */
+export async function applyDryRunFailClosedGate(params: {
+  chatRequest: ChatRequest;
+  requestId: string;
+  log: Logger;
+}): Promise<DryRunGateResult> {
+  const { chatRequest, requestId } = params;
+  const evalBag = getDryRunEvalBag(chatRequest);
+
+  const topLevelStrategy =
+    typeof chatRequest.strategy === 'string' && chatRequest.strategy.trim().length > 0
+      ? chatRequest.strategy
+      : undefined;
+  const evalStrategy =
+    typeof evalBag?.strategy === 'string' && evalBag.strategy.trim().length > 0
+      ? evalBag.strategy
+      : undefined;
+  const strategySource: 'eval_normalized' | undefined =
+    !topLevelStrategy && evalStrategy ? 'eval_normalized' : undefined;
+  const normalizedRequest: ChatRequest =
+    strategySource === 'eval_normalized'
+      ? ({ ...chatRequest, strategy: evalStrategy } as ChatRequest)
+      : chatRequest;
+
+  const dryRunRequested = evalBag?.dryRun === true || evalBag?.planOnly === true;
+  if (!dryRunRequested) {
+    return { kind: 'continue', normalizedRequest, strategySource };
+  }
+
+  const effectiveStrategy = resolveEffectiveStrategy(normalizedRequest, evalBag);
+  if (!effectiveStrategy) {
+    throw new DryRunGateError(
+      'dry-run request requires a strategy (top-level `strategy` or `eval.strategy`)',
+      422,
+      'DRY_RUN_STRATEGY_REQUIRED',
+    );
+  }
+  if (effectiveStrategy !== 'consensus') {
+    throw new DryRunGateError(
+      `dry-run is only supported for strategy=consensus (got "${effectiveStrategy}")`,
+      422,
+      'DRY_RUN_UNSUPPORTED_FOR_REQUEST_SHAPE',
+    );
+  }
+  if (process.env.ENABLE_CONSENSUS_PLAN_DRY_RUN !== 'true') {
+    throw new DryRunGateError(
+      'consensus dry-run is not enabled in this runtime (ENABLE_CONSENSUS_PLAN_DRY_RUN must be the literal string "true")',
+      409,
+      'DRY_RUN_NOT_ENABLED_IN_RUNTIME',
+    );
+  }
+
+  const { plan, fingerprint } = await computeConsensusPlanAndFingerprint({
+    chatRequest: normalizedRequest,
+    evalBag,
+    planSource: 'dry_run',
+  });
+
+  if (evalBag?.executionParityCheck === true) {
+    const requirePlanFingerprintMatch = evalBag.requirePlanFingerprintMatch === true;
+    const approvedPlanFingerprint = evalBag.approvedPlanFingerprint;
+
+    if (requirePlanFingerprintMatch) {
+      if (!approvedPlanFingerprint) {
+        throw new DryRunGateError(
+          'executionParityCheck with requirePlanFingerprintMatch=true requires eval.approvedPlanFingerprint',
+          422,
+          'APPROVED_PLAN_REQUIRED',
+        );
+      }
+      if (approvedPlanFingerprint !== fingerprint.planFingerprint) {
+        throw new DryRunGateError(
+          'approved plan fingerprint does not match the recomputed plan',
+          409,
+          'PLAN_EXECUTION_PARITY_FAILED',
+        );
+      }
+    }
+
+    const response = buildParityShortCircuitResponse(
+      requestId,
+      plan,
+      fingerprint,
+      approvedPlanFingerprint ?? fingerprint.planFingerprint,
+    );
+    return { kind: 'short_circuit', response, strategySource };
+  }
+
+  const response = buildDryRunShortCircuitResponse(requestId, plan, fingerprint);
+  return { kind: 'short_circuit', response, strategySource };
+}
+
+/**
+ * Real-branch (dryRun=false) approved-plan gate. Scoped to requests that
+ * explicitly opt in via `eval.dynamicPlan=true` on strategy=consensus —
+ * a no-op (single boolean/env check) for every other request, so normal
+ * traffic pays nothing. When active, refuses to let the request reach
+ * `orchestrationEngine.execute` unless it carries an `approvedPlanFingerprint`
+ * that matches the plan that would execute right now.
+ */
+async function applyRealBranchApprovedPlanGate(params: {
+  chatRequest: ChatRequest;
+  requestId: string;
+  log: Logger;
+}): Promise<void> {
+  const { chatRequest } = params;
+  const evalBag = getDryRunEvalBag(chatRequest);
+  if (evalBag?.dynamicPlan !== true) return;
+  if (process.env.ENABLE_CONSENSUS_DYNAMIC_PLAN !== 'true') return;
+
+  const effectiveStrategy = resolveEffectiveStrategy(chatRequest, evalBag);
+  if (effectiveStrategy !== 'consensus') return;
+
+  const mustHaveApprovedPlan =
+    process.env.EVAL_REQUIRE_APPROVED_PLAN === 'true' || evalBag.requirePlanFingerprintMatch === true;
+  if (!mustHaveApprovedPlan) return;
+
+  const approvedPlanFingerprint = evalBag.approvedPlanFingerprint;
+  if (!approvedPlanFingerprint) {
+    throw new DryRunGateError(
+      'consensus dynamic-plan execution requires eval.approvedPlanFingerprint from a prior dry-run',
+      422,
+      'APPROVED_PLAN_REQUIRED',
+    );
+  }
+
+  const { fingerprint } = await computeConsensusPlanAndFingerprint({
+    chatRequest,
+    evalBag,
+    planSource: 'runtime_planner',
+  });
+
+  if (approvedPlanFingerprint !== fingerprint.planFingerprint) {
+    throw new DryRunGateError(
+      'approved plan fingerprint does not match the plan that would execute now',
+      409,
+      'PLAN_EXECUTION_PARITY_FAILED',
+    );
+  }
+}
+
 /**
  * Public entry point. Thin wrapper around {@link processChatRequestImpl} that
  * stages a broadcast trace envelope (F1 / ADR-017) into the outbox once the
@@ -1195,8 +1537,21 @@ async function processChatRequestImpl({
   const requestLogger = getRequestLogger();
   const cacheService = getCacheService();
 
+  // 01C.1B-R — fail-closed dry-run gate. Runs BEFORE any cache/orchestration
+  // setup: a dryRun/planOnly request either short-circuits here (no provider
+  // call, ever) or throws an explicit refusal. Cheap no-op for the
+  // overwhelming majority of requests (no eval.dryRun/planOnly signal).
+  const dryRunGateResult = await applyDryRunFailClosedGate({
+    chatRequest: narrowAs<ChatRequest>(chatRequest),
+    requestId,
+    log,
+  });
+  if (dryRunGateResult.kind === 'short_circuit') {
+    return { response: dryRunGateResult.response, fromCache: false };
+  }
+
   // Enhance request with automatic tool usage if appropriate
-  let enhancedRequest = enhanceRequestWithTools(chatRequest);
+  let enhancedRequest = enhanceRequestWithTools(dryRunGateResult.normalizedRequest);
 
   // Native RAG (P5): if the request carries `rag_config`, retrieve relevant
   // chunks from the named vector stores (scoped to this org) and inject a
@@ -1450,6 +1805,14 @@ async function processChatRequestImpl({
 
   // Cache MISS - execute orchestration
   log.debug('Cache MISS - executing orchestration');
+
+  // 01C.1B-P2 — real-branch approved-plan gate. No-op unless the request
+  // opted into `eval.dynamicPlan=true` on strategy=consensus; see docblock.
+  await applyRealBranchApprovedPlanGate({
+    chatRequest: narrowAs<ChatRequest>(enhancedRequest),
+    requestId,
+    log,
+  });
 
   const result = await orchestrationEngine.execute(enhancedRequest, organizationId, userId);
   const requestedCanonicalStrategy = resolveCanonicalStrategyValue(

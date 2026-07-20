@@ -45,6 +45,22 @@
   "homepage": "https://github.com/ailinone/collective-intelligence#readme",
   "devDependencies": {
     "@redocly/cli": "^2.18.2",
-    "@stoplight/spectral-cli": "^6.15.0"
+    "@stoplight/spectral-cli": "^6.15.0",
+    "yaml": "^2.9.0"
+  },
+  "overrides": {
+    "ajv": "8.18.0",
+    "@stoplight/spectral-cli": {
+      "ajv": "8.18.0"
+    },
+    "@stoplight/spectral-core": {
+      "ajv": "8.18.0"
+    },
+    "@stoplight/spectral-functions": {
+      "ajv": "8.18.0"
+    },
+    "@stoplight/spectral-rulesets": {
+      "ajv": "8.18.0"
+    }
   }
 }

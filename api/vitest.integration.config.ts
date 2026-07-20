@@ -26,9 +26,10 @@ export default defineConfig({
     include: ['**/*.integration.test.ts', 'tests/integration/**/*.test.ts'],
     setupFiles: ['./tests/setup.ts', './tests/integration/setup.ts'],
     sequence: { concurrent: false },
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        singleThread: true,
+      forks: {
+        singleFork: true,
       },
     },
     testTimeout: 300_000,

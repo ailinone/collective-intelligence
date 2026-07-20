@@ -168,13 +168,27 @@ function isCanonicalOwnerModel(modelId: string, providerName: string): boolean {
 async function resolveTopTierModels(options?: {
   /** Optional family whitelist for focused comparisons. Empty = all providers. */
   families?: string[];
-  /** Override default cap on distinct providers. */
+  /** Optional cap on distinct providers — unset (default) means ALL eligible
+   *  providers are included. See EXPERIMENT_TOP_TIER_MAX_PROVIDERS below for
+   *  why an explicit cap here is a genuine, not incidental, scope decision. */
   maxProviders?: number;
   /** Override default top-K per provider. */
   perProvider?: number;
 }): Promise<Array<{ id: string; displayName: string; provider: string }>> {
+  // 2026-07-20: no cap by default (was 30). Step 1 discovers providers via
+  // `orderBy: { name: 'asc' }`, and the old default silently stopped the
+  // Step 2 loop once 30 models were collected — with 77 eligible providers,
+  // that hard-excluded every provider whose name sorted after ~'w'
+  // (confirmed: `zai`, `xai` never contributed a single-model arm; the run
+  // that surfaced this had 45 providers represented, cut off exactly at
+  // 'wandb'). The exclusion tracked alphabetical position, not model
+  // quality — GLM (zai), xAI's own listing, and anything else past that
+  // point never had a chance regardless of how good the model was. An
+  // operator can still scope a specific run down via
+  // EXPERIMENT_TOP_TIER_MAX_PROVIDERS or the `maxProviders` param; that is
+  // now an explicit choice instead of an alphabetical accident.
   const maxProviders = options?.maxProviders
-    ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? 30);
+    ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? Infinity);
   const perProvider = options?.perProvider
     ?? Number(process.env.EXPERIMENT_TOP_TIER_PER_PROVIDER ?? 1);
   const minContext = Number(process.env.EXPERIMENT_TOP_TIER_MIN_CONTEXT ?? 4096);

@@ -1013,4 +1013,109 @@ describe('OrchestrationEngine', () => {
       expect(fakeChatStrategy.execute).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('capability-invoker tenant isolation under concurrency', () => {
+    // Regression coverage for a cross-tenant data-race: execute()/executeStream()
+    // used to write a per-request CapabilityInvoker directly onto the shared
+    // BaseStrategy singleton (`strategy.capabilityInvoker = ...`). Every
+    // concurrent request for the same strategy name reuses that exact object
+    // (registered once in the constructor), so one request's invoker could be
+    // overwritten by a concurrent request's before the first ever used it.
+    // That write-side mutation has been removed — the real, already-correct
+    // mechanism is `context.invoker`, built fresh per request in the private
+    // `buildContext()` (called from execute()/executeStream()) and never
+    // shared across requests. These tests lock in both halves: the shared
+    // strategy object must stay free of request-scoped state, and the
+    // context/invoker built for one tenant must never be observable by a
+    // concurrent request for a different tenant.
+
+    function getBuildContext() {
+      // buildContext() is private — it's the one true source of `context.invoker`
+      // for both execute() and executeStream(), so exercising it directly tests
+      // the isolation contract without depending on the rest of the (heavy,
+      // largely un-mocked) execute() pipeline — triage, semantic cache, memory
+      // context, operability gating — that no existing test in this file drives.
+      return (
+        engine as unknown as {
+          buildContext: (
+            request: ChatRequest,
+            organizationId: string,
+            userId: string | undefined,
+            requestId: string
+          ) => Promise<OrchestrationContext>;
+        }
+      ).buildContext.bind(engine);
+    }
+
+    it('never attaches a per-request capabilityInvoker to the shared strategy singleton', () => {
+      const single = engine.getStrategy('single');
+      expect(single).toBeDefined();
+
+      // injectProviderRegistry() runs once per execute()/executeStream() dispatch
+      // against the same shared strategy instance; call it directly (it's
+      // private) to simulate that without paying for the full pipeline.
+      (engine as unknown as { injectProviderRegistry: (s: unknown) => void }).injectProviderRegistry(single);
+
+      expect(Object.prototype.hasOwnProperty.call(single, 'capabilityInvoker')).toBe(false);
+    });
+
+    it('gives two concurrent requests for different tenants distinct contexts and invokers', async () => {
+      const buildContext = getBuildContext();
+
+      const [contextA, contextB] = await Promise.all([
+        buildContext({ messages: [{ role: 'user', content: 'hello from tenant A' }] }, 'org-A', 'user-A', 'req-A'),
+        buildContext({ messages: [{ role: 'user', content: 'hello from tenant B' }] }, 'org-B', 'user-B', 'req-B'),
+      ]);
+
+      expect(contextA.organizationId).toBe('org-A');
+      expect(contextA.userId).toBe('user-A');
+      expect(contextB.organizationId).toBe('org-B');
+      expect(contextB.userId).toBe('user-B');
+
+      // Fresh object per request — never the same context shared across tenants.
+      expect(contextA).not.toBe(contextB);
+      expect(contextA.invoker).toBeDefined();
+      expect(contextB.invoker).toBeDefined();
+      expect(contextA.invoker).not.toBe(contextB.invoker);
+    });
+
+    it("routes each context's capability-invoker chat recursion to its own tenant, never the concurrent request's", async () => {
+      const buildContext = getBuildContext();
+
+      const [contextA, contextB] = await Promise.all([
+        buildContext({ messages: [{ role: 'user', content: 'A' }] }, 'org-A', 'user-A', 'req-A'),
+        buildContext({ messages: [{ role: 'user', content: 'B' }] }, 'org-B', 'user-B', 'req-B'),
+      ]);
+
+      // The invoker's chatHandler recurses through engine.execute(); stub it so
+      // this test asserts routing (which tenant each call carries) rather than
+      // re-running the whole strategy-selection pipeline.
+      const executeSpy = vi.spyOn(engine, 'execute').mockResolvedValue({
+        strategyUsed: 'single',
+        modelsUsed: [],
+        finalResponse: { id: 'r', choices: [], model: 'm', created: 0, object: 'chat.completion' },
+        totalCost: 0,
+        totalDuration: 0,
+        qualityScore: 1,
+        metadata: {},
+      } as unknown as Awaited<ReturnType<typeof engine.execute>>);
+
+      await Promise.all([
+        contextA.invoker!.chat([{ role: 'user', content: 'via invoker for tenant A' }]),
+        contextB.invoker!.chat([{ role: 'user', content: 'via invoker for tenant B' }]),
+      ]);
+
+      const callForA = executeSpy.mock.calls.find(([req]) =>
+        JSON.stringify(req.messages).includes('via invoker for tenant A')
+      );
+      const callForB = executeSpy.mock.calls.find(([req]) =>
+        JSON.stringify(req.messages).includes('via invoker for tenant B')
+      );
+
+      expect(callForA?.[1]).toBe('org-A');
+      expect(callForA?.[2]).toBe('user-A');
+      expect(callForB?.[1]).toBe('org-B');
+      expect(callForB?.[2]).toBe('user-B');
+    });
+  });
 });

@@ -33,7 +33,6 @@ export default defineConfig({
     sequence: {
       concurrent: false,
     },
-    threads: false,
     // Only run unit tests (no integration tests requiring DB)
     include: [
       'src/**/*.test.ts',
@@ -58,9 +57,13 @@ export default defineConfig({
       'src/core/orchestration/strategies/__tests__/**',
       // 01C.1B plan-gate suite — tests for applyDryRunFailClosedGate,
       // plan-fingerprint parity, and the real-branch plan gate inside
-      // processChatRequest. Functions are TDD-spec'd but not yet exported/
-      // implemented in chat-request-processor.ts; excluded until the operator
-      // lands the implementation.
+      // processChatRequest. IMPLEMENTED (see chat-request-processor.ts) but
+      // excluded from THIS bare config: the gate builds a real consensus
+      // plan via getModelRepository()/buildConsensusRoleSpecificCandidatePools,
+      // which needs the real (Testcontainers-managed) Postgres this
+      // simplified config does not provide. Run under vitest.config.ts (the
+      // default, Testcontainers-backed config) via the dedicated
+      // "Plan-gate tests" CI step — same pattern as strategy-contract.test.ts.
       'src/services/__tests__/chat-request-processor-dryrun-fail-closed.test.ts',
       'src/services/__tests__/chat-request-processor-plan-parity.test.ts',
       'src/services/__tests__/chat-request-processor-real-branch-plan-gate.test.ts',
