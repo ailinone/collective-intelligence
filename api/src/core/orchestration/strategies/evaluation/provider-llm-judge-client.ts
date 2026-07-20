@@ -18,18 +18,36 @@
  * present). This class assumes all gates have already passed when its
  * `judge()` method is invoked.
  *
+ * Parsing contract:
+ *   - The raw judge output is routed through the SHARED `normalizeJudgeOutput`
+ *     (`@/core/quality/judge-schema`) used by the consensus / experiment /
+ *     arbitration judges, so this path gets the same tolerant salvage that
+ *     recovers ~half of production judge scores strict parsing would drop
+ *     (0-100 rescale, `overallScore`/`overall` aliases, `confidence` as a
+ *     string, regex salvage of JSON truncated mid-`reasoning`). The rubric's
+ *     richer fields (`verdict`, `rationale`, `subScores`) that the shared
+ *     schema does not model are extracted leniently on top. A malformed judge
+ *     STILL throws (only when NO score is salvageable) so the evaluator wraps
+ *     it into an "unavailable" result without crashing the consensus pipeline.
+ *   - Every outcome (parsed / salvaged / each failure class) emits an
+ *     operability judge metric — counter by verdict+parseClass, latency +
+ *     score histograms — so this path is no longer a silent second contract.
+ *
  * Hard safety properties:
  *   - No prompt text is logged. Only the rubric version, judge model id,
  *     latency, and parsed numeric outputs.
  *   - No DB writes.
- *   - On timeout / parse failure, throws an Error — the evaluator
- *     wraps that into an "unavailable" result without crashing the
- *     consensus pipeline.
  *   - Temperature pinned to 0 for determinism. max_tokens capped at 600.
  */
 import { logger } from '@/utils/logger';
 import type { ProviderRegistry } from '@/providers/provider-registry';
 import type { ChatRequest, ChatResponse } from '@/types';
+import { normalizeJudgeOutput } from '@/core/quality/judge-schema';
+import {
+  METRIC_NAMES,
+  incrementCounter,
+  observeHistogram,
+} from '@/core/operability/metrics';
 import type {
   LLMJudgeClient,
   LLMJudgeInput,
@@ -37,6 +55,29 @@ import type {
 } from './llm-judge-evaluator.types';
 
 const log = logger.child({ component: 'provider-llm-judge-client' });
+
+/** `where` tag threaded into the shared judge normalizer for metric attribution. */
+const JUDGE_NORMALIZE_WHERE = 'provider-llm-judge-client';
+
+/**
+ * How the raw judge output was turned into a verdict — recorded on the judge
+ * metric so operators can see the drift/salvage profile of this path:
+ *   - `ok`            — content parsed as clean JSON and normalized.
+ *   - `salvaged`      — JSON was truncated/malformed; the shared normalizer's
+ *                       regex salvage recovered the score (the prod failure
+ *                       where a slow judge got cut mid-`reasoning`).
+ *   - `empty`         — the provider returned no parseable content.
+ *   - `unrecoverable` — content present but not even a score could be salvaged.
+ *   - `provider_error`— the provider call itself threw.
+ *   - `model_not_found` — the judge model id did not resolve in the registry.
+ */
+type JudgeParseClass =
+  | 'ok'
+  | 'salvaged'
+  | 'empty'
+  | 'unrecoverable'
+  | 'provider_error'
+  | 'model_not_found';
 
 const RUBRIC_PREFIX =
   'You are an impartial code/output judge. Score the candidate output on a strict rubric. ' +
@@ -63,6 +104,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
   async judge(input: LLMJudgeInput): Promise<LLMJudgeRawResult> {
     const resolved = await this.opts.registry.findModel(input.judgeModelId);
     if (!resolved) {
+      recordJudgeMetric({ parseClass: 'model_not_found', verdict: 'none' });
       throw new Error(`judge_model_not_found:${input.judgeModelId}`);
     }
 
@@ -83,6 +125,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
     try {
       response = await resolved.adapter.chatCompletion(judgeRequest);
     } catch (err) {
+      recordJudgeMetric({ parseClass: 'provider_error', verdict: 'none', latencyMs: Date.now() - t0 });
       log.warn(
         {
           judgeModelId: input.judgeModelId,
@@ -96,8 +139,9 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
     }
     const latencyMs = Date.now() - t0;
 
-    const raw = extractJsonContent(response);
-    if (!raw) {
+    const rawContent = extractJsonContent(response);
+    if (!rawContent) {
+      recordJudgeMetric({ parseClass: 'empty', verdict: 'none', latencyMs });
       log.warn(
         { judgeModelId: input.judgeModelId, rubricVersion: input.rubricVersion, latencyMs },
         'judge returned no parseable content',
@@ -105,14 +149,24 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
       throw new Error('judge_response_empty');
     }
 
-    let parsed: unknown;
+    // Route the judge output through the SHARED tolerant normalizer. Pass the
+    // parsed object when the JSON is clean; otherwise pass the raw string so
+    // `normalizeJudgeOutput`'s regex salvage can recover a truncated/malformed
+    // response instead of us hard-failing on `JSON.parse` (the old contract
+    // threw `judge_response_not_json` here and dropped a recoverable score).
+    const cleanObject = tryParseObject(rawContent);
+    let result: LLMJudgeRawResult;
     try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error('judge_response_not_json');
+      result = coerceRawResult(cleanObject ?? rawContent);
+    } catch (err) {
+      recordJudgeMetric({ parseClass: 'unrecoverable', verdict: 'none', latencyMs });
+      log.warn(
+        { judgeModelId: input.judgeModelId, rubricVersion: input.rubricVersion, latencyMs },
+        'judge output unrecoverable after tolerant salvage',
+      );
+      throw err;
     }
-
-    const result = coerceRawResult(parsed);
+    const parseClass: JudgeParseClass = cleanObject ? 'ok' : 'salvaged';
 
     // Cost-accounting integrity (TIER 0): the judge call is billable. Compute
     // its cost via the same mechanism the strategies use
@@ -132,6 +186,12 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
     }
     const resultWithCost: LLMJudgeRawResult = { ...result, costUsd };
 
+    recordJudgeMetric({
+      parseClass,
+      verdict: result.verdict,
+      latencyMs,
+      score: result.score,
+    });
     log.info(
       {
         judgeModelId: input.judgeModelId,
@@ -140,6 +200,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
         verdict: result.verdict,
         score: result.score,
         confidence: result.confidence,
+        parseClass,
         costUsd,
       },
       'judge completed',
@@ -185,42 +246,136 @@ export function extractJsonContent(response: ChatResponse): string | null {
   return content.trim();
 }
 
+/**
+ * Turn a raw judge payload (parsed object OR raw string) into an
+ * `LLMJudgeRawResult`, TOLERANTLY.
+ *
+ * The numeric `score` (and `confidence`) come from the SHARED
+ * `normalizeJudgeOutput` so this path inherits the same salvage the rest of
+ * the system uses (0-100 rescale, `overallScore`/`overall` aliases, `confidence`
+ * as a string, and — when a raw string is passed — regex salvage of JSON
+ * truncated mid-`reasoning`). The rubric's `verdict`, `rationale`, and
+ * `subScores`, which the shared `JudgeVerdict` schema does not model, are
+ * extracted leniently on top:
+ *   - `verdict`: preserved verbatim when the judge emits a valid
+ *     `pass`/`fail`/`uncertain`; otherwise `uncertain` — the honest default per
+ *     `EvaluationVerdict` semantics ("ran but lacks objective evidence to
+ *     commit"). We do NOT fabricate a pass/fail from a score threshold.
+ *   - `subScores` / `rationale`: best-effort; absent on salvaged/truncated input.
+ *
+ * Throws ONLY when not even a score can be recovered, preserving the
+ * throw-on-malformed contract the evaluator relies on to emit `unavailable`.
+ */
 export function coerceRawResult(parsed: unknown): LLMJudgeRawResult {
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('judge_response_not_object');
+  const normalized = normalizeJudgeOutput(parsed, { where: JUDGE_NORMALIZE_WHERE });
+  if (!normalized) {
+    throw new Error('judge_response_unparseable');
   }
-  const o = parsed as Record<string, unknown>;
-  const score = toNumber(o.score);
-  if (score === undefined || score < 0 || score > 1) {
-    throw new Error('judge_response_score_out_of_range');
+
+  const obj = asObject(parsed);
+  const explicitVerdict = obj ? extractVerdict(obj) : undefined;
+  if (!explicitVerdict) {
+    log.debug(
+      { score: normalized.score },
+      'judge verdict missing/invalid — defaulting to uncertain',
+    );
   }
-  const verdict = o.verdict;
-  if (verdict !== 'pass' && verdict !== 'fail' && verdict !== 'uncertain') {
-    throw new Error('judge_response_verdict_invalid');
-  }
-  const confidence = toNumber(o.confidence);
-  const rationale = typeof o.rationale === 'string' ? o.rationale.slice(0, 200) : undefined;
-  const subScoresRaw = o.subScores;
-  let subScores: LLMJudgeRawResult['subScores'];
-  if (typeof subScoresRaw === 'object' && subScoresRaw !== null) {
-    const s = subScoresRaw as Record<string, unknown>;
-    subScores = {
-      correctness: toNumber(s.correctness),
-      completeness: toNumber(s.completeness),
-      instructionAdherence: toNumber(s.instructionAdherence),
-      formatAdherence: toNumber(s.formatAdherence),
-      grounding: toNumber(s.grounding),
-      safety: toNumber(s.safety),
-      reasoningQuality: toNumber(s.reasoningQuality),
-    };
-  }
+
+  const rationale = (obj ? extractRationale(obj) : undefined) ?? normalized.summary;
+
   return {
-    score,
-    verdict,
-    confidence: confidence !== undefined && confidence >= 0 && confidence <= 1 ? confidence : undefined,
+    score: normalized.score,
+    verdict: explicitVerdict ?? 'uncertain',
+    confidence: normalized.confidence,
     shortRationale: rationale,
-    subScores,
+    subScores: obj ? extractSubScores(obj) : undefined,
   };
+}
+
+// ─── tolerant field extraction (rubric fields not modelled by JudgeVerdict) ──
+
+/** Coerce a parsed object or a JSON string into a plain object, else undefined. */
+function asObject(raw: unknown): Record<string, unknown> | undefined {
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === 'string') return tryParseObject(raw);
+  return undefined;
+}
+
+/**
+ * Parse a JSON string to a plain object, tolerating leading/trailing prose by
+ * slicing to the outermost braces. Returns undefined on any failure (e.g. the
+ * JSON was truncated) — NEVER throws.
+ */
+function tryParseObject(raw: string): Record<string, unknown> | undefined {
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+  try {
+    const v: unknown = JSON.parse(slice);
+    return typeof v === 'object' && v !== null && !Array.isArray(v)
+      ? (v as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractVerdict(o: Record<string, unknown>): LLMJudgeRawResult['verdict'] | undefined {
+  const v = o.verdict;
+  return v === 'pass' || v === 'fail' || v === 'uncertain' ? v : undefined;
+}
+
+function extractRationale(o: Record<string, unknown>): string | undefined {
+  const r = o.rationale ?? o.shortRationale;
+  return typeof r === 'string' && r.length > 0 ? r.slice(0, 200) : undefined;
+}
+
+function extractSubScores(o: Record<string, unknown>): LLMJudgeRawResult['subScores'] {
+  const s = o.subScores;
+  if (typeof s !== 'object' || s === null) return undefined;
+  const r = s as Record<string, unknown>;
+  return {
+    correctness: toNumber(r.correctness),
+    completeness: toNumber(r.completeness),
+    instructionAdherence: toNumber(r.instructionAdherence),
+    formatAdherence: toNumber(r.formatAdherence),
+    grounding: toNumber(r.grounding),
+    safety: toNumber(r.safety),
+    reasoningQuality: toNumber(r.reasoningQuality),
+  };
+}
+
+// ─── judge metric emission ──────────────────────────────────────────────────
+
+/**
+ * Emit the operability judge metric. Never throws — metrics must not break the
+ * judge path. `verdict='none'` marks a call that produced no verdict (a failure
+ * class). Latency/score are omitted when not yet known (e.g. model_not_found).
+ */
+function recordJudgeMetric(opts: {
+  parseClass: JudgeParseClass;
+  verdict: LLMJudgeRawResult['verdict'] | 'none';
+  latencyMs?: number;
+  score?: number;
+}): void {
+  try {
+    incrementCounter(METRIC_NAMES.LLM_JUDGE_RESULT_TOTAL, {
+      verdict: opts.verdict,
+      parseClass: opts.parseClass,
+    });
+    if (opts.latencyMs !== undefined) {
+      observeHistogram(METRIC_NAMES.LLM_JUDGE_LATENCY_MS, opts.latencyMs, {
+        verdict: opts.verdict,
+      });
+    }
+    if (opts.score !== undefined) {
+      observeHistogram(METRIC_NAMES.LLM_JUDGE_SCORE, opts.score, { verdict: opts.verdict });
+    }
+  } catch {
+    // Observability is best-effort; a metrics backend hiccup must not fail a judge call.
+  }
 }
 
 function toNumber(v: unknown): number | undefined {

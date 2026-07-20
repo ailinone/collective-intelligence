@@ -8,7 +8,8 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
-import { PROMPTS } from '../prompts/sota-system-prompts';
+import { PROMPTS, type PromptVariant } from '../prompts/sota-system-prompts';
+import { hashSlotValues, type PromptSlotValues } from '../prompts/prompt-slots';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import {
   persistExpertPanelRun,
@@ -42,6 +43,28 @@ interface InternalExecution {
   cost: number;
   durationMs: number;
   success: boolean;
+  /** Bandit instrumentation — mirrors ModelExecution so prompt-variant/slot
+   *  metadata propagates from the expert consultation into modelsUsed. */
+  promptVariantId?: string;
+  promptKey?: string;
+  promptSlotHash?: string;
+}
+
+/**
+ * Derive the `(domain, expertRole)` pair that parameterizes the catalog prompt
+ * `PROMPTS.expertSpecialist(domain, expertRole, slots)` from a raw triage domain
+ * slug. Fully dynamic — no fixed domain allow-list — so ANY domain the triage
+ * plan emits (stage names, role names, intent-mapped domains) routes cleanly
+ * through the catalog.
+ *
+ *   'code-quality' → { domain: 'code quality', expertRole: 'Code Quality Specialist' }
+ *   'security'     → { domain: 'security',     expertRole: 'Security Specialist' }
+ */
+export function expertRoleForDomain(domain: string): { domain: string; expertRole: string } {
+  const displayDomain =
+    (domain || 'general').replace(/[-_]+/g, ' ').trim().toLowerCase() || 'general';
+  const titleCased = displayDomain.replace(/\b\w/g, (c) => c.toUpperCase());
+  return { domain: displayDomain, expertRole: `${titleCased} Specialist` };
 }
 
 /**
@@ -233,6 +256,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
         cost: c.execution.cost,
         durationMs: c.execution.duration,
         success: c.execution.success,
+        // Carry bandit instrumentation into modelsUsed for the feedback loop.
+        promptVariantId: c.execution.promptVariantId,
+        promptKey: c.execution.promptKey,
+        promptSlotHash: c.execution.promptSlotHash,
       })),
       {
         modelId: coordinatorModel.id,
@@ -437,10 +464,12 @@ export class ExpertPanelStrategy extends BaseStrategy {
 
     const coordReq: ChatRequest = {
       ...request,
-      messages: [
-        { role: 'system', content: `${PROMPTS.expertCoordinator}\n\nEXPERT RECOMMENDATIONS:\n${expertInputs}${reasoningSection}\n\nSynthesize into a unified response.` },
-        ...request.messages.filter(m => m.role !== 'system'),
-      ],
+      // Preserve the client's own system message (persona/format/language) —
+      // the previous `filter(m => m.role !== 'system')` silently dropped it.
+      messages: this.buildCoordinatorMessages(
+        request,
+        `${PROMPTS.expertCoordinator}\n\nEXPERT RECOMMENDATIONS:\n${expertInputs}${reasoningSection}\n\nSynthesize into a unified response.`,
+      ),
     };
 
     // RESILIENT streaming: bare for-await had NO first-token deadline. Route
@@ -642,6 +671,15 @@ export class ExpertPanelStrategy extends BaseStrategy {
     domains: string[],
     context: OrchestrationContext
   ): Promise<Array<{ domain: string; execution: InternalExecution }>> {
+    // Bandit + slot instrumentation (same pattern as blind-debate/consensus):
+    // pick a variant once (null unless a variant is registered for
+    // `expertSpecialist`) and resolve typed prompt slots from the plan. Each
+    // expert IS a distinct domain/stage, so prefer the matching stage's slots,
+    // falling back to stage[0].
+    const selectedVariant = this.selectPromptVariant('expertSpecialist', context);
+    const slotsEnabled = process.env.ENABLE_PROMPT_SLOTS === 'true';
+    const plan = context.executionPlan ?? context.triage?.executionPlan;
+
     const consultations = await Promise.allSettled(
       expertModels.map(async (model, index) => {
         const domain = domains[index] || 'general';
@@ -653,8 +691,14 @@ export class ExpertPanelStrategy extends BaseStrategy {
           throw new Error(`No adapter found for model: ${model.id}`);
         }
 
-        // Create expert-specific prompt
-        const expertRequest = this.createExpertRequest(request, domain);
+        // Create expert-specific prompt (routed through the SOTA catalog).
+        const expertSlots = slotsEnabled
+          ? (plan?.stages?.[index]?.promptSlots ?? plan?.stages?.[0]?.promptSlots)
+          : undefined;
+        const expertRequest = this.createExpertRequest(request, domain, {
+          slots: expertSlots,
+          variant: selectedVariant,
+        });
         // C3 dev fix (2026-06-09): cap per-expert output (default 1200 tok, env override). Experts
         // produce FOCUSED assessments that the coordinator synthesizes — not full answers. Unbounded
         // specialist generations were the dominant cost keeping expert-panel at ~104s on long-form.
@@ -666,6 +710,12 @@ export class ExpertPanelStrategy extends BaseStrategy {
           ? await this.executeModelWithReasoning(adapter, model, cappedExpertRequest, 'specialist')
           : await this.executeModel(adapter, model, cappedExpertRequest, 'specialist');
         const response = modelExec.response;
+
+        // Bandit reward bridge: tag with the selected variant / slot hash so
+        // prompt-variant learning receives feedback (mirrors blind-debate).
+        const promptVariantId = selectedVariant?.id;
+        const promptKey = selectedVariant ? 'expertSpecialist' : undefined;
+        const promptSlotHash = expertSlots ? hashSlotValues(expertSlots) : undefined;
 
         // Reasoning already extracted by executeModelWithReasoning
         const reasoning = modelExec.reasoning;
@@ -697,6 +747,9 @@ export class ExpertPanelStrategy extends BaseStrategy {
           success: true,
           reasoning,
           reasoningTokens,
+          promptVariantId,
+          promptKey,
+          promptSlotHash,
         };
 
         return { domain, execution };
@@ -739,7 +792,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
               if (this.getAdapterForModel && model) {
                 const adapter = await this.getAdapterForModel(model, context);
                 if (adapter) {
-                  const retryRequest = this.createExpertRequest(request, successful[i].domain);
+                  const retryRequest = this.createExpertRequest(request, successful[i].domain, { variant: selectedVariant });
                   // Enhanced prompt demanding thoroughness
                   const enhancedRequest: ChatRequest = {
                     ...retryRequest,
@@ -768,27 +821,29 @@ export class ExpertPanelStrategy extends BaseStrategy {
   }
 
   /**
-   * Create expert-specific request with domain focus
+   * Create expert-specific request with domain focus.
+   *
+   * Routes through the SOTA catalog (`PROMPTS.expertSpecialist`) instead of a
+   * local inline prompt map. This is what gives each expert the collective-
+   * intelligence framing, the adaptive-depth directive, peer-review awareness,
+   * and the typed prompt-slot augmentation — none of which the old inline
+   * "As a X Expert, analyze..." strings carried. Those strings also silently
+   * *evaded* the A-Final catalog-drift guardrail (which only matches
+   * `content: 'You are...'|'Your ...'`), so routing them back through the
+   * catalog also restores drift detection.
+   *
+   * A bandit-selected variant (when one is registered for `expertSpecialist`)
+   * overrides the canonical text; slots augment it either way.
    */
-  private createExpertRequest(originalRequest: ChatRequest, domain: string): ChatRequest {
-    const expertPrompts: Record<string, string> = {
-      'code-quality':
-        'As a Code Quality Expert, analyze the following request focusing on code cleanliness, maintainability, best practices, and design patterns. Provide specific recommendations.',
-      performance:
-        'As a Performance Expert, analyze the following request focusing on speed, efficiency, resource usage, and optimization opportunities. Provide specific recommendations.',
-      architecture:
-        'As an Architecture Expert, analyze the following request focusing on system design, scalability, modularity, and architectural patterns. Provide specific recommendations.',
-      testing:
-        'As a Testing Expert, analyze the following request focusing on test coverage, quality assurance, testing strategies, and potential edge cases. Provide specific recommendations.',
-      security:
-        'As a Security Expert, analyze the following request focusing on vulnerabilities, authentication, authorization, data protection, and security best practices. Provide specific recommendations.',
-      debugging:
-        'As a Debugging Expert, analyze the following request focusing on identifying root causes, potential bugs, error handling, and debugging strategies. Provide specific recommendations.',
-      general:
-        'As a General Analysis Expert, provide a comprehensive analysis of the following request with specific recommendations.',
-    };
-
-    const baseInstruction = expertPrompts[domain] || expertPrompts['general'];
+  private createExpertRequest(
+    originalRequest: ChatRequest,
+    domain: string,
+    opts: { slots?: PromptSlotValues; variant?: PromptVariant | null } = {},
+  ): ChatRequest {
+    const { domain: displayDomain, expertRole } = expertRoleForDomain(domain);
+    const baseInstruction = opts.variant
+      ? opts.variant.content
+      : PROMPTS.expertSpecialist(displayDomain, expertRole, opts.slots);
     const expertInstruction = this.withReasoningPrompt(baseInstruction, originalRequest);
 
     return {
@@ -801,6 +856,32 @@ export class ExpertPanelStrategy extends BaseStrategy {
         ...originalRequest.messages,
       ],
     };
+  }
+
+  /**
+   * Build the coordinator's message array WITHOUT dropping the client's own
+   * system message. The coordinator's synthesis directive stays primary, but
+   * any user-provided system instruction (persona, output format, language) is
+   * folded in so the final synthesized answer still honors it. A single merged
+   * system message keeps behavior portable across providers that disagree on
+   * multi-system-message semantics (Anthropic first-wins vs Google last-wins).
+   */
+  private buildCoordinatorMessages(
+    originalRequest: ChatRequest,
+    coordinatorSystem: string,
+  ): ChatRequest['messages'] {
+    const clientSystem = originalRequest.messages
+      .filter((m) => m.role === 'system')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .filter((s) => s.trim().length > 0)
+      .join('\n\n');
+    const systemContent = clientSystem
+      ? `${coordinatorSystem}\n\n## User-provided system instructions (honor these)\n${clientSystem}`
+      : coordinatorSystem;
+    return [
+      { role: 'system', content: systemContent },
+      ...originalRequest.messages.filter((m) => m.role !== 'system'),
+    ];
   }
 
   /**
@@ -840,13 +921,15 @@ export class ExpertPanelStrategy extends BaseStrategy {
       }
     }
 
-    // Create synthesis request
+    // Create synthesis request. Preserve the client's own system message
+    // (persona/format/language) — the previous `filter(m => m.role !== 'system')`
+    // silently dropped it, so user-level instructions never reached the
+    // coordinator's final answer.
     const synthesisRequest: ChatRequest = {
       ...originalRequest,
-      messages: [
-        {
-          role: 'system',
-          content: `${PROMPTS.expertCoordinator}
+      messages: this.buildCoordinatorMessages(
+        originalRequest,
+        `${PROMPTS.expertCoordinator}
 
 EXPERT RECOMMENDATIONS:
 ${expertInputs}${reasoningSection}
@@ -858,9 +941,7 @@ Synthesize these expert inputs into a unified, practical response that:
 4. Provides a clear, implementable plan
 
 Be concise but comprehensive.`,
-        },
-        ...originalRequest.messages.filter((m) => m.role !== 'system'),
-      ],
+      ),
     };
 
     const coordExec = await this.executeModel(adapter, coordinatorModel, synthesisRequest, 'coordinator');

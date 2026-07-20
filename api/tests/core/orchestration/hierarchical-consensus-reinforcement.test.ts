@@ -92,17 +92,21 @@ describe('Hierarchical, Consensus & Reinforcement Strategies', () => {
       expect(metadata.id).toBe('hierarchical');
     });
 
-    it('should require at least 2 models', async () => {
-      if (realModels.length < 2) {
-        // Skip if we don't have enough models
-        return;
-      }
-      const oneModel = realModels.slice(0, 1);
-      const contextWithOneModel: OrchestrationContext = { ...testContext, models: oneModel };
+    it('exposes an honest single-model stub contract (minModels:1, not collective)', () => {
+      // Hierarchical is a single-model passthrough stub — worker delegation is
+      // not implemented. minModels:1 is what keeps the router from classifying
+      // it as a real collective (isCollectiveStrategy = minModels > 1).
+      const metadata = strategy.getMetadata();
+      expect(metadata.minModels).toBe(1);
+      expect(metadata.maxModels).toBe(1);
+    });
+
+    it('should require at least 1 model', async () => {
+      const contextWithNoModels: OrchestrationContext = { ...testContext, models: [] };
       await expect(
-        strategy.execute(testRequest, contextWithOneModel)
-      ).rejects.toThrow('at least 2 models');
-    }, 60000); // Longer timeout for real API calls
+        strategy.execute(testRequest, contextWithNoModels)
+      ).rejects.toThrow('at least 1 model');
+    });
 
     it('should execute successfully with real models', async () => {
       if (realModels.length < 2) {
@@ -114,14 +118,20 @@ describe('Hierarchical, Consensus & Reinforcement Strategies', () => {
       expect(result.finalResponse).toBeDefined();
     }, 60000); // Longer timeout for real API calls
 
-    it('should include manager and workers in metadata', async () => {
-      if (realModels.length < 2) {
-        // Skip if we don't have enough models
+    it('reports honest stub metadata (manager only, no fake workers/plan)', async () => {
+      if (realModels.length < 1) {
+        // Skip if we don't have any models
         return;
       }
       const result = await strategy.execute(testRequest, testContext);
       expect(result.metadata?.manager).toBeDefined();
-      expect(result.metadata?.workers).toBeDefined();
+      // The old contract advertised a `workers` list of models that never ran
+      // and planCreated:true for a plan that never executed. Both are gone.
+      expect(result.metadata?.workers).toBeUndefined();
+      expect(result.metadata?.planCreated).toBe(false);
+      expect(result.metadata?.stub).toBe(true);
+      // A single-model stub returns exactly one execution.
+      expect(result.modelsUsed).toHaveLength(1);
     }, 60000); // Longer timeout for real API calls
   });
 

@@ -122,42 +122,48 @@ describe('ProviderLLMJudgeClient', () => {
     expect(r.verdict).toBe('fail');
   });
 
-  it('throws on score out of range', async () => {
+  it('salvages an out-of-[0,1] score via the shared 0-100 rescale (no throw)', async () => {
+    // Was: strict parse threw score_out_of_range and dropped the verdict.
+    // Now: routed through normalizeJudgeOutput, which treats a >1 score as a
+    // 0-100 value and rescales it. This is the same salvage the consensus path uses.
     const adapter = {
       getName: () => 'mockprov',
       chatCompletion: async () =>
-        fakeChatResponse('{"score":1.5,"verdict":"pass"}'),
+        fakeChatResponse('{"score":85,"verdict":"pass"}'),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
-    await expect(
-      client.judge({
-        judgeModelId: 'judge-model',
-        rubricVersion: 'v1',
-        task: {},
-        output: 'x',
-        maxCostUsd: 0.01,
-        timeoutMs: 1000,
-      }),
-    ).rejects.toThrow(/score_out_of_range/);
+    const r = await client.judge({
+      judgeModelId: 'judge-model',
+      rubricVersion: 'v1',
+      task: {},
+      output: 'x',
+      maxCostUsd: 0.01,
+      timeoutMs: 1000,
+    });
+    expect(r.score).toBeCloseTo(0.85);
+    expect(r.verdict).toBe('pass');
   });
 
-  it('throws on invalid verdict', async () => {
+  it('defaults verdict to uncertain when the judge emits a non-enum verdict (no throw)', async () => {
+    // Was: strict parse threw verdict_invalid. Now: the salvaged score survives
+    // and the un-parseable verdict falls back to the honest `uncertain`
+    // (EvaluationVerdict semantics: ran, but no objective basis to commit).
     const adapter = {
       getName: () => 'mockprov',
       chatCompletion: async () =>
         fakeChatResponse('{"score":0.5,"verdict":"maybe"}'),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
-    await expect(
-      client.judge({
-        judgeModelId: 'judge-model',
-        rubricVersion: 'v1',
-        task: {},
-        output: 'x',
-        maxCostUsd: 0.01,
-        timeoutMs: 1000,
-      }),
-    ).rejects.toThrow(/verdict_invalid/);
+    const r = await client.judge({
+      judgeModelId: 'judge-model',
+      rubricVersion: 'v1',
+      task: {},
+      output: 'x',
+      maxCostUsd: 0.01,
+      timeoutMs: 1000,
+    });
+    expect(r.score).toBe(0.5);
+    expect(r.verdict).toBe('uncertain');
   });
 
   it('throws when judge model is not found', async () => {
@@ -229,9 +235,18 @@ describe('pure helpers', () => {
     expect(extractJsonContent(fakeChatResponse(''))).toBeNull();
   });
 
-  it('coerceRawResult enforces score range', () => {
-    expect(() => coerceRawResult({ score: 1.5, verdict: 'pass' })).toThrow(/out_of_range/);
-    expect(() => coerceRawResult({ score: -0.1, verdict: 'pass' })).toThrow(/out_of_range/);
+  it('coerceRawResult tolerantly clamps/rescales scores instead of throwing', () => {
+    // >1 is treated as a 0-100 value by the shared normalizer (1.5 → 0.015).
+    expect(coerceRawResult({ score: 1.5, verdict: 'pass' }).score).toBeCloseTo(0.015);
+    // Negatives clamp to 0 rather than throwing.
+    expect(coerceRawResult({ score: -0.1, verdict: 'pass' }).score).toBe(0);
+    // In-range scores pass through unchanged.
     expect(coerceRawResult({ score: 0.5, verdict: 'pass' }).score).toBe(0.5);
+  });
+
+  it('coerceRawResult throws only when NO score can be salvaged', () => {
+    expect(() => coerceRawResult({ verdict: 'pass', rationale: 'no score here' })).toThrow(
+      /unparseable/,
+    );
   });
 });

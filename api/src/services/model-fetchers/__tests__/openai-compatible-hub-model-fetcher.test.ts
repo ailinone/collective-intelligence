@@ -212,4 +212,75 @@ describe('openai-compatible-hub-model-fetcher', () => {
       expect(pricing?.outputCostPer1M).toBe(0);
     });
   });
+
+  describe('zai (GLM) provider metadata gap-fill', () => {
+    async function fetchZaiModel(id: string) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ id }], // bigmodel.cn's real /v1/models response: no context/pricing fields at all
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'zai',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      });
+      const models = await fetcher.getModels();
+      expect(models).toHaveLength(1);
+      return models[0];
+    }
+
+    it('fills in real context window and pricing when the provider omits both', async () => {
+      const model = await fetchZaiModel('glm-5.2');
+      expect(model.contextWindow).toBe(1_048_576);
+      expect(model.pricing?.inputCostPer1M).toBeCloseTo(0.965, 5);
+      expect(model.pricing?.outputCostPer1M).toBeCloseTo(3.032, 5);
+    });
+
+    it('does not gap-fill a model id not in the override table', async () => {
+      const model = await fetchZaiModel('glm-6-hypothetical');
+      expect(model.contextWindow).toBe(8192);
+      expect(model.pricing?.inputCostPer1M).toBe(0);
+      expect(model.pricing?.outputCostPer1M).toBe(0);
+    });
+
+    it('never overrides a real, provider-supplied context/price', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 'glm-5.2',
+              context_window: 8192, // genuinely tiny variant the provider actually reports
+              pricing: { prompt: 2, completion: 6 }, // already-normalized $/1M
+            },
+          ],
+        })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'zai',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      });
+      const models = await fetcher.getModels();
+
+      expect(models[0].contextWindow).toBe(8192);
+      expect(models[0].pricing?.inputCostPer1M).toBe(2);
+      expect(models[0].pricing?.outputCostPer1M).toBe(6);
+    });
+
+    it('does not gap-fill the same model id under a different provider', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'glm-5.2' }] })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'some-other-hub',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.example.com',
+      });
+      const models = await fetcher.getModels();
+
+      expect(models[0].contextWindow).toBe(8192);
+      expect(models[0].pricing?.inputCostPer1M).toBe(0);
+    });
+  });
 });
