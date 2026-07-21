@@ -7,3 +7,7 @@ Dockerfile text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 Makefile text eol=lf
+
+# Vendored benchmark datasets — byte-stable LF; parsed line-by-line by the
+# dataset loader and their embedded harness source runs in the sandbox.
+*.jsonl text eol=lf

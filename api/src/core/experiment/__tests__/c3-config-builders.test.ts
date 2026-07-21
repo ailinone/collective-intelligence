@@ -84,6 +84,9 @@ describe('C3_CONFIG_BUILDERS — dispatcher invariant', () => {
       'c3-canvas-physics',
       // Capability #4 (tool-calling), objective grade (2026-07-13)
       'c3-tool-calling',
+      // Public-benchmark axes (2026-07-21): standard datasets, judge-free
+      'ailin-humaneval',
+      'ailin-gsm8k',
       // Frontier supplement (2026-07-05, post-7bb900e2 single-arm audit)
       'c3-frontier-comparison',
       // H-A top-up: collectives × verifiable subset (post-9590ff41)

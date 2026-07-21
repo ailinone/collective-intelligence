@@ -216,6 +216,22 @@ export interface ExperimentTask {
     readonly language: 'javascript' | 'typescript' | 'python' | 'java' | 'csharp' | 'go';
     readonly functionName: string;
     readonly tests: ReadonlyArray<{ readonly args: readonly unknown[]; readonly expected: unknown }>;
+    /**
+     * HumanEval-style native harness. When set, grading does NOT use the
+     * structured `{args, expected}` vectors above — instead the runner
+     * concatenates the model's code, this `checkSource` (which defines a
+     * `check(candidate)` function), and a zero-arg wrapper `def
+     * __ailin_check(): check(entryPoint); return True`, then runs it through
+     * the SAME sandbox path with a single `{args:[], expected:true}` vector.
+     * The wrapper returns True iff every assert in `check` passes, so the
+     * score is a faithful binary pass@1 — HumanEval's own harness runs
+     * unmodified, with no float/tuple-comparison lossiness. `functionName`
+     * must be `__ailin_check` and `tests` `[{args:[],expected:true}]` when
+     * this is set (the loader sets them). See experiment-dataset-loader.ts.
+     */
+    readonly checkSource?: string;
+    /** Entry-point function name the model must define (HumanEval harness input). */
+    readonly entryPoint?: string;
   };
 
   /**
@@ -378,6 +394,16 @@ export interface ExperimentConfig {
   description: string;
   /** Task indices from the suite to include (empty = all). */
   taskIndices: number[];
+  /**
+   * Explicit task universe. When set, tasks are resolved against THIS array
+   * instead of the built-in `EXPERIMENT_SUITE` (still filtered by
+   * `taskIndices` when non-empty). Lets a config carry externally-loaded
+   * tasks — e.g. HumanEval / GSM8K from `experiment-dataset-loader.ts` — so
+   * a public-benchmark run needs no change to the static suite. Travels
+   * inside the persisted config JSON, so resume works. Keep it bounded
+   * (a few hundred tasks) to avoid bloating the stored config.
+   */
+  tasks?: ExperimentTask[];
   /** Mode configurations to run for each task. */
   modes: ModeConfig[];
   /** Number of times to repeat each (task, mode) pair. */

@@ -29,6 +29,7 @@
 import type { ExperimentConfig, ModeConfig, AblationConfig, CollectiveStrategy, CollectiveConfig, SingleModelConfig, SingleBudgetConfig, ForcedPoolCollectiveConfig, AdversarialScenarioName } from './experiment-types';
 import { BENCHMARK_COLLECTIVE_STRATEGIES } from './experiment-types';
 import { EXPERIMENT_SUITE, getVerifiableTaskIndices, getCanvasPhysicsTaskIndices, getHardVerifiableTaskIndices, getCodeVerifiedTaskIndices, getRunnableTextTaskIndices, getToolCallingTaskIndices } from './experiment-suite';
+import { loadHumanEvalTasks, loadGsm8kTasks } from './experiment-dataset-loader';
 import { scoreModelFreshness } from './model-freshness';
 import { CANONICAL_MODEL_OWNERS, classifyProviderTier, extractModelOwner } from './c3-resolvers';
 import { generateAblationMatrix } from '@/core/validation/c3/ablation-config';
@@ -788,6 +789,123 @@ export async function buildC3CodeVerified(options?: {
     taskIndices,
     modes,
     repetitions: options?.repetitions ?? 3,
+    maxBudgetUsd: options?.maxBudgetUsd ?? 20,
+    delayBetweenCallsMs: 2000,
+    maxConcurrency: 3,
+    warmupExecutions: 4,
+    freezeLearningDuringEval: true,
+  };
+}
+
+/**
+ * PUBLIC-BENCHMARK axis: HumanEval (code pass@1) — Ailin¹ Collective
+ * Intelligence vs flagship-solo on the standard public dataset.
+ *
+ * Loads the vendored 164 HumanEval problems (see experiment-dataset-loader.ts)
+ * as an explicit `tasks` universe, so the run maps directly onto a benchmark
+ * the market reports. Each problem is graded by SANDBOX EXECUTION of the
+ * dataset's native check() harness — binary pass@1, no LLM judge (so no judge
+ * pin required). Arms: the benchmark singles (frontier flagships + provider
+ * breadth) as the flagship-solo baseline, plus a few collective strategies so
+ * "does orchestration beat the best single on real code?" is measured on a
+ * defensible, market-comparable axis.
+ */
+export async function buildAilinHumanEval(options?: {
+  repetitions?: number;
+  maxBudgetUsd?: number;
+  collectiveStrategies?: CollectiveStrategy[];
+  limit?: number;
+}): Promise<ExperimentConfig> {
+  const topModels = await resolveBenchmarkSingles();
+  const tasks = loadHumanEvalTasks({ limit: options?.limit });
+  const strategies: CollectiveStrategy[] =
+    options?.collectiveStrategies ?? ['consensus', 'critique-repair', 'cost-cascade'];
+
+  const modes: ModeConfig[] = [
+    ...topModels.map((m): SingleModelConfig => ({
+      mode: 'single-model',
+      modelId: m.id,
+      displayName: `${m.displayName} (${m.provider})`,
+      requiredCapabilities: ['chat'],
+      qualityTarget: 0.95,
+    })),
+    ...strategies.map((strategy): CollectiveConfig => ({
+      mode: 'collective',
+      strategy,
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    })),
+  ];
+
+  return {
+    name: `Ailin¹ HumanEval — ${modes.length}-arm × ${tasks.length} problems (code pass@1)`,
+    description:
+      `Public-benchmark axis: HumanEval (${tasks.length} problems) graded by sandbox execution ` +
+      `of each problem's native check() harness — binary pass@1, judge-free. ` +
+      `${topModels.length} flagship-solo singles vs Ailin¹ ${strategies.join(', ')}. ` +
+      `Market-comparable code-generation axis for the Ailin¹ Collective Intelligence thesis.`,
+    taskIndices: tasks.map((t) => t.index),
+    tasks,
+    modes,
+    repetitions: options?.repetitions ?? 1,
+    maxBudgetUsd: options?.maxBudgetUsd ?? 30,
+    delayBetweenCallsMs: 2000,
+    maxConcurrency: 3,
+    warmupExecutions: 4,
+    freezeLearningDuringEval: true,
+  };
+}
+
+/**
+ * PUBLIC-BENCHMARK axis: GSM8K (grade-school math accuracy) — Ailin¹
+ * Collective Intelligence vs flagship-solo on the standard public dataset.
+ *
+ * Loads a bounded, deterministic prefix of the GSM8K test split (see
+ * experiment-dataset-loader.ts) as an explicit `tasks` universe. Each problem
+ * is graded by `numeric_equals` on the model's `FINAL: <n>` line — objective,
+ * no sandbox, no LLM judge (so no judge pin required). Arms: benchmark singles
+ * (flagship-solo baseline) plus a few collective strategies, to measure
+ * whether orchestration lifts grade-school-math accuracy on a market-comparable
+ * axis.
+ */
+export async function buildAilinGsm8k(options?: {
+  repetitions?: number;
+  maxBudgetUsd?: number;
+  collectiveStrategies?: CollectiveStrategy[];
+  limit?: number;
+}): Promise<ExperimentConfig> {
+  const topModels = await resolveBenchmarkSingles();
+  const tasks = loadGsm8kTasks({ limit: options?.limit ?? 100 });
+  const strategies: CollectiveStrategy[] =
+    options?.collectiveStrategies ?? ['consensus', 'adaptive', 'cost-cascade'];
+
+  const modes: ModeConfig[] = [
+    ...topModels.map((m): SingleModelConfig => ({
+      mode: 'single-model',
+      modelId: m.id,
+      displayName: `${m.displayName} (${m.provider})`,
+      requiredCapabilities: ['chat'],
+      qualityTarget: 0.9,
+    })),
+    ...strategies.map((strategy): CollectiveConfig => ({
+      mode: 'collective',
+      strategy,
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    })),
+  ];
+
+  return {
+    name: `Ailin¹ GSM8K — ${modes.length}-arm × ${tasks.length} problems (math accuracy)`,
+    description:
+      `Public-benchmark axis: GSM8K (${tasks.length} problems) graded by numeric_equals on the ` +
+      `FINAL line — objective, judge-free, no sandbox. ${topModels.length} flagship-solo singles ` +
+      `vs Ailin¹ ${strategies.join(', ')}. Market-comparable grade-school-math axis for the ` +
+      `Ailin¹ Collective Intelligence thesis.`,
+    taskIndices: tasks.map((t) => t.index),
+    tasks,
+    modes,
+    repetitions: options?.repetitions ?? 1,
     maxBudgetUsd: options?.maxBudgetUsd ?? 20,
     delayBetweenCallsMs: 2000,
     maxConcurrency: 3,
@@ -1795,6 +1913,15 @@ export const C3_CONFIG_BUILDERS: Record<
   // no LLM judge, so no judge pin required. See buildC3ToolCalling.
   'c3-tool-calling': (opts) =>
     buildC3ToolCalling(opts as Parameters<typeof buildC3ToolCalling>[0]),
+  // Public-benchmark axes (2026-07-21): Ailin¹ Collective Intelligence vs
+  // flagship-solo on the STANDARD public datasets, so results map onto what
+  // the market reports. Both judge-free (sandbox pass@1 / numeric_equals), so
+  // no judge pin required. Tasks loaded from vendored fixtures — see
+  // experiment-dataset-loader.ts.
+  'ailin-humaneval': (opts) =>
+    buildAilinHumanEval(opts as Parameters<typeof buildAilinHumanEval>[0]),
+  'ailin-gsm8k': (opts) =>
+    buildAilinGsm8k(opts as Parameters<typeof buildAilinGsm8k>[0]),
   // Canvas-physics code benchmark (2026-07-11): collective strategies vs top-tier
   // singles on self-contained HTML5 canvas physics scenes (tasks 136-145), with a
   // structural full-text verifier arming best-of-N. PINNED judge required.
