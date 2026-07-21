@@ -210,7 +210,7 @@ export class AnthropicAdapter extends ProviderAdapter {
         };
         // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
         if (request.tools && request.tools.length > 0) {
-          (params as Anthropic.MessageCreateParams & { tools?: Array<{ name: string; description?: string; input_schema: Record<string, unknown> }> }).tools = this.convertTools(request.tools);
+          params.tools = this.convertTools(request.tools);
         }
         return await this.getRequestClient().messages.create(params);
       }, 'chat completion', this.estimateTokenCost(request));
@@ -273,7 +273,7 @@ export class AnthropicAdapter extends ProviderAdapter {
         };
         // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
         if (request.tools && request.tools.length > 0) {
-          (params as Anthropic.MessageCreateParams & { tools?: Array<{ name: string; description?: string; input_schema: Record<string, unknown> }> }).tools = this.convertTools(request.tools);
+          params.tools = this.convertTools(request.tools);
         }
         return await this.getRequestClient().messages.create(params);
       }, 'streaming chat completion', this.estimateTokenCost(request));
@@ -543,7 +543,7 @@ export class AnthropicAdapter extends ProviderAdapter {
   /**
    * Convert tools to Anthropic format
    */
-  private convertTools(tools: Tool[]): Array<{ name: string; description?: string; input_schema: Record<string, unknown> }> {
+  private convertTools(tools: Tool[]): Anthropic.ToolUnion[] {
     return tools.map((tool) => {
       if (tool.type !== 'function' || !tool.function) {
         throw new Error('Invalid tool format: expected function tool');
@@ -551,7 +551,7 @@ export class AnthropicAdapter extends ProviderAdapter {
       return {
         name: tool.function.name,
         description: tool.function.description,
-        input_schema: tool.function.parameters,
+        input_schema: tool.function.parameters as Anthropic.Tool.InputSchema,
       };
     });
   }

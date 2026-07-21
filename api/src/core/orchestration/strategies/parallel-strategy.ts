@@ -16,6 +16,7 @@
 import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import { resolvePreferredExecutor } from './preferred-model-helper';
+import { PoolBuilder } from '@/core/pool/pool-builder';
 import type {
   ChatRequest,
   ChatResponse,
@@ -434,8 +435,19 @@ export class ParallelStrategy extends BaseStrategy {
       'Using fallback scoring for parallel strategy'
     );
 
-    // Score all models
-    const scoredModels = models.map((model) => ({
+    // Score all models. context.models is intentionally unfiltered by
+    // modality (see the "no pre-filtering" note in orchestration-engine.ts)
+    // — capability filtering is expected to happen downstream, which the
+    // primary DynamicModelSelector path above does via its own
+    // chat-capability gate. This fallback previously scored `models`
+    // directly with no capability check at all, letting a video/image/
+    // audio-only model win a slot on a text task. Apply the same modality
+    // filter the primary path relies on before scoring.
+    const chatCapableModels = new PoolBuilder(models).filterByModality('chat').build().models;
+    if (chatCapableModels.length < 2) {
+      return [];
+    }
+    const scoredModels = chatCapableModels.map((model) => ({
       model,
       score: this.scoreModelForParallel(model, request, context),
     }));
