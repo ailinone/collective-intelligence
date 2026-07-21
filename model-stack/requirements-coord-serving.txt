@@ -19,6 +19,6 @@ fastapi==0.139.2
 uvicorn[standard]==0.51.0
 httpx==0.28.1
 httpcore==1.0.9
-pydantic==2.10.4
+pydantic==2.13.4
 pyyaml==6.0.3
 prometheus-client==0.21.1
