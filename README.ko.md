@@ -9,14 +9,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 Source: https://github.com/ailinone/collective-intelligence
 -->
 
-<!-- BANNER: drop the cover image at .github/assets/banner.png (1280×640
-     recommended, dark-mode friendly) and remove this comment block's
-     wrapper to activate: -->
-<!--
 <p align="center">
   <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence — thousands of AI models coordinate inside one collective model" width="100%">
 </p>
--->
 
 # Ailin¹ Collective Intelligence
 
