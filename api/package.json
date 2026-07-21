@@ -203,7 +203,7 @@
     "tsx": "^4.23.1",
     "typescript": "^5.3.3",
     "vitest": "3.2.6",
-    "vitest-evals": "^0.5.0",
+    "vitest-evals": "^0.15.0",
     "ws": "^8.16.0",
     "yaml": "^2.5.0"
   },
