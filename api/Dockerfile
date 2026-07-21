@@ -62,6 +62,9 @@ RUN set -e && \
     npx tsc-alias || (echo "tsc-alias failed!" && exit 1) && \
     echo "=== Copying app.cjs ===" && \
     cp src/app.cjs dist/ && \
+    echo "=== Copying non-TS assets (vendored benchmark datasets) ===" && \
+    mkdir -p dist/core/experiment/fixtures && \
+    cp -r src/core/experiment/fixtures/datasets dist/core/experiment/fixtures/ && \
     echo "=== Setting up Prisma generated files ===" && \
     mkdir -p dist/generated/prisma && \
     (find src/generated/prisma -name "*.js" -exec cp {} dist/generated/prisma/ \; 2>/dev/null || true) && \

@@ -38,7 +38,7 @@ import type { ChatResponse, ChatRequest, OrchestrationContext } from '@/types';
 import { STRATEGY_INPUT_VALUES, canonicalizeStrategyInput } from '@/core/orchestration/strategy-contract';
 import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
 import { extractFinalAnswer } from '@/core/orchestration/verification/best-of-n-verifier';
-import { EXPERIMENT_SUITE, getFilteredTasks } from './experiment-suite';
+import { EXPERIMENT_SUITE } from './experiment-suite';
 import { registerExperimentBenchmarkTools } from './experiment-tool-catalog';
 import {
   gradeToolCallingResponse,
@@ -260,9 +260,12 @@ let activeExperiment: {
  * Does not start execution — call `startExperiment()` for that.
  */
 export async function createExperiment(config: ExperimentConfig): Promise<string> {
+  // Task universe: an explicit config.tasks (e.g. loaded HumanEval/GSM8K)
+  // overrides the built-in suite; taskIndices still narrows it when set.
+  const universe = config.tasks ?? EXPERIMENT_SUITE;
   const tasks = config.taskIndices.length > 0
-    ? getFilteredTasks({ indices: config.taskIndices })
-    : EXPERIMENT_SUITE;
+    ? universe.filter((t) => config.taskIndices.includes(t.index))
+    : universe;
 
   const totalExecutions = tasks.length * config.modes.length * config.repetitions;
 
@@ -705,9 +708,12 @@ async function runExperimentLoop(
   // every worker in every queue skips its remaining items (with full
   // recordSkip accounting, same as today) on its very next loop tick.
   let budgetExhausted = false;
+  // Task universe: an explicit config.tasks (e.g. loaded HumanEval/GSM8K)
+  // overrides the built-in suite; taskIndices still narrows it when set.
+  const taskUniverse = config.tasks ?? EXPERIMENT_SUITE;
   const rawTasks = config.taskIndices.length > 0
-    ? getFilteredTasks({ indices: config.taskIndices })
-    : EXPERIMENT_SUITE;
+    ? taskUniverse.filter((t) => config.taskIndices.includes(t.index))
+    : taskUniverse;
 
   // Reorder tasks: VERIFIABLE tasks first (they carry answerCheck — the H-A
   // objective adjudication; in c3-v4 the complexity-first order buried them at
@@ -1705,8 +1711,18 @@ async function scoreResponse(
     try {
       const { CodeExecutionService } = await import('@/services/code-execution-service');
       const svc = new CodeExecutionService();
+      // HumanEval-style native harness: concatenate the model's code, the
+      // dataset's own check(candidate) harness, and a zero-arg wrapper that
+      // returns True iff every assert passes. Reuses the EXACT structured
+      // sandbox path with a single {args:[],expected:true} vector — score is
+      // 1.0 (all asserts pass) or 0.0, a faithful binary pass@1 that runs
+      // HumanEval's harness unmodified (no float/tuple-comparison lossiness).
+      const isNativeHarness = typeof task.codeTest.checkSource === 'string' && !!task.codeTest.entryPoint;
+      const code = isNativeHarness
+        ? `${extractCode(content)}\n\n${task.codeTest.checkSource}\n\ndef __ailin_check():\n    check(${task.codeTest.entryPoint})\n    return True\n`
+        : extractCode(content);
       const result = await svc.executeCode({
-        code: extractCode(content),
+        code,
         language: task.codeTest.language,
         functionName: task.codeTest.functionName,
         tests: task.codeTest.tests as Array<{ args: unknown[]; expected: unknown }>,
@@ -2354,14 +2370,14 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
     // The result is persisted as `structuredMetadata.policyValidation` so
     // downstream reporting can filter contaminated executions.
     let policyValidation: Record<string, unknown> | undefined;
-    // Set when assertExperimentIntegrity finds ANY violation. Per the
-    // guard's own contract (experiment-integrity-guard.ts docblock: "Caller
-    // is responsible for ... Deciding whether to mark the execution
-    // success=false based on result.valid"), this was previously never
-    // implemented — a policy-invalid trajectory (e.g. a fallback chain that
-    // blew past maxFallbackDepth) was still persisted as success=true and
-    // silently counted into aggregate quality stats.
-    let policyViolationDetected = false;
+    // Gating is DISABLED (kept false): the ExecutionRecord fed to the
+    // integrity guard here is synthetic (providerId:'unknown', index-based
+    // roles), which makes the guard's per-attempt checks fire false
+    // positives on healthy executions — see the detailed note at the
+    // `if (!integrity.valid)` block below. policyValidation is still
+    // computed and stored in structuredMetadata for offline analysis, but it
+    // must not gate `success` until the guard receives real attempt records.
+    const policyViolationDetected = false;
     if (mode) {
       try {
         const policyMod = await import('./policy');
@@ -2405,7 +2421,25 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
         };
 
         if (!integrity.valid) {
-          policyViolationDetected = true;
+          // Observability only — do NOT gate `success` on this result. The
+          // ExecutionRecord fed to the guard here is SYNTHETIC (built from
+          // result.modelsUsed a few lines above): every attempt carries
+          // providerId:'unknown' and roleInStrategy inferred purely from
+          // array index (i===0 ? primary : fallback). That makes the guard's
+          // per-attempt checks fire FALSE POSITIVES on healthy executions:
+          //   • providerId:'unknown' → computeSubstitutionLevel returns
+          //     'degraded_answer_mode' → substitution_level_exceeded +
+          //     degraded_answer_mode_forbidden on EVERY single-model row
+          //     (observed: a HumanEval run voided all 6396 arms this way);
+          //   • index-based roles label a legit N-expert collective's
+          //     experts as N-1 "fallbacks" → false fallback_depth_exceeded,
+          //     indistinguishable from a real fallback chain.
+          // The video-model-leak this gate was meant to backstop is fixed at
+          // the ROOT by the modality filter (PR #172), so gating on this
+          // low-fidelity signal now only destroys valid data. Re-enable
+          // gating only once the guard receives REAL attempt records (real
+          // providerId + role) from the orchestration engine. policyValidation
+          // is still stored in structuredMetadata below for offline analysis.
           log.warn(
             {
               experimentId: result.experimentId,
@@ -2413,7 +2447,7 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
               violationCount: integrity.violations.length,
               violationKinds: [...new Set(integrity.violations.map((v) => v.kind))],
             },
-            'Policy integrity violations detected during execution',
+            'Policy integrity violations detected (observability only — not gating success; synthetic attempt records)',
           );
         }
       } catch (err) {

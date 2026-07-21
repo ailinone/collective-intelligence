@@ -34,6 +34,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { promises as fs } from 'fs';
+import path from 'path';
 import { applyPolicyGate, buildCanarySkipKey, getModeKey } from '../experiment-runner';
 import type { ModeConfig } from '../experiment-types';
 
@@ -61,6 +63,23 @@ describe('applyPolicyGate', () => {
     const result = applyPolicyGate(false, 'api-error', true);
     expect(result.success).toBe(false);
     expect(result.failureMode).toBe('policy-violation');
+  });
+});
+
+describe('policy gating is DISABLED in persistExecution (synthetic-attempt guardrail)', () => {
+  // The ExecutionRecord persistExecution feeds the integrity guard is
+  // synthetic: providerId:'unknown' + index-based roles. That made the
+  // guard fire false positives (degraded_answer_mode on every single-model
+  // row; index-labelled experts as "fallbacks") and, once applyPolicyGate
+  // was wired in, VOID every execution (an entire 6396-arm HumanEval run
+  // was lost this way). The root leak is fixed by the modality filter
+  // (PR #172), so gating on this low-fidelity signal must stay OFF until the
+  // guard gets real attempt records. This pins that: re-enabling gating
+  // (reintroducing `policyViolationDetected = true`) fails here on purpose.
+  it('persistExecution never sets policyViolationDetected = true', async () => {
+    const src = await fs.readFile(path.resolve(__dirname, '../experiment-runner.ts'), 'utf8');
+    expect(src).toContain('const policyViolationDetected = false;');
+    expect(src).not.toMatch(/policyViolationDetected\s*=\s*true/);
   });
 });
 
