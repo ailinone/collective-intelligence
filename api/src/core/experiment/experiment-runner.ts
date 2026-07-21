@@ -500,6 +500,7 @@ export async function startExperiment(experimentId: string): Promise<StartExperi
       // Never remove ALL arms — if everything failed the gates above decide.
       if (canaryResult.skipPlan.length > 0 && Array.isArray(config.modes)) {
         const skipByArmId = new Map(canaryResult.skipPlan.map((s) => [s.armId, s]));
+        const armIdToMode = new Map(config.modes.map((m) => [resolveExperimentArm(m).armId, m] as const));
         const kept = config.modes.filter(
           (m) => !skipByArmId.has(resolveExperimentArm(m).armId),
         );
@@ -509,7 +510,7 @@ export async function startExperiment(experimentId: string): Promise<StartExperi
             : EXPERIMENT_SUITE.length;
           const perArmExecutions = tasksCount * config.repetitions;
           for (const [armId, s] of skipByArmId) {
-            recordSkip(progress, `canary_skip:${s.errorClass}:${armId}`, perArmExecutions);
+            recordSkip(progress, buildCanarySkipKey(s.errorClass, armId, armIdToMode), perArmExecutions);
           }
           log.warn(
             {
@@ -1801,6 +1802,33 @@ async function extractJudgeCallCost(json: {
   }
 }
 
+/**
+ * Canonicalize a model id for pinned-judge identity comparison: lowercase,
+ * strip a trailing variant tag (`:free`/`:paid`/`:beta`…), and expose the
+ * segment after the last `/`. The hub echoes the resolved offering id, which
+ * may carry a `:free` suffix or a provider prefix the pin didn't
+ * (e.g. pin `qwen/qwen3.6-plus:free` vs echoed `qwen3.6-plus`), so a raw
+ * `===` would false-negative on legitimate matches.
+ */
+function canonicalJudgeId(id: string): { full: string; tail: string } {
+  const base = id.toLowerCase().trim().replace(/:(free|paid|beta|preview|latest)$/i, '');
+  const slash = base.lastIndexOf('/');
+  return { full: base, tail: slash >= 0 ? base.slice(slash + 1) : base };
+}
+
+/**
+ * True when the model that actually answered the judge call is the pinned
+ * judge instrument. Compares canonically (see canonicalJudgeId) on both the
+ * full id and the post-slash tail, so prefix/suffix drift from the hub
+ * doesn't read as a substitution. Exported for unit testing.
+ */
+export function judgeModelMatchesPin(respondedModelId: string | undefined, pinnedModelId: string): boolean {
+  if (!respondedModelId) return false; // unverifiable → treat as NOT the pin (fail-closed)
+  const r = canonicalJudgeId(respondedModelId);
+  const p = canonicalJudgeId(pinnedModelId);
+  return r.full === p.full || r.tail === p.tail;
+}
+
 /** Exported for unit testing (judge-cost accounting). */
 export async function judgeResponse(content: string, rubric: string): Promise<JudgeOutcome> {
   const MAX_JUDGE_RETRIES = 3;
@@ -1912,6 +1940,28 @@ Return the canonical JudgeVerdict JSON.`,
       // Bill the attempt as soon as the response parses — an empty or
       // unparseable verdict below was still a real, charged inference.
       judgeCostUsd += await extractJudgeCallCost(json);
+
+      // Fail-closed pinned-judge guard. The judge dispatches through the
+      // /v1/chat/completions router with the pinned id as a SOFT `model`
+      // hint: when the pinned model isn't in the operational pool (unfunded/
+      // rate-limited), SingleModelStrategy silently falls through to
+      // DynamicModelSelector and a DIFFERENT model answers — historically
+      // Llama-3.3-70B graded ~74% of a run whose pin was qwen/qwen3.6-plus.
+      // A substituted judge is a different scoring instrument, so its score
+      // is not comparable across arms. Verify the responder IS the pin; if a
+      // concrete-but-different model answered (or the responder is
+      // unverifiable), void this attempt and break to the judge-failure path
+      // below — the caller then nulls qualityScore (keeping the number only
+      // in heuristicScoreRaw). Retrying is pointless (the router will
+      // substitute again), so break rather than continue. Only enforced in
+      // pinned mode; dynamic mode expects the cascade to pick the model.
+      if (JUDGE_MODE === 'pinned' && !judgeModelMatchesPin(json.model, JUDGE_MODEL_ID)) {
+        log.warn(
+          { attempt, respondedModel: json.model ?? '(none)', pinnedModel: JUDGE_MODEL_ID },
+          'Judge: responder is NOT the pinned instrument (silent router substitution) — voiding score',
+        );
+        break;
+      }
 
       const judgeContent = json.choices?.[0]?.message?.content ?? '';
       if (!judgeContent.trim()) {
@@ -2067,7 +2117,7 @@ function getModeType(mode: ModeConfig): ExecutionMode {
   }
 }
 
-function getModeKey(mode: ModeConfig): string {
+export function getModeKey(mode: ModeConfig): string {
   switch (mode.mode) {
     case 'single-model': return `single-model:${mode.modelId}`;
     case 'collective': return `collective:${mode.strategy}`;
@@ -2077,6 +2127,30 @@ function getModeKey(mode: ModeConfig): string {
     case 'ablation': return `ablation:${mode.strategy}:${mode.disableComponents.join(',')}`;
     default: return String((mode as { mode: string }).mode);
   }
+}
+
+/**
+ * Build a canary-skip reason key for recordSkip(). armId (from
+ * resolveExperimentArm/deriveArmId) uses a `mode::strategy` double-colon
+ * scheme (see policy-arm-resolver.ts), a different delimiter convention from
+ * getModeKey()'s single-colon `mode:key` scheme that every other
+ * recordSkip() call site in this file uses (e.g. arm_budget_exceeded).
+ * Concatenating `canary_skip:${errorClass}:` (single colon) directly with a
+ * double-colon armId produced keys like
+ * "canary_skip:timeout:collective::collaborative" that read as having an
+ * empty segment. Takes a precomputed armId→ModeConfig map (built by the
+ * caller, which already has resolveExperimentArm in scope) so the key uses
+ * the same single-colon scheme as everything else; falls back to the raw
+ * armId if no matching mode is found (should not happen — the map is built
+ * from the same `modes` list the skip plan's armIds are derived from).
+ */
+export function buildCanarySkipKey(
+  errorClass: string,
+  armId: string,
+  armIdToMode: ReadonlyMap<string, ModeConfig>,
+): string {
+  const mode = armIdToMode.get(armId);
+  return `canary_skip:${errorClass}:${mode ? getModeKey(mode) : armId}`;
 }
 
 function extractProviders(modelIds: string[]): string[] {
@@ -2235,6 +2309,26 @@ export async function lookupModelCost(modelId: string, promptTokens: number, com
   return estimateCostFallback(promptTokens + completionTokens);
 }
 
+/**
+ * A policy-invalid trajectory (per experiment-integrity-guard's own
+ * contract) never counts as a clean success, regardless of what the
+ * orchestrator itself reported. Only overrides success/failureMode —
+ * qualityScore/judgeScore are left as recorded elsewhere (informational),
+ * so the raw judge signal stays queryable while `success` correctly
+ * excludes the row from aggregate quality stats (e.g.
+ * `avg(quality_score) FILTER (WHERE success)`).
+ */
+export function applyPolicyGate(
+  success: boolean,
+  failureMode: FailureMode | null | undefined,
+  policyViolationDetected: boolean,
+): { success: boolean; failureMode: FailureMode | null } {
+  if (policyViolationDetected) {
+    return { success: false, failureMode: 'policy-violation' };
+  }
+  return { success, failureMode: failureMode ?? null };
+}
+
 /** Extract base model name from provider-prefixed ID: 'openai/gpt-5.4' → 'gpt-5.4' */
 function extractBaseModelName(modelId: string): string {
   // Remove provider prefix: 'openai/gpt-5.4' → 'gpt-5.4'
@@ -2260,6 +2354,14 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
     // The result is persisted as `structuredMetadata.policyValidation` so
     // downstream reporting can filter contaminated executions.
     let policyValidation: Record<string, unknown> | undefined;
+    // Set when assertExperimentIntegrity finds ANY violation. Per the
+    // guard's own contract (experiment-integrity-guard.ts docblock: "Caller
+    // is responsible for ... Deciding whether to mark the execution
+    // success=false based on result.valid"), this was previously never
+    // implemented — a policy-invalid trajectory (e.g. a fallback chain that
+    // blew past maxFallbackDepth) was still persisted as success=true and
+    // silently counted into aggregate quality stats.
+    let policyViolationDetected = false;
     if (mode) {
       try {
         const policyMod = await import('./policy');
@@ -2303,6 +2405,7 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
         };
 
         if (!integrity.valid) {
+          policyViolationDetected = true;
           log.warn(
             {
               experimentId: result.experimentId,
@@ -2377,10 +2480,16 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
       ? `${costMetadata} ${result.responseSummary}`
       : result.responseSummary;
 
+    const { success: finalSuccess, failureMode: finalFailureMode } = applyPolicyGate(
+      result.success,
+      result.failureMode,
+      policyViolationDetected,
+    );
+
     // Build structured metadata for the new JSONB column (Hardening Bloco H)
     const structuredMeta: Record<string, unknown> = {};
     if (costMetadata) structuredMeta.cost = costMetadata;
-    if (result.failureMode) structuredMeta.failureMode = result.failureMode;
+    if (finalFailureMode) structuredMeta.failureMode = finalFailureMode;
     if (result.ablationDisabled && result.ablationDisabled.length > 0) structuredMeta.ablationDisabled = result.ablationDisabled;
     if (result.ablationCondition) structuredMeta.ablationCondition = result.ablationCondition;
     if (result.scoringPolicy) structuredMeta.scoringPolicy = result.scoringPolicy;
@@ -2423,7 +2532,7 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
         costUsd: normalizedCostUsd,
         latencyMs: result.latencyMs,
         totalTokens: result.totalTokens,
-        success: result.success,
+        success: finalSuccess,
         modelsUsed: result.modelsUsed,
         phase: result.phase ?? 'frozen',
         judgeScore: result.judgeScore,
@@ -2432,7 +2541,7 @@ async function persistExecution(result: ExperimentExecutionResult, mode?: ModeCo
         structuredMetadata: Object.keys(structuredMeta).length > 0
           ? (structuredMeta as Prisma.InputJsonValue)
           : Prisma.JsonNull,
-        failureMode: result.failureMode ?? null,
+        failureMode: finalFailureMode,
       },
     });
   } catch (err) {

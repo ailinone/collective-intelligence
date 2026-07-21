@@ -115,6 +115,7 @@ export type FailureMode =
   | 'credit-exhaustion'
   | 'skipped-predispatch'
   | 'degraded'
+  | 'policy-violation'
   | 'unknown';
 
 // ─── Task Definitions ──────────────────────────────────────────────────────

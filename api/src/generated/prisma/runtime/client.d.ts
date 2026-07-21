@@ -7,6 +7,7 @@ import { empty } from '@prisma/client-runtime-utils';
 import { isAnyNull } from '@prisma/client-runtime-utils';
 import { isDbNull } from '@prisma/client-runtime-utils';
 import { isJsonNull } from '@prisma/client-runtime-utils';
+import { isObjectEnumValue } from '@prisma/client-runtime-utils';
 import { join } from '@prisma/client-runtime-utils';
 import { JsonNull } from '@prisma/client-runtime-utils';
 import { JsonNullClass } from '@prisma/client-runtime-utils';
@@ -143,7 +144,7 @@ export declare type BaseDMMF = {
 declare type BatchArgs = {
     queries: BatchQuery[];
     transaction?: {
-        isolationLevel?: IsolationLevel_2;
+        isolationLevel?: IsolationLevel;
     };
 };
 
@@ -171,7 +172,9 @@ declare type BatchQueryOptionsCbArgs = {
 declare type BatchResponse = MultiBatchResponse | CompactedBatchResponse;
 
 declare type BatchTransactionOptions = {
-    isolationLevel?: Transaction_2.IsolationLevel;
+    isolationLevel?: Transaction.IsolationLevel;
+    maxWait?: number;
+    timeout?: number;
 };
 
 /**
@@ -461,7 +464,7 @@ export declare function defineDmmfProperty(target: object, runtimeDataModel: Run
 
 declare function defineExtension(ext: ExtensionArgs | ((client: Client) => Client)): (client: Client) => Client;
 
-declare const denylist: readonly ["$connect", "$disconnect", "$on", "$transaction", "$extends"];
+declare const denylist: readonly ["$connect", "$disconnect", "$on", "$use", "$extends"];
 
 declare type Deprecation = ReadonlyDeep_2<{
     sinceVersion: string;
@@ -471,7 +474,7 @@ declare type Deprecation = ReadonlyDeep_2<{
 
 declare type DeserializedResponse = Array<Record<string, unknown>>;
 
-export declare function deserializeJsonResponse(result: unknown): unknown;
+export declare function deserializeJsonObject(result: unknown): unknown;
 
 export declare function deserializeRawResult(response: RawResponse): DeserializedResponse;
 
@@ -498,84 +501,84 @@ export declare type DevTypeMapFnDef = {
 export declare namespace DMMF {
     export {
         datamodelEnumToSchemaEnum,
-        Document_2 as Document,
-        Mappings,
-        OtherOperationMappings,
-        DatamodelEnum,
-        SchemaEnum,
-        EnumValue,
         Datamodel,
-        uniqueIndex,
-        PrimaryKey,
-        Model,
-        FieldKind,
-        FieldNamespace,
-        FieldLocation,
+        DatamodelEnum,
+        Deprecation,
+        Document_2 as Document,
+        EnumValue,
         Field,
         FieldDefault,
         FieldDefaultScalar,
+        FieldKind,
+        FieldLocation,
+        FieldNamespace,
+        FieldRefAllowType,
+        FieldRefType,
         Index,
-        IndexType,
         IndexField,
-        SortOrder,
-        Schema,
+        IndexType,
+        InputType,
+        InputTypeRef,
+        Mappings,
+        Model,
+        ModelAction,
+        ModelMapping,
+        OtherOperationMappings,
+        OutputType,
+        OutputTypeRef,
+        PrimaryKey,
         Query,
         QueryOutput,
-        TypeRef,
-        InputTypeRef,
+        ReadonlyDeep_2 as ReadonlyDeep,
+        Schema,
         SchemaArg,
-        OutputType,
+        SchemaEnum,
         SchemaField,
-        OutputTypeRef,
-        Deprecation,
-        InputType,
-        FieldRefType,
-        FieldRefAllowType,
-        ModelMapping,
-        ModelAction,
-        ReadonlyDeep_2 as ReadonlyDeep
+        SortOrder,
+        TypeRef,
+        uniqueIndex
     }
 }
 
 declare namespace DMMF_2 {
     export {
         datamodelEnumToSchemaEnum,
-        Document_2 as Document,
-        Mappings,
-        OtherOperationMappings,
-        DatamodelEnum,
-        SchemaEnum,
-        EnumValue,
         Datamodel,
-        uniqueIndex,
-        PrimaryKey,
-        Model,
-        FieldKind,
-        FieldNamespace,
-        FieldLocation,
+        DatamodelEnum,
+        Deprecation,
+        Document_2 as Document,
+        EnumValue,
         Field,
         FieldDefault,
         FieldDefaultScalar,
+        FieldKind,
+        FieldLocation,
+        FieldNamespace,
+        FieldRefAllowType,
+        FieldRefType,
         Index,
-        IndexType,
         IndexField,
-        SortOrder,
-        Schema,
+        IndexType,
+        InputType,
+        InputTypeRef,
+        Mappings,
+        Model,
+        ModelAction,
+        ModelMapping,
+        OtherOperationMappings,
+        OutputType,
+        OutputTypeRef,
+        PrimaryKey,
         Query,
         QueryOutput,
-        TypeRef,
-        InputTypeRef,
+        ReadonlyDeep_2 as ReadonlyDeep,
+        Schema,
         SchemaArg,
-        OutputType,
+        SchemaEnum,
         SchemaField,
-        OutputTypeRef,
-        Deprecation,
-        InputType,
-        FieldRefType,
-        FieldRefAllowType,
-        ModelMapping,
-        ModelAction,
-        ReadonlyDeep_2 as ReadonlyDeep
+        SortOrder,
+        TypeRef,
+        uniqueIndex
     }
 }
 
@@ -633,6 +636,8 @@ export declare type DynamicClientExtensionThisBuiltin<TypeMap extends TypeMapDef
         extArgs: ExtArgs;
     }>>;
     $transaction<P extends PrismaPromise<any>[]>(arg: [...P], options?: {
+        maxWait?: number;
+        timeout?: number;
         isolationLevel?: TypeMap['meta']['txIsolationLevel'];
     }): Promise<UnwrapTuple<P>>;
     $transaction<R>(fn: (client: Omit<DynamicClientExtensionThis<TypeMap, TypeMapCb, ExtArgs>, ITXClientDenyList>) => Promise<R>, options?: {
@@ -756,9 +761,9 @@ declare interface Engine<InteractiveTransactionPayload = unknown> {
     version(forceRun?: boolean): Promise<string> | string;
     request<T>(query: JsonQuery, options: RequestOptions<InteractiveTransactionPayload>): Promise<QueryEngineResultData<T>>;
     requestBatch<T>(queries: JsonQuery[], options: RequestBatchOptions<InteractiveTransactionPayload>): Promise<BatchQueryEngineResult<T>[]>;
-    transaction(action: 'start', headers: Transaction_2.TransactionHeaders, options: Transaction_2.Options): Promise<Transaction_2.InteractiveTransactionInfo<unknown>>;
-    transaction(action: 'commit', headers: Transaction_2.TransactionHeaders, info: Transaction_2.InteractiveTransactionInfo<unknown>): Promise<void>;
-    transaction(action: 'rollback', headers: Transaction_2.TransactionHeaders, info: Transaction_2.InteractiveTransactionInfo<unknown>): Promise<void>;
+    transaction(action: 'start', headers: Transaction.TransactionHeaders, options: Transaction.Options): Promise<Transaction.InteractiveTransactionInfo<unknown>>;
+    transaction(action: 'commit', headers: Transaction.TransactionHeaders, info: Transaction.InteractiveTransactionInfo<unknown>): Promise<void>;
+    transaction(action: 'rollback', headers: Transaction.TransactionHeaders, info: Transaction.InteractiveTransactionInfo<unknown>): Promise<void>;
 }
 
 declare interface EngineConfig {
@@ -770,7 +775,7 @@ declare interface EngineConfig {
     previewFeatures?: string[];
     activeProvider?: string;
     logEmitter: LogEmitter;
-    transactionOptions: Transaction_2.Options;
+    transactionOptions: Transaction.Options;
     /**
      * Instance of a Driver Adapter, e.g., like one provided by `@prisma/adapter-pg`.
      */
@@ -806,6 +811,13 @@ declare interface EngineConfig {
      * Runtime data model for enum lookups during parameterization.
      */
     runtimeDataModel: RuntimeDataModel;
+    /**
+     * Optional maximum size for the query plan cache. If not provided, a default size will be used.
+     * A value of `0` can be used to disable the cache entirely. A higher cache size can improve
+     * performance for applications that execute a large number of unique queries, while a smaller
+     * cache size can reduce memory usage.
+     */
+    queryPlanCacheMaxSize?: number;
 }
 
 declare type EngineEvent<E extends EngineEventType> = E extends QueryEventType ? QueryEvent : LogEvent;
@@ -1089,6 +1101,9 @@ declare type Fragment = {
     type: 'parameter';
 } | {
     type: 'parameterTuple';
+    itemPrefix: string;
+    itemSeparator: string;
+    itemSuffix: string;
 } | {
     type: 'parameterTupleList';
     itemPrefix: string;
@@ -1260,7 +1275,7 @@ export declare function getPrismaClient(config: GetPrismaClientConfig): {
             callback: (client: Client) => Promise<unknown>;
             options?: Options;
         }): Promise<unknown>;
-        _createItxClient(transaction: PrismaPromiseInteractiveTransaction): Client;
+        _createItxClient(transaction: PrismaPromiseInteractiveTransaction, scopeId: string, scopeState: ItxScopeState): Client;
         /**
          * Execute queries within a transaction
          * @param input a callback or a query list
@@ -1472,7 +1487,7 @@ declare type InteractiveTransactionInfo<Payload = unknown> = {
     payload: Payload;
 };
 
-declare type InteractiveTransactionOptions<Payload> = Transaction_2.InteractiveTransactionInfo<Payload>;
+declare type InteractiveTransactionOptions<Payload> = Transaction.InteractiveTransactionInfo<Payload>;
 
 export declare type InternalArgs<R = {
     [K in string]: {
@@ -1540,9 +1555,11 @@ export { isDbNull }
 
 export { isJsonNull }
 
-declare type IsolationLevel = 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SNAPSHOT' | 'SERIALIZABLE';
+export { isObjectEnumValue }
 
-declare type IsolationLevel_2 = 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Snapshot' | 'Serializable';
+declare type IsolationLevel = 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Snapshot' | 'Serializable';
+
+declare type IsolationLevel_2 = 'READ UNCOMMITTED' | 'READ COMMITTED' | 'REPEATABLE READ' | 'SNAPSHOT' | 'SERIALIZABLE';
 
 declare function isSkip(value: unknown): value is Skip;
 
@@ -1551,6 +1568,10 @@ export declare function isTypedSql(value: unknown): value is UnknownTypedSql;
 export declare type ITXClientDenyList = (typeof denylist)[number];
 
 export declare const itxClientDenyList: readonly (string | symbol)[];
+
+declare type ItxScopeState = {
+    stack: string[];
+};
 
 declare interface Job {
     resolve: (data: any) => void;
@@ -1592,7 +1613,7 @@ export declare interface JsonArray extends Array<JsonValue> {
 export declare type JsonBatchQuery = {
     batch: JsonQuery[];
     transaction?: {
-        isolationLevel?: IsolationLevel_2;
+        isolationLevel?: IsolationLevel;
     };
 };
 
@@ -1909,7 +1930,12 @@ declare type Options = {
     /** Timeout for the transaction body */
     timeout?: number;
     /** Transaction isolation level */
-    isolationLevel?: IsolationLevel_2;
+    isolationLevel?: IsolationLevel;
+    /**
+     * Used for nested interactive transactions. When provided, the engine may
+     * re-use an existing open transaction instead of opening a new one.
+     */
+    newTxId?: string;
 };
 
 export declare type Or<A extends 1 | 0, B extends 1 | 0> = {
@@ -1936,7 +1962,7 @@ declare type OutputType = ReadonlyDeep_2<{
 declare type OutputTypeRef = TypeRef<'scalar' | 'outputObjectTypes' | 'enumTypes'>;
 
 declare type Pagination = {
-    cursor: Record<string, PrismaValue> | null;
+    cursor: Record<string, unknown> | null;
     take: number | null;
     skip: number | null;
 };
@@ -1978,29 +2004,12 @@ declare type PrimaryKey = ReadonlyDeep_2<{
     fields: string[];
 }>;
 
-export { PrismaClientInitializationError }
-
-export { PrismaClientKnownRequestError }
-
 /**
- * Since Prisma 7, a PrismaClient needs either an adapter or an accelerateUrl.
- * The two options are mutually exclusive.
+ * Options common to all variants of `PrismaClientOptions`, regardless of
+ * whether you connect to your database through a driver adapter or through
+ * Prisma Accelerate.
  */
-declare type PrismaClientMutuallyExclusiveOptions = {
-    /**
-     * Instance of a Driver Adapter, e.g., like one provided by `@prisma/adapter-pg`.
-     */
-    adapter: SqlDriverAdapterFactory;
-    accelerateUrl?: never;
-} | {
-    /**
-     * Prisma Accelerate URL allowing the client to connect through Accelerate instead of a direct database.
-     */
-    accelerateUrl: string;
-    adapter?: never;
-};
-
-export declare type PrismaClientOptions = PrismaClientMutuallyExclusiveOptions & {
+declare interface PrismaClientBaseOptions {
     /**
      * @default "colorless"
      */
@@ -2010,7 +2019,7 @@ export declare type PrismaClientOptions = PrismaClientMutuallyExclusiveOptions &
      * maxWait ?= 2000
      * timeout ?= 5000
      */
-    transactionOptions?: Transaction_2.Options;
+    transactionOptions?: Transaction.Options;
     /**
      * @example
      * \`\`\`
@@ -2045,6 +2054,21 @@ export declare type PrismaClientOptions = PrismaClientMutuallyExclusiveOptions &
      */
     comments?: SqlCommenterPlugin[];
     /**
+     * Optional maximum size for the query plan cache. If not provided, a default size will be used.
+     * A value of `0` can be used to disable the cache entirely. A higher cache size can improve
+     * performance for applications that execute a large number of unique queries, while a smaller
+     * cache size can reduce memory usage.
+     *
+     * @example
+     * ```
+     * const prisma = new PrismaClient({
+     *   adapter,
+     *   queryPlanCacheMaxSize: 100,
+     * })
+     * ```
+     */
+    queryPlanCacheMaxSize?: number;
+    /**
      * @internal
      * You probably don't want to use this. \`__internal\` is used by internal tooling.
      */
@@ -2053,7 +2077,71 @@ export declare type PrismaClientOptions = PrismaClientMutuallyExclusiveOptions &
         /** This can be used for testing purposes */
         configOverride?: (config: GetPrismaClientConfig) => GetPrismaClientConfig;
     };
-};
+}
+
+export { PrismaClientInitializationError }
+
+export { PrismaClientKnownRequestError }
+
+/**
+ * Options passed to the `PrismaClient` constructor.
+ *
+ * A driver adapter (or, alternatively, a Prisma Accelerate URL) is **required**.
+ * See {@link PrismaClientOptionsWithAdapter} and
+ * {@link PrismaClientOptionsWithAccelerateUrl} for the two variants. All other
+ * properties live in {@link PrismaClientBaseOptions} and are optional.
+ *
+ * Learn more about driver adapters: https://pris.ly/d/driver-adapters
+ */
+export declare type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaClientOptionsWithAdapter;
+
+/**
+ * `PrismaClient` options for connecting to your database through Prisma
+ * Accelerate instead of a driver adapter.
+ *
+ * Learn more: https://pris.ly/d/accelerate
+ */
+declare interface PrismaClientOptionsWithAccelerateUrl extends PrismaClientBaseOptions {
+    /**
+     * The Prisma Accelerate connection URL. Use this option to connect to
+     * your database through Prisma Accelerate instead of using a driver
+     * adapter to connect directly.
+     *
+     * Learn more: https://pris.ly/d/accelerate
+     */
+    accelerateUrl: string;
+    adapter?: never;
+}
+
+/**
+ * `PrismaClient` options for connecting to your database through a driver
+ * adapter. This is the common case in Prisma 7.
+ *
+ * Learn more: https://pris.ly/d/driver-adapters
+ */
+declare interface PrismaClientOptionsWithAdapter extends PrismaClientBaseOptions {
+    /**
+     * A driver adapter that PrismaClient uses to connect to your database,
+     * such as the ones provided by `@prisma/adapter-pg`,
+     * `@prisma/adapter-libsql`, `@prisma/adapter-planetscale`, etc.
+     *
+     * A driver adapter is **required** unless you connect to your database
+     * through Prisma Accelerate (in which case use `accelerateUrl` instead).
+     *
+     * Learn more: https://pris.ly/d/driver-adapters
+     *
+     * @example
+     * ```ts
+     * import { PrismaPg } from '@prisma/adapter-pg'
+     * import { PrismaClient } from './generated/prisma/client'
+     *
+     * const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+     * const prisma = new PrismaClient({ adapter })
+     * ```
+     */
+    adapter: SqlDriverAdapterFactory;
+    accelerateUrl?: never;
+}
 
 export { PrismaClientRustPanicError }
 
@@ -2107,7 +2195,9 @@ declare interface PrismaPromise_2<TResult, TSpec extends PrismaOperationSpec<unk
 declare type PrismaPromiseBatchTransaction = {
     kind: 'batch';
     id: number;
-    isolationLevel?: IsolationLevel_2;
+    isolationLevel?: IsolationLevel;
+    maxWait?: number;
+    timeout?: number;
     index: number;
     lock: PromiseLike<void>;
 };
@@ -2191,7 +2281,7 @@ declare interface Queryable<Query, Result> extends AdapterInfo {
 }
 
 declare type QueryCompiler = {
-    compile(request: string): {};
+    compile(request: string): QueryPlanNode;
     compileBatch(batchRequest: string): BatchResponse;
     free(): void;
 };
@@ -2324,6 +2414,7 @@ declare type QueryPlanNode = {
     args: {
         parent: QueryPlanNode;
         children: JoinExpression[];
+        canAssumeStrictEquality: boolean;
     };
 } | {
     type: 'mapField';
@@ -3031,7 +3122,7 @@ declare interface SqlDriverAdapter extends SqlQueryable {
     /**
      * Start new transaction.
      */
-    startTransaction(isolationLevel?: IsolationLevel): Promise<Transaction>;
+    startTransaction(isolationLevel?: IsolationLevel_2): Promise<Transaction_2>;
     /**
      * Optional method that returns extra connection info
      */
@@ -3134,7 +3225,16 @@ declare interface TracingHelper {
     runInChildSpan<R>(nameOrOptions: string | ExtendedSpanOptions, callback: SpanCallback<R>): R;
 }
 
-declare interface Transaction extends AdapterInfo, SqlQueryable {
+declare namespace Transaction {
+    export {
+        IsolationLevel,
+        Options,
+        InteractiveTransactionInfo,
+        TransactionHeaders
+    }
+}
+
+declare interface Transaction_2 extends AdapterInfo, SqlQueryable {
     /**
      * Transaction options.
      */
@@ -3147,15 +3247,18 @@ declare interface Transaction extends AdapterInfo, SqlQueryable {
      * Roll back the transaction.
      */
     rollback(): Promise<void>;
-}
-
-declare namespace Transaction_2 {
-    export {
-        IsolationLevel_2 as IsolationLevel,
-        Options,
-        InteractiveTransactionInfo,
-        TransactionHeaders
-    }
+    /**
+     * Creates a savepoint within the currently running transaction.
+     */
+    createSavepoint?(name: string): Promise<void>;
+    /**
+     * Rolls back transaction state to a previously created savepoint.
+     */
+    rollbackToSavepoint?(name: string): Promise<void>;
+    /**
+     * Releases a previously created savepoint. Optional because not every connector supports this operation.
+     */
+    releaseSavepoint?(name: string): Promise<void>;
 }
 
 declare type TransactionHeaders = {
@@ -3276,14 +3379,14 @@ declare namespace Utils {
 }
 
 declare type ValidationError = {
-    error_identifier: 'RELATION_VIOLATION';
+    errorIdentifier: 'RELATION_VIOLATION';
     context: {
         relation: string;
         modelA: string;
         modelB: string;
     };
 } | {
-    error_identifier: 'MISSING_RELATED_RECORD';
+    errorIdentifier: 'MISSING_RELATED_RECORD';
     context: {
         model: string;
         relation: string;
@@ -3292,24 +3395,24 @@ declare type ValidationError = {
         neededFor?: string;
     };
 } | {
-    error_identifier: 'MISSING_RECORD';
+    errorIdentifier: 'MISSING_RECORD';
     context: {
         operation: string;
     };
 } | {
-    error_identifier: 'INCOMPLETE_CONNECT_INPUT';
+    errorIdentifier: 'INCOMPLETE_CONNECT_INPUT';
     context: {
         expectedRows: number;
     };
 } | {
-    error_identifier: 'INCOMPLETE_CONNECT_OUTPUT';
+    errorIdentifier: 'INCOMPLETE_CONNECT_OUTPUT';
     context: {
         expectedRows: number;
         relation: string;
         relationType: string;
     };
 } | {
-    error_identifier: 'RECORDS_NOT_CONNECTED';
+    errorIdentifier: 'RECORDS_NOT_CONNECTED';
     context: {
         relation: string;
         parent: string;

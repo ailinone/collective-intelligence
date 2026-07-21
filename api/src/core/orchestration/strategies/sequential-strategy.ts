@@ -15,6 +15,7 @@
 
 import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
+import { PoolBuilder } from '@/core/pool/pool-builder';
 import type {
   ChatRequest,
   ChatResponse,
@@ -361,12 +362,22 @@ export class SequentialStrategy extends BaseStrategy {
       );
     }
 
-    // Fallback: Original logic if DynamicModelSelector fails
-    if (models.length < 2) {
+    // Fallback: Original logic if DynamicModelSelector fails.
+    // context.models is intentionally unfiltered by modality (see the "no
+    // pre-filtering" note in orchestration-engine.ts) — capability
+    // filtering is expected to happen downstream. The primary path above
+    // gets that via DynamicModelSelector's own chat-capability gate, but
+    // this fallback previously scored `models` directly with no capability
+    // check at all: scoreAsAnalyzer/scoreAsExecutor rank purely on
+    // contextWindow/latency/cost/quality, none of which exclude a
+    // video/image/audio-only model. Apply the same modality filter the
+    // primary path relies on before scoring.
+    const chatCapableModels = new PoolBuilder(models).filterByModality('chat').build().models;
+    if (chatCapableModels.length < 2) {
       return [];
     }
 
-    const analyzerCandidates = models
+    const analyzerCandidates = chatCapableModels
       .map((model) => ({
         model,
         score: this.scoreAsAnalyzer(model, context),
@@ -380,7 +391,7 @@ export class SequentialStrategy extends BaseStrategy {
 
     const analyzer = analyzerCandidates[0];
 
-    const executorCandidates = models
+    const executorCandidates = chatCapableModels
       .map((model) => ({
         model,
         score: this.scoreAsExecutor(model, request, context),
