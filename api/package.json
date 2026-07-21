@@ -178,7 +178,7 @@
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^10.10.3",
-    "@testcontainers/redis": "^10.10.3",
+    "@testcontainers/redis": "^12.0.4",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.11.17",
