@@ -381,7 +381,7 @@ Maintained by **Ailin One, Inc.** The AGPL licenses the code, not the marks.
 
 ## Star history & contributors
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date&legend=top-left)](https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left)
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
