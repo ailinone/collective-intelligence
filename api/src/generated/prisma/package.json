@@ -89,11 +89,6 @@
       "import": "./runtime/index-browser.mjs",
       "default": "./runtime/index-browser.mjs"
     },
-    "./generator-build": {
-      "require": "./generator-build/index.js",
-      "import": "./generator-build/index.js",
-      "default": "./generator-build/index.js"
-    },
     "./sql": {
       "require": {
         "types": "./sql.d.ts",
@@ -109,10 +104,10 @@
     },
     "./*": "./*"
   },
-  "version": "7.4.0",
+  "version": "7.9.0",
   "sideEffects": false,
   "dependencies": {
-    "@prisma/client-runtime-utils": "7.4.0"
+    "@prisma/client-runtime-utils": "7.9.0"
   },
   "imports": {
     "#wasm-compiler-loader": {
