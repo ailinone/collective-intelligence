@@ -1,12 +1,3 @@
-# Copyright (C) 2026 Ailin One, Inc.
-#
-# This file is part of Collective Intelligence Engine (ci).
-# Licensed under the GNU Affero General Public License v3.0 or later.
-# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
-#
-# SPDX-License-Identifier: AGPL-3.0-or-later
-# Source: https://github.com/ailinone/collective-intelligence
-
 lockfileVersion: '9.0'
 
 settings:
@@ -281,8 +272,8 @@ importers:
         specifier: ^2.2.3
         version: 2.3.4
       nanoid:
-        specifier: ^5.0.5
-        version: 5.1.6
+        specifier: ^6.0.0
+        version: 6.0.0
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -5939,9 +5930,14 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.6:
-    resolution: {integrity: sha512-c7+7RQ+dMB5dPwwCp4ee1/iV/q2P6aK1mTZcfr1BTuVlyW9hJYiMPybJCcnBlQtuSmTIWNeazm/zqNoZSSElBg==}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
     engines: {node: ^18 || >=20}
+    hasBin: true
+
+  nanoid@6.0.0:
+    resolution: {integrity: sha512-mkUH+rPkwU2qPadJ0oJZOjeZ5Mxn8Q1UhevwkTRWNuUZzyia3h4rhzK39hxaHTk0o2OxB8W2SQ6A8k23ZDi1pQ==}
+    engines: {node: ^22 || ^24 || >=26}
     hasBin: true
 
   napi-build-utils@2.0.0:
@@ -13184,7 +13180,7 @@ snapshots:
       '@types/node': 25.9.5
       hash.js: 1.1.7
       jszip: 3.10.1
-      nanoid: 5.1.6
+      nanoid: 5.1.16
       xml: 1.0.1
       xml-js: 1.6.11
 
@@ -15126,7 +15122,9 @@ snapshots:
 
   nanoid@3.3.16: {}
 
-  nanoid@5.1.6: {}
+  nanoid@5.1.16: {}
+
+  nanoid@6.0.0: {}
 
   napi-build-utils@2.0.0: {}
 
