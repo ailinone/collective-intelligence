@@ -30,6 +30,7 @@
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { authenticate } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { CreateProjectHandler } from '@/application/handlers/create-project.handler';
 import { ListProjectsHandler } from '@/application/handlers/list-projects.handler';
 import { GetProjectHandler } from '@/application/handlers/get-project.handler';
@@ -79,6 +80,12 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   const archiveHandler = container.resolve(ArchiveProjectHandler);
   const restoreHandler = container.resolve(RestoreProjectHandler);
 
+  // Route-scoped, on top of the global per-identity rate limits (fastify/rate-limit
+  // + Token Bucket) — matches the convention already applied to every sibling
+  // authorization+DB-write route file (org-governance, collective, auth, tools,
+  // hcra-search, internal-api-keys). See route-rate-limit.ts.
+  const projectsPreHandler = [authenticate, createRouteRateLimit('projects', { capacity: 60, refillRate: 1 })];
+
   // ─── GET /v1/projects ──────────────────────────────────────────────────
   server.get<{
     Querystring: {
@@ -89,7 +96,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: "List projects in the caller's organization",
@@ -130,7 +137,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: 'Create a project in the caller organization',
@@ -180,7 +187,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects/:idOrSlug',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: 'Get a project by id or slug (scoped to caller org)',
@@ -221,7 +228,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects/:idOrSlug',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: 'Update a project (name/description/settings)',
@@ -288,7 +295,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects/:idOrSlug/archive',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: 'Archive a project (reversible soft-delete)',
@@ -328,7 +335,7 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   }>(
     '/v1/projects/:idOrSlug/restore',
     {
-      onRequest: [authenticate],
+      onRequest: projectsPreHandler,
       schema: {
         tags: ['Projects'],
         description: 'Restore an archived project',
