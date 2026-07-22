@@ -24,9 +24,29 @@
  * - Allows bursts up to capacity while limiting average rate
  */
 
+import { createHash } from 'node:crypto';
 import { logger } from '@/utils/logger';
 import { getRedisClient } from '@/cache/redis-client';
 import { config as appConfig } from '@/config';
+
+/**
+ * Produce a safe-to-log representation of a bucket identifier.
+ *
+ * `identifier` is opaque to this module — for scope `'api-key'` it is the
+ * raw `x-api-key` request header value (see token-bucket-rate-limit.ts),
+ * so logging it verbatim would put a live secret in plaintext logs
+ * (CWE-312/532). Every other scope (user/IP/organization) is a non-secret
+ * identifier and is returned unchanged so existing debuggability is
+ * unaffected. The fingerprint is stable per input, so repeated events for
+ * the same key still correlate in logs.
+ */
+export function safeLogIdentifier(scope: string, identifier: string): string {
+  if (scope !== 'api-key' || !identifier) {
+    return identifier;
+  }
+  const fingerprint = createHash('sha256').update(identifier).digest('hex').substring(0, 12);
+  return `redacted:${fingerprint}`;
+}
 
 export interface TokenBucketConfig {
   /**
@@ -107,7 +127,7 @@ export class TokenBucket {
 
     logger.debug(
       {
-        identifier: config.identifier,
+        identifier: safeLogIdentifier(config.scope, config.identifier),
         scope: config.scope,
         capacity: config.capacity,
         refillRate: config.refillRate,
@@ -130,7 +150,7 @@ export class TokenBucket {
       if (!consumed) {
         logger.warn(
           {
-            identifier: this.config.identifier,
+            identifier: safeLogIdentifier(this.config.scope, this.config.identifier),
             scope: this.config.scope,
             tokensRequested: tokens,
           },
@@ -149,7 +169,7 @@ export class TokenBucket {
 
         logger.warn(
           {
-            identifier: this.config.identifier,
+            identifier: safeLogIdentifier(this.config.scope, this.config.identifier),
             scope: this.config.scope,
             tokensRequested: tokens,
           },
@@ -161,7 +181,7 @@ export class TokenBucket {
     } catch (error) {
       // Fallback to local bucket if Redis fails
       logger.warn(
-        { error, identifier: this.config.identifier },
+        { error, identifier: safeLogIdentifier(this.config.scope, this.config.identifier) },
         'Redis token bucket failed, using local fallback'
       );
       this.useLocalFallback = true;
@@ -192,7 +212,11 @@ export class TokenBucket {
       if (!allowed) {
         this.localStats.totalRejected++;
         logger.warn(
-          { identifier: this.config.identifier, scope: this.config.scope, tokensRequested: tokens },
+          {
+            identifier: safeLogIdentifier(this.config.scope, this.config.identifier),
+            scope: this.config.scope,
+            tokensRequested: tokens,
+          },
           'Rate limit exceeded (token bucket)'
         );
       }
@@ -213,7 +237,7 @@ export class TokenBucket {
       };
     } catch (error) {
       logger.warn(
-        { error, identifier: this.config.identifier },
+        { error, identifier: safeLogIdentifier(this.config.scope, this.config.identifier) },
         'Redis token bucket failed, using local fallback'
       );
       this.useLocalFallback = true;
@@ -414,7 +438,11 @@ export class TokenBucket {
         totalRejected: 0,
       };
       logger.info(
-        { identifier: this.config.identifier, scope: this.config.scope, mode: 'local' },
+        {
+          identifier: safeLogIdentifier(this.config.scope, this.config.identifier),
+          scope: this.config.scope,
+          mode: 'local',
+        },
         'Token bucket reset (local fallback)'
       );
       return;
@@ -437,7 +465,7 @@ export class TokenBucket {
     };
 
     logger.info(
-      { identifier: this.config.identifier, scope: this.config.scope },
+      { identifier: safeLogIdentifier(this.config.scope, this.config.identifier), scope: this.config.scope },
       'Token bucket reset'
     );
   }
@@ -521,7 +549,14 @@ export class TokenBucketManager {
       const bucket = new TokenBucket(bucketConfig);
       this.buckets.set(key, bucket);
 
-      logger.debug({ scope, identifier, config: bucketConfig }, 'Token bucket created');
+      logger.debug(
+        {
+          scope,
+          identifier: safeLogIdentifier(scope, identifier),
+          config: { ...bucketConfig, identifier: safeLogIdentifier(scope, identifier) },
+        },
+        'Token bucket created'
+      );
     }
 
     return this.buckets.get(key)!;

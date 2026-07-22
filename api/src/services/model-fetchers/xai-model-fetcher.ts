@@ -41,7 +41,7 @@ export class XAIModelFetcher extends BaseProviderModelFetcher {
     const apiKey = (this.client as { apiKey?: string }).apiKey;
     if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
       this.log.warn(
-        { apiKeyPrefix: apiKey?.substring(0, 10) },
+        { keyPresent: Boolean(apiKey) },
         'xAI API key appears to be mock/test key - skipping model discovery'
       );
       return [];
@@ -56,7 +56,6 @@ export class XAIModelFetcher extends BaseProviderModelFetcher {
       // diagnosing cases where credits exist but no models populate in DB.
       if (!response.data || response.data.length === 0) {
         this.log.warn(
-          { apiKeyPrefix: apiKey?.substring(0, 10) },
           'xAI models.list() returned empty data array — key valid but no models readable'
         );
         return [];

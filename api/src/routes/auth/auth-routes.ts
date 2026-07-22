@@ -20,6 +20,7 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '@/config';
 import { getAuthService } from '@/services/auth-service';
 import { authenticate } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { logger } from '@/utils/logger';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
@@ -248,6 +249,13 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
   server.post(
     '/v1/auth/login',
     {
+      // SECURITY (js/missing-rate-limiting): this handler verifies passwords
+      // and email codes (CWE-307 — brute-force / credential-stuffing surface).
+      // No auth context exists pre-login, so this is scoped by source IP.
+      // Route-scoped (not the global per-identity budget) so it adds a real
+      // ceiling here without double-spending the global token bucket. See
+      // route-rate-limit.ts.
+      preHandler: createRouteRateLimit('auth-login', { capacity: 20, refillRate: 0.2 }),
       schema: {
         tags: ['Auth'],
         description: 'Complete authentication',
@@ -595,7 +603,10 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
         });
       }
 
-      requestLog.info({ keyPrefix: apiKey.substring(0, 15) }, 'API key generated');
+      // SECURITY (js/clear-text-logging): do not log any slice of the
+      // plaintext key — it is returned to the caller in the response body
+      // below, but must never be written to logs.
+      requestLog.info('API key generated');
       return reply.send({
         success: true,
         apiKey,

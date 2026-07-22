@@ -128,7 +128,7 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
     this.log.debug(
       {
         endpoint: this.client.baseURL,
-        apiKeyPrefix: apiKey ? apiKey.substring(0, 15) + '...' : 'not available',
+        keyPresent: Boolean(apiKey),
       },
       'Attempting to fetch models from Alibaba DashScope using API key'
     );
@@ -165,7 +165,7 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
     this.log.debug(
       {
         endpoint: this.baseUrl,
-        accessKeyIdPrefix: this.accessKeyId.substring(0, 10) + '...',
+        accessKeyIdPresent: Boolean(this.accessKeyId),
       },
       'Attempting to fetch models from Alibaba using AccessKey ID/Secret'
     );

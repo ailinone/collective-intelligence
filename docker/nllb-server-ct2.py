@@ -19,6 +19,7 @@ Key differences from PyTorch version:
 - Passes target_prefix to translate_batch() (NOT forced_bos_token_id)
 - beam_size=1 for minimum latency
 """
+import logging
 import os
 import time
 import ctranslate2
@@ -26,6 +27,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 app = FastAPI(title="NLLB-200 Translation Server (CTranslate2)")
+logger = logging.getLogger(__name__)
 
 # Model path: pre-converted int8 from HuggingFace or local mount
 MODEL_DIR = os.environ.get("CT2_MODEL_DIR", "/models/nllb-200-distilled-600M-ct2-int8")
@@ -218,9 +220,11 @@ async def translate_text(request: Request):
     try:
         translated = translate(text, src, tgt)
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"error": f"Translation failed: {e}"}, status_code=500)
+        logger.warning("Invalid language code: %s", e)
+        return JSONResponse({"error": "Invalid language code"}, status_code=400)
+    except Exception:
+        logger.exception("Translation failed")
+        return JSONResponse({"error": "Translation failed"}, status_code=500)
 
     latency_ms = round((time.perf_counter() - start) * 1000, 1)
     return {
@@ -246,8 +250,9 @@ async def translate_batch(request: Request):
     start = time.perf_counter()
     try:
         translated = translate_batch_texts(texts, src, tgt)
-    except Exception as e:
-        return JSONResponse({"error": f"Batch translation failed: {e}"}, status_code=500)
+    except Exception:
+        logger.exception("Batch translation failed")
+        return JSONResponse({"error": "Batch translation failed"}, status_code=500)
 
     results = [{"text": t, "translated_text": tr} for t, tr in zip(texts, translated)]
     return {

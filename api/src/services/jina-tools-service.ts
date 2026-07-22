@@ -144,6 +144,7 @@ export class JinaToolsService {
 
   private buildReaderRequest(payload: Record<string, unknown>): RequestOptions {
     const targetUrl = this.requiredString(payload.url, 'url');
+    this.assertHttpUrl(targetUrl, 'url');
     const normalizedTarget = targetUrl.replace(/^\/+/, '');
     return {
       method: 'GET',
@@ -344,13 +345,37 @@ export class JinaToolsService {
   }
 
   private joinUrl(baseUrl: string, pathOrSuffix: string): string {
-    if (pathOrSuffix.startsWith('http://') || pathOrSuffix.startsWith('https://')) {
-      return pathOrSuffix;
-    }
-
     const normalizedBase = baseUrl.replace(/\/+$/, '');
     const normalizedPath = pathOrSuffix.replace(/^\/+/, '');
     return `${normalizedBase}/${normalizedPath}`;
+  }
+
+  /**
+   * Ensures `value` is an absolute http(s) URL. This is a defense against SSRF:
+   * callers must never be able to redirect our outbound request to a
+   * non-http(s) scheme (e.g. `file:`), and combined with `joinUrl` no longer
+   * special-casing absolute URLs, the request host is always pinned to our
+   * configured base URL (e.g. `readerBaseUrl`) rather than attacker input.
+   */
+  private assertHttpUrl(value: string, fieldName: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new JinaToolsServiceError(
+        `Jina tool field \`${fieldName}\` must be an absolute http(s) URL`,
+        400,
+        'bad_request'
+      );
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new JinaToolsServiceError(
+        `Jina tool field \`${fieldName}\` must be an absolute http(s) URL`,
+        400,
+        'bad_request'
+      );
+    }
   }
 
   private requiredString(value: unknown, fieldName: string): string {

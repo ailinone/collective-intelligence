@@ -91,6 +91,85 @@ export function assertSafeGitToken(value: string, label: string): void {
 }
 
 /**
+ * SECURITY: second-order command injection guard for git `remote` values
+ * (js/second-order-command-line-injection). `assertSafeGitToken` blocks a
+ * leading '-' (ordinary option injection), but git also recognizes special
+ * "remote helper" URL schemes — notably `ext::<shell command>` and `fd::` —
+ * that make the `git` binary itself execute an arbitrary command once it
+ * parses the remote string. That happens even though we invoke git via
+ * execFile with no shell: the shell-out occurs *inside* git, one level
+ * removed, which is exactly the "second order" injection this rule flags.
+ * A leading-dash check doesn't catch it because `ext::…` doesn't start with
+ * '-'. Close it with an allowlist: either a plain configured-remote name, or
+ * a conventional https/ssh/git URL whose host doesn't itself start with '-'
+ * (blocking the related `ssh://-oProxyCommand=…` option-injection trick).
+ */
+const SAFE_GIT_REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const SAFE_GIT_REMOTE_URL = /^(?:https:\/\/|ssh:\/\/|git:\/\/|git@)[A-Za-z0-9][A-Za-z0-9._~%!$&'()*+,;=:@/-]*$/;
+
+export function assertSafeGitRemote(value: string, label: string): void {
+  assertSafeGitToken(value, label);
+  if (SAFE_GIT_REMOTE_NAME.test(value) || SAFE_GIT_REMOTE_URL.test(value)) {
+    return;
+  }
+  throw new Error(
+    `Invalid ${label}: must be a plain remote name or an https/ssh/git URL`
+  );
+}
+
+/**
+ * SECURITY: exact "is this path inside that directory" check
+ * (js/path-injection). A naked `resolved.startsWith(baseDir)` prefix check
+ * is bypassable via sibling-directory collisions — e.g. baseDir "/base"
+ * incorrectly matches "/base-evil" — because it never enforces a path
+ * separator boundary. Comparing via `path.relative` is exact: the relative
+ * path from base to target starts with '..' (or is itself absolute, e.g.
+ * across Windows drives) if and only if target escapes base.
+ */
+function isPathWithinDirectory(baseDir: string, targetPath: string): boolean {
+  const relative = path.relative(baseDir, targetPath);
+  return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+}
+
+/**
+ * SECURITY (js/regex-injection, js/incomplete-sanitization): convert a
+ * simple glob pattern (`*` = any run of chars, `?` = any single char) into a
+ * RegExp, escaping every *other* regex metacharacter first so a filename
+ * like "release(1).ts" or "a+b.txt" matches literally instead of being
+ * parsed as a regex group/quantifier. The previous inline conversions only
+ * escaped '.' and never escaped a literal backslash in the input, so any
+ * other metacharacter (or a backslash) leaked through into the compiled
+ * pattern uncontrolled.
+ */
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const withWildcards = escaped.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+  return new RegExp(withWildcards);
+}
+
+/**
+ * SECURITY (js/regex-injection, CWE-400): `search`/`pattern` below is an
+ * *intentional* user-supplied regex — the caller explicitly opted into
+ * regex mode for search/replace or grep, so escaping it the way
+ * `globToRegExp` does would silently turn regex mode into literal-string
+ * mode and break the feature. Instead, bound the worst case: cap pattern
+ * length and reject the classic nested-quantifier shape (`(a+)+`, `(a*)*`,
+ * `(a|a){2,}`, …) that causes catastrophic backtracking / ReDoS, while
+ * leaving ordinary regex patterns unaffected.
+ */
+const MAX_USER_REGEX_LENGTH = 500;
+const CATASTROPHIC_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]|\([^()]*[+*][^()]*\)\{\d*,/;
+
+function assertSafeUserRegex(source: string, label: string): void {
+  if (source.length > MAX_USER_REGEX_LENGTH) {
+    throw new Error(`Invalid ${label}: pattern too long (max ${MAX_USER_REGEX_LENGTH} chars)`);
+  }
+  if (CATASTROPHIC_REGEX_SHAPE.test(source)) {
+    throw new Error(`Invalid ${label}: nested quantifiers can cause catastrophic backtracking`);
+  }
+}
+
+/**
  * Simple glob-like file matcher using native fs
  * Supports basic patterns like **\/*.ts
  */
@@ -134,9 +213,7 @@ async function findFiles(
               return relativePath.endsWith(ext) || entry.name === ext;
             }
             if (p.includes('*')) {
-              const regex = new RegExp(
-                p.replace(/\./g, '\\.').replace(/\*/g, '.*')
-              );
+              const regex = globToRegExp(p);
               return regex.test(relativePath) || regex.test(entry.name);
             }
             return relativePath === p || entry.name === p;
@@ -236,6 +313,7 @@ export async function executeSearchReplaceTool(
     let replacements = 0;
 
     if (regex) {
+      assertSafeUserRegex(search, 'search');
       const flags = all ? 'g' : '';
       const pattern = new RegExp(search, flags);
       const matches = content.match(pattern);
@@ -336,7 +414,7 @@ export async function executeGrepSearchTool(
     const fullSearchPath = path.resolve(workingDirectory, searchPath);
 
     // Security check
-    if (!fullSearchPath.startsWith(workingDirectory)) {
+    if (!isPathWithinDirectory(workingDirectory, fullSearchPath)) {
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -361,6 +439,8 @@ export async function executeGrepSearchTool(
         '.cache',
       ],
     });
+
+    if (regex) assertSafeUserRegex(pattern, 'pattern');
 
     const results: SearchResult[] = [];
     const searchPattern = regex
@@ -658,9 +738,10 @@ export async function executeGitPushTool(
 
   try {
     // SECURITY: shell-free git via argv array. Validate the client-supplied
-    // remote/branch so neither can be parsed as a git option (leading `-`) and
-    // build the argv with fixed flags only.
-    assertSafeGitToken(remote, 'remote');
+    // remote/branch so neither can be parsed as a git option (leading `-`),
+    // and the remote specifically against dangerous transport schemes
+    // (js/second-order-command-line-injection — see assertSafeGitRemote).
+    assertSafeGitRemote(remote, 'remote');
     if (branch) assertSafeGitToken(branch, 'branch');
 
     const argv = ['push', remote];
@@ -706,8 +787,10 @@ export async function executeGitPullTool(
 
   try {
     // SECURITY: shell-free git via argv array (see runGit). Validate the
-    // client-supplied remote/branch against option/control-char injection.
-    assertSafeGitToken(remote, 'remote');
+    // client-supplied remote/branch against option/control-char injection,
+    // and the remote specifically against dangerous transport schemes
+    // (js/second-order-command-line-injection — see assertSafeGitRemote).
+    assertSafeGitRemote(remote, 'remote');
     if (branch) assertSafeGitToken(branch, 'branch');
 
     const argv = ['pull', remote];
@@ -765,17 +848,22 @@ export async function executeApplyMultiFileChangesTool(
   const applied: string[] = [];
   const failed: Array<{ file: string; error: string }> = [];
   const originalContent = new Map<string, string>();
+  // SECURITY: path resolved + boundary-checked once in Phase 1, reused for
+  // every later use of this change.file_path (Phase 2 apply, rollback)
+  // instead of re-resolving the raw client-supplied file_path a second time
+  // with no check (js/path-injection).
+  const resolvedPaths = new Map<string, string>();
 
   try {
     // Phase 1: Validate all files and backup existing content
     for (const change of changes) {
       const fullPath = path.resolve(workingDirectory, change.file_path);
 
-      const relativePath = path.relative(workingDirectory, fullPath);
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      if (!isPathWithinDirectory(workingDirectory, fullPath)) {
         failed.push({ file: change.file_path, error: 'Path outside working directory' });
         continue;
       }
+      resolvedPaths.set(change.file_path, fullPath);
 
       if (change.operation === 'update' || change.operation === 'delete') {
         try {
@@ -806,7 +894,15 @@ export async function executeApplyMultiFileChangesTool(
 
     // Phase 2: Apply changes
     for (const change of changes) {
-      const fullPath = path.resolve(workingDirectory, change.file_path);
+      // SECURITY: reuse the path validated in Phase 1 rather than
+      // re-resolving the raw file_path (js/path-injection). failed.length
+      // was already checked above, so this should always be set; the guard
+      // is belt-and-suspenders plus satisfies the Map<K,V>.get() type.
+      const fullPath = resolvedPaths.get(change.file_path);
+      if (!fullPath) {
+        failed.push({ file: change.file_path, error: 'Path outside working directory' });
+        continue;
+      }
 
       try {
         switch (change.operation) {
@@ -840,9 +936,12 @@ export async function executeApplyMultiFileChangesTool(
         for (const appliedEntry of applied) {
           const filePath = appliedEntry.split(': ')[1];
           const original = originalContent.get(filePath);
-          if (original) {
+          // SECURITY: reuse the Phase-1-validated path (js/path-injection)
+          // instead of re-resolving the parsed-back filePath.
+          const rollbackPath = resolvedPaths.get(filePath);
+          if (original && rollbackPath) {
             try {
-              await fs.writeFile(path.resolve(workingDirectory, filePath), original, 'utf-8');
+              await fs.writeFile(rollbackPath, original, 'utf-8');
             } catch (rollbackError) {
               log.error({ filePath, rollbackError }, 'Rollback failed');
             }
@@ -907,11 +1006,19 @@ export async function executeBatchSearchReplaceTool(
       };
     }
 
+    if (regex) assertSafeUserRegex(search, 'search');
+
     const changes: FileChange[] = [];
     let totalMatches = 0;
 
     for (const file of matchedFiles) {
       const fullPath = path.resolve(workingDirectory, file);
+
+      // SECURITY: defensive re-validation (js/path-injection) even though
+      // matchedFiles are walked from workingDirectory by findFiles().
+      if (!isPathWithinDirectory(workingDirectory, fullPath)) {
+        continue;
+      }
 
       try {
         const content = await fs.readFile(fullPath, 'utf-8');
@@ -1050,9 +1157,7 @@ export async function executeListDirectoryTool(
     }
 
     const entries: DirectoryEntry[] = [];
-    const patternRegex = file_pattern
-      ? new RegExp(file_pattern.replace(/\*/g, '.*').replace(/\?/g, '.'))
-      : null;
+    const patternRegex = file_pattern ? globToRegExp(file_pattern) : null;
 
     const scanDirectory = async (dir: string, currentDepth: number): Promise<void> => {
       if (currentDepth > max_depth) return;
@@ -1386,6 +1491,13 @@ const TASKS_FILE = '.ailin/todos.json';
 
 async function loadTodoList(workingDirectory: string): Promise<TodoList> {
   const filePath = path.join(workingDirectory, TASKS_FILE);
+  // SECURITY (js/path-injection): TASKS_FILE is a fixed relative constant so
+  // this can't actually escape workingDirectory today, but validate the
+  // resolved path locally anyway so the guard travels with the sink rather
+  // than relying solely on the working_directory clamp in the route layer.
+  if (!isPathWithinDirectory(workingDirectory, filePath)) {
+    throw new Error('Access denied: tasks file outside working directory');
+  }
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -1401,6 +1513,10 @@ async function loadTodoList(workingDirectory: string): Promise<TodoList> {
 
 async function saveTodoList(workingDirectory: string, todoList: TodoList): Promise<void> {
   const filePath = path.join(workingDirectory, TASKS_FILE);
+  // SECURITY (js/path-injection): see loadTodoList above.
+  if (!isPathWithinDirectory(workingDirectory, filePath)) {
+    throw new Error('Access denied: tasks file outside working directory');
+  }
   const dir = path.dirname(filePath);
 
   await fs.mkdir(dir, { recursive: true });

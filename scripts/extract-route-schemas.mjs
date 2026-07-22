@@ -108,7 +108,7 @@ function jsObjectToJsonish(src) {
   // (only word keys at object positions, not after `.` or in strings)
   s = s.replace(/([\{,]\s*)([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":');
   // Replace single-quoted strings with double-quoted
-  s = s.replace(/'((?:[^'\\]|\\.)*)'/g, (_, body) => '"' + body.replace(/"/g, '\\"').replace(/\\'/g, "'") + '"');
+  s = s.replace(/'((?:[^'\\]|\\.)*)'/g, (_, body) => '"' + body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\\\\'/g, "'") + '"');
   // Drop trailing commas
   s = s.replace(/,(\s*[\}\]])/g, '$1');
   return s;

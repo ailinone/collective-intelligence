@@ -45,7 +45,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
       // Validate API key is not mock
       if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
         this.log.warn(
-          { apiKeyPrefix: apiKey?.substring(0, 10) },
+          { keyPresent: Boolean(apiKey) },
           'Google API key appears to be mock/test key - skipping model discovery'
         );
         return [];

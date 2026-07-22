@@ -22,6 +22,24 @@
 
 import { logger } from './logger.js';
 
+/**
+ * Apply a regex replacement repeatedly until the string stops changing.
+ *
+ * A single-pass replace can be defeated when removing one match causes the
+ * characters on either side to join up and form a new match (e.g. "../"
+ * removal turning "..././" into "../"). Looping to a fixed point closes
+ * that reformation gap. `pattern` must have the global flag set.
+ */
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let result = input;
+  let previous: string;
+  do {
+    previous = result;
+    result = result.replace(pattern, replacement);
+  } while (result !== previous);
+  return result;
+}
+
 // ============================================
 // 1. HTML/XSS Sanitization
 // ============================================
@@ -54,10 +72,13 @@ export function sanitizeHTML(input: string): string {
   let sanitized = input.replace(JAVASCRIPT_PROTOCOL, '');
 
   // 2. Remove dangerous event handlers (onerror=, onload=, onclick=, etc.)
-  sanitized = sanitized.replace(DANGEROUS_EVENT_HANDLERS, '');
+  //    Looped to a fixed point: a single pass can leave a new match behind
+  //    where two partially-overlapping handler sequences meet.
+  sanitized = replaceUntilStable(sanitized, DANGEROUS_EVENT_HANDLERS, '');
 
   // 3. Remove dangerous HTML tags
-  sanitized = sanitized.replace(HTML_DANGEROUS_TAGS, '');
+  //    Looped to a fixed point for the same reason (e.g. "<<script>" nesting).
+  sanitized = replaceUntilStable(sanitized, HTML_DANGEROUS_TAGS, '');
 
   // 4. Escape HTML entities
   sanitized = sanitized.replace(/[&<>"'\/]/g, (char) => HTML_ENTITIES[char] || char);
@@ -67,11 +88,39 @@ export function sanitizeHTML(input: string): string {
 
 /**
  * Strip ALL HTML tags (aggressive)
+ *
+ * Implemented as a linear left-to-right scan (find '<', find the next '>',
+ * drop that span, repeat) instead of the equivalent /<[^>]*>/g regex.
+ * That regex is polynomial-time on adversarial input (many '<' with no
+ * closing '>' forces backtracking at every start position) and, being a
+ * single non-looped replace, is also flagged as incomplete multi-character
+ * sanitization. A manual scan has neither problem while producing the same
+ * output for every input (unterminated '<' sequences are left untouched,
+ * matching the old regex's behavior when no closing '>' exists).
  */
 export function stripHTML(input: string): string {
   if (typeof input !== 'string') return String(input);
 
-  return input.replace(/<[^>]*>/g, '');
+  let result = '';
+  let i = 0;
+  const len = input.length;
+
+  while (i < len) {
+    if (input[i] === '<') {
+      const close = input.indexOf('>', i + 1);
+      if (close === -1) {
+        // No closing '>' anywhere after this '<' — leave the remainder as-is.
+        result += input.slice(i);
+        break;
+      }
+      i = close + 1;
+    } else {
+      result += input[i];
+      i++;
+    }
+  }
+
+  return result;
 }
 
 // ============================================
@@ -160,7 +209,10 @@ export function sanitizeFilePath(input: string): string {
   let sanitized = input.replace(/\0/g, '');
 
   // 2. Remove ../ and ..\
-  sanitized = sanitized.replace(/\.\.[/\\]/g, '');
+  //    Looped to a fixed point: a single pass on e.g. "..././" removes the
+  //    middle "../" and leaves the outer characters rejoined into a new
+  //    "../", so one pass is not enough to fully neutralize it.
+  sanitized = replaceUntilStable(sanitized, /\.\.[/\\]/g, '');
 
   // 3. Remove leading / or \ (no absolute paths)
   sanitized = sanitized.replace(/^[/\\]+/, '');

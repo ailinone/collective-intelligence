@@ -82,7 +82,7 @@ const TABLES_SQL =
   "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (table_name LIKE 'experiment%' OR table_name LIKE 'execution%' OR table_name='models' OR table_name='providers') ORDER BY table_name;";
 
 function execPsql(sql: string): string {
-  const oneLine = sql.replace(/\s+/g, ' ').replace(/"/g, '\\"');
+  const oneLine = sql.replace(/\s+/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const cmd =
     `docker exec -i ci-postgres psql -U ci_user -d ci_db -A -t -X -v ON_ERROR_STOP=1 ` +
     `-c "${oneLine}"`;

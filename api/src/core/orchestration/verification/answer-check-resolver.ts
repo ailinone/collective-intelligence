@@ -26,6 +26,8 @@
  * answer (see best-of-n-verifier.extractFinalAnswer) against the spec.
  */
 
+import vm from 'node:vm';
+
 import { parseLocaleNumber } from './locale-number';
 
 /** Serializable objective check for a task with a verifiable answer. */
@@ -54,8 +56,18 @@ const norm = (s: string, caseSensitive?: boolean): string => {
  *  SYMMETRICALLY to candidate and expected, so equivalent variants collapse
  *  together but a genuinely wrong answer can never be flipped into a pass.
  *  String-comparison specs only: numeric_equals extracts the number itself,
- *  contains_all is substring-based, and regex owns its own pattern. */
-const stripTrailingPunct = (s: string): string => s.replace(/[.,;:!?'"`)\]\s]+$/u, '');
+ *  contains_all is substring-based, and regex owns its own pattern.
+ *  Stripped one character at a time (no `+` quantifier) rather than via a
+ *  single `[...]+$` regex: that shape is polynomial-time on strings that
+ *  DON'T end in the class (e.g. many punctuation chars followed by one
+ *  non-punctuation char), since an unanchored `String#replace` retries the
+ *  whole quantified run from every start index. */
+const TRAILING_PUNCT_CHAR = /[.,;:!?'"`)\]\s]/u;
+const stripTrailingPunct = (s: string): string => {
+  let end = s.length;
+  while (end > 0 && TRAILING_PUNCT_CHAR.test(s[end - 1])) end--;
+  return s.slice(0, end);
+};
 
 const normEq = (s: string, caseSensitive?: boolean): string =>
   stripTrailingPunct(norm(s, caseSensitive));
@@ -121,7 +133,22 @@ export function resolveAnswerChecker(
       }
       return (a) => {
         try {
-          return re.test(a.trim());
+          // spec.pattern/flags are caller-supplied (any external HTTP caller,
+          // per the module doc above) and are the whole point of this check
+          // kind, so they can't be escaped/rejected without defeating the
+          // feature. Instead, run the match in a throwaway VM context with a
+          // hard wall-clock timeout: a catastrophic-backtracking ("evil")
+          // pattern can then only ever time out into `false`, never hang the
+          // event loop for other requests. 750ms (not the original 100ms):
+          // a legitimate match is effectively instant regardless of load,
+          // while a genuinely catastrophic-backtracking pattern blows past
+          // this by orders of magnitude — 100ms measurably false-timed-out
+          // under ordinary CPU contention (e.g. the full parallel test
+          // suite), which would silently mis-score a correct answer as
+          // wrong in production too.
+          return Boolean(
+            vm.runInNewContext('re.test(input)', { re, input: a.trim() }, { timeout: 750 }),
+          );
         } catch {
           return false;
         }

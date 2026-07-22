@@ -77,22 +77,20 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Ailin One, Inc."
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
-# --- Image assets (README banner, etc.) -----------------------------------------
-[[annotations]]
-path = ["**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.svg", "**/*.ico", "**/*.gif"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 Ailin One, Inc."
-SPDX-License-Identifier = "AGPL-3.0-or-later"
-
 # --- Prisma query-engine WASM binaries (third-party, NOT Ailin's work) ---------
-# Emitted by `prisma generate`; upstream is the Prisma engines project. Placed
-# LAST: reuse-tool's annotation matching uses "latest match in file order wins"
-# for a given path (no aggregation across [[annotations]] blocks), so this must
-# come after the broader "api/src/generated/**" block above to actually apply —
-# otherwise these files get mislabeled as Ailin/AGPL instead of Prisma/Apache-2.0,
-# and Apache-2.0 shows as an unused license in `reuse lint`.
+# Emitted by `prisma generate` into api/src/generated/**; upstream is the Prisma
+# engines project. Placed AFTER the api/src/generated/** block above: REUSE.toml
+# resolves overlapping [[annotations]] by "last match in file order wins", so
+# this must stay last or the broader generated-code AGPL block would swallow it.
 [[annotations]]
 path = ["**/*.wasm", "**/*.wasm-base64.js"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Prisma Data, Inc. and contributors"
 SPDX-License-Identifier = "Apache-2.0"
+
+# --- Image assets (binary, cannot carry an inline SPDX header) -----------------
+[[annotations]]
+path = ["**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.ico", "**/*.webp", "**/*.svg"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Ailin One, Inc."
+SPDX-License-Identifier = "AGPL-3.0-or-later"

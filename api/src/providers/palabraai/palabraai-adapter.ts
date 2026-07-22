@@ -173,8 +173,17 @@ export class PalabraAIAdapter extends ProviderAdapter {
    * Delete a translation session.
    */
   async deleteSession(sessionId: string): Promise<void> {
+    // Guard against SSRF/path-injection: sessionId comes from the public
+    // DELETE /v1/translation/session/:id route param and is otherwise
+    // unvalidated. Restrict it to the opaque-id charset Palabra actually
+    // issues before it is interpolated into the request URL.
+    if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+      log.warn({ sessionId }, 'Rejected Palabra session deletion: invalid session id format');
+      throw new Error('Invalid session id');
+    }
+
     try {
-      await fetch(`${PALABRA_API}/session-storage/sessions/${sessionId}`, {
+      await fetch(`${PALABRA_API}/session-storage/sessions/${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
         headers: this.authHeaders(),
       });

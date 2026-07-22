@@ -89,7 +89,7 @@ const CAPABILITY_ALIAS_MAP: Record<string, ModelCapability> = {
 };
 
 function normalizeToken(value: string): string {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+/, '').replace(/_+$/, '');
 }
 
 function coerceStringArray(value: unknown): string[] {

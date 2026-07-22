@@ -22,10 +22,11 @@
 import type { Logger } from 'pino';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { exec, execFile } from 'child_process';
+import net from 'net';
+import { lookup as dnsLookup } from 'dns/promises';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 /**
@@ -71,6 +72,108 @@ async function runTool(
     windowsHide: true,
   });
   return { stdout, stderr };
+}
+
+/**
+ * SECURITY: shell-free execution of a fully user/API-controlled command
+ * string (see executeExecuteWorkflowTool's `step.command`, sourced from
+ * executeRegisterWorkflowTool with no content validation). Splitting into an
+ * argv array and invoking via execFile (shell:false) — instead of exec()'s
+ * shell string — means shell metacharacters (`;`, `|`, `&&`, backticks,
+ * `$()`, redirects, etc.) are inert literal argument text, not shell syntax.
+ * This intentionally drops shell-only features (pipes/chaining/redirection);
+ * that is the point — a workflow step is no longer able to run an arbitrary
+ * shell pipeline, only a single program with literal arguments. Basic
+ * single/double-quoted arguments are still supported.
+ */
+function parseCommandToArgv(command: string): string[] {
+  const argv: string[] = [];
+  const tokenPattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let tokenMatch: RegExpExecArray | null;
+  while ((tokenMatch = tokenPattern.exec(command)) !== null) {
+    argv.push(
+      tokenMatch[1] !== undefined
+        ? tokenMatch[1]
+        : tokenMatch[2] !== undefined
+          ? tokenMatch[2]
+          : tokenMatch[3]
+    );
+  }
+  return argv;
+}
+
+/**
+ * SECURITY: escapes regex metacharacters so a user-controlled string (e.g.
+ * an identifier or search term) can be embedded as a literal fragment inside
+ * a hand-built RegExp without letting the caller inject regex syntax that
+ * changes the expression's meaning or causes catastrophic backtracking
+ * (ReDoS). Equivalent to lodash's `_.escapeRegExp`.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * SECURITY: SSRF guard for client-supplied `*_url` parameters (see
+ * executeAnalyzeImageTool / executeCompareImagesTool). A hostname/string
+ * allowlist check alone is insufficient — an attacker-controlled DNS name
+ * can resolve to an internal address (DNS rebinding) — so this resolves the
+ * hostname and rejects the request if ANY resolved address falls inside a
+ * private, loopback, link-local, or other non-public range. Only plain
+ * http/https URLs are permitted.
+ */
+const PRIVATE_IP_BLOCKLIST = new net.BlockList();
+// IPv4: this-network, private (RFC1918), CGNAT, loopback, link-local,
+// benchmark, multicast, reserved, broadcast.
+PRIVATE_IP_BLOCKLIST.addSubnet('0.0.0.0', 8, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('10.0.0.0', 8, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('100.64.0.0', 10, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('127.0.0.0', 8, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('169.254.0.0', 16, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('172.16.0.0', 12, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('192.168.0.0', 16, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('198.18.0.0', 15, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('224.0.0.0', 4, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('240.0.0.0', 4, 'ipv4');
+PRIVATE_IP_BLOCKLIST.addSubnet('255.255.255.255', 32, 'ipv4');
+// IPv6: unspecified, loopback, unique-local, link-local, IPv4-mapped.
+PRIVATE_IP_BLOCKLIST.addSubnet('::', 128, 'ipv6');
+PRIVATE_IP_BLOCKLIST.addSubnet('::1', 128, 'ipv6');
+PRIVATE_IP_BLOCKLIST.addSubnet('fc00::', 7, 'ipv6');
+PRIVATE_IP_BLOCKLIST.addSubnet('fe80::', 10, 'ipv6');
+PRIVATE_IP_BLOCKLIST.addSubnet('::ffff:0:0', 96, 'ipv6');
+
+async function assertPublicHttpUrl(rawUrl: string): Promise<URL> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`Unsupported URL scheme: ${url.protocol}`);
+  }
+
+  const hostname = url.hostname;
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await dnsLookup(hostname, { all: true });
+  } catch {
+    throw new Error(`Unable to resolve host: ${hostname}`);
+  }
+
+  if (addresses.length === 0) {
+    throw new Error(`Unable to resolve host: ${hostname}`);
+  }
+
+  for (const { address, family } of addresses) {
+    if (PRIVATE_IP_BLOCKLIST.check(address, family === 6 ? 'ipv6' : 'ipv4')) {
+      throw new Error(`Refusing to fetch from non-public address: ${hostname}`);
+    }
+  }
+
+  return url;
 }
 
 // ============================================
@@ -285,19 +388,22 @@ export async function executeRenameSymbolTool(
     let totalReplacements = 0;
 
     // Build pattern based on symbol type
+    // SECURITY: oldName is escaped before embedding in the regex so a
+    // caller cannot inject regex syntax (js/regex-injection / ReDoS).
+    const safeOldName = escapeRegExp(oldName);
     let pattern: RegExp;
     switch (symbolType) {
       case 'function':
-        pattern = new RegExp(`\\b(function\\s+)?${oldName}\\s*\\(`, 'g');
+        pattern = new RegExp(`\\b(function\\s+)?${safeOldName}\\s*\\(`, 'g');
         break;
       case 'class':
-        pattern = new RegExp(`\\b(class\\s+)?${oldName}\\b`, 'g');
+        pattern = new RegExp(`\\b(class\\s+)?${safeOldName}\\b`, 'g');
         break;
       case 'variable':
-        pattern = new RegExp(`\\b(const|let|var)\\s+${oldName}\\b`, 'g');
+        pattern = new RegExp(`\\b(const|let|var)\\s+${safeOldName}\\b`, 'g');
         break;
       default:
-        pattern = new RegExp(`\\b${oldName}\\b`, 'g');
+        pattern = new RegExp(`\\b${safeOldName}\\b`, 'g');
     }
 
     for (const filePattern of files) {
@@ -1074,7 +1180,10 @@ export async function executeAnalyzeImageTool(
       // For URLs, we can pass them directly to models that support it
       // But we also fetch for models that need base64
       try {
-        const response = await fetch(image_url);
+        // SECURITY: SSRF guard — resolves the hostname and rejects
+        // private/loopback/link-local targets before fetching (js/request-forgery).
+        const validatedUrl = await assertPublicHttpUrl(image_url);
+        const response = await fetch(validatedUrl);
         if (!response.ok) {
           return {
             tool_call_id: toolCallId,
@@ -1100,6 +1209,14 @@ export async function executeAnalyzeImageTool(
     } else if (image_path) {
       // Read local file
       const fullPath = path.resolve(workingDirectory, image_path);
+      // Security check
+      if (!fullPath.startsWith(workingDirectory)) {
+        return {
+          tool_call_id: toolCallId,
+          success: false,
+          error: 'Access denied: file is outside working directory',
+        };
+      }
       try {
         const buffer = await fs.readFile(fullPath);
         imageData = buffer.toString('base64');
@@ -1260,7 +1377,10 @@ export async function executeCompareImagesTool(
       
       if (url) {
         try {
-          const response = await fetch(url);
+          // SECURITY: SSRF guard — resolves the hostname and rejects
+          // private/loopback/link-local targets before fetching (js/request-forgery).
+          const validatedUrl = await assertPublicHttpUrl(url);
+          const response = await fetch(validatedUrl);
           if (!response.ok) return null;
           const buffer = await response.arrayBuffer();
           return { data: Buffer.from(buffer).toString('base64'), source: 'url' };
@@ -1268,10 +1388,14 @@ export async function executeCompareImagesTool(
           return null;
         }
       }
-      
+
       if (filePath) {
         try {
           const fullPath = path.resolve(workingDirectory, filePath);
+          // Security check
+          if (!fullPath.startsWith(workingDirectory)) {
+            return null;
+          }
           const buffer = await fs.readFile(fullPath);
           return { data: buffer.toString('base64'), source: 'file' };
         } catch {
@@ -1479,13 +1603,16 @@ export async function executeInlineFunctionTool(
     const content = await fs.readFile(fullPath, 'utf-8');
 
     // Find function definition (declaration or block-bodied arrow).
-    const declarationRegex = new RegExp(`\\bfunction\\s+${functionName}\\s*\\([^)]*\\)\\s*\\{`, 'm');
+    // SECURITY: functionName is escaped before embedding in these regexes so
+    // a caller cannot inject regex syntax (js/regex-injection / ReDoS).
+    const safeFunctionName = escapeRegExp(functionName);
+    const declarationRegex = new RegExp(`\\bfunction\\s+${safeFunctionName}\\s*\\([^)]*\\)\\s*\\{`, 'm');
     const arrowBlockRegex = new RegExp(
-      `\\b(?:const|let|var)\\s+${functionName}\\s*=\\s*(?:async\\s+)?\\([^)]*\\)\\s*=>\\s*\\{`,
+      `\\b(?:const|let|var)\\s+${safeFunctionName}\\s*=\\s*(?:async\\s+)?\\([^)]*\\)\\s*=>\\s*\\{`,
       'm'
     );
     const arrowExprRegex = new RegExp(
-      `\\b(?:const|let|var)\\s+${functionName}\\s*=\\s*(?:async\\s+)?\\([^)]*\\)\\s*=>\\s*([^\\n;]+)`,
+      `\\b(?:const|let|var)\\s+${safeFunctionName}\\s*=\\s*(?:async\\s+)?\\([^)]*\\)\\s*=>\\s*([^\\n;]+)`,
       'm'
     );
 
@@ -1543,7 +1670,7 @@ export async function executeInlineFunctionTool(
     }
 
     // Count call sites and exclude the definition itself.
-    const callRegex = new RegExp(`\\b${functionName}\\s*\\(`, 'g');
+    const callRegex = new RegExp(`\\b${safeFunctionName}\\s*\\(`, 'g');
     let callCount = 0;
     let callMatch: RegExpExecArray | null;
     while ((callMatch = callRegex.exec(content)) !== null) {
@@ -1618,8 +1745,22 @@ export async function executeFileSearchTool(
 
   try {
     const fullPath = path.resolve(workingDirectory, searchPath);
+
+    // Security check
+    if (!fullPath.startsWith(workingDirectory)) {
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: 'Access denied: path is outside working directory',
+      };
+    }
+
     const results: Array<{ path: string; type: 'name' | 'content'; match?: string }> = [];
-    const patternRegex = new RegExp(pattern, 'i');
+    // SECURITY: pattern is escaped before constructing the regex so a caller
+    // cannot inject regex syntax (js/regex-injection / ReDoS); this endpoint
+    // is documented as a plain filename/content search, not a regex search
+    // (the dedicated `grep` tool is the regex-search endpoint).
+    const patternRegex = new RegExp(escapeRegExp(pattern), 'i');
 
     const searchDirectory = async (dir: string, depth: number = 0): Promise<void> => {
       if (depth > 10 || results.length >= max_results) return;
@@ -1757,6 +1898,15 @@ export async function executeDetectErrorsTool(
 
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
+
+    // Security check
+    if (!fullPath.startsWith(workingDirectory)) {
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: 'Access denied: file is outside working directory',
+      };
+    }
 
     // Check if file exists
     try {
@@ -2024,6 +2174,18 @@ export async function executeValidateCodeTool(
       const errors: CodeError[] = [];
       const warnings: CodeError[] = [];
 
+      // Security check
+      if (!fullPath.startsWith(workingDirectory)) {
+        results.set(filePath, {
+          valid: false,
+          errors: [{ line: 0, message: 'Access denied: file is outside working directory', type: 'syntax', severity: 'error' }],
+          warnings: [],
+        });
+        failedFiles.push(filePath);
+        totalErrors++;
+        continue;
+      }
+
       try {
         await fs.access(fullPath);
       } catch {
@@ -2194,6 +2356,15 @@ export async function executeGitResolveConflictTool(
 
   try {
     const fullPath = path.resolve(workingDirectory, filePath);
+
+    // Security check
+    if (!fullPath.startsWith(workingDirectory)) {
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: 'Access denied: file is outside working directory',
+      };
+    }
 
     // Check if file exists
     try {
@@ -2572,11 +2743,25 @@ export async function executeExecuteWorkflowTool(
         let stepResult: { success: boolean; output?: string; error?: string };
 
         if (step.command) {
-          // Execute shell command
+          // Execute command
           try {
-            const { stdout, stderr } = await execAsync(step.command, {
+            // SECURITY: shell-free — step.command is fully user/API-controlled
+            // (registered via executeRegisterWorkflowTool with no content
+            // validation), so running it through a shell (exec) would let any
+            // caller run arbitrary shell pipelines/chained commands
+            // (js/command-line-injection). Parse into an argv array and
+            // invoke via execFile (no shell) instead — shell metacharacters
+            // become inert literal arguments rather than shell syntax.
+            const commandArgv = parseCommandToArgv(step.command);
+            if (commandArgv.length === 0) {
+              throw new Error('Empty command');
+            }
+            const { stdout, stderr } = await execFileAsync(commandArgv[0], commandArgv.slice(1), {
               cwd: context.workingDirectory,
               timeout: context.timeout || 30000,
+              shell: false,
+              encoding: 'utf8',
+              windowsHide: true,
             });
             stepResult = {
               success: true,
@@ -2813,6 +2998,16 @@ export async function executeExploreCodebaseTool(
 
   try {
     const fullPath = path.resolve(workingDirectory, targetPath);
+
+    // Security check
+    if (!fullPath.startsWith(workingDirectory)) {
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: 'Access denied: path is outside working directory',
+      };
+    }
+
     const stats = {
       totalFiles: 0,
       totalDirs: 0,

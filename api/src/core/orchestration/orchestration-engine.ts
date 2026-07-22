@@ -2010,8 +2010,8 @@ export class OrchestrationEngine {
           .toLowerCase();
         const promptCharacteristics = {
           urgency: /urgent|asap|immediately|quick|fast|hurry|deadline/gi.test(promptText),
-          costSensitive: /budget|cheap|cost.*effective|low.*cost/gi.test(promptText),
-          qualityCritical: /quality|accurate|precise|best.*result|high.*quality/gi.test(promptText),
+          costSensitive: /budget|cheap|cost.{0,40}effective|low.{0,40}cost/gi.test(promptText),
+          qualityCritical: /quality|accurate|precise|best.{0,40}result|high.{0,40}quality/gi.test(promptText),
           messageCount: request.messages.length,
           hasTools: !!(request.tools && request.tools.length > 0),
         };

@@ -44,6 +44,24 @@ function countCodeBlocks(markdown, language) {
   return matches ? matches.length : 0;
 }
 
+const PRODUCTION_API_HOSTNAME = 'api.ailin.one';
+
+function referencesProductionApiUrl(markdown) {
+  const urlPattern = /https?:\/\/[^\s"'`)>]+/g;
+  const matches = markdown.match(urlPattern) || [];
+  for (const raw of matches) {
+    try {
+      const url = new URL(raw);
+      if (url.protocol === 'https:' && url.hostname === PRODUCTION_API_HOSTNAME) {
+        return true;
+      }
+    } catch {
+      // Not a parseable absolute URL — ignore.
+    }
+  }
+  return false;
+}
+
 function main() {
   const findings = [];
   const aggregate = { curl: 0, ts: 0, python: 0, mermaid: 0 };
@@ -80,7 +98,7 @@ function main() {
     if (tsBlocks === 0) findings.push(`Missing TypeScript example in ${relativePath}`);
     if (pythonBlocks === 0) findings.push(`Missing Python example in ${relativePath}`);
 
-    if (markdown.includes('curl') && !markdown.includes('https://api.ailin.one')) {
+    if (markdown.includes('curl') && !referencesProductionApiUrl(markdown)) {
       findings.push(`curl examples should target production base URL in ${relativePath}`);
     }
   }

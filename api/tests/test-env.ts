@@ -142,11 +142,11 @@ export function loadTestEnvDefaults() {
     }
     
     // Alibaba/Baidu (optional)
-    if (!process.env.ALIBABA_KEY_ID) {
-      process.env.ALIBABA_KEY_ID = 'test-alibaba-id';
+    if (!process.env.ALIBABA_ACCESS_KEY_ID) {
+      process.env.ALIBABA_ACCESS_KEY_ID = 'test-alibaba-id';
     }
-    if (!process.env.ALIBABA_KEY_SECRET) {
-      process.env.ALIBABA_KEY_SECRET = 'test-alibaba-secret';
+    if (!process.env.ALIBABA_ACCESS_KEY_SECRET) {
+      process.env.ALIBABA_ACCESS_KEY_SECRET = 'test-alibaba-secret';
     }
     if (!process.env.ERNIE_API_KEY) {
       process.env.ERNIE_API_KEY = 'test-baidu-key';

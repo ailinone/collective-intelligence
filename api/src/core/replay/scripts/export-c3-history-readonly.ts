@@ -87,7 +87,7 @@ const COUNT_EXPERIMENTS_SQL =
 
 function execPsql(sql: string): string {
   // Collapse SQL into single line, escape double quotes.
-  const oneLine = sql.replace(/\s+/g, ' ').replace(/"/g, '\\"');
+  const oneLine = sql.replace(/\s+/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const cmd =
     `docker exec -i ci-postgres psql -U ci_user -d ci_db -A -t -X -v ON_ERROR_STOP=1 ` +
     `-c "${oneLine}"`;

@@ -120,9 +120,15 @@ export const envVarMappings = {
 export function loadModelSelectionConfigFromEnv(): Partial<DynamicModelSelectorConfig> {
   const config: Partial<DynamicModelSelectorConfig> = {};
 
+  // Keys that could be used to pollute Object.prototype via a deep assignment
+  const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
   // Helper to get nested config
   const setNestedValue = (path: string, value: unknown): void => {
     const keys = path.split('.');
+    if (keys.some((key) => UNSAFE_KEYS.has(key))) {
+      return;
+    }
     let current: Record<string, unknown> = config as Record<string, unknown>;
 
     for (let i = 0; i < keys.length - 1; i++) {

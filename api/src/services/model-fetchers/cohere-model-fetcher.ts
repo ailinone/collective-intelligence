@@ -42,7 +42,7 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
     // Validate API key is not mock
     if (!this.apiKey || this.apiKey.includes('mock') || this.apiKey.includes('test-')) {
       this.log.warn(
-        { apiKeyPrefix: this.apiKey?.substring(0, 10) },
+        { keyPresent: Boolean(this.apiKey) },
         'Cohere API key appears to be mock/test key - skipping model discovery'
       );
       return [];
@@ -51,10 +51,7 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
     // Sanitize API key - remove invalid characters that can't be in HTTP headers
     const sanitizedApiKey = this.apiKey.trim().replace(/[\r\n\t]/g, '');
     if (sanitizedApiKey !== this.apiKey) {
-      this.log.warn(
-        { originalLength: this.apiKey.length, sanitizedLength: sanitizedApiKey.length },
-        'API key contained invalid characters and was sanitized'
-      );
+      this.log.warn('API key contained invalid characters and was sanitized');
     }
 
     // Validate baseUrl
@@ -159,7 +156,7 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
         this.log.error(
           {
             baseUrl: this.baseUrl,
-            apiKeyPrefix: this.apiKey?.substring(0, 10),
+            keyPresent: Boolean(this.apiKey),
             error: errorMessage,
           },
           'Failed to fetch models from Cohere API - invalid character in URL or headers (ERR_INVALID_CHAR). Check baseUrl and API key encoding.'

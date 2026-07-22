@@ -110,7 +110,7 @@ async function main(): Promise<void> {
 
   console.log('\n──── Phase 2b — Product routes still require auth (expect 401) ──');
   for (const r of PRODUCT_ROUTES) {
-    const url = r.url.replace('*', 'http%3A%2F%2Failin.dev%2Fcap%2Fv1%2Fvision');
+    const url = r.url.replace(/\*/g, 'http%3A%2F%2Failin.dev%2Fcap%2Fv1%2Fvision');
     const res = await app.inject({ method: r.method as 'GET', url });
     assert(
       res.statusCode === 401,
