@@ -35,7 +35,7 @@
  * }
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 type TierLevel = 'enterprise';
@@ -314,6 +314,22 @@ async function loadConfigFile(configPath: string): Promise<SetupFile> {
   return parsed;
 }
 
+function maskCredential(value: string): string {
+  if (value.length <= 8) return '*'.repeat(value.length);
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function maskOutcome(outcome: SetupOutcome): Record<string, string | undefined> {
+  return {
+    organizationId: outcome.organizationId,
+    userId: outcome.userId,
+    accessToken: maskCredential(outcome.accessToken),
+    refreshToken: outcome.refreshToken ? maskCredential(outcome.refreshToken) : undefined,
+    loginMode: outcome.loginMode,
+    apiKey: outcome.apiKey ? maskCredential(outcome.apiKey) : undefined,
+  };
+}
+
 if (require.main === module) {
   const configPathArg = process.argv[2] ?? process.env.SETUP_CONFIG_PATH;
 
@@ -340,11 +356,24 @@ if (require.main === module) {
         }
       }
 
+      const outputPath = resolve(
+        process.cwd(),
+        process.env.SETUP_RESULTS_OUTPUT_PATH || `setup-org-results-${Date.now()}.json`
+      );
+      await writeFile(outputPath, JSON.stringify(results, null, 2), { mode: 0o600 });
+
+      const maskedResults: Record<string, Record<string, string | undefined>> = {};
+      for (const [email, outcome] of Object.entries(results)) {
+        maskedResults[email] = maskOutcome(outcome);
+      }
+
       console.log('\n========================================');
-      console.log('Resumo dos acessos gerados (guarde em local seguro):');
+      console.log('Resumo dos acessos gerados (credenciais mascaradas abaixo):');
       console.log('========================================');
-      console.log(JSON.stringify(results, null, 2));
-      console.log('========================================\n');
+      console.log(JSON.stringify(maskedResults, null, 2));
+      console.log('========================================');
+      console.log(`[INFO] Credenciais completas salvas em: ${outputPath} (permissoes 600)`);
+      console.log('[AVISO] Mova este arquivo para um local seguro e apague-o do disco apos o uso.\n');
       console.log('âœ“ Todas as organizaÃ§Ãµes foram configuradas com sucesso!');
     })
     .catch((error) => {

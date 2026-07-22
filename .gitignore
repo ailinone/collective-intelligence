@@ -83,6 +83,9 @@ api/.openai_key*
 api/tmp-probes/
 scripts/probe-results*.json
 
+# setup-org-via-api.ts's full-credential output (real live accessToken/refreshToken/apiKey)
+api/scripts/setup-org-results-*.json
+
 # Local hidden audit notes (per-investigation, dot-prefixed = personal, not for VCS)
 docs/.AUDIT-*.md
 docs/.EXECUTIVE-SUMMARY-*.md
