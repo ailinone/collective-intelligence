@@ -8,11 +8,12 @@
 # Source: https://github.com/ailinone/collective-intelligence
 
 """NLLB-200 Translation Server — PyTorch CPU with greedy decoding."""
-import os, time, torch
+import logging, os, time, torch
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 app = FastAPI(title="NLLB-200 Translation Server")
+logger = logging.getLogger(__name__)
 MODEL_ID = os.environ.get("NLLB_MODEL", "facebook/nllb-200-distilled-600M")
 tokenizer_obj = None
 model_obj = None
@@ -85,8 +86,12 @@ async def translate_text(request: Request):
     if not text.strip(): return JSONResponse({"error": "Empty text"}, status_code=400)
     start = time.perf_counter()
     try: translated = translate(text, src, tgt)
-    except ValueError as e: return JSONResponse({"error": str(e)}, status_code=400)
-    except Exception as e: return JSONResponse({"error": f"Translation failed: {e}"}, status_code=500)
+    except ValueError as e:
+        logger.warning("Invalid language code: %s", e)
+        return JSONResponse({"error": "Invalid language code"}, status_code=400)
+    except Exception:
+        logger.exception("Translation failed")
+        return JSONResponse({"error": "Translation failed"}, status_code=500)
     latency_ms = round((time.perf_counter() - start) * 1000, 1)
     return {"translated_text": translated, "source_lang": src, "target_lang": tgt, "model": "nllb-200-distilled-600M", "latency_ms": latency_ms}
 

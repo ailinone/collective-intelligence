@@ -29,6 +29,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import {
   getCollectiveRun,
@@ -126,10 +127,17 @@ function isUuid(value: unknown): value is string {
 // ─── Route registration ─────────────────────────────────────────────────
 
 export async function registerCollectiveRoutes(server: FastifyInstance): Promise<void> {
+  // SECURITY (js/missing-rate-limiting): each handler below performs an
+  // org-authorization check followed by a DB read of audit data —
+  // route-scoped (not the global per-identity budget) so it adds a real
+  // ceiling here without double-spending the global token bucket. See
+  // route-rate-limit.ts.
+  const collectivePreHandler = [authenticate, createRouteRateLimit('collective-runs')];
+
   // ─── GET /v1/collective/runs/:id ──────────────────────────────────────
   server.get(
     '/v1/collective/runs/:id',
-    { preHandler: [authenticate] },
+    { preHandler: collectivePreHandler },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const organizationId = authenticatedOrgId(req);
       if (!organizationId) {
@@ -174,7 +182,7 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
   // single-run route — wrong-org and not-found are indistinguishable.
   server.get(
     '/v1/collective/runs/:id/trace',
-    { preHandler: [authenticate] },
+    { preHandler: collectivePreHandler },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const organizationId = authenticatedOrgId(req);
       if (!organizationId) {
@@ -229,7 +237,7 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
   // ─── GET /v1/collective/runs?requestId=... ────────────────────────────
   server.get(
     '/v1/collective/runs',
-    { preHandler: [authenticate] },
+    { preHandler: collectivePreHandler },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const organizationId = authenticatedOrgId(req);
       if (!organizationId) {

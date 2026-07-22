@@ -65,6 +65,9 @@ vi.mock('@/core/resilience/token-bucket-limiter', () => ({
     getRetryAfter: mocks.getRetryAfterMock,
     getAllStats: () => Promise.resolve([]),
   },
+  // Passthrough stub: this file doesn't assert on the logged identifier
+  // representation, only on rate-limit/bypass behavior.
+  safeLogIdentifier: (_scope: string, identifier: string) => identifier,
 }));
 
 // Plain function literals (not `vi.fn()`) — these are never asserted on, and

@@ -72,6 +72,72 @@ function authorizeScrape(request: FastifyRequest, reply: FastifyReply): boolean 
   return true;
 }
 
+/**
+ * Rate-limit the scrape endpoints themselves.
+ *
+ * `/metrics` and `/metrics/prompts` are intentionally listed in both
+ * `OPERATIONAL_ROUTE_PATHS` (token-bucket-rate-limit.ts) and `PUBLIC_ROUTES`
+ * (api-key-auth-middleware.ts), so the product-level rate limiters that run
+ * as global preHandler hooks deliberately skip them — that's correct, it
+ * stops Kubernetes probes / Prometheus scrapes from draining a customer's
+ * per-key/per-user/per-org quota. But it also means these two routes carry
+ * NO rate limiting of any kind: a caller who knows the scrape token (or, in
+ * non-production, doesn't even need one) could hammer the metrics-generation
+ * path freely.
+ *
+ * This is a small self-contained in-process sliding window — the same
+ * "local fallback" idiom already used for the Redis-outage path in
+ * api-key-rate-limit-middleware.ts — rather than the shared Redis-backed
+ * tokenBucketManager: that manager is wired for the *product* rate limiters,
+ * and this endpoint is deliberately exempt from product state, so it needs
+ * its own independent, lightweight counter, not a dependency on Redis or the
+ * full app config. Keyed by source IP + route, sized well above normal
+ * Prometheus scrape cadences (typically 15-60s) so legitimate scraping is
+ * unaffected.
+ */
+const SCRAPE_RATE_LIMIT_WINDOW_MS = 60_000; // 60s
+const SCRAPE_RATE_LIMIT_MAX = 30; // generous vs. typical 15-60s scrape interval
+const SCRAPE_RATE_LIMIT_MAX_KEYS = 1_000; // safety cap against unbounded growth
+
+const scrapeRequestWindows = new Map<string, number[]>();
+
+function enforceMetricsScrapeRateLimit(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  routeTag: string
+): boolean {
+  const identifier = `${routeTag}:${request.ip || 'unknown'}`;
+  const now = Date.now();
+  const windowStart = now - SCRAPE_RATE_LIMIT_WINDOW_MS;
+
+  let timestamps = scrapeRequestWindows.get(identifier);
+  if (!timestamps) {
+    if (scrapeRequestWindows.size >= SCRAPE_RATE_LIMIT_MAX_KEYS) {
+      const oldestKey = scrapeRequestWindows.keys().next().value;
+      if (oldestKey !== undefined) scrapeRequestWindows.delete(oldestKey);
+    }
+    timestamps = [];
+  }
+  const pruned = timestamps.filter((t) => t > windowStart);
+
+  if (pruned.length >= SCRAPE_RATE_LIMIT_MAX) {
+    scrapeRequestWindows.set(identifier, pruned);
+    const retryAfterSeconds = Math.max(1, Math.ceil((pruned[0] + SCRAPE_RATE_LIMIT_WINDOW_MS - now) / 1000));
+    reply.header('Retry-After', retryAfterSeconds.toString());
+    reply.status(429).send({
+      error: {
+        code: 'rate_limit_exceeded',
+        message: `Rate limit exceeded. Try again in ${retryAfterSeconds} seconds.`,
+      },
+    });
+    return false;
+  }
+
+  pruned.push(now);
+  scrapeRequestWindows.set(identifier, pruned);
+  return true;
+}
+
 export async function registerMetricsRoute(server: FastifyInstance): Promise<void> {
   server.get(
     '/metrics',
@@ -117,6 +183,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
       },
     },
     async (request, reply) => {
+      if (!enforceMetricsScrapeRateLimit(request, reply, 'metrics')) return reply;
       if (!authorizeScrape(request, reply)) return reply;
 
       try {
@@ -163,6 +230,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
       schema: { hide: true, response: { 200: { type: 'string' }, 403: { type: 'object' } } },
     },
     async (request, reply) => {
+      if (!enforceMetricsScrapeRateLimit(request, reply, 'metrics-prompts')) return reply;
       if (!authorizeScrape(request, reply)) return reply;
 
       const { exportPromptMetricsAsPrometheus, PROMETHEUS_CONTENT_TYPE } = await import(

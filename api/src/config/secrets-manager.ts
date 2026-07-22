@@ -33,10 +33,11 @@ interface CacheEntry {
 
 function generateRandomSecret(length: number): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = crypto.randomBytes(length);
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += alphabet[bytes[i] % alphabet.length];
+    // crypto.randomInt uses rejection sampling internally, so the result is
+    // uniformly distributed over [0, alphabet.length) with no modulo bias.
+    result += alphabet[crypto.randomInt(alphabet.length)];
   }
   return result;
 }

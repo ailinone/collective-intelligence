@@ -19,6 +19,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import path from 'node:path';
 import { logger } from '@/utils/logger';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { nanoid } from 'nanoid';
 import { JinaToolsService, type JinaToolName } from '@/services/jina-tools-service';
 import {
@@ -345,6 +346,12 @@ export async function registerToolsRoutes(rootServer: FastifyInstance): Promise<
   await rootServer.register(async (server: FastifyInstance) => {
     server.addHook('preHandler', authenticate);
     server.addHook('preHandler', requireRole('admin', 'owner'));
+    // SECURITY (js/missing-rate-limiting): these handlers execute shell
+    // commands / filesystem + git operations — expensive, authorization-gated
+    // operations that must not be callable at unbounded rate. Route-scoped
+    // (not the global per-identity budget) so it adds a real ceiling here
+    // without double-spending the global token bucket. See route-rate-limit.ts.
+    server.addHook('preHandler', createRouteRateLimit('tools', { capacity: 120, refillRate: 2 }));
 
   // ==========================================
   // File Operations

@@ -43,6 +43,34 @@ const data = await response.json();
 console.log(data);
 ```
 
+## Python Equivalent
+
+Same call from Python via `requests`, for teams mixing SDKs across services:
+
+```python
+import os
+import requests
+
+base_url = "https://api.ailin.one/v1"
+token = os.environ.get("AILIN_TOKEN", "")
+
+response = requests.post(
+    f"{base_url}/chat/completions",
+    headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "model": "ailin-auto",
+        "messages": [{"role": "user", "content": "Summarize this request."}],
+    },
+)
+
+print(response.json())
+```
+
+See the [Python SDK guide](python-sdk.md) for production-oriented patterns.
+
 ## Best Practices
 
 Recommended runtime checks:

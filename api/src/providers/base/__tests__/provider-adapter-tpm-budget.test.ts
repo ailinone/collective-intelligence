@@ -40,6 +40,9 @@ const { consumeMock, getBucketMock } = vi.hoisted(() => {
 
 vi.mock('@/core/resilience/token-bucket-limiter', () => ({
   tokenBucketManager: { getBucket: getBucketMock },
+  // Passthrough stub: this file doesn't assert on the logged identifier
+  // representation, only on TPM-budget behavior.
+  safeLogIdentifier: (_scope: string, identifier: string) => identifier,
 }));
 
 const { tokenBucketManager } = await import('@/core/resilience/token-bucket-limiter');

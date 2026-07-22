@@ -58,6 +58,7 @@
 import type { FastifyInstance } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { prisma } from '@/database/client';
 import { tryGetEmbedder } from '@/capability/embeddings/embedder';
 import { LEGACY_CAPABILITY_TO_URI } from '@/capability/ontology/seed';
@@ -350,6 +351,12 @@ export default async function hcraSearchRoutes(fastify: FastifyInstance): Promis
   // / public, anything inside it requires credentials.
   await fastify.register(async (gated) => {
     gated.addHook('preHandler', authenticate);
+    // SECURITY (js/missing-rate-limiting): these handlers run pg_trgm +
+    // vector-similarity queries against the ontology/model tables on every
+    // call — expensive, authorization-gated reads. Route-scoped (not the
+    // global per-identity budget) so it adds a real ceiling here without
+    // double-spending the global token bucket. See route-rate-limit.ts.
+    gated.addHook('preHandler', createRouteRateLimit('hcra-search', { capacity: 120, refillRate: 2 }));
 
     // GET /v1/hcra/capabilities?q=...&category=...&limit=...&offset=...&mode=hybrid|lexical|vector
     gated.get('/v1/hcra/capabilities', async (req, reply) => {

@@ -99,8 +99,8 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'VERTEX_AI_API_KEY', secretKeys: ['vertex-key'] },
   { envVar: 'VERTEX_AI_PROJECT_ID', secretKeys: ['vertex-project-id'] },
   { envVar: 'QWEN_API_KEY', secretKeys: ['qwen-key-2'] },
-  { envVar: 'ALIBABA_KEY_ID', secretKeys: ['alibaba-key-id'] },
-  { envVar: 'ALIBABA_KEY_SECRET', secretKeys: ['alibaba-key-secret'] },
+  { envVar: 'ALIBABA_ACCESS_KEY_ID', secretKeys: ['alibaba-key-id'] },
+  { envVar: 'ALIBABA_ACCESS_KEY_SECRET', secretKeys: ['alibaba-key-secret'] },
   { envVar: 'ERNIE_API_KEY', secretKeys: ['baidu-key'] },
   { envVar: 'ERNIE_SECRET_KEY', secretKeys: ['baidu-secret'] },
   { envVar: 'BAIDU_BASE_URL', secretKeys: ['baidu-base-url'] },
@@ -373,7 +373,7 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // No GCP secret provisioned yet — inert until an operator sets AILIN_API_KEY
   // for a self-hosted deployment. secretKeys follow the same naming
   // convention as the rest of this file in case one is provisioned later.
-  { envVar: 'AILIN_API_KEY', secretKeys: ['ailin-key', 'ailin-api-key', 'ailin-gateway-key'] },
+  { envVar: 'AILIN_API_KEY', secretKeys: ['ailin-key', 'ailin-api-key', 'gateway-key'] },
 ] as const;
 
 // ─── Provider Key Status Tracking ──────────────────────────────────────────

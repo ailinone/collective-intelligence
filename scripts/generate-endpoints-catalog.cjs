@@ -15,7 +15,11 @@ const OUTPUT_PATH = path.join('docs', 'reference', 'endpoints-catalog.md');
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
 
 function escapeCell(value = '') {
-  return String(value).replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, ' ')
+    .trim();
 }
 
 function getEffectiveSecurity(operation, pathItem, globalSecurity) {

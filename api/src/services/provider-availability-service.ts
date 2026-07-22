@@ -150,7 +150,7 @@ const PROVIDER_ENV_REQUIREMENTS: Record<string, ProviderRequirement> = {
   alibaba: {
     displayName: 'Alibaba Cloud (Dashscope / Qwen)',
     requiredEnv: ['QWEN_API_KEY'],
-    optionalEnv: ['DASHSCOPE_BASE_URL', 'ALIBABA_KEY_ID', 'ALIBABA_KEY_SECRET'],
+    optionalEnv: ['DASHSCOPE_BASE_URL', 'ALIBABA_ACCESS_KEY_ID', 'ALIBABA_ACCESS_KEY_SECRET'],
   },
   cometapi: {
     displayName: 'CometAPI',

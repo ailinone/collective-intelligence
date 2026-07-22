@@ -37,6 +37,7 @@ import {
   requireServiceAuth,
   type ServiceAuthedRequest,
 } from '@/api/middleware/internal-service-auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { resolveOrProvisionActingUser } from '@/services/internal-acting-user';
 import { invalidateApiKeyAuthCache } from '@/api/middleware/api-key-auth-middleware';
 
@@ -209,7 +210,17 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
    */
   server.delete<{ Params: { id: string } }>(
     '/v1/internal/api-keys/:id',
-    { preHandler: [requireServiceAuth(SCOPE_REVOKE)] },
+    {
+      // SECURITY (js/missing-rate-limiting): `/v1/internal/*` is exempted
+      // from the global auth + rate-limit hooks (see file header), so this
+      // handler's ownership check + DB write must be bounded here.
+      // `requireServiceAuth` runs first so `request.serviceAuth.actingUserId`
+      // is populated for the rate limiter to scope by. See route-rate-limit.ts.
+      preHandler: [
+        requireServiceAuth(SCOPE_REVOKE),
+        createRouteRateLimit('internal-api-keys-revoke', { capacity: 30, refillRate: 0.5 }),
+      ],
+    },
     async (request, reply) => {
       const { actingUserId } = (request as ServiceAuthedRequest).serviceAuth!;
       const { id } = request.params;

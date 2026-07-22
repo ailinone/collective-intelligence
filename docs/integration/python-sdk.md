@@ -47,6 +47,31 @@ print(resp.status_code)
 print(resp.text)
 ```
 
+## TypeScript Equivalent
+
+Same call from TypeScript via `fetch`, for teams mixing SDKs across services:
+
+```ts
+const baseUrl = "https://api.ailin.one/v1";
+const token = process.env.AILIN_TOKEN || "";
+
+const response = await fetch(`${baseUrl}/responses`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    model: "ailin-auto",
+    input: "Generate a concise production readiness checklist.",
+  }),
+});
+
+console.log(await response.json());
+```
+
+See the [TypeScript SDK guide](typescript-sdk.md) for retry and observability patterns.
+
 ## Production Recommendations
 
 - explicit timeout per request

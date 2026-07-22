@@ -28,6 +28,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { logger } from '@/utils/logger';
 import { recordSecurityEvent } from '@/services/security-audit-service';
@@ -74,7 +75,16 @@ function authorizeOrgAccess(
 }
 
 export async function registerOrgGovernanceRoutes(server: FastifyInstance): Promise<void> {
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  // SECURITY (js/missing-rate-limiting): every route below performs an
+  // admin-role + tenant-isolation authorization check before touching
+  // governance state — route-scoped (not the global per-identity budget)
+  // so it adds a real ceiling here without double-spending the global
+  // token bucket. See route-rate-limit.ts.
+  const adminPreHandler = [
+    authenticate,
+    requireRole('admin', 'owner'),
+    createRouteRateLimit('org-governance', { capacity: 30, refillRate: 0.5 }),
+  ];
 
   // ─── PUT /v1/admin/organizations/:id/budget ──────────────────────────────
   server.put(

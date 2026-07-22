@@ -17,7 +17,7 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { tokenBucketManager } from '@/core/resilience/token-bucket-limiter';
+import { tokenBucketManager, safeLogIdentifier } from '@/core/resilience/token-bucket-limiter';
 import { logger } from '@/utils/logger';
 import { getTierConfig } from '@/config/multi-tenancy-config';
 import type { TenantContext } from '@/api/middleware/tenant-isolation-middleware';
@@ -212,7 +212,13 @@ export async function tokenBucketRateLimitMiddleware(
   const identifiers = getIdentifiers(request);
   const requestLog = logger.child({
     endpoint: request.url,
-    identifiers,
+    // `identifiers.apiKey` is the raw `x-api-key` header value — bind a
+    // safe fingerprint instead so it isn't baked into every log line
+    // emitted through this child logger for the rest of the request.
+    identifiers: {
+      ...identifiers,
+      apiKey: identifiers.apiKey ? safeLogIdentifier('api-key', identifiers.apiKey) : identifiers.apiKey,
+    },
   });
 
   // Check whitelist
@@ -284,7 +290,11 @@ export async function tokenBucketRateLimitMiddleware(
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         requestLog.error(
-          { error: errorMessage, scope: check.scope, identifier: check.identifier },
+          {
+            error: errorMessage,
+            scope: check.scope,
+            identifier: safeLogIdentifier(check.scope, check.identifier),
+          },
           'Rate limit check failed'
         );
         return { check, allowed: true, stats: null }; // fail-open for this tier
@@ -304,7 +314,7 @@ export async function tokenBucketRateLimitMiddleware(
     requestLog.warn(
       {
         scope: rejected.check.scope,
-        identifier: rejected.check.identifier,
+        identifier: safeLogIdentifier(rejected.check.scope, rejected.check.identifier),
         retryAfter: retryAfterSeconds,
       },
       'Rate limit exceeded (token bucket)'

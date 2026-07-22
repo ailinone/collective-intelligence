@@ -151,6 +151,420 @@ export interface HumanInputRequest {
 export type HumanInputResolver = (request: HumanInputRequest) => Promise<unknown>;
 
 /**
+ * Restricted, non-executing evaluator for workflow `condition` strings.
+ *
+ * `condition` can come directly from an API-supplied inline workflow
+ * definition (POST body — see ci-routes.ts) or from an LLM-generated
+ * workflow plan (see parseWorkflowPlan below), so it must never be handed
+ * to eval / new Function / vm — any of those would let a crafted condition
+ * string run arbitrary JavaScript inside the API process.
+ *
+ * Instead this parses the small, safe expression grammar conditions
+ * actually need — literals, variable lookups, property access,
+ * comparisons, boolean/arithmetic operators, parentheses — and evaluates
+ * it directly against the workflow's own variables. There is no
+ * function-call syntax and no way to reach anything outside the
+ * `variables` map, so there is no code-execution surface regardless of
+ * input.
+ */
+type ConditionToken =
+  | { kind: 'number'; value: number }
+  | { kind: 'string'; value: string }
+  | { kind: 'identifier'; value: string }
+  | { kind: 'operator'; value: string }
+  | { kind: 'punct'; value: string };
+
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'string') return value.trim() === '' ? 0 : Number(value);
+  if (value === null) return 0;
+  return NaN;
+}
+
+function toDisplayString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function valuesEqual(a: unknown, b: unknown, loose: boolean): boolean {
+  if (!loose) {
+    return a === b;
+  }
+  if (a === b) {
+    return true;
+  }
+  if (a === null || a === undefined || b === null || b === undefined) {
+    return (a === null || a === undefined) && (b === null || b === undefined);
+  }
+  return toNumber(a) === toNumber(b);
+}
+
+function compareRelational(op: string, left: unknown, right: unknown): boolean {
+  let comparison: number;
+  if (typeof left === 'string' && typeof right === 'string') {
+    comparison = left < right ? -1 : left > right ? 1 : 0;
+  } else {
+    const l = toNumber(left);
+    const r = toNumber(right);
+    if (Number.isNaN(l) || Number.isNaN(r)) {
+      return false;
+    }
+    comparison = l < r ? -1 : l > r ? 1 : 0;
+  }
+  if (op === '<') return comparison < 0;
+  if (op === '<=') return comparison <= 0;
+  if (op === '>') return comparison > 0;
+  return comparison >= 0; // '>='
+}
+
+function isUnsafePropertyName(name: string): boolean {
+  return name === '__proto__' || name === 'prototype' || name === 'constructor';
+}
+
+function isPlainObjectOrArray(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readSafeProperty(target: unknown, key: string): unknown {
+  if (target === null || target === undefined) {
+    throw new Error(
+      `Cannot read property "${key}" of ${target === null ? 'null' : 'undefined'} in condition expression`
+    );
+  }
+  if (isUnsafePropertyName(key)) {
+    return undefined;
+  }
+  if (typeof target === 'string') {
+    return key === 'length' ? target.length : undefined;
+  }
+  if (isPlainObjectOrArray(target)) {
+    if (Array.isArray(target) && key === 'length') {
+      return target.length;
+    }
+    return Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
+  }
+  return undefined;
+}
+
+function tokenizeCondition(source: string): ConditionToken[] {
+  const tokens: ConditionToken[] = [];
+  const isDigit = (c: string): boolean => c >= '0' && c <= '9';
+  const isIdentStart = (c: string): boolean => /[A-Za-z_$]/.test(c);
+  const isIdentPart = (c: string): boolean => /[A-Za-z0-9_$]/.test(c);
+  let i = 0;
+  const n = source.length;
+
+  while (i < n) {
+    const ch = source[i];
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      i++;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      let value = '';
+      i++;
+      while (i < n && source[i] !== quote) {
+        if (source[i] === '\\' && i + 1 < n) {
+          const next = source[i + 1];
+          if (next === 'n') value += '\n';
+          else if (next === 't') value += '\t';
+          else if (next === 'r') value += '\r';
+          else value += next;
+          i += 2;
+        } else {
+          value += source[i];
+          i++;
+        }
+      }
+      if (i >= n) {
+        throw new Error('Unterminated string literal in condition expression');
+      }
+      i++; // closing quote
+      tokens.push({ kind: 'string', value });
+      continue;
+    }
+
+    if (isDigit(ch) || (ch === '.' && i + 1 < n && isDigit(source[i + 1]))) {
+      const start = i;
+      while (i < n && (isDigit(source[i]) || source[i] === '.')) {
+        i++;
+      }
+      tokens.push({ kind: 'number', value: parseFloat(source.slice(start, i)) });
+      continue;
+    }
+
+    if (isIdentStart(ch)) {
+      const start = i;
+      while (i < n && isIdentPart(source[i])) {
+        i++;
+      }
+      tokens.push({ kind: 'identifier', value: source.slice(start, i) });
+      continue;
+    }
+
+    const three = source.slice(i, i + 3);
+    if (three === '===' || three === '!==') {
+      tokens.push({ kind: 'operator', value: three });
+      i += 3;
+      continue;
+    }
+
+    const two = source.slice(i, i + 2);
+    if (two === '==' || two === '!=' || two === '<=' || two === '>=' || two === '&&' || two === '||') {
+      tokens.push({ kind: 'operator', value: two });
+      i += 2;
+      continue;
+    }
+
+    if ('<>+-*/%!'.includes(ch)) {
+      tokens.push({ kind: 'operator', value: ch });
+      i++;
+      continue;
+    }
+
+    if (ch === '(' || ch === ')' || ch === '.' || ch === '[' || ch === ']') {
+      tokens.push({ kind: 'punct', value: ch });
+      i++;
+      continue;
+    }
+
+    throw new Error(`Unexpected character "${ch}" in condition expression`);
+  }
+
+  return tokens;
+}
+
+class ConditionEvaluator {
+  private position = 0;
+
+  constructor(
+    private readonly tokens: ConditionToken[],
+    private readonly variables: Record<string, unknown>
+  ) {}
+
+  evaluate(): unknown {
+    const value = this.parseOr();
+    if (this.position < this.tokens.length) {
+      throw new Error('Unexpected trailing content in condition expression');
+    }
+    return value;
+  }
+
+  private peek(): ConditionToken | undefined {
+    return this.tokens[this.position];
+  }
+
+  private takeOperator(...candidates: string[]): string | undefined {
+    const token = this.peek();
+    if (token && token.kind === 'operator' && candidates.includes(token.value)) {
+      this.position++;
+      return token.value;
+    }
+    return undefined;
+  }
+
+  private parseOr(): unknown {
+    let left = this.parseAnd();
+    let op = this.takeOperator('||');
+    while (op !== undefined) {
+      const right = this.parseAnd();
+      left = Boolean(left) || Boolean(right);
+      op = this.takeOperator('||');
+    }
+    return left;
+  }
+
+  private parseAnd(): unknown {
+    let left = this.parseEquality();
+    let op = this.takeOperator('&&');
+    while (op !== undefined) {
+      const right = this.parseEquality();
+      left = Boolean(left) && Boolean(right);
+      op = this.takeOperator('&&');
+    }
+    return left;
+  }
+
+  private parseEquality(): unknown {
+    let left = this.parseRelational();
+    let op = this.takeOperator('===', '!==', '==', '!=');
+    while (op !== undefined) {
+      const right = this.parseRelational();
+      if (op === '===') {
+        left = valuesEqual(left, right, false);
+      } else if (op === '==') {
+        left = valuesEqual(left, right, true);
+      } else if (op === '!==') {
+        left = !valuesEqual(left, right, false);
+      } else {
+        left = !valuesEqual(left, right, true);
+      }
+      op = this.takeOperator('===', '!==', '==', '!=');
+    }
+    return left;
+  }
+
+  private parseRelational(): unknown {
+    let left = this.parseAdditive();
+    let op = this.takeOperator('<', '<=', '>', '>=');
+    while (op !== undefined) {
+      const right = this.parseAdditive();
+      left = compareRelational(op, left, right);
+      op = this.takeOperator('<', '<=', '>', '>=');
+    }
+    return left;
+  }
+
+  private parseAdditive(): unknown {
+    let left = this.parseMultiplicative();
+    let op = this.takeOperator('+', '-');
+    while (op !== undefined) {
+      const right = this.parseMultiplicative();
+      if (op === '+') {
+        left =
+          typeof left === 'string' || typeof right === 'string'
+            ? toDisplayString(left) + toDisplayString(right)
+            : toNumber(left) + toNumber(right);
+      } else {
+        left = toNumber(left) - toNumber(right);
+      }
+      op = this.takeOperator('+', '-');
+    }
+    return left;
+  }
+
+  private parseMultiplicative(): unknown {
+    let left = this.parseUnary();
+    let op = this.takeOperator('*', '/', '%');
+    while (op !== undefined) {
+      const right = this.parseUnary();
+      const l = toNumber(left);
+      const r = toNumber(right);
+      if (op === '*') left = l * r;
+      else if (op === '/') left = l / r;
+      else left = l % r;
+      op = this.takeOperator('*', '/', '%');
+    }
+    return left;
+  }
+
+  private parseUnary(): unknown {
+    if (this.takeOperator('!') !== undefined) {
+      return !this.parseUnary();
+    }
+    if (this.takeOperator('-') !== undefined) {
+      return -toNumber(this.parseUnary());
+    }
+    if (this.takeOperator('+') !== undefined) {
+      return toNumber(this.parseUnary());
+    }
+    return this.parsePostfix();
+  }
+
+  private parsePostfix(): unknown {
+    let value = this.parsePrimary();
+    for (;;) {
+      const token = this.peek();
+      if (token && token.kind === 'punct' && token.value === '.') {
+        this.position++;
+        const propertyToken = this.peek();
+        if (!propertyToken || propertyToken.kind !== 'identifier') {
+          throw new Error('Expected property name after "." in condition expression');
+        }
+        this.position++;
+        value = readSafeProperty(value, propertyToken.value);
+        continue;
+      }
+      if (token && token.kind === 'punct' && token.value === '[') {
+        this.position++;
+        const key = this.parseOr();
+        const closeToken = this.peek();
+        if (!closeToken || closeToken.kind !== 'punct' || closeToken.value !== ']') {
+          throw new Error('Expected "]" in condition expression');
+        }
+        this.position++;
+        value = readSafeProperty(value, toDisplayString(key));
+        continue;
+      }
+      break;
+    }
+    return value;
+  }
+
+  private parsePrimary(): unknown {
+    const token = this.peek();
+    if (!token) {
+      throw new Error('Unexpected end of condition expression');
+    }
+
+    if (token.kind === 'number') {
+      this.position++;
+      return token.value;
+    }
+
+    if (token.kind === 'string') {
+      this.position++;
+      return token.value;
+    }
+
+    if (token.kind === 'punct' && token.value === '(') {
+      this.position++;
+      const value = this.parseOr();
+      const closeToken = this.peek();
+      if (!closeToken || closeToken.kind !== 'punct' || closeToken.value !== ')') {
+        throw new Error('Expected ")" in condition expression');
+      }
+      this.position++;
+      return value;
+    }
+
+    if (token.kind === 'identifier') {
+      this.position++;
+      if (token.value === 'true') return true;
+      if (token.value === 'false') return false;
+      if (token.value === 'null') return null;
+      if (token.value === 'undefined') return undefined;
+      return this.lookupVariable(token.value);
+    }
+
+    throw new Error(`Unexpected token in condition expression: "${token.value}"`);
+  }
+
+  private lookupVariable(name: string): unknown {
+    if (isUnsafePropertyName(name)) {
+      return undefined;
+    }
+    if (!Object.prototype.hasOwnProperty.call(this.variables, name)) {
+      throw new Error(`Unknown variable "${name}" in condition expression`);
+    }
+    return this.variables[name];
+  }
+}
+
+/**
+ * Evaluate a workflow `condition` string against the current execution
+ * variables without ever executing it as code (see ConditionEvaluator).
+ */
+function evaluateWorkflowCondition(expression: string, variables: Record<string, unknown>): unknown {
+  const tokens = tokenizeCondition(expression);
+  if (tokens.length === 0) {
+    return false;
+  }
+  return new ConditionEvaluator(tokens, variables).evaluate();
+}
+
+/**
  * Agentic Workflow Engine
  */
 export class AgenticWorkflowEngine {
@@ -852,14 +1266,13 @@ Output ONLY valid JSON.`,
     context: ExecutionContext
   ): Promise<boolean> {
     const condition = step.config.condition || 'true';
-    
+
     try {
-      // Safely evaluate condition with context variables
-      const fn = new Function(
-        ...Object.keys(context.variables),
-        `return ${condition}`
-      );
-      return Boolean(fn(...Object.values(context.variables)));
+      // Evaluate the condition with a restricted, non-executing expression
+      // parser (ConditionEvaluator, above) instead of eval/new Function/vm —
+      // `condition` may originate from an API-supplied workflow definition
+      // or an LLM-generated plan, so it must never run as actual code.
+      return Boolean(evaluateWorkflowCondition(condition, context.variables));
     } catch (error) {
       log.warn(
         { stepId: step.id, condition, error: getErrorMessage(error) },

@@ -61,7 +61,7 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
     // Validate API key is not mock
     if (!this.apiKey || this.apiKey.includes('mock') || this.apiKey.includes('test-')) {
       this.log.warn(
-        { apiKeyPrefix: this.apiKey?.substring(0, 10) },
+        { keyPresent: Boolean(this.apiKey) },
         'Azure OpenAI API key appears to be mock/test key - skipping model discovery'
       );
       return [];
