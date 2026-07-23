@@ -10,12 +10,12 @@ Source: https://github.com/ailinone/collective-intelligence
 -->
 
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence — thousands of AI models coordinate inside one collective model" width="100%">
+  <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence: thousands of AI models coordinate inside one collective model" width="100%">
 </p>
 
 # Ailin¹ Collective Intelligence
 
-> 🌐 Englisch ist die kanonische Version. Diese Übersetzung folgt Commit 596a94e6 — im Zweifel lies das englische README ([README.md](README.md)).
+> 🌐 Englisch ist die kanonische Version. Diese Übersetzung folgt Commit 596a94e6. Im Zweifel lies das englische README ([README.md](README.md)).
 
 <p align="center">
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-30363d?style=for-the-badge"></a>
@@ -29,14 +29,14 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR** — Ailin¹ lässt **76,636 KI-Modelle** in einem einzigen kollektiven Modell zusammenarbeiten, orchestriert über **32 Strategien** statt an ein einzelnes Modell geroutet. Strukturierte Diversität, unabhängiges Reasoning und ein vollständiger Entscheidungs-Audit-Trail bei jedem Request — zuverlässiger, resilienter und auditierbarer als jede Einzelmodell-Integration, und [gegen die Frontier bewiesen, öffentlich](#gegen-die-frontier-bewiesen--öffentlich).
+> **TL;DR**: Ailin¹ lässt **76,636 KI-Modelle** in einem einzigen kollektiven Modell zusammenarbeiten, orchestriert über **32 Strategien** statt an ein einzelnes Modell geroutet. Strukturierte Diversität, unabhängiges Reasoning und ein vollständiger Entscheidungs-Audit-Trail bei jedem Request: zuverlässiger, resilienter und auditierbarer als jede Einzelmodell-Integration, und [gegen die Frontier bewiesen, öffentlich](#gegen-die-frontier-bewiesen-öffentlich).
 >
-> **→ [Quickstart](#quickstart) · [Die Belege ansehen](#gegen-die-frontier-bewiesen--öffentlich) · [Docs](https://ailin.guide)**
+> **→ [Quickstart](#quickstart) · [Die Belege ansehen](#gegen-die-frontier-bewiesen-öffentlich) · [Docs](https://ailin.guide)**
 
 **Tausende KI-Modelle koordinieren sich in einem einzigen kollektiven Modell.**
 
 Strukturierte Diversität, unabhängiges Reasoning und vollständige
-Entscheidungs-Provenienz bei jedem Request — entworfen, um Ausgaben
+Entscheidungs-Provenienz bei jedem Request, entworfen, um Ausgaben
 zuverlässiger, resilienter und auditierbarer zu machen als jede
 Einzelmodell-Integration. Jeden Tag erscheint ein neues Modell, das
 behauptet, das beste zu sein. Dies ist die Schicht, in der sie
@@ -54,10 +54,10 @@ zusammenarbeiten. Vollständige Dokumentation: **[ailin.guide](https://ailin.gui
 
 [Quickstart](#quickstart) · [Die nächste Frontier](#kollektive-intelligenz-die-nächste-frontier-der-ki) ·
 [Warum ein Kollektiv](#warum-ein-kollektiv-das-größte-einzelmodell-schlägt) ·
-[Die Belege](#gegen-die-frontier-bewiesen--öffentlich) ·
+[Die Belege](#gegen-die-frontier-bewiesen-öffentlich) ·
 [Immer an der Frontier](#zehntausende-modelle-immer-an-der-frontier) ·
 [Wie es funktioniert](#architektur-auf-einen-blick) ·
-[Mitwirken](#mitwirken--kollektive-intelligenz-braucht-ein-kollektiv) · [Docs](https://ailin.guide)
+[Mitwirken](#mitwirken-kollektive-intelligenz-braucht-ein-kollektiv) · [Docs](https://ailin.guide)
 
 ---
 
@@ -66,20 +66,20 @@ zusammenarbeiten. Vollständige Dokumentation: **[ailin.guide](https://ailin.gui
 Die KI-Industrie hat sich darauf konzentriert, immer größere Einzelmodelle
 zu bauen. Ailin¹ verfolgt einen komplementären Ansatz: ein Kollektiv aus
 **76,636 KI-Modellen** (Live-Produktionszählung, 2026-07), die gemeinsam
-kollaborieren, debattieren, kritisieren und synthetisieren können — und
+kollaborieren, debattieren, kritisieren und synthetisieren können, und
 [strukturierte Diversität](https://ailin.guide/architecture/cognitive-diversity) auf Probleme anwenden, bei denen ein
 Einzelmodell ein Single Point of Training, of Architecture, of Bias und
 of Failure ist.
 
 **Das ist kein Multi-Model-Routing. Das ist kein API-Gateway. Das ist
 Kollektive Intelligenz**: ein System, in dem Modelle aus jeder großen
-Architektur — Frontier-APIs, Open-Weight-Herausforderer und unsere eigene
-Modellfamilie — über [Dutzende Strategien](https://ailin.guide/architecture/strategy-catalog) koordinieren, mit dem Ziel
+Architektur (Frontier-APIs, Open-Weight-Herausforderer und unsere eigene
+Modellfamilie) über [Dutzende Strategien](https://ailin.guide/architecture/strategy-catalog) koordinieren, mit dem Ziel
 höherer Zuverlässigkeit, breiterer Evaluationsabdeckung und vollständigerer
 Auditierbarkeit, als jede Einzelmodell-Integration sie bietet.
 
 Das Prinzip ist in der Forschung zu kollektiver Intelligenz und kognitiver
-Diversität verankert — Hong & Pages Resultat „diversity trumps ability"
+Diversität verankert: Hong & Pages Resultat „diversity trumps ability"
 und die Arbeiten von Woolley et al. zu kollektiver Leistung (siehe die
 öffentliche [Bibliographie](https://ailin.guide/reference/bibliography)).
 Ailin¹ setzt dieses Prinzip als Engineering-Plattform um: eine
@@ -87,7 +87,7 @@ Discovery-Engine, die 76,636 Modelle indexiert, Dutzende
 Koordinationsstrategien, ein [Audit-Substrat](https://ailin.guide/architecture/collective-intelligence), das
 jede Koordinationsentscheidung aufzeichnet, und eine
 Closed-Loop-Trainingspipeline. Einige dieser Schichten sind heute
-Production-Grade, andere reifen noch — die Docs tragen Status-Badges,
+Production-Grade, andere reifen noch; die Docs tragen Status-Badges,
 sodass du immer weißt, was ausgeliefert wird und was auf der Roadmap
 steht.
 
@@ -104,31 +104,31 @@ Skalierung allein nicht leisten kann.
   Ist sein Provider an einem gegebenen Tag degradiert, gedrosselt,
   rate-limitiert oder falsch bepreist, ist jeder Call betroffen. Das
   Kollektiv routet ohne Eingreifen um Provider-Ausfälle, degradierte
-  Modelle und lokale Fehler herum — der Request gelingt trotzdem, mit
+  Modelle und lokale Fehler herum; der Request gelingt trotzdem, mit
   vollständiger Provenienz
   ([Resilienz-Deep-Dive](https://ailin.guide/architecture/why-collective-resilience)).
 - **Evaluationsdiversität.** Verschiedene Modelle werden auf
   verschiedenen Daten mit verschiedenen Zielen trainiert. Viele von ihnen
   zu fragen und die Ausgaben zu vergleichen deckt Fehler und blinde
-  Flecken auf, die ein einzelnes Modell — wie groß auch immer — mit
+  Flecken auf, die ein einzelnes Modell, wie groß auch immer, mit
   voller Überzeugung wiederholen würde. Das Kollektiv verwandelt
   Uneinigkeit in ein Qualitätssignal statt in einen Bug.
 - **Anti-Konzentration.** Die Abhängigkeit von einem Modell kettet eine
   Organisation an Roadmap, Preisgestaltung und Policy-Entscheidungen
   eines einzigen Anbieters. Das Kollektiv entkoppelt Fähigkeit von jedem
-  einzelnen Provider — die Plattform funktioniert weiter, während sich
+  einzelnen Provider; die Plattform funktioniert weiter, während sich
   die Frontier verschiebt und einzelne Provider aufsteigen, fallen oder
   ihre Preise ändern.
 - **Reduzierter Single-Point-Bias.** Jedes Modell trägt die Verzerrungen
   seiner Trainingsdaten, seine Refusal-Muster und seine stilistischen
   Defaults. Ein Kollektiv architektonisch unterschiedlicher Modelle
-  verdünnt den Einfluss der blinden Flecken jedes einzelnen Modells —
+  verdünnt den Einfluss der blinden Flecken jedes einzelnen Modells,
   insbesondere in Arbitrationsstrategien, die Konvergenz über unabhängige
   Reasoner hinweg verlangen.
 - **Dynamische Spezialisierung.** Kein einzelnes Modell ist in allem das
   beste. Ein Kollektiv kann den richtigen Spezialisten der richtigen
-  Aufgabe zuweisen — reasoning-lastig, code-lastig, Vision, Long-Context,
-  Low-Latency — und jeden Request zu Modellen routen, die genau dort
+  Aufgabe zuweisen (reasoning-lastig, code-lastig, Vision, Long-Context,
+  Low-Latency) und jeden Request zu Modellen routen, die genau dort
   stark sind, wo die Aufgabe Stärke verlangt.
 - **Stärkere Governance.** Enterprise-Workloads brauchen auditierbare
   Entscheidungen, gedeckelte Kosten, Mandantenisolation und verlässlichen
@@ -139,14 +139,14 @@ Skalierung allein nicht leisten kann.
   Strategie, jedes Modell.
 
 Der Effekt verstärkt sich gegenseitig. Das sind keine sechs unabhängigen
-Features — es sind sechs Facetten einer einzigen strukturellen
+Features; es sind sechs Facetten einer einzigen strukturellen
 Entscheidung: Koordiniere viele Modelle gut, und das Ergebnis ist
-zuverlässiger, besser steuerbar, langlebiger — und auf der wachsenden
+zuverlässiger, besser steuerbar, langlebiger, und auf der wachsenden
 Menge von Aufgaben, deren Korrektheit sich objektiv verifizieren lässt,
 **messbar genauer als jedes Frontier-Flaggschiff, das wir getestet haben**
-(97% vs. 68–82% — Belege unten).
+(97% vs. 68–82%, Belege unten).
 
-## Gegen die Frontier bewiesen — öffentlich
+## Gegen die Frontier bewiesen, öffentlich
 
 Wir testen die These gegen uns selbst, öffentlich, mit objektiver
 Bewertung: gepinnte Judges, maschinell prüfbare Antworten überall dort,
@@ -156,30 +156,30 @@ diesem Repository
 [rohe CSVs + Skripte](reports/experiments/) ·
 [jede Tabelle selbst regenerieren](docs/experiments/REPRODUCING_THE_BENCHMARK.md)).
 
-**✅ Validiert — das Kollektiv schlägt jedes Frontier-Flaggschiff bei
+**✅ Validiert: Das Kollektiv schlägt jedes Frontier-Flaggschiff bei
 verifizierbaren Aufgaben.** Consensus, bewaffnet mit einem
 deterministischen Antwort-Verifier, erzielte **97% objektive Genauigkeit
 (37/38)** gegenüber **68–82%** für GPT-5.5-pro, Claude Opus 4.8, Gemini
-3.1 Pro und Grok 4.3, gepoolt über alle drei Läufe — und in jedem
+3.1 Pro und Grok 4.3, gepoolt über alle drei Läufe, und in jedem
 einzelnen Lauf hat **der Verifier nie eine objektiv falsche Antwort
 ausgewählt**. Ein Pool von Sub-Frontier-Open-Weight-Modellen, gut
 koordiniert, hat auf denselben Aufgaben besser geantwortet als jedes
 Flaggschiff
 ([Leaderboard mit jedem n und jedem Vorbehalt, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)).
 
-**Die aktuelle Frontier der These** — ehrlich gemessen, und sie treibt
+**Die aktuelle Frontier der These**, ehrlich gemessen, und sie treibt
 die Roadmap:
 
 | Achse | Heute | Was wir daran tun |
 |---|---|---|
 | Verifizierbare Korrektheit | ✅ **Kollektiv gewinnt** (97% vs 68–82%) | Ausweitung der Verifier-Abdeckung auf mehr Aufgabenformen (Tool-Calling-Kampagne abgeschlossen 2026-07-18) |
-| Offene Prosa | Einzelmodelle gewinnen weiterhin bei Creative Writing & Refactoring | Die Decider-Auswahl trennt messbar Gewinner- von Verlierer-Läufen — ein lernbarer Hebel ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
-| Kosten | Kollektiv-Aufpreis wie protokolliert — **außer** beim Verifier-Short-Circuit, der ihn ~100× einbrechen lässt, wenn er zündet ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Verbreiterung des Short-Circuit-Pfads; `ailin-auto` wählt per Default die günstigste tragfähige Strategie |
+| Offene Prosa | Einzelmodelle gewinnen weiterhin bei Creative Writing & Refactoring | Die Decider-Auswahl trennt messbar Gewinner- von Verlierer-Läufen, ein lernbarer Hebel ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
+| Kosten | Kollektiv-Aufpreis wie protokolliert, **außer** beim Verifier-Short-Circuit, der ihn ~100× einbrechen lässt, wenn er zündet ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Verbreiterung des Short-Circuit-Pfads; `ailin-auto` wählt per Default die günstigste tragfähige Strategie |
 | Latenz | Mehrrunden-Arbitration, bei der jede Strategie ab dem ersten Token Echtzeit-Fortschritt streamt | `ailin-auto` reserviert die tiefsten Strategien für den Fall, dass das Quality-Gate sie tatsächlich verlangt; latenzkritischer Traffic routet by design auf `single` |
 
 Jede Zahl oben ist durch die Rohdaten pro Ausführung und die
 reproduzierbaren Skripte belegt, die in diesem Repository committet
-sind — führe den Harness selbst aus, auf deinem eigenen Workload, und
+sind. Führe den Harness selbst aus, auf deinem eigenen Workload, und
 halte uns daran fest.
 
 ## Zehntausende Modelle, immer an der Frontier
@@ -196,12 +196,12 @@ Discovery-Engine es ohne Codeänderungen, Konfiguration oder Downtime.
 
 ### Semantische Discovery, null hartkodierte Modelle
 
-Die Discovery-Engine scannt Dutzende Quellen parallel — native
+Die Discovery-Engine scannt Dutzende Quellen parallel: native
 Provider-APIs, Cloud-Hubs, Modell-Aggregatoren, Open-Model-Repositories
 und private Inference-Endpoints. Aber die Quellen selbst sind nicht der
 Punkt. Was zählt, ist, wie Modelle ausgewählt werden.
 
-Jedes entdeckte Modell wird analysiert, klassifiziert und indexiert —
+Jedes entdeckte Modell wird analysiert, klassifiziert und indexiert:
 nach Capabilities, Performance-Profil, Pricing, Kontextfenster,
 Modalitäten und Architektur, automatisch inferiert, ohne manuelles
 Mapping oder Konfiguration. Routen sind health-gated: Ein Modell wird
@@ -209,12 +209,12 @@ erst beworben, nachdem es live bewiesen wurde.
 
 Die Modellauswahl ist **vollständig semantisch**. Wenn ein Request
 eintrifft, wählt das Kollektiv nicht aus einer statischen Liste. Es
-stellt das ideale Team von Modellen zusammen — basierend auf den
+stellt das ideale Team von Modellen zusammen, basierend auf den
 Anforderungen der Aufgabe, der gewählten Strategie und dem gewünschten
 Ergebnisprofil (maximale Qualität, bestes Preis-Leistungs-Verhältnis,
 niedrigste Kosten, schnellste Antwort). Die richtigen Modelle werden in
 Echtzeit gewählt, für jeden einzelnen Request. Wenn morgen das „beste
-Modell aller Zeiten" erscheint, absorbiert das Kollektiv es — statt mit
+Modell aller Zeiten" erscheint, absorbiert das Kollektiv es, statt mit
 ihm zu konkurrieren.
 
 ### Eigene Modelle in derselben Arena
@@ -222,23 +222,23 @@ ihm zu konkurrieren.
 Die `ailin`-Modellfamilie und ihr Trainings-Flywheel sind Teil des
 Designs: Koordinator-Checkpoints, trainiert auf dem eigenen
 Koordinationstraffic der Engine, konkurrieren im selben Pool wie jedes
-Drittanbieter-Modell — ohne Routing-Privileg. Das Audit-Substrat, das
+Drittanbieter-Modell, ohne Routing-Privileg. Das Audit-Substrat, das
 jede Koordinationsentscheidung erfasst, wird heute ausgeliefert;
 produktive Koordinator-Gewichte sind die Kante, an der gerade entwickelt
 wird ([ehrlicher Status, immer aktuell](https://ailin.guide)).
 
 ### Kollektivstrategien als falsifizierbare Hypothesen
 
-32 registrierte Strategien — Konsens mit Konvergenz-Untergrenzen,
+32 registrierte Strategien (Konsens mit Konvergenz-Untergrenzen,
 Blind-Debatte, Expertenpanels, Advocatus-Diaboli-Konsens, Kostenkaskade,
-Best-of-N mit objektiver Verifikation — jede mit ehrlicher Erreichbarkeit
+Best-of-N mit objektiver Verifikation), jede mit ehrlicher Erreichbarkeit
 gelabelt (auto-selektierbar / nur explizit / Roadmap), jede
 falsifizierbar durch den Experiment-Harness in diesem Repo. Strategien
-verdienen sich ihren Platz mit Evidenz — oder verlieren ihn.
+verdienen sich ihren Platz mit Evidenz, oder verlieren ihn.
 
 ### Multimodal + deterministische Dateigenerierung
 
-Multimodale Generierung — Bilder, Audio, Video — geroutet nach
+Multimodale Generierung (Bilder, Audio, Video) geroutet nach
 Capability, plus deterministisches Datei-Rendering (DOCX, XLSX, PDF,
 PPTX, ZIP, Code) aus jedem Chat-Modell mit strukturiertem Output,
 bewiesen in Produktion.
@@ -251,12 +251,12 @@ Request bei der Admission erzwungen, architektonische Mandantenisolation,
 AGPL-§13-Endpoints (`/source`, `/license`), von der Engine selbst
 ausgeliefert, SLSA/Sigstore-Release-Provenienz mit SPDX SBOM. Der
 Audit-Trail, der unsere Behauptungen beweist, ist derselbe, der deinen
-Traffic governt — Governance als [First-Class-Prinzip](https://ailin.guide/architecture/principles), nicht als
+Traffic governt: Governance als [First-Class-Prinzip](https://ailin.guide/architecture/principles), nicht als
 Overhead.
 
 ## Architektur auf einen Blick
 
-Das System, End-to-End — Discovery speist die Team-Zusammenstellung, jeder
+Das System, End-to-End. Discovery speist die Team-Zusammenstellung, jeder
 Ausführungspfad mündet in denselben, Provenienz erzeugenden
 Arbitrationsschritt:
 
@@ -276,7 +276,7 @@ flowchart TB
 
 ## Der Weg eines Requests
 
-Fokussiert auf einen einzelnen Request — welchen der drei oben
+Fokussiert auf einen einzelnen Request, welchen der drei oben
 beschriebenen Pfade er nimmt, und warum:
 
 ```mermaid
@@ -294,12 +294,12 @@ flowchart LR
 
 Der Verifier wird scharfgeschaltet, wenn der Request über
 `ailin_constraints.answer_check` eine maschinell prüfbare Antwort
-deklariert. Die Kaskade ist konservativ — die Ökonomie ist so ausgelegt,
+deklariert. Die Kaskade ist konservativ: Die Ökonomie ist so ausgelegt,
 dass sie standardmäßig den günstigen Pfad bevorzugt und nur eskaliert,
 wenn das Quality-Gating es verlangt. Und weil Koordination nicht gratis
 ist, sagen dir die eigenen Docs der Engine unverblümt,
 [wann ein einzelnes Modell die richtige Wahl ist](docs/use-cases/when-not-to-use-collective.md)
-([auch im Guide](https://ailin.guide/use-cases/when-not-to-use-collective)) — hochvolumiger Low-Stakes-Traffic, enge Latenz-SLAs, Prosa im
+([auch im Guide](https://ailin.guide/use-cases/when-not-to-use-collective)): hochvolumiger Low-Stakes-Traffic, enge Latenz-SLAs, Prosa im
 Dokumentationsstil. Die Entscheidung ist operativ, nicht philosophisch.
 
 ## Quickstart
@@ -323,7 +323,7 @@ EOF
 ```
 
 Bearbeite `.env` und ersetze `sk-...` durch einen echten Key (oder lass
-Keys komplett weg — siehe die Ollama-Option unten). Dann:
+Keys komplett weg, siehe die Ollama-Option unten). Dann:
 
 ```bash
 docker compose up -d api postgres redis
@@ -333,7 +333,7 @@ curl http://localhost:3000/health
 ```
 
 (`coord-serving`, die Serving-Oberfläche des Koordinators, baut und
-bootet neben der API — das ist erwartet.) Lege ein lokales Konto an und
+bootet neben der API; das ist erwartet.) Lege ein lokales Konto an und
 rufe das Kollektiv auf:
 
 ```bash
@@ -375,36 +375,36 @@ Hosted-API-Quickstart: [ailin.guide/getting-started/quickstart](https://ailin.gu
 | AGPL-§13-Endpoints (`/source`, `/license`) + Lizenz-Response-Header | |
 | Broadcast-Delivery-Pipeline (Code ausgeliefert hinter `BROADCAST_FEATURE_ENABLED`, standardmäßig aus; noch nicht produktionsvalidiert) | |
 
-Ehrlichkeit über Validierung ist ein Feature — alles, was nicht in der
+Ehrlichkeit über Validierung ist ein Feature: Alles, was nicht in der
 linken Spalte steht, ist in den Docs genauso gelabelt wie hier.
 
-## Mitwirken — kollektive Intelligenz braucht ein Kollektiv
+## Mitwirken: kollektive Intelligenz braucht ein Kollektiv
 
 Die These selbst sagt es voraus: Diverse, unabhängige Mitwirkende, gut
 koordiniert, bauen etwas, das keine Solo-Anstrengung schaffen kann.
 Code-Beiträge sind willkommen unter dem **DCO** (`git commit -s`, siehe
-[DCO.md](DCO.md) und [CONTRIBUTING.md](CONTRIBUTING.md)) —
+[DCO.md](DCO.md) und [CONTRIBUTING.md](CONTRIBUTING.md)):
 Provider-Adapter (dünne, in sich geschlossene Module),
 Strategie-Implementierungen, objektive Task-Checker, Docs auf
 [ailin.guide](https://ailin.guide).
 
 Und dieses Projekt hat eine Beitragsfläche, die die meisten Projekte
 nicht haben: **Führe den Benchmark selbst aus und veröffentliche das
-Ergebnis — egal, wie es ausgeht.** Starte mit
+Ergebnis, egal, wie es ausgeht.** Starte mit
 [REPRODUCING_THE_BENCHMARK.md](docs/experiments/REPRODUCING_THE_BENCHMARK.md):
 Jede veröffentlichte Tabelle aus den committeten Rohdaten zu
 regenerieren dauert etwa zwei Minuten und braucht nur Pythons stdlib.
-Jede unabhängige Replikation — validierend oder invalidierend — macht
+Jede unabhängige Replikation, validierend oder invalidierend, macht
 das Kollektiv klüger. Genau das ist der Punkt.
 
 Fragen und Ergebnisse: [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
-Sicherheitsmeldungen: **niemals** als öffentliches Issue — siehe [SECURITY.md](SECURITY.md).
+Sicherheitsmeldungen: **niemals** als öffentliches Issue, siehe [SECURITY.md](SECURITY.md).
 
 ## Lizenz & Governance
 
 **AGPL-3.0-or-later.** Wer eine modifizierte Version als Netzwerkdienst
 betreibt, muss deren Nutzern nach §13 den korrespondierenden Quellcode
-anbieten — die Engine liefert die Endpoints `/source` und `/license` aus
+anbieten; die Engine liefert die Endpoints `/source` und `/license` aus
 und sendet `X-License`-/`X-Source-Code`-Header mit jeder Response, um
 die Compliance einfach zu machen (setze `AGPL_SOURCE_URL` so, dass es
 auf *deinen* modifizierten Quellcode zeigt). Siehe
@@ -432,7 +432,7 @@ Marken.
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
 </a>
 
-Wenn die These der kollektiven Intelligenz — öffentlich getestet, Belege
-im Repo — etwas ist, das es aus deiner Sicht in der Welt geben sollte,
+Wenn die These der kollektiven Intelligenz (öffentlich getestet, Belege
+im Repo) etwas ist, das es aus deiner Sicht in der Welt geben sollte,
 dann ist ein ⭐ die Art, anderen Entwicklerinnen und Entwicklern zu
 sagen, dass es ihre zehn Minuten wert ist.
