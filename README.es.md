@@ -10,12 +10,12 @@ Source: https://github.com/ailinone/collective-intelligence
 -->
 
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence — thousands of AI models coordinate inside one collective model" width="100%">
+  <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence: thousands of AI models coordinate inside one collective model" width="100%">
 </p>
 
 # Ailin¹ Collective Intelligence
 
-> 🌐 El inglés es la versión canónica. Esta traducción sigue el commit 596a94e6 — ante la duda, lee el [README en inglés](README.md).
+> 🌐 El inglés es la versión canónica. Esta traducción sigue el commit 596a94e6. Ante la duda, lee el [README en inglés](README.md).
 
 <p align="center">
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-30363d?style=for-the-badge"></a>
@@ -29,14 +29,14 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR** — Ailin¹ hace que **76,636 modelos de IA** colaboren dentro de un único modelo colectivo, coordinados mediante **32 estrategias** en lugar de enrutados a uno solo. Diversidad estructurada, razonamiento independiente y procedencia completa de las decisiones en cada solicitud — más confiable, resiliente y auditable que cualquier integración de modelo único, y [probado contra la frontera, en abierto](#probado-contra-la-frontera--en-abierto).
+> **TL;DR:** Ailin¹ hace que **76,636 modelos de IA** colaboren dentro de un único modelo colectivo, coordinados mediante **32 estrategias** en lugar de enrutados a uno solo. Diversidad estructurada, razonamiento independiente y procedencia completa de las decisiones en cada solicitud: más confiable, resiliente y auditable que cualquier integración de modelo único, y [probado contra la frontera, en abierto](#probado-contra-la-frontera-en-abierto).
 >
-> **→ [Inicio rápido](#inicio-rápido) · [Ver la evidencia](#probado-contra-la-frontera--en-abierto) · [Docs](https://ailin.guide)**
+> **→ [Inicio rápido](#inicio-rápido) · [Ver la evidencia](#probado-contra-la-frontera-en-abierto) · [Docs](https://ailin.guide)**
 
 **Miles de modelos de IA se coordinan dentro de un único modelo colectivo.**
 
 Diversidad estructurada, razonamiento independiente y procedencia completa
-de las decisiones en cada solicitud — todo diseñado para producir salidas
+de las decisiones en cada solicitud, todo diseñado para producir salidas
 más confiables, más resilientes y más auditables que una integración de
 modelo único. Cada día se lanza un nuevo modelo que afirma ser el mejor.
 Esta es la capa donde trabajan juntos. Documentación completa:
@@ -54,10 +54,10 @@ Esta es la capa donde trabajan juntos. Documentación completa:
 
 [Inicio rápido](#inicio-rápido) · [La próxima frontera](#inteligencia-colectiva-la-próxima-frontera-de-la-ia) ·
 [Por qué un colectivo](#por-qué-un-colectivo-supera-al-modelo-individual-más-grande) ·
-[La evidencia](#probado-contra-la-frontera--en-abierto) ·
+[La evidencia](#probado-contra-la-frontera-en-abierto) ·
 [Siempre en la frontera](#decenas-de-miles-de-modelos-siempre-en-la-frontera) ·
 [Cómo funciona](#la-arquitectura-de-un-vistazo) ·
-[Contribuir](#contribuir--la-inteligencia-colectiva-necesita-un-colectivo) · [Docs](https://ailin.guide)
+[Contribuir](#contribuir-la-inteligencia-colectiva-necesita-un-colectivo) · [Docs](https://ailin.guide)
 
 ---
 
@@ -73,13 +73,13 @@ y de fallo.
 
 **Esto no es enrutamiento multi-modelo. Esto no es un gateway de API. Esto
 es Inteligencia Colectiva**: un sistema donde modelos de todas las grandes
-arquitecturas — APIs de frontera, retadores de pesos abiertos y nuestra
-propia familia de modelos — se coordinan mediante [docenas de estrategias](https://ailin.guide/architecture/strategy-catalog), con el objetivo de lograr mayor
+arquitecturas (APIs de frontera, retadores de pesos abiertos y nuestra
+propia familia de modelos) se coordinan mediante [docenas de estrategias](https://ailin.guide/architecture/strategy-catalog), con el objetivo de lograr mayor
 confiabilidad, una cobertura de evaluación más amplia y una auditabilidad
 más completa que las que ofrece cualquier integración de modelo único.
 
 El principio se fundamenta en la investigación sobre inteligencia colectiva
-y diversidad cognitiva — el resultado de Hong & Page de que «la diversidad
+y diversidad cognitiva: el resultado de Hong & Page de que «la diversidad
 supera a la habilidad» ("diversity trumps ability") y el trabajo de
 Woolley et al. sobre desempeño colectivo (ver la
 [Bibliografía](https://ailin.guide/reference/bibliography) pública). Ailin¹ aplica
@@ -88,7 +88,7 @@ indexa 76,636 modelos, docenas de estrategias de coordinación, un
 [sustrato de auditoría](https://ailin.guide/architecture/collective-intelligence) que
 registra cada decisión de coordinación y un pipeline de entrenamiento de
 ciclo cerrado. Algunas de estas capas son de grado de producción hoy y
-otras aún están madurando — la documentación lleva insignias de estado para
+otras aún están madurando: la documentación lleva insignias de estado para
 que siempre sepas qué está disponible y qué está en la hoja de ruta.
 
 ## Por qué un colectivo supera al modelo individual más grande
@@ -104,7 +104,7 @@ puede.
   proveedor está degradado, con throttling, con límites de tasa o con
   precios mal fijados en un día dado, todas las llamadas se ven afectadas.
   El colectivo enruta esquivando caídas de proveedores, modelos degradados
-  y fallos locales sin intervención — la solicitud se completa igualmente,
+  y fallos locales sin intervención; la solicitud se completa igualmente,
   con procedencia completa
   ([análisis en profundidad de la resiliencia](https://ailin.guide/architecture/why-collective-resilience)).
 - **Diversidad de evaluación.** Modelos distintos se entrenan con datos
@@ -115,7 +115,7 @@ puede.
 - **Anti-concentración.** Depender de un solo modelo ata a una organización
   a la hoja de ruta, los precios y las decisiones de política de un único
   proveedor. El colectivo desacopla la capacidad de cualquier proveedor
-  individual — la plataforma sigue funcionando mientras la frontera se
+  individual: la plataforma sigue funcionando mientras la frontera se
   desplaza, y mientras proveedores específicos suben, caen o cambian de
   precio.
 - **Menos sesgo de punto único.** Cada modelo carga con los sesgos de sus
@@ -125,9 +125,9 @@ puede.
   especialmente en estrategias de arbitraje que exigen convergencia entre
   razonadores independientes.
 - **Especialización dinámica.** Ningún modelo único es el mejor en todo.
-  Un colectivo puede asignar el especialista adecuado a la tarea adecuada —
-  razonamiento intensivo, código intensivo, visión, contexto largo, baja
-  latencia — y enrutar cada solicitud hacia modelos que son fuertes
+  Un colectivo puede asignar el especialista adecuado a la tarea adecuada
+  (razonamiento intensivo, código intensivo, visión, contexto largo, baja
+  latencia) y enrutar cada solicitud hacia modelos que son fuertes
   exactamente donde la tarea exige fuerza.
 - **Gobernanza más sólida.** Las cargas de trabajo empresariales necesitan
   decisiones auditables, costos acotados, aislamiento de tenants y fallback
@@ -137,15 +137,15 @@ puede.
   cuotas y aplicación de políticas rigen cada solicitud, cada estrategia,
   cada modelo.
 
-El efecto es acumulativo. No son seis características independientes — son
+El efecto es acumulativo. No son seis características independientes; son
 seis facetas de una única decisión estructural: coordina bien muchos
-modelos, y el resultado es más confiable, más gobernable, más duradero — y,
+modelos, y el resultado es más confiable, más gobernable, más duradero y,
 en el conjunto creciente de tareas donde la corrección puede verificarse
 objetivamente, **más preciso, de forma medible, que todos los buques
-insignia de frontera que probamos** (97% vs 68–82% — los recibos, más
+insignia de frontera que probamos** (97% vs 68–82%; los recibos, más
 abajo).
 
-## Probado contra la frontera — en abierto
+## Probado contra la frontera, en abierto
 
 Ponemos la tesis a prueba contra nosotros mismos, públicamente, con
 calificación objetiva: jueces fijados (pinned), respuestas verificables por
@@ -155,30 +155,30 @@ ejecución versionados en este repositorio
 [CSVs crudos + scripts](reports/experiments/) ·
 [regenera tú mismo cada tabla](docs/experiments/REPRODUCING_THE_BENCHMARK.md)).
 
-**✅ Validado — el colectivo supera a todos los buques insignia de frontera
+**✅ Validado: el colectivo supera a todos los buques insignia de frontera
 en tareas verificables.** El consenso armado con un verificador
 determinista de respuestas obtuvo **97% de precisión objetiva (37/38)**
 frente a **68–82%** de GPT-5.5-pro, Claude Opus 4.8, Gemini 3.1 Pro y
-Grok 4.3, agregados a lo largo de las tres ejecuciones — y en todas las
+Grok 4.3, agregados a lo largo de las tres ejecuciones. Y en todas las
 ejecuciones, **el verificador nunca seleccionó una respuesta objetivamente
 incorrecta**. Un pool de modelos de pesos abiertos por debajo de la
 frontera, bien coordinado, respondió mejor que todos los buques insignia en
 las mismas tareas
 ([tabla de posiciones con cada n y cada salvedad, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)).
 
-**La frontera actual de la tesis** — medida con honestidad, guiando la hoja
+**La frontera actual de la tesis**, medida con honestidad, guiando la hoja
 de ruta:
 
 | Eje | Hoy | Qué estamos haciendo al respecto |
 |---|---|---|
 | Corrección verificable | ✅ **El colectivo gana** (97% vs 68–82%) | Ampliando la cobertura del verificador a más formas de tarea (campaña de tool-calling completada el 2026-07-18) |
-| Prosa abierta | Los modelos individuales aún ganan en escritura creativa y refactorización | La selección del decisor separa de forma medible las ejecuciones ganadoras de las perdedoras — una palanca aprendible ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
-| Costo | Prima del colectivo tal como quedó registrada — **excepto** el short-circuit del verificador, que la colapsa ~100× cuando se activa ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Ensanchando la ruta del short-circuit; `ailin-auto` usa por defecto la estrategia viable más barata |
+| Prosa abierta | Los modelos individuales aún ganan en escritura creativa y refactorización | La selección del decisor separa de forma medible las ejecuciones ganadoras de las perdedoras: una palanca aprendible ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
+| Costo | Prima del colectivo tal como quedó registrada, **excepto** el short-circuit del verificador, que la colapsa ~100× cuando se activa ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Ensanchando la ruta del short-circuit; `ailin-auto` usa por defecto la estrategia viable más barata |
 | Latencia | Arbitraje multi-ronda, con cada estrategia transmitiendo el progreso en tiempo real desde el primer token | `ailin-auto` reserva las estrategias más profundas para cuando la compuerta de calidad realmente lo exige; el tráfico crítico en latencia se enruta a `single` por diseño |
 
 Cada número anterior está respaldado por los datos crudos de cada
 ejecución y por los scripts reproducibles versionados en este
-repositorio — ejecuta tú mismo el arnés de experimentos, con tu propia
+repositorio: ejecuta tú mismo el arnés de experimentos, con tu propia
 carga de trabajo, y tómanos la palabra.
 
 ## Decenas de miles de modelos, siempre en la frontera
@@ -195,14 +195,14 @@ lo absorbe sin cambios de código, sin configuración y sin downtime.
 
 ### Descubrimiento semántico, cero modelos hardcodeados
 
-El motor de descubrimiento escanea docenas de fuentes en paralelo — APIs
+El motor de descubrimiento escanea docenas de fuentes en paralelo: APIs
 nativas de proveedores, hubs de nube, agregadores de modelos, repositorios
 de modelos abiertos y endpoints privados de inferencia. Pero las fuentes en
 sí no son el punto. Lo que importa es cómo se seleccionan los modelos.
 
 Cada modelo descubierto se analiza, se clasifica y se indexa por
 capacidades, perfil de desempeño, precios, ventana de contexto, modalidades
-y arquitectura — todo inferido automáticamente, sin mapeo manual ni
+y arquitectura: todo inferido automáticamente, sin mapeo manual ni
 configuración. Las rutas pasan por compuertas de salud (health-gated): un
 modelo solo se anuncia después de haberse probado vivo.
 
@@ -212,7 +212,7 @@ ideal de modelos según los requisitos de la tarea, la estrategia elegida y
 el perfil de resultado deseado (máxima calidad, mejor costo-beneficio,
 menor costo, respuesta más rápida). Los modelos correctos se eligen en
 tiempo real, para cada solicitud individual. Cuando mañana se lance el
-«mejor modelo de la historia», el colectivo lo absorberá — no competirá
+«mejor modelo de la historia», el colectivo lo absorberá; no competirá
 con él.
 
 ### Modelos propios en la misma arena
@@ -220,23 +220,23 @@ con él.
 La familia de modelos `ailin` y su flywheel de entrenamiento son parte del
 diseño: checkpoints coordinadores entrenados sobre el propio tráfico de
 coordinación del motor, compitiendo en el mismo pool que cualquier modelo
-de terceros — sin privilegio de enrutamiento. El sustrato de auditoría que
+de terceros, sin privilegio de enrutamiento. El sustrato de auditoría que
 captura cada decisión de coordinación se entrega hoy; los pesos de
 coordinador de producción son el frente en desarrollo
 ([estado honesto, siempre actualizado](https://ailin.guide)).
 
 ### Estrategias colectivas como hipótesis falsables
 
-32 estrategias registradas — consenso con pisos de convergencia, debate
+32 estrategias registradas (consenso con pisos de convergencia, debate
 ciego, paneles de expertos, consenso con abogado del diablo, cascada de
-costos, best-of-N con verificación objetiva — cada una etiquetada con su
+costos, best-of-N con verificación objetiva), cada una etiquetada con su
 alcanzabilidad honesta (auto-seleccionable / solo-explícita / hoja de
 ruta), cada una falsable por el arnés de experimentos de este repo. Las
 estrategias se ganan su lugar con evidencia, o lo pierden.
 
 ### Multimodalidad + generación determinista de archivos
 
-Generación multimodal — imágenes, audio, video — enrutada por capacidad,
+Generación multimodal (imágenes, audio, video) enrutada por capacidad,
 más renderizado determinista de archivos (DOCX, XLSX, PDF, PPTX, ZIP,
 código) desde cualquier modelo de chat con salida estructurada, probado en
 producción.
@@ -248,7 +248,7 @@ decisor final, costo por sub-llamada, disenso), `max_cost` por solicitud
 aplicado en la admisión, aislamiento arquitectónico de tenants, endpoints
 AGPL §13 (`/source`, `/license`) servidos por el propio motor, procedencia
 de releases SLSA/Sigstore con SBOM SPDX. El rastro de auditoría que prueba
-nuestras afirmaciones es el mismo que gobierna tu tráfico — la gobernanza
+nuestras afirmaciones es el mismo que gobierna tu tráfico: la gobernanza
 como [principio de primera clase](https://ailin.guide/architecture/principles), no como sobrecarga.
 
 ## La arquitectura de un vistazo
@@ -273,7 +273,7 @@ flowchart TB
 
 ## Cómo fluye una solicitud
 
-Con zoom sobre una sola solicitud — cuál de los tres caminos anteriores
+Con zoom sobre una sola solicitud, cuál de los tres caminos anteriores
 toma, y por qué:
 
 ```mermaid
@@ -291,12 +291,12 @@ flowchart LR
 
 El verificador se arma cuando la solicitud declara una respuesta
 verificable por máquina vía `ailin_constraints.answer_check`. La cascada es
-conservadora — la economía está diseñada para favorecer por defecto la ruta
+conservadora: la economía está diseñada para favorecer por defecto la ruta
 barata, escalando solo cuando la compuerta de calidad lo exige. Y como la
 coordinación no es gratis, la propia documentación del motor te dice sin
 rodeos
 [cuándo un modelo único es la decisión correcta](docs/use-cases/when-not-to-use-collective.md)
-([también en la guía](https://ailin.guide/use-cases/when-not-to-use-collective)) — tráfico de alto volumen y bajo riesgo, SLAs de latencia
+([también en la guía](https://ailin.guide/use-cases/when-not-to-use-collective)): tráfico de alto volumen y bajo riesgo, SLAs de latencia
 estrictos, prosa estilo documentación. La decisión es operativa, no
 filosófica.
 
@@ -321,7 +321,7 @@ EOF
 ```
 
 Edita `.env` y reemplaza `sk-...` con una clave real (o prescinde de claves
-por completo — mira la opción de Ollama más abajo). Después:
+por completo: mira la opción de Ollama más abajo). Después:
 
 ```bash
 docker compose up -d api postgres redis
@@ -331,7 +331,7 @@ curl http://localhost:3000/health
 ```
 
 (`coord-serving`, la superficie de serving del coordinador, se construye y
-arranca junto con la API — eso es lo esperado.) Crea una cuenta local y
+arranca junto con la API; eso es lo esperado.) Crea una cuenta local y
 llama al colectivo:
 
 ```bash
@@ -375,37 +375,37 @@ con la API hospedada:
 | Endpoints AGPL §13 (`/source`, `/license`) + headers de licencia en las respuestas | |
 | Pipeline de entrega broadcast (código entregado detrás de `BROADCAST_FEATURE_ENABLED`, desactivado por defecto; aún no validado en producción) | |
 
-La honestidad sobre la validación es una característica — todo lo que no
+La honestidad sobre la validación es una característica: todo lo que no
 está en la columna izquierda está etiquetado en la documentación igual que
 aquí.
 
-## Contribuir — la inteligencia colectiva necesita un colectivo
+## Contribuir: la inteligencia colectiva necesita un colectivo
 
 La propia tesis lo predice: contribuidores diversos e independientes, bien
 coordinados, construyen algo que ningún esfuerzo en solitario puede. Las
 contribuciones de código son bienvenidas bajo el **DCO** (`git commit -s`,
-ver [DCO.md](DCO.md) y [CONTRIBUTING.md](CONTRIBUTING.md)) — adaptadores de
+ver [DCO.md](DCO.md) y [CONTRIBUTING.md](CONTRIBUTING.md)): adaptadores de
 proveedores (módulos delgados y autocontenidos), implementaciones de
 estrategias, verificadores objetivos de tareas, documentación en
 [ailin.guide](https://ailin.guide).
 
 Y este proyecto tiene una superficie de contribución que la mayoría de los
-proyectos no tiene: **ejecuta el benchmark tú mismo y publica el resultado
-— salga como salga.** Empieza por
+proyectos no tiene: **ejecuta el benchmark tú mismo y publica el resultado,
+salga como salga.** Empieza por
 [REPRODUCING_THE_BENCHMARK.md](docs/experiments/REPRODUCING_THE_BENCHMARK.md):
 regenerar cada tabla publicada a partir de los datos crudos versionados
-toma unos dos minutos y la stdlib de Python. Cada replicación independiente
-— que valide o que invalide — hace más inteligente al colectivo. Ese es
+toma unos dos minutos y la stdlib de Python. Cada replicación independiente,
+que valide o que invalide, hace más inteligente al colectivo. Ese es
 precisamente el punto.
 
 Preguntas y resultados: [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
-Reportes de seguridad: **nunca** en un issue público — ver [SECURITY.md](SECURITY.md).
+Reportes de seguridad: **nunca** en un issue público; ver [SECURITY.md](SECURITY.md).
 
 ## Licencia y gobernanza
 
 **AGPL-3.0-or-later.** Si ejecutas una versión modificada como servicio de
-red, el §13 exige ofrecer a sus usuarios el código fuente correspondiente —
-el motor sirve los endpoints `/source` y `/license` y envía los headers
+red, el §13 exige ofrecer a sus usuarios el código fuente correspondiente.
+El motor sirve los endpoints `/source` y `/license` y envía los headers
 `X-License`/`X-Source-Code` en cada respuesta para facilitar el
 cumplimiento (configura `AGPL_SOURCE_URL` para que apunte a *tu* código
 fuente modificado). Ver [COMPLIANCE.md](COMPLIANCE.md); licenciamiento
@@ -431,8 +431,8 @@ Mantenido por **Ailin One, Inc.** La AGPL licencia el código, no las marcas.
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
 </a>
 
-Si la tesis de la inteligencia colectiva — puesta a prueba en abierto, con
-los recibos en el repo — es algo que quieres que exista en el mundo, una ⭐
+Si la tesis de la inteligencia colectiva (puesta a prueba en abierto, con
+los recibos en el repo) es algo que quieres que exista en el mundo, una ⭐
 es la forma de decirles a otros desarrolladores que vale sus diez minutos.
 </content>
 </StructuredOutput>
