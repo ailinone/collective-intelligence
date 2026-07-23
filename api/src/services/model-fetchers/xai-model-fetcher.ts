@@ -102,23 +102,45 @@ export class XAIModelFetcher extends BaseProviderModelFetcher {
   }
 
   private extractCapabilitiesFromXAI(model: OpenAI.Models.Model): ModelCapability[] {
-    const capabilities: ModelCapability[] = ['chat', 'streaming'];
     const modelId = model.id.toLowerCase();
 
-    // All Grok models support function calling
-    capabilities.push('function_calling');
+    // xAI's /v1/models now lists non-chat model classes alongside Grok chat
+    // models with no modality field to tell them apart: "Grok Imagine"
+    // image/video generation (grok-imagine-image, grok-imagine-video*) and
+    // agentic computer-use/build models (grok-build-*, *-computer-use-*).
+    // Tagging every listed model 'chat' unconditionally (as before) let
+    // these into chat-only candidate pools (e.g. CostCascadeStrategy),
+    // where their non-per-token real cost also produced bogus near-zero
+    // cost_usd once run through token-based pricing estimates.
+    const isImageModel = modelId.includes('imagine') && modelId.includes('image');
+    const isVideoModel = modelId.includes('imagine') && modelId.includes('video');
+    const isComputerUseModel = modelId.includes('computer-use');
+    const isBuildAgentModel = modelId.includes('grok-build');
+    const isNonChatModel = isImageModel || isVideoModel || isComputerUseModel || isBuildAgentModel;
 
-    // JSON mode support
-    capabilities.push('json_mode');
+    const capabilities: ModelCapability[] = [];
+    if (isImageModel) capabilities.push('image_generation');
+    if (isVideoModel) capabilities.push('video_generation');
+    if (isComputerUseModel) capabilities.push('computer_use');
 
-    // Grok models have enhanced reasoning
-    if (modelId.includes('grok')) {
-      capabilities.push('reasoning', 'thinking_mode');
-    }
+    if (!isNonChatModel) {
+      capabilities.push('chat', 'streaming');
 
-    // Vision capabilities (Grok-2 and later)
-    if (modelId.includes('grok-2') || modelId.includes('grok-vision')) {
-      capabilities.push('vision', 'multimodal');
+      // All Grok chat models support function calling
+      capabilities.push('function_calling');
+
+      // JSON mode support
+      capabilities.push('json_mode');
+
+      // Grok models have enhanced reasoning
+      if (modelId.includes('grok')) {
+        capabilities.push('reasoning', 'thinking_mode');
+      }
+
+      // Vision capabilities (Grok-2 and later)
+      if (modelId.includes('grok-2') || modelId.includes('grok-vision')) {
+        capabilities.push('vision', 'multimodal');
+      }
     }
 
     return Array.from(new Set(capabilities));

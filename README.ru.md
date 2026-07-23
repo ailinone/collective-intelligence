@@ -17,7 +17,21 @@ Source: https://github.com/ailinone/collective-intelligence
 
 > 🌐 Каноническая версия — английская. Этот перевод соответствует коммиту 596a94e6 — если сомневаетесь, читайте английский README ([README.md](README.md)).
 
-> 🌐 [English](README.md) · [简体中文](README.zh-CN.md) · [Português (BR)](README.pt-BR.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
+<p align="center">
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-30363d?style=for-the-badge"></a>
+  <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-30363d?style=for-the-badge"></a>
+  <a href="README.pt-BR.md"><img alt="Português (BR)" src="https://img.shields.io/badge/Portugu%C3%AAs%20(BR)-30363d?style=for-the-badge"></a>
+  <a href="README.es.md"><img alt="Español" src="https://img.shields.io/badge/Espa%C3%B1ol-30363d?style=for-the-badge"></a>
+  <a href="README.ja.md"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-30363d?style=for-the-badge"></a>
+  <a href="README.ko.md"><img alt="한국어" src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-30363d?style=for-the-badge"></a>
+  <a href="README.fr.md"><img alt="Français" src="https://img.shields.io/badge/Fran%C3%A7ais-30363d?style=for-the-badge"></a>
+  <a href="README.de.md"><img alt="Deutsch" src="https://img.shields.io/badge/Deutsch-30363d?style=for-the-badge"></a>
+  <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-1f6feb?style=for-the-badge"></a>
+</p>
+
+> **TL;DR** — Ailin¹ заставляет **76,636 ИИ-моделей** работать сообща внутри одной коллективной модели, оркеструя их через **32 стратегии** вместо маршрутизации к одной. Структурированное разнообразие, независимые рассуждения и полный аудиторский след решений в каждом запросе — надёжнее, устойчивее и лучше поддаётся аудиту, чем любая интеграция с одной моделью, и [доказано в сравнении с фронтиром, у всех на виду](#доказано-в-сравнении-с-фронтиром--у-всех-на-виду).
+>
+> **→ [Быстрый старт](#быстрый-старт) · [Смотреть доказательства](#доказано-в-сравнении-с-фронтиром--у-всех-на-виду) · [Документация](https://ailin.guide)**
 
 **Тысячи ИИ-моделей координируются внутри одной коллективной модели.**
 

@@ -17,7 +17,21 @@ Source: https://github.com/ailinone/collective-intelligence
 
 > 🌐 英文版为权威版本（canonical）。本翻译对应 commit 596a94e6——如有疑问，请阅读英文版 README（[README.md](README.md)）。
 
-> 🌐 [English](README.md) · [简体中文](README.zh-CN.md) · [Português (BR)](README.pt-BR.md) · [Español](README.es.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
+<p align="center">
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-30363d?style=for-the-badge"></a>
+  <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-1f6feb?style=for-the-badge"></a>
+  <a href="README.pt-BR.md"><img alt="Português (BR)" src="https://img.shields.io/badge/Portugu%C3%AAs%20(BR)-30363d?style=for-the-badge"></a>
+  <a href="README.es.md"><img alt="Español" src="https://img.shields.io/badge/Espa%C3%B1ol-30363d?style=for-the-badge"></a>
+  <a href="README.ja.md"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-30363d?style=for-the-badge"></a>
+  <a href="README.ko.md"><img alt="한국어" src="https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-30363d?style=for-the-badge"></a>
+  <a href="README.fr.md"><img alt="Français" src="https://img.shields.io/badge/Fran%C3%A7ais-30363d?style=for-the-badge"></a>
+  <a href="README.de.md"><img alt="Deutsch" src="https://img.shields.io/badge/Deutsch-30363d?style=for-the-badge"></a>
+  <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
+</p>
+
+> **TL;DR** — Ailin¹ 让 **76,636 个 AI 模型** 在同一个集体模型中协同，通过 **32 种策略** 编排，而非路由到单一模型。每一次请求都具备结构化多样性、独立推理与完整的决策审计轨迹——比任何单模型集成更可靠、更有韧性、更可审计，并且[已在公开场景中对阵前沿完成实证](#对阵前沿的公开实证)。
+>
+> **→ [快速开始](#快速开始) · [查看实证](#对阵前沿的公开实证) · [文档](https://ailin.guide)**
 
 **数以千计的 AI 模型，在同一个集体模型中协同运作。**
 
