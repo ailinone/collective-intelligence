@@ -20,6 +20,15 @@
  * rerankers (`jina-reranker-*`, `voyage-*`), audio models (`voxtral`), search
  * models (`gpt-4o-search-preview`) and decoding-method strings as voters.
  *
+ * Also observed live (2026-07-23): CostCascadeStrategy's cost-sort admitted
+ * xAI "Grok Imagine" image/video-generation models (`grok-imagine-image`,
+ * `grok-imagine-video*`) and computer-use/agentic-build models
+ * (`grok-build-*`, `*-computer-use-*`) as cascade rungs for a plain
+ * HumanEval code-generation task. Some upstream hub listings DECLARE these
+ * as `chat`-capable in their own catalog metadata, which our capability
+ * fusion trusts as a seed signal ahead of any heuristic — so the id/family
+ * signal below is the only backstop that still excludes them.
+ *
  * This predicate excludes models that are fundamentally NON-GENERATIVE for text,
  * using BOTH a capability signal AND an id/family signal — so corrupt tags
  * cannot smuggle a retrieval/decoding/audio model into a chat pool.
@@ -38,16 +47,18 @@ const DISQUALIFYING_CAPABILITIES = new Set<string>([
 /**
  * Id/family patterns for model classes whose capability tags are unreliable and
  * which cannot perform general text reasoning: embeddings, rerankers, HF
- * decoding-method demo repos, pure speech/audio models, and forced-retrieval
- * search endpoints.
+ * decoding-method demo repos, pure speech/audio models, forced-retrieval
+ * search endpoints, image/video-generation models, and computer-use/agentic
+ * build models.
  */
 const NON_GENERATIVE_ID_PATTERN =
-  /(?:^|[/_-])(?:text-)?embeddings?(?:[/_-]|$)|rerank(?:er)?|colbert|voyage-|contrastive-search|group-beam-search|diverse-beam|(?:^|[/_-])beam-search|greedy-search|transformers-community\/|\bvoxtral\b|\bwhisper\b|text-to-speech|speech-to-text|search-(?:api|preview)|(?:^|[/_-])(?:multilingual-)?e5(?:[/_-]|$)|(?:^|[/_-])(?:bge|gte|labse|minilm|sentence-transformers?)(?:[/_-]|$)/i;
+  /(?:^|[/_-])(?:text-)?embeddings?(?:[/_-]|$)|rerank(?:er)?|colbert|voyage-|contrastive-search|group-beam-search|diverse-beam|(?:^|[/_-])beam-search|greedy-search|transformers-community\/|\bvoxtral\b|\bwhisper\b|text-to-speech|speech-to-text|search-(?:api|preview)|(?:^|[/_-])(?:multilingual-)?e5(?:[/_-]|$)|(?:^|[/_-])(?:bge|gte|labse|minilm|sentence-transformers?)(?:[/_-]|$)|\bimagine-(?:image|video)\b|\bcomputer-use\b|\bgrok-build\b/i;
 
 /**
  * Returns true when `model` is fundamentally non-generative for text reasoning
- * (embedding / reranker / decoding-method repo / pure audio / forced-search) and
- * therefore must not be selected as a chat or collective-voting participant.
+ * (embedding / reranker / decoding-method repo / pure audio / forced-search /
+ * image-video-generation / computer-use-agent) and therefore must not be
+ * selected as a chat or collective-voting participant.
  */
 export function isNonGenerativeModel(model: {
   id?: string | null;

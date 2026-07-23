@@ -54,6 +54,26 @@ describe('isNonGenerativeModel', () => {
     expect(isNonGenerativeModel(m('some/research-assistant-70b', ['chat']))).toBe(false);
   });
 
+  it('excludes xAI Grok Imagine image/video-generation models even when tagged chat', () => {
+    expect(isNonGenerativeModel(m('grok-imagine-image', ['chat', 'streaming']))).toBe(true);
+    expect(isNonGenerativeModel(m('grok-imagine-video', ['chat', 'streaming']))).toBe(true);
+    expect(isNonGenerativeModel(m('grok-imagine-video-1.5-preview', ['chat', 'streaming']))).toBe(true);
+  });
+
+  it('excludes computer-use agent models even when tagged chat', () => {
+    expect(isNonGenerativeModel(m('snowball-computer-use-no-safety', ['chat', 'streaming']))).toBe(true);
+  });
+
+  it('excludes the Grok build/agentic-coding model even when tagged chat', () => {
+    expect(isNonGenerativeModel(m('grok-build-0.1', ['chat', 'streaming']))).toBe(true);
+  });
+
+  it('does not false-positive real chat models on "build"/"imagine"/"use" substrings', () => {
+    expect(isNonGenerativeModel(m('grok-4-fast', ['chat']))).toBe(false);
+    expect(isNonGenerativeModel(m('some/instruction-builder-7b', ['chat']))).toBe(false);
+    expect(isNonGenerativeModel(m('anthropic/claude-opus-4.8', ['chat']))).toBe(false);
+  });
+
   it('excludes sentence-embedding families whose ids flatten the org prefix (c3-v4 leak)', () => {
     // The exact model that voted in a live consensus math task: hub listings
     // flatten `intfloat/multilingual-e5-base` → `intfloat-multilingual-e5-base`,
