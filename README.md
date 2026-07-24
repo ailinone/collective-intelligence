@@ -16,6 +16,10 @@ Source: https://github.com/ailinone/collective-intelligence
 # Ailin¹ Collective Intelligence
 
 <p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Star the repo and back a new, more collective and collaborative era of AI</b></a>
+</p>
+
+<p align="center">
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-1f6feb?style=for-the-badge"></a>
   <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-30363d?style=for-the-badge"></a>
   <a href="README.pt-BR.md"><img alt="Português (BR)" src="https://img.shields.io/badge/Portugu%C3%AAs%20(BR)-30363d?style=for-the-badge"></a>
@@ -30,10 +34,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR**: Ailin¹ makes **76,636 AI models** collaborate inside one collective model, coordinated through **32 strategies** instead of routed to a single one. Structured diversity, independent reasoning, and a full decision audit trail on every request: more reliable, resilient, and auditable than any single-model integration, and [proven against the frontier in the open](#proven-against-the-frontier-in-the-open).
 >
 > **→ [Quickstart](#quickstart) · [See the evidence](#proven-against-the-frontier-in-the-open) · [Full docs](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Star the repo and back a new, more collective and collaborative era of AI, where models win together instead of alone.</b></a>
-</p>
 
 **Thousands of AI models coordinate inside one collective model.**
 
@@ -398,6 +398,10 @@ easy (set `AGPL_SOURCE_URL` to point at *your* modified source). See
 Maintained by **Ailin One, Inc.** The AGPL licenses the code, not the marks.
 
 ## Star history & contributors
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Star the repo and back a new, more collective and collaborative era of AI</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 

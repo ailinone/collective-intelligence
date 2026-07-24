@@ -15,6 +15,10 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Ailin¹ Collective Intelligence
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Estrele o repositório e apoie uma nova era da IA, mais coletiva e colaborativa</b></a>
+</p>
+
 > 🌐 A versão em inglês é a canônica. Esta tradução acompanha o commit 596a94e6. Em caso de dúvida, leia o README em inglês ([README.md](README.md)).
 
 <p align="center">
@@ -32,10 +36,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR:** O Ailin¹ faz **76,636 modelos de IA** colaborarem dentro de um único modelo coletivo, coordenados por **32 estratégias** em vez de roteados para um só. Diversidade estruturada, raciocínio independente e proveniência completa de decisão em cada requisição, mais confiável, resiliente e auditável do que qualquer integração de modelo único, e [provado contra a fronteira, às claras](#provado-contra-a-fronteira-às-claras).
 >
 > **→ [Início rápido](#início-rápido) · [Veja as provas](#provado-contra-a-fronteira-às-claras) · [Docs](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Estrele o repositório e apoie uma nova era da IA, mais coletiva e colaborativa, onde os modelos vencem juntos e não sozinhos.</b></a>
-</p>
 
 **Milhares de modelos de IA se coordenam dentro de um único modelo coletivo.**
 
@@ -418,6 +418,10 @@ licensing@ailin.one.
 Mantido pela **Ailin One, Inc.** A AGPL licencia o código, não as marcas.
 
 ## Histórico de estrelas e contribuidores
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Estrele o repositório e apoie uma nova era da IA, mais coletiva e colaborativa</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 

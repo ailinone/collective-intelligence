@@ -15,6 +15,10 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Ailin¹ Collective Intelligence
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください</b></a>
+</p>
+
 > 🌐 正式版(canonical)は英語版です。この翻訳はコミット 596a94e6 に対応しています。迷った場合は英語版 README([README.md](README.md))をお読みください。
 
 <p align="center">
@@ -32,10 +36,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR**: Ailin¹ は **76,636 個の AI モデル** をひとつのコレクティブ・モデルの中で協調させ、単一モデルへのルーティングではなく **32 の戦略** でオーケストレーションします。すべてのリクエストに構造化された多様性・独立した推論・完全な意思決定の監査証跡を付与し、単一モデル統合よりも信頼性・耐障害性・監査可能性に優れます。さらに[公開の場でフロンティアを相手に実証済み](#フロンティアを相手に公開の場で実証済み)。
 >
 > **→ [クイックスタート](#クイックスタート) · [エビデンスを見る](#フロンティアを相手に公開の場で実証済み) · [ドキュメント](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください。モデルが単独ではなく、共に勝つ時代です。</b></a>
-</p>
 
 **数千のAIモデルが、ひとつのコレクティブ・モデルの中で協調する。**
 
@@ -427,6 +427,10 @@ APIのクイックスタート:
 コードであり、商標ではありません。
 
 ## スター履歴とコントリビューター
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 
