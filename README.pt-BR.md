@@ -33,6 +33,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [Início rápido](#início-rápido) · [Veja as provas](#provado-contra-a-fronteira-às-claras) · [Docs](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Estrele o repositório e apoie uma nova era da IA, mais coletiva e colaborativa, onde os modelos vencem juntos e não sozinhos.</b></a>
+</p>
+
 **Milhares de modelos de IA se coordenam dentro de um único modelo coletivo.**
 
 Diversidade estruturada, raciocínio independente e proveniência completa

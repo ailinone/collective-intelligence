@@ -33,6 +33,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [Quickstart](#quickstart) · [Die Belege ansehen](#gegen-die-frontier-bewiesen-öffentlich) · [Docs](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Gib dem Repo einen Stern und unterstütze eine neue, kollektivere und kollaborativere Ära der KI, in der Modelle gemeinsam gewinnen statt allein.</b></a>
+</p>
+
 **Tausende KI-Modelle koordinieren sich in einem einzigen kollektiven Modell.**
 
 Strukturierte Diversität, unabhängiges Reasoning und vollständige

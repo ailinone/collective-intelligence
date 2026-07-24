@@ -33,6 +33,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [퀵스타트](#퀵스타트) · [증거 보기](#프런티어를-상대로-공개적으로-입증) · [문서](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요. 모델이 혼자가 아니라 함께 이기는 시대입니다.</b></a>
+</p>
+
 **수천 개의 AI 모델이 하나의 집단 모델 안에서 협력합니다.**
 
 모든 요청마다 구조화된 다양성, 독립적 추론, 그리고 완전한 의사결정

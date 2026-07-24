@@ -31,6 +31,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [Quickstart](#quickstart) · [See the evidence](#proven-against-the-frontier-in-the-open) · [Full docs](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Star the repo and back a new, more collective and collaborative era of AI, where models win together instead of alone.</b></a>
+</p>
+
 **Thousands of AI models coordinate inside one collective model.**
 
 Structured diversity, independent reasoning, and full decision provenance

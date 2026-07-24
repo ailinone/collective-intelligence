@@ -33,6 +33,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [クイックスタート](#クイックスタート) · [エビデンスを見る](#フロンティアを相手に公開の場で実証済み) · [ドキュメント](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください。モデルが単独ではなく、共に勝つ時代です。</b></a>
+</p>
+
 **数千のAIモデルが、ひとつのコレクティブ・モデルの中で協調する。**
 
 構造化された多様性、独立した推論、そしてすべてのリクエストに付随する

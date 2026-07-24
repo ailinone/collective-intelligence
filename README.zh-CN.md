@@ -33,6 +33,10 @@ Source: https://github.com/ailinone/collective-intelligence
 >
 > **→ [快速开始](#快速开始) · [查看实证](#对阵前沿的公开实证) · [文档](https://ailin.guide)**
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 为这个仓库点亮 Star，支持一个更集体、更协作的 AI 新时代，让模型一起取胜，而不是各自为战。</b></a>
+</p>
+
 **数以千计的 AI 模型，在同一个集体模型中协同运作。**
 
 每一次请求都具备结构化多样性、独立推理与完整的决策溯源，
