@@ -45,15 +45,17 @@ Source: https://github.com/ailinone/collective-intelligence
 毎日のように「最強」を掲げる新モデルが登場します。ここは、それらが
 共に働くレイヤーです。完全なドキュメント: **[ailin.guide](https://ailin.guide)**。
 
+[![CIワークフローの状態、クリックすると現在の成功/失敗を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
-[![CI](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
-[![REUSE compliance](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
-[![DCO](https://img.shields.io/badge/DCO-required-brightgreen)](DCO.md)
-[![Providers](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![Models indexed](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#数万のモデル常にフロンティアに)
-[![Strategies](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#リクエストの流れ)
+[![License Complianceワークフローの状態、クリックすると現在の成功/失敗を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
+[![DCOチェックの状態、クリックすると現在の成功/失敗を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml)
+[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![CodeQLの状態、クリックすると現在の検出結果を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
+[![~90件のプロバイダー統合](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
+[![76,636モデルをインデックス済み](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#数万のモデル常にフロンティアに)
+[![登録済み32件のコレクティブ戦略](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#リクエストの流れ)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
-[![Discussions](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
+[![GitHub Discussions: 公開中](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
 [クイックスタート](#クイックスタート) · [次なるフロンティア](#コレクティブインテリジェンスaiの次なるフロンティア) ·
 [なぜコレクティブか](#なぜコレクティブは最大の単一モデルに勝るのか) ·
@@ -61,8 +63,6 @@ Source: https://github.com/ailinone/collective-intelligence
 [常にフロンティアに](#数万のモデル常にフロンティアに) ·
 [仕組み](#アーキテクチャ概観) ·
 [コントリビューション](#コントリビューションコレクティブインテリジェンスにはコレクティブが必要だ) · [ドキュメント](https://ailin.guide)
-
----
 
 ## コレクティブ・インテリジェンス：AIの次なるフロンティア
 
@@ -97,45 +97,19 @@ Ailin¹ はその原理をエンジニアリング・プラットフォームと
 ## なぜコレクティブは最大の単一モデルに勝るのか
 
 フロンティアモデルは大型化を続けており、その時々の最強単一モデルは
-見事なものです。しかし単一モデルは常に、トレーニングの単一点、
-アーキテクチャの単一点、障害の単一点、そしてバイアスの単一点です。
+見事なものです。しかし単一モデルは常に、**トレーニングの単一点、
+アーキテクチャの単一点、障害の単一点、そしてバイアスの単一点**です。
 よく協調されたコレクティブは、スケールだけでは決して届かない形で、
 これらの構造的限界の一つひとつに対処します。
 
-- **レジリエンス。** 単一モデルは単一の依存を意味します。その
-  プロバイダーがある日、性能劣化・スロットリング・レート制限・誤った
-  価格設定に見舞われれば、すべての呼び出しが影響を受けます。
-  コレクティブは、プロバイダー障害・劣化したモデル・局所的な失敗を
-  人手の介入なしに迂回します。リクエストは完全なプロビナンス付きで
-  成功し続けます
-  ([レジリエンス詳説](https://ailin.guide/architecture/why-collective-resilience))。
-- **評価の多様性。** モデルはそれぞれ異なるデータで、異なる目的の
-  もとに訓練されています。多数のモデルに問い、出力を比較することで、
-  どれほど巨大な単一モデルでも自信満々に繰り返してしまう誤りや盲点が
-  あぶり出されます。コレクティブは、意見の不一致をバグではなく品質の
-  シグナルへと変えます。
-- **集中の回避。** ひとつのモデルへの依存は、組織をひとつのベンダーの
-  ロードマップ・価格・ポリシー判断に縛り付けます。コレクティブは能力を
-  特定のプロバイダーから切り離します。フロンティアが移り変わり、
-  個々のプロバイダーが台頭し、衰退し、価格を改定しても、
-  プラットフォームは動き続けます。
-- **単一点バイアスの低減。** どのモデルも、訓練データ由来のバイアス、
-  拒否パターン、文体上のデフォルトを抱えています。アーキテクチャの
-  異なるモデルからなるコレクティブは、特定のモデルの盲点が及ぼす
-  影響を拡散させます。独立した推論者たちの間での収束を要求する
-  裁定戦略においては、とりわけ顕著です。
-- **動的スペシャライゼーション。** すべてにおいて最良の単一モデルは
-  存在しません。コレクティブは、適切なスペシャリストを適切なタスクに
-  割り当てられます(推論重視、コード重視、ビジョン、ロング
-  コンテキスト、低レイテンシ)。そして各リクエストを、そのタスクが
-  強さを要求するまさにその点で強いモデルへとルーティングします。
-- **より強固なガバナンス。** エンタープライズのワークロードには、
-  監査可能な意思決定、上限付きコスト、テナント分離、信頼できる
-  フォールバックが必要です。単一モデル統合では、それらの統制の構築は
-  インテグレーター任せになります。コレクティブはガバナンスを
-  プラットフォーム層で強制します: 意思決定プロビナンス、コスト上限、
-  クォータ分離、ポリシー強制が、すべてのリクエスト、すべての戦略、
-  すべてのモデルに適用されます。
+| 単一モデルの構造的リスク | コレクティブによる対処 |
+|---|---|
+| **レジリエンス**: 単一モデルは単一の依存を意味し、そのプロバイダーが性能劣化・スロットリング・レート制限・誤った価格設定に見舞われれば、すべての呼び出しが影響を受ける | プロバイダー障害・劣化したモデル・局所的な失敗を人手の介入なしに迂回し、リクエストは完全なプロビナンス付きで成功し続ける([レジリエンス詳説](https://ailin.guide/architecture/why-collective-resilience)) |
+| **評価の多様性**: モデルはそれぞれ異なるデータ・目的で訓練されており、単一モデルは自信満々に自らの誤りや盲点を繰り返す | 多数のモデルに問い出力を比較することで盲点をあぶり出し、意見の不一致をバグではなく品質のシグナルへと変える |
+| **集中の回避**: ひとつのモデルへの依存は、組織をひとつのベンダーのロードマップ・価格・ポリシー判断に縛り付ける | 能力を特定のプロバイダーから切り離し、フロンティアが移り変わり個々のプロバイダーが台頭・衰退・価格改定しても、プラットフォームは動き続ける |
+| **単一点バイアスの低減**: どのモデルも、訓練データ由来のバイアスや拒否パターン、文体上のデフォルトを抱えている | アーキテクチャの異なるモデルからなるコレクティブが特定のモデルの盲点の影響を拡散させる。独立した推論者たちの間での収束を要求する裁定戦略において、とりわけ顕著 |
+| **動的スペシャライゼーション**: すべてにおいて最良の単一モデルは存在しない | 適切なスペシャリストを適切なタスクに割り当て(推論重視、コード重視、ビジョン、ロングコンテキスト、低レイテンシ)、各リクエストをそのタスクで強いモデルへとルーティングする |
+| **より強固なガバナンス**: 単一モデル統合では、監査可能な意思決定・上限付きコスト・テナント分離・信頼できるフォールバックの構築がインテグレーター任せになる | 意思決定プロビナンス、コスト上限、クォータ分離、ポリシー強制をプラットフォーム層で強制し、すべてのリクエスト・戦略・モデルに適用する |
 
 この効果は複利で効いてきます。これらは6つの独立した機能ではありません。
 多数のモデルをうまく協調させるという、ひとつの構造的選択が持つ
@@ -155,14 +129,17 @@ Ailin¹ はその原理をエンジニアリング・プラットフォームと
 [すべてのテーブルを自分で再生成](docs/experiments/REPRODUCING_THE_BENCHMARK.md))。
 
 **✅ 検証済み: 検証可能なタスクにおいて、コレクティブはすべての
-フロンティア・フラッグシップに勝利。** 決定論的な解答検証器を備えた
-コンセンサスは **97%の客観的正答率(37/38)** を記録しました。対する
-GPT-5.5-pro、Claude Opus 4.8、Gemini 3.1 Pro、Grok 4.3 は、全3ランを
-プールして **68–82%**。しかも全ランを通じて、**検証器が客観的に
-誤った解答を選んだことは一度もありません**。フロンティア未満の
-オープンウェイトモデルのプールが、うまく協調することで、同一タスクに
-おいてすべてのフラッグシップを上回る解答を出したのです
-([すべての n と注意点を記載したリーダーボード、§3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md))。
+フロンティア・フラッグシップに勝利。**
+
+- 決定論的な解答検証器を備えたコンセンサスは **97%の客観的正答率
+  (37/38)** を記録。対する GPT-5.5-pro、Claude Opus 4.8、Gemini 3.1
+  Pro、Grok 4.3 は、全3ランをプールして **68–82%**
+- 全ランを通じて、**検証器が客観的に誤った解答を選んだことは
+  一度もありません**
+- **フロンティア未満のオープンウェイトモデル**のプールが、うまく
+  協調することで、同一タスクにおいてすべてのフラッグシップを
+  上回る解答を出した
+  ([すべての n と注意点を記載したリーダーボード、§3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md))
 
 **このテーゼの現在のフロンティア**、誠実に測定し、ロードマップを
 駆動しています:
@@ -170,8 +147,8 @@ GPT-5.5-pro、Claude Opus 4.8、Gemini 3.1 Pro、Grok 4.3 は、全3ランを
 | 軸 | 現在 | 私たちの対応 |
 |---|---|---|
 | 検証可能な正しさ | ✅ **コレクティブの勝利**(97% vs 68–82%) | 検証器のカバレッジをより多くのタスク形状へ拡大中(ツールコーリング・キャンペーンは 2026-07-18 に完了) |
-| 自由記述の文章 | クリエイティブライティングとリファクタリングでは依然として単一モデルが勝つ | ディサイダーの選定が勝ちランと負けランを測定可能なかたちで分ける: 学習可能なレバー([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
-| コスト | 記録の通りコレクティブにはプレミアムが乗る。**ただし**検証器のショートサーキットは例外で、発動時にはそれを ~100× 圧縮する([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | ショートサーキット経路を拡大中; `ailin-auto` は実行可能な最安戦略をデフォルトとする |
+| 自由記述の文章 | クリエイティブライティングとリファクタリングでは依然として単一モデルが勝つ | ディサイダーの選定が勝ちランと負けランを測定可能なかたちで分ける: 学習可能なレバー([ディサイダー選定、§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
+| コスト | 記録の通りコレクティブにはプレミアムが乗る。**ただし**検証器のショートサーキットは例外で、発動時にはそれを ~100× 圧縮する([コスト内訳、§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | ショートサーキット経路を拡大中; `ailin-auto` は実行可能な最安戦略をデフォルトとする |
 | レイテンシ | マルチラウンド裁定: すべての戦略が最初のトークンからリアルタイムに進捗をストリーミングします | `ailin-auto` は、品質ゲートが実際に必要とする場合にのみ最も踏み込んだ戦略を温存します; レイテンシ重視のトラフィックは設計上 `single` にルーティングされます |
 
 上記のすべての数値は、このリポジトリにコミットされた実行単位の生データと
@@ -194,14 +171,18 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 ### セマンティック・ディスカバリー、ハードコードされたモデルはゼロ
 
 ディスカバリーエンジンは数十のソースを並列にスキャンします:
-ネイティブのプロバイダーAPI、クラウドハブ、モデルアグリゲーター、
-オープンモデルのリポジトリ、プライベート推論エンドポイント。しかし
-ソースそのものは本質ではありません。重要なのは、モデルがどのように
-選ばれるかです。
+- ネイティブのプロバイダーAPI
+- クラウドハブ
+- モデルアグリゲーター
+- オープンモデルのリポジトリ
+- プライベート推論エンドポイント
 
-発見されたすべてのモデルは、能力、パフォーマンスプロファイル、価格、
-コンテキストウィンドウ、モダリティ、アーキテクチャによって分析・分類・
-インデックスされます。手作業のマッピングや設定なしに、自動的に
+しかしソースそのものは本質ではありません。重要なのは
+**モデルがどのように選ばれるか**です。
+
+発見されたすべてのモデルは、**能力、パフォーマンスプロファイル、価格、
+コンテキストウィンドウ、モダリティ、アーキテクチャ**によって分析・
+分類・インデックスされます。手作業のマッピングや設定なしに、自動的に
 推定されます。ルートはヘルスゲート付きです: モデルは、実際に稼働
 していることが証明されてはじめて広告されます。
 
@@ -218,9 +199,9 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 `ailin` モデルファミリーとその学習フライホイールは設計の一部です:
 エンジン自身の協調トラフィックで訓練されたコーディネーター・
 チェックポイントが、すべてのサードパーティモデルと同じプールで
-競います。ルーティング上の特権は一切なし。すべての協調上の意思決定を
+競います。ルーティング上の特権は一切なし。**すべての協調上の意思決定を
 捕捉する監査基盤は今日すでに提供されています; 本番のコーディネーター・
-ウェイトが開発中の最先端です
+ウェイトが開発中の最先端です**
 ([誠実なステータス、常に最新](https://ailin.guide))。
 
 ### 反証可能な仮説としてのコレクティブ戦略
@@ -229,8 +210,8 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 エキスパートパネル、悪魔の代弁者コンセンサス、コストカスケード、
 客観的検証付き best-of-N)、それぞれに誠実な到達可能性ラベル
 (自動選択可 / 明示指定のみ / ロードマップ)が付き、それぞれがこの
-リポジトリの実験ハーネスで反証可能です。戦略はエビデンスによって
-その地位を勝ち取り、あるいは失います。
+リポジトリの実験ハーネスで反証可能です。**戦略はエビデンスによって
+その地位を勝ち取り、あるいは失います。**
 
 ### マルチモーダル + 決定論的ファイル生成
 
@@ -241,14 +222,15 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 
 ### エンタープライズが本当に必要とするガバナンス
 
-完全な意思決定プロビナンス(`ailin_metadata`: 戦略、モデル、最終
-ディサイダー、サブコール単位のコスト、異論)、アドミッション時に
-強制されるリクエスト単位の `max_cost`、アーキテクチャレベルのテナント
-分離、エンジン自身が提供する AGPL §13 エンドポイント(`/source`、
-`/license`)、SPDX SBOM を伴う SLSA/Sigstore リリースプロビナンス。
-私たちの主張を証明する監査証跡は、あなたのトラフィックを統治するのと
-同じものです。ガバナンスはオーバーヘッドではなく
-[第一級の原則](https://ailin.guide/architecture/principles)です。
+| 統制 | 提供する内容 |
+|---|---|
+| 意思決定プロビナンス | `ailin_metadata`: 戦略、モデル、最終ディサイダー、サブコール単位のコスト、異論 |
+| コストガバナンス | アドミッション時に強制されるリクエスト単位の `max_cost` |
+| テナント分離 | アーキテクチャレベル(設定レベルにとどまらない) |
+| AGPL §13準拠 | エンジン自身が提供する `/source`、`/license` エンドポイント |
+| リリースプロビナンス | SPDX SBOM を伴う SLSA/Sigstore |
+
+**私たちの主張を証明する監査証跡は、あなたの本番トラフィックを統治するのと同じものです**: ガバナンスはオーバーヘッドではなく[第一級の原則](https://ailin.guide/architecture/principles)です。
 
 ## アーキテクチャ概観
 
@@ -270,6 +252,17 @@ flowchart TB
     EX <--> PROV[~90 provider integrations<br/>frontier APIs · aggregators · self-hosted]
 ```
 
+*テキストで説明すると: リクエストは、OpenAI SDKやcurlクライアントから
+(base_urlを差し替えるだけで)OpenAI互換APIに入ります。戦略解決が
+`ailin-auto` の保守的なカスケードを適用し、チーム編成に引き継ぎます。
+チーム編成は、ディスカバリーエンジンが継続的に供給する(ヘルスゲート
+付き、ハードコードされたモデルはゼロの)ライブなモデルカタログに対して
+セマンティックな選定を行います。編成されたチームは実行フェーズで動作
+し、フォールバックチェーンとバジェットガバナーを管理しながら、~90の
+プロバイダー統合と双方向にやり取りします。実行の出力は裁定に渡され、
+品質ゲートと決定論的検証器が適用されて、完全なプロビナンス
+(`ailin_metadata`)を伴う最終レスポンスが生成されます。*
+
 ## リクエストの流れ
 
 ひとつのリクエストにズームインすると、上記の3つの経路のうちどれを
@@ -288,23 +281,38 @@ flowchart LR
     G --> H[Response + ailin_metadata<br/>full decision provenance]
 ```
 
+*テキストで説明すると: 戦略解決の `ailin-auto` カスケードは、
+リクエストを3つの経路のいずれかへ振り分けます。単純なリクエストは、
+最も安価で実行可能な単一モデルへ。`ailin_constraints.answer_check` を
+宣言したリクエストはコンセンサス+決定論的検証器へ。戦略を明示的に
+指定したリクエストは、登録済み32戦略のうちの1つへ。3つの経路はすべて
+実行とそのフォールバックチェーンに合流し、続いて裁定と品質ゲートを
+経て、完全な `ailin_metadata` プロビナンスを伴うレスポンスを生成
+します。*
+
 検証器は、リクエストが `ailin_constraints.answer_check` で機械検証
 可能な解答を宣言したときに武装します。カスケードは保守的です。経済
 設計はデフォルトで安価な経路を優先し、品質ゲートが要求するときにのみ
-エスカレーションします。そして協調はタダではないため、エンジン自身の
-ドキュメントが
-[単一モデルが正解となるのはどんな場合か](docs/use-cases/when-not-to-use-collective.md)
-([ガイドにも掲載](https://ailin.guide/use-cases/when-not-to-use-collective))を
-率直に教えてくれます: 大量・低リスクのトラフィック、厳しい
-レイテンシSLA、ドキュメント調の文章。この判断は哲学ではなく、運用の
-問題です。
+エスカレーションします。
+
+**コレクティブが向かないケース**
+([詳しいガイド](docs/use-cases/when-not-to-use-collective.md)、
+[ailin.guideに掲載の同内容](https://ailin.guide/use-cases/when-not-to-use-collective)):
+- 大量・低リスクのトラフィック
+- 厳しいレイテンシSLA
+- ドキュメント調の文章
+
+この判断は哲学ではなく、運用の問題です。
 
 ## クイックスタート
 
 > Compose v2 対応の Docker、~8 GB の空きRAM、空きポート
-> 3000/5432/6379 が必要です。Windows では、以下のブロックを
-> **Git Bash または WSL** で実行してください(ヒアドキュメントと
-> `openssl` を使用しています)。
+> 3000/5432/6379、`python3`(下記の登録レスポンスをパースするため)、
+> そして `pip install openai`(Pythonクライアントの例で使用)が
+> 必要です。Windows では、以下のブロックを **Git Bash または WSL**
+> で実行してください(ヒアドキュメントと `openssl` を使用しています)。
+
+### ステップ1: クローンとシークレットの設定
 
 ```bash
 git clone https://github.com/ailinone/collective-intelligence.git
@@ -321,48 +329,74 @@ EOF
 ```
 
 `.env` を編集して `sk-...` を実際のキーに置き換えてください(キーを
-一切使わないことも可能です: 下記の Ollama オプションを参照)。その後:
+一切使わないことも可能です: 下記の Ollama オプションを参照)。設定
+オプションの完全な一覧: [api/.env.example](api/.env.example)。その後:
+
+### ステップ2: スタックを起動
 
 ```bash
-docker compose up -d api postgres redis
-docker compose logs -f api    # watch first boot: migrations + discovery, ~1-5 min
+docker compose up -d api postgres redis   # coord-serving also builds/boots automatically — expected
+docker compose logs -f api    # watch first boot: DB migrations + provider/model discovery scan, ~1-5 min
 curl http://localhost:3000/health
 # → {"status":"ok","uptime":…,"version":"0.1.0"}
 ```
 
-(コーディネーターのサービング面である `coord-serving` が API と並んで
-ビルド・起動します。これは想定どおりの挙動です。)ローカルアカウントを
-作成し、コレクティブを呼び出します:
+### ステップ3: 登録してトークンを取得
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
+export TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"pick-a-strong-one","name":"You"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['tokens']['accessToken'])")
+echo "token: ${TOKEN:0:12}..."   # non-empty confirms registration worked
 ```
 
+### ステップ4: Pythonクライアントをインストール
+
+```bash
+pip install openai
+```
+
+### ステップ5: コレクティブを呼び出す
+
 ```python
+# run in the same shell session as the export above (or re-export TOKEN first)
+import os
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:3000/v1", api_key=TOKEN)
+client = OpenAI(base_url="http://localhost:3000/v1", api_key=os.environ["TOKEN"])
 
 r = client.chat.completions.create(
     model="ailin-auto",   # or ailin-best / ailin-fast / ailin-economy / ailin-consensus
     messages=[{"role": "user", "content": "Why is the sky blue?"}],
 )
 print(r.choices[0].message.content)
+# → The sky looks blue because of Rayleigh scattering...
 print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — the receipts
+# → {'strategy_used': 'single', 'models_used': ['...'], 'cost_actual': 0.0003, ...}
 ```
+
+**うまく起動しない場合**: `Cannot connect to the Docker daemon` →
+まず Docker Desktop(または docker サービス)を起動してください。
+3000/5432/6379 で `bind: address already in use` → そのポートを
+使っている別のプロセスを止めるか、`docker/docker-compose.override.yml`
+でポートを付け替えてください。`docker compose logs -f api` が
+`Secret retrieval failed` を延々と吐く →
+[縮退ブートモード](docs/hardening/DEGRADED_BOOT_MODE.md)を参照して
+ください。
 
 外部APIキーが一切ない場合は、`docker/.env` に
 `OLLAMA_URL=http://host.docker.internal:11434` を設定すると、エンジンは
 セルフホストの縮退モードで起動します
-([ドキュメント](docs/hardening/DEGRADED_BOOT_MODE.md))。ネイティブ
-Linux では、api サービスに
+([縮退ブートモードのドキュメント](docs/hardening/DEGRADED_BOOT_MODE.md))。
+ネイティブLinux では、api サービスに
 `extra_hosts: ["host.docker.internal:host-gateway"]` も追加してください
-(またはブリッジIPを使用)。完全なローカルセットアップ:
-[インストールガイド](docs/getting-started/installation.md)。ホステッド
-APIのクイックスタート:
+(またはブリッジIPを使用)。OpenAPI検証用のネイティブ(Dockerなし)開発
+セットアップ: [インストールガイド](docs/getting-started/installation.md)。
+ホステッドAPIのクイックスタート:
 [ailin.guide/getting-started/quickstart](https://ailin.guide/getting-started/quickstart)。
+
+次に: [戦略の選び方](docs/guides/strategy-selection.md) ·
+[モデルエイリアスの解説](docs/guides/model-aliases-and-routing.md)。
 
 ## 現在提供中のもの vs. 開発中のもの
 
@@ -413,7 +447,7 @@ APIのクイックスタート:
 ように設定してください)。[COMPLIANCE.md](COMPLIANCE.md) を参照;
 商用ライセンス: licensing@ailin.one。
 
-| | |
+| ガバナンス項目 | 参照先 |
 |---|---|
 | コントリビューターのサインオフ(DCO 1.1) | [DCO.md](DCO.md) |
 | 行動規範(Contributor Covenant 2.1) | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
@@ -432,7 +466,7 @@ APIのクイックスタート:
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください</b></a>
 </p>
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+[![Star History Chart: ailinone/collective-intelligence の累積GitHubスター数の推移](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />

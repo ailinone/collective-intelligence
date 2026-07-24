@@ -45,15 +45,17 @@ Source: https://github.com/ailinone/collective-intelligence
 매일같이 "최고"를 자처하는 새 모델이 출시됩니다. 여기는 그 모델들이
 함께 일하는 계층입니다. 전체 문서: **[ailin.guide](https://ailin.guide)**.
 
+[![CI workflow status, click through for current pass/fail](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
-[![CI](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
-[![REUSE compliance](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
-[![DCO](https://img.shields.io/badge/DCO-required-brightgreen)](DCO.md)
-[![Providers](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![Models indexed](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#수만-개의-모델-언제나-프런티어에)
-[![Strategies](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#요청이-흐르는-방식)
+[![License Compliance workflow status, click through for current pass/fail](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
+[![DCO 체크 상태, 클릭하면 현재 결과 확인](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml)
+[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![CodeQL 상태, 클릭하면 현재 검출 결과 확인](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
+[![~90개 제공자 통합](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
+[![인덱싱된 모델 76,636개](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#수만-개의-모델-언제나-프런티어에)
+[![등록된 집단 전략 32개](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#요청이-흐르는-방식)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
-[![Discussions](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
+[![GitHub Discussions: 열림](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
 [퀵스타트](#퀵스타트) · [다음 프런티어](#집단-지성-ai의-다음-프런티어) ·
 [왜 집단인가](#집단이-가장-큰-단일-모델을-이기는-이유) ·
@@ -61,8 +63,6 @@ Source: https://github.com/ailinone/collective-intelligence
 [언제나 프런티어에](#수만-개의-모델-언제나-프런티어에) ·
 [작동 방식](#한눈에-보는-아키텍처) ·
 [기여하기](#기여하기-집단-지성에는-집단이-필요합니다) · [문서](https://ailin.guide)
-
----
 
 ## 집단 지성: AI의 다음 프런티어
 
@@ -95,40 +95,19 @@ Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 ## 집단이 가장 큰 단일 모델을 이기는 이유
 
 프런티어 모델은 계속 커지고 있고, 어느 시점에서든 가장 강한 단일
-모델은 경이롭습니다. 하지만 단일 모델은 언제나 학습의 단일 지점이고,
+모델은 경이롭습니다. 하지만 단일 모델은 언제나 **학습의 단일 지점이고,
 아키텍처의 단일 지점이며, 장애의 단일 지점이고, 편향의 단일
-지점입니다. 잘 조율된 집단은 이 구조적 한계 하나하나를, 규모만으로는
+지점**입니다. 잘 조율된 집단은 이 구조적 한계 하나하나를, 규모만으로는
 불가능한 방식으로 해결합니다.
 
-- **회복탄력성(Resilience).** 단일 모델은 곧 단일 의존성입니다. 그
-  제공자가 어느 날 성능 저하, 스로틀링, 레이트 리밋, 가격 오류를
-  겪으면 모든 호출이 영향을 받습니다. 집단은 제공자 장애, 성능이
-  저하된 모델, 국소적 실패를 개입 없이 우회합니다: 요청은 여전히
-  성공하고, 완전한 이력이 남습니다
-  ([회복탄력성 심층 분석](https://ailin.guide/architecture/why-collective-resilience)).
-- **평가 다양성.** 모델마다 서로 다른 데이터로, 서로 다른 목표를 갖고
-  학습됩니다. 여러 모델에게 묻고 출력을 비교하면, 아무리 큰 단일
-  모델이라도 확신에 차서 반복했을 오류와 사각지대가 드러납니다.
-  집단은 불일치를 버그가 아니라 품질의 신호로 바꿉니다.
-- **집중 방지(Anti-concentration).** 하나의 모델에 의존하는 조직은 한
-  벤더의 로드맵, 가격, 정책 결정에 묶입니다. 집단은 역량을 특정
-  제공자로부터 분리합니다: 프런티어가 이동해도, 특정 제공자가
-  부상하거나 몰락하거나 가격을 바꿔도 플랫폼은 계속 동작합니다.
-- **단일 지점 편향 완화.** 모든 모델은 학습 데이터의 편향, 거부 패턴,
-  문체적 기본값을 지니고 있습니다. 아키텍처가 서로 다른 모델들의
-  집단은 어느 한 모델의 사각지대가 미치는 영향을 희석합니다, 특히
-  독립적인 추론자들 간의 수렴을 요구하는 중재(arbitration) 전략에서
-  그렇습니다.
-- **동적 전문화.** 모든 것에 최고인 단일 모델은 없습니다. 집단은
-  올바른 전문가를 올바른 과제에 배정할 수 있습니다(추론 집약, 코드
-  집약, 비전, 롱 컨텍스트, 저지연), 그리고 각 요청을, 그 과제가
-  강함을 요구하는 바로 그 지점에서 강한 모델들로 라우팅합니다.
-- **더 강한 거버넌스.** 엔터프라이즈 워크로드에는 감사 가능한
-  의사결정, 상한이 있는 비용, 테넌트 격리, 신뢰할 수 있는 폴백이
-  필요합니다. 단일 모델 통합은 그 통제 장치들을 통합하는 쪽이 직접
-  만들도록 떠넘깁니다. 집단은 거버넌스를 플랫폼 계층에서 강제합니다:
-  의사결정 이력, 비용 상한, 쿼터 격리, 정책 집행이 모든 요청, 모든
-  전략, 모든 모델에 적용됩니다.
+| 단일 모델의 구조적 위험 | 집단이 이를 해결하는 방식 |
+|---|---|
+| **회복탄력성(Resilience)**: 단일 모델은 곧 단일 의존성입니다. 그 제공자가 어느 날 성능 저하, 스로틀링, 레이트 리밋, 가격 오류를 겪으면 모든 호출이 영향을 받습니다 | 집단은 제공자 장애, 성능이 저하된 모델, 국소적 실패를 개입 없이 우회합니다: 요청은 여전히 성공하고, 완전한 이력이 남습니다 ([회복탄력성 심층 분석](https://ailin.guide/architecture/why-collective-resilience)) |
+| **평가 다양성**: 모델마다 서로 다른 데이터로 서로 다른 목표를 갖고 학습되기 때문에, 단일 모델은 아무리 크더라도 확신에 차서 자신의 사각지대를 반복합니다 | 여러 모델에게 묻고 출력을 비교합니다: 불일치가 버그가 아니라 품질의 신호가 됩니다 |
+| **집중 방지(Anti-concentration)**: 하나의 모델에 의존하는 조직은 한 벤더의 로드맵, 가격, 정책 결정에 묶입니다 | 집단은 역량을 특정 제공자로부터 분리합니다: 프런티어가 이동해도, 특정 제공자가 부상하거나 몰락하거나 가격을 바꿔도 플랫폼은 계속 동작합니다 |
+| **단일 지점 편향 완화**: 모든 모델은 학습 데이터의 편향, 거부 패턴, 문체적 기본값을 지니고 있습니다 | 아키텍처가 서로 다른 모델들의 집단은 어느 한 모델의 사각지대가 미치는 영향을 희석합니다, 특히 독립적인 추론자들 간의 수렴을 요구하는 중재(arbitration) 전략에서 그렇습니다 |
+| **동적 전문화**: 모든 것에 최고인 단일 모델은 없습니다 | 집단은 올바른 전문가를 올바른 과제에 배정할 수 있습니다(추론 집약, 코드 집약, 비전, 롱 컨텍스트, 저지연), 그리고 각 요청을, 그 과제가 강함을 요구하는 바로 그 지점에서 강한 모델들로 라우팅합니다 |
+| **더 강한 거버넌스**: 엔터프라이즈 워크로드에는 감사 가능한 의사결정, 상한이 있는 비용, 테넌트 격리, 신뢰할 수 있는 폴백이 필요합니다. 단일 모델 통합은 그 통제 장치들을 통합하는 쪽이 직접 만들도록 떠넘깁니다 | 집단은 거버넌스를 플랫폼 계층에서 강제합니다: 의사결정 이력, 비용 상한, 쿼터 격리, 정책 집행이 모든 요청, 모든 전략, 모든 모델에 적용됩니다 |
 
 효과는 복리로 쌓입니다. 이것은 여섯 개의 독립적인 기능이 아니라,
 하나의 구조적 선택이 가진 여섯 개의 면입니다: 많은 모델을 잘 조율하면
@@ -147,22 +126,25 @@ Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 [모든 표를 직접 재생성하기](docs/experiments/REPRODUCING_THE_BENCHMARK.md)).
 
 **✅ 검증 완료: 검증 가능한 과제에서 집단이 모든 프런티어
-플래그십을 이깁니다.** 결정론적 정답 검증기(verifier)로 무장한
-합의(consensus) 전략은 **객관적 정확도 97% (37/38)**를 기록했고,
-GPT-5.5-pro, Claude Opus 4.8, Gemini 3.1 Pro, Grok 4.3은 세 차례 실행
-전체를 합산해 **68–82%**에 그쳤습니다, 그리고 모든 실행에 걸쳐
-**검증기는 단 한 번도 객관적으로 틀린 답을 선택하지 않았습니다**.
-프런티어 이하(sub-frontier)의 오픈 웨이트 모델 풀이, 잘 조율되기만
-하면, 같은 과제에서 모든 플래그십보다 더 정확히 답했습니다
-([모든 n과 단서 조항이 담긴 리더보드, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)).
+플래그십을 이깁니다.**
+
+- 결정론적 정답 검증기(verifier)로 무장한 합의(consensus) 전략은
+  **객관적 정확도 97% (37/38)**를 기록한 반면, GPT-5.5-pro, Claude Opus
+  4.8, Gemini 3.1 Pro, Grok 4.3은 세 차례 실행 전체를 합산해
+  **68–82%**에 그쳤습니다
+- 모든 실행에 걸쳐 **검증기는 단 한 번도 객관적으로 틀린 답을 선택하지
+  않았습니다**
+- 프런티어 이하(sub-frontier)의 오픈 웨이트 모델 풀이, 잘 조율되기만
+  하면, 같은 과제에서 모든 플래그십보다 더 정확히 답했습니다
+  ([모든 n과 단서 조항이 담긴 리더보드, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md))
 
 **이 명제의 현재 프런티어**, 정직하게 측정되고, 로드맵을 이끕니다:
 
 | 축 | 현재 | 우리가 하고 있는 일 |
 |---|---|---|
 | 검증 가능한 정확성 | ✅ **집단 승리** (97% vs 68–82%) | 더 많은 과제 유형으로 검증기 커버리지 확장 중 (툴 콜링 캠페인 2026-07-18 완료) |
-| 자유형 산문 | 창의적 글쓰기와 리팩토링은 아직 단일 모델이 우세 | 결정자(decider) 선택이 승리한 실행과 패배한 실행을 측정 가능하게 가릅니다: 학습 가능한 레버 ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
-| 비용 | 기록된 그대로의 집단 프리미엄 존재. **단**, 검증기 쇼트서킷이 발동하는 순간 프리미엄이 약 ~100× 규모로 붕괴합니다 ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | 쇼트서킷 경로 확대 중; `ailin-auto`는 실행 가능한 가장 저렴한 전략을 기본값으로 사용 |
+| 자유형 산문 | 창의적 글쓰기와 리팩토링은 아직 단일 모델이 우세 | 결정자(decider) 선택이 승리한 실행과 패배한 실행을 측정 가능하게 가릅니다: 학습 가능한 레버 ([결정자 선택, §7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
+| 비용 | 기록된 그대로의 집단 프리미엄 존재. **단**, 검증기 쇼트서킷이 발동하는 순간 프리미엄이 약 ~100× 규모로 붕괴합니다 ([비용 분석, §5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | 쇼트서킷 경로 확대 중; `ailin-auto`는 실행 가능한 가장 저렴한 전략을 기본값으로 사용 |
 | 지연 시간 | 다회전 중재(arbitration)는 모든 전략이 첫 토큰부터 실시간 진행 상황을 스트리밍합니다 | `ailin-auto`는 품질 게이트가 실제로 요구할 때만 가장 깊은 전략을 사용하도록 예약해 두며, 지연에 민감한 트래픽은 설계상 `single`로 라우팅됩니다 |
 
 위 모든 수치는 이 저장소에 커밋된 실행 단위 원시 데이터와 재현
@@ -183,13 +165,18 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 
 ### 시맨틱 디스커버리, 하드코딩된 모델 제로
 
-디스커버리 엔진은 수십 개의 소스를 병렬로 스캔합니다: 네이티브
-제공자 API, 클라우드 허브, 모델 애그리게이터, 오픈 모델 저장소,
-프라이빗 추론 엔드포인트. 하지만 소스 자체가 핵심이 아닙니다. 중요한
-것은 모델이 선택되는 방식입니다.
+디스커버리 엔진은 수십 개의 소스를 병렬로 스캔합니다:
+- 네이티브 제공자 API
+- 클라우드 허브
+- 모델 애그리게이터
+- 오픈 모델 저장소
+- 프라이빗 추론 엔드포인트
 
-발견된 모든 모델은 능력, 성능 프로필, 가격, 컨텍스트 윈도, 모달리티,
-아키텍처 기준으로 분석·분류·인덱싱됩니다: 수동 매핑이나 설정 없이
+하지만 소스 자체가 핵심은 아닙니다. **모델이 선택되는 방식**이
+핵심입니다.
+
+발견된 모든 모델은 **능력, 성능 프로필, 가격, 컨텍스트 윈도, 모달리티,
+아키텍처** 기준으로 분석·분류·인덱싱됩니다: 수동 매핑이나 설정 없이
 자동으로 추론됩니다. 라우트는 헬스 게이트를 거칩니다: 모델은 실제로
 살아 있음이 증명된 뒤에야 광고됩니다.
 
@@ -205,8 +192,8 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 `ailin` 모델 패밀리와 그 학습 플라이휠은 설계의 일부입니다: 엔진
 자신의 조율 트래픽으로 학습되는 코디네이터 체크포인트가, 모든
 서드파티 모델과 같은 풀에서 경쟁합니다. 라우팅 특혜는 없습니다.
-모든 조율 결정을 포착하는 감사 기반은 오늘 이미 출시되어 있고,
-프로덕션 코디네이터 가중치는 개발 중인 최전선입니다
+**모든 조율 결정을 포착하는 감사 기반은 오늘 이미 출시되어 있고,
+프로덕션 코디네이터 가중치는 개발 중인 최전선입니다**
 ([정직한 상태, 항상 최신](https://ailin.guide)).
 
 ### 반증 가능한 가설로서의 집단 전략
@@ -215,7 +202,7 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 패널, 악마의 변호인 합의, 비용 캐스케이드, 객관적 검증을 갖춘
 best-of-N) 각각은 정직한 도달 가능성(자동 선택 가능 / 명시적 전용 /
 로드맵)으로 라벨링되어 있고, 각각은 이 저장소의 실험 하네스로 반증
-가능합니다. 전략은 증거로 자리를 얻고, 증거로 자리를 잃습니다.
+가능합니다. **전략은 증거로 자리를 얻고, 증거로 자리를 잃습니다.**
 
 ### 멀티모달 + 결정론적 파일 생성
 
@@ -226,13 +213,15 @@ best-of-N) 각각은 정직한 도달 가능성(자동 선택 가능 / 명시적
 
 ### 엔터프라이즈에 실제로 필요한 거버넌스
 
-완전한 의사결정 이력(`ailin_metadata`: 전략, 모델, 최종 결정자,
-서브콜별 비용, 반대 의견), 접수 시점에 강제되는 요청별 `max_cost`,
-아키텍처 수준의 테넌트 격리, 엔진 자체가 서빙하는 AGPL §13
-엔드포인트(`/source`, `/license`), SPDX SBOM을 갖춘 SLSA/Sigstore
-릴리스 이력. 우리의 주장을 증명하는 감사 추적이 곧 여러분의 트래픽을
-통제하는 감사 추적입니다: 거버넌스는 오버헤드가 아니라
-[일급 원칙](https://ailin.guide/architecture/principles)입니다.
+| 통제 항목 | 제공 내용 |
+|---|---|
+| 의사결정 이력 | `ailin_metadata`: 전략, 모델, 최종 결정자, 서브콜별 비용, 반대 의견 |
+| 비용 거버넌스 | 접수 시점에 강제되는 요청별 `max_cost` |
+| 테넌트 격리 | 설정 수준이 아니라 아키텍처 수준 |
+| AGPL §13 준수 | 엔진 자체가 서빙하는 `/source`, `/license` 엔드포인트 |
+| 릴리스 이력 | SLSA/Sigstore + SPDX SBOM |
+
+**우리의 주장을 증명하는 감사 추적이 곧 여러분의 트래픽을 통제하는 감사 추적입니다**: 거버넌스는 오버헤드가 아니라 [일급 원칙](https://ailin.guide/architecture/principles)입니다.
 
 ## 한눈에 보는 아키텍처
 
@@ -253,6 +242,16 @@ flowchart TB
     EX <--> PROV[~90 provider integrations<br/>frontier APIs · aggregators · self-hosted]
 ```
 
+*텍스트로 설명하면: 어떤 OpenAI SDK나 curl 클라이언트든(base_url만
+바꾸면) OpenAI 호환 API를 통해 요청이 들어옵니다. 전략 해석 단계는
+`ailin-auto` 보수적 캐스케이드를 적용해 팀 구성 단계로 넘기고, 팀
+구성은 디스커버리 엔진이 계속 채워 넣는 라이브 모델 카탈로그(헬스
+게이트 통과, 하드코딩된 모델 제로) 위에서 시맨틱 선택을 수행합니다.
+구성된 팀은 실행 단계에서 동작하며, 폴백 체인과 예산 거버너를
+관리하고 ~90개 제공자 통합과 양방향으로 통신합니다. 실행의 결과는
+중재 단계로 전달되어 품질 게이트와 결정론적 검증기를 적용받고, 완전한
+의사결정 이력(`ailin_metadata`)이 담긴 최종 응답을 만들어냅니다.*
+
 ## 요청이 흐르는 방식
 
 한 건의 요청을 확대해서 보면, 위 세 경로 중 어떤 것을 타는지, 그리고
@@ -271,21 +270,37 @@ flowchart LR
     G --> H[Response + ailin_metadata<br/>full decision provenance]
 ```
 
+*텍스트로 설명하면: 전략 해석 단계의 `ailin-auto` 캐스케이드는 요청을
+세 갈래 경로 중 하나로 보냅니다. 단순한 요청은 가장 저렴하게 실행
+가능한 단일 모델로, `ailin_constraints.answer_check`를 선언한 요청은
+합의(consensus)와 결정론적 검증기로, 전략을 명시적으로 지정한 요청은
+등록된 32개 전략 중 하나로 향합니다. 세 경로 모두 실행(폴백 체인
+포함) 단계로 수렴한 뒤 중재와 품질 게이트를 거치고, 완전한
+`ailin_metadata` 의사결정 이력이 담긴 응답으로 마무리됩니다.*
+
 검증기는 요청이 `ailin_constraints.answer_check`를 통해 기계 검증
 가능한 정답을 선언할 때 무장(arm)됩니다. 캐스케이드는 보수적입니다:
 경제 구조는 기본적으로 저렴한 경로를 선호하도록 설계되었고, 품질
-게이팅이 요구할 때만 상승합니다. 그리고 조율은 공짜가 아니기에,
-엔진의 문서 스스로가
-[단일 모델이 옳은 선택인 경우](docs/use-cases/when-not-to-use-collective.md)
-([가이드에서도 확인 가능](https://ailin.guide/use-cases/when-not-to-use-collective))를 솔직하게 알려줍니다: 대량·저위험 트래픽, 빡빡한 지연 SLA,
-문서 스타일 산문이 그런 경우입니다. 이 결정은 철학이 아니라 운영의
-문제입니다.
+게이팅이 요구할 때만 상승합니다.
+
+**집단에 맞지 않는 경우**
+([전체 가이드](docs/use-cases/when-not-to-use-collective.md),
+[ailin.guide의 동일한 가이드](https://ailin.guide/use-cases/when-not-to-use-collective)):
+- 대량·저위험 트래픽
+- 빡빡한 지연 SLA
+- 문서 스타일 산문
+
+이 결정은 철학이 아니라 운영의 문제입니다.
 
 ## 퀵스타트
 
-> Docker(Compose v2 포함), 여유 RAM 약 8 GB, 사용 가능한 포트
-> 3000/5432/6379가 필요합니다. Windows에서는 아래 블록을 **Git Bash
-> 또는 WSL**에서 실행하세요(heredoc과 `openssl`을 사용합니다).
+> Compose v2가 포함된 Docker, 여유 RAM 약 8 GB, 사용 가능한 포트
+> 3000/5432/6379, `python3`(아래 등록 응답을 파싱하는 데 사용), 그리고
+> `pip install openai`(파이썬 클라이언트 예제용)가 필요합니다.
+> Windows에서는 아래 블록을 **Git Bash 또는 WSL**에서 실행하세요
+> (heredoc과 `openssl`을 사용합니다).
+
+### 1단계: 클론하고 시크릿 설정하기
 
 ```bash
 git clone https://github.com/ailinone/collective-intelligence.git
@@ -302,45 +317,73 @@ EOF
 ```
 
 `.env`를 편집해 `sk-...`를 실제 키로 바꾸세요(키를 아예 건너뛰어도
-됩니다, 아래 Ollama 옵션 참조). 그다음:
+됩니다, 아래 Ollama 옵션 참조). 전체 설정 옵션 목록:
+[api/.env.example](api/.env.example). 그다음:
+
+### 2단계: 스택 시작하기
 
 ```bash
-docker compose up -d api postgres redis
-docker compose logs -f api    # watch first boot: migrations + discovery, ~1-5 min
+docker compose up -d api postgres redis   # coord-serving also builds/boots automatically — expected
+docker compose logs -f api    # watch first boot: DB migrations + provider/model discovery scan, ~1-5 min
 curl http://localhost:3000/health
 # → {"status":"ok","uptime":…,"version":"0.1.0"}
 ```
 
-(코디네이터의 서빙 표면인 `coord-serving`이 API와 함께 빌드되고
-부팅됩니다. 정상입니다.) 로컬 계정을 만들고 집단을 호출하세요:
+### 3단계: 등록하고 토큰 받기
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
+export TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"pick-a-strong-one","name":"You"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['tokens']['accessToken'])")
+echo "token: ${TOKEN:0:12}..."   # non-empty confirms registration worked
 ```
 
+### 4단계: 파이썬 클라이언트 설치하기
+
+```bash
+pip install openai
+```
+
+### 5단계: 집단 호출하기
+
 ```python
+# run in the same shell session as the export above (or re-export TOKEN first)
+import os
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:3000/v1", api_key=TOKEN)
+client = OpenAI(base_url="http://localhost:3000/v1", api_key=os.environ["TOKEN"])
 
 r = client.chat.completions.create(
     model="ailin-auto",   # or ailin-best / ailin-fast / ailin-economy / ailin-consensus
     messages=[{"role": "user", "content": "Why is the sky blue?"}],
 )
 print(r.choices[0].message.content)
+# → The sky looks blue because of Rayleigh scattering...
 print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — the receipts
+# → {'strategy_used': 'single', 'models_used': ['...'], 'cost_actual': 0.0003, ...}
 ```
+
+**정상적으로 뜨지 않는다면**: `Cannot connect to the Docker daemon` →
+Docker Desktop이나 docker 서비스를 먼저 실행하세요. 3000/5432/6379
+포트에서 `bind: address already in use` → 해당 포트를 쓰는 다른
+프로세스를 멈추거나 `docker/docker-compose.override.yml`에서 포트를
+재매핑하세요. `docker compose logs -f api`에 `Secret retrieval failed`가
+계속 찍힌다면 → [성능 축소 부팅 모드](docs/hardening/DEGRADED_BOOT_MODE.md)
+문서를 참조하세요.
 
 외부 API 키가 전혀 없다면? `docker/.env`에
 `OLLAMA_URL=http://host.docker.internal:11434`를 설정하면 엔진이 성능
 축소(degraded) 셀프 호스티드 모드로 부팅합니다
-([문서](docs/hardening/DEGRADED_BOOT_MODE.md)). 네이티브 Linux에서는
-api 서비스에 `extra_hosts: ["host.docker.internal:host-gateway"]`도
-추가하세요(또는 브리지 IP를 사용하세요). 전체 로컬 설정:
-[설치 가이드](docs/getting-started/installation.md). 호스티드 API
-퀵스타트: [ailin.guide/getting-started/quickstart](https://ailin.guide/getting-started/quickstart).
+([성능 축소 부팅 모드 문서](docs/hardening/DEGRADED_BOOT_MODE.md)). 네이티브
+Linux에서는 api 서비스에
+`extra_hosts: ["host.docker.internal:host-gateway"]`도 추가하세요(또는
+브리지 IP를 사용하세요). OpenAPI 검증을 위한 네이티브(Docker 미사용)
+개발 환경 설정: [설치 가이드](docs/getting-started/installation.md).
+호스티드 API 퀵스타트:
+[ailin.guide/getting-started/quickstart](https://ailin.guide/getting-started/quickstart).
+
+다음: [전략 선택하기](docs/guides/strategy-selection.md) ·
+[모델 별칭 설명](docs/guides/model-aliases-and-routing.md).
 
 ## 오늘 출시된 것 vs. 개발 중인 것
 
@@ -388,7 +431,7 @@ api 서비스에 `extra_hosts: ["host.docker.internal:host-gateway"]`도
 설정하세요). [COMPLIANCE.md](COMPLIANCE.md) 참조; 상업 라이선스:
 licensing@ailin.one.
 
-| | |
+| 거버넌스 주제 | 참고 자료 |
 |---|---|
 | 기여자 서명 (DCO 1.1) | [DCO.md](DCO.md) |
 | 행동 강령 (Contributor Covenant 2.1) | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
@@ -407,7 +450,7 @@ licensing@ailin.one.
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요</b></a>
 </p>
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+[![Star History 차트: ailinone/collective-intelligence 저장소의 시간에 따른 누적 GitHub Star 수](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
