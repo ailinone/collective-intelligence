@@ -15,6 +15,10 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Ailin¹ Collective Intelligence
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Поставьте звезду репозиторию и поддержите новую, более коллективную и совместную эру ИИ</b></a>
+</p>
+
 > 🌐 Каноническая версия: английская. Этот перевод соответствует коммиту 596a94e6. Если сомневаетесь, читайте английский README ([README.md](README.md)).
 
 <p align="center">
@@ -32,10 +36,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR:** Ailin¹ заставляет **76,636 ИИ-моделей** работать сообща внутри одной коллективной модели, оркеструя их через **32 стратегии** вместо маршрутизации к одной. Структурированное разнообразие, независимые рассуждения и полный аудиторский след решений в каждом запросе делают результат надёжнее, устойчивее и проще для аудита, чем любая интеграция с одной моделью, и это [доказано в сравнении с фронтиром, у всех на виду](#доказано-в-сравнении-с-фронтиром-у-всех-на-виду).
 >
 > **→ [Быстрый старт](#быстрый-старт) · [Смотреть доказательства](#доказано-в-сравнении-с-фронтиром-у-всех-на-виду) · [Документация](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Поставьте звезду репозиторию и поддержите новую, более коллективную и совместную эру ИИ, где модели побеждают вместе, а не поодиночке.</b></a>
-</p>
 
 **Тысячи ИИ-моделей координируются внутри одной коллективной модели.**
 
@@ -419,6 +419,10 @@ licensing@ailin.one.
 знаки.
 
 ## История звёзд и контрибьюторы
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Поставьте звезду репозиторию и поддержите новую, более коллективную и совместную эру ИИ</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 

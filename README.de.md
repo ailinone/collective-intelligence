@@ -15,6 +15,10 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Ailin¹ Collective Intelligence
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Gib dem Repo einen Stern und unterstütze eine neue, kollektivere und kollaborativere Ära der KI</b></a>
+</p>
+
 > 🌐 Englisch ist die kanonische Version. Diese Übersetzung folgt Commit 596a94e6. Im Zweifel lies das englische README ([README.md](README.md)).
 
 <p align="center">
@@ -32,10 +36,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR**: Ailin¹ lässt **76,636 KI-Modelle** in einem einzigen kollektiven Modell zusammenarbeiten, orchestriert über **32 Strategien** statt an ein einzelnes Modell geroutet. Strukturierte Diversität, unabhängiges Reasoning und ein vollständiger Entscheidungs-Audit-Trail bei jedem Request: zuverlässiger, resilienter und auditierbarer als jede Einzelmodell-Integration, und [gegen die Frontier bewiesen, öffentlich](#gegen-die-frontier-bewiesen-öffentlich).
 >
 > **→ [Quickstart](#quickstart) · [Die Belege ansehen](#gegen-die-frontier-bewiesen-öffentlich) · [Docs](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Gib dem Repo einen Stern und unterstütze eine neue, kollektivere und kollaborativere Ära der KI, in der Modelle gemeinsam gewinnen statt allein.</b></a>
-</p>
 
 **Tausende KI-Modelle koordinieren sich in einem einzigen kollektiven Modell.**
 
@@ -429,6 +429,10 @@ Betreut von **Ailin One, Inc.** Die AGPL lizenziert den Code, nicht die
 Marken.
 
 ## Star-Historie & Mitwirkende
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Gib dem Repo einen Stern und unterstütze eine neue, kollektivere und kollaborativere Ära der KI</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 

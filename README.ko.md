@@ -15,6 +15,10 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Ailin¹ Collective Intelligence
 
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요</b></a>
+</p>
+
 > 🌐 영어판이 정본(canonical version)입니다. 이 번역은 커밋 596a94e6을 추적합니다. 확실하지 않은 부분이 있다면 영어 README([README.md](README.md))를 읽어주세요.
 
 <p align="center">
@@ -32,10 +36,6 @@ Source: https://github.com/ailinone/collective-intelligence
 > **TL;DR:** Ailin¹ 은 **76,636 개의 AI 모델** 을 하나의 집단 모델 안에서 협력시키며, 단일 모델로 라우팅하는 대신 **32 가지 전략** 으로 오케스트레이션합니다. 모든 요청에 구조화된 다양성, 독립적 추론, 완전한 의사결정 감사 추적을 적용해 단일 모델 통합보다 더 신뢰할 수 있고 회복력 있으며 감사 가능합니다. 또한 [공개적으로 프런티어를 상대로 입증되었습니다](#프런티어를-상대로-공개적으로-입증).
 >
 > **→ [퀵스타트](#퀵스타트) · [증거 보기](#프런티어를-상대로-공개적으로-입증) · [문서](https://ailin.guide)**
-
-<p align="center">
-  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요. 모델이 혼자가 아니라 함께 이기는 시대입니다.</b></a>
-</p>
 
 **수천 개의 AI 모델이 하나의 집단 모델 안에서 협력합니다.**
 
@@ -402,6 +402,10 @@ licensing@ailin.one.
 상표에는 적용되지 않습니다.
 
 ## 스타 히스토리 & 컨트리뷰터
+
+<p align="center">
+  <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요</b></a>
+</p>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 
