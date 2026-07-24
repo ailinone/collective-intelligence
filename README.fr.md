@@ -46,15 +46,17 @@ mono-modèle. Chaque jour, un nouveau modèle sort en se proclamant le
 meilleur. Voici la couche où ils travaillent ensemble. Documentation
 complète : **[ailin.guide](https://ailin.guide)**.
 
+[![Statut du workflow CI, cliquez pour le résultat actuel (réussite/échec)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
-[![CI](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/ci.yml)
-[![REUSE compliance](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
-[![DCO](https://img.shields.io/badge/DCO-required-brightgreen)](DCO.md)
-[![Providers](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![Models indexed](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#des-dizaines-de-milliers-de-modèles-toujours-à-la-frontière)
-[![Strategies](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#le-parcours-dune-requête)
+[![Statut du workflow de conformité des licences, cliquez pour le résultat actuel (réussite/échec)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/license-compliance.yml)
+[![Statut de la vérification DCO, cliquez pour le résultat actuel (réussite/échec)](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml/badge.svg)](https://github.com/ailinone/collective-intelligence/actions/workflows/dco.yml)
+[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+[![Statut de CodeQL, cliquez pour voir les résultats actuels](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
+[![~90 intégrations de fournisseurs](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
+[![76,636 modèles indexés](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#des-dizaines-de-milliers-de-modèles-toujours-à-la-frontière)
+[![32 stratégies collectives enregistrées](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#le-parcours-dune-requête)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
-[![Discussions](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
+[![Discussions GitHub : ouvertes](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
 
 [Démarrage rapide](#démarrage-rapide) · [La prochaine frontière](#intelligence-collective--la-prochaine-frontière-de-lia) ·
 [Pourquoi un collectif](#pourquoi-un-collectif-bat-le-plus-grand-modèle-unique) ·
@@ -62,8 +64,6 @@ complète : **[ailin.guide](https://ailin.guide)**.
 [Toujours à la frontière](#des-dizaines-de-milliers-de-modèles-toujours-à-la-frontière) ·
 [Comment ça marche](#larchitecture-en-un-coup-dœil) ·
 [Contribuer](#contribuer--lintelligence-collective-a-besoin-dun-collectif) · [Docs](https://ailin.guide)
-
----
 
 ## Intelligence collective : la prochaine frontière de l'IA
 
@@ -101,49 +101,20 @@ ce qui reste sur la feuille de route.
 ## Pourquoi un collectif bat le plus grand modèle unique
 
 Les modèles de frontière ne cessent de grossir, et le meilleur modèle
-unique du moment est remarquable. Mais un modèle unique reste toujours un
-point unique d'entraînement, un point unique d'architecture, un point
-unique de défaillance et un point unique de biais. Un collectif bien
-coordonné répond à chacune de ces limites structurelles d'une manière que
-l'échelle seule ne peut pas atteindre.
+unique du moment est remarquable. Mais un modèle unique reste toujours
+**un point unique d'entraînement, un point unique d'architecture, un
+point unique de défaillance et un point unique de biais**. Un collectif
+bien coordonné répond à chacune de ces limites structurelles d'une
+manière que l'échelle seule ne peut pas atteindre.
 
-- **Résilience.** Un modèle unique, c'est une dépendance unique. Si son
-  fournisseur est dégradé, bridé, limité en débit ou mal tarifé un jour
-  donné, chaque appel en pâtit. Le collectif contourne les pannes de
-  fournisseurs, les modèles dégradés et les défaillances locales sans
-  intervention : la requête aboutit quand même, avec une provenance
-  complète
-  ([analyse approfondie de la résilience](https://ailin.guide/architecture/why-collective-resilience)).
-- **Diversité d'évaluation.** Des modèles différents sont entraînés sur
-  des données différentes, avec des objectifs différents. En interroger
-  beaucoup et comparer leurs sorties fait remonter des erreurs et des
-  angles morts qu'un modèle unique, aussi grand soit-il, répéterait avec
-  aplomb. Le collectif transforme le désaccord en signal de qualité
-  plutôt qu'en bug.
-- **Anti-concentration.** Dépendre d'un seul modèle enchaîne une
-  organisation à la feuille de route, à la tarification et aux décisions
-  de politique d'un seul fournisseur. Le collectif découple la capacité
-  de tout fournisseur unique : la plateforme continue de fonctionner à
-  mesure que la frontière se déplace, et que tel ou tel fournisseur
-  monte, chute ou revoit ses prix.
-- **Réduction du biais de point unique.** Chaque modèle porte les biais
-  de ses données d'entraînement, ses schémas de refus et ses réflexes
-  stylistiques. Un collectif de modèles architecturalement différents
-  dilue l'influence des angles morts de chacun, en particulier dans les
-  stratégies d'arbitrage qui exigent une convergence entre des
-  raisonneurs indépendants.
-- **Spécialisation dynamique.** Aucun modèle unique n'est le meilleur en
-  tout. Un collectif peut affecter le bon spécialiste à la bonne tâche
-  (raisonnement intensif, code, vision, long contexte, faible latence) et
-  router chaque requête vers des modèles forts exactement là où la tâche
-  exige de la force.
-- **Gouvernance renforcée.** Les charges de travail d'entreprise exigent
-  des décisions auditables, des coûts bornés, une isolation par tenant et
-  un repli fiable. Une intégration mono-modèle laisse à l'intégrateur le
-  soin de construire ces contrôles. Le collectif applique la gouvernance
-  au niveau de la plateforme : provenance décisionnelle, plafonds de
-  coût, isolation des quotas et application des politiques valent pour
-  chaque requête, chaque stratégie, chaque modèle.
+| Risque structurel d'un modèle unique | Comment le collectif y répond |
+|---|---|
+| **Résilience** : un modèle unique, c'est une dépendance unique ; si son fournisseur est dégradé, bridé, limité en débit ou mal tarifé un jour donné, chaque appel en pâtit | Contourne les pannes de fournisseurs, les modèles dégradés et les défaillances locales sans intervention ; la requête aboutit quand même, avec une provenance complète ([analyse approfondie de la résilience](https://ailin.guide/architecture/why-collective-resilience)) |
+| **Diversité d'évaluation** : un modèle unique, aussi grand soit-il, répète ses propres angles morts avec aplomb | Compare les sorties de modèles entraînés différemment ; le désaccord devient un signal de qualité, pas un bug |
+| **Anti-concentration** : dépendre d'un seul modèle enchaîne une organisation à la feuille de route, à la tarification et aux décisions de politique d'un seul fournisseur | Découple la capacité de tout fournisseur unique ; la plateforme continue de fonctionner à mesure que la frontière se déplace |
+| **Réduction du biais de point unique** : chaque modèle porte les biais de ses données d'entraînement, ses schémas de refus et ses réflexes stylistiques | Dilue l'influence des angles morts de chacun à travers des modèles architecturalement différents, en particulier dans les stratégies d'arbitrage qui exigent une convergence entre des raisonneurs indépendants |
+| **Spécialisation dynamique** : aucun modèle unique n'est le meilleur en tout | Affecte le bon spécialiste à la bonne tâche (raisonnement intensif, code, vision, long contexte, faible latence) et route chaque requête vers des modèles forts exactement là où la tâche l'exige |
+| **Gouvernance renforcée** : une intégration mono-modèle laisse à l'intégrateur le soin de construire lui-même les contrôles d'audit, de coût et d'isolation | Applique la gouvernance au niveau de la plateforme : provenance décisionnelle, plafonds de coût, isolation des quotas et application des politiques, pour chaque requête, chaque stratégie, chaque modèle |
 
 L'effet se cumule. Ce ne sont pas six fonctionnalités indépendantes. Ce
 sont six facettes d'un seul et même choix structurel : coordonnez bien de
@@ -164,14 +135,14 @@ commitées dans ce dépôt
 [régénérez chaque tableau vous-même](docs/experiments/REPRODUCING_THE_BENCHMARK.md)).
 
 **✅ Validé : le collectif bat chaque flagship de frontière sur les
-tâches vérifiables.** Le consensus armé d'un vérificateur de réponse
-déterministe a obtenu **97% de précision objective (37/38)** contre
-**68–82%** pour GPT-5.5-pro, Claude Opus 4.8, Gemini 3.1 Pro et Grok 4.3
-agrégés sur les trois runs ; et sur chaque run, **le vérificateur n'a
-jamais sélectionné une réponse objectivement fausse**. Un pool de modèles
-open-weight sous-frontière, bien coordonné, a mieux répondu que chaque
-flagship sur les mêmes tâches
-([classement avec chaque n et chaque réserve, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)).
+tâches vérifiables.**
+- **97% de précision objective (37/38)** contre **68–82%** cumulés pour
+  GPT-5.5-pro, Claude Opus 4.8, Gemini 3.1 Pro et Grok 4.3
+- Sur chaque run, **le vérificateur n'a jamais sélectionné une réponse
+  objectivement fausse**
+- Un pool de **modèles open-weight sous-frontière**, bien coordonné, a
+  mieux répondu que chaque flagship sur les mêmes tâches
+  ([classement avec chaque n et chaque réserve, §3](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md))
 
 **La frontière actuelle de la thèse**, mesurée honnêtement, et qui
 pilote la feuille de route :
@@ -179,8 +150,8 @@ pilote la feuille de route :
 | Axe | Aujourd'hui | Ce que nous faisons pour y remédier |
 |---|---|---|
 | Justesse vérifiable | ✅ **Le collectif gagne** (97% vs 68–82%) | Extension de la couverture du vérificateur à davantage de formes de tâches (campagne tool-calling achevée le 2026-07-18) |
-| Prose ouverte | Les modèles seuls gagnent encore en écriture créative et en refactoring | La sélection du décideur sépare de façon mesurable les runs gagnants des runs perdants, un levier apprenable ([§7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
-| Coût | Surcoût du collectif tel qu'enregistré, **sauf** le court-circuit du vérificateur, qui l'effondre ~100× quand il se déclenche ([§5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Élargissement du chemin de court-circuit ; `ailin-auto` choisit par défaut la stratégie viable la moins chère |
+| Prose ouverte | Les modèles seuls gagnent encore en écriture créative et en refactoring | La sélection du décideur sépare de façon mesurable les runs gagnants des runs perdants, un levier apprenable ([sélection du décideur, §7](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) |
+| Coût | Surcoût du collectif tel qu'enregistré, **sauf** le court-circuit du vérificateur, qui l'effondre ~100× quand il se déclenche ([répartition des coûts, §5](reports/experiments/AILIN-COLLECTIVE-FRONTIER-BENCHMARK-2026-07.md)) | Élargissement du chemin de court-circuit ; `ailin-auto` choisit par défaut la stratégie viable la moins chère |
 | Latence | Arbitrage multi-tours, chaque stratégie diffusant une progression en temps réel dès le premier jeton | `ailin-auto` réserve les stratégies les plus profondes aux cas où le contrôle qualité les exige réellement ; le trafic critique en latence est routé en `single` par conception |
 
 Chaque chiffre ci-dessus s'appuie sur les données brutes par exécution et
@@ -203,17 +174,22 @@ sans configuration et sans interruption de service.
 
 ### Découverte sémantique, zéro modèle codé en dur
 
-Le moteur de découverte scanne des dizaines de sources en parallèle : API
-natives de fournisseurs, hubs cloud, agrégateurs de modèles, dépôts de
-modèles ouverts et endpoints d'inférence privés. Mais les sources
-elles-mêmes ne sont pas l'essentiel. Ce qui compte, c'est la façon dont
-les modèles sont sélectionnés.
+Le moteur de découverte scanne des dizaines de sources en parallèle :
+- API natives de fournisseurs
+- Hubs cloud
+- Agrégateurs de modèles
+- Dépôts de modèles ouverts
+- Endpoints d'inférence privés
 
-Chaque modèle découvert est analysé, classifié et indexé par capacités,
-profil de performance, tarification, fenêtre de contexte, modalités et
-architecture, le tout inféré automatiquement, sans mapping manuel ni
-configuration. Les routes sont conditionnées à la santé : un modèle n'est
-annoncé qu'après avoir été prouvé vivant.
+Mais les sources ne sont pas ce qui compte : c'est **la façon dont les
+modèles sont sélectionnés**.
+
+Chaque modèle découvert est analysé, classifié et indexé par
+**capacités**, **profil de performance**, **tarification**, **fenêtre de
+contexte**, **modalités** et **architecture**, le tout inféré
+automatiquement, sans mapping manuel ni configuration. Les routes sont
+conditionnées à la santé : un modèle n'est annoncé qu'après avoir été
+prouvé vivant.
 
 La sélection de modèles est **entièrement sémantique**. Quand une requête
 arrive, le collectif ne pioche pas dans une liste statique. Il assemble
@@ -229,10 +205,10 @@ lancé, le collectif l'absorbera : il ne le concurrencera pas.
 La famille de modèles `ailin` et son volant d'entraînement font partie du
 design : des checkpoints de coordinateur entraînés sur le trafic de
 coordination du moteur lui-même, en compétition dans le même pool que
-chaque modèle tiers, sans aucun privilège de routage. Le substrat
+chaque modèle tiers, sans aucun privilège de routage. **Le substrat
 d'audit qui capture chaque décision de coordination est livré dès
 aujourd'hui ; les poids de coordinateur de production sont le front en
-développement ([statut honnête, toujours à jour](https://ailin.guide)).
+développement** ([statut honnête, toujours à jour](https://ailin.guide)).
 
 ### Des stratégies collectives comme hypothèses falsifiables
 
@@ -241,8 +217,8 @@ débat en aveugle, panels d'experts, consensus avec avocat du diable,
 cascade de coûts, best-of-N avec vérification objective), chacune
 étiquetée avec une accessibilité honnête (auto-sélectionnable / explicite
 uniquement / feuille de route), chacune falsifiable par le harnais
-d'expérimentation de ce dépôt. Les stratégies gagnent leur place avec des
-preuves, ou la perdent.
+d'expérimentation de ce dépôt. **Les stratégies gagnent leur place avec
+des preuves, ou la perdent.**
 
 ### Multimodal + génération déterministe de fichiers
 
@@ -253,14 +229,15 @@ production.
 
 ### La gouvernance dont les entreprises ont réellement besoin
 
-Provenance décisionnelle complète (`ailin_metadata` : stratégie, modèles,
-décideur final, coût par sous-appel, dissension), `max_cost` par requête
-appliqué à l'admission, isolation architecturale par tenant, endpoints
-AGPL §13 (`/source`, `/license`) servis par le moteur lui-même,
-provenance de release SLSA/Sigstore avec SBOM SPDX. La piste d'audit qui
-prouve nos affirmations est la même qui gouverne votre trafic : la
-gouvernance comme [principe de premier ordre](https://ailin.guide/architecture/principles), pas comme un
-surcoût.
+| Contrôle | Ce qu'il apporte |
+|---|---|
+| Provenance décisionnelle | `ailin_metadata` : stratégie, modèles, décideur final, coût par sous-appel, dissension |
+| Gouvernance des coûts | `max_cost` par requête, appliqué à l'admission |
+| Isolation par tenant | Architecturale, pas seulement au niveau de la configuration |
+| Conformité AGPL §13 | Endpoints `/source` et `/license` servis par le moteur lui-même |
+| Provenance des releases | SLSA/Sigstore + SBOM SPDX |
+
+**La même piste d'audit qui prouve nos affirmations de benchmark gouverne votre trafic de production** : la gouvernance comme [principe de premier ordre](https://ailin.guide/architecture/principles), pas comme un surcoût.
 
 ## L'architecture en un coup d'œil
 
@@ -282,6 +259,19 @@ flowchart TB
     EX <--> PROV[~90 provider integrations<br/>frontier APIs · aggregators · self-hosted]
 ```
 
+*En texte : une requête entre par l'API compatible OpenAI, depuis
+n'importe quel SDK OpenAI ou client curl (seul le `base_url` change). La
+résolution de stratégie applique la cascade conservatrice `ailin-auto`
+et transmet la main à l'assemblage d'équipe, qui effectue une sélection
+sémantique sur le catalogue de modèles en direct, alimenté en continu
+par le moteur de découverte (conditionné à la santé, zéro modèle codé en
+dur). L'équipe assemblée passe à l'exécution, qui gère les chaînes de
+repli et un régulateur de budget, en dialoguant dans les deux sens avec
+~90 intégrations de fournisseurs. La sortie de l'exécution va vers
+l'arbitrage, qui applique les portes de qualité et le vérificateur
+déterministe, produisant la réponse finale avec une provenance complète
+(`ailin_metadata`).*
+
 ## Le parcours d'une requête
 
 Zoom sur une seule requête (lequel des trois chemins ci-dessus elle
@@ -300,21 +290,37 @@ flowchart LR
     G --> H[Response + ailin_metadata<br/>full decision provenance]
 ```
 
+*En texte : la cascade `ailin-auto` de la résolution de stratégie envoie
+chaque requête vers l'un de trois chemins. Une requête simple va vers un
+seul modèle, le moins cher qui reste viable. Une requête qui déclare
+`ailin_constraints.answer_check` va vers le consensus plus le
+vérificateur déterministe. Une requête qui nomme une stratégie explicite
+utilise celle-ci parmi les 32 stratégies enregistrées. Les trois chemins
+convergent vers l'exécution et ses chaînes de repli, puis vers
+l'arbitrage et sa porte de qualité, produisant la réponse avec la
+provenance complète `ailin_metadata`.*
+
 Le vérificateur s'arme quand la requête déclare une réponse vérifiable
 par machine via `ailin_constraints.answer_check`. La cascade est
 conservatrice : l'économie est conçue pour favoriser le chemin bon marché
-par défaut, et n'escalader que lorsque le contrôle qualité l'exige. Et
-parce que la coordination n'est pas gratuite, la documentation du moteur
-vous dit sans détour
-[quand un modèle unique est le bon choix](docs/use-cases/when-not-to-use-collective.md)
-([aussi sur le guide](https://ailin.guide/use-cases/when-not-to-use-collective)) : trafic à fort volume et faible enjeu, SLA de latence serrés, prose de
-type documentation. La décision est opérationnelle, pas philosophique.
+par défaut, et n'escalader que lorsque le contrôle qualité l'exige.
+
+**Pas fait pour le collectif** ([le guide complet](docs/use-cases/when-not-to-use-collective.md), [le même guide sur ailin.guide](https://ailin.guide/use-cases/when-not-to-use-collective)) :
+- Trafic à fort volume et faible enjeu
+- SLA de latence serrés
+- Prose de type documentation
+
+La décision est opérationnelle, pas philosophique.
 
 ## Démarrage rapide
 
 > Nécessite Docker avec Compose v2, ~8 Go de RAM libre, les ports
-> 3000/5432/6379 libres. Sous Windows, exécutez le bloc ci-dessous dans
-> **Git Bash ou WSL** (il utilise un heredoc et `openssl`).
+> 3000/5432/6379 libres, `python3` (pour analyser la réponse
+> d'inscription ci-dessous) et `pip install openai` (pour l'exemple de
+> client Python). Sous Windows, exécutez le bloc ci-dessous dans **Git
+> Bash ou WSL** (il utilise un heredoc et `openssl`).
+
+### Étape 1 : cloner le dépôt et configurer les secrets
 
 ```bash
 git clone https://github.com/ailinone/collective-intelligence.git
@@ -331,46 +337,71 @@ EOF
 ```
 
 Éditez `.env` et remplacez `sk-...` par une vraie clé (ou passez-vous
-entièrement de clés, voir l'option Ollama ci-dessous). Puis :
+entièrement de clés, voir l'option Ollama ci-dessous). Liste complète des
+options de configuration : [api/.env.example](api/.env.example). Puis :
+
+### Étape 2 : démarrer la stack
 
 ```bash
-docker compose up -d api postgres redis
-docker compose logs -f api    # watch first boot: migrations + discovery, ~1-5 min
+docker compose up -d api postgres redis   # coord-serving also builds/boots automatically — expected
+docker compose logs -f api    # watch first boot: DB migrations + provider/model discovery scan, ~1-5 min
 curl http://localhost:3000/health
 # → {"status":"ok","uptime":…,"version":"0.1.0"}
 ```
 
-(`coord-serving`, la surface de service du coordinateur, se construit et
-démarre aux côtés de l'API ; c'est attendu.) Créez un compte local et
-appelez le collectif :
+### Étape 3 : s'inscrire et récupérer un jeton
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
+export TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"pick-a-strong-one","name":"You"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['tokens']['accessToken'])")
+echo "token: ${TOKEN:0:12}..."   # non-empty confirms registration worked
 ```
 
+### Étape 4 : installer le client Python
+
+```bash
+pip install openai
+```
+
+### Étape 5 : appeler le collectif
+
 ```python
+# run in the same shell session as the export above (or re-export TOKEN first)
+import os
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:3000/v1", api_key=TOKEN)
+client = OpenAI(base_url="http://localhost:3000/v1", api_key=os.environ["TOKEN"])
 
 r = client.chat.completions.create(
     model="ailin-auto",   # or ailin-best / ailin-fast / ailin-economy / ailin-consensus
     messages=[{"role": "user", "content": "Why is the sky blue?"}],
 )
 print(r.choices[0].message.content)
+# → The sky looks blue because of Rayleigh scattering...
 print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — the receipts
+# → {'strategy_used': 'single', 'models_used': ['...'], 'cost_actual': 0.0003, ...}
 ```
+
+**Si ça ne démarre pas** : `Cannot connect to the Docker daemon` →
+démarrez d'abord Docker Desktop ou le service docker. `bind: address
+already in use` sur le port 3000/5432/6379 → arrêtez ce qui occupe déjà
+ce port ou remappez-le dans `docker/docker-compose.override.yml`.
+`docker compose logs -f api` qui déverse `Secret retrieval failed` en
+boucle → voir [Mode de démarrage dégradé](docs/hardening/DEGRADED_BOOT_MODE.md).
 
 Aucune clé d'API externe du tout ? Définissez
 `OLLAMA_URL=http://host.docker.internal:11434` dans `docker/.env` et le
 moteur démarre en mode auto-hébergé dégradé
-([docs](docs/hardening/DEGRADED_BOOT_MODE.md)). Sous Linux natif, ajoutez
-aussi `extra_hosts: ["host.docker.internal:host-gateway"]` au service api
-(ou utilisez l'IP de votre bridge). Installation locale complète :
-[guide d'installation](docs/getting-started/installation.md). Démarrage
-rapide de l'API hébergée : [ailin.guide/getting-started/quickstart](https://ailin.guide/getting-started/quickstart).
+([documentation du mode de démarrage dégradé](docs/hardening/DEGRADED_BOOT_MODE.md)).
+Sous Linux natif, ajoutez aussi `extra_hosts:
+["host.docker.internal:host-gateway"]` au service api (ou utilisez l'IP
+de votre bridge). Configuration native (sans Docker) pour la validation
+OpenAPI : [guide d'installation](docs/getting-started/installation.md).
+Démarrage rapide de l'API hébergée : [ailin.guide/getting-started/quickstart](https://ailin.guide/getting-started/quickstart).
+
+Suite : [choisir une stratégie](docs/guides/strategy-selection.md) ·
+[les alias de modèles expliqués](docs/guides/model-aliases-and-routing.md).
 
 ## Ce qui est livré aujourd'hui vs ce qui est en développement
 
@@ -420,7 +451,7 @@ rendre la mise en conformité facile (définissez `AGPL_SOURCE_URL` pour
 pointer vers *votre* source modifiée). Voir
 [COMPLIANCE.md](COMPLIANCE.md) ; licence commerciale : licensing@ailin.one.
 
-| | |
+| Sujet de gouvernance | Référence |
 |---|---|
 | Signature des contributeurs (DCO 1.1) | [DCO.md](DCO.md) |
 | Code de conduite (Contributor Covenant 2.1) | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
@@ -438,7 +469,7 @@ Maintenu par **Ailin One, Inc.** L'AGPL licencie le code, pas les marques.
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Mettez une étoile au dépôt et soutenez une nouvelle ère de l'IA, plus collective et collaborative</b></a>
 </p>
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+[![Historique des étoiles : nombre cumulé d'étoiles GitHub au fil du temps pour ailinone/collective-intelligence](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
