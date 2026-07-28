@@ -1,0 +1,90 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "📚 Documentation issue"
+description: "Report a specific problem or improvement in the documentation."
+title: "[Docs]: "
+labels: [documentation]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for improving the documentation. Check the latest canonical content and search existing issues first.
+
+        Do not include secrets, personal data, or vulnerability details. Report vulnerabilities [privately](https://github.com/ailinone/collective-intelligence/security/advisories/new). English is the canonical language.
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Provide the public URL or repository path.
+      placeholder: https://ailin.guide/... or docs/getting-started/installation.md
+    validations:
+      required: true
+  - type: dropdown
+    id: issuetype
+    attributes:
+      label: Issue type
+      options:
+        - Inaccurate information
+        - Missing information
+        - Unclear explanation
+        - Broken link
+        - Broken or outdated example
+        - Navigation or discoverability
+        - Translation issue
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+      description: Identify the statement, example, or task that needs attention and explain its effect on readers.
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: Suggested improvement
+      description: Optionally propose corrected wording, structure, or an example.
+  - type: input
+    id: version
+    attributes:
+      label: Affected version
+      description: Provide the release or commit if the documentation is version-specific.
+  - type: input
+    id: locale
+    attributes:
+      label: Locale
+      description: For translated content, provide the locale, such as en-US, pt-BR, es, zh-CN, ja, ko, fr, de, or ru.
+      placeholder: en-US
+  - type: input
+    id: syncmarker
+    attributes:
+      label: Canonical source and sync marker
+      description: For a translation issue, provide its canonical file and source commit marker. Leave blank for canonical documentation.
+      placeholder: README.md at full commit SHA
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - I can open a pull request
+        - I can review a proposed change
+        - I cannot contribute a change
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked the latest available documentation.
+          required: true
+        - label: I searched existing issues.
+          required: true
+        - label: I provided a URL or repository path.
+          required: true
+        - label: I removed secrets and sensitive information.
+          required: true
