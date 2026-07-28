@@ -1,0 +1,107 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "🚀 Feature proposal"
+description: "Propose a concrete improvement for the open-source engine."
+title: "[Feature]: "
+labels: [enhancement]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a concrete, actionable proposal. Take questions and early-stage ideas to [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
+
+        Search existing issues and Discussions for duplicates first. Do not include secrets, private data, or vulnerability details; report vulnerabilities [privately](https://github.com/ailinone/collective-intelligence/security/advisories/new). English is canonical; use English when possible.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: Describe the problem to solve without assuming a particular solution.
+    validations:
+      required: true
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use case
+      description: Who benefits, and in what real scenario?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - OpenAI-compatible API
+        - Collective orchestration and strategy selection
+        - Provider or model discovery and routing
+        - Authentication, authorization, or tenant controls
+        - Persistence, cache, or queue
+        - Billing or cost governance
+        - Observability or ailin_metadata
+        - Docker or local deployment
+        - Model stack or own-model adapter
+        - SDK, documentation, or developer experience
+        - Other / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable behavior or state after the improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Optionally outline suggested behavior, API, or architecture.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What existing approaches or workarounds did you evaluate?
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: List specific, verifiable conditions that would make the proposal complete.
+      placeholder: |
+        - Given..., when..., then...
+        - Existing behavior remains compatible with...
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Note possible changes to APIs, schemas, configuration, or backward compatibility. Write "None known" if applicable.
+  - type: textarea
+    id: operations
+    attributes:
+      label: Cost, latency, and operational implications
+      description: Note expected effects or uncertainties for cost, latency, reliability, deployment, and maintenance.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - I can implement this
+        - I can help with design or testing
+        - I cannot contribute implementation
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and Discussions.
+          required: true
+        - label: This proposal is more than a question or an exploratory idea.
+          required: true
+        - label: I described the problem and the desired outcome.
+          required: true
+        - label: I am comfortable discussing the design publicly.
+          required: true

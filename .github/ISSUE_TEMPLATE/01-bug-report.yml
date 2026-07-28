@@ -1,0 +1,159 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "🐛 Bug report"
+description: "Report a reproducible defect in the open-source engine."
+title: "[Bug]: "
+labels: [bug]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the open-source engine. Search existing issues before continuing.
+
+        Do not report security vulnerabilities here. Use [private vulnerability reporting](https://github.com/ailinone/collective-intelligence/security/advisories/new) and review [SECURITY.md](https://github.com/ailinone/collective-intelligence/blob/main/SECURITY.md). Remove secrets, replace credentials with placeholders, and review every log and attachment before submitting.
+
+        This form covers the engine in this repository, not the hosted service or a third-party deployment. English is canonical; use English when possible.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug summary
+      description: Describe the reproducible defect and its most important symptom.
+      placeholder: The engine returns... when...
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      description: Select the area closest to the defect.
+      options:
+        - OpenAI-compatible API
+        - Collective orchestration and strategy selection
+        - Provider or model discovery and routing
+        - Authentication, authorization, or tenant controls
+        - Persistence, cache, or queue
+        - Billing or cost governance
+        - Observability or ailin_metadata
+        - Docker or local deployment
+        - Model stack or own-model adapter
+        - SDK or client integration
+        - Other / Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide a release, image digest, or full commit SHA. The `/source` endpoint exposes the running version.
+      placeholder: v0.1.0, sha256:..., or 35c17c7...
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation or execution method
+      options:
+        - Docker Compose
+        - Native Node.js (npm or pnpm)
+        - Model stack (Python or vLLM)
+        - Custom container or orchestration
+        - CI or test environment
+        - Other / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include relevant OS, architecture, runtime, Docker, database, and dependency versions. Omit unrelated details and personal data.
+      placeholder: |
+        OS/architecture:
+        Node.js or Python:
+        Docker:
+        Database/cache:
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Describe the smallest sequence that consistently reproduces the defect. Use placeholders such as `REDACTED_API_KEY`; never include real credentials.
+      placeholder: |
+        1. Configure...
+        2. Send...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: minimalreproduction
+    attributes:
+      label: Minimal reproduction
+      description: Optionally provide sanitized curl commands, an SDK snippet, or a link to a minimal public repository.
+      render: shell
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the engine return or do?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What did the engine return or do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs and ailin_metadata
+      description: Paste only the relevant excerpt. Remove tokens, authorization headers, cookies, personal data, provider credentials, and private URLs.
+      render: shell
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      options:
+        - Always
+        - Intermittent
+        - Once
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Is this a regression?
+      options:
+        - "Yes"
+        - "No"
+        - Unknown
+    validations:
+      required: true
+  - type: input
+    id: lastgood
+    attributes:
+      label: Last known working version
+      description: If this is a regression, provide the last release, image digest, or commit where it worked.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and workaround
+      description: Optionally explain what is blocked or degraded and any safe workaround.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I removed secrets and reviewed logs and attachments for sensitive information.
+          required: true
+        - label: I provided enough information to reproduce the defect.
+          required: true
+        - label: This problem belongs to the open-source engine in this repository.
+          required: true
