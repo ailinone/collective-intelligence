@@ -22,7 +22,7 @@ permissions:
 jobs:
   quality:
     name: Lint, typecheck & unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, collective-intelligence]
     defaults:
       run:
         working-directory: api
