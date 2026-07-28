@@ -23,6 +23,7 @@ import { UserEntity, UserRole, UserStatus } from '@/domain/entities/user.entity'
 import { UserAggregate } from '@/domain/aggregates/user.aggregate';
 import { ApiKeyEntity, ApiKeyStatus } from '@/domain/entities/api-key.entity';
 import { ApiKeyValue } from '@/domain/value-objects/api-key-value';
+import { API_KEY_PREFIX } from '@/utils/api-key-format';
 import { UserId } from '@/domain/value-objects/user-id';
 import { Email } from '@/domain/value-objects/email';
 import { prisma } from '@/database/client';
@@ -328,7 +329,7 @@ export class PrismaUserRepository implements IUserRepository {
           keyValue = ApiKeyValue.create(key.keyHash).getValue();
         } catch {
           // If stored hash is masked, fallback to prefix with placeholder
-          keyValue = `ak_live_${key.id}`;
+          keyValue = `${API_KEY_PREFIX}${key.id}`;
         }
 
         return ApiKeyEntity.reconstitute({

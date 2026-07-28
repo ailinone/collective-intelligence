@@ -39,7 +39,7 @@ import {
   type FinalSelectionResult,
 } from './consensus/consensus-final-selector';
 import { selectWithVerification } from '../verification/verified-selection';
-import { extractFinalAnswer, selfConsistency } from '../verification/best-of-n-verifier';
+import { selfConsistency } from '../verification/best-of-n-verifier';
 import type {
   ConsensusParticipantArtifact,
   ConsensusPlanParityArtifact,
@@ -912,18 +912,29 @@ export class ConsensusStrategy extends BaseStrategy {
       }
     }
 
-    // 2) Voter agreement. Default threshold 1.0 (unanimity among parseable
-    // answers): a synthesis over N identical answers cannot disagree with
-    // them, so running it buys latency and cost, not quality. Tune via
-    // CONSENSUS_AGREEMENT_EXIT_THRESHOLD (>1 disables); minimum parseable
-    // voters via CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS (default 3).
-    const threshold = Number(process.env.CONSENSUS_AGREEMENT_EXIT_THRESHOLD ?? 1.0);
-    const minParseable = Number(process.env.CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS ?? 3);
+    // 2) Voter agreement — self-consistency / majority voting (Wang et al.).
+    // Default threshold 0.6: when at least this FRACTION of the parseable voters
+    // produced the same extracted answer, serve that MAJORITY answer directly.
+    // This is the collective's oracle-free lever — synthesizing over answers
+    // that already agree buys latency and cost, not quality. Tune via
+    // CONSENSUS_AGREEMENT_EXIT_THRESHOLD (>1 disables the gate). Requires at
+    // least CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS parseable voters — default 2,
+    // hard floor 2: a lone voter is the degraded best_individual path, never
+    // self-consistency, so we NEVER short-circuit on a single voter.
+    const threshold = Number(process.env.CONSENSUS_AGREEMENT_EXIT_THRESHOLD ?? 0.6);
+    const minParseable = Math.max(
+      2,
+      Number(process.env.CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS ?? 2),
+    );
     if (threshold <= 1 && validVoters.length >= minParseable) {
-      const answers = validVoters.map((v) => extractFinalAnswer(v.output));
+      // Grouped over SUCCESSFUL, PARSEABLE voters only: validVoters is already
+      // success + non-outlier, and `extractAgreementAnswer` returns null for a
+      // voter with no comparable answer, so empty/errored voters never dilute
+      // or form a majority.
+      const answers = validVoters.map((v) => extractAgreementAnswer(v.output));
       const parseable = answers.filter((a): a is string => a != null);
       if (parseable.length >= minParseable) {
-        const { answer, agreement } = selfConsistency(answers);
+        const { answer, agreement } = selfConsistency(parseable);
         if (answer != null && agreement >= threshold) {
           const voterIndex = answers.findIndex((a) => a === answer);
           const voter = validVoters[voterIndex];
@@ -1189,6 +1200,83 @@ type EvaluatedVoterRecord = {
  */
 function responseTruncated(response: ChatResponse | undefined): boolean {
   return response?.choices?.some((c) => c.finish_reason === 'length') === true;
+}
+
+/**
+ * Extract a comparable "answer key" from a voter reply for the majority /
+ * self-consistency gate — a well-DEFINED answer only, robust for both short
+ * factual answers and code. Precedence:
+ *   1. an explicit `FINAL: <x>` line (last wins) — a directly comparable answer;
+ *   2. a `<solution>...</solution>` tag (last wins) — the format LiveBench-style
+ *      benchmark prompts instruct the model to answer in (reasoning prose is
+ *      expected BEFORE the tag, so this must be checked before the fenced-code
+ *      fallback below, which requires the ENTIRE reply to be one fenced block
+ *      and would otherwise never match a prose-then-tag reply);
+ *   3. a fenced code block (` ``` ` present) — the answer IS the whole reply.
+ *      Exact-string equality on raw code is too strict (a trailing newline or a
+ *      ` ```lang ` fence differs voter-to-voter), so the whole reply is compared
+ *      LIGHTLY normalized (see `normalizeAgreementAnswer`).
+ * Returns null for everything else. In particular there is DELIBERATELY no bare
+ * last-numeric-token fallback: a majority gate at a <1.0 threshold must not be
+ * formed by an INCIDENTAL number in free-form prose ("reason R1", "3 factors"),
+ * which the numeric tokenizer would extract and which could align by coincidence
+ * across voters. Self-consistency (Wang et al.) only applies where there is a
+ * well-defined answer; open prose correctly proceeds to synthesis instead.
+ */
+function extractAgreementAnswer(output: string): string | null {
+  const finals = [...output.matchAll(/FINAL:\s*([^\n]+)/gi)];
+  if (finals.length > 0) {
+    const raw = finals[finals.length - 1][1].trim();
+    if (raw.length > 0) return normalizeAgreementAnswer(raw);
+  }
+  const solutionTags = [...output.matchAll(/<solution>([\s\S]*?)<\/solution>/gi)];
+  if (solutionTags.length > 0) {
+    const raw = solutionTags[solutionTags.length - 1][1].trim();
+    if (raw.length > 0) return normalizeSolutionTagAnswer(raw);
+  }
+  if (output.indexOf('```') !== -1) {
+    const normalized = normalizeAgreementAnswer(output);
+    return normalized.length > 0 ? normalized : null;
+  }
+  return null;
+}
+
+/**
+ * Light, purely lexical normalization for code-answer grouping — NO semantic
+ * parsing, NO reformatting of internal whitespace (that could merge two DISTINCT
+ * code answers into a false majority). Strips a single surrounding Markdown code
+ * fence, removes trailing whitespace on each line, and trims the whole string,
+ * so two voters that emitted the SAME code differing only by an opening
+ * ` ```lang ` fence or trailing newlines land in the same group.
+ */
+function normalizeAgreementAnswer(s: string): string {
+  let t = s.trim();
+  const fenced = t.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
+  if (fenced) t = fenced[1];
+  return t
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Normalization for `<solution>...</solution>` tag content — the short,
+ * structured (often comma-separated) answers LiveBench-style reasoning tasks
+ * ask for, e.g. "1, filmmaking, police-officer, journalist". Unlike
+ * `normalizeAgreementAnswer` (deliberately whitespace-preserving, because
+ * reformatting could merge two DISTINCT code answers into a false majority),
+ * this path never carries code — collapsing whitespace and comma-spacing here
+ * only merges answers that are the SAME list of values written slightly
+ * differently voter-to-voter, which is exactly what the majority gate should
+ * treat as agreement. Still purely lexical: no reordering, no semantic parsing.
+ */
+function normalizeSolutionTagAnswer(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\s*,\s*/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Decision payload of `detectPreSynthesisShortCircuit` (2026-07-03). */

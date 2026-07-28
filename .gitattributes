@@ -11,3 +11,10 @@ Makefile text eol=lf
 # Vendored benchmark datasets — byte-stable LF; parsed line-by-line by the
 # dataset loader and their embedded harness source runs in the sandbox.
 *.jsonl text eol=lf
+
+# scripts/oss-export/manifest.csv is parsed line-by-line with a strict
+# header string match (scripts/oss-export/export.mjs). On a Windows
+# checkout with core.autocrlf=true, without this the header line gets a
+# trailing \r that fails the check and aborts every export (fail-closed
+# by design, but for the wrong reason).
+*.csv text eol=lf

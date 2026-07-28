@@ -78,6 +78,23 @@ describe('runProviderDiscovery', () => {
     expect(result?.includeInOperationalPool).toBe(false);
   });
 
+  it('does NOT mark an apiKeyOptional provider auth_failed when its env var is unset (vllm/lm-studio/xinference/triton regression)', async () => {
+    delete process.env.SELF_HOSTED_OPTIONAL_KEY;
+
+    const snapshot = await runProviderDiscovery([
+      {
+        providerId: 'vllm',
+        integrationClass: 'self-hosted-oai-compat',
+        apiKeyEnvVar: 'SELF_HOSTED_OPTIONAL_KEY',
+        apiKeyOptional: true,
+      },
+    ]);
+
+    const result = snapshot.results.get('vllm');
+    expect(result?.healthState).not.toBe('auth_failed');
+    expect(result?.errorClass).not.toBe('auth_failed');
+  });
+
   it('updates ProviderHealthRegistry on auth failure', async () => {
     delete process.env.MISSING_KEY;
 

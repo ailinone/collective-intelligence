@@ -235,6 +235,34 @@ export interface ExperimentTask {
   };
 
   /**
+   * GROUND-TRUTH SCORER (LiveBench, 2026-07-24). ORACLE-FREE objective grade
+   * against a held-out ground truth. When set, the runner runs — in the SAME
+   * structured sandbox as `codeTest` — a Python program = `scorerSource` (a
+   * self-contained module exposing `__ailin_scorer(ground_truth, llm_answer) ->
+   * float` in 0..1, e.g. a vendored LiveBench task scorer) + a driver that
+   * embeds the model's RAW response and `groundTruth` as json.loads constants,
+   * calls the scorer, and quantizes the returned float into the sandbox's
+   * pass-count so `quality_score = passedCases/totalCases` is that continuous
+   * score. See scoreResponse in experiment-runner.ts and
+   * loadLiveBenchReasoningTasks in experiment-dataset-loader.ts.
+   *
+   * ANTI-ORACLE INVARIANT: `groundTruth` is used for SCORING ONLY. Unlike
+   * `answerCheck` (forwarded as `ailin_constraints.answer_check` so the
+   * collective can best-of-N select a checker-passing candidate), this field is
+   * NEVER added to `ailin_constraints` — exactly like `codeTest`. Forwarding the
+   * ground truth would re-introduce the oracle contamination that invalidated
+   * the `answer_check` axis for these tasks. Do not add it to any request body.
+   */
+  groundTruthScorer?: {
+    /** Self-contained Python module defining `__ailin_scorer(ground_truth, llm_answer) -> float` (0..1). */
+    readonly scorerSource: string;
+    /** Held-out ground truth. SCORING ONLY — never forwarded to the collective. */
+    readonly groundTruth: string;
+    /** Optional pass threshold; the stored quality_score stays continuous (advisory only). */
+    readonly scoreThreshold?: number;
+  };
+
+  /**
    * TOOL-CALLING. When set, the runner forwards `tools` (+ `tool_choice`) so the
    * model must decide to call a function. Grade objectively via `answerCheck` on
    * the FINAL result that is ONLY reachable by calling the tool. Structural mirror

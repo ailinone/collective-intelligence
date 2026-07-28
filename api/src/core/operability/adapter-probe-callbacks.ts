@@ -112,14 +112,29 @@ function parseBalanceBody(data: unknown): BalanceParseResult | null {
 
 // ─── Probe implementations ────────────────────────────────────────────────
 
+/**
+ * Node's global `fetch` (undici) sends `User-Agent: node` when no override
+ * is given. Some providers front their API with a WAF that silently blocks
+ * that exact UA — e.g. featherless-ai's Cloudflare edge returns a generic
+ * `404 Gone` for it regardless of auth validity, which is indistinguishable
+ * from a real 404 in logs/metrics and previously masqueraded as a URL-join
+ * bug (see joinBaseAndPath below). Any non-default UA clears it, so probes
+ * identify themselves explicitly instead of relying on undici's default.
+ */
+const PROBE_USER_AGENT = 'ailin-ci-discovery/1.0 (+https://ailin.one)';
+
 async function fetchWithTimeout(
   url: string,
-  init: RequestInit & { timeoutMs: number },
+  init: Omit<RequestInit, 'headers'> & { timeoutMs: number; headers?: Record<string, string> },
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, {
+      ...init,
+      headers: { 'User-Agent': PROBE_USER_AGENT, ...init.headers },
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -172,6 +187,22 @@ async function probeCreditViaBalanceEndpoint(input: {
   }
 }
 
+/**
+ * Joins a base URL and a path, de-duplicating a shared "/v1" segment when
+ * baseUrl already ends in /v1 and path also starts with /v1 — e.g.
+ * featherless-ai's catalog baseUrl is https://api.featherless.ai/v1 and the
+ * default modelListPath is /v1/models; naive concatenation produced
+ * /v1/v1/models (404) instead of the real /v1/models.
+ */
+function joinBaseAndPath(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (/\/v1$/i.test(base) && /^\/v1(\/|$)/i.test(normalizedPath)) {
+    return base + normalizedPath.slice('/v1'.length);
+  }
+  return base + normalizedPath;
+}
+
 async function listModelsViaOAICompat(input: {
   providerId: string;
   apiKey: string;
@@ -180,7 +211,7 @@ async function listModelsViaOAICompat(input: {
   modelListPath?: string;
 }): Promise<readonly DiscoveredModel[]> {
   const path = input.modelListPath ?? '/v1/models';
-  const url = input.baseUrl.replace(/\/$/, '') + path;
+  const url = joinBaseAndPath(input.baseUrl, path);
 
   const resp = await fetchWithTimeout(url, {
     method: 'GET',
@@ -192,7 +223,7 @@ async function listModelsViaOAICompat(input: {
   });
 
   if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} on ${path}`);
+    throw new Error(`HTTP ${resp.status} on ${url}`);
   }
 
   const body: unknown = await resp.json();

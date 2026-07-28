@@ -28,6 +28,14 @@ interface OpenAICompatibleHubModelFetcherConfig {
   extraHeaders?: Record<string, string>;
   /** Model IDs to exclude (read from env: <PROVIDER>_MODEL_DENYLIST=model1,model2) */
   modelDenylist?: string[];
+  /**
+   * Matches the catalog's `apiKeyOptional` flag — self-hosted OpenAI-compat
+   * servers (vllm, lm-studio, xinference) commonly run with no auth at all.
+   * When true, an empty apiKey does NOT skip discovery (the caller already
+   * decided the provider is reachable without one); when false/absent, an
+   * empty apiKey is treated as "missing credential" as before.
+   */
+  apiKeyOptional?: boolean;
 }
 
 type RawModelRecord = Record<string, unknown>;
@@ -68,6 +76,20 @@ const HUB_METADATA_GAP_FILL: Record<
 
 const HUB_FETCHER_DEFAULT_CONTEXT_WINDOW = 8192;
 
+/**
+ * Node's global `fetch` (undici) sends `User-Agent: node` when no override
+ * is given. Some providers front their API with a WAF that silently blocks
+ * that exact UA (e.g. featherless-ai's Cloudflare edge returns a generic
+ * `404 Gone`), which this fetcher's own 404/405 handling treats as "this
+ * path doesn't exist, try the next one" and swallows with no log line —
+ * so the WAF block reads as an empty model list instead of an error. Same
+ * fix and rationale as adapter-probe-callbacks.ts's PROBE_USER_AGENT; kept
+ * as a separate constant here since the two fetchers are independent code
+ * paths (this one backs central-model-discovery-service.ts's DB-populating
+ * catalog sources, not the operability/health-check layer).
+ */
+const HUB_FETCHER_USER_AGENT = 'ailin-ci-discovery/1.0 (+https://ailin.one)';
+
 function normalizeHubModelId(rawModelId: string): string {
   const trimmed = rawModelId.trim();
   if (!trimmed) {
@@ -107,6 +129,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   private readonly secondaryAuthScheme?: string;
   private readonly extraHeaders: Record<string, string>;
   private readonly modelDenylist: Set<string>;
+  private readonly apiKeyOptional: boolean;
   private readonly log;
 
   constructor(config: OpenAICompatibleHubModelFetcherConfig) {
@@ -124,6 +147,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     this.secondaryAuthHeaderName = config.secondaryAuthHeaderName;
     this.secondaryAuthScheme = config.secondaryAuthScheme;
     this.extraHeaders = config.extraHeaders || {};
+    this.apiKeyOptional = config.apiKeyOptional === true;
     // Denylist from config OR from env: <PROVIDER_UPPER>_MODEL_DENYLIST=model1,model2
     const envKey = `${this.providerName.toUpperCase().replace(/-/g, '_')}_MODEL_DENYLIST`;
     const fromEnv = process.env[envKey] ? process.env[envKey]!.split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -136,8 +160,13 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   }
 
   async getModels(): Promise<ProviderModel[]> {
-    if (!this.apiKey || this.apiKey.includes('mock') || this.apiKey.includes('test-')) {
-      this.log.warn('API key appears to be missing or mock/test, skipping model discovery');
+    const looksMockOrTest = this.apiKey.includes('mock') || this.apiKey.includes('test-');
+    const missingAndRequired = !this.apiKey && !this.apiKeyOptional;
+    if (missingAndRequired || looksMockOrTest) {
+      this.log.warn(
+        { apiKeyOptional: this.apiKeyOptional, hasKey: Boolean(this.apiKey) },
+        'API key appears to be missing (and required) or mock/test, skipping model discovery',
+      );
       return [];
     }
 
@@ -151,6 +180,10 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
 
         if (!response.ok) {
           if (response.status === 404 || response.status === 405) {
+            this.log.debug(
+              { path, status: response.status },
+              'Hub model discovery endpoint not found at this path, trying next'
+            );
             continue;
           }
 
@@ -194,17 +227,23 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   private buildRequestHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'User-Agent': HUB_FETCHER_USER_AGENT,
     };
 
-    headers[this.authHeaderName] = this.authScheme
-      ? `${this.authScheme} ${this.apiKey}`.trim()
-      : this.apiKey;
-
-    if (this.secondaryAuthHeaderName) {
-      const scheme = this.secondaryAuthScheme || this.authScheme;
-      headers[this.secondaryAuthHeaderName] = scheme
-        ? `${scheme} ${this.apiKey}`.trim()
+    // apiKeyOptional providers (vllm, lm-studio, xinference) commonly run
+    // with no auth at all — omit the header rather than send a bare "Bearer"
+    // with no token, which some strict servers reject.
+    if (this.apiKey) {
+      headers[this.authHeaderName] = this.authScheme
+        ? `${this.authScheme} ${this.apiKey}`.trim()
         : this.apiKey;
+
+      if (this.secondaryAuthHeaderName) {
+        const scheme = this.secondaryAuthScheme || this.authScheme;
+        headers[this.secondaryAuthHeaderName] = scheme
+          ? `${scheme} ${this.apiKey}`.trim()
+          : this.apiKey;
+      }
     }
 
     for (const [key, value] of Object.entries(this.extraHeaders)) {
@@ -217,6 +256,16 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   }
 
   private buildUrl(path: string): string {
+    // A modelListPaths entry that is itself an absolute URL overrides baseUrl
+    // entirely, rather than being appended to it. Needed for providers whose
+    // chat baseUrl and model-catalog endpoint live under different roots —
+    // e.g. GitHub Models serves chat at https://models.github.ai/inference/*
+    // but the catalog listing at https://models.github.ai/catalog/models
+    // (NOT nested under /inference). Plain concatenation of baseUrl + a
+    // relative "/catalog/models" path 404s.
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
     const normalizedBase = this.baseUrl.endsWith('/')
       ? this.baseUrl.slice(0, -1)
       : this.baseUrl;

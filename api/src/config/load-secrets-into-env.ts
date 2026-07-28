@@ -155,17 +155,23 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // Two env-var aliases: GEMINI_API_KEY (canonical upstream) and
   // GOOGLE_AI_STUDIO_API_KEY (legacy). The adapter reads either.
   //
-  // 2026-04-23 final pass: `vertex-key` added as a fallback source because
-  // it was verified working against generativelanguage.googleapis.com this
-  // session (HTTP 200, 50 Gemini models) while `google-key` is suspended
-  // (403 CONSUMER_SUSPENDED). The Vertex/Gemini API-key split is
-  // mostly historical — a Google Cloud API key scoped for Gemini works
-  // equally on aistudio and on the generativelanguage surface, as long as
-  // the key's GCP project has the API enabled. Putting `vertex-key` at
-  // the END of the fallback preserves existing behavior (gemini-key /
-  // google-ai-studio-key / google-key are still preferred when present)
-  // while letting the vertex-key unlock gemini-openai today.
-  { envVar: 'GEMINI_API_KEY', secretKeys: ['google-key', 'gemini-key', 'google-ai-studio-key', 'vertex-key'] },
+  // 2026-04-23: `vertex-key` added as a fallback source because it was
+  // verified working against generativelanguage.googleapis.com (HTTP 200,
+  // 50 Gemini models) while `google-key` is suspended (403
+  // CONSUMER_SUSPENDED). The Vertex/Gemini API-key split is mostly
+  // historical — a Google Cloud API key scoped for Gemini works equally on
+  // aistudio and on the generativelanguage surface, as long as the key's
+  // GCP project has the API enabled.
+  //
+  // 2026-07-25: `vertex-key` was originally placed LAST on the (incorrect)
+  // assumption that the loop below tries each candidate live and keeps the
+  // first one that WORKS. It doesn't — it takes the first candidate that
+  // merely EXISTS in Secret Manager (see the resolution loop a few hundred
+  // lines down), so the suspended `google-key` always won and gemini-openai
+  // stayed broken. Moved `vertex-key` first since it's the only one
+  // confirmed live-working; the others remain as fallbacks if it's ever
+  // rotated out.
+  { envVar: 'GEMINI_API_KEY', secretKeys: ['vertex-key', 'gemini-key', 'google-ai-studio-key', 'google-key'] },
   // GitHub Models uses a GitHub PAT. Operators typically already have this
   // in env (it's the same PAT used for gh CLI); the GCP path is a fallback
   // for service accounts that need isolated tokens.

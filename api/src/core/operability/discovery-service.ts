@@ -64,6 +64,8 @@ export interface ConfiguredProvider {
   integrationClass?: string;
   /** Env var that should hold the API key. */
   apiKeyEnvVar?: string;
+  /** From the catalog row — true for self-hosted servers with no auth by default (vllm, lm-studio, xinference). */
+  apiKeyOptional?: boolean;
   /** Probe strategy override. */
   probeStrategy?: ProviderProbeStrategy;
 }
@@ -244,6 +246,7 @@ class ProviderDiscoveryService {
     // ─── 1. Credential check ────────────────────────────────────────
     const apiKey = provider.apiKeyEnvVar ? process.env[provider.apiKeyEnvVar] : undefined;
     const credentialMissing = provider.apiKeyEnvVar !== undefined
+      && provider.apiKeyOptional !== true
       && (apiKey === undefined || apiKey === '');
 
     if (credentialMissing) {

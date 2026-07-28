@@ -18,6 +18,7 @@ import { logger } from '@/utils/logger';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { getHeaderString } from '@/utils/type-guards';
 import { resolveOrganizationId } from '@/utils/context-headers';
+import { looksLikeApiKey } from '@/utils/api-key-format';
 
 const log = logger.child({ component: 'auth-middleware' });
 
@@ -113,10 +114,10 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     }
 
     const apiKey = (() => {
-      if (authHeader && authHeader.startsWith('ak_')) {
+      if (authHeader && looksLikeApiKey(authHeader)) {
         return authHeader;
       }
-      if (apiKeyHeader && apiKeyHeader.startsWith('ak_')) {
+      if (apiKeyHeader && looksLikeApiKey(apiKeyHeader)) {
         return apiKeyHeader;
       }
       return undefined;

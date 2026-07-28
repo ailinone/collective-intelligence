@@ -28,6 +28,7 @@ import { logger } from '@/utils/logger';
 import { config } from '@/config';
 import { getEmailService } from './email-service';
 import { invalidateApiKeyAuthCache } from '@/api/middleware/api-key-auth-middleware';
+import { matchApiKeyPrefix } from '@/utils/api-key-format';
 import type { ApiKey, User, Organization } from '@/generated/prisma/index.js';
 import { Prisma } from '@/generated/prisma/index.js';
 
@@ -64,7 +65,7 @@ export interface ApiKeyValidationResult {
 // Constants
 // ============================================
 
-const KEY_PREFIX = 'ak_';
+const KEY_PREFIX = 'ai1sk_';
 const KEY_LENGTH_BYTES = 32; // 256 bits
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_GRACE_PERIOD_DAYS = 7;
@@ -136,14 +137,16 @@ export function quickHash(key: string): string {
 }
 
 /**
- * Extract key prefix for display (e.g., "ak_abc123")
- * Shows first 8 chars after prefix
+ * Extract key prefix for display (e.g., "ai1sk_abc123" or, for a
+ * pre-rename legacy key, "ak_abc123"). Shows first 8 chars after
+ * whichever known prefix matched.
  */
 export function getKeyPrefix(key: string): string {
-  if (!key.startsWith(KEY_PREFIX)) {
+  const matchedPrefix = matchApiKeyPrefix(key);
+  if (!matchedPrefix) {
     throw new Error('Invalid API key format');
   }
-  const displayLength = KEY_PREFIX.length + 8;
+  const displayLength = matchedPrefix.length + 8;
   return key.substring(0, Math.min(displayLength, key.length));
 }
 

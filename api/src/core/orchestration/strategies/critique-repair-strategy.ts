@@ -31,17 +31,59 @@ import type {
   OrchestrationContext,
   OrchestrationResult,
   ModelExecution,
+  Model,
 } from '@/types';
+import type { ProviderAdapter } from '@/providers/base/provider-adapter';
+import { answerForScope } from '../verification/best-of-n-verifier';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'critique-repair-strategy' });
 const MAX_ITERATIONS = Number(process.env.CRITIQUE_REPAIR_MAX_ITERATIONS ?? 3);
 const PLATEAU_EPSILON = Number(process.env.CRITIQUE_REPAIR_PLATEAU_EPSILON ?? 0.05);
 const DEFAULT_QUALITY_TARGET = 0.85;
+// Non-regressive repair gate (2026-07): oracle-free, a repair must beat the
+// pre-repair output's re-score by AT LEAST this margin to be committed —
+// otherwise the primary/current best is kept. Env-overridable like the consts
+// above so the floor can be tuned without a code change.
+const REPAIR_IMPROVEMENT_EPSILON = Number(process.env.CRITIQUE_REPAIR_IMPROVEMENT_EPSILON ?? 0.02);
 
 interface CritiqueResult {
   qualityScore: number;
   issues: Array<{ severity: string; location: string; description: string; suggested_fix: string }>;
+}
+
+/**
+ * Extract the name of the FIRST top-level function definition in a candidate,
+ * used by the non-regressive repair gate to reject a repair that silently
+ * renames the primary function (the count_nums→count_numss /
+ * words_in_sentence→filter_prime_length_words breakage observed on HumanEval,
+ * which turns correct code into a wrong-signature failure).
+ *
+ * Python is the primary target (HumanEval is Python): the first top-level
+ * `def <name>(` at column 0 — indented/nested helpers never match. The common
+ * top-level JS forms (`function <name>`, `const <name> =`) are handled too as a
+ * best-effort. Returns null when NO top-level definition is present (prose /
+ * documentation answers) — the caller then SKIPS the structural guard, so
+ * non-code repairs are never affected.
+ *
+ * CAVEAT (see repair gate): only the FIRST top-level definition is inspected. A
+ * solution with two top-level functions (a helper defined before the entry
+ * point) keys on the helper, so a repair that legitimately reorders or
+ * introduces a top-level helper could be false-rejected. HumanEval's canonical
+ * single top-level entry point makes this rare in the target workload.
+ */
+export function extractPrimaryDefName(code: string): string | null {
+  if (typeof code !== 'string' || code.length === 0) return null;
+  // Python: first top-level `def name(` (column 0 — nested/indented helpers,
+  // which start with whitespace, are intentionally not matched).
+  const py = /^def\s+([A-Za-z_]\w*)\s*\(/m.exec(code);
+  if (py) return py[1];
+  // Common top-level JS forms (best-effort; HumanEval itself is Python).
+  const fn = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/m.exec(code);
+  if (fn) return fn[1];
+  const cst = /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=/m.exec(code);
+  if (cst) return cst[1];
+  return null;
 }
 
 export class CritiqueRepairStrategy extends BaseStrategy {
@@ -182,14 +224,40 @@ export class CritiqueRepairStrategy extends BaseStrategy {
 
     if (!genExec.success) throw new Error('Initial generation failed');
 
-    let currentContent = genExec.response?.choices?.[0]?.message?.content ?? '';
+    const initialContent = genExec.response?.choices?.[0]?.message?.content;
+    let currentContent: string = typeof initialContent === 'string' ? initialContent : '';
     let currentResponse = genExec.response;
-    // `bestContent` was tracked but never read directly (we return
-    // bestResponse, which carries the same content). Track without binding
-    // to a variable, but mark intent in comments.
+    // Non-regressive floor (2026-07): the tracked best is SEEDED with the
+    // primary generation and only displaced by a repair that STRICTLY beats it
+    // on re-evaluation (see the repair-accept gate in the loop below). Under
+    // that gate `currentContent`/`currentResponse` only ever advance to a
+    // repair that won, so they stay in lock-step with the best triple —
+    // `bestContent` is read as the baseline the repair must beat, so a repair
+    // that merely LOOKS better to the subjective critic, or that renames the
+    // primary function, can never overwrite a good primary.
     let bestResponse = currentResponse;
+    let bestContent = currentContent;
     let bestScore = 0;
     const scoreHistory: number[] = [];
+
+    // Objective verifier gate (oracle path). When the request carries an
+    // `answerVerifier` (verifiable task, e.g. HumanEval code_execution), a
+    // repair may only displace the current best if it PASSES the checker while
+    // the pre-repair output did NOT — a verifier-passing output is never
+    // replaced by an unverified one. Mirrors how consensus applies the checker
+    // (answerForScope honors `answerVerifierScope`: 'full' for code, 'final'
+    // for short answers). Never throws — a throwing/absent checker yields false.
+    const verifyContent = (content: string): boolean => {
+      const verifier = context.answerVerifier;
+      if (!verifier) return false;
+      const scoped = answerForScope(content, context.answerVerifierScope);
+      if (scoped == null) return false;
+      try {
+        return verifier(scoped) === true;
+      } catch {
+        return false;
+      }
+    };
 
     // C3 P0.2: Skip critique loop when ablated — return initial generation directly
     const critiqueAblated = context.ablationFlags?.disabled?.has('critique');
@@ -204,56 +272,23 @@ export class CritiqueRepairStrategy extends BaseStrategy {
         summary: `Iteration ${iteration}: critiquing current response.`,
       });
 
-      // Critique
-      const critiqueReq: ChatRequest = {
-        ...request,
-        messages: [
-          { role: 'system', content: PROMPTS.critiqueEvaluator },
-          { role: 'user', content: `ORIGINAL REQUEST:\n${request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n')}\n\nRESPONSE TO EVALUATE:\n${currentContent}` },
-        ],
-        response_format: { type: 'json_object' },
-        max_tokens: 1000,
-        temperature: 0.1,
-      };
-      // executeModelWithRetry handles cross-provider failover when the
-      // critic call itself fails. The critic running cold against
-      // unrelated providers is a normal occurrence — diversity is the
-      // point — so transient failures should walk the pool rather than
-      // tank the iteration.
-      const critiqueExec = await this.executeModelWithRetry(criticAdapter, critic, critiqueReq, 'critic', context);
+      // Critique the CURRENT best via the shared critic path (runCritique) —
+      // the same path used to re-score a repair below, so the pre/post-repair
+      // scores are directly comparable.
+      const { critique, exec: critiqueExec } = await this.runCritique(currentContent, request, criticAdapter, critic, context);
       executions.push(critiqueExec);
-
-      // Parse critique. JSON.parse returns `unknown` — narrow each accessed
-      // field, fall back to defaults if shape doesn't match.
-      let critique: CritiqueResult = { qualityScore: 0.5, issues: [] };
-      try {
-        const critiqueContent = critiqueExec.response?.choices?.[0]?.message?.content;
-        if (typeof critiqueContent === 'string') {
-          const parsed: unknown = JSON.parse(critiqueContent);
-          if (typeof parsed === 'object' && parsed !== null) {
-            const obj = parsed as { quality_score?: unknown; issues?: unknown };
-            const qualityScore = typeof obj.quality_score === 'number' ? obj.quality_score : 0.5;
-            const rawIssues = Array.isArray(obj.issues) ? obj.issues : [];
-            const issues = rawIssues.filter(
-              (issue): issue is CritiqueResult['issues'][number] =>
-                typeof issue === 'object' &&
-                issue !== null &&
-                typeof (issue as { severity?: unknown }).severity === 'string',
-            );
-            critique = { qualityScore, issues };
-          }
-        }
-      } catch {
-        log.debug({ iteration }, 'Failed to parse critique JSON, using defaults');
-      }
 
       scoreHistory.push(critique.qualityScore);
 
       // Track best response (the score-corresponding content lives inside
-      // bestResponse.choices[0].message.content — no need to track separately).
+      // bestResponse.choices[0].message.content). Seeds the primary as the
+      // hard floor on iteration 1 (bestScore starts at 0) and re-confirms a
+      // committed repair; `currentContent` only ever holds the current best,
+      // so bestContent stays in lock-step with it.
       if (critique.qualityScore > bestScore) {
         bestScore = critique.qualityScore;
         bestResponse = currentResponse;
+        bestContent = currentContent;
       }
 
       log.info({
@@ -317,8 +352,77 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       if (repairExec.success) {
         const repaired = repairExec.response?.choices?.[0]?.message?.content;
         if (typeof repaired === 'string' && repaired.trim()) {
-          currentContent = repaired;
-          currentResponse = repairExec.response;
+          // NON-REGRESSIVE REPAIR GATE (2026-07). The old code committed ANY
+          // non-empty repair, which let a blind overwrite replace correct code
+          // with a lower-quality — or wrong-signature — repair (HumanEval:
+          // −0.194 quality; count_nums→count_numss). A repair is now committed
+          // ONLY if it provably beats the current best; otherwise the current
+          // best is kept untouched. `currentContent`/`bestContent` are equal
+          // here (invariant), so the pre-repair baseline is the current best.
+          const preRepairContent = bestContent;
+          const preRepairScore = critique.qualityScore;
+
+          // (3) Structural guard FIRST (no model call): reject a repair that
+          // renames the primary top-level function. Only applies when the
+          // pre-repair output actually defines one (code); prose answers (null)
+          // skip the guard so non-code repairs are unaffected.
+          const preName = extractPrimaryDefName(preRepairContent);
+          const repairedName = preName === null ? null : extractPrimaryDefName(repaired);
+          if (preName !== null && repairedName !== preName) {
+            log.info(
+              { iteration, from: preName, to: repairedName },
+              'Repair discarded: primary function renamed/removed — keeping current best',
+            );
+          } else {
+            // Re-score the repair via the SAME critic path as the pre-repair
+            // score above, so the two are directly comparable. Used by both the
+            // verifier-blind fallback and the oracle-free improvement gate.
+            const { critique: repairedCritique, exec: reScoreExec } =
+              await this.runCritique(repaired, request, criticAdapter, critic, context);
+            executions.push(reScoreExec);
+            const repairedScore = repairedCritique.qualityScore;
+
+            let accept: boolean;
+            if (context.answerVerifier) {
+              // (2a) Oracle path: commit only if the repair PASSES the checker
+              // and the pre-repair did NOT — never replace a verifier-passing
+              // output with an unverified one. When neither passes (verifier
+              // blind) fall back to the strict re-score improvement so the loop
+              // can still improve a still-failing output without regression risk.
+              const preVerified = verifyContent(preRepairContent);
+              const repairedVerified = verifyContent(repaired);
+              if (repairedVerified && !preVerified) {
+                accept = true;
+              } else if (!preVerified && !repairedVerified) {
+                accept = repairedScore > preRepairScore + REPAIR_IMPROVEMENT_EPSILON;
+              } else {
+                // pre-repair already verified (or repair lost verification) —
+                // keep the verified output.
+                accept = false;
+              }
+            } else {
+              // (2b) Oracle-free path: require a strict re-score improvement
+              // over the pre-repair score by at least the epsilon margin.
+              accept = repairedScore > preRepairScore + REPAIR_IMPROVEMENT_EPSILON;
+            }
+
+            if (accept) {
+              currentContent = repaired;
+              currentResponse = repairExec.response;
+              bestContent = repaired;
+              bestResponse = repairExec.response;
+              bestScore = repairedScore;
+              log.info(
+                { iteration, preRepairScore, repairedScore },
+                'Repair accepted: strictly beats current best',
+              );
+            } else {
+              log.info(
+                { iteration, preRepairScore, repairedScore },
+                'Repair discarded: does not beat current best — keeping it',
+              );
+            }
+          }
         }
       }
     }
@@ -346,6 +450,60 @@ export class CritiqueRepairStrategy extends BaseStrategy {
         ...(reasoningTraces?.length ? { reasoning_traces: reasoningTraces } : {}),
       },
     };
+  }
+
+  /**
+   * Run the critic over a candidate and parse its JSON verdict. Extracted so
+   * the loop's top-of-iteration critique and the repair re-score share ONE
+   * critic path (same adapter/model/prompt/params) — that makes the pre-repair
+   * score and the repaired re-score directly comparable, which the
+   * non-regressive gate depends on. Cross-provider failover on a failed critic
+   * call is handled inside executeModelWithRetry. Never throws: a malformed or
+   * missing verdict falls back to a neutral 0.5 / no-issues default.
+   */
+  private async runCritique(
+    content: string,
+    request: ChatRequest,
+    criticAdapter: ProviderAdapter,
+    critic: Model,
+    context: OrchestrationContext,
+  ): Promise<{ critique: CritiqueResult; exec: ModelExecution }> {
+    const critiqueReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.critiqueEvaluator },
+        { role: 'user', content: `ORIGINAL REQUEST:\n${request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n')}\n\nRESPONSE TO EVALUATE:\n${content}` },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 1000,
+      temperature: 0.1,
+    };
+    const exec = await this.executeModelWithRetry(criticAdapter, critic, critiqueReq, 'critic', context);
+
+    // Parse critique. JSON.parse returns `unknown` — narrow each accessed
+    // field, fall back to defaults if shape doesn't match.
+    let critique: CritiqueResult = { qualityScore: 0.5, issues: [] };
+    try {
+      const critiqueContent = exec.response?.choices?.[0]?.message?.content;
+      if (typeof critiqueContent === 'string') {
+        const parsed: unknown = JSON.parse(critiqueContent);
+        if (typeof parsed === 'object' && parsed !== null) {
+          const obj = parsed as { quality_score?: unknown; issues?: unknown };
+          const qualityScore = typeof obj.quality_score === 'number' ? obj.quality_score : 0.5;
+          const rawIssues = Array.isArray(obj.issues) ? obj.issues : [];
+          const issues = rawIssues.filter(
+            (issue): issue is CritiqueResult['issues'][number] =>
+              typeof issue === 'object' &&
+              issue !== null &&
+              typeof (issue as { severity?: unknown }).severity === 'string',
+          );
+          critique = { qualityScore, issues };
+        }
+      }
+    } catch {
+      log.debug({ phase: 'critique-parse' }, 'Failed to parse critique JSON, using defaults');
+    }
+    return { critique, exec };
   }
 
   // Intentionally buffered, not real per-token streaming (audited

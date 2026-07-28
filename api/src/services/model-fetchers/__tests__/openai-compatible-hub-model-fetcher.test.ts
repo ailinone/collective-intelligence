@@ -93,6 +93,52 @@ describe('openai-compatible-hub-model-fetcher', () => {
     expect(models[0].metadata?.executionProvider).toBe('heliconeai');
   });
 
+  describe('explicit User-Agent header (featherless-ai WAF regression)', () => {
+    it('sends a non-default User-Agent instead of undici\'s "node" default', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'recursal/EagleX_1-7T', context_window: 16384 }] })
+      );
+
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'featherless-ai',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.featherless.ai/v1',
+      });
+
+      await fetcher.getModels();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const headers = fetchSpy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers['User-Agent']).toBeTruthy();
+      expect(headers['User-Agent']).not.toBe('node');
+    });
+
+    it('sends the explicit User-Agent on every attempted path, not just the first', async () => {
+      // Regression: a WAF blocking the default UA 404s on EVERY path this
+      // fetcher tries (all indistinguishable from "path doesn't exist"), so
+      // the header must be present on each retry, not just the initial call.
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({}, 404))
+        .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'm1', context_window: 4096 }] }));
+
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'featherless-ai',
+        apiKey: 'live-hub-key',
+        baseUrl: 'https://api.featherless.ai/v1',
+        modelListPaths: ['/models', '/v1/models'],
+      });
+
+      await fetcher.getModels();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      for (const call of fetchSpy.mock.calls) {
+        const headers = call[1]?.headers as Record<string, string>;
+        expect(headers['User-Agent']).not.toBe('node');
+      }
+    });
+  });
+
   it('normalizes provider@model identifiers to provider/model for runtime execution', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
@@ -156,6 +202,70 @@ describe('openai-compatible-hub-model-fetcher', () => {
     expect(metadata.originalProvider).toBe('anthropic');
     expect(metadata.executionProvider).toBe('heliconeai');
     expect(metadata.executionProviders).toEqual(['heliconeai', 'anthropic']);
+  });
+
+  describe('apiKeyOptional (vllm/lm-studio/xinference self-hosted servers)', () => {
+    it('still skips discovery with no key when apiKeyOptional is unset/false (unchanged default behavior)', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'some-required-key-provider',
+        apiKey: '',
+        baseUrl: 'https://api.example.com',
+      });
+      const models = await fetcher.getModels();
+      expect(models).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('proceeds with discovery on an empty key when apiKeyOptional is true, and omits the Authorization header', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'qwen2.5:7b' }] })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'vllm',
+        apiKey: '',
+        apiKeyOptional: true,
+        baseUrl: 'http://localhost:8000/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models).toHaveLength(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const headers = fetchSpy.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(headers.Authorization).toBeUndefined();
+    });
+
+    it('still skips discovery when apiKeyOptional is true but the key looks like a mock/test value', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'vllm',
+        apiKey: 'mock-key',
+        apiKeyOptional: true,
+        baseUrl: 'http://localhost:8000/v1',
+      });
+      const models = await fetcher.getModels();
+      expect(models).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('absolute-URL modelListPaths override (github-models catalog endpoint)', () => {
+    it('uses the absolute URL as-is instead of concatenating it onto baseUrl', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'openai/gpt-4o' }] })
+      );
+      const fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: 'github-models',
+        apiKey: 'ghp_live',
+        baseUrl: 'https://models.github.ai/inference',
+        modelListPaths: ['https://models.github.ai/catalog/models'],
+      });
+      const models = await fetcher.getModels();
+      expect(models).toHaveLength(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://models.github.ai/catalog/models',
+        expect.any(Object),
+      );
+    });
   });
 
   describe('pricing unit normalization', () => {

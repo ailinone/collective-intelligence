@@ -12,10 +12,18 @@
  * Represents an API key with validation and security
  *
  * DDD Pattern: Value Object
- * Format: ak_live_xxxxxxxxxxxx (15 chars prefix for indexing)
+ * Format: ai1sk_xxxxxxxxxxxx (15 chars prefix for indexing)
+ *
+ * Legacy: keys minted before the ai1sk_ rename used ak_live_/ak_test_/
+ * ak_local_/bare ak_<random> shapes (see api/src/utils/api-key-format.ts
+ * for why there's more than one legacy shape). isValid()/create() still
+ * accept all of them — via the generic `ak_` root, not per-variant — so
+ * already-issued customer keys keep authenticating. Only generate() is
+ * new-format-only.
  */
 
 import { randomBytes } from 'crypto';
+import { API_KEY_PREFIX, matchApiKeyPrefix } from '@/utils/api-key-format';
 
 export class ApiKeyValue {
   private readonly value: string;
@@ -28,12 +36,12 @@ export class ApiKeyValue {
 
   /**
    * Generate new API key
-   * Format: ak_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (48 chars total)
+   * Format: ai1sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (49 chars total)
    */
-  static generate(environment: 'live' | 'test' = 'live'): ApiKeyValue {
+  static generate(): ApiKeyValue {
     // Generate cryptographically secure random key
     const randomPart = randomBytes(32).toString('base64url'); // 43 chars
-    const apiKey = `ak_${environment}_${randomPart}`;
+    const apiKey = `${API_KEY_PREFIX}${randomPart}`;
     const prefix = apiKey.substring(0, 15); // For database indexing
 
     return new ApiKeyValue(apiKey, prefix);
@@ -56,31 +64,21 @@ export class ApiKeyValue {
   }
 
   /**
-   * Validate API key format
+   * Validate API key format: current ai1sk_ prefix, or any legacy
+   * ak_-rooted shape.
    */
   private static isValid(apiKey: string): boolean {
-    // Must start with ak_live_ or ak_test_
-    if (!apiKey.startsWith('ak_live_') && !apiKey.startsWith('ak_test_')) {
+    // Must have minimum length (prefix + random part) and a sane maximum
+    // (security best practice)
+    if (apiKey.length < 40 || apiKey.length > 100) {
       return false;
     }
 
-    // Must have minimum length (ak_live_ = 8, + random part minimum 32)
-    if (apiKey.length < 40) {
-      return false;
-    }
-
-    // Must have maximum length (security best practice)
-    if (apiKey.length > 100) {
-      return false;
-    }
-
-    // Only allow alphanumeric, underscore, hyphen (base64url safe)
-    const validCharsRegex = /^ak_(live|test)_[A-Za-z0-9_-]+$/;
-    if (!validCharsRegex.test(apiKey)) {
-      return false;
-    }
-
-    return true;
+    // Only allow the known prefixes, followed by alphanumeric, underscore,
+    // hyphen (base64url/nanoid safe) — covers ak_live_/ak_test_/ak_local_/
+    // bare ak_<random> under the single `ak_` root, no need to enumerate
+    // each historical sub-variant.
+    return /^(?:ai1sk_|ak_)[A-Za-z0-9_-]+$/.test(apiKey);
   }
 
   /**
@@ -98,29 +96,32 @@ export class ApiKeyValue {
   }
 
   /**
-   * Get environment (live or test)
+   * Get environment tag. Preserved only for reading pre-rename legacy
+   * values (ak_test_...) — new ai1sk_ keys have no environment concept
+   * and always report 'live'.
    */
   getEnvironment(): 'live' | 'test' {
-    return this.value.startsWith('ak_live_') ? 'live' : 'test';
+    return this.value.startsWith('ak_test_') ? 'test' : 'live';
   }
 
   /**
    * Get masked version for display (security)
-   * Returns: ak_live_abc***...***xyz (shows first 3 + last 3 of random part)
+   * Returns: <prefix>abc***...***xyz (shows first 3 + last 3 chars after
+   * the recognized prefix). Format-agnostic so it works the same for the
+   * current ai1sk_ prefix and every legacy ak_-rooted shape.
    */
   getMasked(): string {
-    const environment = this.getEnvironment();
-    const prefixLength = environment === 'live' ? 'ak_live_'.length : 'ak_test_'.length;
-    const randomPart = this.value.substring(prefixLength);
+    const prefix = matchApiKeyPrefix(this.value) ?? '';
+    const randomPart = this.value.substring(prefix.length);
 
     if (randomPart.length < 6) {
-      return `ak_${environment}_***`;
+      return `${prefix}***`;
     }
 
     const first3 = randomPart.substring(0, 3);
     const last3 = randomPart.substring(randomPart.length - 3);
 
-    return `ak_${environment}_${first3}***...***${last3}`;
+    return `${prefix}${first3}***...***${last3}`;
   }
 
   /**

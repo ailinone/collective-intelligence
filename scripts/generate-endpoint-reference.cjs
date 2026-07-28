@@ -146,6 +146,39 @@ function requestJsonSample(operation, components) {
   return sampleFromSchema(schema, components);
 }
 
+// Curated request-body samples for operations whose OpenAPI definition omits a
+// `requestBody` schema even though the endpoint requires a JSON payload. Without
+// this the generator falls back to "No JSON request body is required." plus
+// bodyless curl/ts/python examples for real write endpoints. Keyed by
+// "<METHOD> <path>"; delete an entry once the spec itself carries the schema.
+const REQUEST_BODY_OVERRIDES = {
+  'POST /v1/batches': {
+    input_file_id: 'file_abc',
+    endpoint: '/v1/chat/completions',
+    completion_window: '24h',
+  },
+  'POST /v1/assistants': {
+    model: 'gpt-4o',
+    name: 'Support Assistant',
+    instructions: 'You are a helpful assistant.',
+  },
+  'POST /v1/assistants/{assistant_id}': {
+    instructions: 'Updated instructions.',
+  },
+  'POST /v1/assistants/{assistant_id}/files': {
+    file_id: 'file_abc',
+  },
+};
+
+// Prefer the schema declared in the spec; fall back to a curated override so the
+// examples never contradict an endpoint that genuinely requires a JSON body.
+function resolveRequestSample(method, routePath, operation, components) {
+  const fromSpec = requestJsonSample(operation, components);
+  if (fromSpec) return fromSpec;
+  const override = REQUEST_BODY_OVERRIDES[`${method} ${routePath}`];
+  return override ? { ...override } : null;
+}
+
 function summarizeResponses(operation) {
   const responses = operation.responses && typeof operation.responses === 'object' ? operation.responses : {};
   return Object.entries(responses).map(([statusCode, response]) => {
@@ -178,7 +211,7 @@ function collectOperations(spec) {
         description: operation.description || '',
         securityLabel: securityLabel(operation, globalSecurity),
         parameters: extractParameters(operation),
-        requestSample: requestJsonSample(operation, spec.components || {}),
+        requestSample: resolveRequestSample(method.toUpperCase(), routePath, operation, spec.components || {}),
         responses: summarizeResponses(operation),
         rateLimit: operation['x-rateLimit'] || null,
       });

@@ -130,6 +130,22 @@ describe('probeCredit (mocked fetch)', () => {
     expect(result.status).toBe('unknown');
     expect(result.reason).toContain('probe_error');
   });
+
+  it('sends an explicit non-default User-Agent header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ balance: 10 }),
+    } as unknown as Response);
+    globalThis.fetch = fetchMock;
+
+    const cb = buildProbeCallbacks({ providerId: 'aihubmix', integrationClass: 'oai-compat-pure', baseUrl: 'https://aihubmix.com' });
+    await cb.probeCredit!({ providerId: 'aihubmix', apiKey: 'sk-test', timeoutMs: 1000 });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers['User-Agent']).toBeTruthy();
+    expect(init.headers['User-Agent']).not.toBe('node');
+  });
 });
 
 describe('listModels (mocked fetch)', () => {
@@ -171,6 +187,51 @@ describe('listModels (mocked fetch)', () => {
     await expect(cb.listModels!({ providerId: 'openai', apiKey: 'sk-bad', timeoutMs: 1000 })).rejects.toThrow(/HTTP 401/);
   });
 
+  it('includes the full resolved URL (not just the path) in the HTTP error message', async () => {
+    // Regression: the error used to report only the raw path fragment
+    // (e.g. "/v1/models"), which made a WAF/UA-based block on the fully
+    // joined URL indistinguishable from a URL-join bug in logs alone.
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as unknown as Response);
+
+    const cb = buildProbeCallbacks({
+      providerId: 'featherless-ai',
+      integrationClass: 'oai-compat-pure',
+      baseUrl: 'https://api.featherless.ai/v1',
+    });
+    await expect(
+      cb.listModels!({ providerId: 'featherless-ai', apiKey: 'sk', timeoutMs: 1000 }),
+    ).rejects.toThrow('HTTP 404 on https://api.featherless.ai/v1/models');
+  });
+
+  it('sends an explicit non-default User-Agent header (featherless-ai WAF regression)', async () => {
+    // Regression: Node's global fetch sends `User-Agent: node` when no
+    // override is given. featherless-ai's Cloudflare edge silently blocks
+    // that exact UA with a generic 404 "Gone" regardless of auth validity —
+    // confirmed via direct reproduction against production. Any explicit,
+    // non-default UA clears it.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ id: 'recursal/EagleX_1-7T' }] }),
+    } as unknown as Response);
+    globalThis.fetch = fetchMock;
+
+    const cb = buildProbeCallbacks({
+      providerId: 'featherless-ai',
+      integrationClass: 'oai-compat-pure',
+      baseUrl: 'https://api.featherless.ai/v1',
+    });
+    await cb.listModels!({ providerId: 'featherless-ai', apiKey: 'sk', timeoutMs: 1000 });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers['User-Agent']).toBeTruthy();
+    expect(init.headers['User-Agent']).not.toBe('node');
+  });
+
   it('throws on missing data array', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -198,6 +259,46 @@ describe('listModels (mocked fetch)', () => {
     await cb.listModels!({ providerId: 'custom', apiKey: 'sk', timeoutMs: 1000 });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.custom.io/api/models',
+      expect.any(Object),
+    );
+  });
+
+  it('does not duplicate /v1 when baseUrl already ends in /v1 and the default modelListPath is used (featherless-ai regression)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ data: [{ id: 'recursal/EagleX_1-7T' }] }),
+    } as unknown as Response);
+    globalThis.fetch = fetchMock;
+
+    const cb = buildProbeCallbacks({
+      providerId: 'featherless-ai',
+      integrationClass: 'oai-compat-pure',
+      baseUrl: 'https://api.featherless.ai/v1',
+      // no modelListPath override — falls back to the default '/v1/models'
+    });
+    await cb.listModels!({ providerId: 'featherless-ai', apiKey: 'sk', timeoutMs: 1000 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.featherless.ai/v1/models',
+      expect.any(Object),
+    );
+  });
+
+  it('still appends a non-/v1 custom path normally onto a /v1 baseUrl (no over-eager stripping)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ data: [{ id: 'foo' }] }),
+    } as unknown as Response);
+    globalThis.fetch = fetchMock;
+
+    const cb = buildProbeCallbacks({
+      providerId: 'custom',
+      integrationClass: 'oai-compat-pure',
+      baseUrl: 'https://api.custom.io/v1',
+      modelListPath: '/catalog/models',
+    });
+    await cb.listModels!({ providerId: 'custom', apiKey: 'sk', timeoutMs: 1000 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.custom.io/v1/catalog/models',
       expect.any(Object),
     );
   });

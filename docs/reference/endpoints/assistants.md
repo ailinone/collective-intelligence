@@ -128,7 +128,13 @@ This operation does not declare explicit parameters.
 
 ### Request Body
 
-No JSON request body is required.
+```json
+{
+  "model": "gpt-4o",
+  "name": "Support Assistant",
+  "instructions": "You are a helpful assistant."
+}
+```
 
 ### Responses
 
@@ -161,7 +167,9 @@ Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugg
 ```bash
 curl -X POST "https://api.ailin.one/v1/assistants" \
   -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o","name":"Support Assistant","instructions":"You are a helpful assistant."}'
 ```
 
 ```ts
@@ -170,7 +178,13 @@ const response = await fetch("https://api.ailin.one/v1/assistants", {
   headers: {
     Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
     "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
   },
+  body: JSON.stringify({
+  "model": "gpt-4o",
+  "name": "Support Assistant",
+  "instructions": "You are a helpful assistant."
+}),
 });
 const data = await response.json();
 ```
@@ -185,7 +199,13 @@ response = requests.request(
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
     },
+    json={
+    "model": "gpt-4o",
+    "name": "Support Assistant",
+    "instructions": "You are a helpful assistant."
+},
 )
 print(response.status_code)
 print(response.text)
@@ -401,7 +421,11 @@ Requires: Bearer token or API key.
 
 ### Request Body
 
-No JSON request body is required.
+```json
+{
+  "instructions": "Updated instructions."
+}
+```
 
 ### Responses
 
@@ -434,7 +458,9 @@ Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugg
 ```bash
 curl -X POST "https://api.ailin.one/v1/assistants/sample" \
   -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"instructions":"Updated instructions."}'
 ```
 
 ```ts
@@ -443,7 +469,11 @@ const response = await fetch("https://api.ailin.one/v1/assistants/sample", {
   headers: {
     Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
     "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
   },
+  body: JSON.stringify({
+  "instructions": "Updated instructions."
+}),
 });
 const data = await response.json();
 ```
@@ -458,7 +488,11 @@ response = requests.request(
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
     },
+    json={
+    "instructions": "Updated instructions."
+},
 )
 print(response.status_code)
 print(response.text)
@@ -583,7 +617,11 @@ Requires: Bearer token or API key.
 
 ### Request Body
 
-No JSON request body is required.
+```json
+{
+  "file_id": "file_abc"
+}
+```
 
 ### Responses
 
@@ -616,7 +654,9 @@ Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugg
 ```bash
 curl -X POST "https://api.ailin.one/v1/assistants/sample/files" \
   -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"file_id":"file_abc"}'
 ```
 
 ```ts
@@ -625,7 +665,11 @@ const response = await fetch("https://api.ailin.one/v1/assistants/sample/files",
   headers: {
     Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
     "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
   },
+  body: JSON.stringify({
+  "file_id": "file_abc"
+}),
 });
 const data = await response.json();
 ```
@@ -640,7 +684,11 @@ response = requests.request(
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
     },
+    json={
+    "file_id": "file_abc"
+},
 )
 print(response.status_code)
 print(response.text)

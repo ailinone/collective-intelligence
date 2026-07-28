@@ -199,9 +199,11 @@ export interface ConsensusStrategyArtifacts {
 
   /**
    * Agreement short-circuit telemetry (2026-07-03) — present only when synthesis
-   * was skipped because every parseable voter answer agreed at or above
-   * CONSENSUS_AGREEMENT_EXIT_THRESHOLD (default 1.0 = unanimity). Synthesizing N
-   * copies of the same answer adds latency and cost, not quality.
+   * was skipped because a fraction of the parseable voter answers at or above
+   * CONSENSUS_AGREEMENT_EXIT_THRESHOLD (default 0.6 = majority; self-consistency
+   * / majority voting) agreed on the same answer. Synthesizing over answers that
+   * already agree adds latency and cost, not quality. `agreement` is the winning
+   * answer's share of the parseable voters (1.0 = unanimity).
    */
   readonly agreementShortCircuit?: {
     readonly agreement: number;

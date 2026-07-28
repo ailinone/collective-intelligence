@@ -27,7 +27,7 @@ if (!USER_ID || !ORG_ID) {
 }
 
 async function main(): Promise<void> {
-  const plaintext = `ak_local_${randomBytes(24).toString('base64url')}`;
+  const plaintext = `ai1sk_${randomBytes(24).toString('base64url')}`;
   const keyHash = await bcrypt.hash(plaintext, 10);
   const quickHash = createHash('sha256').update(plaintext).digest('hex');
   const keyPrefix = plaintext.slice(0, 16);

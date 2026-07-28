@@ -403,7 +403,7 @@ describe('ApiKeyEntity', () => {
       expect(dto.id).toBeDefined();
       expect(dto.name).toBe('Production API Key');
       expect(dto.keyPrefix).toHaveLength(15);
-      expect(dto.keyValue).toMatch(/^ak_live_/);
+      expect(dto.keyValue).toMatch(/^ai1sk_/);
       expect(dto.status).toBe('active');
       expect(dto.requestCount).toBe(0);
     });
@@ -411,11 +411,11 @@ describe('ApiKeyEntity', () => {
     it('should convert to presentation DTO (MASKED)', () => {
       const apiKey = ApiKeyEntity.create(validData);
       const dto = apiKey.toDTO();
-      
+
       expect(dto.id).toBeDefined();
       expect(dto.name).toBe('Production API Key');
-      expect(dto.keyPreview).toMatch(/^ak_live_.*\*\*\*.*$/);
-      expect(dto.keyPreview).not.toMatch(/^ak_live_[A-Za-z0-9_-]{40,}$/); // Not full key
+      expect(dto.keyPreview).toMatch(/^ai1sk_.*\*\*\*.*$/);
+      expect(dto.keyPreview).not.toMatch(/^ai1sk_[A-Za-z0-9_-]{40,}$/); // Not full key
       expect(dto.status).toBe('active');
       expect(dto.requestCount).toBe(0);
     });
