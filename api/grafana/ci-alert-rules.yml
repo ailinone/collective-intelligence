@@ -196,6 +196,64 @@ groups:
           team: ci-ops
 
       ##
+      ## WARNING: A provider's discovered-model count dropped sharply
+      ##
+      ## Compares against the SAME provider's own value 24h ago rather than
+      ## a hardcoded floor — the "right" model count differs wildly per
+      ## provider (huggingface: tens of thousands; a small first-party
+      ## adapter: a handful) and drifts over time as upstream catalogs grow
+      ## or shrink, so a fixed threshold goes stale and either misses real
+      ## regressions or false-alarms constantly. The `> 50` guard on the
+      ## 24h-ago value excludes providers too small for a 50% swing to be
+      ## meaningful noise.
+      - uid: ci-alert-provider-model-count-drop
+        title: "Provider discovered-model count dropped sharply"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: "${DS_PROMETHEUS}"
+            model:
+              expr: >-
+                (ci_provider_discovered_models_total offset 24h) > 50
+                and
+                ci_provider_discovered_models_total
+                  < 0.5 * (ci_provider_discovered_models_total offset 24h)
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          summary: >-
+            Provider {{ $labels.provider }}'s discovered-model count dropped
+            more than 50% versus 24h ago (current: {{ $value }}).
+          description: >-
+            The discovery pipeline for this provider may be silently
+            under-fetching (pagination/filtering regression, credential or
+            WAF issue returning partial results, upstream API contract
+            change) rather than fully failing — a full failure would trip
+            the circuit-breaker alert instead. Check central-discovery logs
+            for this provider's source(s) and compare against a direct API
+            call.
+        labels:
+          severity: warning
+          team: ci-ops
+
+      ##
       ## WARNING: Model quality dropped below 0.50 (possible model degradation)
       ##
       - uid: ci-alert-model-quality-drop

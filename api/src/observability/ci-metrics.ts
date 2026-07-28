@@ -590,6 +590,24 @@ export const circuitBreakerState = createGauge({
   registers: [registry],
 });
 
+/**
+ * Current row count of the `models` table per provider_id, refreshed at the
+ * end of every discovery cycle. A silent regression in any provider's
+ * discovery path (a fetcher's pagination/filtering logic breaking, a WAF
+ * block returning fewer results than expected, etc.) surfaces here as a
+ * count drop without needing a manual DB check — see
+ * ci-alert-provider-model-count-drop in ci-alert-rules.yml, which compares
+ * this against its own 24h-ago value rather than a hardcoded floor, since
+ * "how many models a provider should have" varies per provider and drifts
+ * over time as upstream catalogs grow or shrink.
+ */
+export const providerDiscoveredModelsTotal = createGauge({
+  name: 'ci_provider_discovered_models_total',
+  help: 'Current models table row count per provider_id, refreshed after each discovery cycle',
+  labelNames: ['provider'],
+  registers: [registry],
+});
+
 // ============================================
 // Distributed Bulkhead Metrics (scale-to-100k Phase 2)
 // ============================================
