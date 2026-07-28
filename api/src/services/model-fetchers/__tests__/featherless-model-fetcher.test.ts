@@ -35,9 +35,6 @@ describe('featherless-model-fetcher', () => {
   });
 
   it('paginates through every page reported by total_pages, accumulating all models', async () => {
-    // Realistic shape: every page is a full 1000 except the last (mirrors
-    // real featherless-ai pagination) — a short intermediate page is
-    // covered separately below, where it's expected to short-circuit.
     const fullPage = (prefix: string) =>
       Array.from({ length: 1000 }, (_, i) => ({ id: `${prefix}/m${i}`, context_length: 4096 }));
 
@@ -69,18 +66,39 @@ describe('featherless-model-fetcher', () => {
     expect(headers.Authorization).toBe('Bearer live-key');
   });
 
-  it('stops early when a page returns fewer than per_page models, even if total_pages says otherwise', async () => {
-    // Regression guard: trust the actual page size over a possibly-stale
-    // total_pages value, so a mid-fetch catalog shrink can't cause an
-    // infinite/over-long pagination loop.
-    const short = Array.from({ length: 5 }, (_, i) => ({ id: `a/m${i}`, context_length: 4096 }));
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(page(short, 1, 5));
+  it('does NOT stop on a mid-catalog page that comes back short of per_page (production regression)', async () => {
+    // Regression: featherless-ai's live ~43.5k-model catalog returns
+    // slightly-short-of-1000 pages even mid-crawl (confirmed against
+    // production: page 2 came back with 998 of 1000, page 3 with 997) —
+    // NOT just on the final page. An earlier version of this fetcher
+    // treated any page with length < per_page as "the last page" and
+    // stopped after page 2, capturing only ~1998 of ~43,591 models. Only a
+    // genuinely EMPTY page (or total_pages being exhausted) should stop
+    // pagination.
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        page(
+          Array.from({ length: 998 }, (_, i) => ({ id: `p1/m${i}` })),
+          1,
+          3
+        )
+      )
+      .mockResolvedValueOnce(
+        page(
+          Array.from({ length: 997 }, (_, i) => ({ id: `p2/m${i}` })),
+          2,
+          3
+        )
+      )
+      .mockResolvedValueOnce(page([{ id: 'p3/last' }], 3, 3));
 
     const fetcher = new FeatherlessModelFetcher('live-key');
     const models = await fetcher.getModels();
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(models).toHaveLength(5);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(models).toHaveLength(998 + 997 + 1);
+    expect(models.at(-1)?.id).toBe('p3/last');
   });
 
   it('stops when a page comes back empty', async () => {

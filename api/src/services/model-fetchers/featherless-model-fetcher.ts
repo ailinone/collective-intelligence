@@ -90,6 +90,7 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
 
     const all: FeatherlessModelEntry[] = [];
     let totalPages = 1;
+    let pagesFetched = 0;
 
     for (let page = 1; page <= totalPages && page <= MAX_PAGES; page++) {
       const url = `https://api.featherless.ai/v1/models?page=${page}&per_page=${PER_PAGE}`;
@@ -116,23 +117,28 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
       }
 
       const pageModels = Array.isArray(body.data) ? body.data : [];
+      pagesFetched++;
       if (pageModels.length === 0) {
+        // A genuinely empty page (0 items) always means "no more data",
+        // regardless of what total_pages claims — trust this over the
+        // pagination metadata. A page with FEWER than per_page items is NOT
+        // treated as the end: featherless-ai's catalog is large and live,
+        // so even non-final pages can come back a few items short (e.g.
+        // 997-999 of 1000) — confirmed by direct reproduction. total_pages
+        // (re-read below, driving the loop's own bound) is what actually
+        // decides when to stop.
         break;
       }
       all.push(...pageModels);
 
       totalPages = body.pagination?.total_pages || totalPages;
-      if (pageModels.length < PER_PAGE) {
-        // Short page — this was the last one, even if total_pages disagrees.
-        break;
-      }
     }
 
     const out = all
       .filter((m) => typeof m.id === 'string' && m.id.length > 0)
       .map((m) => this.transform(m));
 
-    this.log.info({ pagesFetched: Math.min(totalPages, MAX_PAGES), received: all.length, emitted: out.length }, 'Featherless AI discovery completed');
+    this.log.info({ pagesFetched, totalPages: Math.min(totalPages, MAX_PAGES), received: all.length, emitted: out.length }, 'Featherless AI discovery completed');
     return out;
   }
 

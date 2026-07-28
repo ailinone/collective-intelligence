@@ -37,6 +37,7 @@ import { withNormalizedMetadata } from '@/capability/metadata-normalization';
 import { narrowAs } from '@/utils/type-guards';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { BalanceCheckResult } from '@/providers/base/provider-adapter';
+import { providerDiscoveredModelsTotal } from '@/observability/ci-metrics';
 
 const PROVIDER_ID_ALIASES: Record<string, string> = {
   'x-ai': 'xai',
@@ -2378,6 +2379,11 @@ export class CentralModelDiscoveryService {
     // Registra estatísticas no banco
     await this.recordDiscoveryResults(results);
 
+    // Best-effort: refresh the per-provider model-count gauge so a silent
+    // discovery regression (pagination breaking, a WAF block reducing
+    // results, etc.) is visible in Grafana without a manual DB check.
+    await this.updateProviderModelCountMetrics();
+
     // Invalida caches seletivamente - apenas para providers que foram descobertos
     // Isso preserva cache de outros providers e reduz impacto de performance
     const discoveredProviderIds = Array.from(
@@ -3388,6 +3394,30 @@ export class CentralModelDiscoveryService {
   private async recordDiscoveryResults(results: ModelDiscoveryResult[]) {
     for (const _result of results) {
       // Discovery log persistence will be enabled once the corresponding database table is available.
+    }
+  }
+
+  /**
+   * Refreshes ci_provider_discovered_models_total with the actual current
+   * `models` row count per provider_id. Deliberately queries the DB rather
+   * than summing this cycle's per-source modelsDiscovered figures: several
+   * sources can write to the same provider_id (e.g. a catalog-bridge entry
+   * plus a dedicated -native source), and a source that was skipped this
+   * cycle (rate-limited, disabled, mid-backoff) shouldn't make the gauge
+   * read as if that provider's models vanished. Best-effort — a metrics
+   * failure must never fail the discovery cycle itself.
+   */
+  private async updateProviderModelCountMetrics(): Promise<void> {
+    try {
+      const counts = await prisma.model.groupBy({
+        by: ['providerId'],
+        _count: { _all: true },
+      });
+      for (const row of counts) {
+        providerDiscoveredModelsTotal.set({ provider: row.providerId }, row._count._all);
+      }
+    } catch (error) {
+      this.log.debug({ error }, 'Failed to refresh per-provider model-count metric (non-fatal)');
     }
   }
 
