@@ -128,7 +128,13 @@ This operation does not declare explicit parameters.
 
 ### Request Body
 
-No JSON request body is required.
+```json
+{
+  "input_file_id": "file_abc",
+  "endpoint": "/v1/chat/completions",
+  "completion_window": "24h"
+}
+```
 
 ### Responses
 
@@ -161,7 +167,9 @@ Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugg
 ```bash
 curl -X POST "https://api.ailin.one/v1/batches" \
   -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input_file_id":"file_abc","endpoint":"/v1/chat/completions","completion_window":"24h"}'
 ```
 
 ```ts
@@ -170,7 +178,13 @@ const response = await fetch("https://api.ailin.one/v1/batches", {
   headers: {
     Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
     "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
   },
+  body: JSON.stringify({
+  "input_file_id": "file_abc",
+  "endpoint": "/v1/chat/completions",
+  "completion_window": "24h"
+}),
 });
 const data = await response.json();
 ```
@@ -185,7 +199,13 @@ response = requests.request(
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
     },
+    json={
+    "input_file_id": "file_abc",
+    "endpoint": "/v1/chat/completions",
+    "completion_window": "24h"
+},
 )
 print(response.status_code)
 print(response.text)

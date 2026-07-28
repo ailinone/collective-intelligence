@@ -41,6 +41,7 @@ import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import { getHeaderString } from '@/utils/type-guards';
 import { getAuthService } from '@/services/auth-service';
+import { looksLikeApiKey } from '@/utils/api-key-format';
 import {
   consumeRealtimeSession,
   REALTIME_SESSION_TOKEN_PREFIX,
@@ -169,23 +170,23 @@ function extractApiKey(request: FastifyRequest): string | null {
   // apiKeyAuthMiddleware).
 
   // Priority 1: x-api-key header (most explicit)
-  if (apiKeyHeader && apiKeyHeader.startsWith('ak_')) {
+  if (apiKeyHeader && looksLikeApiKey(apiKeyHeader)) {
     return apiKeyHeader;
   }
 
   // Priority 2: Authorization header
   if (authHeader) {
     const authLower = authHeader.toLowerCase();
-    
-    // Direct API key (Authorization: ak_live_...)
-    if (authHeader.startsWith('ak_')) {
+
+    // Direct API key (Authorization: ai1sk_...)
+    if (looksLikeApiKey(authHeader)) {
       return authHeader;
     }
-    
-    // Bearer token (Authorization: Bearer ak_live_...)
+
+    // Bearer token (Authorization: Bearer ai1sk_...)
     if (authLower.startsWith('bearer ')) {
       const token = authHeader.substring(7);
-      if (token.startsWith('ak_')) {
+      if (looksLikeApiKey(token)) {
         return token;
       }
     }
@@ -255,8 +256,8 @@ function extractJwtToken(request: FastifyRequest): string | null {
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    // JWT tokens don't start with 'ak_'
-    if (!token.startsWith('ak_')) {
+    // JWT tokens don't look like API keys
+    if (!looksLikeApiKey(token)) {
       return token;
     }
   }
@@ -373,7 +374,7 @@ async function resolveApiKeyContext(
   apiKey: string
 ): Promise<CachedApiKeyContext['context'] | null> {
   const quickHash = createQuickHash(apiKey);
-  const keyPrefix = apiKey.substring(0, 15); // "ak_live_abc123" or similar
+  const keyPrefix = apiKey.substring(0, 15); // "ai1sk_abc123..." or a legacy "ak_..." shape
 
   const cached = apiKeyAuthCache.get(quickHash);
   if (cached && Date.now() < cached.expiresAt) {

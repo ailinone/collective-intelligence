@@ -12,8 +12,9 @@
  *   1. voter evaluation runs CONCURRENTLY (was N sequential judge calls);
  *   2. pre-synthesis short-circuit via objective checker (answerVerifier) —
  *      a verified voter is served without paying synthesis + its evaluation;
- *   3. pre-synthesis short-circuit via voter agreement (default: unanimity);
- *   4. gates stay OFF under CONSENSUS_STRICT_PLAN_EXECUTION and on partial
+ *   3. pre-synthesis short-circuit via voter agreement (default: 0.6 majority /
+ *      self-consistency — see consensus-majority-self-consistency.test.ts);
+ *   4. gates stay OFF under CONSENSUS_STRICT_PLAN_EXECUTION and on sub-majority
  *      agreement — the plain synthesis contract is untouched.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -143,14 +144,18 @@ describe('ConsensusStrategy — pre-synthesis short-circuits', () => {
     expect(r.metadata?.aggregationMethod).toBe('agreement_individual');
   });
 
-  it('partial agreement (2/3) does NOT short-circuit — synthesis contract untouched', async () => {
+  it('sub-majority agreement (all distinct) does NOT short-circuit — synthesis contract untouched', async () => {
+    // With the default majority threshold (0.6), three distinct answers give
+    // 1/3 agreement — below threshold — so the gate must not fire. (A 2/3
+    // MAJORITY now DOES short-circuit; that is exercised in
+    // consensus-majority-self-consistency.test.ts.)
     const models = threeHealthyModels();
     setAggregatorOverride({ content: `SENTINEL_SYNTHESIS ${pad}`, confidence: 0.9 });
     const { strategy } = wireStrategy({
       responses: {
         'voter-a': { content: `${pad}FINAL: 42` },
-        'voter-b': { content: `${pad}FINAL: 42` },
-        'voter-c': { content: `${pad}FINAL: 7` },
+        'voter-b': { content: `${pad}FINAL: 7` },
+        'voter-c': { content: `${pad}FINAL: 13` },
       },
       evaluator: makeMockEvaluator({ fallback: 0.5, synthesis: 0.9 }),
       eligibleModels: models,

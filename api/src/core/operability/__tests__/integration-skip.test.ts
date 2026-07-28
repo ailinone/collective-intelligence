@@ -125,7 +125,7 @@ describe('integration: near-zero skip flow', () => {
     expect(counter).toBe(1);
   });
 
-  it('serial fallback chain across 3 known-bad providers stays under 5ms total', () => {
+  it('serial fallback chain across 3 known-bad providers stays near-zero (median across repeated runs)', () => {
     const reg = getProviderHealthRegistry();
     // Mark 3 providers as known-bad
     for (const p of ['hub-a', 'hub-b', 'hub-c']) {
@@ -136,12 +136,26 @@ describe('integration: near-zero skip flow', () => {
       });
     }
 
-    const t0 = performance.now();
-    for (const p of ['hub-a', 'hub-b', 'hub-c']) {
-      const decision = shouldSkipNearZero({ providerId: p, modelId: 'any-model' });
-      expect(decision.skip).toBe(true);
+    // A single wall-clock sample is sensitive to scheduler/GC jitter on
+    // shared CI runners (observed isolated 6-17ms spikes on an otherwise
+    // sub-ms code path, unrelated to any code change). Sample the same
+    // in-process, no-I/O loop many times and assert on the median: a real
+    // performance regression (e.g. an accidental synchronous I/O call)
+    // would push every sample up, while an isolated scheduling blip only
+    // pushes one or two outliers and gets filtered out by the median.
+    const ITERATIONS = 15;
+    const samples: number[] = [];
+    for (let iter = 0; iter < ITERATIONS; iter++) {
+      const t0 = performance.now();
+      for (const p of ['hub-a', 'hub-b', 'hub-c']) {
+        const decision = shouldSkipNearZero({ providerId: p, modelId: 'any-model' });
+        expect(decision.skip).toBe(true);
+      }
+      samples.push(performance.now() - t0);
     }
-    const elapsed = performance.now() - t0;
-    expect(elapsed).toBeLessThan(5);
+
+    samples.sort((a, b) => a - b);
+    const median = samples[Math.floor(samples.length / 2)];
+    expect(median).toBeLessThan(5);
   });
 });

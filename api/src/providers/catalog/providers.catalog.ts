@@ -1670,8 +1670,15 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://docs.github.com/en/github-models',
+    // Model catalog lives at /catalog/models on the top-level API host, NOT
+    // nested under this baseUrl's /inference path — and paths.modelList only
+    // accepts relative paths (ProviderEndpointPathsSchema's pathString regex
+    // requires a leading "/"), so it can't express a different host either.
+    // Discovery is wired as a dedicated hardcoded source (github-models-native
+    // in central-model-discovery-service.ts) instead of the generic
+    // catalog-bridge path.
     notes:
-      'GitHub PAT-auth aggregator (OpenAI / Meta / Mistral / Cohere). Free tier has aggressive per-PAT daily+monthly rate limits (50 req/day free tier for cheap models) — 429s are CALLER quota, not provider health. Model ids follow `{publisher}/{name}` convention (e.g. openai/gpt-4o, meta/Meta-Llama-3.1-70B-Instruct). Model catalog at /catalog/models (not /v1/models).',
+      'GitHub PAT-auth aggregator (OpenAI / Meta / Mistral / Cohere). Free tier has aggressive per-PAT rate limits (50 req/day for cheap models) — 429s are CALLER quota, not provider health. Model ids follow `{publisher}/{name}` (e.g. openai/gpt-4o).',
     adapterClass: 'GitHubModelsAdapter',
     lastReviewedAt: '2026-04-22',
   },

@@ -26,6 +26,7 @@ import { config, isProduction, isDevelopment } from '@/config';
 import { registerHealthProbes } from '@/routes/health/health-probes';
 import { logger } from '@/utils/logger';
 import { isString, isError, isNodeError, getErrorMessage, getErrorCode, isObject, extractFastifyErrorProperties, getHeaderString } from '@/utils/type-guards';
+import { looksLikeApiKey } from '@/utils/api-key-format';
 // Types imported for future use
 // import type { ChatRequest, ChatResponse } from '@/types';
 
@@ -422,7 +423,7 @@ export async function createServer(): Promise<FastifyInstance> {
     const rawAuthorization = getHeaderString(request.headers, 'authorization');
     const apiKeyHeader = getHeaderString(request.headers, 'x-api-key');
     const apiKey =
-      rawAuthorization && rawAuthorization.startsWith('ak_') ? rawAuthorization : apiKeyHeader;
+      rawAuthorization && looksLikeApiKey(rawAuthorization) ? rawAuthorization : apiKeyHeader;
 
     if (!apiKey) {
       request.log.warn({ jwtError }, 'Authentication failed: credentials missing');

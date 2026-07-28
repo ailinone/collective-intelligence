@@ -1669,6 +1669,59 @@ export function gradeObjectiveAnswer(
   return checker(candidate) ? 1 : 0;
 }
 
+/**
+ * Resolution of the ground-truth scorer's continuous score. The scorer's float
+ * (0..1) is recovered as `round(raw*BUCKETS)/BUCKETS` via BUCKETS pass/fail
+ * vectors, so quality_score = passedCases/totalCases keeps ~0.001 granularity —
+ * exact for the LiveBench partial-credit fractions (e.g. 0.125, 0.25, 0.375).
+ */
+const GROUND_TRUTH_SCORER_BUCKETS = 1000;
+
+/**
+ * Assemble the Python program run in the sandbox for a groundTruthScorer task:
+ * the self-contained `scorerSource` (defines `__ailin_scorer(ground_truth,
+ * llm_answer) -> float`) + a driver that embeds the model's RAW response and the
+ * ground truth as `json.loads(<double-encoded literal>)` string constants (the
+ * same injection-safe embed the HumanEval+ loader uses), calls the scorer once at
+ * import, clamps to [0,1], and defines
+ * `__ailin_score(k)` = True for the first `round(raw*BUCKETS)` buckets. The
+ * sandbox harness then counts those Trues → passedCases = round(raw*BUCKETS).
+ *
+ * ANTI-ORACLE: the ground truth is embedded HERE (sandbox-local, scoring only)
+ * and NEVER placed in the request body / ailin_constraints.
+ */
+function buildGroundTruthScorerProgram(
+  scorer: NonNullable<ExperimentTask['groundTruthScorer']>,
+  content: string,
+): string {
+  // DOUBLE JSON.stringify: the inner produces a JSON document string; the outer
+  // wraps it as a Python/JSON string literal, so `json.loads(<literal>)` decodes
+  // back to the exact original text — robust to quotes, backslashes, newlines and
+  // unicode (the same json.loads embed the HumanEval+ loader uses). Single-encoding
+  // would emit `json.loads("1, a, b")`, which json.loads reads as the number 1 +
+  // "Extra data" and crashes the grade — validated against.
+  const gtLiteral = JSON.stringify(JSON.stringify(scorer.groundTruth));
+  const llmLiteral = JSON.stringify(JSON.stringify(content));
+  return [
+    scorer.scorerSource,
+    '',
+    'import json',
+    `_ailin_gt = json.loads(${gtLiteral})`,
+    `_ailin_llm = json.loads(${llmLiteral})`,
+    'try:',
+    '    _ailin_raw = float(__ailin_scorer(_ailin_gt, _ailin_llm))',
+    'except Exception:',
+    '    _ailin_raw = 0.0',
+    'if _ailin_raw < 0.0: _ailin_raw = 0.0',
+    'if _ailin_raw > 1.0: _ailin_raw = 1.0',
+    '',
+    '',
+    'def __ailin_score(k):',
+    `    return (_ailin_raw + 1e-9) >= ((k - 0.5) / ${GROUND_TRUTH_SCORER_BUCKETS}.0)`,
+    '',
+  ].join('\n');
+}
+
 async function scoreResponse(
   content: string,
   task: ExperimentTask,
@@ -1736,6 +1789,46 @@ async function scoreResponse(
       return { score, judgeUsed: false, judgeFailed: false, scoreSource: 'code_execution', judgeModelId: null, judgeCostUsd: 0 };
     } catch (err) {
       log.warn({ task: task.index, error: String(err) }, 'codeTest execution failed — scoring 0');
+      return { score: 0, judgeUsed: false, judgeFailed: false, scoreSource: 'code_execution', judgeModelId: null, judgeCostUsd: 0 };
+    }
+  }
+
+  // 1a) Ground-truth scorer (LiveBench): ORACLE-FREE objective grade. Runs the
+  // task's self-contained Python scorer + the model's RAW response against a
+  // held-out ground truth in the SAME sandbox path as codeTest — but the score
+  // is CONTINUOUS (0..1, partial credit): the driver quantizes the scorer's
+  // float into BUCKET pass/fail vectors, so passedCases/totalCases IS the score.
+  // The ground truth is embedded in the sandbox program ONLY (see the anti-oracle
+  // invariant on ExperimentTask.groundTruthScorer) — it is never forwarded to the
+  // collective, unlike answerCheck.
+  if (task.groundTruthScorer) {
+    try {
+      const { CodeExecutionService } = await import('@/services/code-execution-service');
+      const svc = new CodeExecutionService();
+      const code = buildGroundTruthScorerProgram(task.groundTruthScorer, content);
+      // BUCKET vectors: __ailin_score(k) is True for the first round(raw*BUCKET)
+      // of k=1..BUCKET, so passedCases = round(raw*BUCKET) and the score is the
+      // scorer's float floored to 1/BUCKET resolution (validated exact for the
+      // LiveBench partial-credit fractions). Vectors live here (TS), mirroring
+      // how codeTest passes its `tests` — nothing extra is embedded in Python.
+      const tests = Array.from({ length: GROUND_TRUTH_SCORER_BUCKETS }, (_, i) => ({
+        args: [i + 1],
+        expected: true,
+      }));
+      const result = await svc.executeCode({
+        code,
+        language: 'python',
+        functionName: '__ailin_score',
+        tests,
+        timeoutMs: Number(process.env.EXPERIMENT_CODE_TIMEOUT_MS ?? 10_000),
+        userContext: {} as never,
+        requestId: `exp-${task.index}`,
+      });
+      const t = result.testResult;
+      const score = t && t.totalCases > 0 ? t.passedCases / t.totalCases : 0;
+      return { score, judgeUsed: false, judgeFailed: false, scoreSource: 'code_execution', judgeModelId: null, judgeCostUsd: 0 };
+    } catch (err) {
+      log.warn({ task: task.index, error: String(err) }, 'groundTruthScorer execution failed — scoring 0');
       return { score: 0, judgeUsed: false, judgeFailed: false, scoreSource: 'code_execution', judgeModelId: null, judgeCostUsd: 0 };
     }
   }

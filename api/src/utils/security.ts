@@ -54,9 +54,17 @@ export function validateJWTSecret(secret: string): {
     };
   }
 
-  // Check entropy (rough estimate)
+  // Check entropy (rough estimate).
+  // A flat "must contain all 16 hex symbols" bar is a coupon-collector trap:
+  // a genuinely random `openssl rand -hex 32` secret (64 draws over a
+  // 16-symbol alphabet) misses at least one symbol ~26% of the time by pure
+  // chance. Scale the minimum with length instead — safe across hex/base64/
+  // base64url secrets of any length >= 32 (see security.test.ts for the
+  // 1000-trial regression proof) — while still rejecting low-diversity
+  // patterns (e.g. a repeated or 2-4 character cycling string).
   const uniqueChars = new Set(secret).size;
-  if (uniqueChars < 16) {
+  const minUniqueChars = Math.min(14, Math.floor(secret.length / 6));
+  if (uniqueChars < minUniqueChars) {
     return {
       valid: false,
       reason: 'JWT secret has low entropy. Use cryptographically random string.',

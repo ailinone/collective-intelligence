@@ -24,6 +24,7 @@ import { ApiKeyValue } from '@/domain/value-objects/api-key-value';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { logger } from '@/utils/logger';
+import { matchApiKeyPrefix } from '@/utils/api-key-format';
 import bcrypt from 'bcrypt';
 
 @injectable()
@@ -394,12 +395,13 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
 
   /**
    * Build a domain-safe placeholder API key from persisted prefix.
-   * Some legacy rows may contain prefixes outside ak_live_/ak_test_.
+   * Rows may carry the current ai1sk_ prefix or any pre-rename legacy
+   * ak_-rooted shape (ak_live_/ak_test_/ak_local_/bare ak_<random>).
    * Listing endpoints should not fail for those historical records.
    */
   private buildSafePlaceholderValue(keyPrefix: string): string {
-    const environmentPrefix = keyPrefix.startsWith('ak_test_') ? 'ak_test_' : 'ak_live_';
-    const sanitizedSeed = keyPrefix.replace(/^ak_(live|test)_/, '').replace(/[^A-Za-z0-9_-]/g, '');
+    const matchedPrefix = matchApiKeyPrefix(keyPrefix) ?? 'ak_';
+    const sanitizedSeed = keyPrefix.slice(matchedPrefix.length).replace(/[^A-Za-z0-9_-]/g, '');
     const filler = 'placeholderplaceholderplaceholderplaceholderplaceholderplaceholder';
     let randomPart = `${sanitizedSeed}${filler}`;
 
@@ -409,9 +411,9 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
     }
     randomPart = randomPart.slice(0, 92);
 
-    let candidate = `${environmentPrefix}${randomPart}`;
+    let candidate = `${matchedPrefix}${randomPart}`;
     if (candidate.length < 40) {
-      candidate = `${environmentPrefix}${filler}`.slice(0, 40);
+      candidate = `${matchedPrefix}${filler}`.slice(0, 40);
     }
 
     try {
@@ -419,7 +421,7 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
       return candidate;
     } catch {
       // Last-resort fallback keeps repository reads resilient to malformed legacy data.
-      return 'ak_live_placeholderplaceholderplaceholderplaceholder';
+      return `ak_${filler}`.slice(0, 50);
     }
   }
 

@@ -1660,6 +1660,97 @@ export class CentralModelDiscoveryService {
       });
     }
 
+    if (process.env.GITHUB_MODELS_DISCOVERY_DISABLED !== 'true') {
+      // GitHub Models' catalog listing (https://models.github.ai/catalog/models)
+      // lives at the top-level API host, NOT nested under the chat baseUrl's
+      // /inference path — the generic catalog-bridge path concatenates
+      // paths.modelList onto baseUrl and would 404 at .../inference/catalog/models.
+      // paths.modelList is also relative-path-only per
+      // ProviderEndpointPathsSchema (pathString regex requires a leading "/"),
+      // so an absolute-URL override can't be expressed there either. Register
+      // a dedicated source instead — same shape-mismatch rationale as
+      // bytez-native/imagerouter-native/cloudflare-workers-ai-native above —
+      // using OpenAICompatibleHubModelFetcher directly since the response
+      // shape (OpenAI-style { data: [...] }) IS otherwise compatible; only
+      // the URL needs an absolute override, via buildUrl()'s absolute-URL
+      // passthrough.
+      this.discoverySources.set('github-models-native', {
+        name: 'github-models-native',
+        type: 'aggregator',
+        priority: 8,
+        providers: ['github-models'],
+        fetcher: async (): Promise<DiscoveredModel[]> => {
+          const apiKey = process.env.GITHUB_TOKEN || '';
+          if (!apiKey) return [];
+          const { OpenAICompatibleHubModelFetcher } = await import(
+            './model-fetchers/openai-compatible-hub-model-fetcher.js'
+          );
+          const fetcher = new OpenAICompatibleHubModelFetcher({
+            providerName: 'github-models',
+            apiKey,
+            baseUrl: 'https://models.github.ai/inference',
+            modelListPaths: ['https://models.github.ai/catalog/models'],
+          });
+          return await fetcher.getModels();
+        },
+      });
+    }
+
+    if (process.env.CLOUDFLARE_DISCOVERY_DISABLED !== 'true') {
+      // Cloudflare Workers AI's OAI-compat surface (accounts/{id}/ai/v1) has
+      // no /models route at all — the real catalog lives at a differently-
+      // shaped v4 API endpoint (accounts/{id}/ai/models/search). The generic
+      // catalog-bridge path also can't reach it regardless: the catalog row's
+      // baseUrl is a literal `{account_id}` template (substituted only inside
+      // CloudflareWorkersAIAdapter's constructor, never by the generic
+      // fetcher), so it would 404-loop the OAI-compat default paths against
+      // an unsubstituted URL. Register the dedicated fetcher here — same
+      // shape-mismatch rationale as bytez-native/imagerouter-native above —
+      // so catalog-bridge skips 'cloudflare-workers-ai' entirely.
+      this.discoverySources.set('cloudflare-workers-ai-native', {
+        name: 'cloudflare-workers-ai-native',
+        type: 'aggregator',
+        priority: 8,
+        providers: ['cloudflare-workers-ai'],
+        fetcher: async (): Promise<DiscoveredModel[]> => {
+          const { CloudflareWorkersAIModelFetcher } = await import(
+            './model-fetchers/cloudflare-workers-ai-model-fetcher.js'
+          );
+          const fetcher = new CloudflareWorkersAIModelFetcher(
+            process.env.CLOUDFLARE_API_TOKEN || '',
+            process.env.CLOUDFLARE_ACCOUNT_ID || '',
+          );
+          return await fetcher.getModels();
+        },
+      });
+    }
+
+    if (process.env.FEATHERLESS_DISCOVERY_DISABLED !== 'true') {
+      // featherless-ai's /v1/models is silently paginated: an unparameterized
+      // request returns an incomplete legacy-shaped body with no total/
+      // pagination field to signal truncation (~half the real catalog, no
+      // error). The generic catalog-bridge fetcher makes one unparameterized
+      // request and has no pagination support — same shape-mismatch
+      // rationale as bytez-native/cloudflare-workers-ai-native above, so
+      // catalog-bridge skips 'featherless-ai' entirely and this dedicated
+      // fetcher pages through the full ~43.5k-model catalog instead.
+      this.discoverySources.set('featherless-ai-native', {
+        name: 'featherless-ai-native',
+        type: 'aggregator',
+        priority: 8,
+        providers: ['featherless-ai'],
+        fetcher: async (): Promise<DiscoveredModel[]> => {
+          const apiKey = process.env.FEATHERLESS_AI_API_KEY || '';
+          if (!apiKey) return [];
+          const { FeatherlessModelFetcher } = await import(
+            './model-fetchers/featherless-model-fetcher.js'
+          );
+          const fetcher = new FeatherlessModelFetcher(apiKey);
+          return await fetcher.getModels();
+        },
+      });
+    }
+
     if (process.env.IMAGEROUTER_DISCOVERY_DISABLED !== 'true') {
       // ImageRouter's /v1/models is an object-map and /v2/models a bare array;
       // neither is the OpenAI `{ data: [] }` shape the hub fetcher expects (the
@@ -1867,6 +1958,7 @@ export class CentralModelDiscoveryService {
               const fetcher = new OpenAICompatibleHubModelFetcher({
                 providerName: providerId,
                 apiKey,
+                apiKeyOptional,
                 baseUrl,
                 modelListPaths,
                 authHeaderName,

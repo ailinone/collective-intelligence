@@ -67,7 +67,7 @@ describe('C3_CONFIG_BUILDERS — dispatcher invariant', () => {
   it('exposes every key documented in the API contract', async () => {
     const { C3_CONFIG_BUILDERS } = await import('../c3-experiment-configs');
 
-    // The 45 canonical keys. Adding a 46th REQUIRES updating this
+    // The 47 canonical keys. Adding a 48th REQUIRES updating this
     // assertion — that's deliberate so the API surface change goes
     // through code review.
     const expected = [
@@ -86,7 +86,11 @@ describe('C3_CONFIG_BUILDERS — dispatcher invariant', () => {
       'c3-tool-calling',
       // Public-benchmark axes (2026-07-21): standard datasets, judge-free
       'ailin-humaneval',
+      // HumanEval+ (EvalPlus augmented tests) — harder differential-test variant
+      'ailin-humaneval-plus',
       'ailin-gsm8k',
+      // LiveBench reasoning (2026-07-24): contamination-free, oracle-free axis
+      'ailin-livebench-reasoning',
       // Frontier supplement (2026-07-05, post-7bb900e2 single-arm audit)
       'c3-frontier-comparison',
       // H-A top-up: collectives × verifiable subset (post-9590ff41)

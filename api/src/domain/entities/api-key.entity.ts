@@ -85,7 +85,7 @@ export class ApiKeyEntity {
     ipWhitelist?: string[];
   }): ApiKeyEntity {
     const now = new Date();
-    const keyValue = ApiKeyValue.generate('live');
+    const keyValue = ApiKeyValue.generate();
 
     return new ApiKeyEntity({
       id: crypto.randomUUID(),

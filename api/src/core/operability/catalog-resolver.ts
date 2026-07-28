@@ -108,6 +108,7 @@ export function resolveConfiguredProviders(): ConfiguredProvider[] {
       providerId: entry.providerId,
       integrationClass: entry.integrationClass,
       apiKeyEnvVar: entry.apiKeyEnvVar,
+      apiKeyOptional: entry.apiKeyOptional,
     });
   }
   log.debug({ count: out.length }, 'Resolved configured providers from catalog');

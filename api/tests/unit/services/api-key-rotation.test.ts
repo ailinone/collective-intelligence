@@ -173,7 +173,7 @@ describe('API Key Rotation Service', () => {
       
       expect(key).toBeDefined();
       expect(typeof key).toBe('string');
-      expect(key.startsWith('ak_')).toBe(true);
+      expect(key.startsWith('ai1sk_')).toBe(true);
       expect(key.length).toBeGreaterThan(40); // Prefix + 32 bytes base64url
     });
 
@@ -425,7 +425,7 @@ describe('API Key Rotation Service', () => {
       
       expect(result.apiKey).toBeDefined();
       expect(result.plainKey).toBeDefined();
-      expect(result.plainKey.startsWith('ak_')).toBe(true);
+      expect(result.plainKey.startsWith('ai1sk_')).toBe(true);
       expect(prisma.apiKeyRotationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

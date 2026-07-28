@@ -7,8 +7,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSecret } from '@/config/secrets-loader';
+import { logger } from '@/utils/logger';
 
 const envVarsToReset = [
   'NVIDIA_API_KEY',
@@ -73,5 +74,30 @@ describe('secrets-loader alias resolution', () => {
 
   it('throws informative error for required secret when all aliases are missing', async () => {
     await expect(loadSecret('orqai-api-key', true)).rejects.toThrow('tried aliases');
+  });
+
+  it('logs a warning with the underlying manager error when a NON-required secret is not found anywhere (was previously silent)', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as unknown as void);
+    try {
+      const result = await loadSecret('orqai-api-key', false);
+      expect(result).toBeUndefined();
+      // The manager isn't wired to a real GCP backend in this test env, so
+      // resolving getSecretsManager() (or its getSecret() call) is expected
+      // to fail for every candidate — that failure is exactly what used to
+      // vanish with no log line at all. Only assert the warning fires when a
+      // real error occurred, not just "no value found" — a legitimate
+      // NOT_FOUND-only run (no manager error) is not itself a bug to flag.
+      const warnedAboutSwallowedError = warnSpy.mock.calls.some(
+        ([meta]) =>
+          typeof meta === 'object' &&
+          meta !== null &&
+          'perCandidateErrors' in meta &&
+          Array.isArray((meta as { perCandidateErrors: unknown[] }).perCandidateErrors) &&
+          (meta as { perCandidateErrors: unknown[] }).perCandidateErrors.length > 0
+      );
+      expect(warnedAboutSwallowedError).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

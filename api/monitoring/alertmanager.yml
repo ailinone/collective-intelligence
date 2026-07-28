@@ -10,16 +10,21 @@
 # Alertmanager Configuration — ci/api
 # G7 fix: Real alertmanager config (replaces placeholder URLs in prometheus-alerts.yaml).
 #
-# SETUP: Replace the environment variables below with real values:
-#   SLACK_WEBHOOK_CRITICAL — Slack incoming webhook for #incidents
-#   SLACK_WEBHOOK_MONITORING — Slack incoming webhook for #monitoring
-#   PAGERDUTY_SERVICE_KEY — PagerDuty Events API v1 service key
-#
-# These can be injected via Docker secrets or env file.
-
+# SETUP: this file is loaded verbatim by the Alertmanager binary — it has no
+# built-in ${VAR} substitution (that syntax only works in docker-compose's own
+# `environment:` block, which the ci-alertmanager service also sets, but that
+# only sets container env vars; nothing in the alertmanager process reads
+# them back into this YAML). Loading a literal "${SLACK_WEBHOOK_MONITORING}"
+# string as a URL fails config validation at startup ("unsupported scheme"
+# for URL) and crash-loops the service. Until real webhook/service-key values
+# are wired in, the URLs below are inert placeholders (valid syntax, no
+# listener) so the service boots; replace them with real values directly in
+# this file (or template it via a real substitution step) to enable delivery:
+#   slack_api_url / api_url — Slack incoming webhook URL
+#   service_key — PagerDuty Events API v1 service key
 global:
   resolve_timeout: 5m
-  slack_api_url: "${SLACK_WEBHOOK_MONITORING}"
+  slack_api_url: "http://127.0.0.1:1/unconfigured-slack-webhook"
 
 route:
   receiver: "slack-default"
@@ -55,12 +60,12 @@ receivers:
 
   - name: "pagerduty-oncall"
     pagerduty_configs:
-      - service_key: "${PAGERDUTY_SERVICE_KEY}"
+      - service_key: "unconfigured-pagerduty-service-key"
         description: "{{ .GroupLabels.alertname }} - {{ .Annotations.summary }}"
 
   - name: "slack-critical"
     slack_configs:
-      - api_url: "${SLACK_WEBHOOK_CRITICAL}"
+      - api_url: "http://127.0.0.1:1/unconfigured-slack-webhook"
         channel: "#incidents"
         title: "CRITICAL: {{ .GroupLabels.alertname }}"
         text: "{{ .Annotations.description }}\nSeverity: {{ .Labels.severity }}\nInstance: {{ .Labels.instance }}"

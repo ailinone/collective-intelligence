@@ -29,7 +29,7 @@
 import type { ExperimentConfig, ModeConfig, AblationConfig, CollectiveStrategy, CollectiveConfig, SingleModelConfig, SingleBudgetConfig, ForcedPoolCollectiveConfig, AdversarialScenarioName } from './experiment-types';
 import { BENCHMARK_COLLECTIVE_STRATEGIES } from './experiment-types';
 import { EXPERIMENT_SUITE, getVerifiableTaskIndices, getCanvasPhysicsTaskIndices, getHardVerifiableTaskIndices, getCodeVerifiedTaskIndices, getRunnableTextTaskIndices, getToolCallingTaskIndices } from './experiment-suite';
-import { loadHumanEvalTasks, loadGsm8kTasks } from './experiment-dataset-loader';
+import { loadHumanEvalTasks, loadHumanEvalPlusTasks, loadGsm8kTasks, loadLiveBenchReasoningTasks } from './experiment-dataset-loader';
 import { scoreModelFreshness } from './model-freshness';
 import { CANONICAL_MODEL_OWNERS, classifyProviderTier, extractModelOwner } from './c3-resolvers';
 import { generateAblationMatrix } from '@/core/validation/c3/ablation-config';
@@ -857,6 +857,69 @@ export async function buildAilinHumanEval(options?: {
 }
 
 /**
+ * PUBLIC-BENCHMARK axis: HumanEval+ (EvalPlus augmented tests) — Ailin¹
+ * Collective Intelligence vs flagship-solo on the HARDER, un-saturated variant.
+ *
+ * Same 164 problems as HumanEval, but each is graded by a DIFFERENTIAL-TEST
+ * harness (candidate vs the reference solution on ~200 augmented inputs — the
+ * base asserts plus a deterministic prefix of EvalPlus's ~999 extra inputs),
+ * not the weak 7-assert base. This un-saturates the ceiling that plain
+ * HumanEval cannot express: frontier best-of-10 solves 98.1% of HumanEval, but
+ * the augmented tests drop frontier pass@1 ~10-20pts by catching edge-case bugs
+ * the 7 base asserts miss. Loaded as an explicit `tasks` universe (see
+ * experiment-dataset-loader.ts). Graded by SANDBOX EXECUTION — binary pass@1,
+ * no LLM judge (so no judge pin required). Same arms/structure as
+ * buildAilinHumanEval, so the two configs are directly comparable (the delta
+ * between them IS the HumanEval→HumanEval+ hardening).
+ */
+export async function buildAilinHumanEvalPlus(options?: {
+  repetitions?: number;
+  maxBudgetUsd?: number;
+  collectiveStrategies?: CollectiveStrategy[];
+  limit?: number;
+}): Promise<ExperimentConfig> {
+  const topModels = await resolveBenchmarkSingles();
+  const tasks = loadHumanEvalPlusTasks({ limit: options?.limit });
+  const strategies: CollectiveStrategy[] =
+    options?.collectiveStrategies ?? ['consensus', 'critique-repair', 'cost-cascade'];
+
+  const modes: ModeConfig[] = [
+    ...topModels.map((m): SingleModelConfig => ({
+      mode: 'single-model',
+      modelId: m.id,
+      displayName: `${m.displayName} (${m.provider})`,
+      requiredCapabilities: ['chat'],
+      qualityTarget: 0.95,
+    })),
+    ...strategies.map((strategy): CollectiveConfig => ({
+      mode: 'collective',
+      strategy,
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    })),
+  ];
+
+  return {
+    name: `Ailin¹ HumanEval+ — ${modes.length}-arm × ${tasks.length} problems (augmented pass@1)`,
+    description:
+      `Public-benchmark axis: HumanEval+ (EvalPlus augmented tests) — the same ${tasks.length} ` +
+      `HumanEval problems graded by sandbox execution of a DIFFERENTIAL-TEST harness (candidate vs ` +
+      `reference on ~200 augmented inputs), binary pass@1, judge-free. Un-saturates the HumanEval ` +
+      `ceiling (drops frontier pass@1 ~10-20pts). ${topModels.length} flagship-solo singles vs ` +
+      `Ailin¹ ${strategies.join(', ')}. Directly comparable to the ailin-humaneval config.`,
+    taskIndices: tasks.map((t) => t.index),
+    tasks,
+    modes,
+    repetitions: options?.repetitions ?? 1,
+    maxBudgetUsd: options?.maxBudgetUsd ?? 30,
+    delayBetweenCallsMs: 2000,
+    maxConcurrency: 3,
+    warmupExecutions: 4,
+    freezeLearningDuringEval: true,
+  };
+}
+
+/**
  * PUBLIC-BENCHMARK axis: GSM8K (grade-school math accuracy) — Ailin¹
  * Collective Intelligence vs flagship-solo on the standard public dataset.
  *
@@ -907,6 +970,105 @@ export async function buildAilinGsm8k(options?: {
     modes,
     repetitions: options?.repetitions ?? 1,
     maxBudgetUsd: options?.maxBudgetUsd ?? 20,
+    delayBetweenCallsMs: 2000,
+    maxConcurrency: 3,
+    warmupExecutions: 4,
+    freezeLearningDuringEval: true,
+  };
+}
+
+/**
+ * PUBLIC-BENCHMARK axis: LiveBench REASONING — the contamination-free,
+ * ORACLE-FREE axis where the Ailin¹ Collective showed real promise. LiveBench is
+ * monthly-refreshed against contamination; reasoning is graded by LiveBench's OWN
+ * vendored scorers (Apache-2.0) run in the sandbox against a held-out ground
+ * truth that is used for SCORING ONLY and NEVER forwarded to the collective (the
+ * `answer_check` forwarding that made the old objective axis an "oracle" is not
+ * on this path — see ExperimentTask.groundTruthScorer). Tasks loaded from the
+ * vendored fixture (see experiment-dataset-loader.ts); subtasks covered:
+ * zebra_puzzle (current `<solution>` format), spatial, web_of_lies_v2. Continuous
+ * 0..1 with partial credit where the scorer defines it. Judge-free — no pin.
+ *
+ * Arms bake in the two thesis levers that today's plain-collective baseline lacks:
+ *  (a) single-model frontier arms (resolveBenchmarkSingles) — the flagship-solo baseline;
+ *  (b) plain `collective` arms (consensus, cost-cascade, critique-repair) — the un-improved baseline;
+ *  (c) FRONTIER-AS-MEMBERS: `forced-pool-collective` arms for those same 3 strategies whose pool
+ *      is 2-3 frontier flagship IDs + a couple of cheaper members — so the collective is built from
+ *      CAPABLE models (today ~0/10 frontier are ever elected as members; the biggest structural fix);
+ *  (d) ROUTER: one `adaptive` arm — AdaptiveStrategy routes by task type, so this tests the router.
+ */
+export async function buildAilinLiveBenchReasoning(options?: {
+  repetitions?: number;
+  maxBudgetUsd?: number;
+  collectiveStrategies?: CollectiveStrategy[];
+  limit?: number;
+}): Promise<ExperimentConfig> {
+  const topModels = await resolveBenchmarkSingles();
+  const tasks = loadLiveBenchReasoningTasks({ limit: options?.limit });
+  const strategies: CollectiveStrategy[] =
+    options?.collectiveStrategies ?? ['consensus', 'cost-cascade', 'critique-repair'];
+
+  // (c) FRONTIER-AS-MEMBERS pool: 2-3 frontier flagship IDs + a couple cheaper
+  // members. resolveFrontierModels/resolveBudgetModels each catch-and-return []
+  // when the catalog is unavailable, so the forced-pool arms are added ONLY when
+  // a real pool resolves (empty pools would silently degrade to plain collective
+  // and would trip the non-empty-pool builder invariant).
+  const [frontier, budget] = await Promise.all([
+    resolveFrontierModels({ maxModels: 3 }),
+    resolveBudgetModels(),
+  ]);
+  const frontierIds = frontier.slice(0, 3).map((m) => m.id);
+  const cheaperIds = budget.slice(0, 2).map((m) => m.id);
+  const frontierPool = [...new Set([...frontierIds, ...cheaperIds])];
+  const frontierPoolArms: ForcedPoolCollectiveConfig[] =
+    frontierPool.length >= 2
+      ? strategies.map((strategy): ForcedPoolCollectiveConfig => ({
+          mode: 'forced-pool-collective',
+          strategy,
+          forcedModelPool: frontierPool,
+          displayName: `${strategy} (frontier pool)`,
+          qualityTarget: 1.0,
+          requiredCapabilities: ['chat'],
+        }))
+      : [];
+
+  const modes: ModeConfig[] = [
+    // (a) single-model frontier arms — flagship-solo baseline.
+    ...topModels.map((m): SingleModelConfig => ({
+      mode: 'single-model',
+      modelId: m.id,
+      displayName: `${m.displayName} (${m.provider})`,
+      requiredCapabilities: ['chat'],
+      qualityTarget: 0.95,
+    })),
+    // (b) plain collective arms — the un-improved baseline (auto-selected members).
+    ...strategies.map((strategy): CollectiveConfig => ({
+      mode: 'collective',
+      strategy,
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    })),
+    // (c) frontier-as-members — the same strategies over a capable forced pool.
+    ...frontierPoolArms,
+    // (d) router.
+    { mode: 'adaptive' as const, requiredCapabilities: ['chat'] },
+  ];
+
+  return {
+    name: `Ailin¹ LiveBench Reasoning — ${modes.length}-arm × ${tasks.length} problems (oracle-free)`,
+    description:
+      `Public-benchmark axis: LiveBench REASONING (${tasks.length} problems, contamination-free) ` +
+      `graded by LiveBench's own vendored scorers against a held-out ground truth — oracle-free ` +
+      `(ground truth NEVER forwarded to the collective), judge-free, continuous 0..1 with partial ` +
+      `credit. ${topModels.length} flagship-solo singles vs plain ${strategies.join(', ')} ` +
+      `(auto-pool) vs the SAME strategies over a frontier-member pool ` +
+      `[${frontierPool.join(', ') || 'none resolved'}] + adaptive router. Tests the collective's ` +
+      `real-promise axis with the frontier-as-members and router levers armed.`,
+    taskIndices: tasks.map((t) => t.index),
+    tasks,
+    modes,
+    repetitions: options?.repetitions ?? 1,
+    maxBudgetUsd: options?.maxBudgetUsd ?? 30,
     delayBetweenCallsMs: 2000,
     maxConcurrency: 3,
     warmupExecutions: 4,
@@ -1920,8 +2082,20 @@ export const C3_CONFIG_BUILDERS: Record<
   // experiment-dataset-loader.ts.
   'ailin-humaneval': (opts) =>
     buildAilinHumanEval(opts as Parameters<typeof buildAilinHumanEval>[0]),
+  // HumanEval+ (EvalPlus augmented tests): the SAME 164 problems graded by a
+  // differential-test harness on ~200 augmented inputs (not the weak 7-assert
+  // base) — un-saturates the ceiling plain HumanEval can't express. Judge-free
+  // (sandbox pass@1). Directly comparable to 'ailin-humaneval'.
+  'ailin-humaneval-plus': (opts) =>
+    buildAilinHumanEvalPlus(opts as Parameters<typeof buildAilinHumanEvalPlus>[0]),
   'ailin-gsm8k': (opts) =>
     buildAilinGsm8k(opts as Parameters<typeof buildAilinGsm8k>[0]),
+  // LiveBench reasoning (2026-07-24): contamination-free, ORACLE-FREE reasoning
+  // axis — LiveBench's own vendored scorers grade a held-out ground truth that is
+  // NEVER forwarded to the collective. Frontier-as-members + adaptive-router
+  // levers armed. Judge-free. See buildAilinLiveBenchReasoning.
+  'ailin-livebench-reasoning': (opts) =>
+    buildAilinLiveBenchReasoning(opts as Parameters<typeof buildAilinLiveBenchReasoning>[0]),
   // Canvas-physics code benchmark (2026-07-11): collective strategies vs top-tier
   // singles on self-contained HTML5 canvas physics scenes (tasks 136-145), with a
   // structural full-text verifier arming best-of-N. PINNED judge required.

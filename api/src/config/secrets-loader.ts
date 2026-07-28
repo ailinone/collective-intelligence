@@ -176,6 +176,13 @@ export async function loadSecret(
 ): Promise<string | undefined> {
   const candidates = getSecretCandidates(key);
   let managerLookupError: Error | undefined;
+  // Per-candidate errors, kept in addition to managerLookupError (which only
+  // ever holds the LAST one) — when a key has multiple alias candidates
+  // (e.g. featherless-key, featherless-api-key), the earlier ones' failure
+  // reasons were previously discarded even from the one place that DID log
+  // (the `required` throw below), let alone the non-required path, which
+  // never logged anything at all — see the 2026-07-26 fix note.
+  const perCandidateErrors: Array<{ candidate: string; error: string }> = [];
 
   try {
     const secretsManager = getSecretsManager();
@@ -187,10 +194,12 @@ export async function loadSecret(
         return value;
       } catch (error) {
         managerLookupError = error as Error;
+        perCandidateErrors.push({ candidate, error: managerLookupError.message });
       }
     }
   } catch (error) {
     managerLookupError = error as Error;
+    perCandidateErrors.push({ candidate: '(getSecretsManager)', error: managerLookupError.message });
   }
 
   // Fallback to environment variable
@@ -210,6 +219,21 @@ export async function loadSecret(
     throw new Error(
       `Required secret not found: ${key} (tried aliases: ${candidates.join(', ')})` +
         (managerLookupError ? `; manager error: ${managerLookupError.message}` : '')
+    );
+  }
+
+  // 2026-07-26: previously this silently returned undefined here with NO log
+  // line at all when the manager genuinely errored (as opposed to cleanly
+  // reporting "not found") — every actual GCP/provider error (permission
+  // denied, quota, transient network fault, etc.) was indistinguishable from
+  // "secret simply doesn't exist yet" in the logs. Found while investigating
+  // a provider whose secret was confirmed to exist in GCP (correct project,
+  // enabled version, matching IAM to a working secret) yet never populated
+  // process.env, with zero corroborating log evidence anywhere.
+  if (perCandidateErrors.length > 0) {
+    logger.warn(
+      { requestedKey: key, candidates, perCandidateErrors },
+      'Secret not found via Secrets Manager or environment, and the manager reported an error for at least one candidate (not thrown because required=false) — see perCandidateErrors for the real cause'
     );
   }
 
