@@ -16,7 +16,12 @@ upfront so nobody's expectations are silently broken.
 | Need | Channel |
 |---|---|
 | Question, idea, independent benchmark result | [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions) |
-| Reproducible bug | [Issue](https://github.com/ailinone/collective-intelligence/issues) using the bug template |
+| Reproducible open-source engine bug | [Bug report](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
+| Concrete feature proposal | [Feature proposal](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
+| Documentation problem | [Documentation issue](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
+| Provider or model integration issue | [Provider or model integration](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
+| Collective strategy proposal | [Collective strategy proposal](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
+| Reproducible performance or reliability regression | [Regression report](https://github.com/ailinone/collective-intelligence/issues/new/choose) |
 | Security vulnerability | **Never a public issue** — see [SECURITY.md](SECURITY.md) |
 | Commercial licensing / enterprise | licensing@ailin.one |
 | Hosted-service support | The hosted API at api.ailin.one has its own support channel; this repo covers the open-source engine only |
