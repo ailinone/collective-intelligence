@@ -44,8 +44,11 @@ requirements and the practical workflow.
 
 ## Practical workflow
 
-1. **Discuss first** for anything non-trivial: open an issue describing the
-   problem and your proposed approach before writing code.
+1. **Discuss first** for anything non-trivial: use the
+   [issue chooser](https://github.com/ailinone/collective-intelligence/issues/new/choose)
+   for an actionable bug or concrete proposal. Use
+   [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions)
+   for questions, exploratory ideas, and independent benchmark results.
 2. **Branch** from `main`; use a descriptive branch name (`fix/...`,
    `feat/...`).
 3. **Develop** — see `docs/getting-started/installation.md` for local setup.

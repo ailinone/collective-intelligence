@@ -1,0 +1,115 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "🔌 Provider or model integration"
+description: "Report a provider, model discovery, capability, or metadata issue."
+title: "[Provider]: "
+labels: [provider-adapter]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for the engine's provider and model catalog integrations. Search existing issues first.
+
+        Never paste API keys, tokens, authorization headers, cookies, private endpoints, or unsanitized API responses. Report security vulnerabilities through [private vulnerability reporting](https://github.com/ailinone/collective-intelligence/security/advisories/new), not a public issue. English is canonical; use English when possible.
+  - type: dropdown
+    id: requesttype
+    attributes:
+      label: Request type
+      options:
+        - Existing provider integration bug
+        - Missing provider
+        - Missing model
+        - Incorrect model metadata
+        - Capability mismatch
+        - Pricing discrepancy
+        - Context-window discrepancy
+        - Availability or health issue
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      description: Use the provider's public name or the adapter identifier used by the engine.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model identifier
+      description: Provide the exact public model identifier when the request concerns a specific model.
+  - type: input
+    id: version
+    attributes:
+      label: Affected version or commit
+      description: Required for integration defects; otherwise provide it when relevant.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior or metadata
+      description: State the expected discovery, routing, capability, price, context window, health, or availability data.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior or metadata
+      description: State what the engine currently returns or does.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Authoritative public evidence
+      description: Link provider documentation or release notes, or include a sanitized public API response. Never include credentials.
+      placeholder: https://provider.example/docs/models/...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Optionally provide sanitized commands or code using credential placeholders.
+      render: shell
+  - type: textarea
+    id: metadata
+    attributes:
+      label: Relevant sanitized ailin_metadata
+      description: Include only relevant fields after removing secrets, identifiers, and private URLs.
+      render: json
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Primary impact
+      options:
+        - Models are not discovered
+        - Incorrect model selection
+        - Request failure
+        - Incorrect cost
+        - Increased latency
+        - Reduced output quality
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: impactdetails
+    attributes:
+      label: Impact details
+      description: Optionally quantify the effect or describe a safe workaround.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched for the provider or model in existing issues.
+          required: true
+        - label: I verified that the information is current.
+          required: true
+        - label: I included no secrets or private provider data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I provided a public source when one is available.
+          required: true

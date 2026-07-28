@@ -1,0 +1,126 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "🧠 Collective strategy proposal"
+description: "Propose and evaluate a collective intelligence strategy."
+title: "[Strategy]: "
+labels: [enhancement]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a testable new coordination strategy or a substantial change to an existing one. Take early ideas and general research discussion to [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
+
+        A proposal is a hypothesis, not a claim of superiority. Review the strategy catalog and search existing issues for duplicates first. Do not include secrets, private datasets, or personal data. Report vulnerabilities through [private vulnerability reporting](https://github.com/ailinone/collective-intelligence/security/advisories/new), not this form. English is canonical; use English when possible.
+  - type: input
+    id: strategy
+    attributes:
+      label: Strategy name
+      description: A provisional name is acceptable.
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Problem or hypothesis
+      description: Describe the problem and a falsifiable hypothesis when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: coordination
+    attributes:
+      label: Coordination mechanism
+      description: Explain selection, rounds, debate or critique, arbitration, voting or verification, convergence, and stopping criteria as applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: advantage
+    attributes:
+      label: Expected advantage
+      description: State the expected effect on quality, reliability, cost, latency, diversity, robustness, or auditability without asserting it is already proven.
+    validations:
+      required: true
+  - type: textarea
+    id: workload
+    attributes:
+      label: Target workload
+      description: Identify suitable task types, constraints, and cases where the strategy should not be used.
+    validations:
+      required: true
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: Evaluation plan
+      description: Define baselines, metrics, dataset or workload, sample size, objective verifier where applicable, and comparison with existing strategies.
+    validations:
+      required: true
+  - type: textarea
+    id: costlatency
+    attributes:
+      label: Cost and latency implications
+      description: Provide estimates or explicitly state what remains unknown and how it would be measured.
+    validations:
+      required: true
+  - type: textarea
+    id: failuremodes
+    attributes:
+      label: Failure modes
+      description: Consider correlated or convergence failures, bias amplification, runaway cost or latency, provider dependency, and verifier gaming.
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Audit and provenance implications
+      description: Identify decisions, dissent, scores, costs, and transitions that ailin_metadata should record.
+    validations:
+      required: true
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Intended catalog status
+      options:
+        - Auto-selectable
+        - Explicit-only
+        - Experimental
+        - Roadmap concept
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: integration
+    attributes:
+      label: Compatibility and integration
+      description: Explain interaction with the current catalog, auto-selection, APIs, configuration, and existing strategies.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Prior art or references
+      description: Optionally link papers, implementations, or experiments and identify applicable licenses.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - I can prototype and benchmark this
+        - I can implement this
+        - I can help with design or evaluation
+        - I cannot contribute implementation
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I reviewed the existing strategy catalog and issues.
+          required: true
+        - label: This proposal is more than an alias for an existing strategy.
+          required: true
+        - label: I described a hypothesis and an evaluation method.
+          required: true
+        - label: I identified relevant trade-offs and failure modes.
+          required: true

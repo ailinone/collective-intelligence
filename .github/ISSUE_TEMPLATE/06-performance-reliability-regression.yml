@@ -1,0 +1,132 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: "📉 Performance or reliability regression"
+description: "Report a measurable, reproducible regression in the engine."
+title: "[Regression]: "
+labels: [bug]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a measurable regression in this repository under comparable conditions. Search existing issues for duplicates first. Share independent model benchmarks and general result discussions in [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
+
+        Do not publish vulnerabilities. Use [private vulnerability reporting](https://github.com/ailinone/collective-intelligence/security/advisories/new). Remove secrets, identifiers, private prompts, authorization headers, and personal data from commands, logs, metadata, and attachments. English is canonical; use English when possible.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Regression category
+      options:
+        - Latency
+        - Throughput
+        - Memory
+        - CPU
+        - Storage
+        - Error rate
+        - Availability
+        - Cost
+        - Objective quality
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - OpenAI-compatible API
+        - Collective orchestration and strategy selection
+        - Provider or model discovery and routing
+        - Persistence, cache, or queue
+        - Billing or cost governance
+        - Observability or ailin_metadata
+        - Docker or local deployment
+        - Model stack or own-model adapter
+        - SDK or client integration
+        - Other / Not sure
+    validations:
+      required: true
+  - type: input
+    id: currentversion
+    attributes:
+      label: Current version or commit
+      placeholder: Release, image digest, or full commit SHA
+    validations:
+      required: true
+  - type: input
+    id: lastgood
+    attributes:
+      label: Last known good version
+      description: Provide the last comparable version or commit, or write "Unknown".
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline
+      description: Provide the previous value, unit, and test scenario.
+      placeholder: "p95 latency: 420 ms; 100 requests; scenario..."
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current result
+      description: Provide the current value using the same unit and scenario.
+    validations:
+      required: true
+  - type: textarea
+    id: methodology
+    attributes:
+      label: Methodology
+      description: Describe environment, workload, warm-up, sample size, repetitions, percentiles, and objective verifier where applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide a sanitized script or exact commands. Replace every credential and private value with a placeholder.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: executioncontext
+    attributes:
+      label: Strategy, providers, and models involved
+      description: List the strategy and public identifiers, or state why they do not apply.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or metadata
+      description: Include only relevant excerpts after reviewing them for secrets and sensitive data.
+      render: shell
+  - type: textarea
+    id: impact
+    attributes:
+      label: Operational impact
+      description: Explain the user-visible, reliability, capacity, cost, or quality effect.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: Optionally describe a safe mitigation.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I reproduced the regression more than once.
+          required: true
+        - label: I included units, sample size, and comparable conditions.
+          required: true
+        - label: I removed secrets and reviewed logs and attachments.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: This is a project regression, not a promotional benchmark or general comparison.
+          required: true
