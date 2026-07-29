@@ -86,26 +86,84 @@ function parseArgs(): Args {
     const k = argv[i];
     const v = argv[i + 1];
     switch (k) {
-      case '--providers': a.providers = v.split(',').map((x) => x.trim()).filter(Boolean); i++; break;
-      case '--logical-models': a.logicalModels = v.split(',').map((x) => x.trim()).filter(Boolean); i++; break;
-      case '--write-json': a.writeJsonPath = v; i++; break;
-      case '--write-md': a.writeMdPath = v; i++; break;
-      case '--write-alias-snapshot': a.writeAliasSnapshotPath = v; i++; break;
-      case '--use-internal-catalog': a.useInternalCatalog = true; break;
-      case '--use-cached-discovery': a.useCachedDiscovery = true; break;
-      case '--use-provider-model-list': a.useProviderModelList = true; break;
-      case '--use-existing-aliases': a.useExistingAliases = true; break;
-      case '--no-chat-completions': a.noChatCompletions = true; break;
-      case '--no-provider-generation': a.noProviderGeneration = true; break;
-      case '--dry-run': a.dryRun = true; break;
-      case '--sanitize': a.sanitize = true; break;
-      case '--prefer-live-model-list': a.preferLiveModelList = v === 'true'; i++; break;
-      case '--max-cache-age-ms': a.maxCacheAgeMs = Number(v); i++; break;
-      case '--max-external-discovery-calls': a.maxExternalDiscoveryCalls = Number(v); i++; break;
-      case '--timeout-ms': a.timeoutMs = Number(v); i++; break;
-      case '--include-raw-model-ids': a.includeRawModelIds = v === 'true'; i++; break;
-      case '--include-sanitized-model-samples': a.includeSanitizedModelSamples = v === 'true'; i++; break;
-      case '--fail-on-secret-leak': a.failOnSecretLeak = v === 'true'; i++; break;
+      case '--providers':
+        a.providers = v
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean);
+        i++;
+        break;
+      case '--logical-models':
+        a.logicalModels = v
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean);
+        i++;
+        break;
+      case '--write-json':
+        a.writeJsonPath = v;
+        i++;
+        break;
+      case '--write-md':
+        a.writeMdPath = v;
+        i++;
+        break;
+      case '--write-alias-snapshot':
+        a.writeAliasSnapshotPath = v;
+        i++;
+        break;
+      case '--use-internal-catalog':
+        a.useInternalCatalog = true;
+        break;
+      case '--use-cached-discovery':
+        a.useCachedDiscovery = true;
+        break;
+      case '--use-provider-model-list':
+        a.useProviderModelList = true;
+        break;
+      case '--use-existing-aliases':
+        a.useExistingAliases = true;
+        break;
+      case '--no-chat-completions':
+        a.noChatCompletions = true;
+        break;
+      case '--no-provider-generation':
+        a.noProviderGeneration = true;
+        break;
+      case '--dry-run':
+        a.dryRun = true;
+        break;
+      case '--sanitize':
+        a.sanitize = true;
+        break;
+      case '--prefer-live-model-list':
+        a.preferLiveModelList = v === 'true';
+        i++;
+        break;
+      case '--max-cache-age-ms':
+        a.maxCacheAgeMs = Number(v);
+        i++;
+        break;
+      case '--max-external-discovery-calls':
+        a.maxExternalDiscoveryCalls = Number(v);
+        i++;
+        break;
+      case '--timeout-ms':
+        a.timeoutMs = Number(v);
+        i++;
+        break;
+      case '--include-raw-model-ids':
+        a.includeRawModelIds = v === 'true';
+        i++;
+        break;
+      case '--include-sanitized-model-samples':
+        a.includeSanitizedModelSamples = v === 'true';
+        i++;
+        break;
+      case '--fail-on-secret-leak':
+        a.failOnSecretLeak = v === 'true';
+        i++;
+        break;
       case '--help':
         process.stdout.write('Usage: see file header\n');
         process.exit(0);
@@ -116,19 +174,30 @@ function parseArgs(): Args {
 
 async function loadCatalogRowsForLogical(
   logicalModelId: string,
-  providerIds: readonly string[],
+  providerIds: readonly string[]
 ): Promise<readonly DiscoveredModelRow[]> {
   const tokens = parseLogicalModelTokens(logicalModelId);
   if (!tokens) return [];
   // Build a broad family+version ILIKE filter. The learner's safety
   // guards will then strictly score each row.
   const versionPatterns = tokens.versionMinor
-    ? [`${tokens.versionMajor}.${tokens.versionMinor}`, `${tokens.versionMajor}-${tokens.versionMinor}`]
+    ? [
+        `${tokens.versionMajor}.${tokens.versionMinor}`,
+        `${tokens.versionMajor}-${tokens.versionMinor}`,
+      ]
     : [tokens.versionMajor];
   const orFilter = providerIds.flatMap((p) =>
     versionPatterns.flatMap((v) => [
-      { providerId: p, name: { contains: `${tokens.family}`, mode: 'insensitive' as const }, AND: [{ name: { contains: v, mode: 'insensitive' as const } }] },
-      { providerId: p, id: { contains: `${tokens.family}`, mode: 'insensitive' as const }, AND: [{ id: { contains: v, mode: 'insensitive' as const } }] },
+      {
+        providerId: p,
+        name: { contains: `${tokens.family}`, mode: 'insensitive' as const },
+        AND: [{ name: { contains: v, mode: 'insensitive' as const } }],
+      },
+      {
+        providerId: p,
+        id: { contains: `${tokens.family}`, mode: 'insensitive' as const },
+        AND: [{ id: { contains: v, mode: 'insensitive' as const } }],
+      },
     ])
   );
   const rows = await prisma.model.findMany({
@@ -144,11 +213,15 @@ async function main() {
   const log = (msg: string) => process.stderr.write(`[j1f-learner] ${msg}\n`);
 
   if (!args.useInternalCatalog && !args.useCachedDiscovery && !args.useProviderModelList) {
-    process.stderr.write('ERROR: at least one of --use-internal-catalog / --use-cached-discovery / --use-provider-model-list required\n');
+    process.stderr.write(
+      'ERROR: at least one of --use-internal-catalog / --use-cached-discovery / --use-provider-model-list required\n'
+    );
     process.exit(1);
   }
   if (args.useProviderModelList) {
-    process.stderr.write('NOTE: --use-provider-model-list deferred — J1F implementation is catalog-first; provider /v1/models calls are future work.\n');
+    process.stderr.write(
+      'NOTE: --use-provider-model-list deferred — J1F implementation is catalog-first; provider /v1/models calls are future work.\n'
+    );
   }
   log(`providers=${args.providers.length} logicalModels=${args.logicalModels.length}`);
 
@@ -166,19 +239,23 @@ async function main() {
     }
   }
 
-  const succeeded = results.filter((r) => r.selected).map((r) => ({
-    providerId: r.providerId,
-    logicalModelId: r.logicalModelId,
-    apiModelId: r.selected!.apiModelId,
-    confidence: r.selected!.confidence,
-    matchKind: r.selected!.matchKind,
-  }));
-  const failed = results.filter((r) => !r.selected).map((r) => ({
-    providerId: r.providerId,
-    logicalModelId: r.logicalModelId,
-    unresolvedReason: r.unresolvedReason,
-    candidatesCount: r.candidates.length,
-  }));
+  const succeeded = results
+    .filter((r) => r.selected)
+    .map((r) => ({
+      providerId: r.providerId,
+      logicalModelId: r.logicalModelId,
+      apiModelId: r.selected!.apiModelId,
+      confidence: r.selected!.confidence,
+      matchKind: r.selected!.matchKind,
+    }));
+  const failed = results
+    .filter((r) => !r.selected)
+    .map((r) => ({
+      providerId: r.providerId,
+      logicalModelId: r.logicalModelId,
+      unresolvedReason: r.unresolvedReason,
+      candidatesCount: r.candidates.length,
+    }));
 
   const summary = {
     stage: '01C.1B-J1F',
@@ -202,7 +279,9 @@ async function main() {
             apiModelId: r.selected.apiModelId,
             confidence: r.selected.confidence,
             matchKind: r.selected.matchKind,
-            evidenceDisplayName: args.includeSanitizedModelSamples ? r.selected.evidence.displayName : undefined,
+            evidenceDisplayName: args.includeSanitizedModelSamples
+              ? r.selected.evidence.displayName
+              : undefined,
           }
         : null,
       unresolvedReason: r.unresolvedReason ?? null,
@@ -225,7 +304,8 @@ async function main() {
   };
 
   if (args.writeJsonPath) fs.writeFileSync(args.writeJsonPath, JSON.stringify(summary, null, 2));
-  if (args.writeAliasSnapshotPath) fs.writeFileSync(args.writeAliasSnapshotPath, JSON.stringify(aliasSnapshot, null, 2));
+  if (args.writeAliasSnapshotPath)
+    fs.writeFileSync(args.writeAliasSnapshotPath, JSON.stringify(aliasSnapshot, null, 2));
   if (args.writeMdPath) {
     const md = [
       '# 01C.1B-J1F Provider Discovery Alias Learning',
@@ -238,31 +318,44 @@ async function main() {
       '## Succeeded',
       '| Provider | Logical | apiModelId | Confidence | Match kind |',
       '|----------|---------|------------|------------|------------|',
-      ...succeeded.map((s) =>
-        `| ${s.providerId} | \`${s.logicalModelId}\` | \`${s.apiModelId}\` | ${s.confidence} | ${s.matchKind} |`),
+      ...succeeded.map(
+        (s) =>
+          `| ${s.providerId} | \`${s.logicalModelId}\` | \`${s.apiModelId}\` | ${s.confidence} | ${s.matchKind} |`
+      ),
       '',
       '## Failed',
       '| Provider | Logical | Unresolved reason | Candidates |',
       '|----------|---------|-------------------|-----------:|',
-      ...failed.map((f) => `| ${f.providerId} | \`${f.logicalModelId}\` | ${f.unresolvedReason} | ${f.candidatesCount} |`),
+      ...failed.map(
+        (f) =>
+          `| ${f.providerId} | \`${f.logicalModelId}\` | ${f.unresolvedReason} | ${f.candidatesCount} |`
+      ),
     ];
     fs.writeFileSync(args.writeMdPath, md.join('\n'));
   }
 
-  process.stdout.write(JSON.stringify({
-    stage: summary.stage,
-    succeededCount: summary.succeededCount,
-    failedCount: summary.failedCount,
-    chatCompletionsExecuted: summary.chatCompletionsExecuted,
-    externalModelListCalls: summary.externalModelListCalls,
-    generationCostUsd: summary.generationCostUsd,
-  }, null, 2));
+  process.stdout.write(
+    JSON.stringify(
+      {
+        stage: summary.stage,
+        succeededCount: summary.succeededCount,
+        failedCount: summary.failedCount,
+        chatCompletionsExecuted: summary.chatCompletionsExecuted,
+        externalModelListCalls: summary.externalModelListCalls,
+        generationCostUsd: summary.generationCostUsd,
+      },
+      null,
+      2
+    )
+  );
   process.stdout.write('\n');
 
   await prisma.$disconnect();
 }
 
 main().catch((err) => {
-  process.stderr.write(`[j1f-learner] FATAL: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.stderr.write(
+    `[j1f-learner] FATAL: ${err instanceof Error ? err.message : String(err)}\n`
+  );
   process.exit(1);
 });

@@ -48,7 +48,9 @@ export interface ProviderProbe {
   readonly billableRisk: ProbeBillableRisk;
   /** Probe function. MUST be non-billable. The registry refuses to
    *  invoke probes whose `billableRisk !== 'none'`. */
-  readonly probe: (input: ProbeInput) => Promise<Omit<ProviderProbeResult, 'providerId' | 'endpointType' | 'billableRisk'>>;
+  readonly probe: (
+    input: ProbeInput
+  ) => Promise<Omit<ProviderProbeResult, 'providerId' | 'endpointType' | 'billableRisk'>>;
 }
 
 export class ProviderProbeRegistry {
@@ -57,7 +59,7 @@ export class ProviderProbeRegistry {
   register(probe: ProviderProbe): void {
     if (probe.billableRisk !== 'none') {
       throw new Error(
-        `Refusing to register probe for ${probe.providerId}: billableRisk must be 'none', got '${probe.billableRisk}'`,
+        `Refusing to register probe for ${probe.providerId}: billableRisk must be 'none', got '${probe.billableRisk}'`
       );
     }
     this.probes.set(probe.providerId.toLowerCase(), probe);

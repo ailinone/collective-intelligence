@@ -197,7 +197,7 @@ export interface C3ParityComparisonResult {
  */
 export function compareC3ParitySnapshots(
   approved: C3ParityCanonicalSnapshot,
-  runtime: C3ParityCanonicalSnapshot,
+  runtime: C3ParityCanonicalSnapshot
 ): C3ParityComparisonResult {
   const diffs: string[] = [];
   const drift: C3ParityDriftReason[] = [];
@@ -219,19 +219,28 @@ export function compareC3ParitySnapshots(
   for (let i = 0; i < n; i++) {
     const a = approved.candidates[i]!;
     const r = runtime.candidates[i]!;
-    if (a.providerId !== r.providerId) add('provider_changed', `[${i}] ${a.providerId} -> ${r.providerId}`);
+    if (a.providerId !== r.providerId)
+      add('provider_changed', `[${i}] ${a.providerId} -> ${r.providerId}`);
     if (a.modelId !== r.modelId) add('model_changed', `[${i}] ${a.modelId} -> ${r.modelId}`);
-    if (a.candidateClass !== r.candidateClass) add('candidate_class_changed', `[${i}] ${a.candidateClass} -> ${r.candidateClass}`);
-    if (a.modelProbeStatus !== r.modelProbeStatus) add('model_probe_status_changed', `[${i}] ${a.modelProbeStatus} -> ${r.modelProbeStatus}`);
-    if (r.selectedExecutableModel === true && a.selectedExecutableModel !== true) add('selected_executable_model_true', `[${i}] ${r.candidateId}`);
-    if (r.providerRouteCreated === true && a.providerRouteCreated !== true) add('provider_route_created_true', `[${i}] ${r.candidateId}`);
+    if (a.candidateClass !== r.candidateClass)
+      add('candidate_class_changed', `[${i}] ${a.candidateClass} -> ${r.candidateClass}`);
+    if (a.modelProbeStatus !== r.modelProbeStatus)
+      add('model_probe_status_changed', `[${i}] ${a.modelProbeStatus} -> ${r.modelProbeStatus}`);
+    if (r.selectedExecutableModel === true && a.selectedExecutableModel !== true)
+      add('selected_executable_model_true', `[${i}] ${r.candidateId}`);
+    if (r.providerRouteCreated === true && a.providerRouteCreated !== true)
+      add('provider_route_created_true', `[${i}] ${r.candidateId}`);
   }
 
-  if (approved.fanout !== runtime.fanout) add('fanout_changed', `${approved.fanout} -> ${runtime.fanout}`);
-  if (approved.fanoutCap !== runtime.fanoutCap) add('fanout_cap_changed', `${approved.fanoutCap} -> ${runtime.fanoutCap}`);
+  if (approved.fanout !== runtime.fanout)
+    add('fanout_changed', `${approved.fanout} -> ${runtime.fanout}`);
+  if (approved.fanoutCap !== runtime.fanoutCap)
+    add('fanout_cap_changed', `${approved.fanoutCap} -> ${runtime.fanoutCap}`);
 
-  if (JSON.stringify(approved.roles) !== JSON.stringify(runtime.roles)) add('role_changed', 'roles differ');
-  if (approved.budgetPolicyKey !== runtime.budgetPolicyKey) add('budget_policy_changed', `${approved.budgetPolicyKey} -> ${runtime.budgetPolicyKey}`);
+  if (JSON.stringify(approved.roles) !== JSON.stringify(runtime.roles))
+    add('role_changed', 'roles differ');
+  if (approved.budgetPolicyKey !== runtime.budgetPolicyKey)
+    add('budget_policy_changed', `${approved.budgetPolicyKey} -> ${runtime.budgetPolicyKey}`);
 
   // Fallback insertion: runtime flags a hidden fallback the approved plan did not.
   if (runtime.hiddenFallbackDetected === true && approved.hiddenFallbackDetected !== true) {
@@ -242,14 +251,21 @@ export function compareC3ParitySnapshots(
   for (const f of approved.provenanceRequiredFields) {
     if (!runtime.provenanceRequiredFields.includes(f)) add('provenance_required_field_removed', f);
   }
-  if (runtime.provenanceComplete !== true) add('provenance_complete_false', 'runtime provenanceComplete!=true');
+  if (runtime.provenanceComplete !== true)
+    add('provenance_complete_false', 'runtime provenanceComplete!=true');
 
-  if (approved.planFingerprint !== runtime.planFingerprint) add('plan_fingerprint_mismatch', `${approved.planFingerprint} -> ${runtime.planFingerprint}`);
-  if (approved.promptFingerprint !== runtime.promptFingerprint) add('prompt_fingerprint_mismatch', `${approved.promptFingerprint} -> ${runtime.promptFingerprint}`);
+  if (approved.planFingerprint !== runtime.planFingerprint)
+    add('plan_fingerprint_mismatch', `${approved.planFingerprint} -> ${runtime.planFingerprint}`);
+  if (approved.promptFingerprint !== runtime.promptFingerprint)
+    add(
+      'prompt_fingerprint_mismatch',
+      `${approved.promptFingerprint} -> ${runtime.promptFingerprint}`
+    );
 
   const approvedCanon = c3ParityCanonicalFingerprint(approved);
   const runtimeCanon = c3ParityCanonicalFingerprint(runtime);
-  if (approvedCanon !== runtimeCanon) add('approved_plan_fingerprint_mismatch', `${approvedCanon} -> ${runtimeCanon}`);
+  if (approvedCanon !== runtimeCanon)
+    add('approved_plan_fingerprint_mismatch', `${approvedCanon} -> ${runtimeCanon}`);
 
   return { pass: drift.length === 0, diffs, driftReasons: [...new Set(drift)] };
 }

@@ -27,7 +27,6 @@ import { splitTrainHoldout } from '../historical-replay-split';
 import type { HistoricalReplayExecution } from '../historical-replay-types';
 import type { HistoricalExecution } from '../../contribution/historical-execution-types';
 
-
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
 const NORMALIZED_PATH = resolve(ARTIFACTS_DIR, 'c3-history-full-export.normalized.jsonl');
 
@@ -70,7 +69,7 @@ function main(): void {
   for (const est of ALL_ESTIMATORS) {
     const ev = evaluateEstimator(est, data);
     console.log(
-      `[calib-only] ${est.name.padEnd(28)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)}`,
+      `[calib-only] ${est.name.padEnd(28)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)}`
     );
   }
 }

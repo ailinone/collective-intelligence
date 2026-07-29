@@ -30,14 +30,8 @@ import {
   validationStatusForMode,
 } from './evaluation/strategy-output-evaluator';
 import { UnavailableStrategyOutputEvaluator } from './evaluation/unavailable-evaluator';
-import {
-  detectOutlier,
-  type OutlierDetectionResult,
-} from './consensus/consensus-outlier-detector';
-import {
-  selectFinal,
-  type FinalSelectionResult,
-} from './consensus/consensus-final-selector';
+import { detectOutlier, type OutlierDetectionResult } from './consensus/consensus-outlier-detector';
+import { selectFinal, type FinalSelectionResult } from './consensus/consensus-final-selector';
 import { selectWithVerification } from '../verification/verified-selection';
 import { selfConsistency } from '../verification/best-of-n-verifier';
 import type {
@@ -164,7 +158,9 @@ export class ConsensusStrategy extends BaseStrategy {
     );
 
     if (models.length < 3 && !plan) {
-      throw new Error(`Consensus requires at least 3 eligible models; only ${models.length} passed quality/capability filters (from ${context.models.length} total)`);
+      throw new Error(
+        `Consensus requires at least 3 eligible models; only ${models.length} passed quality/capability filters (from ${context.models.length} total)`
+      );
     }
 
     // Voter selection — plan wins when present, legacy diversity otherwise.
@@ -192,7 +188,7 @@ export class ConsensusStrategy extends BaseStrategy {
     // Observer: phase start
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: selectedModels.map(m => m.name),
+      models: selectedModels.map((m) => m.name),
       summary: `Consensus voting started with ${selectedModels.length} independent voters.`,
     });
 
@@ -206,9 +202,10 @@ export class ConsensusStrategy extends BaseStrategy {
     const reasoningEnabled = this.isReasoningEnabled(request);
 
     // Lote 6: resolve prompt slots from triage execution plan (if feature-flagged ON)
-    const promptSlots = process.env.ENABLE_PROMPT_SLOTS === 'true'
-      ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
-      : undefined;
+    const promptSlots =
+      process.env.ENABLE_PROMPT_SLOTS === 'true'
+        ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
+        : undefined;
 
     // Lote 6: try prompt variant selection via LinUCB bandit (if feature-flagged ON).
     // selectPromptVariant returns PromptVariant | null (not a wrapper object).
@@ -233,10 +230,7 @@ export class ConsensusStrategy extends BaseStrategy {
         const voterSystemPrompt = this.withReasoningPrompt(basePrompt, request, model);
         const voterRequest: ChatRequest = {
           ...request,
-          messages: [
-            { role: 'system', content: voterSystemPrompt },
-            ...request.messages,
-          ],
+          messages: [{ role: 'system', content: voterSystemPrompt }, ...request.messages],
         };
 
         // Use BaseStrategy.executeModel() for bulkhead, retry, metrics, tracing
@@ -262,7 +256,10 @@ export class ConsensusStrategy extends BaseStrategy {
         return execution;
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        this.log.error({ error: errorMessage, model: model.name }, 'Model execution failed in consensus');
+        this.log.error(
+          { error: errorMessage, model: model.name },
+          'Model execution failed in consensus'
+        );
 
         const execution: ModelExecution = {
           modelId: model.id,
@@ -274,12 +271,14 @@ export class ConsensusStrategy extends BaseStrategy {
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
             model: model.name,
-            choices: [{
-              index: 0,
-              message: { role: 'assistant', content: '' },
-              finish_reason: 'stop',
-              logprobs: null,
-            }],
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: '' },
+                finish_reason: 'stop',
+                logprobs: null,
+              },
+            ],
           },
           cost: 0,
           durationMs: 0,
@@ -330,13 +329,11 @@ export class ConsensusStrategy extends BaseStrategy {
           modelId: e.modelId,
         });
         return { execution: e, output, evaluation, outlierDetection };
-      }),
+      })
     );
 
     const successes = evaluated.filter((v) => v.execution.success);
-    const validVoters = evaluated.filter(
-      (v) => v.execution.success && !v.outlierDetection.outlier,
-    );
+    const validVoters = evaluated.filter((v) => v.execution.success && !v.outlierDetection.outlier);
 
     if (successes.length === 0) {
       throw new Error('Consensus requires at least 1 successful model execution');
@@ -371,9 +368,7 @@ export class ConsensusStrategy extends BaseStrategy {
     // ─── Degraded path: < 2 valid voters means synthesis isn't viable ──
     if (validVoters.length < 2) {
       const degradedReason =
-        validVoters.length === 0
-          ? 'no_valid_voters_after_outlier_filter'
-          : 'only_one_valid_voter';
+        validVoters.length === 0 ? 'no_valid_voters_after_outlier_filter' : 'only_one_valid_voter';
 
       this.log.warn(
         {
@@ -384,7 +379,7 @@ export class ConsensusStrategy extends BaseStrategy {
           reason: degradedReason,
           scoringMode: evaluator.mode,
         },
-        'Consensus degraded: insufficient valid voters — falling back to best individual',
+        'Consensus degraded: insufficient valid voters — falling back to best individual'
       );
 
       this.emitObserverEvent(context, {
@@ -485,7 +480,7 @@ export class ConsensusStrategy extends BaseStrategy {
             voterModelId: shortCircuit.voter.execution.modelId,
             confidence: shortCircuit.confidence,
           },
-          'Consensus pre-synthesis short-circuit: skipping synthesizer',
+          'Consensus pre-synthesis short-circuit: skipping synthesizer'
         );
         this.emitObserverEvent(context, {
           type: 'synthesis_complete',
@@ -522,7 +517,8 @@ export class ConsensusStrategy extends BaseStrategy {
           scoringMode: evaluator.mode,
           evaluatorId: evaluator.id,
           validationStatus:
-            shortCircuit.voter.evaluation.validationStatus ?? validationStatusForMode(evaluator.mode),
+            shortCircuit.voter.evaluation.validationStatus ??
+            validationStatusForMode(evaluator.mode),
           participantOutputs,
           synthesis: {
             // Synthesis deliberately skipped — no synthesizer subcall, no score.
@@ -575,12 +571,13 @@ export class ConsensusStrategy extends BaseStrategy {
         validExecutions: validVoters.length,
         scoringMode: evaluator.mode,
       },
-      'All models executed, starting synthesis aggregation',
+      'All models executed, starting synthesis aggregation'
     );
 
     this.emitObserverEvent(context, {
       type: 'round_complete',
-      round: 1, totalRounds: 1,
+      round: 1,
+      totalRounds: 1,
       summary: `${validVoters.length} valid voter responses collected. Starting synthesis.`,
     });
 
@@ -591,25 +588,21 @@ export class ConsensusStrategy extends BaseStrategy {
 
     // Phase 2c shadow integration — non-streaming execute() path. NEVER throws.
     void runEnsembleInShadow(
-      buildEnsembleRequest(
-        'consensus',
-        'synthesis-coordinator',
-        {
-          requestId: context.requestId,
-          voterCount: validVoters.length,
-          voterModelIds: validVoters.map((v) => v.execution.modelId),
-          taskType: context.taskType,
-          qualityThreshold: context.qualityTarget || 0.8,
-          path: 'non-streaming',
-        },
-      ),
+      buildEnsembleRequest('consensus', 'synthesis-coordinator', {
+        requestId: context.requestId,
+        voterCount: validVoters.length,
+        voterModelIds: validVoters.map((v) => v.execution.modelId),
+        taskType: context.taskType,
+        qualityThreshold: context.qualityTarget || 0.8,
+        path: 'non-streaming',
+      }),
       {
         heuristicDecisionForComparison: {
           role: 'synthesizer',
           scheduler: 'aggregator-synthesis',
           reason: 'aggregator-default',
         },
-      },
+      }
     ).catch((err: unknown) => {
       log.debug({ err: String(err) }, 'shadow runner promise rejected silently');
     });
@@ -723,15 +716,13 @@ export class ConsensusStrategy extends BaseStrategy {
             totalCount: verified.verify.totalCount,
             confidence: verified.verify.confidence,
           },
-          'Consensus verification override: checker-verified voter beats unverified synthesis',
+          'Consensus verification override: checker-verified voter beats unverified synthesis'
         );
       }
     }
 
     const partialDegradation = validVoters.length < metadata.minModels;
-    const partialDegradationReason = partialDegradation
-      ? 'fewer_valid_voters_than_min'
-      : undefined;
+    const partialDegradationReason = partialDegradation ? 'fewer_valid_voters_than_min' : undefined;
 
     const executedParticipantModelIds = selectedModels.map((m) => m.id);
     // Strategy 01C.0.2 — Hybrid parity. Per-planned success flags +
@@ -746,8 +737,8 @@ export class ConsensusStrategy extends BaseStrategy {
     // `metadata.coordinatorModelId`; when it doesn't (e.g., simple synthesis
     // or test mock) we fall back to the planned id so plan-parity holds.
     const executedSynthesizerModelId =
-      (aggregated.metadata as { coordinatorModelId?: string } | undefined)?.coordinatorModelId
-      ?? plannedSynthesizerModelId;
+      (aggregated.metadata as { coordinatorModelId?: string } | undefined)?.coordinatorModelId ??
+      plannedSynthesizerModelId;
     // Judge id flows through judgeModelOverride; record the planned id as
     // executed when an override was sent.
     const executedJudgeModelId = plannedJudgeModelId;
@@ -803,7 +794,7 @@ export class ConsensusStrategy extends BaseStrategy {
         bestIndividualScore: bestVoter.evaluation.score,
         selection,
       },
-      'Consensus strategy completed',
+      'Consensus strategy completed'
     );
 
     this.emitObserverEvent(context, {
@@ -817,7 +808,10 @@ export class ConsensusStrategy extends BaseStrategy {
     // set AND the plan diverged at execution time (planExecutionDegraded),
     // throw BEFORE returning a usable result. Operators running validation
     // can't accept silent degradation.
-    if (process.env.CONSENSUS_STRICT_PLAN_EXECUTION === 'true' && planParity.planExecutionDegraded) {
+    if (
+      process.env.CONSENSUS_STRICT_PLAN_EXECUTION === 'true' &&
+      planParity.planExecutionDegraded
+    ) {
       this.log.error(
         {
           requestId: context.requestId,
@@ -829,17 +823,17 @@ export class ConsensusStrategy extends BaseStrategy {
           judgeModelMatchesPlan: planParity.judgeModelMatchesPlan,
           successfulParticipantCount: planParity.successfulParticipantCount,
         },
-        'Consensus strict-plan-execution: refusing to return a degraded result',
+        'Consensus strict-plan-execution: refusing to return a degraded result'
       );
       throw Object.assign(
         new Error(
-          `Consensus strict-plan-execution: ${planParity.planExecutionDegradationReason ?? 'plan_diverged'}`,
+          `Consensus strict-plan-execution: ${planParity.planExecutionDegradationReason ?? 'plan_diverged'}`
         ),
         {
           code: 'consensus_strict_plan_execution_blocked',
           statusCode: 503,
           planParity,
-        },
+        }
       );
     }
 
@@ -872,7 +866,7 @@ export class ConsensusStrategy extends BaseStrategy {
    */
   private detectPreSynthesisShortCircuit(
     context: OrchestrationContext,
-    validVoters: readonly EvaluatedVoterRecord[],
+    validVoters: readonly EvaluatedVoterRecord[]
   ): PreSynthesisShortCircuit | null {
     // 1) Objective checker — the best-of-N verification lever (#2).
     if (context.answerVerifier) {
@@ -922,10 +916,7 @@ export class ConsensusStrategy extends BaseStrategy {
     // hard floor 2: a lone voter is the degraded best_individual path, never
     // self-consistency, so we NEVER short-circuit on a single voter.
     const threshold = Number(process.env.CONSENSUS_AGREEMENT_EXIT_THRESHOLD ?? 0.6);
-    const minParseable = Math.max(
-      2,
-      Number(process.env.CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS ?? 2),
-    );
+    const minParseable = Math.max(2, Number(process.env.CONSENSUS_AGREEMENT_EXIT_MIN_VOTERS ?? 2));
     if (threshold <= 1 && validVoters.length >= minParseable) {
       // Grouped over SUCCESSFUL, PARSEABLE voters only: validVoters is already
       // success + non-outlier, and `extractAgreementAnswer` returns null for a
@@ -962,12 +953,11 @@ export class ConsensusStrategy extends BaseStrategy {
 
   private buildEvaluationTask(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): StrategyEvaluationTask {
     const lastUserMsg = [...request.messages].reverse().find((m) => m.role === 'user');
-    const userMessageExcerpt = typeof lastUserMsg?.content === 'string'
-      ? lastUserMsg.content.slice(0, 200)
-      : undefined;
+    const userMessageExcerpt =
+      typeof lastUserMsg?.content === 'string' ? lastUserMsg.content.slice(0, 200) : undefined;
     const taskType = typeof context.taskType === 'string' ? context.taskType : undefined;
     return {
       taskType,
@@ -984,7 +974,14 @@ export class ConsensusStrategy extends BaseStrategy {
     readonly startTime: number;
     readonly aggregated: { response: ChatResponse; confidence: number; metadata: unknown };
     readonly selection: FinalSelectionResult;
-    readonly baseArtifactFields: Omit<ConsensusStrategyArtifacts, 'strategyName' | 'effectiveStrategyId' | 'finalSelection' | 'partialDegradation' | 'partialDegradationReason'>;
+    readonly baseArtifactFields: Omit<
+      ConsensusStrategyArtifacts,
+      | 'strategyName'
+      | 'effectiveStrategyId'
+      | 'finalSelection'
+      | 'partialDegradation'
+      | 'partialDegradationReason'
+    >;
     readonly bestVoter: { execution: ModelExecution; output: string; evaluation: EvaluationResult };
     readonly reasoningTraces: unknown[] | undefined;
     readonly partialDegradation: boolean;
@@ -1073,7 +1070,7 @@ export class ConsensusStrategy extends BaseStrategy {
     throw new Error(
       'ConsensusStrategy.executeStream() is disabled: streaming would bypass the ' +
         'evaluator/outlier/fallback pipeline. Engines must use execute() until ' +
-        'streaming parity lands. supportsStreaming() returns false to enforce this.',
+        'streaming parity lands. supportsStreaming() returns false to enforce this.'
     );
     // Original streaming body removed (deletion preserves the property
     // that there is exactly ONE runtime path through consensus, and it
@@ -1101,11 +1098,9 @@ export class ConsensusStrategy extends BaseStrategy {
   private async selectDiverseModels(
     models: Model[],
     count: number,
-    context?: OrchestrationContext,
+    context?: OrchestrationContext
   ): Promise<Model[]> {
-    const preference = context
-      ? resolvePreferredExecutor(models, context, [])
-      : undefined;
+    const preference = context ? resolvePreferredExecutor(models, context, []) : undefined;
 
     if (preference?.pinReason === 'pin-not-in-pool') {
       this.log.warn(
@@ -1114,7 +1109,7 @@ export class ConsensusStrategy extends BaseStrategy {
           requestedModel: preference.requestedId,
           poolSize: models.length,
         },
-        'Consensus strategy: requested model not in operational pool — falling back to provider-diverse selection',
+        'Consensus strategy: requested model not in operational pool — falling back to provider-diverse selection'
       );
     }
 
@@ -1124,9 +1119,7 @@ export class ConsensusStrategy extends BaseStrategy {
     const pool = preference?.pinnedExecutor
       ? models.filter((m) => m.id !== preference.pinnedExecutor!.id)
       : models;
-    const remainingCount = preference?.pinnedExecutor
-      ? Math.max(0, count - 1)
-      : count;
+    const remainingCount = preference?.pinnedExecutor ? Math.max(0, count - 1) : count;
 
     // Group remaining models by provider
     const byProvider: Record<string, Model[]> = {};
@@ -1176,9 +1169,7 @@ export class ConsensusStrategy extends BaseStrategy {
     // Prepend the pinned executor (if any) at index 0 so the user's
     // model is the FIRST voter — keeps user intent visible in audit logs
     // and the response ordering.
-    return preference
-      ? withPreferredFirst(preference, selected)
-      : selected;
+    return preference ? withPreferredFirst(preference, selected) : selected;
   }
 }
 
@@ -1324,7 +1315,7 @@ function toParticipantArtifact(v: EvaluatedVoterRecord): ConsensusParticipantArt
 }
 
 function inferExpectedFormat(
-  taskType: string | undefined,
+  taskType: string | undefined
 ): 'json' | 'code' | 'reasoning' | 'free_text' | undefined {
   if (!taskType) return undefined;
   const t = taskType.toLowerCase();
@@ -1340,9 +1331,7 @@ function inferExpectedFormat(
  * attach the plan as `request.consensusPlan` via structural typing.
  * We never mutate the request; this helper just narrows the cast.
  */
-export function readConsensusPlan(
-  request: ChatRequest,
-): ConsensusExecutionPlan | undefined {
+export function readConsensusPlan(request: ChatRequest): ConsensusExecutionPlan | undefined {
   const r = request as ChatRequest & { consensusPlan?: ConsensusExecutionPlan };
   if (!r.consensusPlan) return undefined;
   if (r.consensusPlan.strategyName !== 'consensus') return undefined;
@@ -1371,7 +1360,10 @@ export function computeHybridParityForPlan(input: {
   successFlags: readonly boolean[];
   failureReasons: readonly (ParticipantFailureReason | undefined)[];
 } {
-  if (input.planSource !== 'dynamic_role_resolver' || input.plannedParticipantModelIds.length === 0) {
+  if (
+    input.planSource !== 'dynamic_role_resolver' ||
+    input.plannedParticipantModelIds.length === 0
+  ) {
     return { successFlags: [], failureReasons: [] };
   }
   const byId = new Map<string, (typeof input.evaluated)[number]>();
@@ -1396,7 +1388,7 @@ export function computeHybridParityForPlan(input: {
             executionError: e.execution.error,
             outlier: e.outlierDetection.outlier,
             outlierReason: e.outlierDetection.outlierReason,
-          }),
+          })
     );
   }
   return { successFlags, failureReasons };
@@ -1421,7 +1413,11 @@ export function classifyParticipantFailure(input: {
   if (input.executionSuccess && !input.outlier) return undefined;
   if (!input.executionSuccess) {
     const err = (input.executionError ?? '').toLowerCase();
-    if (err.indexOf('402') !== -1 || err.indexOf('no credit') !== -1 || err.indexOf('insufficient') !== -1) {
+    if (
+      err.indexOf('402') !== -1 ||
+      err.indexOf('no credit') !== -1 ||
+      err.indexOf('insufficient') !== -1
+    ) {
       return 'no_credits';
     }
     if (err.indexOf('401') !== -1 || err.indexOf('auth') !== -1 || err.indexOf('unauthor') !== -1) {
@@ -1433,7 +1429,11 @@ export function classifyParticipantFailure(input: {
     if (err.indexOf('timeout') !== -1 || err.indexOf('timed out') !== -1) {
       return 'timeout';
     }
-    if (err.indexOf('not found') !== -1 || err.indexOf('404') !== -1 || err.indexOf('model_not_found') !== -1) {
+    if (
+      err.indexOf('not found') !== -1 ||
+      err.indexOf('404') !== -1 ||
+      err.indexOf('model_not_found') !== -1
+    ) {
       return 'model_not_found';
     }
     if (err.indexOf('unsupported') !== -1) return 'unsupported_model';
@@ -1493,11 +1493,9 @@ export function buildPlanParityArtifact(input: {
       : input.planSource !== 'dynamic_role_resolver';
 
   const successFlags =
-    input.plannedParticipantExecutionSuccess ??
-    input.plannedParticipantModelIds.map(() => true); // legacy/no-plan: treat as success
+    input.plannedParticipantExecutionSuccess ?? input.plannedParticipantModelIds.map(() => true); // legacy/no-plan: treat as success
   const failureReasons =
-    input.plannedParticipantFailureReasons ??
-    input.plannedParticipantModelIds.map(() => undefined);
+    input.plannedParticipantFailureReasons ?? input.plannedParticipantModelIds.map(() => undefined);
   const successfulCount = successFlags.filter(Boolean).length;
   const failedCount = successFlags.length - successfulCount;
   const effectiveCount = input.effectiveParticipantCount ?? successfulCount;

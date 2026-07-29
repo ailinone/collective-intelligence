@@ -24,11 +24,7 @@ import type { ConsensusExecutionPlan } from '../consensus-execution-planner';
 import { ConsensusExecutionPlanner } from '../consensus-execution-planner';
 import { ModelRoleResolver } from '../../model-selection/model-role-resolver';
 import { fullConsensusPool } from '../../model-selection/__tests__/role-resolver.fixtures';
-import {
-  makeContext,
-  makeRequest,
-  wireStrategy,
-} from './consensus-strategy.fixtures';
+import { makeContext, makeRequest, wireStrategy } from './consensus-strategy.fixtures';
 import type { ChatRequest } from '@/types';
 
 async function buildPlan(): Promise<ConsensusExecutionPlan> {
@@ -63,7 +59,7 @@ describe('ConsensusStrategy — strict plan execution', () => {
         i === 0
           ? { content: '', success: false, error: 'HTTP 402 Payment Required' }
           : { content: `output ${m.id} `.repeat(8) },
-      ]),
+      ])
     );
     const { strategy } = wireStrategy({
       responses,
@@ -72,7 +68,7 @@ describe('ConsensusStrategy — strict plan execution', () => {
     const request = makeRequest() as ChatRequest & { consensusPlan?: ConsensusExecutionPlan };
     request.consensusPlan = plan;
     await expect(strategy.execute(request, makeContext(plannedModels))).rejects.toThrow(
-      /consensus_strict_plan_execution|plan_diverged|insufficient_successful_participants/,
+      /consensus_strict_plan_execution|plan_diverged|insufficient_successful_participants/
     );
   });
 
@@ -81,7 +77,7 @@ describe('ConsensusStrategy — strict plan execution', () => {
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,
@@ -105,7 +101,7 @@ describe('ConsensusStrategy — strict plan execution', () => {
         i === 0
           ? { content: '', success: false, error: 'HTTP 402' }
           : { content: `output ${m.id} `.repeat(8) },
-      ]),
+      ])
     );
     const { strategy } = wireStrategy({
       responses,
@@ -116,7 +112,9 @@ describe('ConsensusStrategy — strict plan execution', () => {
     const r = await strategy.execute(request, makeContext(plannedModels));
     const a = r.metadata?.consensusArtifacts as ConsensusStrategyArtifacts;
     expect(a.planParity.planExecutionDegraded).toBe(true);
-    expect(a.planParity.planExecutionDegradationReason).toBe('insufficient_successful_participants');
+    expect(a.planParity.planExecutionDegradationReason).toBe(
+      'insufficient_successful_participants'
+    );
     // Result IS returned — strategy completes.
     expect(a.strategyName).toBe('consensus');
   });
@@ -125,7 +123,7 @@ describe('ConsensusStrategy — strict plan execution', () => {
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,

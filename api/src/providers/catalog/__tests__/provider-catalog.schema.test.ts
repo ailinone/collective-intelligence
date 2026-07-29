@@ -23,10 +23,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  ProviderCatalogEntrySchema,
-  ProviderCatalogSchema,
-} from '../provider-catalog.schema';
+import { ProviderCatalogEntrySchema, ProviderCatalogSchema } from '../provider-catalog.schema';
 import { PROVIDER_CATALOG } from '../providers.catalog';
 import type { ProviderCatalogEntry } from '../provider-catalog.types';
 
@@ -60,14 +57,14 @@ describe('ProviderCatalogEntrySchema', () => {
 
   it('rejects providerId that is not kebab-case', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ providerId: 'Test_Provider' }),
+      validEntry({ providerId: 'Test_Provider' })
     );
     expect(result.success).toBe(false);
   });
 
   it('rejects providerId with trailing dash', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ providerId: 'test-provider-' }),
+      validEntry({ providerId: 'test-provider-' })
     );
     expect(result.success).toBe(false);
   });
@@ -75,7 +72,7 @@ describe('ProviderCatalogEntrySchema', () => {
   it('rejects apiKeyEnvVar that is lowercase', () => {
     // Also picked up by the convention refinement — both paths should refuse.
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ apiKeyEnvVar: 'test_provider_api_key' }),
+      validEntry({ apiKeyEnvVar: 'test_provider_api_key' })
     );
     expect(result.success).toBe(false);
   });
@@ -87,7 +84,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         providerId: 'my-thing',
         apiKeyEnvVar: 'MY_THING_API_KEY',
-      }),
+      })
     );
     expect(result.success).toBe(true);
   });
@@ -97,7 +94,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         providerId: 'my-thing',
         apiKeyEnvVar: 'SOMETHING_ELSE_API_KEY',
-      }),
+      })
     );
     expect(result.success).toBe(false);
   });
@@ -108,7 +105,7 @@ describe('ProviderCatalogEntrySchema', () => {
         providerId: 'bedrock-like',
         apiKeyEnvVar: 'AWS_ACCESS_KEY_ID',
         authScheme: 'hmac-sigv4',
-      }),
+      })
     );
     expect(result.success).toBe(true);
   });
@@ -117,14 +114,14 @@ describe('ProviderCatalogEntrySchema', () => {
 
   it('rejects api-key-header scheme without authHeaderName', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ authScheme: 'api-key-header' }),
+      validEntry({ authScheme: 'api-key-header' })
     );
     expect(result.success).toBe(false);
   });
 
   it('accepts api-key-header scheme with authHeaderName provided', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ authScheme: 'api-key-header', authHeaderName: 'x-api-key' }),
+      validEntry({ authScheme: 'api-key-header', authHeaderName: 'x-api-key' })
     );
     expect(result.success).toBe(true);
   });
@@ -133,7 +130,7 @@ describe('ProviderCatalogEntrySchema', () => {
 
   it('rejects http:// baseUrl for cloud provider', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ baseUrl: 'http://cloud.example.com/v1' }),
+      validEntry({ baseUrl: 'http://cloud.example.com/v1' })
     );
     expect(result.success).toBe(false);
   });
@@ -143,7 +140,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         integrationClass: 'self-hosted-oai-compat',
         baseUrl: 'http://localhost:8000/v1',
-      }),
+      })
     );
     expect(result.success).toBe(true);
   });
@@ -155,7 +152,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         integrationClass: 'embeddings-only',
         supports: { embeddings: true, chat: true },
-      }),
+      })
     );
     expect(result.success).toBe(false);
   });
@@ -165,7 +162,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         integrationClass: 'rerank-only',
         supports: { rerank: true, tools: true },
-      }),
+      })
     );
     expect(result.success).toBe(false);
   });
@@ -175,7 +172,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         integrationClass: 'image-only',
         supports: { imageGeneration: true, imageEditing: true },
-      }),
+      })
     );
     expect(result.success).toBe(true);
   });
@@ -184,7 +181,7 @@ describe('ProviderCatalogEntrySchema', () => {
 
   it('rejects execution-only mode without staticModels', () => {
     const result = ProviderCatalogEntrySchema.safeParse(
-      validEntry({ integrationMode: 'execution-only' }),
+      validEntry({ integrationMode: 'execution-only' })
     );
     expect(result.success).toBe(false);
   });
@@ -194,7 +191,7 @@ describe('ProviderCatalogEntrySchema', () => {
       validEntry({
         integrationMode: 'execution-only',
         staticModels: ['model-a', 'model-b'],
-      }),
+      })
     );
     expect(result.success).toBe(true);
   });
@@ -222,7 +219,10 @@ describe('ProviderCatalogSchema (collection)', () => {
   });
 
   it('rejects duplicate providerId in the collection', () => {
-    const dup = [validEntry({ providerId: 'dup', apiKeyEnvVar: 'DUP_API_KEY' }), validEntry({ providerId: 'dup', apiKeyEnvVar: 'DUP_API_KEY' })];
+    const dup = [
+      validEntry({ providerId: 'dup', apiKeyEnvVar: 'DUP_API_KEY' }),
+      validEntry({ providerId: 'dup', apiKeyEnvVar: 'DUP_API_KEY' }),
+    ];
     const result = ProviderCatalogSchema.safeParse(dup);
     expect(result.success).toBe(false);
   });
@@ -230,7 +230,11 @@ describe('ProviderCatalogSchema (collection)', () => {
   it('rejects duplicate apiKeyEnvVar in the collection', () => {
     const dup = [
       validEntry({ providerId: 'first', apiKeyEnvVar: 'SHARED_API_KEY', providerFamily: 'first' }),
-      validEntry({ providerId: 'second', apiKeyEnvVar: 'SHARED_API_KEY', providerFamily: 'second' }),
+      validEntry({
+        providerId: 'second',
+        apiKeyEnvVar: 'SHARED_API_KEY',
+        providerFamily: 'second',
+      }),
     ];
     // Note: both entries will also fail the convention refinement (providerId→env mismatch),
     // but the duplicate-env refinement is what we're asserting — either failure mode is acceptable
@@ -257,7 +261,7 @@ describe('PROVIDER_CATALOG contents (smoke check)', () => {
 
   it('no entry enables catalog-only mode and enabledByDefault together (inconsistent state)', () => {
     const contradictory = PROVIDER_CATALOG.filter(
-      (e) => e.integrationMode === 'catalog-only' && e.enabledByDefault === true && !e.denyByDefault,
+      (e) => e.integrationMode === 'catalog-only' && e.enabledByDefault === true && !e.denyByDefault
     );
     // catalog-only + enabledByDefault: true is valid — loader still skips, but the entry
     // is "discoverable inventory". So this is an advisory check, not a failure:
@@ -265,7 +269,7 @@ describe('PROVIDER_CATALOG contents (smoke check)', () => {
     if (contradictory.length > 0) {
       // eslint-disable-next-line no-console
       console.warn(
-        `${contradictory.length} catalog-only entries have enabledByDefault=true — they will be skipped at load time.`,
+        `${contradictory.length} catalog-only entries have enabledByDefault=true — they will be skipped at load time.`
       );
     }
     expect(true).toBe(true);

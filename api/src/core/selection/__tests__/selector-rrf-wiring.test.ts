@@ -49,11 +49,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SELECTOR_PATH = join(
-  __dirname,
-  '..',
-  'dynamic-model-selector.ts',
-);
+const SELECTOR_PATH = join(__dirname, '..', 'dynamic-model-selector.ts');
 const TYPES_PATH = join(__dirname, '..', '..', '..', 'types', 'index.ts');
 
 const selectorSource = readFileSync(SELECTOR_PATH, 'utf8');
@@ -62,37 +58,31 @@ const typesSource = readFileSync(TYPES_PATH, 'utf8');
 describe('Caminho-C selector ↔ CapabilitySearchService wiring contract', () => {
   it('imports getCapabilitySearchService from the singleton module', () => {
     expect(selectorSource).toMatch(
-      /import\s*\{\s*getCapabilitySearchService\s*\}\s*from\s*['"]@\/capability\/search\/capability-search-singleton['"]/,
+      /import\s*\{\s*getCapabilitySearchService\s*\}\s*from\s*['"]@\/capability\/search\/capability-search-singleton['"]/
     );
   });
 
   it('imports ModelSearchHit type from the search service', () => {
     expect(selectorSource).toMatch(
-      /import\s+type\s*\{\s*ModelSearchHit\s*\}\s*from\s*['"]@\/capability\/search\/capability-search-service['"]/,
+      /import\s+type\s*\{\s*ModelSearchHit\s*\}\s*from\s*['"]@\/capability\/search\/capability-search-service['"]/
     );
   });
 
   it('declares the semanticQuery optional field on SelectionCriteria', () => {
     // Heuristic: the field appears within the SelectionCriteria block.
-    const block = selectorSource.match(
-      /export\s+interface\s+SelectionCriteria\s*\{[\s\S]*?\n\}/,
-    );
+    const block = selectorSource.match(/export\s+interface\s+SelectionCriteria\s*\{[\s\S]*?\n\}/);
     expect(block).toBeTruthy();
     expect(block![0]).toMatch(/semanticQuery\?\s*:\s*string/);
   });
 
   it('declares the semanticQuery optional field on OrchestrationContext', () => {
-    const block = typesSource.match(
-      /export\s+interface\s+OrchestrationContext[\s\S]*?\n\}/,
-    );
+    const block = typesSource.match(/export\s+interface\s+OrchestrationContext[\s\S]*?\n\}/);
     expect(block).toBeTruthy();
     expect(block![0]).toMatch(/semanticQuery\?\s*:\s*string/);
   });
 
   it('defines applySemanticRerank that calls searchService.searchModels', () => {
-    expect(selectorSource).toMatch(
-      /private\s+async\s+applySemanticRerank\s*\(/,
-    );
+    expect(selectorSource).toMatch(/private\s+async\s+applySemanticRerank\s*\(/);
     // The body must reference searchModels via the service handle. The
     // exact variable name can drift, but the call shape must stay.
     expect(selectorSource).toMatch(/\.searchModels\s*\(\s*\{/);
@@ -103,7 +93,7 @@ describe('Caminho-C selector ↔ CapabilitySearchService wiring contract', () =>
     // it on context and have it reach the selector — so the test guards
     // the field-name spelling on both sides of the merge.
     expect(selectorSource).toMatch(
-      /semanticQuery:\s*criteria\.semanticQuery\s*\?\?\s*context\.semanticQuery/,
+      /semanticQuery:\s*criteria\.semanticQuery\s*\?\?\s*context\.semanticQuery/
     );
   });
 
@@ -111,8 +101,6 @@ describe('Caminho-C selector ↔ CapabilitySearchService wiring contract', () =>
     // The boost must be bounded — RRF cannot override health/balance/
     // capability gates. We lock the ceiling constant by name.
     expect(selectorSource).toMatch(/SEMANTIC_RERANK_MAX_BOOST/);
-    expect(selectorSource).toMatch(
-      /score\s*=\s*baseScore\s*\*\s*\(\s*1\s*\+\s*semanticBoost\s*\)/,
-    );
+    expect(selectorSource).toMatch(/score\s*=\s*baseScore\s*\*\s*\(\s*1\s*\+\s*semanticBoost\s*\)/);
   });
 });

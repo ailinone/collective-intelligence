@@ -188,21 +188,75 @@ export type ModelCapability =
 
 /** Runtime list of all valid ModelCapability values. Public: use for iteration or validation. */
 export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
-  'chat', 'code_generation', 'code_completion', 'coding', 'code_review', 'debugging', 'refactoring',
-  'documentation', 'testing', 'analysis', 'qa', 'vision', 'multimodal', 'function_calling',
-  'tool_use', 'streaming', 'json_mode', 'embeddings', 'embedding', 'reasoning', 'thinking_mode',
-  'text_generation', 'web_search', 'deep_research', 'deep_search', 'file_search', 'image_generation',
-  'image_editing', 'image_upscale', 'image_denoise',
-  'video_generation', 'video_editing', 'video_understanding', 'image_captioning',
-  'visual_question_answering', 'audio_generation', 'speech_to_text', 'text_to_speech', 'tts', 'listen',
-  'transcription', 'audio_input', 'audio_output', 'audio_to_audio', 'image_to_video', 'video_to_video',
-  'video_to_text', 'video_transcription', 'realtime_audio', 'computer_use', 'mcp', 'completions',
-  'code_interpreter', 'diarization', 'agents', 'realtime', 'audio', 'deep_compute', 'research',
-  'health', 'pdf_understanding', 'translation',
+  'chat',
+  'code_generation',
+  'code_completion',
+  'coding',
+  'code_review',
+  'debugging',
+  'refactoring',
+  'documentation',
+  'testing',
+  'analysis',
+  'qa',
+  'vision',
+  'multimodal',
+  'function_calling',
+  'tool_use',
+  'streaming',
+  'json_mode',
+  'embeddings',
+  'embedding',
+  'reasoning',
+  'thinking_mode',
+  'text_generation',
+  'web_search',
+  'deep_research',
+  'deep_search',
+  'file_search',
+  'image_generation',
+  'image_editing',
+  'image_upscale',
+  'image_denoise',
+  'video_generation',
+  'video_editing',
+  'video_understanding',
+  'image_captioning',
+  'visual_question_answering',
+  'audio_generation',
+  'speech_to_text',
+  'text_to_speech',
+  'tts',
+  'listen',
+  'transcription',
+  'audio_input',
+  'audio_output',
+  'audio_to_audio',
+  'image_to_video',
+  'video_to_video',
+  'video_to_text',
+  'video_transcription',
+  'realtime_audio',
+  'computer_use',
+  'mcp',
+  'completions',
+  'code_interpreter',
+  'diarization',
+  'agents',
+  'realtime',
+  'audio',
+  'deep_compute',
+  'research',
+  'health',
+  'pdf_understanding',
+  'translation',
   // Retrieval/rerank + specialty code-edit (added 2026-04-28).
-  'reranking', 'retrieval', 'code_edit',
+  'reranking',
+  'retrieval',
+  'code_edit',
   // Moderation/safety classifiers (added 2026-04-29 to mirror union).
-  'moderation', 'safety',
+  'moderation',
+  'safety',
   // Long-context routing target (≥128k tokens; added 2026-04-28).
   'long_context',
 ];
@@ -216,7 +270,9 @@ export function isModelCapability(s: string): s is ModelCapability {
 
 /** Normalize unknown to ModelCapability[]; invalid entries are filtered out. Use when parsing JSON/DB. */
 export function ensureModelCapabilityArray(value: unknown): ModelCapability[] {
-  const strings = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  const strings = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
   return strings.filter(isModelCapability);
 }
 
@@ -225,7 +281,12 @@ export type ModelStatus = Model['status'];
 
 /** Runtime list of all valid ModelStatus values. Public: use for iteration or validation. */
 export const MODEL_STATUSES: readonly ModelStatus[] = [
-  'active', 'deprecated', 'disabled', 'maintenance', 'legacy', 'preview',
+  'active',
+  'deprecated',
+  'disabled',
+  'maintenance',
+  'legacy',
+  'preview',
 ];
 
 const MODEL_STATUS_SET = new Set<string>(MODEL_STATUSES);
@@ -423,7 +484,9 @@ export interface ChatRequest {
   /** Pipeline of strategies for compositor (e.g., ['debate', 'collaborative']) */
   strategyPipeline?: string[];
   /** DAG workflow for compositor */
-  strategyWorkflow?: { steps: Array<{ id: string; strategy: string; depends_on?: string[]; context?: string }> };
+  strategyWorkflow?: {
+    steps: Array<{ id: string; strategy: string; depends_on?: string[]; context?: string }>;
+  };
 
   // C3 Validation extensions
   /** Components to disable for ablation study (P0.2) */
@@ -477,7 +540,8 @@ export interface ChatResponse {
   // clarification) use narrower discriminated variants. Discriminate via
   // the `type` field — absent on completion metadata, present on chunk
   // variants.
-  ailin_metadata?: AilinMetadata | AilinProgressMetadata | AilinObserverMetadata | AilinClarificationMetadata;
+  ailin_metadata?:
+    AilinMetadata | AilinProgressMetadata | AilinObserverMetadata | AilinClarificationMetadata;
 }
 
 /** SSE progress chunk: incremental step indicator emitted during long strategies. */
@@ -1044,7 +1108,14 @@ export interface ModelExecution {
 
 /** Observer event emitted during collective strategy execution. */
 export interface ObserverEvent {
-  type: 'phase_start' | 'model_response' | 'round_complete' | 'reasoning_extracted' | 'synthesis_start' | 'synthesis_complete' | 'quality_assessment';
+  type:
+    | 'phase_start'
+    | 'model_response'
+    | 'round_complete'
+    | 'reasoning_extracted'
+    | 'synthesis_start'
+    | 'synthesis_complete'
+    | 'quality_assessment';
   timestamp: number;
   strategy: string;
   round?: number;
@@ -2144,10 +2215,7 @@ export interface UnifiedTranslationRequest extends UnifiedRequestBase {
 
 /** Discriminated union of all unified request types. */
 export type UnifiedRequest =
-  | UnifiedChatRequest
-  | UnifiedSTTRequest
-  | UnifiedTTSRequest
-  | UnifiedTranslationRequest;
+  UnifiedChatRequest | UnifiedSTTRequest | UnifiedTTSRequest | UnifiedTranslationRequest;
 
 /** Base result fields shared across modalities. */
 interface UnifiedResultBase {
@@ -2194,10 +2262,7 @@ export interface UnifiedTranslationResult extends UnifiedResultBase {
 
 /** Discriminated union of all unified result types. */
 export type UnifiedResult =
-  | UnifiedChatResult
-  | UnifiedSTTResult
-  | UnifiedTTSResult
-  | UnifiedTranslationResult;
+  UnifiedChatResult | UnifiedSTTResult | UnifiedTTSResult | UnifiedTranslationResult;
 
 export interface AuthLoginWithPasswordRequest {
   email: string;

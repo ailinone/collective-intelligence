@@ -86,9 +86,7 @@ describe('R5 — catalog prompts no longer hardcode word minimums', () => {
     // At least one of the audited prompts must carry the shared directive.
     // (Not all — devilsAdvocate never had a word floor, and some prompts have
     // role-specific wording — but the ones we touched in R5 all do.)
-    const withDirective = AUDITED_PROMPTS.filter((p) =>
-      /match depth to task complexity/i.test(p),
-    );
+    const withDirective = AUDITED_PROMPTS.filter((p) => /match depth to task complexity/i.test(p));
     expect(withDirective.length).toBeGreaterThanOrEqual(5);
   });
 });
@@ -97,7 +95,7 @@ describe('R6 — execution-system-prompt capability section is a tag list, not p
   it('emits a single-line "Available capabilities: ..." tag list when caps are present', () => {
     const out = buildExecutionSystemPrompt(
       makeRequest(),
-      makeContext({ requiredCapabilities: ['web_search', 'vision'] }),
+      makeContext({ requiredCapabilities: ['web_search', 'vision'] })
     );
     expect(out).toContain('Available capabilities: web_search, vision');
   });
@@ -105,7 +103,7 @@ describe('R6 — execution-system-prompt capability section is a tag list, not p
   it('does not emit verbose description sentences like the prior capMap', () => {
     const out = buildExecutionSystemPrompt(
       makeRequest(),
-      makeContext({ requiredCapabilities: ['web_search', 'vision', 'code_generation'] }),
+      makeContext({ requiredCapabilities: ['web_search', 'vision', 'code_generation'] })
     );
     // Representative strings from the prior capMap — none should appear.
     expect(out).not.toContain('Search the web for current information');
@@ -116,7 +114,7 @@ describe('R6 — execution-system-prompt capability section is a tag list, not p
   it('omits the capability section entirely when no known caps are provided', () => {
     const out = buildExecutionSystemPrompt(
       makeRequest(),
-      makeContext({ requiredCapabilities: [] }),
+      makeContext({ requiredCapabilities: [] })
     );
     expect(out).not.toContain('Available capabilities');
   });
@@ -126,7 +124,7 @@ describe('R6 — execution-system-prompt capability section is a tag list, not p
       makeRequest(),
       makeContext({
         requiredCapabilities: ['web_search', 'unknown_fake_cap' as unknown as never],
-      }),
+      })
     );
     expect(out).toContain('Available capabilities: web_search');
     expect(out).not.toContain('unknown_fake_cap');
@@ -154,7 +152,8 @@ describe('R8 — independent-respondent prompts are consolidated via shared fact
   });
 
   it('all three public aliases are driven by the shared factory (shared base)', () => {
-    const shared = 'You are one of multiple expert models in the Ailin¹ Collective Intelligence system';
+    const shared =
+      'You are one of multiple expert models in the Ailin¹ Collective Intelligence system';
     expect(PROMPTS.parallelCompetitor).toContain(shared);
     expect(PROMPTS.massiveParallelExpert).toContain(shared);
     expect(PROMPTS.diversityRespondent).toContain(shared);
@@ -189,18 +188,18 @@ describe('R9 — moderation prompt is centralized', () => {
       const abs = path.join(repoRoot, rel);
       const src = await fs.readFile(abs, 'utf8');
       expect(src, `${rel} should import MODERATION_ANALYZER_SYSTEM_PROMPT`).toContain(
-        'MODERATION_ANALYZER_SYSTEM_PROMPT',
+        'MODERATION_ANALYZER_SYSTEM_PROMPT'
       );
       expect(
         src.includes("'You are a content moderation analyzer. Respond only with valid JSON.'"),
-        `${rel} must not contain the legacy literal moderation prompt`,
+        `${rel} must not contain the legacy literal moderation prompt`
       ).toBe(false);
     }
   });
 
   it('exposes the canonical content expected by the moderation flow', () => {
     expect(MODERATION_ANALYZER_SYSTEM_PROMPT).toBe(
-      'You are a content moderation analyzer. Respond only with valid JSON.',
+      'You are a content moderation analyzer. Respond only with valid JSON.'
     );
   });
 });
@@ -234,7 +233,7 @@ describe('Peer-review harness — social-facilitation prepend is centralized and
       resolvePeerReviewMode({
         AILIN_PEER_REVIEW_MODE: 'on',
         DISABLE_FACILITATION_PROMPT: 'true',
-      }),
+      })
     ).toBe('on');
   });
 
@@ -243,7 +242,7 @@ describe('Peer-review harness — social-facilitation prepend is centralized and
       shouldInjectPeerReviewPrompt({
         isCollectiveStrategy: false,
         request: makeRequest(),
-      }),
+      })
     ).toBe(false);
   });
 
@@ -253,7 +252,7 @@ describe('Peer-review harness — social-facilitation prepend is centralized and
         isCollectiveStrategy: true,
         request: makeRequest(),
         env: {},
-      }),
+      })
     ).toBe(true);
   });
 
@@ -263,7 +262,7 @@ describe('Peer-review harness — social-facilitation prepend is centralized and
         isCollectiveStrategy: true,
         request: makeRequest(),
         env: { AILIN_PEER_REVIEW_MODE: 'off' },
-      }),
+      })
     ).toBe(false);
   });
 
@@ -279,7 +278,7 @@ describe('Peer-review harness — social-facilitation prepend is centralized and
         isCollectiveStrategy: true,
         request: req,
         env: {},
-      }),
+      })
     ).toBe(false);
   });
 

@@ -149,7 +149,7 @@ describe('CanonicalModel ↔ Offering ↔ Route — three-layer contract', () =>
     const offerings = registry.offeringsForCanonical(canonical.canonicalModelId);
     expect(offerings).toHaveLength(3);
     expect(new Set(offerings.map((o) => o.servingProviderId))).toEqual(
-      new Set(['groq', 'fireworks', 'openrouter']),
+      new Set(['groq', 'fireworks', 'openrouter'])
     );
   });
 
@@ -169,7 +169,7 @@ describe('CanonicalModel ↔ Offering ↔ Route — three-layer contract', () =>
     const routes = registry.routesForOffering(offering.offeringId);
     expect(routes).toHaveLength(3);
     expect(new Set(routes.map((r) => r.region))).toEqual(
-      new Set(['us-east-1', 'eu-central-1', 'ap-south-1']),
+      new Set(['us-east-1', 'eu-central-1', 'ap-south-1'])
     );
   });
 
@@ -400,9 +400,7 @@ describe('RuntimeModelRegistry skeleton — lookup primitives', () => {
 
     const routes = registry.routesForCanonical('claude-opus-4-7');
     expect(routes).toHaveLength(2);
-    expect(new Set(routes.map((r) => r.routeKind))).toEqual(
-      new Set(['native', 'aggregator']),
-    );
+    expect(new Set(routes.map((r) => r.routeKind))).toEqual(new Set(['native', 'aggregator']));
   });
 
   it('getVersion and getBuiltAt return values from the snapshot', () => {

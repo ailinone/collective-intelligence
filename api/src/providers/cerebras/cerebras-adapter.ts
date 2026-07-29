@@ -76,7 +76,7 @@ export class CerebrasAdapter extends OpenAICompatibleHubAdapter {
    */
   protected override getExtraChatPayloadFields(
     _resolvedModel: string,
-    request: ChatRequest,
+    request: ChatRequest
   ): Record<string, unknown> {
     const raw = narrowAs<Record<string, unknown>>(request);
     const mct = raw.max_completion_tokens;

@@ -130,7 +130,7 @@ function buildHerdingRound(opts: {
             confidence: isDivergent ? 0.62 : 0.6,
             rationale: 'round-1 reasoning',
           },
-        }),
+        })
       );
     }
     return signals;
@@ -147,7 +147,7 @@ function buildHerdingRound(opts: {
           confidence: 0.95,
           rationale: 'round-2 reasoning',
         },
-      }),
+      })
     );
   }
   return signals;
@@ -155,9 +155,16 @@ function buildHerdingRound(opts: {
 
 describe('Convergence evaluator detects synthetic herding', () => {
   it('flags herdingDetected=true on rising-confidence cascade after divergent round 1', () => {
-    let state: CoordinationState = createInitialState('run-h1', 'sensitivity-consensus', defaultLimits());
+    let state: CoordinationState = createInitialState(
+      'run-h1',
+      'sensitivity-consensus',
+      defaultLimits()
+    );
 
-    state = aggregateSignals(buildHerdingRound({ round: 1, divergentInRound1: HERDING_FLIP_COUNT }), state).nextState;
+    state = aggregateSignals(
+      buildHerdingRound({ round: 1, divergentInRound1: HERDING_FLIP_COUNT }),
+      state
+    ).nextState;
     state = aggregateSignals(buildHerdingRound({ round: 2 }), state).nextState;
 
     const evaluation = evaluateConvergence(state);
@@ -171,7 +178,11 @@ describe('Convergence evaluator detects synthetic herding', () => {
   });
 
   it('does NOT flag herding when decisions stay stable across rounds with consistent confidence', () => {
-    let state: CoordinationState = createInitialState('run-h2', 'sensitivity-consensus', defaultLimits());
+    let state: CoordinationState = createInitialState(
+      'run-h2',
+      'sensitivity-consensus',
+      defaultLimits()
+    );
 
     // Round 1: unanimous approve at moderate confidence.
     const round1 = Array.from({ length: HERDING_AGENT_COUNT }, (_, i) =>
@@ -179,7 +190,7 @@ describe('Convergence evaluator detects synthetic herding', () => {
         agentId: `agent-${i}`,
         round: 1,
         decision: { type: 'approve', value: 'y', confidence: 0.85, rationale: 'stable' },
-      }),
+      })
     );
     state = aggregateSignals(round1, state).nextState;
 
@@ -190,7 +201,7 @@ describe('Convergence evaluator detects synthetic herding', () => {
         agentId: `agent-${i}`,
         round: 2,
         decision: { type: 'approve', value: 'y', confidence: 0.86, rationale: 'stable' },
-      }),
+      })
     );
     state = aggregateSignals(round2, state).nextState;
 
@@ -267,8 +278,15 @@ describe('Herding detection still trips when EntropySeed wired in (no false nega
     // the post-hoc detector. This test guards against an accidental
     // future change where the detector would only flag herding when a
     // specific prompt shape was used.
-    let state: CoordinationState = createInitialState('run-h3', 'sensitivity-consensus', defaultLimits());
-    state = aggregateSignals(buildHerdingRound({ round: 1, divergentInRound1: HERDING_FLIP_COUNT }), state).nextState;
+    let state: CoordinationState = createInitialState(
+      'run-h3',
+      'sensitivity-consensus',
+      defaultLimits()
+    );
+    state = aggregateSignals(
+      buildHerdingRound({ round: 1, divergentInRound1: HERDING_FLIP_COUNT }),
+      state
+    ).nextState;
     state = aggregateSignals(buildHerdingRound({ round: 2 }), state).nextState;
 
     const evaluation = evaluateConvergence(state);

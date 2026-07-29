@@ -44,7 +44,12 @@ function getExistingAuthIds(
   ) {
     const userId = (user as { userId?: unknown }).userId;
     const organizationId = (user as { organizationId?: unknown }).organizationId;
-    if (typeof userId === 'string' && typeof organizationId === 'string' && userId && organizationId) {
+    if (
+      typeof userId === 'string' &&
+      typeof organizationId === 'string' &&
+      userId &&
+      organizationId
+    ) {
       return { userId, organizationId };
     }
   }
@@ -156,7 +161,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
       };
       extendedRequest.organizationId = organizationId;
       extendedRequest.userId = payload.userId;
-      
+
       // Attach API key info if present
       if (payload.apiKeyId) {
         extendedRequest.apiKey = {
@@ -218,7 +223,7 @@ export function requireRole(...roles: string[]) {
     }
 
     // Type guard for user object
-    const userRoles: string[] = 
+    const userRoles: string[] =
       user && typeof user === 'object' && 'roles' in user && Array.isArray(user.roles)
         ? user.roles
         : user && typeof user === 'object' && 'role' in user && typeof user.role === 'string'
@@ -241,26 +246,32 @@ export function requireRole(...roles: string[]) {
     // Log for debugging (only in test environment)
     if (process.env.NODE_ENV === 'test') {
       const userId = getUserId(user);
-      log.debug({
-        userId,
-        userRoles,
-        requiredRoles: roles,
-        url: request.url,
-        method: request.method,
-      }, 'Role check');
+      log.debug(
+        {
+          userId,
+          userRoles,
+          requiredRoles: roles,
+          url: request.url,
+          method: request.method,
+        },
+        'Role check'
+      );
     }
 
     const hasRole = userRoles.some((role) => roles.includes(role));
 
     if (!hasRole) {
       const userId = getUserId(user);
-      log.warn({
-        userId,
-        userRoles,
-        requiredRoles: roles,
-        url: request.url,
-        method: request.method,
-      }, 'Role check failed - insufficient permissions');
+      log.warn(
+        {
+          userId,
+          userRoles,
+          requiredRoles: roles,
+          url: request.url,
+          method: request.method,
+        },
+        'Role check failed - insufficient permissions'
+      );
 
       // Do NOT use reply.hijack() here. Hijacking marks the reply as already sent and will
       // cause Fastify to throw `FST_ERR_REP_ALREADY_SENT` when calling `send()`, leading to
@@ -285,8 +296,11 @@ export function requireOrganization(request: FastifyRequest, reply: FastifyReply
   const user = extendedRequest.user;
 
   // Type guard for user object
-  const organizationId = 
-    user && typeof user === 'object' && 'organizationId' in user && typeof user.organizationId === 'string'
+  const organizationId =
+    user &&
+    typeof user === 'object' &&
+    'organizationId' in user &&
+    typeof user.organizationId === 'string'
       ? user.organizationId
       : undefined;
 

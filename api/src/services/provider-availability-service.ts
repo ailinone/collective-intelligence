@@ -137,11 +137,24 @@ const PROVIDER_ENV_REQUIREMENTS: Record<string, ProviderRequirement> = {
     // required; the SDK credential chain will pick whichever is present
     // (and fall through to instance/role credentials when neither is set).
     requiredEnv: ['AWS_ACCESS_KEY_ID'],
-    optionalEnv: ['AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_BEARER_TOKEN_BEDROCK', 'AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_BEDROCK_INFERENCE_PROFILE_ARN'],
+    optionalEnv: [
+      'AWS_SECRET_ACCESS_KEY',
+      'AWS_SESSION_TOKEN',
+      'AWS_BEARER_TOKEN_BEDROCK',
+      'AWS_BEDROCK_REGION',
+      'AWS_REGION',
+      'AWS_BEDROCK_INFERENCE_PROFILE_ARN',
+    ],
   },
   oci: {
     displayName: 'Oracle OCI Generative AI',
-    requiredEnv: ['OCI_TENANCY_ID', 'OCI_USER_ID', 'OCI_FINGERPRINT', 'OCI_PRIVATE_KEY', 'OCI_REGION'],
+    requiredEnv: [
+      'OCI_TENANCY_ID',
+      'OCI_USER_ID',
+      'OCI_FINGERPRINT',
+      'OCI_PRIVATE_KEY',
+      'OCI_REGION',
+    ],
   },
   // ── 2026-05-06 closure batch ──────────────────────────────────────────
   // Adapters/factories already registered (via catalog or factory registry);
@@ -215,7 +228,12 @@ class ProviderAvailabilityService {
       const missing = this.getMissingEnv(requirement.requiredEnv);
 
       if (missing.length > 0) {
-        this.setStatus(provider, 'missing_credentials', `Missing env vars: ${missing.join(', ')}`, missing);
+        this.setStatus(
+          provider,
+          'missing_credentials',
+          `Missing env vars: ${missing.join(', ')}`,
+          missing
+        );
       } else {
         this.setStatus(provider, 'available');
       }
@@ -300,7 +318,10 @@ class ProviderAvailabilityService {
     if (status === 'available') {
       this.log.info({ provider }, 'Provider marked as available');
     } else if (status === 'missing_credentials') {
-      this.log.info({ provider, status, reason, missingEnv }, 'Provider skipped due to missing optional credentials');
+      this.log.info(
+        { provider, status, reason, missingEnv },
+        'Provider skipped due to missing optional credentials'
+      );
     } else {
       this.log.warn({ provider, status, reason, missingEnv }, 'Provider marked as unavailable');
     }
@@ -316,4 +337,3 @@ class ProviderAvailabilityService {
 
 export const providerAvailabilityService = new ProviderAvailabilityService();
 export { PROVIDER_ENV_REQUIREMENTS };
-

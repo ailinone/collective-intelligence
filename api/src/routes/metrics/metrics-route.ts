@@ -122,7 +122,10 @@ function enforceMetricsScrapeRateLimit(
 
   if (pruned.length >= SCRAPE_RATE_LIMIT_MAX) {
     scrapeRequestWindows.set(identifier, pruned);
-    const retryAfterSeconds = Math.max(1, Math.ceil((pruned[0] + SCRAPE_RATE_LIMIT_WINDOW_MS - now) / 1000));
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((pruned[0] + SCRAPE_RATE_LIMIT_WINDOW_MS - now) / 1000)
+    );
     reply.header('Retry-After', retryAfterSeconds.toString());
     reply.status(429).send({
       error: {
@@ -155,7 +158,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
         // Safely extract error message and code without type assertions
         const errorMessage = getErrorMessage(error);
         const errorCode = extractErrorCodeFromObject(error);
-        
+
         // Handle premature close errors silently for metrics endpoint
         // This is expected behavior for Prometheus scraping
         if (
@@ -166,7 +169,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
             { requestId: request.id },
             'Metrics endpoint: client connection closed (normal for Prometheus scraping)'
           );
-          
+
           // Don't send response if connection is already closed
           if (!reply.sent && !reply.raw.destroyed) {
             try {
@@ -177,7 +180,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
           }
           return;
         }
-        
+
         // For other errors, use default handler
         throw error;
       },
@@ -189,19 +192,22 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
       try {
         const payload = await getMetrics();
         reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-        
+
         // Check if connection is still open before sending
         if (!reply.raw.destroyed && !reply.raw.writableEnded) {
           reply.send(payload);
         } else {
           // Connection was closed by client (normal for scraping)
-          request.log.debug({ requestId: request.id }, 'Metrics endpoint: connection closed before send');
+          request.log.debug(
+            { requestId: request.id },
+            'Metrics endpoint: connection closed before send'
+          );
         }
       } catch (error: unknown) {
         // Safely extract error message and code without type assertions
         const errorMessage = getErrorMessage(error);
         const errorCode = extractErrorCodeFromObject(error);
-        
+
         // Handle premature close errors gracefully
         if (
           errorMessage.toLowerCase() === 'premature close' ||
@@ -213,7 +219,7 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
           );
           return;
         }
-        
+
         // Re-throw other errors
         throw error;
       }
@@ -233,11 +239,10 @@ export async function registerMetricsRoute(server: FastifyInstance): Promise<voi
       if (!enforceMetricsScrapeRateLimit(request, reply, 'metrics-prompts')) return reply;
       if (!authorizeScrape(request, reply)) return reply;
 
-      const { exportPromptMetricsAsPrometheus, PROMETHEUS_CONTENT_TYPE } = await import(
-        '@/core/orchestration/prompts/prompt-metrics-exporter.js'
-      );
+      const { exportPromptMetricsAsPrometheus, PROMETHEUS_CONTENT_TYPE } =
+        await import('@/core/orchestration/prompts/prompt-metrics-exporter.js');
       reply.header('Content-Type', PROMETHEUS_CONTENT_TYPE);
       reply.send(exportPromptMetricsAsPrometheus());
-    },
+    }
   );
 }

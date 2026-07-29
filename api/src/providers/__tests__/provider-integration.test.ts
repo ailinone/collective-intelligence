@@ -9,11 +9,11 @@
 
 /**
  * Provider Integration Tests (Realistic)
- * 
+ *
  * Tests actual provider behavior without complex mocks.
  * Uses real database for model catalog.
  * Mocks only external API calls.
- * 
+ *
  * Focus: Error handling, cost calculation, model selection
  */
 
@@ -31,15 +31,16 @@ describe('Provider Integration Tests', () => {
   beforeAll(async () => {
     // Use dynamic model discovery instead of hardcoded models
     // Discover models from providers dynamically
-    const { getCentralModelDiscoveryService } = await import('@/services/central-model-discovery-service.js');
+    const { getCentralModelDiscoveryService } =
+      await import('@/services/central-model-discovery-service.js');
     const discoveryService = await getCentralModelDiscoveryService();
-    
+
     // Run discovery to populate database with real models
     await discoveryService.discoverAllModels();
-    
+
     // Find a real discovered model for testing (dynamic, not hardcoded)
     testProviderId = 'openai';
-    
+
     // Ensure provider exists
     await prisma.provider.upsert({
       where: { id: testProviderId },
@@ -159,4 +160,3 @@ describe('Provider Integration Tests', () => {
     });
   });
 });
-

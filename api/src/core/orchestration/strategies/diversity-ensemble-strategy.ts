@@ -42,11 +42,12 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
       id: 'diversity-ensemble',
       name: 'diversity-ensemble',
       displayName: 'Diversity Ensemble (Page Theorem)',
-      description: 'Selects N models maximizing cross-provider diversity. Parallel execution + weighted synthesis.',
+      description:
+        'Selects N models maximizing cross-provider diversity. Parallel execution + weighted synthesis.',
       minModels: 3,
       maxModels: 7,
       estimatedCostMultiplier: 4.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 2.0,
       suitableFor: ['analysis', 'reasoning', 'creative', 'general'],
     };
@@ -57,12 +58,19 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
     return Promise.race([
       this.executeCore(request, context, startTime),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Diversity ensemble timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error(`Diversity ensemble timeout after ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS
+        )
       ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Diversity ensemble requires at least 3 models');
 
@@ -75,26 +83,44 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Diversity ensemble: requested model not in operational pool — falling back to selectMaxDiversity',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Diversity ensemble: requested model not in operational pool — falling back to selectMaxDiversity'
       );
     }
     const targetCount = Math.min(5, models.length);
     const diverseFromFallback = this.selectMaxDiversity(
       preference.fallbackPool as Model[],
-      preference.pinnedExecutor ? Math.max(2, targetCount - 1) : targetCount,
+      preference.pinnedExecutor ? Math.max(2, targetCount - 1) : targetCount
     );
     const diverse = withPreferredFirst(preference, diverseFromFallback);
-    const synthesizer = preference.pinnedExecutor
-      ?? [...diverse].sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5))[0];
-    const respondents = diverse.filter(m => m.id !== synthesizer.id);
+    const synthesizer =
+      preference.pinnedExecutor ??
+      [...diverse].sort(
+        (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
+      )[0];
+    const respondents = diverse.filter((m) => m.id !== synthesizer.id);
 
     const executions: ModelExecution[] = [];
 
-    log.info({ synthesizer: synthesizer.id, respondents: respondents.map(m => m.id), providers: [...new Set(diverse.map(m => m.provider))] }, 'Diversity ensemble: starting');
+    log.info(
+      {
+        synthesizer: synthesizer.id,
+        respondents: respondents.map((m) => m.id),
+        providers: [...new Set(diverse.map((m) => m.provider))],
+      },
+      'Diversity ensemble: starting'
+    );
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: respondents.map(m => m.name || m.id), summary: `Diversity ensemble: ${respondents.length} respondents from ${[...new Set(diverse.map(m => m.provider))].length} providers responding in parallel.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: respondents.map((m) => m.name || m.id),
+      summary: `Diversity ensemble: ${respondents.length} respondents from ${[...new Set(diverse.map((m) => m.provider))].length} providers responding in parallel.`,
+    });
 
     // Phase 1: All respond in parallel
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
@@ -103,7 +129,16 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
       if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
       const adapter = await this.getAdapterForModel(model, context);
       if (!adapter) throw new Error(`No adapter for ${model.id}`);
-      const diverseReq: ChatRequest = { ...request, messages: [{ role: 'system', content: this.withReasoningPrompt(PROMPTS.diversityRespondent, request, model) }, ...request.messages] };
+      const diverseReq: ChatRequest = {
+        ...request,
+        messages: [
+          {
+            role: 'system',
+            content: this.withReasoningPrompt(PROMPTS.diversityRespondent, request, model),
+          },
+          ...request.messages,
+        ],
+      };
       const exec = hasTools
         ? await this.executeModelWithTools(adapter, model, diverseReq, 'respondent')
         : reasoningEnabled
@@ -119,7 +154,11 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
       if (r.status === 'fulfilled') {
         executions.push(r.value.exec);
         if (r.value.content.trim()) {
-          responses.push({ name: r.value.model.displayName || r.value.model.id, content: r.value.content, provider: r.value.model.provider || 'unknown' });
+          responses.push({
+            name: r.value.model.displayName || r.value.model.id,
+            content: r.value.content,
+            provider: r.value.model.provider || 'unknown',
+          });
         }
       }
     }
@@ -127,15 +166,40 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
     if (responses.length === 0) return this.emptyResult(startTime, executions);
 
     // Observer: responses collected
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${responses.length} diverse perspectives collected. Synthesizer merging.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: synthesizer.name || synthesizer.id, summary: 'Synthesizer merging maximally diverse perspectives.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${responses.length} diverse perspectives collected. Synthesizer merging.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: synthesizer.name || synthesizer.id,
+      summary: 'Synthesizer merging maximally diverse perspectives.',
+    });
 
     // Phase 2: Synthesizer merges diverse perspectives
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const respText = responses.map((r, i) => `### Perspective ${i + 1} (${r.name}, provider: ${r.provider}):\n${r.content}`).join('\n\n---\n\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const respText = responses
+      .map((r, i) => `### Perspective ${i + 1} (${r.name}, provider: ${r.provider}):\n${r.content}`)
+      .join('\n\n---\n\n');
 
-    const reasoningTraces = this.isReasoningEnabled(request) ? this.formatReasoningForSynthesizer(executions) : '';
-    const synthReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.consensusSynthesizer }, { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nDIVERSE PERSPECTIVES:\n${respText}${reasoningTraces}` }] };
+    const reasoningTraces = this.isReasoningEnabled(request)
+      ? this.formatReasoningForSynthesizer(executions)
+      : '';
+    const synthReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.consensusSynthesizer },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nDIVERSE PERSPECTIVES:\n${respText}${reasoningTraces}`,
+        },
+      ],
+    };
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
     const synthAdapter = await this.getAdapterForModel(synthesizer, context);
@@ -143,63 +207,133 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
     const synthExec = await this.executeModel(synthAdapter, synthesizer, synthReq, 'synthesizer');
     executions.push(synthExec);
 
-    const uniqueProviders = [...new Set(diverse.map(m => m.provider))];
+    const uniqueProviders = [...new Set(diverse.map((m) => m.provider))];
     return {
-      finalResponse: synthExec.response, strategyUsed: 'diversity-ensemble', modelsUsed: executions,
-      totalDuration: Date.now() - startTime, totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
+      finalResponse: synthExec.response,
+      strategyUsed: 'diversity-ensemble',
+      modelsUsed: executions,
+      totalDuration: Date.now() - startTime,
+      totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
       metadata: {
-        strategy: 'diversity-ensemble', diversityScore: uniqueProviders.length / diverse.length, providers: uniqueProviders, respondents: respondents.length,
-        ...(reasoningEnabled ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) } : {}),
+        strategy: 'diversity-ensemble',
+        diversityScore: uniqueProviders.length / diverse.length,
+        providers: uniqueProviders,
+        respondents: respondents.length,
+        ...(reasoningEnabled
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
+          : {}),
       },
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Diversity ensemble requires at least 3 models');
     const preference = resolvePreferredExecutor(models, context, []);
     const targetCount = Math.min(5, models.length);
     const diverseFromFallback = this.selectMaxDiversity(
       preference.fallbackPool as Model[],
-      preference.pinnedExecutor ? Math.max(2, targetCount - 1) : targetCount,
+      preference.pinnedExecutor ? Math.max(2, targetCount - 1) : targetCount
     );
     const diverse = withPreferredFirst(preference, diverseFromFallback);
-    const synthesizer = preference.pinnedExecutor
-      ?? [...diverse].sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5))[0];
-    const respondents = diverse.filter(m => m.id !== synthesizer.id);
+    const synthesizer =
+      preference.pinnedExecutor ??
+      [...diverse].sort(
+        (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
+      )[0];
+    const respondents = diverse.filter((m) => m.id !== synthesizer.id);
     const reasoningEnabled = this.isReasoningEnabled(request);
 
-    this.emitObserverEvent(context, { type: 'phase_start', models: respondents.map(m => m.name || m.id), summary: `Diversity ensemble: ${respondents.length} respondents from ${[...new Set(diverse.map(m => m.provider))].length} providers.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: respondents.map((m) => m.name || m.id),
+      summary: `Diversity ensemble: ${respondents.length} respondents from ${[...new Set(diverse.map((m) => m.provider))].length} providers.`,
+    });
     yield this.progressChunk(`${respondents.length} diverse models responding...`, 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const executions: ModelExecution[] = [];
     const responses: Array<{ name: string; content: string }> = [];
-    const results = await Promise.allSettled(respondents.map(async (model) => {
-      if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
-      const adapter = await this.getAdapterForModel(model, context);
-      if (!adapter) throw new Error(`No adapter for ${model.id}`);
-      const diverseReq: ChatRequest = { ...request, messages: [{ role: 'system', content: this.withReasoningPrompt(PROMPTS.diversityRespondent, request, model) }, ...request.messages] };
-      const exec = reasoningEnabled
-        ? await this.executeModelWithReasoning(adapter, model, diverseReq, 'respondent')
-        : await this.executeModel(adapter, model, diverseReq, 'respondent');
-      const rawContent = exec.response?.choices?.[0]?.message?.content;
-      return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
-    }));
-    for (const r of results) { if (r.status === 'fulfilled') { executions.push(r.value.exec); const c = typeof r.value.content === 'string' ? r.value.content.trim() : ''; if (c) responses.push({ name: r.value.model.displayName || r.value.model.id, content: c }); } }
+    const results = await Promise.allSettled(
+      respondents.map(async (model) => {
+        if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
+        const adapter = await this.getAdapterForModel(model, context);
+        if (!adapter) throw new Error(`No adapter for ${model.id}`);
+        const diverseReq: ChatRequest = {
+          ...request,
+          messages: [
+            {
+              role: 'system',
+              content: this.withReasoningPrompt(PROMPTS.diversityRespondent, request, model),
+            },
+            ...request.messages,
+          ],
+        };
+        const exec = reasoningEnabled
+          ? await this.executeModelWithReasoning(adapter, model, diverseReq, 'respondent')
+          : await this.executeModel(adapter, model, diverseReq, 'respondent');
+        const rawContent = exec.response?.choices?.[0]?.message?.content;
+        return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
+      })
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        executions.push(r.value.exec);
+        const c = typeof r.value.content === 'string' ? r.value.content.trim() : '';
+        if (c) responses.push({ name: r.value.model.displayName || r.value.model.id, content: c });
+      }
+    }
     if (responses.length === 0) throw new Error('All respondents failed');
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${responses.length} diverse perspectives collected.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: synthesizer.name || synthesizer.id, summary: 'Synthesizer merging diverse perspectives.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${responses.length} diverse perspectives collected.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: synthesizer.name || synthesizer.id,
+      summary: 'Synthesizer merging diverse perspectives.',
+    });
     yield this.progressChunk(`Synthesizing ${responses.length} perspectives...`, 1, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const respText = responses.map((r, i) => `### Perspective ${i + 1} (${r.name}):\n${r.content}`).join('\n\n---\n\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const respText = responses
+      .map((r, i) => `### Perspective ${i + 1} (${r.name}):\n${r.content}`)
+      .join('\n\n---\n\n');
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
-    const synthReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.consensusSynthesizer }, { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nDIVERSE PERSPECTIVES:\n${respText}${reasoningTraces}` }] };
+    const synthReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.consensusSynthesizer },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nDIVERSE PERSPECTIVES:\n${respText}${reasoningTraces}`,
+        },
+      ],
+    };
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
     const synthAdapter = await this.getAdapterForModel(synthesizer, context);
@@ -210,19 +344,29 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       synthReq,
       [{ adapter: synthAdapter, model: synthesizer }],
-      () => respText.slice(0, 4000),
+      () => respText.slice(0, 4000)
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Diversity synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Diversity synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
   private selectMaxDiversity(models: Model[], count: number): Model[] {
     const byProvider = new Map<string, Model[]>();
-    for (const m of models) { const p = m.provider || 'unknown'; if (!byProvider.has(p)) byProvider.set(p, []); byProvider.get(p)!.push(m); }
-    for (const ms of byProvider.values()) ms.sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5));
+    for (const m of models) {
+      const p = m.provider || 'unknown';
+      if (!byProvider.has(p)) byProvider.set(p, []);
+      byProvider.get(p)!.push(m);
+    }
+    for (const ms of byProvider.values())
+      ms.sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5));
     const queues = [...byProvider.values()];
-    queues.sort((a, b) => (b[0]?.performance?.quality ?? 0.5) - (a[0]?.performance?.quality ?? 0.5));
+    queues.sort(
+      (a, b) => (b[0]?.performance?.quality ?? 0.5) - (a[0]?.performance?.quality ?? 0.5)
+    );
     const selected: Model[] = [];
     let qi = 0;
     while (selected.length < count) {
@@ -236,10 +380,30 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
   }
 
   private errorResponse(model: Model): ChatResponse {
-    return { id: `error-${Date.now()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model.name, choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop', logprobs: null }] };
+    return {
+      id: `error-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: model.name,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: '' },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+    };
   }
 
   private emptyResult(startTime: number, executions: ModelExecution[]): OrchestrationResult {
-    return { finalResponse: this.errorResponse(narrowAs<Model>({ id: 'unknown', name: 'unknown' })), strategyUsed: 'diversity-ensemble', modelsUsed: executions, totalDuration: Date.now() - startTime, totalCost: 0, metadata: { strategy: 'diversity-ensemble', error: 'all-failed' } };
+    return {
+      finalResponse: this.errorResponse(narrowAs<Model>({ id: 'unknown', name: 'unknown' })),
+      strategyUsed: 'diversity-ensemble',
+      modelsUsed: executions,
+      totalDuration: Date.now() - startTime,
+      totalCost: 0,
+      metadata: { strategy: 'diversity-ensemble', error: 'all-failed' },
+    };
   }
 }

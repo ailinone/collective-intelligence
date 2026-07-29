@@ -75,14 +75,17 @@ export function computeModalityCost(params: {
     inputTokens,
     outputTokens,
     params.model.inputCostPer1k,
-    params.model.outputCostPer1k,
+    params.model.outputCostPer1k
   );
 
   // Feed the same counter as the chat path — only when a real cost exists, so a
   // 'missing'/'genuinely_free' record never inflates the spend metric.
   if (typeof record.normalizedCostUsd === 'number' && record.normalizedCostUsd > 0) {
     try {
-      llmCostUSD.inc({ provider: params.provider, model: params.model.id }, record.normalizedCostUsd);
+      llmCostUSD.inc(
+        { provider: params.provider, model: params.model.id },
+        record.normalizedCostUsd
+      );
     } catch (err) {
       log.debug({ err: String(err) }, 'modality cost metric emit failed (non-fatal)');
     }

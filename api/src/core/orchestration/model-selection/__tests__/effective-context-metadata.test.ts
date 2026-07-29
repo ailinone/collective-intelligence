@@ -73,7 +73,10 @@ describe('01C.1B-J1D-R4C §7 — resolveEffectiveContextMetadata', () => {
       ...baseQuery,
       catalogContextWindow: 8192,
       overrides: [
-        mkOverride({ canonicalModelId: 'anthropic/claude-opus-4-7', effectiveContextWindow: 200000 }),
+        mkOverride({
+          canonicalModelId: 'anthropic/claude-opus-4-7',
+          effectiveContextWindow: 200000,
+        }),
       ],
     });
     expect(r.effectiveContextWindow).toBe(200000);
@@ -86,7 +89,10 @@ describe('01C.1B-J1D-R4C §7 — resolveEffectiveContextMetadata', () => {
       ...baseQuery,
       catalogContextWindow: 8192,
       overrides: [
-        mkOverride({ canonicalModelId: 'anthropic/claude-opus-4-7', effectiveContextWindow: 100000 }),
+        mkOverride({
+          canonicalModelId: 'anthropic/claude-opus-4-7',
+          effectiveContextWindow: 100000,
+        }),
         mkOverride({
           providerId: 'deepinfra',
           routeId: 'deepinfra::anthropic/claude-opus-4-7',
@@ -198,7 +204,10 @@ describe('01C.1B-J1D-R4C §7 — resolveEffectiveContextMetadata', () => {
       ...baseQuery,
       catalogContextWindow: 8192,
       overrides: [
-        mkOverride({ canonicalModelId: 'anthropic/claude-opus-4-7', effectiveContextWindow: 200000 }),
+        mkOverride({
+          canonicalModelId: 'anthropic/claude-opus-4-7',
+          effectiveContextWindow: 200000,
+        }),
       ],
     };
     const r1 = resolveEffectiveContextMetadata(args);
@@ -211,7 +220,10 @@ describe('01C.1B-J1D-R4C §7 — resolveEffectiveContextMetadata', () => {
       ...baseQuery,
       catalogContextWindow: 8192,
       overrides: [
-        mkOverride({ canonicalModelId: 'anthropic/claude-opus-4-7', effectiveContextWindow: 200000 }),
+        mkOverride({
+          canonicalModelId: 'anthropic/claude-opus-4-7',
+          effectiveContextWindow: 200000,
+        }),
       ],
     });
     const s = JSON.stringify(r);

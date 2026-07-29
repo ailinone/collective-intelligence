@@ -23,15 +23,21 @@ import {
   buildReconciledSnapshot,
   type ReconciledOperabilitySnapshot,
 } from '../reconciled-operability-snapshot';
-import type { ProviderCreditAuditResult, ProviderProbeResult } from '../provider-credit-audit-types';
+import type {
+  ProviderCreditAuditResult,
+  ProviderProbeResult,
+} from '../provider-credit-audit-types';
 
-function buildAudit(provider: {
-  id: string;
-  classification: ProviderCreditAuditResult['providerResults'][number]['classification'];
-  probe?: ProviderProbeResult;
-  reconciliationVerdict?: import('../provider-credit-audit-types').ReconciliationVerdict;
-  reconciliationCritical?: boolean;
-}, mode: 'metadata_only' | 'non_billable_probe'): ProviderCreditAuditResult {
+function buildAudit(
+  provider: {
+    id: string;
+    classification: ProviderCreditAuditResult['providerResults'][number]['classification'];
+    probe?: ProviderProbeResult;
+    reconciliationVerdict?: import('../provider-credit-audit-types').ReconciliationVerdict;
+    reconciliationCritical?: boolean;
+  },
+  mode: 'metadata_only' | 'non_billable_probe'
+): ProviderCreditAuditResult {
   return {
     mode,
     observedAt: Date.now(),
@@ -61,7 +67,11 @@ function buildAudit(provider: {
         isAggregator: false,
         observedAt: Date.now(),
         source: provider.probe ? 'live_non_billable' : 'hub_cache',
-        probe: { probeSupported: !!provider.probe, probeEndpointType: 'balance', probeBillableRisk: 'none' },
+        probe: {
+          probeSupported: !!provider.probe,
+          probeEndpointType: 'balance',
+          probeBillableRisk: 'none',
+        },
         probeResult: provider.probe,
         reconciliation: provider.reconciliationVerdict
           ? {
@@ -103,7 +113,7 @@ describe('buildReconciledSnapshot', () => {
         reconciliationVerdict: 'cached_no_credits_but_live_has_credits',
         reconciliationCritical: true,
       },
-      'non_billable_probe',
+      'non_billable_probe'
     );
     const snap = buildReconciledSnapshot(audit);
     expect(snap.source).toBe('non_billable_probe');
@@ -129,7 +139,7 @@ describe('buildReconciledSnapshot', () => {
         },
         reconciliationVerdict: 'provider_probe_error',
       },
-      'non_billable_probe',
+      'non_billable_probe'
     );
     const snap = buildReconciledSnapshot(audit);
     expect(snap.providerStates['p-err'].source).toBe('hub_cache');
@@ -143,7 +153,11 @@ describe('applySnapshotToCandidate', () => {
     hasCredits: true,
     rateLimited: false,
   };
-  const makeSnapshot = (state: { auth?: string; credit?: string; rate?: string }): ReconciledOperabilitySnapshot => ({
+  const makeSnapshot = (state: {
+    auth?: string;
+    credit?: string;
+    rate?: string;
+  }): ReconciledOperabilitySnapshot => ({
     observedAt: '2026-05-13T00:00:00.000Z',
     source: 'non_billable_probe',
     criticalStaleOperabilityStateCount: 0,

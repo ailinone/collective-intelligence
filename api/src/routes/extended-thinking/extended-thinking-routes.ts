@@ -10,7 +10,7 @@
 /**
  * Extended Thinking Routes
  * Claude/Gemini-compatible extended thinking modes with REAL implementation
- * 
+ *
  * Features:
  * - Extended thinking (Claude-style prolonged reasoning)
  * - Ultra thinking (Ailin Collective Intelligence with 9 models)
@@ -133,17 +133,15 @@ class ExtendedThinkingService {
     );
 
     // Step 1: Find models with thinking_mode capability
-    const thinkingModels = await this.modelRepo.findModelsWithCapabilities(
-      ['thinking_mode'],
-      { limit: 5 }
-    );
+    const thinkingModels = await this.modelRepo.findModelsWithCapabilities(['thinking_mode'], {
+      limit: 5,
+    });
 
     if (thinkingModels.length === 0) {
       // Fallback to reasoning-capable models
-      const reasoningModels = await this.modelRepo.findModelsWithCapabilities(
-        ['reasoning'],
-        { limit: 5 }
-      );
+      const reasoningModels = await this.modelRepo.findModelsWithCapabilities(['reasoning'], {
+        limit: 5,
+      });
 
       if (reasoningModels.length === 0) {
         throw new Error(
@@ -211,9 +209,15 @@ class ExtendedThinkingService {
         break;
       } catch (candidateError: unknown) {
         lastError = candidateError;
-        const errorMessage = candidateError instanceof Error ? candidateError.message : String(candidateError);
+        const errorMessage =
+          candidateError instanceof Error ? candidateError.message : String(candidateError);
         log.warn(
-          { requestId: context.requestId, model: candidate.name, provider: candidate.provider, error: errorMessage },
+          {
+            requestId: context.requestId,
+            model: candidate.name,
+            provider: candidate.provider,
+            error: errorMessage,
+          },
           'Extended thinking candidate failed — trying next'
         );
       }
@@ -298,15 +302,13 @@ class ExtendedThinkingService {
     );
 
     // Step 1: Get multiple high-quality models for collective intelligence
-    const models = await this.modelRepo.findModelsWithCapabilities(
-      ['reasoning', 'chat'],
-      { limit: 9, anyMatch: true }
-    );
+    const models = await this.modelRepo.findModelsWithCapabilities(['reasoning', 'chat'], {
+      limit: 9,
+      anyMatch: true,
+    });
 
     if (models.length < 2) {
-      throw new Error(
-        'Ultra thinking requires at least 2 models. Configure more providers.'
-      );
+      throw new Error('Ultra thinking requires at least 2 models. Configure more providers.');
     }
 
     log.info(
@@ -358,7 +360,11 @@ class ExtendedThinkingService {
       taskType: 'reasoning',
     };
 
-    const result = await engine.execute(chatRequest, ultraContext.organizationId, ultraContext.userId);
+    const result = await engine.execute(
+      chatRequest,
+      ultraContext.organizationId,
+      ultraContext.userId
+    );
 
     // Step 5: Build response with collective thinking metadata
     const responseContent = this.extractContent(result.finalResponse);
@@ -543,9 +549,7 @@ Focus on quality, accuracy, and completeness.`;
 // Route Registration
 // ==
 
-export async function registerExtendedThinkingRoutes(
-  server: FastifyInstance
-): Promise<void> {
+export async function registerExtendedThinkingRoutes(server: FastifyInstance): Promise<void> {
   const thinkingService = new ExtendedThinkingService();
 
   // POST /v1/chat/completions/extended-thinking
@@ -564,20 +568,26 @@ export async function registerExtendedThinkingRoutes(
           properties: {
             messages: {
               type: 'array',
-              description: 'Conversation messages. Each message has a role (system, user, assistant) and content (text or multimodal array).',
+              description:
+                'Conversation messages. Each message has a role (system, user, assistant) and content (text or multimodal array).',
               items: {
                 type: 'object',
                 required: ['role', 'content'],
                 properties: {
-                  role: { 
-                    type: 'string', 
+                  role: {
+                    type: 'string',
                     enum: ['system', 'user', 'assistant'],
-                    description: 'Message role: system (instructions), user (input), assistant (previous responses)',
+                    description:
+                      'Message role: system (instructions), user (input), assistant (previous responses)',
                   },
                   content: {
                     oneOf: [
                       { type: 'string', description: 'Text content as a string' },
-                      { type: 'array', items: { type: 'object' }, description: 'Multimodal content array (text, images, etc.)' },
+                      {
+                        type: 'array',
+                        items: { type: 'object' },
+                        description: 'Multimodal content array (text, images, etc.)',
+                      },
                     ],
                     description: 'Message content. Can be a string or array of content blocks.',
                   },
@@ -590,39 +600,43 @@ export async function registerExtendedThinkingRoutes(
               description:
                 'Model ID or "auto" for dynamic selection of thinking-capable models (e.g., Claude models with thinking modes, Gemini with extended thinking)',
             },
-            max_tokens: { 
-              type: 'integer', 
-              minimum: 1, 
+            max_tokens: {
+              type: 'integer',
+              minimum: 1,
               default: 8192,
-              description: 'Maximum tokens in the response. Higher values allow longer outputs. Default: 8192',
+              description:
+                'Maximum tokens in the response. Higher values allow longer outputs. Default: 8192',
             },
-            temperature: { 
-              type: 'number', 
-              minimum: 0, 
-              maximum: 2, 
+            temperature: {
+              type: 'number',
+              minimum: 0,
+              maximum: 2,
               default: 0.7,
-              description: 'Sampling temperature (0-2). Higher values increase randomness. Default: 0.7 for balanced reasoning',
+              description:
+                'Sampling temperature (0-2). Higher values increase randomness. Default: 0.7 for balanced reasoning',
             },
             thinking_budget: {
               type: 'integer',
               minimum: 100,
               maximum: 32000,
-              description: 'Maximum tokens allocated specifically for the thinking/reasoning process (separate from response tokens). Range: 100-32000',
+              description:
+                'Maximum tokens allocated specifically for the thinking/reasoning process (separate from response tokens). Range: 100-32000',
             },
-            stream: { 
-              type: 'boolean', 
+            stream: {
+              type: 'boolean',
               default: false,
               description: 'Whether to stream responses incrementally as Server-Sent Events (SSE)',
             },
-            quality_target: { 
-              type: 'number', 
-              minimum: 0, 
-              maximum: 1, 
+            quality_target: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
               default: 0.9,
-              description: 'Target quality level (0-1). Higher values prioritize reasoning quality over speed/cost. Default: 0.9',
+              description:
+                'Target quality level (0-1). Higher values prioritize reasoning quality over speed/cost. Default: 0.9',
             },
-            max_cost: { 
-              type: 'number', 
+            max_cost: {
+              type: 'number',
               minimum: 0,
               description: 'Maximum cost threshold (USD). Orchestration will not exceed this cost.',
             },
@@ -650,10 +664,17 @@ export async function registerExtendedThinkingRoutes(
                       properties: {
                         role: { type: 'string', description: 'Message role: assistant' },
                         content: { type: 'string', description: 'Response content text' },
-                        thinking: { type: 'string', description: 'Thinking process (Claude-style extended thinking blocks)' },
+                        thinking: {
+                          type: 'string',
+                          description: 'Thinking process (Claude-style extended thinking blocks)',
+                        },
                       },
                     },
-                    finish_reason: { type: 'string', description: 'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required)' },
+                    finish_reason: {
+                      type: 'string',
+                      description:
+                        'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required)',
+                    },
                   },
                 },
               },
@@ -662,17 +683,33 @@ export async function registerExtendedThinkingRoutes(
                 description: 'Token usage statistics',
                 properties: {
                   prompt_tokens: { type: 'integer', description: 'Number of tokens in the prompt' },
-                  completion_tokens: { type: 'integer', description: 'Number of tokens in the completion' },
-                  thinking_tokens: { type: 'integer', description: 'Tokens used for thinking process (separate from completion tokens)' },
-                  total_tokens: { type: 'integer', description: 'Total tokens used (prompt + completion + thinking)' },
+                  completion_tokens: {
+                    type: 'integer',
+                    description: 'Number of tokens in the completion',
+                  },
+                  thinking_tokens: {
+                    type: 'integer',
+                    description:
+                      'Tokens used for thinking process (separate from completion tokens)',
+                  },
+                  total_tokens: {
+                    type: 'integer',
+                    description: 'Total tokens used (prompt + completion + thinking)',
+                  },
                 },
               },
               ailin_metadata: {
                 type: 'object',
                 description: 'Ailin-specific metadata about the request',
                 properties: {
-                  provider_used: { type: 'string', description: 'AI provider used (e.g., "anthropic", "google")' },
-                  thinking_mode: { type: 'string', description: 'Thinking mode used (e.g., "extended", "ultra")' },
+                  provider_used: {
+                    type: 'string',
+                    description: 'AI provider used (e.g., "anthropic", "google")',
+                  },
+                  thinking_mode: {
+                    type: 'string',
+                    description: 'Thinking mode used (e.g., "extended", "ultra")',
+                  },
                   total_cost: { type: 'number', description: 'Total cost in USD for this request' },
                 },
               },
@@ -722,8 +759,7 @@ export async function registerExtendedThinkingRoutes(
             contextSize: JSON.stringify(thinkingRequest.messages).length,
           });
 
-      const requestId =
-        typeof request.id === 'string' ? request.id : `ext-think-${nanoid(16)}`;
+      const requestId = typeof request.id === 'string' ? request.id : `ext-think-${nanoid(16)}`;
       userContext.requestId = requestId;
 
       try {
@@ -787,15 +823,17 @@ export async function registerExtendedThinkingRoutes(
           properties: {
             messages: {
               type: 'array',
-              description: 'Conversation messages. Each message has a role (system, user, assistant) and content (text or multimodal array).',
+              description:
+                'Conversation messages. Each message has a role (system, user, assistant) and content (text or multimodal array).',
               items: {
                 type: 'object',
                 required: ['role', 'content'],
                 properties: {
-                  role: { 
-                    type: 'string', 
+                  role: {
+                    type: 'string',
                     enum: ['system', 'user', 'assistant'],
-                    description: 'Message role: system (instructions), user (input), assistant (previous responses)',
+                    description:
+                      'Message role: system (instructions), user (input), assistant (previous responses)',
                   },
                   content: {
                     oneOf: [
@@ -805,7 +843,8 @@ export async function registerExtendedThinkingRoutes(
                         description: 'Multimodal content array (text, images, etc.)',
                         items: {
                           type: 'object',
-                          description: 'Content block object. Can contain text, image_url, or other multimodal content types.',
+                          description:
+                            'Content block object. Can contain text, image_url, or other multimodal content types.',
                           properties: {
                             type: {
                               type: 'string',
@@ -833,33 +872,36 @@ export async function registerExtendedThinkingRoutes(
               type: 'string',
               description: 'Not used in ultra-thinking (uses multiple models)',
             },
-            max_tokens: { 
-              type: 'integer', 
-              minimum: 1, 
+            max_tokens: {
+              type: 'integer',
+              minimum: 1,
               default: 16384,
-              description: 'Maximum tokens in the response. Higher values allow longer reasoning outputs. Default: 16384',
+              description:
+                'Maximum tokens in the response. Higher values allow longer reasoning outputs. Default: 16384',
             },
-            temperature: { 
-              type: 'number', 
-              minimum: 0, 
-              maximum: 2, 
+            temperature: {
+              type: 'number',
+              minimum: 0,
+              maximum: 2,
               default: 0.7,
-              description: 'Sampling temperature (0-2). Higher values increase randomness. Default: 0.7 for balanced reasoning',
+              description:
+                'Sampling temperature (0-2). Higher values increase randomness. Default: 0.7 for balanced reasoning',
             },
-            stream: { 
-              type: 'boolean', 
+            stream: {
+              type: 'boolean',
               default: false,
               description: 'Whether to stream responses incrementally as Server-Sent Events (SSE)',
             },
-            quality_target: { 
-              type: 'number', 
-              minimum: 0, 
-              maximum: 1, 
+            quality_target: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
               default: 0.95,
-              description: 'Target quality level (0-1). Higher values prioritize reasoning quality. Default: 0.95',
+              description:
+                'Target quality level (0-1). Higher values prioritize reasoning quality. Default: 0.95',
             },
-            max_cost: { 
-              type: 'number', 
+            max_cost: {
+              type: 'number',
               minimum: 0,
               description: 'Maximum cost threshold (USD). Orchestration will not exceed this cost.',
             },
@@ -873,7 +915,10 @@ export async function registerExtendedThinkingRoutes(
               id: { type: 'string', description: 'Completion ID' },
               object: { type: 'string', enum: ['chat.completion'], description: 'Object type' },
               created: { type: 'integer', description: 'Unix timestamp of creation' },
-              model: { type: 'string', description: 'Primary model used (or "collective" for multi-model)' },
+              model: {
+                type: 'string',
+                description: 'Primary model used (or "collective" for multi-model)',
+              },
               choices: {
                 type: 'array',
                 description: 'Completion choices with consolidated thinking',
@@ -883,14 +928,23 @@ export async function registerExtendedThinkingRoutes(
                     index: { type: 'integer', description: 'Choice index (0-based)' },
                     message: {
                       type: 'object',
-                      description: 'Response message containing role, content, and consolidated thinking',
+                      description:
+                        'Response message containing role, content, and consolidated thinking',
                       properties: {
                         role: { type: 'string', description: 'Message role: assistant' },
                         content: { type: 'string', description: 'Response content text' },
-                        thinking: { type: 'string', description: 'Consolidated thinking from multiple models (ultra-thinking mode)' },
+                        thinking: {
+                          type: 'string',
+                          description:
+                            'Consolidated thinking from multiple models (ultra-thinking mode)',
+                        },
                       },
                     },
-                    finish_reason: { type: 'string', description: 'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required)' },
+                    finish_reason: {
+                      type: 'string',
+                      description:
+                        'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required)',
+                    },
                   },
                 },
               },
@@ -899,19 +953,44 @@ export async function registerExtendedThinkingRoutes(
                 description: 'Token usage statistics across all models',
                 properties: {
                   prompt_tokens: { type: 'integer', description: 'Number of tokens in the prompt' },
-                  completion_tokens: { type: 'integer', description: 'Number of tokens in the completion' },
-                  thinking_tokens: { type: 'integer', description: 'Total tokens used for thinking across all models' },
-                  total_tokens: { type: 'integer', description: 'Total tokens used (prompt + completion + thinking)' },
+                  completion_tokens: {
+                    type: 'integer',
+                    description: 'Number of tokens in the completion',
+                  },
+                  thinking_tokens: {
+                    type: 'integer',
+                    description: 'Total tokens used for thinking across all models',
+                  },
+                  total_tokens: {
+                    type: 'integer',
+                    description: 'Total tokens used (prompt + completion + thinking)',
+                  },
                 },
               },
               ailin_metadata: {
                 type: 'object',
                 description: 'Ailin-specific metadata about the ultra-thinking request',
                 properties: {
-                  providers_used: { type: 'array', items: { type: 'string' }, description: 'List of providers/models used in the collective intelligence orchestration' },
-                  strategy: { type: 'string', description: 'Orchestration strategy used (e.g., "collaborative", "massive-parallel")' },
-                  total_cost: { type: 'number', description: 'Total cost in USD across all models used' },
-                  consensus_score: { type: 'number', description: 'Consensus score (0-1) indicating agreement level among multiple models' },
+                  providers_used: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description:
+                      'List of providers/models used in the collective intelligence orchestration',
+                  },
+                  strategy: {
+                    type: 'string',
+                    description:
+                      'Orchestration strategy used (e.g., "collaborative", "massive-parallel")',
+                  },
+                  total_cost: {
+                    type: 'number',
+                    description: 'Total cost in USD across all models used',
+                  },
+                  consensus_score: {
+                    type: 'number',
+                    description:
+                      'Consensus score (0-1) indicating agreement level among multiple models',
+                  },
                 },
               },
             },
@@ -960,16 +1039,12 @@ export async function registerExtendedThinkingRoutes(
             contextSize: JSON.stringify(thinkingRequest.messages).length,
           });
 
-      const requestId =
-        typeof request.id === 'string' ? request.id : `ultra-think-${nanoid(16)}`;
+      const requestId = typeof request.id === 'string' ? request.id : `ultra-think-${nanoid(16)}`;
       userContext.requestId = requestId;
 
       try {
         // Execute ultra thinking with collective intelligence
-        const response = await thinkingService.executeUltraThinking(
-          thinkingRequest,
-          userContext
-        );
+        const response = await thinkingService.executeUltraThinking(thinkingRequest, userContext);
 
         // Track usage for billing
         if (response.usage && userContext.organizationId) {

@@ -42,19 +42,23 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
   /**
    * GET /admin/queues/dlq — Overview of all DLQ queues and sizes
    */
-  server.get('/admin/queues/dlq', { preHandler: adminPreHandler }, async (_request: FastifyRequest, reply: FastifyReply) => {
-    const queues = getRegisteredDLQQueues();
-    const sizes = await getDLQSizes();
+  server.get(
+    '/admin/queues/dlq',
+    { preHandler: adminPreHandler },
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      const queues = getRegisteredDLQQueues();
+      const sizes = await getDLQSizes();
 
-    return reply.send({
-      queues: queues.map((name) => ({
-        name,
-        dlqName: `${name}-dlq`,
-        size: sizes[name] ?? 0,
-      })),
-      totalDeadLetters: Object.values(sizes).reduce((sum, n) => sum + Math.max(n, 0), 0),
-    });
-  });
+      return reply.send({
+        queues: queues.map((name) => ({
+          name,
+          dlqName: `${name}-dlq`,
+          size: sizes[name] ?? 0,
+        })),
+        totalDeadLetters: Object.values(sizes).reduce((sum, n) => sum + Math.max(n, 0), 0),
+      });
+    }
+  );
 
   /**
    * GET /admin/queues/dlq/:queue — List jobs in a specific queue's DLQ
@@ -63,8 +67,11 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
     '/admin/queues/dlq/:queue',
     { preHandler: adminPreHandler },
     async (
-      request: FastifyRequest<{ Params: { queue: string }; Querystring: { page?: string; limit?: string } }>,
-      reply: FastifyReply,
+      request: FastifyRequest<{
+        Params: { queue: string };
+        Querystring: { page?: string; limit?: string };
+      }>,
+      reply: FastifyReply
     ) => {
       const { queue } = request.params;
       const page = Math.max(1, parseInt(request.query.page || '1', 10));
@@ -78,7 +85,7 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
         total: result.total,
         jobs: result.jobs,
       });
-    },
+    }
   );
 
   /**
@@ -89,11 +96,14 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
     { preHandler: adminPreHandler },
     async (
       request: FastifyRequest<{ Params: { queue: string; jobId: string } }>,
-      reply: FastifyReply,
+      reply: FastifyReply
     ) => {
       const { queue, jobId } = request.params;
 
-      log.info({ queue, jobId, userId: (narrowAs<{ userId?: string }>(request)).userId }, 'DLQ replay requested');
+      log.info(
+        { queue, jobId, userId: narrowAs<{ userId?: string }>(request).userId },
+        'DLQ replay requested'
+      );
 
       const result = await replayDLQJob(queue, jobId);
 
@@ -112,6 +122,6 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
           },
         });
       }
-    },
+    }
   );
 }

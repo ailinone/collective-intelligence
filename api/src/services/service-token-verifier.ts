@@ -115,7 +115,10 @@ async function fetchJwks(force = false): Promise<Jwk[] | null> {
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) {
-      logger.warn({ status: response.status, jwksUri: sa.jwksUri }, 'service-token JWKS fetch failed');
+      logger.warn(
+        { status: response.status, jwksUri: sa.jwksUri },
+        'service-token JWKS fetch failed'
+      );
       return null;
     }
     const body = (await response.json()) as { keys?: unknown };
@@ -123,7 +126,9 @@ async function fetchJwks(force = false): Promise<Jwk[] | null> {
       logger.warn({ jwksUri: sa.jwksUri }, 'service-token JWKS response has no keys[]');
       return null;
     }
-    const keys = body.keys.filter((key): key is Jwk => isRecord(key) && typeof key.kty === 'string');
+    const keys = body.keys.filter(
+      (key): key is Jwk => isRecord(key) && typeof key.kty === 'string'
+    );
     jwksCache = { keys, expiresAt: now + sa.jwksCacheTtlSeconds * 1000 };
     return keys;
   } catch (error) {
@@ -139,7 +144,9 @@ function selectJwk(keys: Jwk[], kid: string | undefined, alg: string): Jwk | nul
       return byKid;
     }
   }
-  const byAlg = keys.find((key) => (!key.alg || key.alg === alg) && (!key.use || key.use === 'sig'));
+  const byAlg = keys.find(
+    (key) => (!key.alg || key.alg === alg) && (!key.use || key.use === 'sig')
+  );
   if (byAlg) {
     return byAlg;
   }
@@ -196,12 +203,18 @@ export async function verifyServiceToken(token: string): Promise<ServiceTokenCon
   const alg = typeof decoded.header.alg === 'string' ? decoded.header.alg : null;
   const kid = typeof decoded.header.kid === 'string' ? decoded.header.kid : undefined;
   if (!alg || !ALLOWED_ALGORITHMS.has(alg)) {
-    throw new ServiceTokenError('unsupported_algorithm', `unsupported service-token alg: ${alg ?? 'none'}`);
+    throw new ServiceTokenError(
+      'unsupported_algorithm',
+      `unsupported service-token alg: ${alg ?? 'none'}`
+    );
   }
 
   let keys = await fetchJwks();
   if (!keys) {
-    throw new ServiceTokenError('jwks_unavailable', 'could not fetch id JWKS to verify service token');
+    throw new ServiceTokenError(
+      'jwks_unavailable',
+      'could not fetch id JWKS to verify service token'
+    );
   }
   let jwk = selectJwk(keys, kid, alg);
   if (!jwk) {
@@ -226,7 +239,7 @@ export async function verifyServiceToken(token: string): Promise<ServiceTokenCon
   } catch (error) {
     throw new ServiceTokenError(
       'invalid_signature',
-      `service token failed verification: ${error instanceof Error ? error.message : String(error)}`,
+      `service token failed verification: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 
@@ -236,7 +249,10 @@ export async function verifyServiceToken(token: string): Promise<ServiceTokenCon
 
   const tokenType = typeof payload.token_type === 'string' ? payload.token_type : null;
   if (tokenType !== 'service' && tokenType !== 'exchanged') {
-    throw new ServiceTokenError('wrong_token_type', `expected a service/exchanged token, got: ${tokenType ?? 'none'}`);
+    throw new ServiceTokenError(
+      'wrong_token_type',
+      `expected a service/exchanged token, got: ${tokenType ?? 'none'}`
+    );
   }
 
   // Resolve the calling client id: for a service token it is `client_id`
@@ -261,7 +277,10 @@ export async function verifyServiceToken(token: string): Promise<ServiceTokenCon
   }
 
   if (!clientId || !sa.allowedClients.includes(clientId)) {
-    throw new ServiceTokenError('client_not_allowed', `client not allowed for internal calls: ${clientId ?? 'none'}`);
+    throw new ServiceTokenError(
+      'client_not_allowed',
+      `client not allowed for internal calls: ${clientId ?? 'none'}`
+    );
   }
 
   const context: ServiceTokenContext = {

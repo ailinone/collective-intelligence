@@ -166,10 +166,7 @@ describe('C3 config builders — structural validation', () => {
       const config = await builder();
       expect(config.modes.length, `${key} should have ≥1 mode`).toBeGreaterThan(0);
       expect(config.repetitions, `${key} should have ≥1 repetition`).toBeGreaterThan(0);
-      expect(
-        config.maxBudgetUsd,
-        `${key} should have a positive maxBudgetUsd`,
-      ).toBeGreaterThan(0);
+      expect(config.maxBudgetUsd, `${key} should have a positive maxBudgetUsd`).toBeGreaterThan(0);
       expect(config.name, `${key} should have a non-empty name`).toMatch(/\S/);
     }
   });
@@ -188,7 +185,7 @@ describe('C3 config builders — structural validation', () => {
         if (mode.mode !== 'forced-pool-collective') continue;
         expect(
           mode.forcedModelPool.length,
-          `${key} has forced-pool-collective mode with empty pool — bug regression`,
+          `${key} has forced-pool-collective mode with empty pool — bug regression`
         ).toBeGreaterThan(0);
       }
     }
@@ -200,10 +197,9 @@ describe('C3 config builders — structural validation', () => {
     for (const [key, builder] of Object.entries(C3_CONFIG_BUILDERS)) {
       const config = await builder();
       for (const mode of config.modes) {
-        expect(
-          typeof mode.mode,
-          `${key}: every mode must have a string discriminator`,
-        ).toBe('string');
+        expect(typeof mode.mode, `${key}: every mode must have a string discriminator`).toBe(
+          'string'
+        );
         expect(
           [
             'single-model',
@@ -213,7 +209,7 @@ describe('C3 config builders — structural validation', () => {
             'ablation',
             'adaptive',
           ],
-          `${key}: mode '${mode.mode}' is not a known ExecutionMode`,
+          `${key}: mode '${mode.mode}' is not a known ExecutionMode`
         ).toContain(mode.mode);
       }
     }
@@ -230,10 +226,7 @@ describe('C3 config builders — structural validation', () => {
           mode.mode === 'forced-pool-collective' ||
           mode.mode === 'ablation'
         ) {
-          expect(
-            mode.strategy,
-            `${key}: ${mode.mode} mode must specify a strategy`,
-          ).toBeTruthy();
+          expect(mode.strategy, `${key}: ${mode.mode} mode must specify a strategy`).toBeTruthy();
         }
       }
     }
@@ -247,13 +240,12 @@ describe('C3 config builders — structural validation', () => {
     const pilotKeys = ['c3-pilot', 'c3-ablation-pilot', 'c3-adversarial-pilot'];
     for (const key of pilotKeys) {
       const config = await C3_CONFIG_BUILDERS[key]!();
-      const taskCount =
-        config.taskIndices.length > 0 ? config.taskIndices.length : 100;
+      const taskCount = config.taskIndices.length > 0 ? config.taskIndices.length : 100;
       const armCount = config.modes.length;
       const totalExecs = taskCount * armCount * config.repetitions;
       expect(
         totalExecs,
-        `${key} estimated ${totalExecs} executions — too large for a pilot`,
+        `${key} estimated ${totalExecs} executions — too large for a pilot`
       ).toBeLessThan(2000);
     }
   });
@@ -266,10 +258,8 @@ describe('C3 config builders — structural validation', () => {
     const advRobust = await C3_CONFIG_BUILDERS['c3-adversarial-robustness']!();
     const advPilot = await C3_CONFIG_BUILDERS['c3-adversarial-pilot']!();
 
-    const pilotScale =
-      (pilot.taskIndices.length || 100) * pilot.modes.length * pilot.repetitions;
-    const mainScale =
-      (main.taskIndices.length || 100) * main.modes.length * main.repetitions;
+    const pilotScale = (pilot.taskIndices.length || 100) * pilot.modes.length * pilot.repetitions;
+    const mainScale = (main.taskIndices.length || 100) * main.modes.length * main.repetitions;
     const advRobustScale =
       (advRobust.taskIndices.length || 100) * advRobust.modes.length * advRobust.repetitions;
     const advPilotScale =
@@ -278,7 +268,7 @@ describe('C3 config builders — structural validation', () => {
     expect(mainScale, 'main should be larger than pilot').toBeGreaterThanOrEqual(pilotScale);
     expect(
       advRobustScale,
-      'adversarial-robustness should be larger than its pilot',
+      'adversarial-robustness should be larger than its pilot'
     ).toBeGreaterThanOrEqual(advPilotScale);
   });
 });
@@ -312,7 +302,7 @@ describe('C3 coverage invariants', () => {
 
     const indices = pickStratifiedTaskIndices(4);
     expect(indices.length).toBeGreaterThanOrEqual(8); // 4 per bucket × 3 buckets, minus
-                                                     //   any bucket smaller than 4.
+    //   any bucket smaller than 4.
 
     // Decompose by complexity — every bucket should have ≥1 sample.
     const byCplx: Record<string, number> = { low: 0, medium: 0, high: 0 };
@@ -338,7 +328,7 @@ describe('C3 coverage invariants', () => {
     // Stratified should reach into the upper half of the suite.
     expect(
       max,
-      `stratified sample max=${max} should reach above suite midpoint ${Math.floor(suiteMax / 2)}`,
+      `stratified sample max=${max} should reach above suite midpoint ${Math.floor(suiteMax / 2)}`
     ).toBeGreaterThanOrEqual(Math.floor(suiteMax / 2));
   });
 
@@ -354,9 +344,8 @@ describe('C3 coverage invariants', () => {
   });
 
   it('adversarial-robustness defaults to adversarial-tagged tasks', async () => {
-    const { C3_CONFIG_BUILDERS, ADVERSARIAL_TASK_INDICES } = await import(
-      '../c3-experiment-configs'
-    );
+    const { C3_CONFIG_BUILDERS, ADVERSARIAL_TASK_INDICES } =
+      await import('../c3-experiment-configs');
 
     const config = await C3_CONFIG_BUILDERS['c3-adversarial-robustness']!();
     expect(config.taskIndices.sort()).toEqual([...ADVERSARIAL_TASK_INDICES].sort());
@@ -364,7 +353,8 @@ describe('C3 coverage invariants', () => {
 
   it('main-comparison covers all BENCHMARK collective strategies (stubs excluded)', async () => {
     const { C3_CONFIG_BUILDERS } = await import('../c3-experiment-configs');
-    const { BENCHMARK_COLLECTIVE_STRATEGIES, NON_COLLECTIVE_BENCHMARK_STRATEGIES } = await import('../experiment-types');
+    const { BENCHMARK_COLLECTIVE_STRATEGIES, NON_COLLECTIVE_BENCHMARK_STRATEGIES } =
+      await import('../experiment-types');
 
     const config = await C3_CONFIG_BUILDERS['c3-main-comparison']!();
     const strategiesUsed = new Set<string>();
@@ -377,22 +367,22 @@ describe('C3 coverage invariants', () => {
     for (const strategy of BENCHMARK_COLLECTIVE_STRATEGIES) {
       expect(
         strategiesUsed.has(strategy),
-        `main-comparison should include strategy '${strategy}'`,
+        `main-comparison should include strategy '${strategy}'`
       ).toBe(true);
     }
     // ...and known stubs (e.g. hierarchical) must NOT — they would contaminate
     // the pooled collective mean with single-model results.
     for (const stub of NON_COLLECTIVE_BENCHMARK_STRATEGIES) {
-      expect(
-        strategiesUsed.has(stub),
-        `main-comparison must exclude stub strategy '${stub}'`,
-      ).toBe(false);
+      expect(strategiesUsed.has(stub), `main-comparison must exclude stub strategy '${stub}'`).toBe(
+        false
+      );
     }
   });
 
   it('independence-herding covers all BENCHMARK collective strategies (stubs excluded)', async () => {
     const { C3_CONFIG_BUILDERS } = await import('../c3-experiment-configs');
-    const { BENCHMARK_COLLECTIVE_STRATEGIES, NON_COLLECTIVE_BENCHMARK_STRATEGIES } = await import('../experiment-types');
+    const { BENCHMARK_COLLECTIVE_STRATEGIES, NON_COLLECTIVE_BENCHMARK_STRATEGIES } =
+      await import('../experiment-types');
 
     const config = await C3_CONFIG_BUILDERS['c3-independence-herding']!();
     const strategiesUsed = new Set<string>();
@@ -431,7 +421,7 @@ describe('C3 coverage invariants', () => {
       const key = `c3-ablation-${strategy}`;
       expect(
         C3_CONFIG_BUILDERS[key],
-        `Missing ablation builder for shadow-wired strategy '${strategy}' (key: ${key})`,
+        `Missing ablation builder for shadow-wired strategy '${strategy}' (key: ${key})`
       ).toBeDefined();
     }
   });
@@ -449,7 +439,7 @@ describe('C3 coverage invariants', () => {
       const key = `c3-ablation-${strategy}`;
       expect(
         C3_CONFIG_BUILDERS[key],
-        `Missing ablation builder for strategy '${strategy}' (key: ${key})`,
+        `Missing ablation builder for strategy '${strategy}' (key: ${key})`
       ).toBeDefined();
     }
   });
@@ -462,9 +452,8 @@ describe('c3-ha-verifiable-minirun — H-A adjudication config (2026-07-04)', ()
   });
 
   it('targets the FULL verifiable subset (incl. the hard 126-135) and both H-A collective arms', async () => {
-    const { buildC3VerifiableMiniRun, VERIFIABLE_TASK_INDICES } = await import(
-      '../c3-experiment-configs'
-    );
+    const { buildC3VerifiableMiniRun, VERIFIABLE_TASK_INDICES } =
+      await import('../c3-experiment-configs');
     const { getVerifiableTaskIndices } = await import('../experiment-suite');
     const config = await buildC3VerifiableMiniRun();
 

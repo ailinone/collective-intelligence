@@ -148,12 +148,7 @@ const NETWORK_PATTERNS = [
   /network\s+error/i,
   /fetch\s+failed/i,
 ];
-const TIMEOUT_PATTERNS = [
-  /^timeout$/i,
-  /request\s+timeout/i,
-  /timed\s+out/i,
-  /\babort/i,
-];
+const TIMEOUT_PATTERNS = [/^timeout$/i, /request\s+timeout/i, /timed\s+out/i, /\babort/i];
 
 function bodyMatches(patterns: readonly RegExp[], body: string): boolean {
   for (const p of patterns) if (p.test(body)) return true;
@@ -183,10 +178,7 @@ export function classifyProviderError(input: ClassifyInput): ProviderErrorClassi
   // authenticated" message that's actually credit).
 
   // 1) Credit / payment issues → non-retryable
-  if (
-    bodyMatches(CREDIT_PATTERNS, bodyLower) ||
-    status === 402
-  ) {
+  if (bodyMatches(CREDIT_PATTERNS, bodyLower) || status === 402) {
     return {
       kind: 'insufficient_credits',
       retryable: false,
@@ -214,10 +206,7 @@ export function classifyProviderError(input: ClassifyInput): ProviderErrorClassi
   }
 
   // 3) Auth failure (key invalid, unauthorized) — 401 OR body says so
-  if (
-    status === 401 ||
-    bodyMatches(AUTH_PATTERNS, bodyLower)
-  ) {
+  if (status === 401 || bodyMatches(AUTH_PATTERNS, bodyLower)) {
     return {
       kind: 'invalid_auth',
       retryable: false,
@@ -231,14 +220,11 @@ export function classifyProviderError(input: ClassifyInput): ProviderErrorClassi
   }
 
   // 4) Model / route compatibility — 400 model_not_supported, 404 model_not_found
-  if (
-    status === 404 ||
-    bodyMatches(MODEL_UNSUPPORTED_PATTERNS, bodyLower)
-  ) {
+  if (status === 404 || bodyMatches(MODEL_UNSUPPORTED_PATTERNS, bodyLower)) {
     return {
       kind: 'model_not_supported',
       retryable: false,
-      routeHealthy: true,        // provider may be fine, just not this model
+      routeHealthy: true, // provider may be fine, just not this model
       providerHealthy: true,
       modelRouteCompatible: false,
       reason: 'model_not_supported',

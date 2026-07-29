@@ -20,7 +20,11 @@ import {
   C3_PAYLOAD_TEMPLATE_COUNT,
 } from '@/core/experiment/c3-dryrun-plan-validation-contract';
 
-const ARTIFACT = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-plan-validation-payload-precheck.json');
+const ARTIFACT = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-dryrun-plan-validation-payload-precheck.json'
+);
 const artifact = existsSync(ARTIFACT) ? JSON.parse(readFileSync(ARTIFACT, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — payload precheck', () => {
@@ -39,7 +43,7 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — payload precheck', () => {
           billableProviderCallsAuthorized: false,
           providerCallExecuted: false,
           cost_usd: 0,
-        }),
+        })
       ).toBe(false);
     });
 
@@ -52,7 +56,7 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — payload precheck', () => {
           billableProviderCallsAuthorized: false,
           providerCallExecuted: false,
           cost_usd: 0,
-        }),
+        })
       ).toBe(true);
     });
 

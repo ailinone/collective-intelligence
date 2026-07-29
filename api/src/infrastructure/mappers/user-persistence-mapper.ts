@@ -9,13 +9,13 @@
 
 /**
  * User Persistence Mapper (Enterprise-Grade)
- * 
+ *
  * Responsibility:
  * - Convert domain entities to Prisma-compatible types
  * - NO as any casts - full type safety
  * - Handle complex Prisma relations explicitly
  * - Support all edge cases (optional fields, null handling, JSON serialization)
- * 
+ *
  * Clean Architecture:
  * - Domain entities remain pure (no persistence logic)
  * - Mappers handle impedance mismatch between domain and database
@@ -28,7 +28,7 @@ import type { ApiKeyEntity } from '@/domain/entities/api-key.entity';
 
 /**
  * Map UserEntity to Prisma UserCreateInput
- * 
+ *
  * Handles:
  * - Organization relation (connect by ID)
  * - Optional fields (nullable columns)
@@ -46,16 +46,20 @@ export function mapUserToPrismaCreate(
   if (!passwordHash || (typeof passwordHash === 'string' && passwordHash.trim().length === 0)) {
     throw new Error(
       'passwordHash is required and must be a valid bcrypt hash. ' +
-      'The auth service must generate a hash before calling mapUserToPrismaCreate. ' +
-      'For email code auth users, generate a hash from a cryptographically secure random password.'
+        'The auth service must generate a hash before calling mapUserToPrismaCreate. ' +
+        'For email code auth users, generate a hash from a cryptographically secure random password.'
     );
   }
 
   // Validate that it looks like a bcrypt hash (basic format check)
-  if (!passwordHash.startsWith('$2a$') && !passwordHash.startsWith('$2b$') && !passwordHash.startsWith('$2y$')) {
+  if (
+    !passwordHash.startsWith('$2a$') &&
+    !passwordHash.startsWith('$2b$') &&
+    !passwordHash.startsWith('$2y$')
+  ) {
     throw new Error(
       'passwordHash must be a valid bcrypt hash (starting with $2a$, $2b$, or $2y$). ' +
-      'Use a proper bcrypt library to generate the hash.'
+        'Use a proper bcrypt library to generate the hash.'
     );
   }
 
@@ -81,7 +85,7 @@ export function mapUserToPrismaCreate(
 
 /**
  * Map UserEntity to Prisma UserUpdateInput
- * 
+ *
  * Only updates mutable fields (never ID, createdAt)
  */
 export function mapUserToPrismaUpdate(
@@ -105,7 +109,7 @@ export function mapUserToPrismaUpdate(
 
 /**
  * Map ApiKeyEntity to Prisma ApiKeyCreateInput
- * 
+ *
  * Handles:
  * - User and Organization relations (connect by IDs)
  * - Optional fields (expiration, rotation config, IP whitelist)
@@ -160,7 +164,7 @@ export function mapApiKeyToPrismaCreate(
 
 /**
  * Map ApiKeyEntity to Prisma ApiKeyUpdateInput
- * 
+ *
  * Only updates mutable fields
  */
 export function mapApiKeyToPrismaUpdate(
@@ -191,11 +195,11 @@ export function mapApiKeyToPrismaUpdate(
 
 /**
  * Map UserAggregate to Prisma batch operations
- * 
+ *
  * Returns typed operations for transaction:
  * - User upsert
  * - API keys upserts (array)
- * 
+ *
  * All type-safe, no as any casts
  */
 export function mapUserAggregateToPrismaBatch(aggregate: {
@@ -244,4 +248,3 @@ export function mapUserAggregateToPrismaBatch(aggregate: {
     }),
   };
 }
-

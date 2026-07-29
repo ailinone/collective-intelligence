@@ -57,9 +57,9 @@ describe('Performance Snapshots', () => {
           avg_latency_ms: 2000,
           avg_cost_usd: 0.01,
           success_rate: 0.88,
-          quality_p10: 0.60,
+          quality_p10: 0.6,
           quality_p90: 0.88,
-          quality_stddev: 0.10,
+          quality_stddev: 0.1,
         },
       ]);
 
@@ -94,16 +94,26 @@ describe('Performance Snapshots', () => {
     it('returns strategies ranked by quality', async () => {
       mockQueryRaw.mockResolvedValueOnce([
         {
-          strategy: 'debate', task_type: 'code-generation',
-          avg_quality: 0.88, success_rate: 0.92, avg_latency_ms: 4500,
-          avg_cost_usd: 0.04, total_samples: BigInt(150),
-          avg_stability: 0.85, avg_confidence: 0.90,
+          strategy: 'debate',
+          task_type: 'code-generation',
+          avg_quality: 0.88,
+          success_rate: 0.92,
+          avg_latency_ms: 4500,
+          avg_cost_usd: 0.04,
+          total_samples: BigInt(150),
+          avg_stability: 0.85,
+          avg_confidence: 0.9,
         },
         {
-          strategy: 'single', task_type: 'code-generation',
-          avg_quality: 0.76, success_rate: 0.88, avg_latency_ms: 2000,
-          avg_cost_usd: 0.01, total_samples: BigInt(300),
-          avg_stability: 0.70, avg_confidence: 0.95,
+          strategy: 'single',
+          task_type: 'code-generation',
+          avg_quality: 0.76,
+          success_rate: 0.88,
+          avg_latency_ms: 2000,
+          avg_cost_usd: 0.01,
+          total_samples: BigInt(300),
+          avg_stability: 0.7,
+          avg_confidence: 0.95,
         },
       ]);
 

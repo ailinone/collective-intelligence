@@ -130,7 +130,8 @@ function parseArgs(): Args {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--providers') o.providers = (argv[++i] ?? '').split(',').filter(Boolean);
-    else if (a === '--secrets-source') i++;  // accept but ignore (sourced from runtime)
+    else if (a === '--secrets-source')
+      i++; // accept but ignore (sourced from runtime)
     else if (a === '--validate-secret-presence') o.validateSecretPresence = true;
     else if (a === '--validate-credential-endpoint') o.validateCredentialEndpoint = true;
     else if (a === '--canonical-chat-probe') o.canonicalChatProbe = true;
@@ -174,7 +175,9 @@ async function checkSecretPresence(providerId: string): Promise<StageResult> {
       providerId.toUpperCase().replace(/-/g, '_'),
       providerId.toUpperCase().replace(/-/g, ''),
     ];
-    const allLoaded = [...(summary.fromGCP ?? []), ...(summary.fromEnv ?? [])].map((s) => s.toUpperCase());
+    const allLoaded = [...(summary.fromGCP ?? []), ...(summary.fromEnv ?? [])].map((s) =>
+      s.toUpperCase()
+    );
     const found = candidates.some((c) => allLoaded.some((l) => l.includes(c)));
     return {
       stage: 'secret_presence',
@@ -237,7 +240,13 @@ async function checkCredentialEndpoint(providerId: string): Promise<StageResult>
 async function checkCanonicalChatProbe(
   providerId: string,
   args: Args,
-  budget: { accruedUsd: number; capUsd: number; probesUsed: number; probeCap: number; perProbeUsd: number },
+  budget: {
+    accruedUsd: number;
+    capUsd: number;
+    probesUsed: number;
+    probeCap: number;
+    perProbeUsd: number;
+  }
 ): Promise<StageResult> {
   if (budget.accruedUsd + budget.perProbeUsd > budget.capUsd) {
     return {
@@ -266,7 +275,10 @@ async function checkCanonicalChatProbe(
     const { modelCatalogService } = await import('@/services/model-catalog-service');
     const all = await modelCatalogService.listModels();
     const catalogModels = all
-      .filter((m) => m.status === 'active' && (m.provider ?? '').toLowerCase() === providerId.toLowerCase())
+      .filter(
+        (m) =>
+          m.status === 'active' && (m.provider ?? '').toLowerCase() === providerId.toLowerCase()
+      )
       .map((m) => ({ id: m.id, capabilities: m.capabilities as readonly string[] }));
     const canonical = resolveCanonicalProbeModel({ providerId, catalogModels });
     if (!canonical) {
@@ -285,7 +297,11 @@ async function checkCanonicalChatProbe(
       clearTimeout(timeout);
       if (resp && typeof resp === 'object') {
         budget.accruedUsd += budget.perProbeUsd;
-        return { stage: 'canonical_chat_probe', pass: true, sanitizedMessage: `OK_model=${canonical.apiModelId}` };
+        return {
+          stage: 'canonical_chat_probe',
+          pass: true,
+          sanitizedMessage: `OK_model=${canonical.apiModelId}`,
+        };
       }
       return { stage: 'canonical_chat_probe', pass: false, sanitizedMessage: 'empty_response' };
     } catch (err) {
@@ -311,27 +327,49 @@ async function checkCanonicalChatProbe(
   }
 }
 
-function finalBucketFromStages(stages: readonly StageResult[]): { bucket: ProviderReadinessBucket; reason: string } {
+function finalBucketFromStages(stages: readonly StageResult[]): {
+  bucket: ProviderReadinessBucket;
+  reason: string;
+} {
   const sec = stages.find((s) => s.stage === 'secret_presence');
   const cred = stages.find((s) => s.stage === 'credential_endpoint');
   const chat = stages.find((s) => s.stage === 'canonical_chat_probe');
 
   if (sec && !sec.pass) {
-    return { bucket: 'R_secret_alias_mismatch', reason: 'secret not loaded by loader (alias mismatch)' };
+    return {
+      bucket: 'R_secret_alias_mismatch',
+      reason: 'secret not loaded by loader (alias mismatch)',
+    };
   }
   if (cred) {
     if (!cred.pass) {
       if (cred.errorKind === 'invalid_auth') {
-        return { bucket: 'D_blocked_by_auth_confirmed', reason: 'credential endpoint returned auth failure' };
+        return {
+          bucket: 'D_blocked_by_auth_confirmed',
+          reason: 'credential endpoint returned auth failure',
+        };
       }
       // 404 with "deployment / region" → S
-      if (cred.httpStatus === 404 || /deployment|region|endpoint/i.test(cred.sanitizedMessage ?? '')) {
-        return { bucket: 'S_provider_requires_deployment_or_endpoint', reason: 'credential endpoint requires deployment/region/endpoint id' };
+      if (
+        cred.httpStatus === 404 ||
+        /deployment|region|endpoint/i.test(cred.sanitizedMessage ?? '')
+      ) {
+        return {
+          bucket: 'S_provider_requires_deployment_or_endpoint',
+          reason: 'credential endpoint requires deployment/region/endpoint id',
+        };
       }
       if (cred.errorKind === 'insufficient_credits') {
-        return { bucket: 'C_blocked_by_credit', reason: 'credential endpoint surfaced credit exhaustion' };
+        return {
+          bucket: 'C_blocked_by_credit',
+          reason: 'credential endpoint surfaced credit exhaustion',
+        };
       }
-      return { bucket: 'Q_auth_header_or_base_url_mismatch', reason: 'credential endpoint failed without explicit auth reason (header / base URL suspect)' };
+      return {
+        bucket: 'Q_auth_header_or_base_url_mismatch',
+        reason:
+          'credential endpoint failed without explicit auth reason (header / base URL suspect)',
+      };
     }
   }
   if (chat) {
@@ -433,9 +471,12 @@ async function main(): Promise<void> {
     const stages: StageResult[] = [];
     if (args.validateSecretPresence) stages.push(await checkSecretPresence(providerId));
     if (args.validateCredentialEndpoint) stages.push(await checkCredentialEndpoint(providerId));
-    if (args.canonicalChatProbe) stages.push(await checkCanonicalChatProbe(providerId, args, budget));
+    if (args.canonicalChatProbe)
+      stages.push(await checkCanonicalChatProbe(providerId, args, budget));
     const { bucket, reason } = finalBucketFromStages(stages);
-    const costUsd = stages.some((s) => s.stage === 'canonical_chat_probe' && s.pass) ? budget.perProbeUsd : 0;
+    const costUsd = stages.some((s) => s.stage === 'canonical_chat_probe' && s.pass)
+      ? budget.perProbeUsd
+      : 0;
     results.push({ providerId, stages, finalBucket: bucket, finalReason: reason, costUsd });
     console.log(`  ${providerId.padEnd(20)}  ${bucket.padEnd(40)}  ${reason}`);
   }

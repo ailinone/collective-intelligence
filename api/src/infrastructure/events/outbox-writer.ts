@@ -59,7 +59,7 @@ interface OutboxTransactionClient {
 export async function writeEventsToOutbox(
   tx: OutboxTransactionClient,
   events: BaseDomainEvent[],
-  aggregateType: string,
+  aggregateType: string
 ): Promise<void> {
   if (events.length === 0) return;
 

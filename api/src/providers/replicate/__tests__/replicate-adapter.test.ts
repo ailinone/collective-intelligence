@@ -66,7 +66,7 @@ describe('ReplicateAdapter — construction', () => {
           enabled: true,
           apiKey: 'r8_test_token',
           baseUrl: 'https://api.replicate.com/v1',
-        }),
+        })
     ).not.toThrow();
   });
 
@@ -153,7 +153,7 @@ describe('ReplicateAdapter — chatCompletion (owner/name model form)', () => {
         adapter.chatCompletion({
           model: 'meta/llama-3-8b',
           messages: [{ role: 'user', content: 'x' }],
-        }),
+        })
       ).rejects.toThrow(/Replicate prediction failed.*model went offline/);
     } finally {
       restore();

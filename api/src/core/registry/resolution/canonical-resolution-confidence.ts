@@ -27,9 +27,7 @@
  *   7. fallback_provider_model_id (confidence 0, never merges)
  */
 
-import type {
-  CanonicalResolutionConfidence,
-} from './canonical-resolution-types';
+import type { CanonicalResolutionConfidence } from './canonical-resolution-types';
 import {
   CANONICAL_SOURCE_AUTHORITY,
   FALLBACK_RESOLUTION_CONFIDENCE,
@@ -91,7 +89,7 @@ export interface CanonicalResolutionInput {
  * via `canAutoMerge` and conflict tracking.
  */
 export function resolveCanonicalConfidence(
-  input: CanonicalResolutionInput,
+  input: CanonicalResolutionInput
 ): CanonicalResolutionConfidence {
   // 1. Manual override — absolute authority.
   if (input.manualOverride) {
@@ -189,7 +187,7 @@ export function canAutoMerge(c: CanonicalResolutionConfidence): boolean {
  */
 export function pickHigherAuthority(
   a: CanonicalResolutionConfidence,
-  b: CanonicalResolutionConfidence,
+  b: CanonicalResolutionConfidence
 ): CanonicalResolutionConfidence {
   const authA = CANONICAL_SOURCE_AUTHORITY[a.source] ?? 0;
   const authB = CANONICAL_SOURCE_AUTHORITY[b.source] ?? 0;

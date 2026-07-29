@@ -109,7 +109,6 @@ export const BLOCKED_MODES: ReadonlySet<RoutingMode> = new Set<RoutingMode>([
   'semantic_primary',
 ]);
 
-export const BLOCKED_REASON =
-  'blocked_until_c3_completed_and_semantic_index_available';
+export const BLOCKED_REASON = 'blocked_until_c3_completed_and_semantic_index_available';
 
 export const ALLOWED_REASON = 'mode_allowed';

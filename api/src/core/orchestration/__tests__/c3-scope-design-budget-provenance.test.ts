@@ -42,7 +42,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-DESIGN-R3 §6+8 — budget policy and provenance schema contract', () => {
-
   describe('thesis metric constants (R3: explicit thesis)', () => {
     it('primary thesis is the quality/cost statement', () => {
       expect(C3_THESIS_PRIMARY).toContain('equal_or_better_quality');
@@ -97,38 +96,38 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §6+8 — budget policy and provenance schem
 
     it('all budget caps are <= $0.10 (sanity ceiling)', () => {
       for (const strategy of C3_ELIGIBLE_STRATEGIES) {
-        expect(C3_STRATEGY_BUDGET_CAPS_USD[strategy]).toBeLessThanOrEqual(0.10);
+        expect(C3_STRATEGY_BUDGET_CAPS_USD[strategy]).toBeLessThanOrEqual(0.1);
       }
     });
   });
 
   describe('budget caps: per-strategy values', () => {
     it('single cap is $0.010 (1 provider call)', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['single']).toBe(0.010);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['single']).toBe(0.01);
     });
 
     it('consensus cap is $0.050', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['consensus']).toBe(0.050);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['consensus']).toBe(0.05);
     });
 
     it('debate cap is $0.050', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['debate']).toBe(0.050);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['debate']).toBe(0.05);
     });
 
     it('expert-panel cap is $0.050', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['expert-panel']).toBe(0.050);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['expert-panel']).toBe(0.05);
     });
 
     it('cost-cascade cap is $0.030 (economy-tier focused)', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['cost-cascade']).toBe(0.030);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['cost-cascade']).toBe(0.03);
     });
 
     it('critique-repair cap is $0.040', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['critique-repair']).toBe(0.040);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['critique-repair']).toBe(0.04);
     });
 
     it('quality-multipass cap is $0.080 (most provider calls)', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['quality-multipass']).toBe(0.080);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['quality-multipass']).toBe(0.08);
     });
   });
 
@@ -152,8 +151,9 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §6+8 — budget policy and provenance schem
     });
 
     it('cost-cascade cap is less than consensus (cascade is cost-optimized — thesis relevant)', () => {
-      expect(C3_STRATEGY_BUDGET_CAPS_USD['cost-cascade'])
-        .toBeLessThan(C3_STRATEGY_BUDGET_CAPS_USD['consensus']);
+      expect(C3_STRATEGY_BUDGET_CAPS_USD['cost-cascade']).toBeLessThan(
+        C3_STRATEGY_BUDGET_CAPS_USD['consensus']
+      );
     });
   });
 
@@ -177,12 +177,26 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §6+8 — budget policy and provenance schem
 
   describe('provenance schema: original 20 fields preserved', () => {
     const original20 = [
-      'executionId', 'experimentId', 'taskId', 'strategyId',
-      'dryRun', 'planOnly', 'planFingerprint', 'semanticPlanVersion',
-      'participantModels', 'synthesizerModelId', 'judgeModelId',
-      'qualityScore', 'qualityDimensions', 'latencyMs', 'costUsdEstimated',
-      'timestamp', 'providerIds', 'c3EligibilityPolicyVersion',
-      'qualityScoreSource', 'stepCount',
+      'executionId',
+      'experimentId',
+      'taskId',
+      'strategyId',
+      'dryRun',
+      'planOnly',
+      'planFingerprint',
+      'semanticPlanVersion',
+      'participantModels',
+      'synthesizerModelId',
+      'judgeModelId',
+      'qualityScore',
+      'qualityDimensions',
+      'latencyMs',
+      'costUsdEstimated',
+      'timestamp',
+      'providerIds',
+      'c3EligibilityPolicyVersion',
+      'qualityScoreSource',
+      'stepCount',
     ] as const;
 
     for (const field of original20) {

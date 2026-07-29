@@ -18,11 +18,7 @@
  */
 
 export type EvaluatorConfigMode =
-  | 'unavailable'
-  | 'structural'
-  | 'task_specific'
-  | 'llm_judge'
-  | 'composite';
+  'unavailable' | 'structural' | 'task_specific' | 'llm_judge' | 'composite';
 
 export interface EvaluatorConfig {
   readonly mode: EvaluatorConfigMode;
@@ -42,9 +38,7 @@ const VALID_MODES: ReadonlySet<EvaluatorConfigMode> = new Set([
   'composite',
 ]);
 
-export function loadEvaluatorConfigFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): EvaluatorConfig {
+export function loadEvaluatorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): EvaluatorConfig {
   const rawMode = (env.STRATEGY_EVALUATOR_MODE ?? '').trim();
   const mode: EvaluatorConfigMode = VALID_MODES.has(rawMode as EvaluatorConfigMode)
     ? (rawMode as EvaluatorConfigMode)

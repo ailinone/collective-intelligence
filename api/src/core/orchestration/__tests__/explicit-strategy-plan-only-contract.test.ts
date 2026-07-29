@@ -52,7 +52,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
   describe('selectionSource field in strategy_resolution_trace', () => {
     it('explicit selection source sets coldStartPolicyApplied=false', () => {
       const result = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true },
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -63,7 +70,13 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
     it('cold-start-policy selection source sets coldStartPolicyApplied=true', () => {
       const result = buildPlanOnlyResult(
-        'single', 'cold-start-policy', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9,
+        'single',
+        'cold-start-policy',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -74,7 +87,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
     it('resolvedStrategy in trace matches the strategyName argument', () => {
       for (const strategy of ['single', 'consensus', 'debate', 'cost-cascade']) {
         const result = buildPlanOnlyResult(
-          strategy, 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.85, { registered: true },
+          strategy,
+          'explicit',
+          'request-flag',
+          REQ,
+          CTX_WITH_MODELS,
+          null,
+          0.85,
+          { registered: true }
         );
         const meta = result.metadata as Record<string, unknown>;
         const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -86,7 +106,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
   describe('context integration — models and taskType', () => {
     it('modelsAvailable in trace reflects context.models.length', () => {
       const result = buildPlanOnlyResult(
-        'consensus', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true },
+        'consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -95,7 +122,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
     it('modelsAvailable=0 when context has no models', () => {
       const result = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX_EMPTY_MODELS, null, 0.7, { registered: true },
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_EMPTY_MODELS,
+        null,
+        0.7,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -104,7 +138,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
     it('taskType in trace reflects context.taskType', () => {
       const result = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true },
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['strategy_resolution_trace'] as Record<string, unknown>;
@@ -115,9 +156,14 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
   describe('triage trace when triage not invoked', () => {
     it('triage_trace.invoked=false when triageDecision=null', () => {
       const result = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS,
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
         null, // triageDecision = null
-        0.9, { registered: true },
+        0.9,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['triage_trace'] as Record<string, unknown>;
@@ -127,9 +173,19 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
     it('triage_trace.invoked=true when triageDecision is provided', () => {
       const result = buildPlanOnlyResult(
-        'consensus', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS,
-        { intent: 'analysis', complexity: 'high', confidence: 0.92, recommendedStrategy: 'consensus' },
-        0.9, { registered: true },
+        'consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        {
+          intent: 'analysis',
+          complexity: 'high',
+          confidence: 0.92,
+          recommendedStrategy: 'consensus',
+        },
+        0.9,
+        { registered: true }
       );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['triage_trace'] as Record<string, unknown>;
@@ -142,35 +198,80 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
   describe('cost-quality trace', () => {
     it('estimatedPlanCostUsd is always 0', () => {
-      const result = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['cost_quality_trace'] as Record<string, unknown>;
       expect(trace['estimatedPlanCostUsd']).toBe(0);
     });
 
     it('providerCallExecuted is false in cost_quality_trace', () => {
-      const result = buildPlanOnlyResult('single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['cost_quality_trace'] as Record<string, unknown>;
       expect(trace['providerCallExecuted']).toBe(false);
     });
 
     it('qualityTarget reflects the passed qualityTarget', () => {
-      const result = buildPlanOnlyResult('debate', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.75, { registered: true });
+      const result = buildPlanOnlyResult(
+        'debate',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.75,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['cost_quality_trace'] as Record<string, unknown>;
       expect(trace['qualityTarget']).toBe(0.75);
     });
 
     it('planExecutable=false when no models available (routeReadiness=0)', () => {
-      const result = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, CTX_EMPTY_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_EMPTY_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['cost_quality_trace'] as Record<string, unknown>;
       expect(trace['planExecutable']).toBe(false);
     });
 
     it('planExecutable=true when models are available', () => {
-      const result = buildPlanOnlyResult('single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const trace = meta['cost_quality_trace'] as Record<string, unknown>;
       expect(trace['planExecutable']).toBe(true);
@@ -179,39 +280,83 @@ describe('01C.1B-SM-R3 §12c — explicit strategy plan-only contract', () => {
 
   describe('route candidates trace', () => {
     it('route_candidates.routeSelectionPolicy equals selectionSource', () => {
-      const result = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const routeCands = meta['route_candidates'] as Record<string, unknown>;
       expect(routeCands['routeSelectionPolicy']).toBe('explicit');
     });
 
     it('route_candidates.selectedRoute is null when no models available', () => {
-      const result = buildPlanOnlyResult('single', 'explicit', 'request-flag', REQ, CTX_EMPTY_MODELS, null, 0.7, { registered: true });
+      const result = buildPlanOnlyResult(
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_EMPTY_MODELS,
+        null,
+        0.7,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const routeCands = meta['route_candidates'] as Record<string, unknown>;
       expect(routeCands['selectedRoute']).toBeNull();
     });
 
     it('route_candidates.selectedRoute is a model id when models are available', () => {
-      const result = buildPlanOnlyResult('single', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: true });
+      const result = buildPlanOnlyResult(
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: true }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const routeCands = meta['route_candidates'] as Record<string, unknown>;
       expect(typeof routeCands['selectedRoute']).toBe('string');
     });
 
     it('route_candidates.candidates are all available=false for unregistered strategy', () => {
-      const result = buildPlanOnlyResult('sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX_WITH_MODELS, null, 0.9, { registered: false });
+      const result = buildPlanOnlyResult(
+        'sensitivity-consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX_WITH_MODELS,
+        null,
+        0.9,
+        { registered: false }
+      );
       const meta = result.metadata as Record<string, unknown>;
       const routeCands = meta['route_candidates'] as Record<string, unknown>;
       const candidates = routeCands['candidates'] as Array<{ available: boolean }>;
-      expect(candidates.every(c => c.available === false)).toBe(true);
+      expect(candidates.every((c) => c.available === false)).toBe(true);
     });
   });
 
   describe('detection path preserved in metadata', () => {
     it('dry_run_interception_path matches the passed detectionPath', () => {
       for (const path of ['request-flag', 'ailin-metadata-flag', 'eval-flag'] as const) {
-        const result = buildPlanOnlyResult('single', 'explicit', path, REQ, CTX_WITH_MODELS, null, 0.9);
+        const result = buildPlanOnlyResult(
+          'single',
+          'explicit',
+          path,
+          REQ,
+          CTX_WITH_MODELS,
+          null,
+          0.9
+        );
         const meta = result.metadata as Record<string, unknown>;
         expect(meta['dry_run_interception_path']).toBe(path);
       }

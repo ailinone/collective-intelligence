@@ -121,7 +121,8 @@ export class CompositeEvaluator implements StrategyOutputEvaluator {
     let verdict: 'pass' | 'fail' | 'uncertain';
     let validationStatus: ValidationStatus;
 
-    const taskFullyValidated = taskValidation === 'fully_validated' && typeof taskScore === 'number';
+    const taskFullyValidated =
+      taskValidation === 'fully_validated' && typeof taskScore === 'number';
 
     if (taskFullyValidated && judgeFullyValidated) {
       score = clamp01(taskScore! * weights.taskSpecific + judgeScore! * weights.llmJudge);
@@ -144,16 +145,20 @@ export class CompositeEvaluator implements StrategyOutputEvaluator {
       score = undefined;
       selectedScoreSource = 'none';
       verdict = taskResult?.verdict ?? 'uncertain';
-      validationStatus = this.opts.structural || this.opts.taskSpecific
-        ? 'structurally_validated_only'
-        : 'unavailable';
+      validationStatus =
+        this.opts.structural || this.opts.taskSpecific
+          ? 'structurally_validated_only'
+          : 'unavailable';
     }
 
     // Aggregate structural facts from the strongest signal we have.
-    const baseStructural = taskResult?.structural
-      ?? judgeResult?.structural
-      ?? subResults[0]?.result.structural
-      ?? { nonEmpty: true, meetsMinLength: true, executionError: false };
+    const baseStructural = taskResult?.structural ??
+      judgeResult?.structural ??
+      subResults[0]?.result.structural ?? {
+        nonEmpty: true,
+        meetsMinLength: true,
+        executionError: false,
+      };
 
     return {
       scoringMode: this.mode,

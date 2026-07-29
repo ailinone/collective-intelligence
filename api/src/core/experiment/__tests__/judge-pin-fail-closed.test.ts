@@ -46,7 +46,9 @@ describe('judgeModelMatchesPin', () => {
 
   it('REJECTS a genuinely different model (the substitution bug)', () => {
     // The exact production substitution: pin was qwen, but Llama answered.
-    expect(judgeModelMatchesPin('meta-llama/Llama-3.3-70B-Instruct', 'qwen/qwen3.6-plus:free')).toBe(false);
+    expect(
+      judgeModelMatchesPin('meta-llama/Llama-3.3-70B-Instruct', 'qwen/qwen3.6-plus:free')
+    ).toBe(false);
     expect(judgeModelMatchesPin('zai-org/GLM-5.2', 'qwen/qwen3.6-plus:free')).toBe(false);
     expect(judgeModelMatchesPin('google/gemma-4-31B-it', 'qwen/qwen3.6-plus:free')).toBe(false);
   });

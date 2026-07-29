@@ -24,13 +24,8 @@ import {
   aggregatePerAgent,
   summarizePerAgentStates,
 } from '../per-agent-state';
-import {
-  coordinateMedianConsensus,
-} from '../coordinate-median-consensus';
-import {
-  createFullyConnectedTopology,
-  createRingTopology,
-} from '../collective-topology';
+import { coordinateMedianConsensus } from '../coordinate-median-consensus';
+import { createFullyConnectedTopology, createRingTopology } from '../collective-topology';
 
 function defaultLimits(): CoordinationLimits {
   return {
@@ -110,7 +105,7 @@ describe('aggregatePerAgent', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-test',
+      'run-test'
     );
 
     expect(nextStates.size).toBe(3);
@@ -124,22 +119,72 @@ describe('aggregatePerAgent', () => {
     }
   });
 
-  it('limits each agent\'s view to its neighbors under a ring topology', () => {
+  it("limits each agent's view to its neighbors under a ring topology", () => {
     const agentIds = ['a', 'b', 'c', 'd'];
     const states = createInitialPerAgentStates(agentIds);
     const topology = createRingTopology(agentIds);
     // Signal from 'c' has a unique extra sensitivity variable 'cost'.
     const signals = [
-      makeSignal({ agentId: 'a', sensitivities: [{ variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r-a', expectedDelta: 0.5 }] }),
-      makeSignal({ agentId: 'b', sensitivities: [{ variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r-b', expectedDelta: 0.4 }] }),
+      makeSignal({
+        agentId: 'a',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r-a',
+            expectedDelta: 0.5,
+          },
+        ],
+      }),
+      makeSignal({
+        agentId: 'b',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r-b',
+            expectedDelta: 0.4,
+          },
+        ],
+      }),
       makeSignal({
         agentId: 'c',
         sensitivities: [
-          { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r-c', expectedDelta: 0.6 },
-          { variable: 'cost', direction: 'increase', trigger: 't', confidence: 0.7, rationale: 'r-c', expectedDelta: 0.3 },
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r-c',
+            expectedDelta: 0.6,
+          },
+          {
+            variable: 'cost',
+            direction: 'increase',
+            trigger: 't',
+            confidence: 0.7,
+            rationale: 'r-c',
+            expectedDelta: 0.3,
+          },
         ],
       }),
-      makeSignal({ agentId: 'd', sensitivities: [{ variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r-d', expectedDelta: 0.5 }] }),
+      makeSignal({
+        agentId: 'd',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r-d',
+            expectedDelta: 0.5,
+          },
+        ],
+      }),
     ];
 
     const { nextStates } = aggregatePerAgent(
@@ -149,7 +194,7 @@ describe('aggregatePerAgent', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-test',
+      'run-test'
     );
 
     // Ring on 4 nodes: a's neighbors are d,b. So a sees signals from a,b,d
@@ -177,7 +222,7 @@ describe('aggregatePerAgent', () => {
       'llm_synthesis',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-test',
+      'run-test'
     );
     expect(nextStates.size).toBe(2);
   });
@@ -192,7 +237,15 @@ describe('aggregatePerAgent', () => {
 
     const topology = createFullyConnectedTopology(agentIds);
     const signals = agentIds.map((id) => makeSignal({ agentId: id }));
-    aggregatePerAgent(states, signals, topology, 'weighted_confidence', defaultLimits(), 'sensitivity-consensus', 'run-test');
+    aggregatePerAgent(
+      states,
+      signals,
+      topology,
+      'weighted_confidence',
+      defaultLimits(),
+      'sensitivity-consensus',
+      'run-test'
+    );
 
     const after = JSON.stringify({
       a: states.get('a')!.variables,
@@ -218,11 +271,41 @@ describe('summarizePerAgentStates', () => {
 describe('coordinateMedianConsensus', () => {
   it('produces a numeric coordinate median', () => {
     const states = createInitialPerAgentStates(['a', 'b', 'c', 'd', 'e']);
-    states.get('a')!.variables.risk = { value: 0.1, confidence: 0.8, updatedBy: ['a'], rationale: 'r', stability: 1 };
-    states.get('b')!.variables.risk = { value: 0.2, confidence: 0.8, updatedBy: ['b'], rationale: 'r', stability: 1 };
-    states.get('c')!.variables.risk = { value: 0.3, confidence: 0.8, updatedBy: ['c'], rationale: 'r', stability: 1 };
-    states.get('d')!.variables.risk = { value: 0.4, confidence: 0.8, updatedBy: ['d'], rationale: 'r', stability: 1 };
-    states.get('e')!.variables.risk = { value: 0.5, confidence: 0.8, updatedBy: ['e'], rationale: 'r', stability: 1 };
+    states.get('a')!.variables.risk = {
+      value: 0.1,
+      confidence: 0.8,
+      updatedBy: ['a'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('b')!.variables.risk = {
+      value: 0.2,
+      confidence: 0.8,
+      updatedBy: ['b'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('c')!.variables.risk = {
+      value: 0.3,
+      confidence: 0.8,
+      updatedBy: ['c'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('d')!.variables.risk = {
+      value: 0.4,
+      confidence: 0.8,
+      updatedBy: ['d'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('e')!.variables.risk = {
+      value: 0.5,
+      confidence: 0.8,
+      updatedBy: ['e'],
+      rationale: 'r',
+      stability: 1,
+    };
 
     const result = coordinateMedianConsensus(states);
     expect(result.variables.risk).toBeDefined();
@@ -231,10 +314,28 @@ describe('coordinateMedianConsensus', () => {
 
   it('is robust to outliers (median, not mean)', () => {
     const states = createInitialPerAgentStates(['a', 'b', 'c']);
-    states.get('a')!.variables.x = { value: 10, confidence: 0.9, updatedBy: ['a'], rationale: 'r', stability: 1 };
-    states.get('b')!.variables.x = { value: 11, confidence: 0.9, updatedBy: ['b'], rationale: 'r', stability: 1 };
+    states.get('a')!.variables.x = {
+      value: 10,
+      confidence: 0.9,
+      updatedBy: ['a'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('b')!.variables.x = {
+      value: 11,
+      confidence: 0.9,
+      updatedBy: ['b'],
+      rationale: 'r',
+      stability: 1,
+    };
     // outlier
-    states.get('c')!.variables.x = { value: 1000, confidence: 0.9, updatedBy: ['c'], rationale: 'r', stability: 1 };
+    states.get('c')!.variables.x = {
+      value: 1000,
+      confidence: 0.9,
+      updatedBy: ['c'],
+      rationale: 'r',
+      stability: 1,
+    };
 
     const result = coordinateMedianConsensus(states);
     // Median of {10, 11, 1000} = 11; mean would be ~340.
@@ -243,9 +344,27 @@ describe('coordinateMedianConsensus', () => {
 
   it('uses confidence-weighted mode for non-numeric values', () => {
     const states = createInitialPerAgentStates(['a', 'b', 'c']);
-    states.get('a')!.variables.decision = { value: 'approve', confidence: 0.9, updatedBy: ['a'], rationale: 'r', stability: 1 };
-    states.get('b')!.variables.decision = { value: 'approve', confidence: 0.6, updatedBy: ['b'], rationale: 'r', stability: 1 };
-    states.get('c')!.variables.decision = { value: 'reject', confidence: 0.3, updatedBy: ['c'], rationale: 'r', stability: 1 };
+    states.get('a')!.variables.decision = {
+      value: 'approve',
+      confidence: 0.9,
+      updatedBy: ['a'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('b')!.variables.decision = {
+      value: 'approve',
+      confidence: 0.6,
+      updatedBy: ['b'],
+      rationale: 'r',
+      stability: 1,
+    };
+    states.get('c')!.variables.decision = {
+      value: 'reject',
+      confidence: 0.3,
+      updatedBy: ['c'],
+      rationale: 'r',
+      stability: 1,
+    };
 
     const result = coordinateMedianConsensus(states);
     expect(result.variables.decision.value).toBe('approve');
@@ -255,9 +374,21 @@ describe('coordinateMedianConsensus', () => {
 
   it('reports partial-coverage variables', () => {
     const states = createInitialPerAgentStates(['a', 'b', 'c']);
-    states.get('a')!.variables.risk = { value: 0.5, confidence: 0.8, updatedBy: ['a'], rationale: 'r', stability: 1 };
+    states.get('a')!.variables.risk = {
+      value: 0.5,
+      confidence: 0.8,
+      updatedBy: ['a'],
+      rationale: 'r',
+      stability: 1,
+    };
     // 'b' did not observe 'risk' (e.g. topology blocked it)
-    states.get('c')!.variables.risk = { value: 0.6, confidence: 0.8, updatedBy: ['c'], rationale: 'r', stability: 1 };
+    states.get('c')!.variables.risk = {
+      value: 0.6,
+      confidence: 0.8,
+      updatedBy: ['c'],
+      rationale: 'r',
+      stability: 1,
+    };
 
     const result = coordinateMedianConsensus(states);
     expect(result.partialCoverageVariables).toContain('risk');

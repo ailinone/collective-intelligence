@@ -23,7 +23,10 @@ import type { ChatRequest, ChatResponse, ChatMessage, MessageContent, Model } fr
 import type { Logger } from 'pino';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import type { TierContext } from '@/services/pricing-tier-billing';
-import { OrchestrationEngine, detectMediaGenerationModality } from '@/core/orchestration/orchestration-engine';
+import {
+  OrchestrationEngine,
+  detectMediaGenerationModality,
+} from '@/core/orchestration/orchestration-engine';
 import { inferCapabilities } from '@/core/orchestration/capability-inference';
 import { authenticate as _authenticate } from '@/middleware/auth-middleware';
 import {
@@ -33,7 +36,10 @@ import {
 import { logger } from '@/utils/logger';
 import { nanoid } from 'nanoid';
 import { processChatRequest } from '@/services/chat-request-processor';
-import { enqueueIfNeeded, queueManagerMiddleware as _queueManagerMiddleware } from '@/api/middleware/queue-manager';
+import {
+  enqueueIfNeeded,
+  queueManagerMiddleware as _queueManagerMiddleware,
+} from '@/api/middleware/queue-manager';
 import { getRequestLogger } from '@/services/request-logger';
 import {
   setupSSEHeaders,
@@ -92,7 +98,8 @@ const chatCompletionSchema = {
             role: {
               type: 'string',
               enum: ['system', 'user', 'assistant', 'function', 'tool'],
-              description: 'Message role: system (instructions), user (user input), assistant (model response), function/tool (tool results)',
+              description:
+                'Message role: system (instructions), user (user input), assistant (model response), function/tool (tool results)',
             },
             content: {
               oneOf: [
@@ -102,12 +109,13 @@ const chatCompletionSchema = {
                   items: {
                     type: 'object',
                     properties: {
-                      type: { 
-                        type: 'string', 
+                      type: {
+                        type: 'string',
                         enum: ['text', 'image_url'],
-                        description: 'Content part type: text (plain text) or image_url (image reference)',
+                        description:
+                          'Content part type: text (plain text) or image_url (image reference)',
                       },
-                      text: { 
+                      text: {
                         type: 'string',
                         description: 'Text content (required when type is "text")',
                       },
@@ -115,50 +123,60 @@ const chatCompletionSchema = {
                         type: 'object',
                         description: 'Image URL object (required when type is "image_url")',
                         properties: {
-                          url: { 
+                          url: {
                             type: 'string',
-                            description: 'Image URL (must be publicly accessible or use data URI format)',
+                            description:
+                              'Image URL (must be publicly accessible or use data URI format)',
                           },
-                          detail: { 
-                            type: 'string', 
+                          detail: {
+                            type: 'string',
                             enum: ['low', 'high', 'auto'],
-                            description: 'Image detail level: low (cost-effective, 512x512), high (full resolution), auto (adaptive based on image size)',
+                            description:
+                              'Image detail level: low (cost-effective, 512x512), high (full resolution), auto (adaptive based on image size)',
                           },
                         },
                       },
                     },
                   },
-                  description: 'Array of content parts (text and/or images) for multimodal messages',
+                  description:
+                    'Array of content parts (text and/or images) for multimodal messages',
                 },
                 {
                   type: 'object',
                   properties: {
-                    type: { 
+                    type: {
                       type: 'string',
                       description: 'Content type (e.g., "text", "image_url")',
                     },
-                    text: { 
+                    text: {
                       type: 'string',
                       description: 'Text content (when type is "text")',
                     },
-                    image_url: { 
+                    image_url: {
                       type: 'object',
                       description: 'Image URL object (when type is "image_url")',
                     },
                   },
                   additionalProperties: true,
-                  description: 'Content object format (alternative to array format for multimodal content)',
+                  description:
+                    'Content object format (alternative to array format for multimodal content)',
                 },
               ],
               description: 'Message content (string, array of parts, or object)',
             },
-            name: { type: 'string', description: 'Optional name for the message (for function/tool messages)' },
+            name: {
+              type: 'string',
+              description: 'Optional name for the message (for function/tool messages)',
+            },
             tool_calls: {
               type: 'array',
               items: { type: 'object', additionalProperties: true },
               description: 'Tool calls made by the assistant',
             },
-            tool_call_id: { type: 'string', description: 'ID of the tool call this message responds to' },
+            tool_call_id: {
+              type: 'string',
+              description: 'ID of the tool call this message responds to',
+            },
           },
         },
         minItems: 1,
@@ -169,18 +187,21 @@ const chatCompletionSchema = {
         minimum: 0,
         maximum: 2,
         default: 1,
-        description: 'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused and deterministic.',
+        description:
+          'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused and deterministic.',
       },
       max_tokens: {
         type: 'integer',
         minimum: 1,
-        description: 'Maximum number of tokens to generate in the completion. Model-dependent limits apply.',
+        description:
+          'Maximum number of tokens to generate in the completion. Model-dependent limits apply.',
       },
       top_p: {
         type: 'number',
         minimum: 0,
         maximum: 1,
-        description: 'Nucleus sampling parameter. Consider tokens with top_p probability mass. Alternative to temperature.',
+        description:
+          'Nucleus sampling parameter. Consider tokens with top_p probability mass. Alternative to temperature.',
       },
       frequency_penalty: {
         type: 'number',
@@ -199,14 +220,20 @@ const chatCompletionSchema = {
       stop: {
         oneOf: [
           { type: 'string', description: 'Single stop sequence' },
-          { type: 'array', items: { type: 'string' }, maxItems: 4, description: 'Up to 4 stop sequences' },
+          {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: 4,
+            description: 'Up to 4 stop sequences',
+          },
         ],
         description: 'Stop sequences. Generation stops when any sequence is encountered.',
       },
       stream: {
         type: 'boolean',
         default: false,
-        description: 'Enable streaming mode. Returns Server-Sent Events (SSE) stream of completion chunks.',
+        description:
+          'Enable streaming mode. Returns Server-Sent Events (SSE) stream of completion chunks.',
       },
       tools: {
         type: 'array',
@@ -218,31 +245,40 @@ const chatCompletionSchema = {
               type: 'object',
               description: 'Function tool definition. Required when type is "function".',
               properties: {
-                name: { 
+                name: {
                   type: 'string',
-                  description: 'Function name (must be unique, lowercase/underscore, a-z, 0-9, _). Used by the model to identify which function to call.',
+                  description:
+                    'Function name (must be unique, lowercase/underscore, a-z, 0-9, _). Used by the model to identify which function to call.',
                 },
-                description: { 
+                description: {
                   type: 'string',
-                  description: 'Function description explaining what the function does. The model uses this to decide when to call the function.',
+                  description:
+                    'Function description explaining what the function does. The model uses this to decide when to call the function.',
                 },
-                parameters: { 
-                  type: 'object', 
+                parameters: {
+                  type: 'object',
                   additionalProperties: true,
-                  description: 'JSON Schema object defining function parameters. Must be valid JSON Schema describing the expected input structure.',
+                  description:
+                    'JSON Schema object defining function parameters. Must be valid JSON Schema describing the expected input structure.',
                 },
               },
             },
           },
         },
-        description: 'List of tools (functions) available to the model. Model may choose to call these tools.',
+        description:
+          'List of tools (functions) available to the model. Model may choose to call these tools.',
       },
       tool_choice: {
         oneOf: [
-          { type: 'string', enum: ['none', 'auto'], description: 'Tool choice mode: none (no tools) or auto (model decides)' },
+          {
+            type: 'string',
+            enum: ['none', 'auto'],
+            description: 'Tool choice mode: none (no tools) or auto (model decides)',
+          },
           { type: 'object', additionalProperties: true, description: 'Force specific tool call' },
         ],
-        description: 'Controls which tool (if any) the model calls. "none" disables tools, "auto" lets model decide.',
+        description:
+          'Controls which tool (if any) the model calls. "none" disables tools, "auto" lets model decide.',
       },
       response_format: {
         type: 'object',
@@ -261,25 +297,30 @@ const chatCompletionSchema = {
       max_cost: {
         type: 'number',
         minimum: 0,
-        description: 'Ailin-specific: Maximum cost in USD for this request. Orchestration will select models within budget.',
+        description:
+          'Ailin-specific: Maximum cost in USD for this request. Orchestration will select models within budget.',
       },
       quality_target: {
         type: 'number',
         minimum: 0,
         maximum: 1,
-        description: 'Ailin-specific: Quality target (0-1). Higher values prioritize quality over cost/speed.',
+        description:
+          'Ailin-specific: Quality target (0-1). Higher values prioritize quality over cost/speed.',
       },
       task_type: {
         type: 'string',
-        description: 'Ailin-specific: Task type hint (e.g., "code-generation", "analysis", "creative") for better model selection',
+        description:
+          'Ailin-specific: Task type hint (e.g., "code-generation", "analysis", "creative") for better model selection',
       },
       no_cache: {
         type: 'boolean',
-        description: 'Ailin-specific: Skip semantic cache lookup. Used for experiment validation to force real LLM calls.',
+        description:
+          'Ailin-specific: Skip semantic cache lookup. Used for experiment validation to force real LLM calls.',
       },
       freeze_learning: {
         type: 'boolean',
-        description: 'Ailin-specific: Do not feed learning/bandit updates from this request. Used by the experiment harness during the frozen measurement phase to keep the system fixed.',
+        description:
+          'Ailin-specific: Do not feed learning/bandit updates from this request. Used by the experiment harness during the frozen measurement phase to keep the system fixed.',
       },
       rag_config: {
         type: 'object',
@@ -290,7 +331,8 @@ const chatCompletionSchema = {
             type: 'array',
             items: { type: 'string' },
             minItems: 1,
-            description: 'Vector store IDs to search. Only stores owned by your organization are queried.',
+            description:
+              'Vector store IDs to search. Only stores owned by your organization are queried.',
           },
           top_k: {
             type: 'integer',
@@ -330,18 +372,26 @@ const chatCompletionResponseSchema = {
     choices: {
       type: 'array',
       description: 'Array of completion choices. Usually contains one choice unless n > 1',
-    items: {
+      items: {
         type: 'object',
         required: ['index', 'message', 'finish_reason'],
         additionalProperties: true,
         description: 'A completion choice containing the generated message',
         properties: {
           index: { type: 'integer', description: 'Index of the choice (0-based)' },
-          finish_reason: { type: 'string', description: 'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required), content_filter (content filtered), or function_call (deprecated)' },
+          finish_reason: {
+            type: 'string',
+            description:
+              'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required), content_filter (content filtered), or function_call (deprecated)',
+          },
           logprobs: {
             anyOf: [
               { type: 'null', description: 'No logprobs returned' },
-              { type: 'object', additionalProperties: true, description: 'Log probability information for tokens' },
+              {
+                type: 'object',
+                additionalProperties: true,
+                description: 'Log probability information for tokens',
+              },
             ],
             description: 'Log probabilities for tokens (if requested)',
           },
@@ -358,7 +408,11 @@ const chatCompletionResponseSchema = {
                   {
                     type: 'array',
                     description: 'Array of content parts (for multimodal responses)',
-                    items: { type: 'object', additionalProperties: true, description: 'Content part object (text, image_url, etc.)' },
+                    items: {
+                      type: 'object',
+                      additionalProperties: true,
+                      description: 'Content part object (text, image_url, etc.)',
+                    },
                   },
                 ],
                 description: 'Message content (string or array of parts)',
@@ -366,7 +420,10 @@ const chatCompletionResponseSchema = {
               refusal: {
                 anyOf: [
                   { type: 'null', description: 'No refusal reason' },
-                  { type: 'string', description: 'Reason why the model refused to respond (safety/content policy)' },
+                  {
+                    type: 'string',
+                    description: 'Reason why the model refused to respond (safety/content policy)',
+                  },
                 ],
                 description: 'Refusal reason if the model declined to respond',
               },
@@ -376,7 +433,11 @@ const chatCompletionResponseSchema = {
                   {
                     type: 'array',
                     description: 'Array of tool calls made by the model',
-                    items: { type: 'object', additionalProperties: true, description: 'Tool call object containing function name and arguments' },
+                    items: {
+                      type: 'object',
+                      additionalProperties: true,
+                      description: 'Tool call object containing function name and arguments',
+                    },
                   },
                 ],
                 description: 'Tool calls made by the model (if tools were used)',
@@ -397,17 +458,18 @@ const chatCompletionResponseSchema = {
         total_tokens: { type: 'integer', description: 'Total tokens used (prompt + completion)' },
       },
     },
-    system_fingerprint: { 
+    system_fingerprint: {
       anyOf: [
         { type: 'null', description: 'No system fingerprint available' },
         { type: 'string', description: 'System fingerprint for reproducibility' },
       ],
       description: 'System fingerprint identifying the backend configuration used',
     },
-    ailin_metadata: { 
-      type: 'object', 
+    ailin_metadata: {
+      type: 'object',
       additionalProperties: true,
-      description: 'Ailin-specific metadata about the completion (model used, provider, cost, etc.)',
+      description:
+        'Ailin-specific metadata about the completion (model used, provider, cost, etc.)',
     },
   },
 };
@@ -432,21 +494,23 @@ function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
   const explicitlyAuto = modelValue.toLowerCase() === 'auto' || aliasResolution !== null;
   const hasUserFlag = 'user_specified_model' in chatRequest;
   const strategyFromAlias =
-    !chatRequest.strategy && aliasResolution?.strategy
-      ? aliasResolution.strategy
-      : undefined;
+    !chatRequest.strategy && aliasResolution?.strategy ? aliasResolution.strategy : undefined;
 
   const normalizedRequest: ChatRequest = {
     ...chatRequest,
     model: aliasResolution ? aliasResolution.model : chatRequest.model,
-    strategy: resolvedStrategy ?? (normalizedStrategyInput === 'dynamic' ? 'auto' : chatRequest.strategy),
+    strategy:
+      resolvedStrategy ?? (normalizedStrategyInput === 'dynamic' ? 'auto' : chatRequest.strategy),
     messages: normalizedMessages,
   };
 
   if (strategyFromAlias) {
     normalizedRequest.strategy = strategyFromAlias;
   }
-  if (aliasResolution?.qualityTarget !== undefined && normalizedRequest.quality_target === undefined) {
+  if (
+    aliasResolution?.qualityTarget !== undefined &&
+    normalizedRequest.quality_target === undefined
+  ) {
     normalizedRequest.quality_target = aliasResolution.qualityTarget;
   }
   if (aliasResolution?.maxCost !== undefined && normalizedRequest.max_cost === undefined) {
@@ -556,7 +620,9 @@ function normalizeMessageContent(content: ChatMessage['content']): ChatMessage['
   return String(content);
 }
 
-function normalizeContentItem(item: MessageContent | string | Record<string, unknown>): MessageContent {
+function normalizeContentItem(
+  item: MessageContent | string | Record<string, unknown>
+): MessageContent {
   if (typeof item === 'string') {
     return { type: 'text', text: item };
   }
@@ -615,7 +681,8 @@ export async function registerChatRoutes(
       schema: {
         tags: ['Chat'],
         summary: 'Create a chat completion',
-        description: 'Create a chat completion with intelligent multi-model orchestration. Supports streaming and non-streaming modes. Automatically selects the best model based on requirements, cost, and quality targets.',
+        description:
+          'Create a chat completion with intelligent multi-model orchestration. Supports streaming and non-streaming modes. Automatically selects the best model based on requirements, cost, and quality targets.',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         body: {
           ...chatCompletionSchema.body,
@@ -635,12 +702,22 @@ export async function registerChatRoutes(
               message: { type: 'string', description: 'Queue message' },
               queueId: { type: 'string', description: 'Queue ID for tracking' },
               position: { type: 'integer', description: 'Position in queue' },
-              estimatedWaitTimeMs: { type: 'integer', description: 'Estimated wait time in milliseconds' },
+              estimatedWaitTimeMs: {
+                type: 'integer',
+                description: 'Estimated wait time in milliseconds',
+              },
               priority: { type: 'integer', description: 'Request priority' },
-              tier: { type: 'string', enum: ['enterprise', 'pro', 'free'], description: 'User tier' },
+              tier: {
+                type: 'string',
+                enum: ['enterprise', 'pro', 'free'],
+                description: 'User tier',
+              },
               systemLoad: { type: 'number', description: 'Current system load' },
               reason: { type: 'string', description: 'Reason for queueing' },
-              pollAfterMs: { type: 'integer', description: 'Recommended polling interval in milliseconds' },
+              pollAfterMs: {
+                type: 'integer',
+                description: 'Recommended polling interval in milliseconds',
+              },
               statusUrl: { type: 'string', description: 'URL to check request status' },
               expiresAt: { type: 'integer', description: 'Unix timestamp when request expires' },
             },
@@ -822,7 +899,10 @@ export async function registerChatRoutes(
       // and fail-open; covers BOTH streaming and non-streaming (runs before the split).
       // `tierCtx` is reused at the debit site inside the idempotency handler below.
       const tierCtx = isTierBillingEnabled()
-        ? extractTierContext({ tier: chatRequest.ailin_tier, tierRate: chatRequest.ailin_tier_rate })
+        ? extractTierContext({
+            tier: chatRequest.ailin_tier,
+            tierRate: chatRequest.ailin_tier_rate,
+          })
         : null;
       if (tierCtx) {
         const gate = await gateTierRequest(
@@ -933,15 +1013,16 @@ export async function registerChatRoutes(
         // Extract error details safely using type guards
         const { extractStatusCode } = await import('@/utils/type-guards');
         const statusCode = extractStatusCode(error);
-        
-        const errorMessage = error instanceof Error 
-          ? error.message 
-          : typeof error === 'string' 
-            ? error 
-            : 'An unexpected error occurred';
-        
+
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'An unexpected error occurred';
+
         const errorStack = error instanceof Error ? error.stack : undefined;
-        
+
         // Log error details for debugging
         requestLog.error(
           {
@@ -974,62 +1055,80 @@ export async function registerChatRoutes(
 
         // Handle specific error status codes
         if (statusCode === 429) {
-          return reply.code(429).type('application/json').send({
-            error: {
-              code: 'rate_limit_exceeded',
-              message: 'Rate limit exceeded. Please try again later.',
-            },
-          });
+          return reply
+            .code(429)
+            .type('application/json')
+            .send({
+              error: {
+                code: 'rate_limit_exceeded',
+                message: 'Rate limit exceeded. Please try again later.',
+              },
+            });
         }
 
         if (statusCode === 401) {
-          return reply.code(401).type('application/json').send({
-            error: {
-              code: 'unauthorized',
-              message: 'Invalid or missing authentication.',
-            },
-          });
+          return reply
+            .code(401)
+            .type('application/json')
+            .send({
+              error: {
+                code: 'unauthorized',
+                message: 'Invalid or missing authentication.',
+              },
+            });
         }
 
         if (statusCode && statusCode >= 400 && statusCode < 500) {
           const { extractErrorCodeFromObject } = await import('@/utils/type-guards');
           const clientErrorCode = extractErrorCodeFromObject(error) || 'bad_request';
-          return reply.code(statusCode).type('application/json').send({
-            error: {
-              code: clientErrorCode,
-              message: errorMessage || 'Request could not be processed',
-            },
-          });
+          return reply
+            .code(statusCode)
+            .type('application/json')
+            .send({
+              error: {
+                code: clientErrorCode,
+                message: errorMessage || 'Request could not be processed',
+              },
+            });
         }
 
         // Handle Prisma errors specifically
         const { extractErrorCodeFromObject } = await import('@/utils/type-guards');
         const prismaCode = extractErrorCodeFromObject(error);
         if (prismaCode === 'P2002') {
-          return reply.code(409).type('application/json').send({
-            error: {
-              code: 'duplicate_entry',
-              message: 'A record with this value already exists',
-            },
-          });
+          return reply
+            .code(409)
+            .type('application/json')
+            .send({
+              error: {
+                code: 'duplicate_entry',
+                message: 'A record with this value already exists',
+              },
+            });
         }
         if (prismaCode === 'P2003' || prismaCode === 'P2014') {
-          return reply.code(400).type('application/json').send({
-            error: {
-              code: 'foreign_key_constraint',
-              message: 'Invalid reference to related record',
-            },
-          });
+          return reply
+            .code(400)
+            .type('application/json')
+            .send({
+              error: {
+                code: 'foreign_key_constraint',
+                message: 'Invalid reference to related record',
+              },
+            });
         }
         if (prismaCode === 'P2025') {
-          return reply.code(404).type('application/json').send({
-            error: {
-              code: 'record_not_found',
-              message: 'The requested record was not found',
-            },
-          });
+          return reply
+            .code(404)
+            .type('application/json')
+            .send({
+              error: {
+                code: 'record_not_found',
+                message: 'The requested record was not found',
+              },
+            });
         }
-        
+
         // Default error response - ensure proper serialization
         const errorResponse: {
           error: {
@@ -1048,7 +1147,7 @@ export async function registerChatRoutes(
         if (isDevelopment && errorStack) {
           errorResponse.error.stack = errorStack;
         }
-        
+
         return reply.code(500).type('application/json').send(errorResponse);
       }
     }
@@ -1175,7 +1274,9 @@ async function handleStreamingRequest(
     max_tokens: chatRequest.max_tokens,
   });
   if (detectMediaGenerationModality(mediaGateInference.requiredCapabilities) === 'file') {
-    requestLog.info('File-generation intent detected on streaming request — redirecting to non-streaming artifact pipeline');
+    requestLog.info(
+      'File-generation intent detected on streaming request — redirecting to non-streaming artifact pipeline'
+    );
     try {
       await withIdempotency({
         request,
@@ -1448,7 +1549,12 @@ async function handleStreamingRequest(
     try {
       const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
       const hub = getProviderOperabilityHub();
-      const PROVEN_BAD = new Set(['auth_failed', 'no_credits', 'rate_limited', 'temporarily_unavailable']);
+      const PROVEN_BAD = new Set([
+        'auth_failed',
+        'no_credits',
+        'rate_limited',
+        'temporarily_unavailable',
+      ]);
       const routeRank = (c: (typeof candidates)[number]): number => {
         const provider = (c.adapter.getName() || c.model.provider || '').toLowerCase();
         if (!provider) return 1;
@@ -1539,7 +1645,7 @@ async function handleStreamingRequest(
           index,
           candidateRanks,
           staticFirstChunkTimeoutMs,
-          Number(process.env.STREAMING_FIRST_CHUNK_FALLBACK_MS ?? 1800),
+          Number(process.env.STREAMING_FIRST_CHUNK_FALLBACK_MS ?? 1800)
         );
         const idleTimeoutMs = Number(process.env.STREAMING_IDLE_MS ?? 15000);
         if (firstChunkTimeoutMs !== staticFirstChunkTimeoutMs) {
@@ -1552,9 +1658,13 @@ async function handleStreamingRequest(
           try {
             const ret = iterator.return?.(undefined);
             if (ret && typeof (ret as Promise<unknown>).then === 'function') {
-              (ret as Promise<unknown>).catch(() => { /* ignore */ });
+              (ret as Promise<unknown>).catch(() => {
+                /* ignore */
+              });
             }
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         };
 
         // First chunk under a hard deadline (rethrow on timeout → next candidate).
@@ -1562,7 +1672,7 @@ async function handleStreamingRequest(
         const firstDeadline = new Promise<never>((_, reject) => {
           firstTimer = setTimeout(
             () => reject(new Error(`first-chunk timeout after ${firstChunkTimeoutMs}ms`)),
-            firstChunkTimeoutMs,
+            firstChunkTimeoutMs
           );
         });
         let result: IteratorResult<ChatResponse>;
@@ -1609,7 +1719,7 @@ async function handleStreamingRequest(
           if (idledOut) {
             requestLog.warn(
               { provider: candidate.adapter.getName(), model: candidate.model.name, idleTimeoutMs },
-              'Single-stream idle past deadline — closing straggling provider stream',
+              'Single-stream idle past deadline — closing straggling provider stream'
             );
             closeIterator();
             break;
@@ -1693,9 +1803,13 @@ async function handleStreamingRequest(
         try {
           const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
           getProviderOperabilityHub().recordRouteExecution(
-            candidate.adapter.getName(), candidate.model.id, true,
+            candidate.adapter.getName(),
+            candidate.model.id,
+            true
           );
-        } catch { /* hub unavailable — non-fatal */ }
+        } catch {
+          /* hub unavailable — non-fatal */
+        }
 
         reply.raw.end();
         return;
@@ -1710,14 +1824,13 @@ async function handleStreamingRequest(
           code?: string;
           type?: string;
           status?: number;
-          response?: { 
+          response?: {
             data?: { error?: { code?: string; type?: string; param?: string } };
             status?: number;
           };
         }
-        const errorObj: ProviderError | null = error && typeof error === 'object' && error !== null
-          ? error as ProviderError
-          : null;
+        const errorObj: ProviderError | null =
+          error && typeof error === 'object' && error !== null ? (error as ProviderError) : null;
         const errorDetails = {
           message: errorObj?.message || errorObj?.error?.message || String(error),
           code: errorObj?.error?.code || errorObj?.code || errorObj?.response?.data?.error?.code,
@@ -1769,10 +1882,15 @@ async function handleStreamingRequest(
         try {
           const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
           getProviderOperabilityHub().recordRouteExecution(
-            candidate.adapter.getName(), candidate.model.id, false,
-            errorDetails.status, errorDetails.message,
+            candidate.adapter.getName(),
+            candidate.model.id,
+            false,
+            errorDetails.status,
+            errorDetails.message
           );
-        } catch { /* hub unavailable — non-fatal */ }
+        } catch {
+          /* hub unavailable — non-fatal */
+        }
 
         if (firstChunkSent) {
           throw error;
@@ -1808,7 +1926,10 @@ async function handleStreamingRequest(
     const durationMs = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    requestLog.error({ error: errorMessage, duration: durationMs, allAttempts }, 'Streaming failed');
+    requestLog.error(
+      { error: errorMessage, duration: durationMs, allAttempts },
+      'Streaming failed'
+    );
 
     sendSSEError(reply, errorObj);
     sendSSEDone(reply);
@@ -1944,26 +2065,30 @@ export async function registerCapabilityRoutes(
 
         const response = {
           requirements,
-          triage: triage ? {
-            suggestedCapabilities: triage.suggestedCapabilities,
-            suggestedTaskType: triage.suggestedTaskType,
-            complexity: triage.complexity,
-            confidence: triage.confidence,
-            triageModelsUsed: triage.triageModelsUsed,
-            crossValidated: triage.crossValidated,
-          } : null,
+          triage: triage
+            ? {
+                suggestedCapabilities: triage.suggestedCapabilities,
+                suggestedTaskType: triage.suggestedTaskType,
+                complexity: triage.complexity,
+                confidence: triage.confidence,
+                triageModelsUsed: triage.triageModelsUsed,
+                crossValidated: triage.crossValidated,
+              }
+            : null,
           selection: {
             totalModelsEvaluated: selection.totalModelsEvaluated,
             totalModelsMatched: selection.totalModelsMatched,
             selectionTime: selection.selectionTime,
-            primaryCandidate: selection.primaryCandidate ? {
-              modelId: selection.primaryCandidate.model.id,
-              provider: selection.primaryCandidate.model.provider,
-              score: selection.primaryCandidate.score,
-              reason: selection.primaryCandidate.reason,
-              matchedCapabilities: selection.primaryCandidate.matchedCapabilities,
-            } : null,
-            topCandidates: selection.candidates.slice(0, 10).map(c => ({
+            primaryCandidate: selection.primaryCandidate
+              ? {
+                  modelId: selection.primaryCandidate.model.id,
+                  provider: selection.primaryCandidate.model.provider,
+                  score: selection.primaryCandidate.score,
+                  reason: selection.primaryCandidate.reason,
+                  matchedCapabilities: selection.primaryCandidate.matchedCapabilities,
+                }
+              : null,
+            topCandidates: selection.candidates.slice(0, 10).map((c) => ({
               modelId: c.model.id,
               provider: c.model.provider,
               score: c.score,
@@ -1972,12 +2097,15 @@ export async function registerCapabilityRoutes(
           },
         };
 
-        requestLog.info({
-          complexity: requirements.complexity,
-          taskType: requirements.taskType,
-          modelsMatched: selection.totalModelsMatched,
-          primaryModel: selection.primaryCandidate?.model.id,
-        }, 'Requirements analysis complete');
+        requestLog.info(
+          {
+            complexity: requirements.complexity,
+            taskType: requirements.taskType,
+            modelsMatched: selection.totalModelsMatched,
+            primaryModel: selection.primaryCandidate?.model.id,
+          },
+          'Requirements analysis complete'
+        );
 
         return reply.send(response);
       } catch (error: unknown) {
@@ -2167,7 +2295,10 @@ export async function registerCapabilityRoutes(
             });
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            requestLog.warn({ provider: adapter.getName(), error: errorMessage }, 'Failed to get provider info');
+            requestLog.warn(
+              { provider: adapter.getName(), error: errorMessage },
+              'Failed to get provider info'
+            );
           }
         }
 
@@ -2213,7 +2344,8 @@ export async function registerCapabilityRoutes(
       schema: {
         tags: ['Chat', 'Intelligent'],
         summary: 'Create chat completion with intelligent selection',
-        description: 'Chat completion with intelligent model selection, triage, and unlimited fallback. Uses advanced AI to analyze requirements and automatically select the best model, with automatic failover to alternative models if needed.',
+        description:
+          'Chat completion with intelligent model selection, triage, and unlimited fallback. Uses advanced AI to analyze requirements and automatically select the best model, with automatic failover to alternative models if needed.',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         body: {
           ...chatCompletionSchema.body,
@@ -2325,31 +2457,40 @@ export async function registerCapabilityRoutes(
         // Step 1: Analyze requirements
         const requirements = await intelligentSelection.analyzeRequirements(chatRequest);
 
-        requestLog.info({
-          complexity: requirements.complexity,
-          taskType: requirements.taskType,
-          requiredCapabilities: requirements.required,
-        }, 'Requirements analyzed');
+        requestLog.info(
+          {
+            complexity: requirements.complexity,
+            taskType: requirements.taskType,
+            requiredCapabilities: requirements.required,
+          },
+          'Requirements analyzed'
+        );
 
         // Step 2: Perform triage for complex requests
         const triage = await intelligentSelection.performInputTriage(chatRequest, requirements);
 
         if (triage) {
-          requestLog.info({
-            triageModels: triage.triageModelsUsed,
-            suggestedCapabilities: triage.suggestedCapabilities,
-            confidence: triage.confidence,
-          }, 'Input triage completed');
+          requestLog.info(
+            {
+              triageModels: triage.triageModelsUsed,
+              suggestedCapabilities: triage.suggestedCapabilities,
+              confidence: triage.confidence,
+            },
+            'Input triage completed'
+          );
         }
 
         // Step 3: Select capable models (no limit)
         const selection = await intelligentSelection.selectCapableModels(requirements, triage);
 
-        requestLog.info({
-          totalCandidates: selection.totalModelsMatched,
-          primaryModel: selection.primaryCandidate?.model.id,
-          selectionTime: selection.selectionTime,
-        }, 'Model selection completed');
+        requestLog.info(
+          {
+            totalCandidates: selection.totalModelsMatched,
+            primaryModel: selection.primaryCandidate?.model.id,
+            selectionTime: selection.selectionTime,
+          },
+          'Model selection completed'
+        );
 
         if (!selection.primaryCandidate) {
           return reply.status(400).send({
@@ -2381,7 +2522,12 @@ export async function registerCapabilityRoutes(
 
           // Final result contains execution metadata
           if (result && !result.choices) {
-            const execResult = result as { success?: boolean; modelsAttempted?: number; finalProvider?: string; finalModel?: string };
+            const execResult = result as {
+              success?: boolean;
+              modelsAttempted?: number;
+              finalProvider?: string;
+              finalModel?: string;
+            };
             reply.raw.write(
               `: execution-summary success=${execResult.success} attempts=${execResult.modelsAttempted} provider=${execResult.finalProvider} model=${execResult.finalModel}\n\n`
             );
@@ -2392,7 +2538,14 @@ export async function registerCapabilityRoutes(
         } else {
           // Non-streaming execution
           const result = await executeRouteWithRetry(
-            () => intelligentSelection.executeWithIntelligentFallback(chatRequest, selection, organizationId, userId, requirements.required),
+            () =>
+              intelligentSelection.executeWithIntelligentFallback(
+                chatRequest,
+                selection,
+                organizationId,
+                userId,
+                requirements.required
+              ),
             {
               operationName: 'POST /v1/chat/completions/intelligent',
               requestId,
@@ -2407,16 +2560,19 @@ export async function registerCapabilityRoutes(
           const durationMs = Date.now() - startTime;
 
           if (!result.success) {
-            requestLog.error({
-              attempts: result.attempts,
-              durationMs,
-            }, 'All models failed');
+            requestLog.error(
+              {
+                attempts: result.attempts,
+                durationMs,
+              },
+              'All models failed'
+            );
 
             return reply.status(500).send({
               error: {
                 code: 'all_models_failed',
                 message: `All ${result.modelsAttempted} capable models failed`,
-                attempts: result.attempts.map(a => ({
+                attempts: result.attempts.map((a) => ({
                   provider: a.provider,
                   model: a.model,
                   error: a.error,
@@ -2426,12 +2582,15 @@ export async function registerCapabilityRoutes(
             });
           }
 
-          requestLog.info({
-            finalProvider: result.finalProvider,
-            finalModel: result.finalModel,
-            attempts: result.modelsAttempted,
-            durationMs,
-          }, 'Intelligent completion successful');
+          requestLog.info(
+            {
+              finalProvider: result.finalProvider,
+              finalModel: result.finalModel,
+              attempts: result.modelsAttempted,
+              durationMs,
+            },
+            'Intelligent completion successful'
+          );
 
           // Add execution metadata to response
           const response = {

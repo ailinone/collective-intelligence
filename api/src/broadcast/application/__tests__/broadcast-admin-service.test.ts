@@ -26,11 +26,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  BroadcastAdminService,
-  type AdminRunner,
-  type Subject,
-} from '../broadcast-admin-service';
+import { BroadcastAdminService, type AdminRunner, type Subject } from '../broadcast-admin-service';
 
 interface CapturedExec {
   sql: string;
@@ -55,12 +51,15 @@ function interpolate(strings: TemplateStringsArray, values: unknown[]): Captured
 interface FakeDbState {
   execCalls: CapturedExec[];
   destinationsDeleted: number;
-  dlqEntries: Map<string, {
-    id: string;
-    envelopeSnapshot: Record<string, unknown>;
-    replayedAt: Date | null;
-    replayedByUserId: string | null;
-  }>;
+  dlqEntries: Map<
+    string,
+    {
+      id: string;
+      envelopeSnapshot: Record<string, unknown>;
+      replayedAt: Date | null;
+      replayedByUserId: string | null;
+    }
+  >;
   outboxRows: Array<{ envelopeId: string; envelope: unknown; [k: string]: unknown }>;
 }
 
@@ -104,7 +103,11 @@ function makeFakeDb(): { db: AdminRunner; state: FakeDbState } {
     },
     broadcastTraceOutbox: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        state.outboxRows.push({ envelopeId: data.envelopeId as string, envelope: data.envelope, ...data });
+        state.outboxRows.push({
+          envelopeId: data.envelopeId as string,
+          envelope: data.envelope,
+          ...data,
+        });
         return data;
       },
     },
@@ -200,7 +203,7 @@ describe('BroadcastAdminService — replayDlqEntry', () => {
     const envelope = state.outboxRows[0]!.envelope as Record<string, unknown>;
     expect(envelope.envelopeId).toBe(outcome.newEnvelopeId);
     expect((envelope.metadata as Record<string, unknown>).replayedFromEnvelopeId).toBe(
-      'original-envelope-uuid',
+      'original-envelope-uuid'
     );
   });
 

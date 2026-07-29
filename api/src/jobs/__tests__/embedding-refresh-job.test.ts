@@ -45,9 +45,7 @@ describe('embedding-refresh job ↔ scheduled-jobs registry wiring', () => {
   });
 
   it('handler imports from `./embedding-refresh-job`', () => {
-    expect(registrySource).toMatch(
-      /import\(\s*['"]\.\/embedding-refresh-job(\.js)?['"]\s*\)/,
-    );
+    expect(registrySource).toMatch(/import\(\s*['"]\.\/embedding-refresh-job(\.js)?['"]\s*\)/);
   });
 
   it('schedules with a cron pattern AND an HCRA_EMBEDDER_URL gate', () => {

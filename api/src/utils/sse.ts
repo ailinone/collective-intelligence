@@ -65,15 +65,17 @@ export function sendSSEError(reply: FastifyReply, error: Error): void {
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model: 'error',
-    choices: [{
-      index: 0,
-      message: {
-        role: 'assistant',
-        content: error.message,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: error.message,
+        },
+        finish_reason: null,
+        logprobs: null,
       },
-      finish_reason: null,
-      logprobs: null,
-    }],
+    ],
   };
   reply.raw.write(formatSSE(errorData));
 }

@@ -77,7 +77,7 @@ export const LEGACY_MODELS_FIXTURE: ReadonlyArray<LegacyModelSnapshot> = Object.
     contextWindow: 128_000,
     maxOutputTokens: 16_384,
     inputCostPer1k: 0.005,
-    outputCostPer1k: 0.020,
+    outputCostPer1k: 0.02,
     lifecycleStatus: 'current',
     createdAt: T0,
     updatedAt: T2,
@@ -499,7 +499,9 @@ export const LEGACY_MODELS_FIXTURE: ReadonlyArray<LegacyModelSnapshot> = Object.
  * Exposed so tests can express provider-tier classification without
  * hardcoding lists inside the builder.
  */
-export const FIXTURE_ROUTE_KIND_BY_PROVIDER: Readonly<Record<string, 'native' | 'aggregator' | 'gateway' | 'edge' | 'local' | 'self_hosted'>> = Object.freeze({
+export const FIXTURE_ROUTE_KIND_BY_PROVIDER: Readonly<
+  Record<string, 'native' | 'aggregator' | 'gateway' | 'edge' | 'local' | 'self_hosted'>
+> = Object.freeze({
   // Aggregators / hubs
   aihubmix: 'aggregator',
   openrouter: 'aggregator',

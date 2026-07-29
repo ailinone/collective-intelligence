@@ -34,9 +34,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { scoreHistoricalContribution } from '../../contribution/historical-contribution-scorer';
-import type {
-  HistoricalContributionResult,
-} from '../../contribution/historical-contribution-scorer';
+import type { HistoricalContributionResult } from '../../contribution/historical-contribution-scorer';
 import type { ModelTaskPerformanceProfile } from '../../contribution/model-task-performance-profile';
 import {
   estimateCalibratedJudge,
@@ -51,16 +49,13 @@ import {
   type TrainEvalDatum,
 } from '../calibration/expected-judge-calibrator';
 import { computeCalibrationMetrics } from '../calibration/calibration-metrics';
-import {
-  resolveCalibrationPolicy,
-} from '../calibration/calibration-policy';
+import { resolveCalibrationPolicy } from '../calibration/calibration-policy';
 import { buildCalibrationReport } from '../calibration/calibration-report';
 import { buildTaskTypeCalibration } from '../calibration/tasktype-calibration';
 import { runHistoricalReplay } from '../historical-replay-runner';
 import { splitTrainHoldout } from '../historical-replay-split';
 import type { HistoricalReplayExecution } from '../historical-replay-types';
 import type { HistoricalExecution } from '../../contribution/historical-execution-types';
-
 
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
 const NORMALIZED_PATH = resolve(ARTIFACTS_DIR, 'c3-history-full-export.normalized.jsonl');
@@ -94,7 +89,7 @@ function main(): void {
     'experiments | holdout=',
     split.holdout.length,
     'over',
-    split.holdoutExperimentIds.length,
+    split.holdoutExperimentIds.length
   );
 
   // Train contribution profiles on train ONLY.
@@ -117,7 +112,7 @@ function main(): void {
   console.log('[calib] best estimator:', selection.chosen.name);
   for (const e of selection.evaluations) {
     console.log(
-      `[calib]   ${e.estimatorName.padEnd(28)} MAE=${e.meanAbsoluteError.toFixed(4)}  median=${e.medianAbsoluteError.toFixed(4)}  p80=${e.p80AbsoluteError.toFixed(4)}  n=${e.sampleCount}`,
+      `[calib]   ${e.estimatorName.padEnd(28)} MAE=${e.meanAbsoluteError.toFixed(4)}  median=${e.medianAbsoluteError.toFixed(4)}  p80=${e.p80AbsoluteError.toFixed(4)}  n=${e.sampleCount}`
     );
   }
 
@@ -154,10 +149,7 @@ function main(): void {
 
   // Per-task-type breakdown.
   const trainCountsByTaskType = countByTaskType(split.train);
-  const errorByTaskType = errorByTaskTypeFor(
-    selection.chosen,
-    trainEvalData,
-  );
+  const errorByTaskType = errorByTaskTypeFor(selection.chosen, trainEvalData);
   const taskTypeRecords = buildTaskTypeCalibration({
     rows: replay.rows,
     trainCountsByTaskType,
@@ -178,18 +170,13 @@ function main(): void {
 
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + '\n', 'utf-8');
   console.log('[calib] wrote', REPORT_PATH);
-  console.log(
-    '[calib] APPROVAL:',
-    report.approval.approved ? 'APPROVED' : 'REJECTED',
-  );
+  console.log('[calib] APPROVAL:', report.approval.approved ? 'APPROVED' : 'REJECTED');
   for (const r of report.approval.reasons) console.log('         -', r);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function replayToContributionExecution(
-  e: HistoricalReplayExecution,
-): HistoricalExecution {
+function replayToContributionExecution(e: HistoricalReplayExecution): HistoricalExecution {
   return {
     executionId: e.executionId,
     experimentId: e.experimentId,
@@ -216,7 +203,7 @@ function replayToContributionExecution(
  */
 function buildTrainEvalData(
   train: readonly HistoricalReplayExecution[],
-  history: HistoricalContributionResult,
+  history: HistoricalContributionResult
 ): TrainEvalDatum[] {
   const profileIdx = new Map<string, ModelTaskPerformanceProfile>();
   for (const p of history.modelProfiles) {
@@ -236,13 +223,13 @@ function buildTrainEvalData(
 
 function applyCalibrationToHistory(
   history: HistoricalContributionResult,
-  ctx: CalibratedEstimatorContext,
+  ctx: CalibratedEstimatorContext
 ): HistoricalContributionResult {
   const replaced = history.modelProfiles.map((p) =>
     Object.freeze({
       ...p,
       judgeMean: estimateCalibratedJudge(ctx, p),
-    }),
+    })
   );
   return Object.freeze({
     ...history,
@@ -250,17 +237,23 @@ function applyCalibrationToHistory(
   });
 }
 
-function countByTaskType(
-  rows: readonly HistoricalReplayExecution[],
-): ReadonlyMap<string, number> {
+function countByTaskType(rows: readonly HistoricalReplayExecution[]): ReadonlyMap<string, number> {
   const m = new Map<string, number>();
   for (const r of rows) m.set(r.taskType, (m.get(r.taskType) ?? 0) + 1);
   return m;
 }
 
 function errorByTaskTypeFor(
-  estimator: { estimate(input: { profile: ModelTaskPerformanceProfile; globalMean?: number; taskTypeOffset?: number; pairLiftMean?: number }): number; name: string },
-  data: readonly TrainEvalDatum[],
+  estimator: {
+    estimate(input: {
+      profile: ModelTaskPerformanceProfile;
+      globalMean?: number;
+      taskTypeOffset?: number;
+      pairLiftMean?: number;
+    }): number;
+    name: string;
+  },
+  data: readonly TrainEvalDatum[]
 ): ReadonlyMap<string, number> {
   const buckets = new Map<string, { sumErr: number; count: number }>();
   for (const d of data) {

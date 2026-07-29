@@ -59,22 +59,17 @@ export interface HistoricalExecution {
 
 // ─── Outcome classifications (derived from judgeScore + baselines) ─────
 
-export type ExecutionOutcomeClass =
-  | 'win'
-  | 'partial'
-  | 'loss'
-  | 'zero'
-  | 'failure';
+export type ExecutionOutcomeClass = 'win' | 'partial' | 'loss' | 'zero' | 'failure';
 
 /**
  * Default thresholds used to classify a judge score. Overridable per
  * scorer invocation when callers want stricter or looser cuts.
  */
 export interface JudgeThresholdPolicy {
-  readonly winFloor: number;        // win: judgeScore >= max(winFloor, baseline)
-  readonly partialFloor: number;    // partial: between partialFloor and winFloor
-  readonly lossCeiling: number;     // loss: judgeScore < lossCeiling
-  readonly zeroCeiling: number;     // zero: judgeScore <= zeroCeiling
+  readonly winFloor: number; // win: judgeScore >= max(winFloor, baseline)
+  readonly partialFloor: number; // partial: between partialFloor and winFloor
+  readonly lossCeiling: number; // loss: judgeScore < lossCeiling
+  readonly zeroCeiling: number; // zero: judgeScore <= zeroCeiling
 }
 
 export const DEFAULT_JUDGE_THRESHOLDS: JudgeThresholdPolicy = Object.freeze({

@@ -28,16 +28,17 @@ import { buildPlanOnlyResult } from '@/core/orchestration/dry-run/strategy-plan-
 import type { OrchestrationContext } from '@/types';
 
 // Import the strategy contract to verify schema membership.
-import { STRATEGY_INPUT_VALUES, resolveExecutionStrategy } from '@/core/orchestration/strategy-contract';
+import {
+  STRATEGY_INPUT_VALUES,
+  resolveExecutionStrategy,
+} from '@/core/orchestration/strategy-contract';
 
 const CTX: OrchestrationContext = {
   requestId: 'sm-r4-fast-gap-001',
   taskType: 'general',
   qualityTarget: 0.85,
   preferSpeed: true,
-  models: [
-    { id: 'model-fast', provider: 'openai' } as OrchestrationContext['models'][0],
-  ],
+  models: [{ id: 'model-fast', provider: 'openai' } as OrchestrationContext['models'][0]],
 };
 
 const REQ = {
@@ -64,7 +65,14 @@ describe('01C.1B-SM-R4 §13c — fast strategy schema gap', () => {
 
   describe('sensitivity-consensus proxy plan', () => {
     const proxyResult = buildPlanOnlyResult(
-      'sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+      'sensitivity-consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      CTX,
+      null,
+      0.85,
+      { registered: true }
     );
     const proxyMeta = proxyResult.metadata as Record<string, unknown>;
 
@@ -100,10 +108,24 @@ describe('01C.1B-SM-R4 §13c — fast strategy schema gap', () => {
   describe('fast canonical documentation', () => {
     it('fast plan with sensitivity-consensus proxy has distinct fingerprint from single', () => {
       const proxyResult = buildPlanOnlyResult(
-        'sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+        'sensitivity-consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.85,
+        { registered: true }
       );
       const singleResult = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.85,
+        { registered: true }
       );
       const proxyFp = (proxyResult.metadata as Record<string, unknown>)['planFingerprint'];
       const singleFp = (singleResult.metadata as Record<string, unknown>)['planFingerprint'];
@@ -112,7 +134,14 @@ describe('01C.1B-SM-R4 §13c — fast strategy schema gap', () => {
 
     it('sensitivity-consensus resolvedStrategy is sensitivity-consensus', () => {
       const proxyResult = buildPlanOnlyResult(
-        'sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+        'sensitivity-consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.85,
+        { registered: true }
       );
       expect(proxyResult.strategyUsed).toBe('sensitivity-consensus');
     });

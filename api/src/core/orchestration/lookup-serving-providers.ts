@@ -91,7 +91,7 @@ export interface LookupServingProvidersInput {
  * only rows whose `capabilities[]` includes `'chat'` are returned.
  */
 export async function lookupServingProvidersFromCatalog(
-  input: LookupServingProvidersInput,
+  input: LookupServingProvidersInput
 ): Promise<readonly ServingProviderEntry[]> {
   const logicalModelId = input.logicalModelId;
   const requireCapability = input.requireCapability ?? 'chat';
@@ -113,7 +113,12 @@ export async function lookupServingProvidersFromCatalog(
       caps.includes('chat') || caps.includes('text_generation') || caps.includes('text-generation');
     if (requireCapability === 'chat' && !chatCapable) continue;
     if (requireCapability === 'embedding' && !caps.includes('embedding')) continue;
-    if (requireCapability === 'text_generation' && !caps.includes('text_generation') && !caps.includes('text-generation')) continue;
+    if (
+      requireCapability === 'text_generation' &&
+      !caps.includes('text_generation') &&
+      !caps.includes('text-generation')
+    )
+      continue;
 
     // Confidence based on name compare.
     const cmp = compareModelIds(logicalModelId, row.name);

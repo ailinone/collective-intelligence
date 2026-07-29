@@ -53,7 +53,9 @@ interface HoldRow {
 
 /** Transaction-scoped advisory lock so all per-org money ops serialize with each other. */
 function lockOrg(tx: Prisma.TransactionClient, organizationId: string): Promise<number> {
-  return tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`);
+  return tx.$executeRaw(
+    Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+  );
 }
 
 export class PrismaBalanceStore implements BalanceStore {
@@ -80,7 +82,7 @@ export class PrismaBalanceStore implements BalanceStore {
   async adjustBalanceUsd(
     organizationId: string,
     deltaUsd: number,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<number> {
     return prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<BalanceRow[]>(Prisma.sql`
@@ -109,7 +111,7 @@ export class PrismaBalanceStore implements BalanceStore {
     organizationId: string,
     amountUsd: number,
     idempotencyKey: string,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<DebitResult> {
     return prisma.$transaction(async (tx) => {
       await lockOrg(tx, organizationId);
@@ -150,7 +152,7 @@ export class PrismaBalanceStore implements BalanceStore {
     organizationId: string,
     holdId: string,
     amountUsd: number,
-    opts?: ReserveOptions,
+    opts?: ReserveOptions
   ): Promise<ReserveResult> {
     const floor = opts?.minBalanceUsd ?? 0;
     const ttlSeconds = Math.max(1, Math.ceil((opts?.ttlMs ?? DEFAULT_HOLD_TTL_MS) / 1000));
@@ -198,7 +200,7 @@ export class PrismaBalanceStore implements BalanceStore {
     organizationId: string,
     holdId: string,
     actualChargeUsd: number,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<DebitResult> {
     const key = memo.idempotencyKey ?? holdId;
 

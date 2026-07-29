@@ -47,7 +47,7 @@ describe('GitHubModelsAdapter', () => {
           enabled: true,
           providerName: 'github-models',
           apiKey: 'ghp_abc123',
-        }),
+        })
     ).not.toThrow();
   });
 

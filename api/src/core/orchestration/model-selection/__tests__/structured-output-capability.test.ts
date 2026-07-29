@@ -201,7 +201,7 @@ describe('01C.1B-J1D-R4D — detectStructuredOutputSupport', () => {
       satisfiesJudgeStructuredOutputRequirement({
         evidence: e,
         allowWeakStructuredOutputForJudge: true,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -212,7 +212,7 @@ describe('01C.1B-J1D-R4D — detectStructuredOutputSupport', () => {
       satisfiesJudgeStructuredOutputRequirement({
         evidence: e,
         allowWeakStructuredOutputForJudge: true,
-      }),
+      })
     ).toBe(false);
   });
 

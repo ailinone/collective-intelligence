@@ -20,7 +20,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mapSubcallEntries } from '../chat-request-processor';
 
 const ORIGINAL_ENV = { ...process.env };
-afterEach(() => { process.env = { ...ORIGINAL_ENV }; });
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+});
 
 function exec(over: Partial<Parameters<typeof mapSubcallEntries>[0][number]> = {}) {
   return {
@@ -34,7 +36,7 @@ function exec(over: Partial<Parameters<typeof mapSubcallEntries>[0][number]> = {
     promptKey: 'consensusVoter',
     promptVariantId: 'v2',
     response: {
-      choices: [{ message: { content: 'the voter\'s full answer text' } }],
+      choices: [{ message: { content: "the voter's full answer text" } }],
       usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
     },
     ...over,
@@ -54,7 +56,7 @@ describe('mapSubcallEntries', () => {
 
   it('includeContent=true: captures the full output text, reasoning, and prompt provenance', () => {
     const [entry] = mapSubcallEntries([exec()], true);
-    expect(entry.content).toBe('the voter\'s full answer text');
+    expect(entry.content).toBe("the voter's full answer text");
     expect(entry.reasoning).toBe('thought about it step by step');
     expect(entry.prompt_key).toBe('consensusVoter');
     expect(entry.prompt_variant_id).toBe('v2');
@@ -64,7 +66,10 @@ describe('mapSubcallEntries', () => {
   it('content is NOT truncated by default (SUBCALL_CONTENT_MAX_CHARS unset → unlimited)', () => {
     delete process.env.SUBCALL_CONTENT_MAX_CHARS;
     const big = 'x'.repeat(500_000);
-    const [entry] = mapSubcallEntries([exec({ response: { choices: [{ message: { content: big } }] } })], true);
+    const [entry] = mapSubcallEntries(
+      [exec({ response: { choices: [{ message: { content: big } }] } })],
+      true
+    );
     expect(entry.content).toHaveLength(500_000);
     expect(entry.content_truncated).toBeUndefined();
   });
@@ -72,15 +77,27 @@ describe('mapSubcallEntries', () => {
   it('operator cap (SUBCALL_CONTENT_MAX_CHARS>0) clips and FLAGS the truncation explicitly', () => {
     process.env.SUBCALL_CONTENT_MAX_CHARS = '100';
     const big = 'y'.repeat(1_000);
-    const [entry] = mapSubcallEntries([exec({ response: { choices: [{ message: { content: big } }] } })], true);
+    const [entry] = mapSubcallEntries(
+      [exec({ response: { choices: [{ message: { content: big } }] } })],
+      true
+    );
     expect(entry.content).toHaveLength(100);
     expect(entry.content_truncated).toBe(true);
   });
 
   it('a failed subcall with no response still yields an entry (content null, error kept)', () => {
     const [entry] = mapSubcallEntries(
-      [exec({ success: false, error: 'timeout', response: undefined, reasoning: undefined, promptKey: undefined, promptVariantId: undefined })],
-      true,
+      [
+        exec({
+          success: false,
+          error: 'timeout',
+          response: undefined,
+          reasoning: undefined,
+          promptKey: undefined,
+          promptVariantId: undefined,
+        }),
+      ],
+      true
     );
     expect(entry.success).toBe(false);
     expect(entry.error).toBe('timeout');
@@ -97,17 +114,32 @@ describe('mapSubcallEntries', () => {
     ];
     const [entry] = mapSubcallEntries(
       [exec({ response: { choices: [{ message: { content: parts as never } }] } })],
-      true,
+      true
     );
     expect(entry.content).toBe('Here is the scene: [image_url] — as requested.');
   });
 
   it('preserves per-subcall identity across a multi-voter flow (order and roles)', () => {
-    const entries = mapSubcallEntries([
-      exec({ modelId: 'p/a', role: 'voter', response: { choices: [{ message: { content: 'A says X' } }] } }),
-      exec({ modelId: 'p/b', role: 'voter', response: { choices: [{ message: { content: 'B says Y' } }] } }),
-      exec({ modelId: 'p/c', role: 'synthesizer', response: { choices: [{ message: { content: 'final synthesis' } }] } }),
-    ], true);
+    const entries = mapSubcallEntries(
+      [
+        exec({
+          modelId: 'p/a',
+          role: 'voter',
+          response: { choices: [{ message: { content: 'A says X' } }] },
+        }),
+        exec({
+          modelId: 'p/b',
+          role: 'voter',
+          response: { choices: [{ message: { content: 'B says Y' } }] },
+        }),
+        exec({
+          modelId: 'p/c',
+          role: 'synthesizer',
+          response: { choices: [{ message: { content: 'final synthesis' } }] },
+        }),
+      ],
+      true
+    );
     expect(entries.map((e) => `${e.role}:${e.content}`)).toEqual([
       'voter:A says X',
       'voter:B says Y',

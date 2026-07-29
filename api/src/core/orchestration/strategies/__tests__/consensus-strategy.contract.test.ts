@@ -51,9 +51,9 @@ describe('ConsensusStrategy — contract', () => {
       },
       eligibleModels: onlyTwo,
     });
-    await expect(
-      strategy.execute(makeRequest(), makeContext(onlyTwo)),
-    ).rejects.toThrow(/at least 3/i);
+    await expect(strategy.execute(makeRequest(), makeContext(onlyTwo))).rejects.toThrow(
+      /at least 3/i
+    );
   });
 
   it('returns a result with effectiveStrategyId + scoringMode + validationStatus on the happy path', async () => {
@@ -95,7 +95,7 @@ describe('ConsensusStrategy — contract', () => {
     const r = await strategy.execute(makeRequest(), makeContext(models));
     expect(r.modelsUsed.length).toBe(3);
     expect(new Set(r.modelsUsed.map((e) => e.modelId))).toEqual(
-      new Set(['voter-a', 'voter-b', 'voter-c']),
+      new Set(['voter-a', 'voter-b', 'voter-c'])
     );
   });
 });

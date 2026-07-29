@@ -42,12 +42,12 @@ import {
 // ──────────────────────────────────────────────────────────────────────
 
 describe('classifyProviderRouting v2 — natives', () => {
-  it.each([
-    'openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere',
-    'deepseek', 'perplexity',
-  ])('"%s" is native', (id) => {
-    expect(classifyProviderRouting(id)?.kind).toBe('native');
-  });
+  it.each(['openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere', 'deepseek', 'perplexity'])(
+    '"%s" is native',
+    (id) => {
+      expect(classifyProviderRouting(id)?.kind).toBe('native');
+    }
+  );
 
   it('every frontier native has at least 2 routesVia (multi-route)', () => {
     for (const id of ['openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere', 'deepseek']) {
@@ -65,11 +65,28 @@ describe('classifyProviderRouting v2 — natives', () => {
 
 describe('classifyProviderRouting v2 — routers', () => {
   it.each([
-    'huggingface', 'openrouter', 'aihubmix', 'cometapi', 'edenai',
-    'requesty', 'nanogpt', 'github-models', 'vercel-ai-gateway',
-    'aiml', 'orqai', 'venice', 'poe', 'routeway', 'imagerouter',
-    'gemini-openai', 'heliconeai', 'bytez', 'cloudflare-workers-ai',
-    'mancer', 'synthetic', 'ai302',
+    'huggingface',
+    'openrouter',
+    'aihubmix',
+    'cometapi',
+    'edenai',
+    'requesty',
+    'nanogpt',
+    'github-models',
+    'vercel-ai-gateway',
+    'aiml',
+    'orqai',
+    'venice',
+    'poe',
+    'routeway',
+    'imagerouter',
+    'gemini-openai',
+    'heliconeai',
+    'bytez',
+    'cloudflare-workers-ai',
+    'mancer',
+    'synthetic',
+    'ai302',
   ])('"%s" is router', (id) => {
     expect(classifyProviderRouting(id)?.kind).toBe('router');
   });
@@ -165,7 +182,7 @@ describe('listModelRouteCandidates v2 — hybrid backends still have multi-route
     const out = listModelRouteCandidates('togetherai');
     const hfCandidate = out.find((c) => c.providerId === 'huggingface');
     expect(hfCandidate?.kind).toBe('router');
-    expect(hfCandidate?.upstreamSlug).toBe('together');  // HF slug, not 'togetherai'
+    expect(hfCandidate?.upstreamSlug).toBe('together'); // HF slug, not 'togetherai'
     expect(hfCandidate?.nativeProviderId).toBe('togetherai');
   });
 });
@@ -231,17 +248,36 @@ describe('listRouterBackends + listRoutersForNative — bidirectional consistenc
 
 describe('Operator disclosure 2026-05-16 — hybrid backends preserved', () => {
   const HYBRID_BACKENDS_2026_05_16 = [
-    'groq', 'novita', 'cerebras', 'sambanova', 'nscale', 'fal', 'hyperbolic',
-    'togetherai', 'fireworks-ai', 'featherless-ai', 'zai', 'replicate', 'cohere',
-    'scaleway', 'public-ai', 'ovhcloud', 'hf-inference', 'deepinfra', 'wavespeed',
+    'groq',
+    'novita',
+    'cerebras',
+    'sambanova',
+    'nscale',
+    'fal',
+    'hyperbolic',
+    'togetherai',
+    'fireworks-ai',
+    'featherless-ai',
+    'zai',
+    'replicate',
+    'cohere',
+    'scaleway',
+    'public-ai',
+    'ovhcloud',
+    'hf-inference',
+    'deepinfra',
+    'wavespeed',
   ];
 
-  it.each(HYBRID_BACKENDS_2026_05_16)('"%s" is a native with at least huggingface in routesVia', (id) => {
-    const cls = classifyProviderRouting(id);
-    expect(cls?.kind).toBe('native');
-    const routers = cls?.routesVia.map((p) => p.routerProviderId) ?? [];
-    expect(routers, `${id} should be reachable via huggingface router`).toContain('huggingface');
-  });
+  it.each(HYBRID_BACKENDS_2026_05_16)(
+    '"%s" is a native with at least huggingface in routesVia',
+    (id) => {
+      const cls = classifyProviderRouting(id);
+      expect(cls?.kind).toBe('native');
+      const routers = cls?.routesVia.map((p) => p.routerProviderId) ?? [];
+      expect(routers, `${id} should be reachable via huggingface router`).toContain('huggingface');
+    }
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────
@@ -312,9 +348,9 @@ describe('Role selection fallback semantics — the operator scenario', () => {
   it('judge role using google can fallback via gemini-openai and openrouter', () => {
     const routes = listModelRouteCandidates('google');
     const ids = routes.map((r) => r.providerId);
-    expect(ids).toContain('google');         // primary
-    expect(ids).toContain('gemini-openai');  // fallback 1
-    expect(ids).toContain('openrouter');     // fallback 2
+    expect(ids).toContain('google'); // primary
+    expect(ids).toContain('gemini-openai'); // fallback 1
+    expect(ids).toContain('openrouter'); // fallback 2
   });
 
   it('fallback role with cohere has multiple alternatives', () => {

@@ -275,7 +275,7 @@ describe('resolveSemanticCandidates', () => {
   });
 
   function buildSnap(
-    rows: Array<{ providerId: string; modelId: string; available?: boolean }>,
+    rows: Array<{ providerId: string; modelId: string; available?: boolean }>
   ): ProviderDiscoverySnapshot {
     const map = new Map<string, ReturnType<typeof makeRow>>();
     for (const r of rows) {

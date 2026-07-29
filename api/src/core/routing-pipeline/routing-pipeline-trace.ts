@@ -68,7 +68,7 @@ function selectedRouteId(s: StrategyPlannerResult | undefined): string | null {
 
 function selectedFromRetrieval(
   s: StrategyPlannerResult | undefined,
-  r: CandidateRetrievalResult | undefined,
+  r: CandidateRetrievalResult | undefined
 ): {
   readonly canonicalModelId: string | null;
   readonly offeringId: string | null;
@@ -114,8 +114,8 @@ export function buildPipelineTrace(args: BuildPipelineTraceArgs): RoutingDecisio
   const candidatesByStage: Record<string, number> = args.retrievalResult
     ? { ...args.retrievalResult.countsByStage }
     : typeof args.initialRegistryRoutes === 'number'
-    ? { initial: args.initialRegistryRoutes }
-    : {};
+      ? { initial: args.initialRegistryRoutes }
+      : {};
 
   const raw: RoutingDecisionTrace = {
     traceId: args.traceId,

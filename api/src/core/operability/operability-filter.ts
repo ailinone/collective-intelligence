@@ -101,12 +101,7 @@ function isSelfHosted(providerId: string): boolean {
 }
 
 function extractProviderId(model: ModelForOperability): string | null {
-  return (
-    model.__providerForOperability
-    ?? model.providerId
-    ?? model.provider
-    ?? null
-  );
+  return model.__providerForOperability ?? model.providerId ?? model.provider ?? null;
 }
 
 function extractModelId(model: ModelForOperability): string | null {
@@ -145,7 +140,9 @@ async function loadHubBuckets(): Promise<{
       noCredits: toSet(summary.no_credits),
       rateLimited: toSet(summary.rate_limited),
       temporarilyUnavailable: toSet(summary.temporarily_unavailable),
-      permanentlyUnavailable: toSet((summary as { permanently_unavailable?: string[] }).permanently_unavailable),
+      permanentlyUnavailable: toSet(
+        (summary as { permanently_unavailable?: string[] }).permanently_unavailable
+      ),
       healthy: toSet(summary.healthy),
       degraded: toSet(summary.degraded),
       recovering: toSet(summary.recovering),
@@ -161,7 +158,7 @@ function readEnvBlocklist(): Set<string> {
     (process.env.EXPERIMENT_BLOCKED_PROVIDERS ?? '')
       .split(',')
       .map((s) => s.trim().toLowerCase())
-      .filter(Boolean),
+      .filter(Boolean)
   );
 }
 
@@ -180,7 +177,7 @@ function readEnvBlocklist(): Set<string> {
  */
 export async function filterModelsByProviderOperability<T extends ModelForOperability>(
   models: readonly T[],
-  options: OperabilityFilterOptions = {},
+  options: OperabilityFilterOptions = {}
 ): Promise<OperabilityFilterResult<T>> {
   const allowUnknown = options.allowUnknown ?? true;
   const allowDegraded = options.allowDegraded ?? true;
@@ -221,14 +218,31 @@ export async function filterModelsByProviderOperability<T extends ModelForOperab
     if (buckets) {
       let blockedHere: OperabilityBlockReason | null = null;
       let hubState: string | undefined;
-      if (buckets.authFailed.has(providerId)) { blockedHere = 'provider_auth_failed'; hubState = 'auth_failed'; }
-      else if (buckets.noCredits.has(providerId)) { blockedHere = 'provider_no_credits'; hubState = 'no_credits'; }
-      else if (buckets.rateLimited.has(providerId)) { blockedHere = 'provider_rate_limited'; hubState = 'rate_limited'; }
-      else if (buckets.temporarilyUnavailable.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'temporarily_unavailable'; }
-      else if (buckets.permanentlyUnavailable.has(providerId)) { blockedHere = 'provider_permanently_unavailable'; hubState = 'permanently_unavailable'; }
-      else if (!allowUnknown && buckets.unknown.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'unknown_not_allowed'; }
-      else if (!allowDegraded && buckets.degraded.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'degraded_not_allowed'; }
-      else if (!allowRecovering && buckets.recovering.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'recovering_not_allowed'; }
+      if (buckets.authFailed.has(providerId)) {
+        blockedHere = 'provider_auth_failed';
+        hubState = 'auth_failed';
+      } else if (buckets.noCredits.has(providerId)) {
+        blockedHere = 'provider_no_credits';
+        hubState = 'no_credits';
+      } else if (buckets.rateLimited.has(providerId)) {
+        blockedHere = 'provider_rate_limited';
+        hubState = 'rate_limited';
+      } else if (buckets.temporarilyUnavailable.has(providerId)) {
+        blockedHere = 'provider_temporarily_unavailable';
+        hubState = 'temporarily_unavailable';
+      } else if (buckets.permanentlyUnavailable.has(providerId)) {
+        blockedHere = 'provider_permanently_unavailable';
+        hubState = 'permanently_unavailable';
+      } else if (!allowUnknown && buckets.unknown.has(providerId)) {
+        blockedHere = 'provider_temporarily_unavailable';
+        hubState = 'unknown_not_allowed';
+      } else if (!allowDegraded && buckets.degraded.has(providerId)) {
+        blockedHere = 'provider_temporarily_unavailable';
+        hubState = 'degraded_not_allowed';
+      } else if (!allowRecovering && buckets.recovering.has(providerId)) {
+        blockedHere = 'provider_temporarily_unavailable';
+        hubState = 'recovering_not_allowed';
+      }
 
       if (blockedHere) {
         blocked.push({ model: m, providerId, modelId, reason: blockedHere, hubState });
@@ -241,13 +255,16 @@ export async function filterModelsByProviderOperability<T extends ModelForOperab
   }
 
   if (blocked.length > 0) {
-    log.debug({
-      prefix: options.reasonPrefix,
-      before: models.length,
-      after: eligible.length,
-      blocked: blocked.length,
-      byReason,
-    }, 'Operability filter applied');
+    log.debug(
+      {
+        prefix: options.reasonPrefix,
+        before: models.length,
+        after: eligible.length,
+        blocked: blocked.length,
+        byReason,
+      },
+      'Operability filter applied'
+    );
   }
 
   return {
@@ -270,7 +287,7 @@ export function filterModelsByProviderOperabilitySync<T extends ModelForOperabil
   models: readonly T[],
   buckets: NonNullable<Awaited<ReturnType<typeof loadHubBuckets>>>,
   envBlocklist: Set<string>,
-  options: OperabilityFilterOptions = {},
+  options: OperabilityFilterOptions = {}
 ): OperabilityFilterResult<T> {
   const allowUnknown = options.allowUnknown ?? true;
   const allowDegraded = options.allowDegraded ?? true;
@@ -304,14 +321,31 @@ export function filterModelsByProviderOperabilitySync<T extends ModelForOperabil
 
     let blockedHere: OperabilityBlockReason | null = null;
     let hubState: string | undefined;
-    if (buckets.authFailed.has(providerId)) { blockedHere = 'provider_auth_failed'; hubState = 'auth_failed'; }
-    else if (buckets.noCredits.has(providerId)) { blockedHere = 'provider_no_credits'; hubState = 'no_credits'; }
-    else if (buckets.rateLimited.has(providerId)) { blockedHere = 'provider_rate_limited'; hubState = 'rate_limited'; }
-    else if (buckets.temporarilyUnavailable.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'temporarily_unavailable'; }
-    else if (buckets.permanentlyUnavailable.has(providerId)) { blockedHere = 'provider_permanently_unavailable'; hubState = 'permanently_unavailable'; }
-    else if (!allowUnknown && buckets.unknown.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'unknown_not_allowed'; }
-    else if (!allowDegraded && buckets.degraded.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'degraded_not_allowed'; }
-    else if (!allowRecovering && buckets.recovering.has(providerId)) { blockedHere = 'provider_temporarily_unavailable'; hubState = 'recovering_not_allowed'; }
+    if (buckets.authFailed.has(providerId)) {
+      blockedHere = 'provider_auth_failed';
+      hubState = 'auth_failed';
+    } else if (buckets.noCredits.has(providerId)) {
+      blockedHere = 'provider_no_credits';
+      hubState = 'no_credits';
+    } else if (buckets.rateLimited.has(providerId)) {
+      blockedHere = 'provider_rate_limited';
+      hubState = 'rate_limited';
+    } else if (buckets.temporarilyUnavailable.has(providerId)) {
+      blockedHere = 'provider_temporarily_unavailable';
+      hubState = 'temporarily_unavailable';
+    } else if (buckets.permanentlyUnavailable.has(providerId)) {
+      blockedHere = 'provider_permanently_unavailable';
+      hubState = 'permanently_unavailable';
+    } else if (!allowUnknown && buckets.unknown.has(providerId)) {
+      blockedHere = 'provider_temporarily_unavailable';
+      hubState = 'unknown_not_allowed';
+    } else if (!allowDegraded && buckets.degraded.has(providerId)) {
+      blockedHere = 'provider_temporarily_unavailable';
+      hubState = 'degraded_not_allowed';
+    } else if (!allowRecovering && buckets.recovering.has(providerId)) {
+      blockedHere = 'provider_temporarily_unavailable';
+      hubState = 'recovering_not_allowed';
+    }
 
     if (blockedHere) {
       blocked.push({ model: m, providerId, modelId, reason: blockedHere, hubState });

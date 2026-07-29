@@ -71,7 +71,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         aaName: m.aaName,
         matchConfidence: m.matchConfidence,
         matchKind: m.matchKind,
-      }),
+      })
     );
 
     // claude-opus-4-7: no variant indicator
@@ -97,7 +97,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         aaName: m.aaName,
         matchConfidence: m.matchConfidence,
         matchKind: m.matchKind,
-      }),
+      })
     );
 
     const batch = R6_SELECTED_AA_MATCHES.map((m, i) => ({
@@ -128,7 +128,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         aaName: m.aaName,
         matchConfidence: m.matchConfidence,
         matchKind: m.matchKind,
-      }),
+      })
     );
     const batch = R6_SELECTED_AA_MATCHES.map((m, i) => ({
       modelId: m.modelId,
@@ -153,7 +153,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         aaName: m.aaName,
         matchConfidence: m.matchConfidence,
         matchKind: m.matchKind,
-      }),
+      })
     );
     const batch = R6_SELECTED_AA_MATCHES.map((m, i) => ({
       modelId: m.modelId,
@@ -184,7 +184,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         aaName: m.aaName,
         matchConfidence: m.matchConfidence,
         matchKind: m.matchKind,
-      }),
+      })
     );
     const batch = R6_SELECTED_AA_MATCHES.map((m, i) => ({
       modelId: m.modelId,
@@ -203,7 +203,7 @@ describe('01C.1B-J2-C-R6-HARDEN — end-to-end C3 eligibility pipeline', () => {
         : 'CONSENSUS_01C_1B_J2C_R6_HARDEN_C3_BLOCKED_BY_VARIANT_MISMATCH';
 
     expect(decisionPhrase).toBe(
-      'CONSENSUS_01C_1B_J2C_R6_HARDEN_C3_BLOCKED_BY_MEDIUM_CONFIDENCE_MODELS',
+      'CONSENSUS_01C_1B_J2C_R6_HARDEN_C3_BLOCKED_BY_MEDIUM_CONFIDENCE_MODELS'
     );
   });
 });

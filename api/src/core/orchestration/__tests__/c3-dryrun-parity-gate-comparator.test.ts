@@ -22,21 +22,48 @@ import {
 
 function baseSnap(): C3ParityCanonicalSnapshot {
   return {
-    planId: 'p1', taskId: 'T1_simple_factual', strategyId: 'single', baselineId: null,
+    planId: 'p1',
+    taskId: 'T1_simple_factual',
+    strategyId: 'single',
+    baselineId: null,
     candidates: [
-      { candidateId: 'c1', providerId: 'prov1', modelId: 'm1', candidateClass: 'model_probe_validated', modelProbeStatus: 'model_probe_validated', requiresModelProbeBeforeBillableExecution: false, selectedExecutableModel: false, providerRouteCreated: false },
-      { candidateId: 'c2', providerId: 'prov2', modelId: 'm2', candidateClass: 'catalog_candidate', modelProbeStatus: 'not_model_probe_validated', requiresModelProbeBeforeBillableExecution: true, selectedExecutableModel: false, providerRouteCreated: false },
+      {
+        candidateId: 'c1',
+        providerId: 'prov1',
+        modelId: 'm1',
+        candidateClass: 'model_probe_validated',
+        modelProbeStatus: 'model_probe_validated',
+        requiresModelProbeBeforeBillableExecution: false,
+        selectedExecutableModel: false,
+        providerRouteCreated: false,
+      },
+      {
+        candidateId: 'c2',
+        providerId: 'prov2',
+        modelId: 'm2',
+        candidateClass: 'catalog_candidate',
+        modelProbeStatus: 'not_model_probe_validated',
+        requiresModelProbeBeforeBillableExecution: true,
+        selectedExecutableModel: false,
+        providerRouteCreated: false,
+      },
     ],
     unresolvedCatalogCandidates: ['c2'],
-    fanout: 2, fanoutCap: 4,
+    fanout: 2,
+    fanoutCap: 4,
     roles: [{ role: 'responder', candidateRef: 'c1', phase: 'direct_answer' }],
     budgetPolicyKey: '{"judgeRequired":false}',
     provenanceRequiredFields: ['taskId', 'strategyId', 'planFingerprint'],
     provenanceComplete: true,
     hiddenFallbackDetected: false,
-    planFingerprint: 'pf_abc', promptFingerprint: 'pp_abc',
-    runtimeResolvedStrategy: 'single', runtimeTaskType: 'T1_simple_factual', runtimePlanFingerprint: 'pf_run',
-    runtimeProviderCallExecuted: false, runtimeCostUsd: 0, runtimeUsageTotalTokens: 0,
+    planFingerprint: 'pf_abc',
+    promptFingerprint: 'pp_abc',
+    runtimeResolvedStrategy: 'single',
+    runtimeTaskType: 'T1_simple_factual',
+    runtimePlanFingerprint: 'pf_run',
+    runtimeProviderCallExecuted: false,
+    runtimeCostUsd: 0,
+    runtimeUsageTotalTokens: 0,
   };
 }
 
@@ -71,7 +98,9 @@ describe('01C.1B-C3-DRYRUN-PARITY-GATE — comparator (identical snapshots pass)
       expect(cmp.criticalDiffs).toBe(0);
     });
     it('every plan consistency check passed', () => {
-      expect(cmp.comparisons.every((c: any) => Object.values(c.consistency).every(Boolean))).toBe(true);
+      expect(cmp.comparisons.every((c: any) => Object.values(c.consistency).every(Boolean))).toBe(
+        true
+      );
     });
   });
 });

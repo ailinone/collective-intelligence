@@ -30,7 +30,7 @@ describe('BytezAdapter', () => {
           providerName: 'bytez',
           apiKey: 'test-bytez-key',
           baseUrl: 'https://api.bytez.com/v1',
-        }),
+        })
     ).not.toThrow();
   });
 

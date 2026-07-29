@@ -18,7 +18,8 @@
  * no billable provider calls, no external network, no positive cost/usage.
  */
 
-export const C3_DRYRUN_CONTROLLED_RUNTIME_SMOKE_VERSION = '01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE' as const;
+export const C3_DRYRUN_CONTROLLED_RUNTIME_SMOKE_VERSION =
+  '01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE' as const;
 export const C3_DRYRUN_CONTROLLED_RUNTIME_SMOKE_DATE = '2026-06-06' as const;
 
 // ── Execution locks (withheld) ──────────────────────────────────────────────────
@@ -41,7 +42,8 @@ export const C3_MODEL_PROBES_EXECUTED = 0 as const;
 export const C3_PROVIDER_PROBES_EXECUTED = 0 as const;
 export const C3_TOTAL_COST_USD = 0 as const;
 
-export type C3ControlledRuntimeSmokeMode = 'real_in_process_entrypoint' | 'local_http_plan_only' | 'hybrid_real_entrypoint';
+export type C3ControlledRuntimeSmokeMode =
+  'real_in_process_entrypoint' | 'local_http_plan_only' | 'hybrid_real_entrypoint';
 
 export type C3ControlledRuntimeSmokeBlockedReason =
   | 'runtime_entrypoint_not_found'
@@ -89,11 +91,17 @@ export function isC3ControlledSmokeExecutionLocked(response: {
 }
 
 export function isC3SmokeAllowedMode(mode: string): mode is C3ControlledRuntimeSmokeMode {
-  return mode === 'real_in_process_entrypoint' || mode === 'local_http_plan_only' || mode === 'hybrid_real_entrypoint';
+  return (
+    mode === 'real_in_process_entrypoint' ||
+    mode === 'local_http_plan_only' ||
+    mode === 'hybrid_real_entrypoint'
+  );
 }
 
 export function isC3SyntheticOnlyMode(mode: string): boolean {
-  return mode === 'local_adapter_only' || mode === 'offline_compiler_only' || mode === 'synthetic_only';
+  return (
+    mode === 'local_adapter_only' || mode === 'offline_compiler_only' || mode === 'synthetic_only'
+  );
 }
 
 /**
@@ -103,7 +111,9 @@ export function isC3SyntheticOnlyMode(mode: string): boolean {
  */
 export function c3SmokeEnvelopeFromOrchestrationResult(result: {
   totalCost?: number;
-  finalResponse?: { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
+  finalResponse?: {
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  };
   metadata?: Record<string, unknown>;
 }): {
   accepted: true;
@@ -140,7 +150,8 @@ export function c3SmokeEnvelopeFromOrchestrationResult(result: {
       total_tokens: Number(usage.total_tokens ?? 0),
     },
     hiddenFallbackDetected: false,
-    provenanceComplete: typeof meta['planFingerprint'] === 'string' && (meta['planFingerprint'] as string).length > 0,
+    provenanceComplete:
+      typeof meta['planFingerprint'] === 'string' && (meta['planFingerprint'] as string).length > 0,
     planFingerprint: (meta['planFingerprint'] as string) ?? null,
   };
 }

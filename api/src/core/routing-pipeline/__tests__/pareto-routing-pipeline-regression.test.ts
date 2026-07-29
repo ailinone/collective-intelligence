@@ -61,7 +61,7 @@ describe('regression A — multi-mini cheap pool', () => {
     // Either the plan beats the baseline OR it falls back to single.
     expect(
       r.paretoPlan.strategyId === 'single_fallback' ||
-        expectedJudge >= STANDARD_BASELINE.singleModelJudge,
+        expectedJudge >= STANDARD_BASELINE.singleModelJudge
     ).toBe(true);
     void allRejected;
   });
@@ -72,9 +72,7 @@ describe('regression C — modality mismatch', () => {
     const r = runPipeline();
     // Inspect each selected route: it must not be a pure-audio/pure-image one.
     for (const routeId of r.paretoPlan.selectedRouteIds) {
-      const route = r.structuralRetrievalResult.candidates.find(
-        (c) => c.routeId === routeId,
-      );
+      const route = r.structuralRetrievalResult.candidates.find((c) => c.routeId === routeId);
       expect(route).toBeDefined();
     }
   });
@@ -109,7 +107,7 @@ describe('regression F — consensus caro rejeitado no modo strict', () => {
     // We don't assert it WILL be chosen — only that the chain doesn't
     // forbid it categorically.
     expect(['parallel', 'consensus', 'single_fallback', 'single_best']).toContain(
-      r.strategyAdapterResult.finalOfflinePlan.strategy,
+      r.strategyAdapterResult.finalOfflinePlan.strategy
     );
   });
 });
@@ -123,8 +121,7 @@ describe('regression G — no viable collective → single_fallback', () => {
     // Default policy does NOT allow exploration ⇒ Pareto returns
     // single_fallback (or the plan has no selected models).
     expect(
-      r.paretoPlan.strategyId === 'single_fallback' ||
-        r.paretoPlan.selectedModelIds.length === 0,
+      r.paretoPlan.strategyId === 'single_fallback' || r.paretoPlan.selectedModelIds.length === 0
     ).toBe(true);
   });
 });
@@ -139,7 +136,7 @@ describe('regression — final plan source is one of three sentinels', () => {
   it('trace.paretoSummary.finalPlanSource matches the adapter source', () => {
     const r = runPipeline();
     expect(r.trace.paretoSummary!.finalPlanSource).toBe(
-      r.strategyAdapterResult.finalOfflinePlan.source,
+      r.strategyAdapterResult.finalOfflinePlan.source
     );
   });
 });

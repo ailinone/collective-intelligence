@@ -62,7 +62,7 @@ function makeMockRunner(): OutboxPrismaRunner & { calls: RecordedCall[] } {
                 code: 'P2002',
                 clientVersion: 'test',
                 meta: { target: ['request_id'] },
-              },
+              }
             );
           }
           seenRequestIds.add(requestId);
@@ -157,20 +157,14 @@ describe('BroadcastOutboxWriter', () => {
     const runner = makeMockRunner();
     const sharedRequestId = 'req-retry-victim';
 
-    const first = await writer.write(
-      makeEnvelope({ requestId: sharedRequestId }),
-      runner,
-    );
+    const first = await writer.write(makeEnvelope({ requestId: sharedRequestId }), runner);
     expect(first.alreadyStaged).toBe(false);
     expect(runner.calls).toHaveLength(1);
 
     // Second call generates a DIFFERENT envelopeId (envelope builder uses
     // randomUUID every time) but carries the SAME requestId. The partial
     // unique index fires and we collapse to a no-op.
-    const second = await writer.write(
-      makeEnvelope({ requestId: sharedRequestId }),
-      runner,
-    );
+    const second = await writer.write(makeEnvelope({ requestId: sharedRequestId }), runner);
     expect(second.alreadyStaged).toBe(true);
     // Runner only recorded the first insert — the second was collapsed.
     expect(runner.calls).toHaveLength(1);
@@ -191,15 +185,15 @@ describe('BroadcastOutboxWriter', () => {
               code: 'P2002',
               clientVersion: 'test',
               meta: { target: ['envelope_id'] },
-            },
+            }
           );
         },
       } as unknown as OutboxPrismaRunner['broadcastTraceOutbox'],
     };
 
-    await expect(
-      writer.write(makeEnvelope({ envelopeId }), runner),
-    ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+    await expect(writer.write(makeEnvelope({ envelopeId }), runner)).rejects.toBeInstanceOf(
+      Prisma.PrismaClientKnownRequestError
+    );
   });
 
   it('flattens tenant fields into columns', async () => {
@@ -259,7 +253,7 @@ describe('BroadcastOutboxWriter', () => {
     });
 
     await expect(writer.write(envelope, runner)).rejects.toBeInstanceOf(
-      OutboxEnvelopeTooLargeError,
+      OutboxEnvelopeTooLargeError
     );
     expect(runner.calls).toHaveLength(0);
   });

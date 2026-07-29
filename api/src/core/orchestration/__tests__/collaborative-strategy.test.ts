@@ -10,7 +10,7 @@
 /**
  * Tests for Collaborative Strategy
  * 3-phase execution: Primary → Reviewer → Refinement → Quality Validation
- * 
+ *
  * Uses dynamic model discovery - no hardcoded models
  */
 
@@ -46,7 +46,8 @@ describe('CollaborativeStrategy', () => {
     // If no chat models discovered, the test environment should ensure models are available
     if (discoveredModels.length === 0) {
       // Trigger discovery if needed
-      const { getCentralModelDiscoveryService } = await import('@/services/central-model-discovery-service.js');
+      const { getCentralModelDiscoveryService } =
+        await import('@/services/central-model-discovery-service.js');
       const discoveryService = await getCentralModelDiscoveryService();
       await discoveryService.discoverAllModels();
 
@@ -63,9 +64,8 @@ describe('CollaborativeStrategy', () => {
     strategy = new CollaborativeStrategy();
 
     // Use dynamically discovered models (at least 3 for collaborative strategy)
-    const modelsForTest = discoveredModels.length >= 3 
-      ? discoveredModels.slice(0, 3)
-      : discoveredModels;
+    const modelsForTest =
+      discoveredModels.length >= 3 ? discoveredModels.slice(0, 3) : discoveredModels;
 
     testContext = {
       organizationId: 'org-123',
@@ -175,4 +175,3 @@ describe('CollaborativeStrategy', () => {
     });
   });
 });
-

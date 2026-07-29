@@ -88,7 +88,7 @@ export class CircuitBreakerKekProvider implements KekProvider {
 
   constructor(
     private readonly inner: KekProvider,
-    opts: KekBreakerOptions = {},
+    opts: KekBreakerOptions = {}
   ) {
     this.failureThreshold = opts.failureThreshold ?? 5;
     this.rollingWindowMs = opts.rollingWindowMs ?? 60_000;
@@ -178,19 +178,13 @@ export class CircuitBreakerKekProvider implements KekProvider {
   }
 
   private openBreaker(): void {
-    const cooldown = Math.min(
-      this.baseCooldownMs * 2 ** this.cooldownExponent,
-      this.maxCooldownMs,
-    );
+    const cooldown = Math.min(this.baseCooldownMs * 2 ** this.cooldownExponent, this.maxCooldownMs);
     this.openUntilTimestamp = this.now() + cooldown;
     this.consecutiveProbeSuccesses = 0;
     this.transition('open', { cooldownMs: cooldown });
   }
 
-  private transition(
-    next: BreakerState,
-    extra: Record<string, unknown> = {},
-  ): void {
+  private transition(next: BreakerState, extra: Record<string, unknown> = {}): void {
     const prev = this.state;
     if (prev === next) return;
     this.state = next;
@@ -200,7 +194,7 @@ export class CircuitBreakerKekProvider implements KekProvider {
     this.publishState();
     log.warn(
       { kekResource: this.inner.resource, prev, next, ...extra },
-      'KEK circuit breaker state change',
+      'KEK circuit breaker state change'
     );
   }
 

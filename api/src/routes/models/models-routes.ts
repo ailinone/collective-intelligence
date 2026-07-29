@@ -94,12 +94,10 @@ type ModelsListQuery = {
   all?: boolean;
 };
 
-let runtimeSignalsCache:
-  | {
-      expiresAt: number;
-      value: Map<string, RuntimeModelSignal>;
-    }
-  | null = null;
+let runtimeSignalsCache: {
+  expiresAt: number;
+  value: Map<string, RuntimeModelSignal>;
+} | null = null;
 
 function toNumber(value: bigint | number | null | undefined): number {
   if (typeof value === 'bigint') {
@@ -168,7 +166,10 @@ async function getRuntimeSignals(): Promise<Map<string, RuntimeModelSignal>> {
     return value;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.warn({ error: errorMessage }, 'Failed to load runtime model signals; continuing without signals');
+    logger.warn(
+      { error: errorMessage },
+      'Failed to load runtime model signals; continuing without signals'
+    );
     return new Map<string, RuntimeModelSignal>();
   }
 }
@@ -181,7 +182,14 @@ function computeCatalogRank(model: Model, signal?: RuntimeModelSignal): number {
   const provider404Penalty = (signal?.provider404Count ?? 0) * 250;
   const noChatPenalty = model.capabilities.includes('chat') ? 0 : 100;
 
-  return successScore + reliabilityScore + qualityScore - policyPenalty - provider404Penalty - noChatPenalty;
+  return (
+    successScore +
+    reliabilityScore +
+    qualityScore -
+    policyPenalty -
+    provider404Penalty -
+    noChatPenalty
+  );
 }
 
 function stripChatCapabilities(model: Model): Model {
@@ -191,10 +199,7 @@ function stripChatCapabilities(model: Model): Model {
   };
 }
 
-function sanitizeModelForChatEligibility(
-  model: Model,
-  signal?: RuntimeModelSignal
-): Model {
+function sanitizeModelForChatEligibility(model: Model, signal?: RuntimeModelSignal): Model {
   const metadata = getModelMetadata(model);
 
   if (signal && signal.policyBlockedCount > 0 && signal.successCount === 0) {
@@ -272,8 +277,7 @@ const MODELS_LIST_QUERYSTRING_SCHEMA = {
     },
     limit: {
       type: 'integer',
-      description:
-        'Max rows per page. Default 100, clamped to [1, 1000]. Ignored when all=true.',
+      description: 'Max rows per page. Default 100, clamped to [1, 1000]. Ignored when all=true.',
     },
     offset: {
       type: 'integer',
@@ -307,8 +311,14 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
       properties: {
         catalog: { type: 'number', description: 'Total active rows in DB catalog' },
         runnable: { type: 'number', description: 'Models whose provider has a registered adapter' },
-        scoped: { type: 'number', description: 'After applying scope filter (runnable/all/discovered)' },
-        matched: { type: 'number', description: 'After applying optional endpoint filter (full result set being paged)' },
+        scoped: {
+          type: 'number',
+          description: 'After applying scope filter (runnable/all/discovered)',
+        },
+        matched: {
+          type: 'number',
+          description: 'After applying optional endpoint filter (full result set being paged)',
+        },
         returned: { type: 'number', description: 'Rows in THIS page (length of data array)' },
       },
       required: ['catalog', 'runnable', 'scoped', 'matched', 'returned'],
@@ -320,10 +330,19 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
       properties: {
         limit: { type: 'number', description: 'Effective page size after clamping to [1, 1000]' },
         offset: { type: 'number', description: 'Effective 0-based offset after clamping to >= 0' },
-        total: { type: 'number', description: 'Total rows matching scope+endpoint filter (== counts.matched)' },
-        returned: { type: 'number', description: 'Rows in this page (== counts.returned == data.length)' },
+        total: {
+          type: 'number',
+          description: 'Total rows matching scope+endpoint filter (== counts.matched)',
+        },
+        returned: {
+          type: 'number',
+          description: 'Rows in this page (== counts.returned == data.length)',
+        },
         hasMore: { type: 'boolean', description: 'True when more rows exist beyond this page' },
-        nextOffset: { type: ['number', 'null'], description: 'offset+limit when hasMore, else null' },
+        nextOffset: {
+          type: ['number', 'null'],
+          description: 'offset+limit when hasMore, else null',
+        },
       },
       required: ['limit', 'offset', 'total', 'returned', 'hasMore', 'nextOffset'],
     },
@@ -454,9 +473,8 @@ export async function registerModelRoutes(
         );
         void (async () => {
           try {
-            const { getCentralModelDiscoveryService } = await import(
-              '@/services/central-model-discovery-service'
-            );
+            const { getCentralModelDiscoveryService } =
+              await import('@/services/central-model-discovery-service');
             const discovery = await getCentralModelDiscoveryService();
             await discovery.discoverAllModels();
           } catch (err) {
@@ -470,16 +488,19 @@ export async function registerModelRoutes(
 
       const runtimeSignals = await getRuntimeSignals();
       const requestedScope = request.query.scope ?? 'runnable';
-      const scope: ModelsScope = requestedScope === 'all' || requestedScope === 'discovered'
-        ? requestedScope
-        : 'runnable';
+      const scope: ModelsScope =
+        requestedScope === 'all' || requestedScope === 'discovered' ? requestedScope : 'runnable';
       const endpointFilterRaw = request.query.endpoint;
       const endpointFilter =
         typeof endpointFilterRaw === 'string' && endpointFilterRaw.trim().length > 0
           ? normalizeOperationEndpoint(endpointFilterRaw)
           : undefined;
 
-      if (typeof endpointFilterRaw === 'string' && endpointFilterRaw.trim().length > 0 && !endpointFilter) {
+      if (
+        typeof endpointFilterRaw === 'string' &&
+        endpointFilterRaw.trim().length > 0 &&
+        !endpointFilter
+      ) {
         return reply.status(400).send({
           error: {
             code: 'invalid_endpoint_filter',
@@ -607,7 +628,7 @@ export async function registerModelRoutes(
             matched: matchedTotal,
             ratio: (runnableCount / catalogTotal).toFixed(3),
           },
-          'Low runnable/catalog ratio — many providers may lack registered adapters',
+          'Low runnable/catalog ratio — many providers may lack registered adapters'
         );
       }
 
@@ -651,11 +672,11 @@ export async function registerModelRoutes(
       const data = page.pageEntries.map((entry) => buildModelDto(entry));
 
       const counts = {
-        catalog: catalogTotal,                    // total rows in DB
-        runnable: runnableCount,                  // pass operability gate
-        scoped: scopedCount,                      // after scope filter
-        matched: matchedTotal,                    // after endpoint filter (full result set)
-        returned: page.returned,                  // rows in THIS page
+        catalog: catalogTotal, // total rows in DB
+        runnable: runnableCount, // pass operability gate
+        scoped: scopedCount, // after scope filter
+        matched: matchedTotal, // after endpoint filter (full result set)
+        returned: page.returned, // rows in THIS page
       };
 
       return reply.send({

@@ -65,10 +65,10 @@ export class CatalogPluginUnsupportedError extends Error {
   constructor(
     readonly providerId: string,
     readonly integrationClass: string,
-    reason: string,
+    reason: string
   ) {
     super(
-      `CatalogProviderPlugin: cannot bridge '${providerId}' (integrationClass=${integrationClass}) — ${reason}`,
+      `CatalogProviderPlugin: cannot bridge '${providerId}' (integrationClass=${integrationClass}) — ${reason}`
     );
     this.name = 'CatalogPluginUnsupportedError';
   }
@@ -101,8 +101,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
     this.entry = entry;
     this.name = entry.providerId;
     this.description =
-      entry.notes ??
-      `${entry.displayName} (${entry.integrationClass}, ${entry.integrationMode})`;
+      entry.notes ?? `${entry.displayName} (${entry.integrationClass}, ${entry.integrationMode})`;
     this.log = logger.child({
       component: 'catalog-provider-plugin',
       providerId: entry.providerId,
@@ -124,7 +123,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
       throw new CatalogPluginUnsupportedError(
         this.entry.providerId,
         this.entry.integrationClass,
-        'integrationMode=catalog-only — the loader should have skipped this entry',
+        'integrationMode=catalog-only — the loader should have skipped this entry'
       );
     }
 
@@ -140,7 +139,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         this.entry.integrationClass,
         'requires a dedicated ProviderPlugin (first-party-native / specialty). ' +
           `Declare adapterClass in the catalog entry and register the factory in ` +
-          `default-adapter-factories.ts. adapterClass="${this.entry.adapterClass ?? '<unset>'}".`,
+          `default-adapter-factories.ts. adapterClass="${this.entry.adapterClass ?? '<unset>'}".`
       );
     }
 
@@ -151,35 +150,53 @@ export class CatalogProviderPlugin implements ProviderPlugin {
       throw new CatalogPluginUnsupportedError(
         this.entry.providerId,
         this.entry.integrationClass,
-        `missing API key — set ${this.entry.apiKeyEnvVar} in env`,
+        `missing API key — set ${this.entry.apiKeyEnvVar} in env`
       );
     }
 
     // ── Resolve baseUrl: env override wins over catalog default. ───────────
     const baseUrl = this.resolveBaseUrl(config);
 
-    // ── Build fetcher (discovery). ─────────────────────────────────────────
+    // ── Build fetcher (discovery) — skipped when `listModels()` will be
+    //    served entirely from the catalog's pinnedFallback list. ───────────
     //
-    // Even dedicated adapters use the hub fetcher for /models discovery when
-    // the provider exposes an OpenAI-compatible listing endpoint. Dedicated
-    // adapters that override getModels() (e.g. Voyage, Volcano) effectively
-    // ignore this fetcher — but constructing it is cheap and harmless.
-    this.fetcher = new OpenAICompatibleHubModelFetcher({
-      providerName: this.entry.providerId,
-      apiKey: apiKey || '',
-      baseUrl,
-      modelListPaths: this.entry.paths?.modelList
-        ? [...this.entry.paths.modelList]
-        : undefined,
-      authHeaderName: this.entry.authHeaderName,
-      authScheme: this.mapAuthScheme(),
-      extraHeaders: this.entry.extraHeaders
-        ? { ...this.entry.extraHeaders }
-        : undefined,
-      modelDenylist: this.entry.modelDenylist
-        ? [...this.entry.modelDenylist]
-        : undefined,
-    });
+    // Even dedicated adapters normally use the hub fetcher for /models
+    // discovery when the provider exposes an OpenAI-compatible listing
+    // endpoint. Dedicated adapters that override getModels() (e.g. Voyage,
+    // Volcano) effectively ignore this fetcher — constructing it is usually
+    // cheap and harmless, so historically we always built it.
+    //
+    // BUT for `execution-only` entries with a populated `pinnedFallback`
+    // (azure-openai, inworld, aws-bedrock, ...), `listModels()` below never
+    // touches the fetcher at all — and neither does anything else in the
+    // codebase (`getFetcher()` has no external callers). Building it anyway
+    // forces `mapAuthScheme()` to resolve the entry's real `authScheme`
+    // (`custom`, `hmac-sigv4`, etc.) even though the OAI-compat bridge has no
+    // representation for those — which fires the "Unsupported authScheme for
+    // oai-compat bridge — falling back to Bearer" warning on every boot for
+    // a fetcher that is provably dead code. That log reads as "azure-openai's
+    // auth is broken", when in fact the dedicated adapter (built below) has
+    // the correct `api-key` header contract; only the unused discovery
+    // fetcher was ever misconfigured. Skip building it in that case.
+    const rawPinnedForFetcherGate =
+      this.entry.pinnedFallback?.models ?? this.entry.staticModels ?? null;
+    const servedFromPinnedFallback =
+      this.entry.integrationMode === 'execution-only' &&
+      !!rawPinnedForFetcherGate &&
+      rawPinnedForFetcherGate.length > 0;
+
+    if (!servedFromPinnedFallback) {
+      this.fetcher = new OpenAICompatibleHubModelFetcher({
+        providerName: this.entry.providerId,
+        apiKey: apiKey || '',
+        baseUrl,
+        modelListPaths: this.entry.paths?.modelList ? [...this.entry.paths.modelList] : undefined,
+        authHeaderName: this.entry.authHeaderName,
+        authScheme: this.mapAuthScheme(),
+        extraHeaders: this.entry.extraHeaders ? { ...this.entry.extraHeaders } : undefined,
+        modelDenylist: this.entry.modelDenylist ? [...this.entry.modelDenylist] : undefined,
+      });
+    }
 
     // ── Build adapter (execution). ─────────────────────────────────────────
     if (dedicatedFactory) {
@@ -187,9 +204,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         entry: this.entry,
         apiKey: apiKey || '',
         baseUrl,
-        extraHeaders: this.entry.extraHeaders
-          ? { ...this.entry.extraHeaders }
-          : undefined,
+        extraHeaders: this.entry.extraHeaders ? { ...this.entry.extraHeaders } : undefined,
       });
       this.log.info(
         {
@@ -199,7 +214,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
           baseUrl,
           apiKeyPresent: Boolean(apiKey),
         },
-        'Catalog-backed plugin initialized via dedicated adapter factory',
+        'Catalog-backed plugin initialized via dedicated adapter factory'
       );
       return;
     }
@@ -222,9 +237,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
       metadata: {
         authHeaderName: this.entry.authHeaderName,
         authScheme: this.mapAuthScheme(),
-        extraHeaders: this.entry.extraHeaders
-          ? { ...this.entry.extraHeaders }
-          : undefined,
+        extraHeaders: this.entry.extraHeaders ? { ...this.entry.extraHeaders } : undefined,
         chatCompletionsPath: this.entry.paths?.chatCompletions,
         embeddingsPath: this.entry.paths?.embeddings,
         moderationsPath: this.entry.paths?.moderation,
@@ -251,7 +264,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         apiKeyPresent: Boolean(apiKey),
         apiKeyOptional: Boolean(this.entry.apiKeyOptional),
       },
-      'Catalog-backed plugin initialized',
+      'Catalog-backed plugin initialized'
     );
   }
 
@@ -269,12 +282,6 @@ export class CatalogProviderPlugin implements ProviderPlugin {
    * register.
    */
   async listModels(): Promise<PluginProviderModel[]> {
-    if (!this.fetcher) {
-      throw new Error(
-        `CatalogProviderPlugin(${this.entry.providerId}): listModels called before initialize`,
-      );
-    }
-
     // Execution-only: synthesize from pinnedFallback.models (Phase 4d, 2026-04-28).
     // The legacy `staticModels` branch is kept as a safety net during the
     // migration window — once every catalog row is migrated, both the legacy
@@ -288,12 +295,12 @@ export class CatalogProviderPlugin implements ProviderPlugin {
     // the plugin manager (separate code path). When called via that path, we
     // preserve the declared capabilities so the synthesized model rows surface
     // with real tags rather than `capabilities: []`.
+    //
+    // This branch is checked BEFORE the `this.fetcher` guard below because
+    // `initialize()` intentionally skips constructing the fetcher when this
+    // branch is guaranteed to be taken (see `servedFromPinnedFallback` there).
     const rawPinned = this.entry.pinnedFallback?.models ?? this.entry.staticModels ?? null;
-    if (
-      this.entry.integrationMode === 'execution-only' &&
-      rawPinned &&
-      rawPinned.length > 0
-    ) {
+    if (this.entry.integrationMode === 'execution-only' && rawPinned && rawPinned.length > 0) {
       return rawPinned.map((rawEntry) => {
         const { id, capabilities } = normalizePinnedModelEntry(rawEntry);
         return {
@@ -306,6 +313,12 @@ export class CatalogProviderPlugin implements ProviderPlugin {
           pricing: { inputCostPer1M: 0, outputCostPer1M: 0 },
         };
       });
+    }
+
+    if (!this.fetcher) {
+      throw new Error(
+        `CatalogProviderPlugin(${this.entry.providerId}): listModels called before initialize`
+      );
     }
 
     const models = await this.fetcher.getModels();
@@ -346,7 +359,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
   getAdapter(): ProviderAdapter {
     if (!this.adapter) {
       throw new Error(
-        `CatalogProviderPlugin(${this.entry.providerId}): getAdapter called before initialize`,
+        `CatalogProviderPlugin(${this.entry.providerId}): getAdapter called before initialize`
       );
     }
     return this.adapter;
@@ -354,7 +367,10 @@ export class CatalogProviderPlugin implements ProviderPlugin {
 
   /**
    * Expose the fetcher for downstream wiring (central-model-discovery-service).
-   * Returns undefined if not yet initialized or if the entry is catalog-only.
+   * Returns undefined if not yet initialized, if the entry is catalog-only,
+   * or if the entry is `execution-only` with a populated `pinnedFallback`
+   * (in which case `listModels()` is served entirely from the catalog and
+   * no discovery fetcher is ever constructed — see `initialize()`).
    */
   getFetcher(): OpenAICompatibleHubModelFetcher | undefined {
     return this.fetcher;
@@ -429,7 +445,7 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         // classification. If we got here, the catalog entry is misconfigured.
         this.log.warn(
           { authScheme: this.entry.authScheme },
-          'Unsupported authScheme for oai-compat bridge — falling back to Bearer',
+          'Unsupported authScheme for oai-compat bridge — falling back to Bearer'
         );
         return 'Bearer';
       case 'none':
@@ -460,15 +476,13 @@ export class CatalogProviderPlugin implements ProviderPlugin {
  * Loader code should prefer this over `new CatalogProviderPlugin(...)` so
  * that the "can bridge?" and "build bridge" steps are co-located.
  */
-export function createCatalogProviderPlugin(
-  entry: ProviderCatalogEntry,
-): CatalogProviderPlugin {
+export function createCatalogProviderPlugin(entry: ProviderCatalogEntry): CatalogProviderPlugin {
   // Structural reject for modes that shouldn't reach the bridge at all.
   if (entry.integrationMode === 'catalog-only') {
     throw new CatalogPluginUnsupportedError(
       entry.providerId,
       entry.integrationClass,
-      'integrationMode=catalog-only — loader must filter these out before bridging',
+      'integrationMode=catalog-only — loader must filter these out before bridging'
     );
   }
 
@@ -491,7 +505,7 @@ export function createCatalogProviderPlugin(
         'class needs a dedicated ProviderPlugin — bridge only covers oai-compat-* ' +
           'and no factory is registered for ' +
           `adapterClass="${entry.adapterClass ?? '<unset>'}". Either register a ` +
-          'factory in default-adapter-factories.ts or set integrationClass to an oai-compat variant.',
+          'factory in default-adapter-factories.ts or set integrationClass to an oai-compat variant.'
       );
     }
     // Has a registered factory → proceed; initialize() will route through it.

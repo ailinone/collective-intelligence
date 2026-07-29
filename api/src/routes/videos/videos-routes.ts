@@ -37,7 +37,20 @@ const VideoGenerationRequestSchema = z.object({
   n: z.number().int().min(1).max(8).optional().default(1),
   response_format: z.enum(['url', 'b64_json']).optional().default('url'),
   strategy: z
-    .enum(['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'])
+    .enum([
+      'single',
+      'cost',
+      'speed',
+      'quality',
+      'balanced',
+      'parallel',
+      'debate',
+      'quality_multipass',
+      'quality-multipass',
+      'quality-multi-pass',
+      'dynamic',
+      'auto',
+    ])
     .optional(),
   allow_fallback: z.boolean().optional().default(true),
   max_cost: z.number().min(0).optional(),
@@ -82,7 +95,10 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
           image: { type: 'string', description: 'Image URL or base64 data URI for image-to-video' },
           start_image: { type: 'string', description: 'Start frame image URL/base64' },
           end_image: { type: 'string', description: 'End frame image URL/base64' },
-          audio: { type: 'string', description: 'Audio URL or base64 data URI to condition generation' },
+          audio: {
+            type: 'string',
+            description: 'Audio URL or base64 data URI to condition generation',
+          },
           video: { type: 'string', description: 'Source video URL/base64 for video-to-video' },
           duration: { type: 'integer', minimum: 1, maximum: 120 },
           aspect_ratio: { type: 'string' },
@@ -91,7 +107,20 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
           response_format: { type: 'string', enum: ['url', 'b64_json'], default: 'url' },
           strategy: {
             type: 'string',
-            enum: ['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'],
+            enum: [
+              'single',
+              'cost',
+              'speed',
+              'quality',
+              'balanced',
+              'parallel',
+              'debate',
+              'quality_multipass',
+              'quality-multipass',
+              'quality-multi-pass',
+              'dynamic',
+              'auto',
+            ],
           },
           allow_fallback: { type: 'boolean', default: true },
           max_cost: { type: 'number', minimum: 0 },
@@ -140,7 +169,9 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
         const enrichedUserContext = {
           ...userContext,
           ...(validated.max_cost !== undefined ? { maxCost: validated.max_cost } : {}),
-          ...(validated.quality_target !== undefined ? { qualityTarget: validated.quality_target } : {}),
+          ...(validated.quality_target !== undefined
+            ? { qualityTarget: validated.quality_target }
+            : {}),
         };
         const result = await executeRouteWithRetry(
           () =>
@@ -184,7 +215,10 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
         });
       } catch (error: unknown) {
         const statusCode =
-          error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number'
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
+          typeof error.statusCode === 'number'
             ? error.statusCode
             : 500;
         const message = error instanceof Error ? error.message : 'Video generation failed';

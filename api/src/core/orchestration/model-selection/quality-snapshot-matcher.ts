@@ -93,7 +93,11 @@ function aliasSet(e: QualitySnapshotEntry): Set<string> {
   return new Set(entryAliases(e).map((s) => s.toLowerCase()));
 }
 
-function familyKey(input: { family?: string; sizeClass?: string; variant?: string }): string | null {
+function familyKey(input: {
+  family?: string;
+  sizeClass?: string;
+  variant?: string;
+}): string | null {
   if (!input.family) return null;
   return [input.family, input.sizeClass ?? '', input.variant ?? ''].join('|').toLowerCase();
 }
@@ -112,7 +116,7 @@ function entryFamilyKey(e: QualitySnapshotEntry): string | null {
   // Family = leading non-numeric token after vendor prefix
   const stripped = lowered.replace(
     /^(anthropic|openai|google|xai|deepseek-ai|deepseek|moonshotai|qwen|alibaba|abacusai|aion-labs|meta-llama|meta|mistralai|mistral)\//,
-    '',
+    ''
   );
   const family = stripped.split(/[-/.]/)[0];
   if (!family) return null;
@@ -138,18 +142,14 @@ export function matchQualitySnapshotEntry(input: {
     };
   }
 
-  const runtimeAliases = new Set(
-    runtimeIdentity.normalizedIds.map((s) => s.toLowerCase()),
-  );
+  const runtimeAliases = new Set(runtimeIdentity.normalizedIds.map((s) => s.toLowerCase()));
   runtimeAliases.add(runtimeIdentity.qualityCanonicalId.toLowerCase());
   const canonicalLower = runtimeIdentity.qualityCanonicalId.toLowerCase();
   const runtimeFamily = familyKey(runtimeIdentity);
 
   // Tier 1: exact_model_id (verbatim)
   const exactModel = snapshotEntries.filter(
-    (e) =>
-      typeof e.modelId === 'string' &&
-      runtimeIdentity.normalizedIds.includes(e.modelId),
+    (e) => typeof e.modelId === 'string' && runtimeIdentity.normalizedIds.includes(e.modelId)
   );
   if (exactModel.length > 0) {
     return {
@@ -168,8 +168,7 @@ export function matchQualitySnapshotEntry(input: {
     (e) =>
       (typeof e.canonicalModelId === 'string' &&
         normalizeQualityModelId(e.canonicalModelId) === canonicalLower) ||
-      (typeof e.modelId === 'string' &&
-        normalizeQualityModelId(e.modelId) === canonicalLower),
+      (typeof e.modelId === 'string' && normalizeQualityModelId(e.modelId) === canonicalLower)
   );
   if (exactCanonical.length > 0) {
     return {
@@ -179,8 +178,7 @@ export function matchQualitySnapshotEntry(input: {
       entry: exactCanonical[0],
       matchedAlias: exactCanonical[0].canonicalModelId ?? exactCanonical[0].modelId,
       ambiguousMatchCount: exactCanonical.length,
-      reasons:
-        exactCanonical.length > 1 ? ['ambiguous_match_count:' + exactCanonical.length] : [],
+      reasons: exactCanonical.length > 1 ? ['ambiguous_match_count:' + exactCanonical.length] : [],
     };
   }
 
@@ -203,13 +201,17 @@ export function matchQualitySnapshotEntry(input: {
     // If the alias is the wrapper-stripped form (i.e. equals canonical without
     // wrapper but original modelId had a wrapper), classify as provider_unwrapped.
     const wrapperLikeAlias = aliasMatches.find((_m) =>
-      runtimeIdentity.reasons.some((r) => r.startsWith('stripped_wrapper:')),
+      runtimeIdentity.reasons.some((r) => r.startsWith('stripped_wrapper:'))
     );
     const kind: QualityMatchKind = wrapperLikeAlias
       ? 'provider_unwrapped_alias'
       : 'normalized_alias';
     const confidence: QualityMatchConfidence =
-      kind === 'provider_unwrapped_alias' ? (aliasMatches.length === 1 ? 'high' : 'medium') : 'medium';
+      kind === 'provider_unwrapped_alias'
+        ? aliasMatches.length === 1
+          ? 'high'
+          : 'medium'
+        : 'medium';
     return {
       matched: true,
       matchKind: kind,
@@ -217,8 +219,7 @@ export function matchQualitySnapshotEntry(input: {
       entry: aliasMatches[0].entry,
       matchedAlias: aliasMatches[0].aliasIntersect,
       ambiguousMatchCount: aliasMatches.length,
-      reasons:
-        aliasMatches.length > 1 ? ['ambiguous_match_count:' + aliasMatches.length] : [],
+      reasons: aliasMatches.length > 1 ? ['ambiguous_match_count:' + aliasMatches.length] : [],
     };
   }
 

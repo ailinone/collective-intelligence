@@ -160,9 +160,7 @@ export class ContextCachingService {
    * Create a new cached context
    * Stores in Redis (hot cache) and PostgreSQL (persistent)
    */
-  async createCachedContext(
-    params: CreateCachedContextParams
-  ): Promise<CreateCachedContextResult> {
+  async createCachedContext(params: CreateCachedContextParams): Promise<CreateCachedContextResult> {
     const { name, messages, ttl = '1h', metadata = {}, userContext, requestId } = params;
 
     const organizationId = userContext.organizationId;
@@ -284,7 +282,10 @@ export class ContextCachingService {
 
       // Update PostgreSQL access stats asynchronously
       this.updateAccessStats(contextId, cached.accessCount).catch((err) => {
-        log.warn({ error: serializeError(err), contextId }, 'Failed to update access stats in database');
+        log.warn(
+          { error: serializeError(err), contextId },
+          'Failed to update access stats in database'
+        );
       });
 
       log.debug({ requestId, contextId, cacheHit: 'redis' }, 'Cache hit from Redis');
@@ -378,28 +379,33 @@ export class ContextCachingService {
       }),
     ]);
 
-    log.debug({ requestId, organizationId, count: contexts.length, total }, 'Listed cached contexts');
+    log.debug(
+      { requestId, organizationId, count: contexts.length, total },
+      'Listed cached contexts'
+    );
 
     return {
-      contexts: contexts.map((ctx: {
-        id: string;
-        name: string;
-        tokenCount: number;
-        ttl: string;
-        createdAt: Date;
-        expiresAt: Date;
-        lastAccessedAt: Date;
-        accessCount: number;
-      }) => ({
-        id: ctx.id,
-        name: ctx.name,
-        tokenCount: ctx.tokenCount,
-        ttl: ctx.ttl as CacheTTL,
-        createdAt: ctx.createdAt.toISOString(),
-        expiresAt: ctx.expiresAt.toISOString(),
-        lastAccessedAt: ctx.lastAccessedAt.toISOString(),
-        accessCount: ctx.accessCount,
-      })),
+      contexts: contexts.map(
+        (ctx: {
+          id: string;
+          name: string;
+          tokenCount: number;
+          ttl: string;
+          createdAt: Date;
+          expiresAt: Date;
+          lastAccessedAt: Date;
+          accessCount: number;
+        }) => ({
+          id: ctx.id,
+          name: ctx.name,
+          tokenCount: ctx.tokenCount,
+          ttl: ctx.ttl as CacheTTL,
+          createdAt: ctx.createdAt.toISOString(),
+          expiresAt: ctx.expiresAt.toISOString(),
+          lastAccessedAt: ctx.lastAccessedAt.toISOString(),
+          accessCount: ctx.accessCount,
+        })
+      ),
       total,
       hasMore: offset + contexts.length < total,
     };
@@ -553,4 +559,3 @@ export function getContextCachingService(): ContextCachingService {
   }
   return contextCachingServiceInstance;
 }
-

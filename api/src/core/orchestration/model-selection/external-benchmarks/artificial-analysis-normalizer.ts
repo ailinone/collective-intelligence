@@ -125,7 +125,7 @@ function aliasSet(m: ArtificialAnalysisLlmModel): ReadonlyArray<string> {
 // ─── Public API ───────────────────────────────────────────────────────────
 
 export function normalizeArtificialAnalysisModel(
-  m: ArtificialAnalysisLlmModel,
+  m: ArtificialAnalysisLlmModel
 ): NormalizedArtificialAnalysisModel {
   return {
     source: 'artificial_analysis_api',
@@ -167,7 +167,7 @@ export function normalizeArtificialAnalysisModel(
 }
 
 export function normalizeArtificialAnalysisModels(
-  ms: ReadonlyArray<ArtificialAnalysisLlmModel>,
+  ms: ReadonlyArray<ArtificialAnalysisLlmModel>
 ): ReadonlyArray<NormalizedArtificialAnalysisModel> {
   return ms.map(normalizeArtificialAnalysisModel);
 }

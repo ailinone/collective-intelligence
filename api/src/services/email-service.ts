@@ -142,7 +142,9 @@ class EmailService {
     );
 
     // Determine provider: prioritize SMTP if env vars are present, otherwise use config or env
-    const configuredProvider = (envProvider || config.auth.email.provider || '').toLowerCase().trim();
+    const configuredProvider = (envProvider || config.auth.email.provider || '')
+      .toLowerCase()
+      .trim();
 
     // IMPORTANT: In tests and local development, we often set AUTH_EMAIL_PROVIDER=console to avoid
     // sending real emails. Do not override an explicit "console" provider just because SMTP env vars exist.
@@ -315,20 +317,23 @@ class EmailService {
    */
   private async initializeConsole(): Promise<SendFunction> {
     this.log.info('Console email provider initialized - emails will be logged to console');
-    
+
     return async (message: EmailMessage) => {
       // Log the email content to console for debugging/testing
       console.log('📧 EMAIL (console provider):');
       console.log('  To:', message.to);
       console.log('  Subject:', message.subject);
-      console.log('  Text:', message.text?.substring(0, 200) + (message.text && message.text.length > 200 ? '...' : ''));
-      
+      console.log(
+        '  Text:',
+        message.text?.substring(0, 200) + (message.text && message.text.length > 200 ? '...' : '')
+      );
+
       this.log.info(
-        { 
-          provider: 'console', 
-          to: message.to, 
-          subject: message.subject 
-        }, 
+        {
+          provider: 'console',
+          to: message.to,
+          subject: message.subject,
+        },
         'Email logged (not sent - console provider)'
       );
     };
@@ -364,7 +369,12 @@ class EmailService {
 
     const sgMailModule = await import('@sendgrid/mail');
     this.sendgridClient = sgMailModule.default;
-    if (typeof this.sendgridClient === 'object' && this.sendgridClient !== null && 'setApiKey' in this.sendgridClient && typeof this.sendgridClient.setApiKey === 'function') {
+    if (
+      typeof this.sendgridClient === 'object' &&
+      this.sendgridClient !== null &&
+      'setApiKey' in this.sendgridClient &&
+      typeof this.sendgridClient.setApiKey === 'function'
+    ) {
       this.sendgridClient.setApiKey(apiKey);
     }
 
@@ -372,7 +382,12 @@ class EmailService {
     const fromName = config.auth.email.fromName || 'Ailin Platform';
 
     return async (message: EmailMessage) => {
-      if (!this.sendgridClient || typeof this.sendgridClient !== 'object' || !('send' in this.sendgridClient) || typeof this.sendgridClient.send !== 'function') {
+      if (
+        !this.sendgridClient ||
+        typeof this.sendgridClient !== 'object' ||
+        !('send' in this.sendgridClient) ||
+        typeof this.sendgridClient.send !== 'function'
+      ) {
         throw new Error('SendGrid client not initialized');
       }
       try {
@@ -419,7 +434,12 @@ class EmailService {
     const fromName = config.auth.email.fromName || 'Ailin Platform';
 
     return async (message: EmailMessage) => {
-      if (!this.sesClient || typeof this.sesClient !== 'object' || !('send' in this.sesClient) || typeof this.sesClient.send !== 'function') {
+      if (
+        !this.sesClient ||
+        typeof this.sesClient !== 'object' ||
+        !('send' in this.sesClient) ||
+        typeof this.sesClient.send !== 'function'
+      ) {
         throw new Error('SES client not initialized');
       }
       if (!this.sesCommand || typeof this.sesCommand !== 'function') {
@@ -431,7 +451,10 @@ class EmailService {
         Destination: { ToAddresses: string[] };
         Message: {
           Subject: { Data: string; Charset: string };
-          Body: { Text: { Data: string; Charset: string }; Html?: { Data: string; Charset: string } };
+          Body: {
+            Text: { Data: string; Charset: string };
+            Html?: { Data: string; Charset: string };
+          };
         };
       }) => unknown;
       try {

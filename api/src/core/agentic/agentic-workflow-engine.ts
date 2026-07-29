@@ -40,13 +40,13 @@ const log = logger.child({ component: 'agentic-workflow' });
 /**
  * Workflow step types
  */
-export type StepType = 
-  | 'llm_call'      // Call an LLM
-  | 'tool_call'     // Use a tool
-  | 'human_input'   // Wait for human input
-  | 'condition'     // Conditional branching
-  | 'loop'          // Iterate over items
-  | 'parallel'      // Execute steps in parallel
+export type StepType =
+  | 'llm_call' // Call an LLM
+  | 'tool_call' // Use a tool
+  | 'human_input' // Wait for human input
+  | 'condition' // Conditional branching
+  | 'loop' // Iterate over items
+  | 'parallel' // Execute steps in parallel
   | 'sub_workflow'; // Execute nested workflow
 
 /**
@@ -65,7 +65,7 @@ export interface WorkflowStep {
       parameters: Record<string, unknown>;
     }>;
     condition?: string; // JavaScript expression
-    items?: string;     // Variable name for loop items
+    items?: string; // Variable name for loop items
     steps?: WorkflowStep[]; // Sub-steps for parallel/loop/sub_workflow
     humanInput?: {
       variable?: string;
@@ -90,7 +90,7 @@ export interface WorkflowDefinition {
   steps: WorkflowStep[];
   initialContext?: Record<string, unknown>;
   maxDuration?: number; // Max execution time in ms
-  maxSteps?: number;    // Max steps to prevent infinite loops
+  maxSteps?: number; // Max steps to prevent infinite loops
 }
 
 /**
@@ -321,7 +321,14 @@ function tokenizeCondition(source: string): ConditionToken[] {
     }
 
     const two = source.slice(i, i + 2);
-    if (two === '==' || two === '!=' || two === '<=' || two === '>=' || two === '&&' || two === '||') {
+    if (
+      two === '==' ||
+      two === '!=' ||
+      two === '<=' ||
+      two === '>=' ||
+      two === '&&' ||
+      two === '||'
+    ) {
       tokens.push({ kind: 'operator', value: two });
       i += 2;
       continue;
@@ -556,7 +563,10 @@ class ConditionEvaluator {
  * Evaluate a workflow `condition` string against the current execution
  * variables without ever executing it as code (see ConditionEvaluator).
  */
-function evaluateWorkflowCondition(expression: string, variables: Record<string, unknown>): unknown {
+function evaluateWorkflowCondition(
+  expression: string,
+  variables: Record<string, unknown>
+): unknown {
   const tokens = tokenizeCondition(expression);
   if (tokens.length === 0) {
     return false;
@@ -759,10 +769,7 @@ Output ONLY valid JSON.`,
       }
     } catch (error) {
       status = 'failed';
-      log.error(
-        { executionId, error: getErrorMessage(error) },
-        'Workflow execution failed'
-      );
+      log.error({ executionId, error: getErrorMessage(error) }, 'Workflow execution failed');
     } finally {
       this.activeWorkflows.delete(executionId);
     }
@@ -829,10 +836,7 @@ Output ONLY valid JSON.`,
   /**
    * Execute a single workflow step
    */
-  private async executeStep(
-    step: WorkflowStep,
-    context: ExecutionContext
-  ): Promise<StepResult> {
+  private async executeStep(step: WorkflowStep, context: ExecutionContext): Promise<StepResult> {
     const startTime = Date.now();
     let retries = 0;
     const maxRetries = step.config.maxRetries || 3;
@@ -1014,10 +1018,7 @@ Output ONLY valid JSON.`,
   /**
    * Execute LLM call step
    */
-  private async executeLLMStep(
-    step: WorkflowStep,
-    context: ExecutionContext
-  ): Promise<string> {
+  private async executeLLMStep(step: WorkflowStep, context: ExecutionContext): Promise<string> {
     const { getProviderRegistry } = await import('@/providers/provider-registry.js');
     const registry = getProviderRegistry();
 
@@ -1026,9 +1027,10 @@ Output ONLY valid JSON.`,
 
     // Find model
     const allModels = await registry.getAllModels();
-    const model = modelId === 'auto'
-      ? allModels.find((m) => m.performance?.quality >= 0.8)
-      : allModels.find((m) => m.id === modelId || m.name === modelId);
+    const model =
+      modelId === 'auto'
+        ? allModels.find((m) => m.performance?.quality >= 0.8)
+        : allModels.find((m) => m.id === modelId || m.name === modelId);
 
     if (!model) {
       throw new Error(`Model ${modelId} not found`);
@@ -1052,12 +1054,9 @@ Output ONLY valid JSON.`,
   /**
    * Execute tool call step
    */
-  private async executeToolStep(
-    step: WorkflowStep,
-    context: ExecutionContext
-  ): Promise<unknown> {
+  private async executeToolStep(step: WorkflowStep, context: ExecutionContext): Promise<unknown> {
     const tools = step.config.tools || [];
-    
+
     if (tools.length === 0) {
       log.warn({ stepId: step.id }, 'Tool step has no tools configured');
       return { toolResult: null, error: 'No tools configured for step' };
@@ -1103,7 +1102,13 @@ Output ONLY valid JSON.`,
       switch (tool.name) {
         case 'extract_function':
           toolResult = await executeExtractFunctionTool(
-            resolvedParams as { filePath: string; startLine: number; endLine: number; functionName: string; dryRun?: boolean },
+            resolvedParams as {
+              filePath: string;
+              startLine: number;
+              endLine: number;
+              functionName: string;
+              dryRun?: boolean;
+            },
             toolCallId,
             toolContext
           );
@@ -1111,7 +1116,13 @@ Output ONLY valid JSON.`,
 
         case 'rename_symbol':
           toolResult = await executeRenameSymbolTool(
-            resolvedParams as { oldName: string; newName: string; files: string[]; symbolType?: 'function' | 'variable' | 'class' | 'any'; dryRun?: boolean },
+            resolvedParams as {
+              oldName: string;
+              newName: string;
+              files: string[];
+              symbolType?: 'function' | 'variable' | 'class' | 'any';
+              dryRun?: boolean;
+            },
             toolCallId,
             toolContext
           );
@@ -1119,7 +1130,14 @@ Output ONLY valid JSON.`,
 
         case 'extract_variable':
           toolResult = await executeExtractVariableTool(
-            resolvedParams as { filePath: string; line: number; startColumn: number; endColumn: number; variableName: string; dryRun?: boolean },
+            resolvedParams as {
+              filePath: string;
+              line: number;
+              startColumn: number;
+              endColumn: number;
+              variableName: string;
+              dryRun?: boolean;
+            },
             toolCallId,
             toolContext
           );
@@ -1183,7 +1201,10 @@ Output ONLY valid JSON.`,
 
         default:
           // For tools not directly available, try to use chat request processor
-          log.warn({ toolName: tool.name }, 'Tool not directly supported in workflow engine, attempting via chat request processor');
+          log.warn(
+            { toolName: tool.name },
+            'Tool not directly supported in workflow engine, attempting via chat request processor'
+          );
           toolResult = {
             tool_call_id: toolCallId,
             success: false,
@@ -1221,7 +1242,7 @@ Output ONLY valid JSON.`,
         { stepId: step.id, toolName: tool.name, error: errorMessage },
         'Tool execution failed'
       );
-      
+
       // Store error in context
       context.variables[`${step.name}_error`] = errorMessage;
       context.variables[`${tool.name}_error`] = errorMessage;
@@ -1285,13 +1306,10 @@ Output ONLY valid JSON.`,
   /**
    * Execute loop step
    */
-  private async executeLoopStep(
-    step: WorkflowStep,
-    context: ExecutionContext
-  ): Promise<unknown[]> {
+  private async executeLoopStep(step: WorkflowStep, context: ExecutionContext): Promise<unknown[]> {
     const itemsVar = step.config.items || '';
     const itemsValue = context.variables[itemsVar];
-    
+
     // Type guard: ensure items is an array
     const items: unknown[] = Array.isArray(itemsValue) ? itemsValue : [];
     const results: unknown[] = [];
@@ -1299,7 +1317,7 @@ Output ONLY valid JSON.`,
     for (const item of items) {
       // Execute sub-steps with item in context
       const itemContext = { ...context, variables: { ...context.variables, _item: item } };
-      
+
       for (const subStep of step.config.steps || []) {
         const result = await this.executeStepInternal(subStep, itemContext);
         results.push(result);
@@ -1317,7 +1335,7 @@ Output ONLY valid JSON.`,
     context: ExecutionContext
   ): Promise<unknown[]> {
     const subSteps = step.config.steps || [];
-    
+
     const results = await Promise.all(
       subSteps.map((subStep) => this.executeStepInternal(subStep, context))
     );
@@ -1413,7 +1431,8 @@ Keep the workflow focused and efficient. Use 3-7 steps.`;
           ? (parsed as { name?: unknown; description?: unknown; steps?: unknown })
           : {};
       const parsedName = typeof parsedObj.name === 'string' ? parsedObj.name : 'Generated Workflow';
-      const parsedDesc = typeof parsedObj.description === 'string' ? parsedObj.description : task.substring(0, 100);
+      const parsedDesc =
+        typeof parsedObj.description === 'string' ? parsedObj.description : task.substring(0, 100);
       const parsedSteps: unknown[] = Array.isArray(parsedObj.steps) ? parsedObj.steps : [];
 
       const workflow: WorkflowDefinition = {
@@ -1429,10 +1448,14 @@ Keep the workflow focused and efficient. Use 3-7 steps.`;
           return {
             id: typeof step.id === 'string' ? step.id : `step_${index + 1}`,
             name: typeof step.name === 'string' ? step.name : `Step ${index + 1}`,
-            type: typeof step.type === 'string' ? (step.type as WorkflowDefinition['steps'][number]['type']) : 'llm_call',
-            config: typeof step.config === 'object' && step.config !== null
-              ? (step.config as Record<string, unknown>)
-              : {},
+            type:
+              typeof step.type === 'string'
+                ? (step.type as WorkflowDefinition['steps'][number]['type'])
+                : 'llm_call',
+            config:
+              typeof step.config === 'object' && step.config !== null
+                ? (step.config as Record<string, unknown>)
+                : {},
             dependencies: Array.isArray(step.dependencies)
               ? step.dependencies.filter((dep): dep is string => typeof dep === 'string')
               : [],
@@ -1442,10 +1465,7 @@ Keep the workflow focused and efficient. Use 3-7 steps.`;
 
       return workflow;
     } catch (error) {
-      log.warn(
-        { error: getErrorMessage(error) },
-        'Failed to parse workflow plan, using default'
-      );
+      log.warn({ error: getErrorMessage(error) }, 'Failed to parse workflow plan, using default');
 
       // Return simple single-step workflow as fallback
       return {
@@ -1470,10 +1490,7 @@ Keep the workflow focused and efficient. Use 3-7 steps.`;
   /**
    * Interpolate template string with context variables
    */
-  private interpolateTemplate(
-    template: string,
-    variables: Record<string, unknown>
-  ): string {
+  private interpolateTemplate(template: string, variables: Record<string, unknown>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_match: string, key: string) => {
       const value = variables[key];
       return value !== undefined ? String(value) : `{{${key}}}`;
@@ -1560,4 +1577,3 @@ export function getAgenticWorkflowEngine(): AgenticWorkflowEngine {
   }
   return workflowEngineInstance;
 }
-

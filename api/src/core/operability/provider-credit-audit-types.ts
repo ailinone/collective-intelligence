@@ -30,9 +30,7 @@
  */
 
 export type ProviderCreditAuditMode =
-  | 'metadata_only'
-  | 'non_billable_probe'
-  | 'minimal_billable_probe';
+  'metadata_only' | 'non_billable_probe' | 'minimal_billable_probe';
 
 export interface ProviderCreditAuditInput {
   readonly mode: ProviderCreditAuditMode;
@@ -73,12 +71,7 @@ export type ProviderAuditClassification =
  *   NOT call an endpoint of unknown billing class.
  */
 export type ProbeEndpointType =
-  | 'models'
-  | 'balance'
-  | 'account'
-  | 'health'
-  | 'metadata'
-  | 'unknown';
+  'models' | 'balance' | 'account' | 'health' | 'metadata' | 'unknown';
 
 export type ProbeBillableRisk = 'none' | 'unknown' | 'billable';
 

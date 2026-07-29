@@ -42,7 +42,7 @@ describe('GeminiOpenAIAdapter', () => {
           enabled: true,
           providerName: 'gemini-openai',
           apiKey: 'AIza_gemini_key',
-        }),
+        })
     ).not.toThrow();
   });
 
@@ -54,7 +54,7 @@ describe('GeminiOpenAIAdapter', () => {
       apiKey: 'k',
     });
     expect(getInternals(adapter).baseUrl).toBe(
-      'https://generativelanguage.googleapis.com/v1beta/openai',
+      'https://generativelanguage.googleapis.com/v1beta/openai'
     );
   });
 
@@ -66,9 +66,7 @@ describe('GeminiOpenAIAdapter', () => {
       apiKey: 'k',
       baseUrl: 'https://gemini-proxy.internal.corp/v1beta/openai',
     });
-    expect(getInternals(adapter).baseUrl).toBe(
-      'https://gemini-proxy.internal.corp/v1beta/openai',
-    );
+    expect(getInternals(adapter).baseUrl).toBe('https://gemini-proxy.internal.corp/v1beta/openai');
   });
 
   it('uses Bearer auth on the Authorization header', () => {

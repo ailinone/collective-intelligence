@@ -176,13 +176,11 @@ export async function resolveFallbackModels(): Promise<Record<string, readonly D
   // Step 1: collect all providerIds that need a fallback (non-enumerable
   // integration classes only — providers that DO list via /v1/models
   // don't need fallback because discovery already enumerates).
-  const providerIds = PROVIDER_CATALOG
-    .filter(
-      (entry) =>
-        isEligibleForChatDiscovery(entry)
-        && !ENUMERABLE_INTEGRATION_CLASSES.has(entry.integrationClass),
-    )
-    .map((entry) => entry.providerId);
+  const providerIds = PROVIDER_CATALOG.filter(
+    (entry) =>
+      isEligibleForChatDiscovery(entry) &&
+      !ENUMERABLE_INTEGRATION_CLASSES.has(entry.integrationClass)
+  ).map((entry) => entry.providerId);
 
   if (providerIds.length === 0) return result;
 
@@ -229,7 +227,7 @@ export async function resolveFallbackModels(): Promise<Record<string, readonly D
         providersFound: grouped.size,
         rowsTotal: rows.length,
       },
-      'Fallback models resolved (batched)',
+      'Fallback models resolved (batched)'
     );
   } catch (err) {
     // If the batched query fails, we log but DO NOT fall back to per-
@@ -238,7 +236,7 @@ export async function resolveFallbackModels(): Promise<Record<string, readonly D
     // tick (5min later) gets another chance.
     log.warn(
       { err: String(err), providerCount: providerIds.length },
-      'Batched fallback model resolution failed — pool will lack non-enumerable providers this tick',
+      'Batched fallback model resolution failed — pool will lack non-enumerable providers this tick'
     );
   }
 

@@ -72,7 +72,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 50,
     docsUrl: 'https://console.groq.com/docs/api-reference',
-    notes: 'Custom LPU hardware, sub-second latency for Llama/Mixtral/Gemma. Dedicated adapter injects reasoning_format/reasoning_effort/service_tier for OSS-reasoning models (gpt-oss, deepseek-r1, qwen-qwq, compound-beta).',
+    notes:
+      'Custom LPU hardware, sub-second latency for Llama/Mixtral/Gemma. Dedicated adapter injects reasoning_format/reasoning_effort/service_tier for OSS-reasoning models (gpt-oss, deepseek-r1, qwen-qwq, compound-beta).',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -107,7 +108,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 40,
     docsUrl: 'https://docs.together.ai/reference',
-    notes: 'D1 2026-04-24: provisioned key (ailin-togetherai-api-key) returned 401 on /v1/chat — "key_" prefix non-canonical; operator to re-issue if chat 401 persists. Probe 2026-07-17: video surface live-validated to the field-validation layer with THIS key (payload-wrap body; see videoRequestStyle) — auth accepted there.',
+    notes:
+      'D1 2026-04-24: provisioned key (ailin-togetherai-api-key) returned 401 on /v1/chat — "key_" prefix non-canonical; operator to re-issue if chat 401 persists. Probe 2026-07-17: video surface live-validated to the field-validation layer with THIS key (payload-wrap body; see videoRequestStyle) — auth accepted there.',
     lastReviewedAt: '2026-07-17',
     originalProviderField: 'organization',
   },
@@ -203,13 +205,14 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     },
     capabilityHints: [
       { capability: 'web_search', rationale: 'provider-class-default', confidence: 0.85 },
-      { capability: 'deep_research', rationale: 'docs-declared', confidence: 0.70 },
+      { capability: 'deep_research', rationale: 'docs-declared', confidence: 0.7 },
     ],
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 30,
     docsUrl: 'https://docs.perplexity.ai/api-reference/chat-completions',
-    notes: 'All models are web-search-grounded. Response includes citations[], related_questions[], images[]. Dedicated adapter preserves those extension fields on PerplexityChatResponse.',
+    notes:
+      'All models are web-search-grounded. Response includes citations[], related_questions[], images[]. Dedicated adapter preserves those extension fields on PerplexityChatResponse.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -235,7 +238,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 45,
     docsUrl: 'https://inference-docs.cerebras.ai/api-reference',
-    notes: 'Wafer-scale inference; fastest Llama-70B in market. Dedicated adapter normalizes max_completion_tokens ↔ max_tokens per Cerebras docs.',
+    notes:
+      'Wafer-scale inference; fastest Llama-70B in market. Dedicated adapter normalizes max_completion_tokens ↔ max_tokens per Cerebras docs.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -257,7 +261,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://docs.hyperbolic.xyz/',
-    notes: 'D1 2026-04-24: key provisioned (ailin-hyperbolic-api-key, 73B "sk_liv…") and auth accepted; /v1/chat returns 402 {"detail":"Insufficient funds, please see https://docs.hyperbolic.xyz/docs/hyperbolic-pricing"}. Classified upstream-suspended (not credentials-missing) because the credential itself is valid — only the account balance is zero. Operator top-up unblocks live-validation.',
+    notes:
+      'D1 2026-04-24: key provisioned (ailin-hyperbolic-api-key, 73B "sk_liv…") and auth accepted; /v1/chat returns 402 {"detail":"Insufficient funds, please see https://docs.hyperbolic.xyz/docs/hyperbolic-pricing"}. Classified upstream-suspended (not credentials-missing) because the credential itself is valid — only the account balance is zero. Operator top-up unblocks live-validation.',
     lastReviewedAt: '2026-04-24',
   },
   {
@@ -301,7 +306,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none',
     enabledByDefault: true, // Anyscale deprecated public endpoints mid-2024; secret provisioned but vendor-side suspended. Adapter still resolves for ANYSCALE_BASE_URL private deployments.
     priority: 10,
-    notes: 'Deprecated for new signups. Entry retained for existing enterprise deployments via ANYSCALE_BASE_URL override. D1 2026-04-24: key provisioned (ailin-anyscale-api-key, 236B "aph0_C…") but api.endpoints.anyscale.com returns HTML shutdown notice "Effective August 1, 2024 ... Multi-tenant access to LLM models has been removed." Permanent vendor-side shutdown; classified upstream-suspended. Unblock via private Hosted deployment with ANYSCALE_BASE_URL override.',
+    notes:
+      'Deprecated for new signups. Entry retained for existing enterprise deployments via ANYSCALE_BASE_URL override. D1 2026-04-24: key provisioned (ailin-anyscale-api-key, 236B "aph0_C…") but api.endpoints.anyscale.com returns HTML shutdown notice "Effective August 1, 2024 ... Multi-tenant access to LLM models has been removed." Permanent vendor-side shutdown; classified upstream-suspended. Unblock via private Hosted deployment with ANYSCALE_BASE_URL override.',
     baseUrlEnvVar: 'ANYSCALE_BASE_URL',
     lastReviewedAt: '2026-04-24',
   },
@@ -324,7 +330,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 15,
     docsUrl: 'https://featherless.ai/docs/completions',
-    notes: 'Large long-tail HF-model marketplace. Dedicated thin adapter for per-provider observability (logs/metrics scope to `provider: featherless-ai`). No model identifiers hardcoded — the catalog/discovery service is sole source of truth; the adapter is identity-only over the hub.',
+    notes:
+      'Large long-tail HF-model marketplace. Dedicated thin adapter for per-provider observability (logs/metrics scope to `provider: featherless-ai`). No model identifiers hardcoded — the catalog/discovery service is sole source of truth; the adapter is identity-only over the hub.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -393,7 +400,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 40,
     docsUrl: 'https://docs.sambanova.ai/cloud/docs/get-started/overview',
-    notes: 'RDU hardware; fast Llama-405B inference. Dedicated adapter only labels observability and exposes FAST_TIER_MODELS hint.',
+    notes:
+      'RDU hardware; fast Llama-405B inference. Dedicated adapter only labels observability and exposes FAST_TIER_MODELS hint.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -478,8 +486,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 15,
     docsUrl: 'https://chutes.ai/',
-    notes: 'D1 2026-04-24: key provisioned (ailin-chutes-api-key, 102B "cpk_8f…") and auth accepted; /v1/chat (Qwen/Qwen3-32B-TEE) returns 402 {"detail":{"message":"Quota exceeded and account balance is $0.0, please pay with fiat or send tao to..."}}. Chutes accepts fiat or TAO (Bittensor token) credit. Classified upstream-suspended. Operator top-up unblocks live-validation.',
-    lastReviewedAt: '2026-04-24',
+    notes:
+      'D1 2026-04-24: key provisioned (ailin-chutes-api-key) and auth accepted; /v1/chat returned 402 (account balance $0.0). Live-verified 2026-07-29 after operator top-up: GET /v1/models 200 (15 TEE models, this key is TEE-only by provisioning), POST /v1/chat/completions 200 for Qwen/Qwen3-32B-TEE and unsloth/Mistral-Nemo-Instruct-2407-TEE — zero 402s. No integration changes needed.',
+    lastReviewedAt: '2026-07-29',
   },
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -561,7 +570,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://platform.xiaomimimo.com/#/docs/welcome',
-    notes: 'New platform; no /v1/models listing — pinnedFallback covers the 3 published SKUs (MiMo-V2-Pro, V2-Flash, Omni). Cross-checked against Vercel AI Gateway listing 2026-04-29. Uses dedicated XiaomiMimoAdapter for named identity in metrics + circuit-breaker scoping.',
+    notes:
+      'New platform; no /v1/models listing — pinnedFallback covers the 3 published SKUs (MiMo-V2-Pro, V2-Flash, Omni). Cross-checked against Vercel AI Gateway listing 2026-04-29. Uses dedicated XiaomiMimoAdapter for named identity in metrics + circuit-breaker scoping.',
     adapterClass: 'XiaomiMimoAdapter',
     lastReviewedAt: '2026-04-29',
   },
@@ -599,13 +609,18 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       lastReviewedAt: '2026-04-29',
     },
     capabilityHints: [
-      { capability: 'frontend_code_generation', rationale: 'provider-class-default', confidence: 0.8 },
+      {
+        capability: 'frontend_code_generation',
+        rationale: 'provider-class-default',
+        confidence: 0.8,
+      },
     ],
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://v0.app/docs/api/platform/overview',
-    notes: 'Specialized in frontend/UI code generation. No /v1/models endpoint — pinnedFallback enumerates the published SKUs.',
+    notes:
+      'Specialized in frontend/UI code generation. No /v1/models endpoint — pinnedFallback enumerates the published SKUs.',
     lastReviewedAt: '2026-04-29',
   },
   {
@@ -671,7 +686,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 35,
     docsUrl: 'https://vercel.com/docs/ai-gateway',
-    notes: 'Gateway routing to OpenAI/Anthropic/xAI/etc. Models namespaced as `provider/model`; adapter exposes parseModelId() + attributeFromDiscovery() so the capability merger attributes to the real owner. Image/video/reasoning/rerank/moderation surface; paths.imagesGenerate=/images/generations matches the OAI Images endpoint. videoGeneration=true reflects model surface, NOT REST availability — Vercel video is AI-SDK-only as of 2026-04-29 (no published REST).',
+    notes:
+      'Gateway routing to OpenAI/Anthropic/xAI/etc. Models namespaced as `provider/model`; adapter exposes parseModelId() + attributeFromDiscovery() so the capability merger attributes to the real owner. Image/video/reasoning/rerank/moderation surface; paths.imagesGenerate=/images/generations matches the OAI Images endpoint. videoGeneration=true reflects model surface, NOT REST availability — Vercel video is AI-SDK-only as of 2026-04-29 (no published REST).',
     lastReviewedAt: '2026-04-29',
   },
   {
@@ -699,7 +715,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 15,
     docsUrl: 'https://docs.wandb.ai/weave/quickstart-inference',
-    notes: 'OAI-compatible chat surface. Dedicated adapter injects the required `wandb-project` header from $WANDB_PROJECT at request time (env hot-swap safe).',
+    notes:
+      'OAI-compatible chat surface. Dedicated adapter injects the required `wandb-project` header from $WANDB_PROJECT at request time (env hot-swap safe).',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -772,14 +789,15 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       rerank: true,
     },
     capabilityHints: [
-      { capability: 'rerank', rationale: 'endpoint-declared', confidence: 0.90 },
-      { capability: 'long_context_embedding', rationale: 'docs-declared', confidence: 0.80 },
+      { capability: 'rerank', rationale: 'endpoint-declared', confidence: 0.9 },
+      { capability: 'long_context_embedding', rationale: 'docs-declared', confidence: 0.8 },
     ],
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 60,
     docsUrl: 'https://docs.voyageai.com/docs/introduction',
-    notes: 'Top-tier embeddings + rerank. voyage-3, voyage-code-3, voyage-rerank-2. Voyage does NOT expose GET /v1/models (confirmed 404 via live probe 2026-04-22); discovery is skipped, model IDs are resolved from the catalog/DB. Dedicated adapter implements /v1/embeddings + /v1/rerank and explicitly rejects chat calls.',
+    notes:
+      'Top-tier embeddings + rerank. voyage-3, voyage-code-3, voyage-rerank-2. Voyage does NOT expose GET /v1/models (confirmed 404 via live probe 2026-04-22); discovery is skipped, model IDs are resolved from the catalog/DB. Dedicated adapter implements /v1/embeddings + /v1/rerank and explicitly rejects chat calls.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -807,7 +825,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 30,
     docsUrl: 'https://www.volcengine.com/docs/82379/1099455',
-    notes: 'ByteDance/Volcano ARK — Doubao models. Strong Chinese coverage. ARK does NOT expose a bulk /models route — dedicated adapter returns empty getModels() and validates the ep-<timestamp>-<random> endpoint-id format.',
+    notes:
+      'ByteDance/Volcano ARK — Doubao models. Strong Chinese coverage. ARK does NOT expose a bulk /models route — dedicated adapter returns empty getModels() and validates the ep-<timestamp>-<random> endpoint-id format.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -838,7 +857,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 25,
     docsUrl: 'https://www.ibm.com/watsonx/developer/',
-    notes: 'IAM token exchange against https://iam.cloud.ibm.com/identity/token (grant_type=urn:ibm:params:oauth:grant-type:apikey). Requires WATSONX_APIKEY + WATSONX_PROJECT_ID. API version pinned to 2024-05-31.',
+    notes:
+      'IAM token exchange against https://iam.cloud.ibm.com/identity/token (grant_type=urn:ibm:params:oauth:grant-type:apikey). Requires WATSONX_APIKEY + WATSONX_PROJECT_ID. API version pinned to 2024-05-31.',
     adapterClass: 'WatsonxAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -870,7 +890,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api',
-    notes: 'JWT key-pair auth via SnowflakeCortexAdapter. Requires SNOWFLAKE_PAT + SNOWFLAKE_USER + SNOWFLAKE_ACCOUNT set together (account-scoped baseUrl). Adapter wired 2026-06-15.',
+    notes:
+      'JWT key-pair auth via SnowflakeCortexAdapter. Requires SNOWFLAKE_PAT + SNOWFLAKE_USER + SNOWFLAKE_ACCOUNT set together (account-scoped baseUrl). Adapter wired 2026-06-15.',
     adapterClass: 'SnowflakeCortexAdapter',
     lastReviewedAt: '2026-04-21',
   },
@@ -903,7 +924,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 15,
     docsUrl: 'https://help.sap.com/docs/sap-ai-core',
-    notes: 'OAuth2 client_credentials via SapAiCoreAdapter. Requires SAP_AI_CORE_CLIENT_ID + SAP_AI_CORE_CLIENT_SECRET + SAP_AI_CORE_AUTH_URL set together (+ optional resource group). Adapter wired 2026-06-15.',
+    notes:
+      'OAuth2 client_credentials via SapAiCoreAdapter. Requires SAP_AI_CORE_CLIENT_ID + SAP_AI_CORE_CLIENT_SECRET + SAP_AI_CORE_AUTH_URL set together (+ optional resource group). Adapter wired 2026-06-15.',
     adapterClass: 'SapAiCoreAdapter',
     lastReviewedAt: '2026-04-21',
   },
@@ -946,7 +968,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 30,
     docsUrl: 'https://www.recraft.ai/docs/api-reference/getting-started',
-    notes: 'Vector + raster image gen with style controls. Dedicated adapter validates model × style pairs before the wire (v3 has vector families + any, v2 is raster-only).',
+    notes:
+      'Vector + raster image gen with style controls. Dedicated adapter validates model × style pairs before the wire (v3 has vector families + any, v2 is raster-only).',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -988,13 +1011,14 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       imageGeneration: true,
     },
     capabilityHints: [
-      { capability: 'image_to_video', rationale: 'docs-declared', confidence: 0.90 },
+      { capability: 'image_to_video', rationale: 'docs-declared', confidence: 0.9 },
     ],
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 35,
     docsUrl: 'https://docs.dev.runwayml.com/',
-    notes: 'Video-from-image + act-one motion transfer. Requires X-Runway-Version header. Async-job API: POST /v1/image_to_video → poll GET /v1/tasks/{id} until terminal status. Dedicated adapter owns the polling budget.',
+    notes:
+      'Video-from-image + act-one motion transfer. Requires X-Runway-Version header. Async-job API: POST /v1/image_to_video → poll GET /v1/tasks/{id} until terminal status. Dedicated adapter owns the polling budget.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -1028,7 +1052,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       imageEditing: true,
     },
     capabilityHints: [
-      { capability: 'image_upscale', rationale: 'docs-declared', confidence: 0.90 },
+      { capability: 'image_upscale', rationale: 'docs-declared', confidence: 0.9 },
       { capability: 'image_denoise', rationale: 'docs-declared', confidence: 0.85 },
     ],
     pricingMode: 'none',
@@ -1078,7 +1102,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 35,
     docsUrl: 'https://docs.bfl.ai/',
-    notes: 'FLUX family. Uses x-key header (not Bearer). Async-job protocol — submit → poll → download.',
+    notes:
+      'FLUX family. Uses x-key header (not Bearer). Async-job protocol — submit → poll → download.',
     adapterClass: 'BflAdapter',
     lastReviewedAt: '2026-04-29',
   },
@@ -1218,7 +1243,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       lastReviewedAt: '2026-04-28',
     },
     docsUrl: 'https://replicate.com/docs',
-    notes: 'Predictions API (async-by-default, sync via Prefer: wait). Models are invoked as owner/name or owner/name:version. Adapter handles SSE streams for LLM models and downloads output URLs for image/audio models.',
+    notes:
+      'Predictions API (async-by-default, sync via Prefer: wait). Models are invoked as owner/name or owner/name:version. Adapter handles SSE streams for LLM models and downloads output URLs for image/audio models.',
     adapterClass: 'ReplicateAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1270,7 +1296,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 12,
     docsUrl: 'https://docs.bytez.com/http-reference/oaiCompliant/chatCompletions',
-    notes: 'Multi-modality hub over HuggingFace + custom models. OAI-compat chat/embeddings live at /models/v2/openai/v1/... — NOT /v1/... (quirk). Native discovery GET /models/v2/list/models returns non-OAI shape {error, output:[{modelId,task,...}]}; consumed by BytezNativeModelFetcher (Phase 4d 2026-04-28 — was execution-only with 4 staticModels). Confirmed 2026-04-22 via docs + live probe (old /v1 baseUrl returned HTTP 404 on every path).',
+    notes:
+      'Multi-modality hub over HuggingFace + custom models. OAI-compat chat/embeddings live at /models/v2/openai/v1/... — NOT /v1/... (quirk). Native discovery GET /models/v2/list/models returns non-OAI shape {error, output:[{modelId,task,...}]}; consumed by BytezNativeModelFetcher (Phase 4d 2026-04-28 — was execution-only with 4 staticModels). Confirmed 2026-04-22 via docs + live probe (old /v1 baseUrl returned HTTP 404 on every path).',
     adapterClass: 'BytezAdapter',
     fetcherClass: 'BytezNativeModelFetcher',
     lastReviewedAt: '2026-04-28',
@@ -1394,7 +1421,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://docs.inworld.ai',
-    notes: 'OAI-compat chat router + TTS/STT/voice-clone. Basic auth (key already base64-encoded in GCP). Discovery endpoints both return 404 (router/v1/models and /v1/models) — catalog supplies model IDs. Orphan-closure entry: the InworldAdapter class existed but was never wired until 2026-04-22.',
+    notes:
+      'OAI-compat chat router + TTS/STT/voice-clone. Basic auth (key already base64-encoded in GCP). Discovery endpoints both return 404 (router/v1/models and /v1/models) — catalog supplies model IDs. Orphan-closure entry: the InworldAdapter class existed but was never wired until 2026-04-22.',
     lastReviewedAt: '2026-04-22',
   },
   {
@@ -1415,7 +1443,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     apiKeyEnvVarOverrideReason:
       'CLOUDFLARE_API_TOKEN is the canonical CF-wide env (Cloudflare SDK, wrangler, R2/Workers/DNS). CLOUDFLARE_WORKERS_AI_API_KEY would force users to double-set the same account-scoped token.',
     extraEnvVars: {
-      CLOUDFLARE_ACCOUNT_ID: 'Cloudflare account ID — substituted into the Workers AI baseUrl path segment at adapter construction time. Required.',
+      CLOUDFLARE_ACCOUNT_ID:
+        'Cloudflare account ID — substituted into the Workers AI baseUrl path segment at adapter construction time. Required.',
     },
     supports: {
       chat: true,
@@ -1427,7 +1456,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/',
-    notes: 'OAI-compatible surface at account-scoped URL. Model ids use @cf/vendor/name convention (e.g. @cf/meta/llama-3-8b-instruct). Workers AI has dedicated per-account neuron rate limits that do NOT share with the account\'s overall CF API quota — diagnose 429s via cf-ray + x-ratelimit-* response headers.',
+    notes:
+      "OAI-compatible surface at account-scoped URL. Model ids use @cf/vendor/name convention (e.g. @cf/meta/llama-3-8b-instruct). Workers AI has dedicated per-account neuron rate limits that do NOT share with the account's overall CF API quota — diagnose 429s via cf-ray + x-ratelimit-* response headers.",
     adapterClass: 'CloudflareWorkersAIAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1459,7 +1489,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 18,
     docsUrl: 'https://huggingface.co/docs/inference-providers/index',
-    notes: 'Router that dispatches to TogetherAI/Fireworks/Replicate/etc. using a single HF_TOKEN. Single-tenant billing across heterogeneous backends. Uses dedicated adapter to inject `x-use-cache: false` for benchmark runs (hub default is a cache hit which ruins timing measurement).',
+    notes:
+      'Router that dispatches to TogetherAI/Fireworks/Replicate/etc. using a single HF_TOKEN. Single-tenant billing across heterogeneous backends. Uses dedicated adapter to inject `x-use-cache: false` for benchmark runs (hub default is a cache hit which ruins timing measurement).',
     adapterClass: 'HuggingFaceInferenceAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1638,7 +1669,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 30,
     docsUrl: 'https://ai.google.dev/gemini-api/docs/openai',
     notes:
-      'Drop-in OpenAI-compat shim at /v1beta/openai. Same API key as the native `google` adapter (GEMINI_API_KEY). Use this for uniform wire-protocol routing via LiteLLM/OpenRouter-style aggregators; use the native GoogleAdapter for vision/video/grounded-search features that the OAI shim doesn\'t expose.',
+      "Drop-in OpenAI-compat shim at /v1beta/openai. Same API key as the native `google` adapter (GEMINI_API_KEY). Use this for uniform wire-protocol routing via LiteLLM/OpenRouter-style aggregators; use the native GoogleAdapter for vision/video/grounded-search features that the OAI shim doesn't expose.",
     adapterClass: 'GeminiOpenAIAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1802,7 +1833,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html',
-    notes: 'Self-hosted OpenAI-compatible server. Set VLLM_BASE_URL to enable. Uses dedicated VllmAdapter for apiKeyOptional handling + named identity.',
+    notes:
+      'Self-hosted OpenAI-compatible server. Set VLLM_BASE_URL to enable. Uses dedicated VllmAdapter for apiKeyOptional handling + named identity.',
     adapterClass: 'VllmAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1827,7 +1859,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://lmstudio.ai/docs/local-server',
-    notes: 'Local OAI-compatible server bundled with LM Studio desktop. No auth by default. Uses LmStudioAdapter for apiKeyOptional + named identity.',
+    notes:
+      'Local OAI-compatible server bundled with LM Studio desktop. No auth by default. Uses LmStudioAdapter for apiKeyOptional + named identity.',
     adapterClass: 'LmStudioAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1856,7 +1889,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://inference.readthedocs.io/en/latest/index.html',
-    notes: 'Self-hosted multi-modality runtime. XinferenceAdapter exposes a Cohere-compatible /v1/rerank method on top of the hub OAI surface.',
+    notes:
+      'Self-hosted multi-modality runtime. XinferenceAdapter exposes a Cohere-compatible /v1/rerank method on top of the hub OAI surface.',
     adapterClass: 'XinferenceAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -1878,8 +1912,10 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 5,
-    docsUrl: 'https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/protocol/extension_generate.html',
-    notes: 'Triton KServe v2 HTTP protocol — POST /v2/models/{model}/infer with INPUT/OUTPUT tensor arrays. Adapter converts OAI embedding request into Triton tensor shape and flattens response tensor back to float32[].',
+    docsUrl:
+      'https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/protocol/extension_generate.html',
+    notes:
+      'Triton KServe v2 HTTP protocol — POST /v2/models/{model}/infer with INPUT/OUTPUT tensor arrays. Adapter converts OAI embedding request into Triton tensor shape and flattens response tensor back to float32[].',
     adapterClass: 'TritonAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -2038,7 +2074,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 25,
     docsUrl: 'https://aihubmix.com/docs',
-    notes: 'Multi-upstream aggregator (OpenAI, Anthropic, Google, etc.). Was switch case; migrated 2026-04-21. Probe 2026-07-17: video route discovered at POST /videos (see paths).',
+    notes:
+      'Multi-upstream aggregator (OpenAI, Anthropic, Google, etc.). Was switch case; migrated 2026-04-21. Probe 2026-07-17: video route discovered at POST /videos (see paths).',
     lastReviewedAt: '2026-07-17',
   },
   {
@@ -2092,7 +2129,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 25,
     docsUrl: 'https://docs.aimlapi.com/',
-    notes: 'Multi-modal aggregator. modelsBaseUrl quirk in legacy config: /models served from bare host. Migrated 2026-04-21.',
+    notes:
+      'Multi-modal aggregator. modelsBaseUrl quirk in legacy config: /models served from bare host. Migrated 2026-04-21.',
     lastReviewedAt: '2026-04-21',
   },
   {
@@ -2124,7 +2162,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://imagerouter.io/docs',
-    notes: 'Image/video generation router. Quirks: paths differ from standard /v1/images/*. Was switch case; migrated 2026-04-21.',
+    notes:
+      'Image/video generation router. Quirks: paths differ from standard /v1/images/*. Was switch case; migrated 2026-04-21.',
     lastReviewedAt: '2026-04-21',
   },
   {
@@ -2192,7 +2231,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://docs.helicone.ai/getting-started/integration-method/gateway',
-    notes: 'Unified gateway proxying many upstreams. Was switch case; migrated 2026-04-21. D1 2026-04-24: live-validated — new ailin-heliconeai-api-key (sk-hel… 43B Virtual Key) replaces legacy ailin-heliconeai-key (11B "PLACEHOLDER"). Gateway routed gpt-4o-mini /chat 200 (1003B completion). Helicone injects its observability shim and forwards to the target vendor (OpenAI here); works with any target-model/Helicone-Target-Url configuration.',
+    notes:
+      'Unified gateway proxying many upstreams. Was switch case; migrated 2026-04-21. D1 2026-04-24: live-validated — new ailin-heliconeai-api-key (sk-hel… 43B Virtual Key) replaces legacy ailin-heliconeai-key (11B "PLACEHOLDER"). Gateway routed gpt-4o-mini /chat 200 (1003B completion). Helicone injects its observability shim and forwards to the target vendor (OpenAI here); works with any target-model/Helicone-Target-Url configuration.',
     lastReviewedAt: '2026-04-24',
   },
   {
@@ -2222,7 +2262,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 20,
     docsUrl: 'https://www.cometapi.com/docs',
-    notes: 'Multi-model aggregator. Was switch case; migrated 2026-04-21. Probe 2026-07-17: video route discovered at POST /videos (see paths).',
+    notes:
+      'Multi-model aggregator. Was switch case; migrated 2026-04-21. Probe 2026-07-17: video route discovered at POST /videos (see paths).',
     lastReviewedAt: '2026-07-17',
   },
   {
@@ -2349,7 +2390,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://github.com/ollama/ollama/blob/main/docs/openai.md',
-    notes: 'Local Ollama server. Set OLLAMA_URL (e.g. http://localhost:11434/v1) to enable. Dedicated OllamaAdapter gives named identity for logs/metrics and a subclass seat for future native /api/* endpoints (tags, pull, generate).',
+    notes:
+      'Local Ollama server. Set OLLAMA_URL (e.g. http://localhost:11434/v1) to enable. Dedicated OllamaAdapter gives named identity for logs/metrics and a subclass seat for future native /api/* endpoints (tags, pull, generate).',
     adapterClass: 'OllamaAdapter',
     lastReviewedAt: '2026-04-22',
   },
@@ -2511,7 +2553,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://dev.writer.com',
-    notes: 'Enterprise Palmyra-family chat + generation. OAI-compat execution path (chat/completions); non-standard `{models: [...]}` discovery shape — catalog supplies model IDs until discovery-parser supports the shape. palmyra-vision is listed upstream but requires Writer-specific content shape (standard OAI multimodal content array returns 400 OpenrouterException); vision support deferred to a dedicated adapter extension. Orphan-closure entry 2026-04-23.',
+    notes:
+      'Enterprise Palmyra-family chat + generation. OAI-compat execution path (chat/completions); non-standard `{models: [...]}` discovery shape — catalog supplies model IDs until discovery-parser supports the shape. palmyra-vision is listed upstream but requires Writer-specific content shape (standard OAI multimodal content array returns 400 OpenrouterException); vision support deferred to a dedicated adapter extension. Orphan-closure entry 2026-04-23.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2542,7 +2585,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://developers.upstage.ai',
-    notes: 'Solar LLM family + document-AI embeddings. OAI-compat. Orphan-closure entry 2026-04-23: adapter class existed at providers/upstage/ but was never wired. Post-closure live probes (chat, embeddings, jsonMode) all 200.',
+    notes:
+      'Solar LLM family + document-AI embeddings. OAI-compat. Orphan-closure entry 2026-04-23: adapter class existed at providers/upstage/ but was never wired. Post-closure live probes (chat, embeddings, jsonMode) all 200.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2568,7 +2612,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://docs.reka.ai',
-    notes: 'Reka Core / Flash / Edge multimodal chat. OAI-compat surface. Orphan-closure entry 2026-04-23: adapter class existed at providers/rekaai/ but was never wired.',
+    notes:
+      'Reka Core / Flash / Edge multimodal chat. OAI-compat surface. Orphan-closure entry 2026-04-23: adapter class existed at providers/rekaai/ but was never wired.',
     lastReviewedAt: '2026-04-23',
   },
 
@@ -2611,8 +2656,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://docs.arcee.ai',
-    notes: 'Arcee SLM family (Trinity). OAI-compat chat with OpenRouter-style /models metadata (context_length, pricing, supported_features). Reasoning exposed at response.choices[0].message.reasoning. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-arcee-api-key, 37B "rcai-a…") and auth accepted; /v1/chat (trinity-mini) returns 402 {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}. Classified upstream-suspended.',
-    lastReviewedAt: '2026-04-24',
+    notes:
+      'Arcee SLM family (Trinity). OAI-compat chat, OpenRouter-style /models metadata. Reasoning at message.reasoning_content (streaming: delta.reasoning_content) — NOT message.reasoning as previously documented; unverified until 2026-07-29. Lot M 2026-04-23. D1 2026-04-24: 402 insufficient-credits. Live-verified 2026-07-29 after a $5 top-up: GET /v1/models 200 (trinity-mini renamed to trinity-large-thinking), POST /v1/chat/completions 200 (real content+usage), stream:true 200 (SSE, [DONE]).',
+    lastReviewedAt: '2026-07-29',
   },
   {
     providerId: 'atlascloud',
@@ -2663,7 +2709,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://www.atlascloud.ai/docs',
-    notes: 'GPU cloud aggregator. Multi-surface (chat+image+video) under a single OAI-compat base URL. No public GET /models; static model IDs taken from docs. Lot M 2026-04-23. Probe 2026-07-17: no OAI-style video route (404 both candidates) — video de-advertised until a real route is proven.',
+    notes:
+      'GPU cloud aggregator. Multi-surface (chat+image+video) under a single OAI-compat base URL. No public GET /models; static model IDs taken from docs. Lot M 2026-04-23. Probe 2026-07-17: no OAI-style video route (404 both candidates) — video de-advertised until a real route is proven.',
     lastReviewedAt: '2026-07-17',
   },
   {
@@ -2708,7 +2755,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://avian.io/docs',
-    notes: 'OAI-compat inference aggregator (deepseek, moonshot, z-ai routes). Static model list per docs; no /models endpoint documented. Lot M 2026-04-23.',
+    notes:
+      'OAI-compat inference aggregator (deepseek, moonshot, z-ai routes). Static model list per docs; no /models endpoint documented. Lot M 2026-04-23.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2783,7 +2831,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html',
-    notes: 'PRC-region. Content-safety filters applied server-side. Two auth paths: v1 AK+SK→OAuth (legacy, not wired in this repo) and v2 bce-v3 bearer (our canonical). Sublote A probe 2026-04-23: v2 /chat/completions with empty bearer → HTTP 401 invalid_iam_token (expected); v1 /wenxinworkshop/chat/ernie-4.0-8k with empty access_token → HTTP 200 error_code=3 "Unsupported openapi method" (host reachable, method routing rejects empty auth). Both surfaces confirmed alive.',
+    notes:
+      'PRC-region. Content-safety filters applied server-side. Two auth paths: v1 AK+SK→OAuth (legacy, not wired in this repo) and v2 bce-v3 bearer (our canonical). Sublote A probe 2026-04-23: v2 /chat/completions with empty bearer → HTTP 401 invalid_iam_token (expected); v1 /wenxinworkshop/chat/ernie-4.0-8k with empty access_token → HTTP 200 error_code=3 "Unsupported openapi method" (host reachable, method routing rejects empty auth). Both surfaces confirmed alive.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2809,7 +2858,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.gmicloud.ai',
-    notes: 'Serverless + Dedicated GPU platform. Two-plane API: inference at api.gmi-serving.com, provisioning/IAM at console.gmicloud.ai. Video API distinct from LLM API. Sublote C1 2026-04-23: /v1/chat and /v1/embeddings return 404 "No matching target server found for model X" BEFORE auth validation — model routing is pre-auth; 404 with unknown model does NOT imply bad key. Lot M 2026-04-23.',
+    notes:
+      'Serverless + Dedicated GPU platform. Two-plane API: inference at api.gmi-serving.com, provisioning/IAM at console.gmicloud.ai. Video API distinct from LLM API. Sublote C1 2026-04-23: /v1/chat and /v1/embeddings return 404 "No matching target server found for model X" BEFORE auth validation — model routing is pre-auth; 404 with unknown model does NOT imply bad key. Lot M 2026-04-23.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2830,7 +2880,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.infermatic.ai',
-    notes: "Zero-logs vLLM behind LiteLLM proxy. Roleplay catalog (Sao10K, TheDrummer, Magnum). Domain mismatch: docs on docs.infermatic.ai, API on api.totalgpt.ai. Extra sampling params (top_k, repetition_penalty); some models reject system prompts. Tools NOT documented. Lot M 2026-04-23. D1 2026-04-24: live-validated — ailin-infermatic-api-key (25B sk-12T…) is model-scoped LiteLLM Virtual Key; Qwen-Qwen3-30B-A3B chat 200 (476B). Key ACL pins model list.",
+    notes:
+      'Zero-logs vLLM behind LiteLLM proxy. Roleplay catalog (Sao10K, TheDrummer, Magnum). Domain mismatch: docs on docs.infermatic.ai, API on api.totalgpt.ai. Extra sampling params (top_k, repetition_penalty); some models reject system prompts. Tools NOT documented. Lot M 2026-04-23. D1 2026-04-24: live-validated — ailin-infermatic-api-key (25B sk-12T…) is model-scoped LiteLLM Virtual Key; Qwen-Qwen3-30B-A3B chat 200 (476B). Key ACL pins model list.',
     lastReviewedAt: '2026-04-24',
   },
   {
@@ -2878,7 +2929,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://developers.inflection.ai',
-    notes: 'OpenAI-compatible API at https://api.inflection.ai/v1 (chat/completions + embeddings, Bearer auth) — no custom adapter needed (the old /external/api/inference proprietary path did). No /v1/models listing (discovery is /v1/discovery/configs, non-standard shape); pinnedFallback carries the documented chat SKUs: inflection_3_pi, inflection_3_productivity (on /v1), Pi-3.1 (legacy OAI-compat path). Promoted first-party-native/catalog-only → oai-compat-pure/execution-only 2026-06-15.',
+    notes:
+      'OpenAI-compatible API at https://api.inflection.ai/v1 (chat/completions + embeddings, Bearer auth) — no custom adapter needed (the old /external/api/inference proprietary path did). No /v1/models listing (discovery is /v1/discovery/configs, non-standard shape); pinnedFallback carries the documented chat SKUs: inflection_3_pi, inflection_3_productivity (on /v1), Pi-3.1 (legacy OAI-compat path). Promoted first-party-native/catalog-only → oai-compat-pure/execution-only 2026-06-15.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2899,7 +2951,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     contentPolicyClass: 'uncensored',
     priority: 5,
     docsUrl: 'https://docs.mancer.tech',
-    notes: 'Roleplay/creative ("No filters, No guidelines, No constraints"). Tagged contentPolicyClass=uncensored — fully admitted per universal "habilitado e nunca censurado" policy (Phase 4b 2026-04-28); tag is informational, downstream surfaces may filter. Credit-based pricing (not USD/token). 9 models incl. MythoMax-13B, Goliath-120B, Magnum-72B-v4. SillyTavern primary client. Lot M 2026-04-23.',
+    notes:
+      'Roleplay/creative ("No filters, No guidelines, No constraints"). Tagged contentPolicyClass=uncensored — fully admitted per universal "habilitado e nunca censurado" policy (Phase 4b 2026-04-28); tag is informational, downstream surfaces may filter. Credit-based pricing (not USD/token). 9 models incl. MythoMax-13B, Goliath-120B, Magnum-72B-v4. SillyTavern primary client. Lot M 2026-04-23.',
     lastReviewedAt: '2026-04-28',
   },
   {
@@ -2926,7 +2979,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.phala.network',
-    notes: 'TEE-attested LLM gateway (NVIDIA H100/H200 Confidential Computing). Every response carries cryptographic attestation verifiable at /phala-cloud/confidential-ai/verify. Aggregates upstream models (Anthropic, OpenAI, DeepSeek, Qwen) running inside enclaves. Lot M 2026-04-23.',
+    notes:
+      'TEE-attested LLM gateway (NVIDIA H100/H200 Confidential Computing). Every response carries cryptographic attestation verifiable at /phala-cloud/confidential-ai/verify. Aggregates upstream models (Anthropic, OpenAI, DeepSeek, Qwen) running inside enclaves. Lot M 2026-04-23.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -2977,7 +3031,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.relace.ai',
-    notes: 'Specialty code-edit API — NOT a general-purpose chat provider. Proprietary /v1/code/apply merge endpoint (>10k tok/s). Also offers rerank, embed, retrieval. Requires dedicated RelaceAdapter with custom surfaces (codeApply, codeRerank); integrationMode=catalog-only until adapter exists. Precedent: morph. Lot M 2026-04-23.',
+    notes:
+      'Specialty code-edit API — NOT a general-purpose chat provider. Proprietary /v1/code/apply merge endpoint (>10k tok/s). Also offers rerank, embed, retrieval. Requires dedicated RelaceAdapter (codeApply, codeRerank); integrationMode=catalog-only until adapter exists. Note 2026-07-29: morph is NOT a real precedent — morph uses standard /v1/chat/completions, no dedicated adapter, never catalog-only. Relace genuinely needs one: its endpoints are non-chat-shaped. Lot M 2026-04-23.',
     lastReviewedAt: '2026-04-23',
   },
   {
@@ -3006,7 +3061,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://docs.siliconflow.cn',
-    notes: 'PRC-region primary (.cn); .com fronts same service. Full multi-surface: chat+image+video+audio+rerank. Supports enable_thinking + thinking_budget (128–32768). Returns x-siliconcloud-trace-id header. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-siliconflow-api-key, 51B "sk-hhc…") but /v1/chat returns 401 bare-JSON "Api key is invalid" (15B oai-compat-quirks shape). sk- prefix non-canonical; probable format mismatch. Sub-class: auth-incomplete.',
+    notes:
+      'PRC-region primary (.cn); .com fronts same service. Full multi-surface: chat+image+video+audio+rerank. Supports enable_thinking + thinking_budget (128–32768). Returns x-siliconcloud-trace-id header. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-siliconflow-api-key, 51B "sk-hhc…") but /v1/chat returns 401 bare-JSON "Api key is invalid" (15B oai-compat-quirks shape). sk- prefix non-canonical; probable format mismatch. Sub-class: auth-incomplete.',
     lastReviewedAt: '2026-04-24',
   },
   {
@@ -3036,7 +3092,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 5,
     docsUrl: 'https://platform.stepfun.com/docs',
-    notes: 'OpenAI SDK v1.0+ drop-in compat. Dual-region: api.stepfun.com (PRC) / api.stepfun.ai (global). Realtime voice + cloning. 10-min timeout → 503. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-stepfun-api-key, 65B) but /v1/chat returns 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}}. Endpoint alive; specific key rejected. Operator must verify key-account binding. Sub-class: auth-incomplete.',
+    notes:
+      'OpenAI SDK v1.0+ drop-in compat. Dual-region: api.stepfun.com (PRC) / api.stepfun.ai (global). Realtime voice + cloning. 10-min timeout → 503. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-stepfun-api-key, 65B) but /v1/chat returns 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}}. Endpoint alive; specific key rejected. Operator must verify key-account binding. Sub-class: auth-incomplete.',
     lastReviewedAt: '2026-04-24',
   },
   {
@@ -3067,7 +3124,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     contentPolicyClass: 'uncensored',
     priority: 5,
     docsUrl: 'https://docs.venice.ai',
-    notes: 'Privacy-first, no retention. Tagged contentPolicyClass=uncensored (Phase 4b 2026-04-28; informational, downstream may filter). venice_parameters: enable_web_search, character_slug, E2EE, reasoning. Async /audio/queue + /video/queue. Double-path /api/v1. Safety headers x-venice-is-blurred / -contains-minor. Sublote A 2026-04-23: /models PUBLIC; /chat HTTP 402 (USDC Base L2 eip155:8453) alt to bearer — impl bearer-only. Lot M.',
+    notes:
+      'Privacy-first, no retention. Tagged contentPolicyClass=uncensored (Phase 4b 2026-04-28; informational, downstream may filter). venice_parameters: enable_web_search, character_slug, E2EE, reasoning. Async /audio/queue + /video/queue. Double-path /api/v1. Safety headers x-venice-is-blurred / -contains-minor. Sublote A 2026-04-23: /models PUBLIC; /chat HTTP 402 (USDC Base L2 eip155:8453) alt to bearer — impl bearer-only. Lot M.',
     lastReviewedAt: '2026-04-28',
   },
   // ── Alibaba Cloud (Dashscope / Qwen) — closed 2026-05-06 ──────────────
@@ -3104,8 +3162,10 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'remote',
     enabledByDefault: true,
     priority: 25,
-    docsUrl: 'https://help.aliyun.com/zh/dashscope/developer-reference/compatibility-of-openai-with-dashscope',
-    notes: 'Qwen + DeepSeek hosted via Dashscope OAI-compat endpoint. Adds qwen-coder, qwen-vl, qwen-flash, qvq-max + DeepSeek-V3.x mirrors. The pre-existing alibaba-model-fetcher.ts handles discovery (wraps OpenAI client against compatible-mode/v1); this catalog row adds the runtime adapter via the standard hub bridge. Operator override DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 for mainland China region.',
+    docsUrl:
+      'https://help.aliyun.com/zh/dashscope/developer-reference/compatibility-of-openai-with-dashscope',
+    notes:
+      'Qwen + DeepSeek hosted via Dashscope OAI-compat endpoint. Adds qwen-coder, qwen-vl, qwen-flash, qvq-max + DeepSeek-V3.x mirrors. The pre-existing alibaba-model-fetcher.ts handles discovery (wraps OpenAI client against compatible-mode/v1); this catalog row adds the runtime adapter via the standard hub bridge. Operator override DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 for mainland China region.',
     lastReviewedAt: '2026-05-06',
   },
   // ── AWS Bedrock — closed 2026-05-06 ───────────────────────────────────
@@ -3148,9 +3208,18 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       // curated roster of the most commonly-used canonical IDs. Operators
       // should expand this list as AWS publishes new SKUs.
       models: [
-        { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', capabilities: ['chat', 'tool_use', 'vision', 'streaming'] },
-        { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', capabilities: ['chat', 'tool_use', 'streaming'] },
-        { id: 'anthropic.claude-3-opus-20240229-v1:0', capabilities: ['chat', 'tool_use', 'vision', 'streaming'] },
+        {
+          id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          capabilities: ['chat', 'tool_use', 'vision', 'streaming'],
+        },
+        {
+          id: 'anthropic.claude-3-5-haiku-20241022-v1:0',
+          capabilities: ['chat', 'tool_use', 'streaming'],
+        },
+        {
+          id: 'anthropic.claude-3-opus-20240229-v1:0',
+          capabilities: ['chat', 'tool_use', 'vision', 'streaming'],
+        },
         { id: 'amazon.nova-pro-v1:0', capabilities: ['chat', 'tool_use', 'vision', 'streaming'] },
         { id: 'amazon.nova-lite-v1:0', capabilities: ['chat', 'tool_use', 'vision', 'streaming'] },
         { id: 'amazon.nova-micro-v1:0', capabilities: ['chat', 'streaming'] },
@@ -3175,7 +3244,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 40,
     docsUrl: 'https://docs.aws.amazon.com/bedrock/',
-    notes: 'AWS Bedrock Converse API. SigV4 auth via AWS SDK default credential chain (AWS_ACCESS_KEY_ID/SECRET, AWS_BEARER_TOKEN_BEDROCK, container role, etc.). Region from AWS_BEDROCK_REGION or AWS_REGION (default us-east-1). Inference-profile ARNs supported via AWS_BEDROCK_INFERENCE_PROFILE_ARN for cross-region routing.',
+    notes:
+      'AWS Bedrock Converse API. SigV4 auth via AWS SDK default credential chain (AWS_ACCESS_KEY_ID/SECRET, AWS_BEARER_TOKEN_BEDROCK, container role, etc.). Region from AWS_BEDROCK_REGION or AWS_REGION (default us-east-1). Inference-profile ARNs supported via AWS_BEDROCK_INFERENCE_PROFILE_ARN for cross-region routing.',
     lastReviewedAt: '2026-05-06',
   },
 
@@ -3237,7 +3307,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none', // hybrid subscription-multiplier + PAYG billing; doesn't fit the remote per-token extractor
     enabledByDefault: true,
     docsUrl: 'https://docs.apertis.ai/api/',
-    notes: 'Multi-vendor gateway (400+ models, new-api-style). ApertisAdapter disables its native fallback_models so failures surface to our orchestrator. Probe 2026-07-16: SSE/embeddings/STT proven; imageGen+TTS routes exist, upstream 429-saturated (unconfirmed); rerank 404 + images/edits drops the model field — both removed from supports (see paths comments). dall-e-2 absent; use dall-e-3/gpt-image-*. Video async, out of scope. sk-sub- keys 403 on /audio.',
+    notes:
+      'Multi-vendor gateway (400+ models, new-api-style). ApertisAdapter disables its native fallback_models so failures surface to our orchestrator. Probe 2026-07-16: SSE/embeddings/STT proven; imageGen+TTS routes exist, upstream 429-saturated (unconfirmed); rerank 404 + images/edits drops the model field — both removed from supports (see paths comments). dall-e-2 absent; use dall-e-3/gpt-image-*. Video async, out of scope. sk-sub- keys 403 on /audio.',
     lastReviewedAt: '2026-07-16',
   },
   {
@@ -3261,13 +3332,12 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
       jsonMode: true,
       reasoning: true,
     },
-    capabilityHints: [
-      { capability: 'diffusion_lm', rationale: 'docs-declared', confidence: 0.6 },
-    ],
+    capabilityHints: [{ capability: 'diffusion_lm', rationale: 'docs-declared', confidence: 0.6 }],
     pricingMode: 'none',
     enabledByDefault: true,
     docsUrl: 'https://docs.inceptionlabs.ai/get-started/get-started',
-    notes: 'dLLM (diffusion). NEVER send diffusing:true — confirmed live 2026-07-16: chunks carry diffusion_meta and the FULL rewritten text (naive delta concatenation duplicates output); InceptionAdapter drops the flag and logs. Normal SSE + tool-calling proven same day. temperature server-clamped [0.5,1.0]; adapter clamps client-side. Text-only. FIM/Next-Edit out of scope (non-chat payload).',
+    notes:
+      'dLLM (diffusion). NEVER send diffusing:true — confirmed live 2026-07-16: chunks carry diffusion_meta and the FULL rewritten text (naive delta concatenation duplicates output); InceptionAdapter drops the flag and logs. Normal SSE + tool-calling proven same day. temperature server-clamped [0.5,1.0]; adapter clamps client-side. Text-only. FIM/Next-Edit out of scope (non-chat payload).',
     lastReviewedAt: '2026-07-16',
   },
 
@@ -3319,7 +3389,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none', // heterogeneous per-unit billing (token/request/image/second); per-response cost_usd is real but /models pricing shape doesn't fit the remote extractor
     enabledByDefault: true,
     docsUrl: 'https://docs.empiriolabs.ai/welcome',
-    notes: 'Multi-vendor gateway (134+ models). Probe 2026-07-16: SSE, embeddings (text-embedding-v4), rerank (/reranks PLURAL, qwen3-rerank) and system-override all proven — our system message fully replaces the platform default. Its catalog category field is authoritative (embedding/reranker). CAVEAT: deepseek-v4-flash streams into delta.reasoning_content, content empty at low max_tokens — budget generously. Only /v1/chat/completions wired. Probe 2026-07-17: video route live (blocked only by 402 credits).',
+    notes:
+      'Multi-vendor gateway (134+ models). Probe 2026-07-16: SSE, embeddings (text-embedding-v4), rerank (/reranks PLURAL, qwen3-rerank) and system-override all proven — our system message fully replaces the platform default. Its catalog category field is authoritative (embedding/reranker). CAVEAT: deepseek-v4-flash streams into delta.reasoning_content, content empty at low max_tokens — budget generously. Only /v1/chat/completions wired. Probe 2026-07-17: video route live (blocked only by 402 credits).',
     lastReviewedAt: '2026-07-17',
   },
 
@@ -3369,7 +3440,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none', // pricing lives on the enrichment endpoints (get-model/get-provider-info), not on the flat /v1/models/ list the generic extractor reads
     enabledByDefault: true,
     docsUrl: 'https://concentrate.ai/docs/api-reference/introduction',
-    notes: 'Meta-aggregator (20 upstream providers). Discovery unauthenticated; execution paths carry a TRAILING SLASH. Probe 2026-07-16: SSE + /responses/ proven (azure/gpt-4o-mini routing visible, cost breakdown in payload). 424 = ITS upstream vendor failed — classified retryable server_error by provider-error-classifier. Its concentrate/redact-v1 listing is a PII-redaction feature, not an inference vendor.',
+    notes:
+      'Meta-aggregator (20 upstream providers). Discovery unauthenticated; execution paths carry a TRAILING SLASH. Probe 2026-07-16: SSE + /responses/ proven (azure/gpt-4o-mini routing visible, cost breakdown in payload). 424 = ITS upstream vendor failed — classified retryable server_error by provider-error-classifier. Its concentrate/redact-v1 listing is a PII-redaction feature, not an inference vendor.',
     lastReviewedAt: '2026-07-16',
   },
 
@@ -3428,7 +3500,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'remote',
     enabledByDefault: true,
     docsUrl: 'https://docs.fastrouter.ai/',
-    notes: 'Meta-aggregator (20 upstream, BYOK). /api/v1 canonical (docs show both prefixes). Probe 2026-07-16: SSE proven (:FASTROUTER PROCESSING comment keep-alives + own final usage chunk with cost+provider before [DONE]); embeddings proven; :flex suffix proven (service_tier flex). Model ids provider/model may carry :price/:throughput/:flex — do not strip. fastrouter/auto not used (ci does its own selection). 402 = insufficient credits. Probe 2026-07-17: video async-queue surface mapped live (see paths).',
+    notes:
+      'Meta-aggregator (20 upstream, BYOK). /api/v1 canonical (docs show both prefixes). Probe 2026-07-16: SSE proven (:FASTROUTER PROCESSING comment keep-alives + own final usage chunk with cost+provider before [DONE]); embeddings proven; :flex suffix proven (service_tier flex). Model ids provider/model may carry :price/:throughput/:flex — do not strip. fastrouter/auto not used (ci does its own selection). 402 = insufficient credits. Probe 2026-07-17: video async-queue surface mapped live (see paths).',
     lastReviewedAt: '2026-07-17',
   },
 
@@ -3489,7 +3562,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none', // /v1/models discovery response carries no pricing object (unlike fastrouter); cost is only visible per-response (usage.cost) after a real call
     enabledByDefault: true,
     docsUrl: 'https://docs.perplexity.ai/docs/agent-api/models',
-    notes: 'Second Perplexity surface (same account/key as `perplexity`): /v1/agent, Responses-style, NOT chat/completions. REAL token streaming since 2026-07-16 (response.output_text.delta / response.completed; NO [DONE]; gappy sequence_number) — unit-tested against the live-captured fixture. Tools proven live (flat shape; toolu_bdrk_ ids reveal Bedrock-served Anthropic). Moonshot kimi-k2.7-code works but hangs intermittently when cold — orchestrator timeout+fallback covers it.',
+    notes:
+      'Second Perplexity surface (same account/key as `perplexity`): /v1/agent, Responses-style, NOT chat/completions. REAL token streaming since 2026-07-16 (response.output_text.delta / response.completed; NO [DONE]; gappy sequence_number) — unit-tested against the live-captured fixture. Tools proven live (flat shape; toolu_bdrk_ ids reveal Bedrock-served Anthropic). Moonshot kimi-k2.7-code works but hangs intermittently when cold — orchestrator timeout+fallback covers it.',
     lastReviewedAt: '2026-07-16',
   },
 
@@ -3550,29 +3624,43 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 0,
-    notes: 'Meta-gateway to ~100 upstream providers / 70k+ models behind api.ailin.one\'s own orchestration. Discovery uses the generic hub fetcher against a richer native /v1/models shape it only partly understands (see header comment) — operability filtering is a known follow-up gap. Auth is X-API-Key; api.ailin.one also accepts bearerAuth JWT for user sessions, not used here (static server credential).',
+    notes:
+      "Meta-gateway to ~100 upstream providers / 70k+ models behind api.ailin.one's own orchestration. Discovery uses the generic hub fetcher against a richer native /v1/models shape it only partly understands (see header comment) — operability filtering is a known follow-up gap. Auth is X-API-Key; api.ailin.one also accepts bearerAuth JWT for user sessions, not used here (static server credential).",
     lastReviewedAt: '2026-07-13',
   },
   // ──────────────────────────────────────────────────────────────────────────
-  // Sakana AI (Fugu) — added 2026-07-29, live-verified with a real key from
-  // GCP secret `ailin-sakana-ai-key`.
+  // Sakana AI (Fugu) — added 2026-07-29 in PR #234, promoted to fully
+  // operational the same day once the operator activated pay-as-you-go
+  // billing on the account (previously had no active subscription, so every
+  // chat/completions call 429'd regardless of integration correctness).
   //   - GET /v1/models -> 200, real 5-model array (fugu, fugu-ultra,
   //     fugu-ultra-20260615, fugu-ultra-v1.0, fugu-ultra-v1.1) even though
   //     NEITHER docs page (console.sakana.ai/get-started or /models)
   //     documents this endpoint. Shape matches the generic
   //     OpenAICompatibleHubModelFetcher (`data[].id`) — no dedicated
   //     fetcher/pinnedFallback needed.
-  //   - POST /v1/chat/completions is real and OpenAI-shaped (confirmed a
-  //     proper `authentication_error` on a missing key), but a genuinely
-  //     successful completion could NOT be confirmed: both `fugu` and
-  //     `fugu-ultra` returned HTTP 429 usage_limit_reached, "No active
-  //     subscription. Subscribe at https://console.sakana.ai/billing" — this
-  //     key's account has no active subscription/PAYG billing. Streaming,
-  //     tools, jsonMode, reasoning and vision below are per-docs only, not
-  //     live-confirmed. Vision comes from the get-started page's sample
-  //     model-catalog config (`input_modalities: ["text","image"]` for all
-  //     models); the /models capability table omits vision entirely, so
-  //     treat that flag with some caution.
+  //   - POST /v1/chat/completions: after billing activation, a real
+  //     end-to-end re-verification was run directly against the live API
+  //     (2026-07-29, GCP secret `ailin-sakana-ai-key`) and confirmed chat,
+  //     streaming, tool calls, JSON mode, and vision ALL genuinely work —
+  //     real HTTP 200 responses with correct, sensible content, not merely
+  //     the absence of an error. Vision in particular is now evidence-
+  //     backed rather than doc-inferred: a multimodal request containing an
+  //     inline image correctly identified the image's content, and
+  //     prompt_tokens jumped sharply on that call versus text-only calls —
+  //     proof the image was actually processed, not silently dropped. That
+  //     DIRECTLY CONTRADICTS console.sakana.ai/models' own capability
+  //     table, which marks Vision unsupported (✗); the live probe is
+  //     trusted over the vendor's apparently stale/incorrect docs.
+  //   - Observed quirk, noted but not acted on: `usage.completion_tokens_
+  //     details.reasoning_tokens` showed up on a plain `fugu` call even
+  //     though nothing in the request asked for reasoning — worth watching,
+  //     not itself a reason to change anything (`supports.reasoning` was
+  //     already `true`).
+  //   - fugu-ultra appears to route requests through an internal
+  //     multi-agent orchestration layer (matches its docs' "routes 1-3
+  //     agents" description) — `usage.prompt_tokens_details.
+  //     orchestration_input_tokens` reflects that on fugu-ultra calls.
   //   - fugu-cyber / fugu-cyber-v1.0 are excluded via modelDenylist: the
   //     pricing docs say cyber "requires access request approval" and is
   //     "available only through pay-as-you-go billing"; this key's
@@ -3587,8 +3675,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   //     above 272K context, $0.50/$1.00 cached; fugu-cyber $6/$36 standard,
   //     $12/$54 above 272K, $0.60/$1.20 cached; base fugu has no per-token
   //     price — subscription-only (Standard $20/mo, Pro $100/mo, Max
-  //     $200/mo), consistent with base fugu also 429'ing with the same
-  //     no-active-subscription error on this key.
+  //     $200/mo).
   //   - apiKeyEnvVar follows the `<PROVIDER_ID_UPPER>_API_KEY` convention
   //     (SAKANA_AI_API_KEY, not the shorter SAKANA_API_KEY) per Rule 1 in
   //     provider-catalog.schema.ts — Sakana has no well-known upstream SDK
@@ -3617,7 +3704,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 35,
     docsUrl: 'https://console.sakana.ai/get-started',
-    notes: 'Fugu chat/tools/reasoning models. Live-verified 2026-07-29: /v1/models works (undocumented but real, 5 models), chat/completions is real OAI-shaped but this key has no active billing so a successful completion was not confirmed (429 usage_limit_reached on both fugu and fugu-ultra). fugu-cyber excluded via modelDenylist (approval-gated, absent from this key\'s /v1/models). pricingMode=none: no pricing in API responses; see header comment above for full detail and marketing-page figures.',
+    notes:
+      'Fugu chat/tools/reasoning/vision models. Live-verified 2026-07-29: /v1/models works (5 real models). Billing activated same day; end-to-end re-verification confirmed chat, streaming, tools, JSON mode, and vision all genuinely work — real HTTP 200s with correct content. Vision is evidence-backed despite console.sakana.ai/models marking it unsupported. fugu-cyber excluded via modelDenylist (approval-gated). pricingMode=none: no pricing in API responses; see header comment for detail.',
     lastReviewedAt: '2026-07-29',
   },
 ] as const satisfies readonly ProviderCatalogEntry[];

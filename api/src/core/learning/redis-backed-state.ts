@@ -106,7 +106,10 @@ export class RedisBackedMap<V> {
       } catch {
         this.failureCount++;
         if (this.failureCount >= this.maxFailures) {
-          log.warn({ keyPrefix: this.keyPrefix }, 'Redis-backed state degrading to local-only after repeated failures');
+          log.warn(
+            { keyPrefix: this.keyPrefix },
+            'Redis-backed state degrading to local-only after repeated failures'
+          );
         }
       }
     }
@@ -194,7 +197,10 @@ export class RedisBackedMap<V> {
       log.info({ keyPrefix: this.keyPrefix, loaded: count }, 'Redis-backed state loaded');
       return count;
     } catch {
-      log.warn({ keyPrefix: this.keyPrefix }, 'Failed to load Redis-backed state, starting with empty local cache');
+      log.warn(
+        { keyPrefix: this.keyPrefix },
+        'Failed to load Redis-backed state, starting with empty local cache'
+      );
       return 0;
     }
   }
@@ -270,7 +276,9 @@ export class RedisBackedSet {
     }
 
     if (this.enabled && this.redis && this.failureCount < 5) {
-      this.redis.sadd(this.redisKey, member).catch(() => { this.failureCount++; });
+      this.redis.sadd(this.redisKey, member).catch(() => {
+        this.failureCount++;
+      });
     }
   }
 

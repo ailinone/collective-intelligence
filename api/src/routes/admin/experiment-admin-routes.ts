@@ -50,10 +50,7 @@ import {
   effectSize,
 } from '@/core/experiment/statistical-analysis';
 import type { ExperimentConfig, ExecutionMode } from '@/core/experiment/experiment-types';
-import {
-  C3_CONFIG_BUILDERS,
-  getAllC3Configs,
-} from '@/core/experiment/c3-experiment-configs';
+import { C3_CONFIG_BUILDERS, getAllC3Configs } from '@/core/experiment/c3-experiment-configs';
 
 const log = logger.child({ component: 'experiment-admin' });
 
@@ -93,7 +90,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         log.error({ error: String(err) }, 'Failed to create experiment');
         return reply.status(500).send({ error: String(err) });
       }
-    },
+    }
   );
 
   // ─── Start / Resume Experiment ───────────────────────────────────────
@@ -129,7 +126,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       } catch (err) {
         return reply.status(400).send({ error: String(err) });
       }
-    },
+    }
   );
 
   // ─── Status ──────────────────────────────────────────────────────────
@@ -158,7 +155,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         progress: dbExp.progress,
         source: 'db-fallback', // not the live in-memory handle
       });
-    },
+    }
   );
 
   // ─── Pause ───────────────────────────────────────────────────────────
@@ -172,7 +169,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       } catch (err) {
         return reply.status(400).send({ error: String(err) });
       }
-    },
+    }
   );
 
   // ─── Raw Results ─────────────────────────────────────────────────────
@@ -204,7 +201,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         count: results.length,
         results,
       });
-    },
+    }
   );
 
   // ─── Statistical Analysis ───────────────────────────────────────────
@@ -218,10 +215,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       }
 
       const results = await getExperimentResults(experimentId);
-      const successful = results.filter(r => r.success && r.qualityScore !== null);
+      const successful = results.filter((r) => r.success && r.qualityScore !== null);
 
       if (successful.length === 0) {
-        return reply.send({ experimentId, message: 'No successful executions yet', analysis: null });
+        return reply.send({
+          experimentId,
+          message: 'No successful executions yet',
+          analysis: null,
+        });
       }
 
       // Per-mode analysis
@@ -229,17 +230,17 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       const modeAnalysis: Record<string, unknown> = {};
 
       for (const mode of modes) {
-        const modeResults = successful.filter(r => r.executionMode === mode);
+        const modeResults = successful.filter((r) => r.executionMode === mode);
         if (modeResults.length === 0) continue;
 
-        const qualities = modeResults.map(r => r.qualityScore!);
+        const qualities = modeResults.map((r) => r.qualityScore!);
         modeAnalysis[mode] = {
           sampleSize: modeResults.length,
           quality: computeDescriptiveStats(qualities),
           confidenceInterval: computeConfidenceInterval(qualities),
-          cost: computeDescriptiveStats(modeResults.map(r => r.costUsd)),
-          latency: computeDescriptiveStats(modeResults.map(r => r.latencyMs)),
-          successRate: modeResults.filter(r => r.success).length / modeResults.length,
+          cost: computeDescriptiveStats(modeResults.map((r) => r.costUsd)),
+          latency: computeDescriptiveStats(modeResults.map((r) => r.latencyMs)),
+          successRate: modeResults.filter((r) => r.success).length / modeResults.length,
         };
       }
 
@@ -247,13 +248,18 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       const comparisons: Record<string, unknown> = {};
       for (let i = 0; i < modes.length; i++) {
         for (let j = i + 1; j < modes.length; j++) {
-          const a = successful.filter(r => r.executionMode === modes[i]).map(r => r.qualityScore!);
-          const b = successful.filter(r => r.executionMode === modes[j]).map(r => r.qualityScore!);
+          const a = successful
+            .filter((r) => r.executionMode === modes[i])
+            .map((r) => r.qualityScore!);
+          const b = successful
+            .filter((r) => r.executionMode === modes[j])
+            .map((r) => r.qualityScore!);
           if (a.length >= 2 && b.length >= 2) {
             comparisons[`${modes[i]}_vs_${modes[j]}`] = {
               tTest: welchTTest(a, b),
               effectSize: effectSize(a, b),
-              meanDiff: a.reduce((s, v) => s + v, 0) / a.length - b.reduce((s, v) => s + v, 0) / b.length,
+              meanDiff:
+                a.reduce((s, v) => s + v, 0) / a.length - b.reduce((s, v) => s + v, 0) / b.length,
             };
           }
         }
@@ -266,7 +272,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         modeAnalysis,
         comparisons,
       });
-    },
+    }
   );
 
   // ─── Full Report ─────────────────────────────────────────────────────
@@ -304,7 +310,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       if (document === 'decision-memo') return reply.send(report.decisionMemo);
 
       return reply.send(report);
-    },
+    }
   );
 
   // ─── History ─────────────────────────────────────────────────────────
@@ -331,7 +337,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       });
 
       return reply.send({ experiments });
-    },
+    }
   );
 
   // ─── Suite Info ──────────────────────────────────────────────────────
@@ -342,7 +348,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       const coverage = getSuiteCoverage();
       return reply.send({
         ...coverage,
-        tasks: EXPERIMENT_SUITE.map(t => ({
+        tasks: EXPERIMENT_SUITE.map((t) => ({
           index: t.index,
           taskType: t.taskType,
           complexity: t.complexity,
@@ -351,7 +357,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
           promptPreview: t.prompt.slice(0, 100) + (t.prompt.length > 100 ? '...' : ''),
         })),
       });
-    },
+    }
   );
 
   // ─── GO/NO-GO Decision Report ────────────────────────────────────────
@@ -372,7 +378,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       const { generateGoNoGoReport } = await import('@/core/experiment/go-no-go-engine.js');
       const report = generateGoNoGoReport(experimentId, results);
       return reply.send(report);
-    },
+    }
   );
 
   // ─── Segmented Benchmark Report (CONFIRMATORY vs EXPLORATORY) ──────────
@@ -395,10 +401,11 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         return reply.send({ experimentId, message: 'No executions yet', report: null });
       }
 
-      const { generateSegmentedBenchmarkReport } = await import('@/core/experiment/segmented-benchmark-report.js');
+      const { generateSegmentedBenchmarkReport } =
+        await import('@/core/experiment/segmented-benchmark-report.js');
       const report = generateSegmentedBenchmarkReport(experimentId, results);
       return reply.send(report);
-    },
+    }
   );
 
   // ─── Strategy × Scenario Matrix (per-strategy W/T/L vs best single) ────
@@ -422,10 +429,11 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         return reply.send({ experimentId, message: 'No executions yet', matrix: null });
       }
 
-      const { generateStrategyScenarioMatrix } = await import('@/core/experiment/strategy-scenario-matrix.js');
+      const { generateStrategyScenarioMatrix } =
+        await import('@/core/experiment/strategy-scenario-matrix.js');
       const matrix = generateStrategyScenarioMatrix(experimentId, results);
       return reply.send(matrix);
-    },
+    }
   );
 
   // ── Judge Calibration Endpoint ──────────────────────────────────────────
@@ -450,8 +458,9 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
 
       const { calibrateJudge } = await import('@/core/experiment/judge-calibration.js');
       const judgeModel = process.env.EXPERIMENT_JUDGE_MODEL || 'auto';
-      const apiBase = process.env.BOOTSTRAP_API_BASE
-        ?? (process.env.EVAL_API_BASE_URL
+      const apiBase =
+        process.env.BOOTSTRAP_API_BASE ??
+        (process.env.EVAL_API_BASE_URL
           ? `${process.env.EVAL_API_BASE_URL}/v1/chat/completions`
           : 'http://localhost:3000/v1/chat/completions');
       const bearerToken = process.env.BOOTSTRAP_BEARER_TOKEN ?? process.env.EVAL_BEARER_TOKEN ?? '';
@@ -464,7 +473,7 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       });
 
       return reply.send(report);
-    },
+    }
   );
 
   // ─── C3 Validation: Pre-built experiment configs ─────────────────────
@@ -477,15 +486,19 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         key,
         name: config.name,
         description: config.description,
-        taskCount: config.taskIndices.length === 0 ? EXPERIMENT_SUITE.length : config.taskIndices.length,
+        taskCount:
+          config.taskIndices.length === 0 ? EXPERIMENT_SUITE.length : config.taskIndices.length,
         modeCount: config.modes.length,
         repetitions: config.repetitions,
-        estimatedExecutions: (config.taskIndices.length === 0 ? EXPERIMENT_SUITE.length : config.taskIndices.length) * config.modes.length * config.repetitions,
+        estimatedExecutions:
+          (config.taskIndices.length === 0 ? EXPERIMENT_SUITE.length : config.taskIndices.length) *
+          config.modes.length *
+          config.repetitions,
         maxBudgetUsd: config.maxBudgetUsd,
         freezeLearning: config.freezeLearningDuringEval,
       }));
       return reply.send({ configs: summary });
-    },
+    }
   );
 
   // ─── C3 Validation: Create experiment from pre-built config ─────────
@@ -528,7 +541,10 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       try {
         config = { ...(await builder()), ...(overrides ?? {}) };
       } catch (buildErr) {
-        log.error({ error: String(buildErr), configKey }, 'Config builder failed (likely DB/provider resolution issue)');
+        log.error(
+          { error: String(buildErr), configKey },
+          'Config builder failed (likely DB/provider resolution issue)'
+        );
         return reply.status(500).send({
           error: `Config builder failed: ${String(buildErr)}`,
           configKey,
@@ -545,8 +561,11 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
       const diagnostics: Record<string, unknown> = {
         modesCount: modes.length,
         tasksCount: config.taskIndices?.length ?? 0,
-        totalExecutions: (config.taskIndices?.length ?? 0) * modes.length * (config.repetitions ?? 1),
-        singleModelArms: modes.filter((m) => m.mode === 'single-model' || m.mode === 'single-budget').length,
+        totalExecutions:
+          (config.taskIndices?.length ?? 0) * modes.length * (config.repetitions ?? 1),
+        singleModelArms: modes.filter(
+          (m) => m.mode === 'single-model' || m.mode === 'single-budget'
+        ).length,
         collectiveArms: modes.filter((m) => m.mode === 'collective').length,
         adaptiveArms: modes.filter((m) => m.mode === 'adaptive').length,
       };
@@ -562,13 +581,16 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
 
       try {
         const experimentId = await createExperiment(config);
-        log.info({ experimentId, configKey, name: config.name, ...diagnostics }, 'C3 experiment created');
+        log.info(
+          { experimentId, configKey, name: config.name, ...diagnostics },
+          'C3 experiment created'
+        );
         return reply.status(201).send({ experimentId, config, diagnostics });
       } catch (err) {
         log.error({ error: String(err), configKey }, 'Failed to create C3 experiment');
         return reply.status(500).send({ error: String(err) });
       }
-    },
+    }
   );
 
   log.info('Experiment admin routes registered (including C3 validation endpoints)');

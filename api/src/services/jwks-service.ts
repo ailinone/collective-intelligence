@@ -10,19 +10,19 @@
 /**
  * JWKS (JSON Web Key Set) Service
  * Manages RSA key pairs for RS256 JWT signing and verification
- * 
+ *
  * Security Features:
  * - RSA 2048-bit key pairs (NIST recommended minimum)
  * - Automatic key rotation with kid versioning
  * - JWKS endpoint for public key distribution
  * - Private key storage in Docker secrets or environment
  * - Key caching with TTL
- * 
+ *
  * Migration Path:
  * Phase 1: Generate keys, expose JWKS endpoint (current)
  * Phase 2: Dual signing (HS256 + RS256) for backward compatibility
  * Phase 3: RS256 only, deprecate HS256
- * 
+ *
  * Configuration:
  * - JWKS_ENABLED: Enable JWKS endpoint (default: false)
  * - JWKS_PRIVATE_KEY: PEM-encoded private key (from Docker secret)
@@ -74,7 +74,7 @@ let previousKeyPair: RSAKeyPair | null = null;
  */
 function generateRSAKeyPair(kid: string, rotationDays: number = 90): RSAKeyPair {
   log.info({ kid, rotationDays }, 'Generating new RSA key pair');
-  
+
   const { publicKey, privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: {
@@ -86,10 +86,10 @@ function generateRSAKeyPair(kid: string, rotationDays: number = 90): RSAKeyPair 
       format: 'pem',
     },
   });
-  
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + rotationDays * 24 * 60 * 60 * 1000);
-  
+
   return {
     kid,
     privateKey,
@@ -105,25 +105,25 @@ function generateRSAKeyPair(kid: string, rotationDays: number = 90): RSAKeyPair 
  */
 async function loadKeyPairFromEnv(): Promise<RSAKeyPair | null> {
   const privateKeyEnv = process.env.JWKS_PRIVATE_KEY;
-  
+
   if (!privateKeyEnv) {
     return null;
   }
-  
+
   try {
     // Decode if base64 encoded
     let privateKey = privateKeyEnv;
     if (!privateKey.includes('-----BEGIN')) {
       privateKey = Buffer.from(privateKey, 'base64').toString('utf-8');
     }
-    
+
     // Derive public key from private key
     const publicKeyObj = createPublicKey(privateKey);
     const publicKey = publicKeyObj.export({ type: 'spki', format: 'pem' }) as string;
-    
+
     const rotationDays = parseInt(process.env.JWKS_ROTATION_DAYS || '90', 10);
     const now = new Date();
-    
+
     return {
       kid: JWKS_KEY_ID,
       privateKey,
@@ -133,7 +133,10 @@ async function loadKeyPairFromEnv(): Promise<RSAKeyPair | null> {
       algorithm: JWKS_ALGORITHM,
     };
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to load key pair from environment');
+    log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Failed to load key pair from environment'
+    );
     return null;
   }
 }
@@ -146,18 +149,23 @@ export async function initializeJWKS(): Promise<void> {
     log.info('JWKS service disabled (JWKS_ENABLED=false)');
     return;
   }
-  
+
   // Try to load from environment first
   currentKeyPair = await loadKeyPairFromEnv();
-  
+
   if (!currentKeyPair) {
     // Generate new key pair if not provided
     log.warn('No JWKS_PRIVATE_KEY provided, generating ephemeral key pair');
-    log.warn('WARNING: Ephemeral keys will be lost on restart. Set JWKS_PRIVATE_KEY for production.');
+    log.warn(
+      'WARNING: Ephemeral keys will be lost on restart. Set JWKS_PRIVATE_KEY for production.'
+    );
     currentKeyPair = generateRSAKeyPair(JWKS_KEY_ID);
   }
-  
-  log.info({ kid: currentKeyPair.kid, expiresAt: currentKeyPair.expiresAt }, 'JWKS service initialized');
+
+  log.info(
+    { kid: currentKeyPair.kid, expiresAt: currentKeyPair.expiresAt },
+    'JWKS service initialized'
+  );
 }
 
 /**
@@ -167,7 +175,7 @@ export function getSigningKey(): { privateKey: string; kid: string; algorithm: s
   if (!JWKS_ENABLED || !currentKeyPair) {
     return null;
   }
-  
+
   return {
     privateKey: currentKeyPair.privateKey,
     kid: currentKeyPair.kid,
@@ -181,7 +189,7 @@ export function getSigningKey(): { privateKey: string; kid: string; algorithm: s
 function pemToJWK(pem: string, kid: string): JWK {
   const publicKeyObj = createPublicKey(pem);
   const keyData = publicKeyObj.export({ format: 'jwk' }) as { n: string; e: string };
-  
+
   return {
     kty: 'RSA',
     use: KEY_USE,
@@ -197,16 +205,16 @@ function pemToJWK(pem: string, kid: string): JWK {
  */
 export function getJWKS(): JWKS {
   const keys: JWK[] = [];
-  
+
   if (currentKeyPair) {
     keys.push(pemToJWK(currentKeyPair.publicKey, currentKeyPair.kid));
   }
-  
+
   // Include previous key for rotation grace period
   if (previousKeyPair) {
     keys.push(pemToJWK(previousKeyPair.publicKey, previousKeyPair.kid));
   }
-  
+
   return { keys };
 }
 
@@ -217,11 +225,11 @@ export function getPublicKeyByKid(kid: string): string | null {
   if (currentKeyPair && currentKeyPair.kid === kid) {
     return currentKeyPair.publicKey;
   }
-  
+
   if (previousKeyPair && previousKeyPair.kid === kid) {
     return previousKeyPair.publicKey;
   }
-  
+
   return null;
 }
 
@@ -233,19 +241,22 @@ export function rotateKeys(): void {
     log.warn('Cannot rotate keys - JWKS service disabled');
     return;
   }
-  
+
   const newKid = `key-${new Date().toISOString().slice(0, 7)}-${randomUUID().slice(0, 8)}`;
-  
+
   // Move current to previous
   previousKeyPair = currentKeyPair;
-  
+
   // Generate new key pair
   currentKeyPair = generateRSAKeyPair(newKid);
-  
-  log.info({
-    newKid: currentKeyPair.kid,
-    previousKid: previousKeyPair?.kid,
-  }, 'Keys rotated successfully');
+
+  log.info(
+    {
+      newKid: currentKeyPair.kid,
+      previousKid: previousKeyPair?.kid,
+    },
+    'Keys rotated successfully'
+  );
 }
 
 /**
@@ -280,11 +291,16 @@ function parseExpiresInToSeconds(value: string): number {
   if (!match) return 3600;
   const num = parseInt(match[1], 10);
   switch (match[2]) {
-    case 's': return num;
-    case 'm': return num * 60;
-    case 'h': return num * 3600;
-    case 'd': return num * 86400;
-    default: return 3600;
+    case 's':
+      return num;
+    case 'm':
+      return num * 60;
+    case 'h':
+      return num * 3600;
+    case 'd':
+      return num * 86400;
+    default:
+      return 3600;
   }
 }
 
@@ -301,7 +317,7 @@ export async function signJWTWithRS256(
     log.warn('Cannot sign JWT with RS256 - JWKS not enabled or no key available');
     return null;
   }
-  
+
   const jwt = await import('jsonwebtoken');
   type JwtSecret = import('jsonwebtoken').Secret;
   type JwtSignOptions = import('jsonwebtoken').SignOptions;
@@ -325,25 +341,25 @@ export async function verifyJWTWithRS256(
   options: { issuer?: string | string[]; audience?: string | string[] } = {}
 ): Promise<Record<string, unknown> | null> {
   const jwt = await import('jsonwebtoken');
-  
+
   // Decode header to get kid
   const decoded = jwt.default.decode(token, { complete: true });
   if (!decoded || typeof decoded === 'string') {
     return null;
   }
-  
+
   const kid = decoded.header.kid;
   if (!kid) {
     log.warn('JWT missing kid in header');
     return null;
   }
-  
+
   const publicKey = getPublicKeyByKid(kid);
   if (!publicKey) {
     log.warn({ kid }, 'Unknown kid in JWT header');
     return null;
   }
-  
+
   const defaultIssuers: [string, ...string[]] = ['https://ailin.id', 'ci-api'];
   const defaultAudiences: [string, ...string[]] = ['https://api.ailin.one', 'ci-api'];
   const issuerVal = options.issuer ?? defaultIssuers;
@@ -369,8 +385,10 @@ export async function verifyJWTWithRS256(
       clockTolerance: 30,
     }) as Record<string, unknown>;
   } catch (error) {
-    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'RS256 JWT verification failed');
+    log.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      'RS256 JWT verification failed'
+    );
     return null;
   }
 }
-

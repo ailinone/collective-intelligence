@@ -21,10 +21,7 @@
 import { BroadcastOutboxPoller } from '@/broadcast/application/broadcast-outbox-poller';
 import { BroadcastDeliveryExecutor } from '@/broadcast/application/delivery-executor';
 import { destinationResolver } from '@/broadcast/application/destination-resolver';
-import {
-  DestinationConfigCipher,
-  resolveKekProvider,
-} from '@/broadcast/infrastructure/encryption';
+import { DestinationConfigCipher, resolveKekProvider } from '@/broadcast/infrastructure/encryption';
 import type { DestinationAdapterRegistry } from '@/broadcast/infrastructure/destinations/destination-adapter';
 import { buildDefaultAdapterRegistry } from '@/broadcast/infrastructure/destinations';
 

@@ -50,7 +50,7 @@ import { broadcastMetrics } from '@/broadcast/infrastructure/metrics/broadcast-m
 
 const dnsLookupAsync = promisify(dnsLookup) as (
   hostname: string,
-  options?: { all: true },
+  options?: { all: true }
 ) => Promise<LookupAddress[]>;
 
 // ─── Config ─────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ export class EgressBlockedError extends Error {
       | 'ip_blocked'
       | 'too_many_redirects'
       | 'body_too_large',
-    message: string,
+    message: string
   ) {
     super(message);
     this.name = 'EgressBlockedError';
@@ -159,7 +159,7 @@ async function validateUrl(rawUrl: string): Promise<ValidatedTarget> {
     if (!allowPrivate && isForbiddenIp(literalIp.ip)) {
       throw new EgressBlockedError(
         'ip_blocked',
-        `hostname ${url.hostname} is forbidden literal IP`,
+        `hostname ${url.hostname} is forbidden literal IP`
       );
     }
     return { url, ip: literalIp.ip, family: literalIp.family };
@@ -172,7 +172,7 @@ async function validateUrl(rawUrl: string): Promise<ValidatedTarget> {
   } catch (e) {
     throw new EgressBlockedError(
       'host_resolution_failed',
-      `DNS lookup failed for ${url.hostname}: ${(e as Error).message}`,
+      `DNS lookup failed for ${url.hostname}: ${(e as Error).message}`
     );
   }
   if (addrs.length === 0) {
@@ -184,7 +184,7 @@ async function validateUrl(rawUrl: string): Promise<ValidatedTarget> {
       if (isForbiddenIp(addr.address)) {
         throw new EgressBlockedError(
           'ip_blocked',
-          `hostname ${url.hostname} resolves to forbidden address ${addr.address}`,
+          `hostname ${url.hostname} resolves to forbidden address ${addr.address}`
         );
       }
     }
@@ -244,8 +244,8 @@ export type PinnedLookup = (
   callback: (
     err: NodeJS.ErrnoException | null,
     address: string | LookupAddress[],
-    family?: number,
-  ) => void,
+    family?: number
+  ) => void
 ) => void;
 
 /**
@@ -256,7 +256,10 @@ export type PinnedLookup = (
  */
 export function buildPinnedLookup(ip: string, family: 4 | 6): PinnedLookup {
   return (_hostname, options, callback) => {
-    const all = typeof options === 'object' && options !== null && (options as { all?: boolean }).all === true;
+    const all =
+      typeof options === 'object' &&
+      options !== null &&
+      (options as { all?: boolean }).all === true;
     if (all) {
       callback(null, [{ address: ip, family } as LookupAddress]);
     } else {
@@ -288,7 +291,7 @@ function buildPinnedAgent(target: ValidatedTarget): Agent {
  */
 export async function safeFetch(
   rawUrl: string,
-  init: SafeFetchInit = {},
+  init: SafeFetchInit = {}
 ): Promise<SafeFetchResponse> {
   const timeoutMs = init.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
   const maxResponseBytes = init.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
@@ -344,7 +347,7 @@ export async function safeFetch(
         if (redirectCount > maxRedirects) {
           throw new EgressBlockedError(
             'too_many_redirects',
-            `exceeded ${maxRedirects} redirects starting at ${rawUrl}`,
+            `exceeded ${maxRedirects} redirects starting at ${rawUrl}`
           );
         }
         currentUrl = new URL(location, target.url).toString();
@@ -364,14 +367,14 @@ export async function safeFetch(
   // TypeScript and ESLint both want a definite termination.
   throw new EgressBlockedError(
     'too_many_redirects',
-    `exceeded ${maxRedirects} redirects starting at ${rawUrl}`,
+    `exceeded ${maxRedirects} redirects starting at ${rawUrl}`
   );
 }
 
 async function finalizeResponse(
   response: Awaited<ReturnType<typeof undiciFetch>>,
   redirects: number,
-  maxBytes: number,
+  maxBytes: number
 ): Promise<SafeFetchResponse> {
   // Stream the body with a byte cap. `response.arrayBuffer()` can't be
   // bounded, so read via the stream.
@@ -388,10 +391,14 @@ async function finalizeResponse(
       if (value instanceof Uint8Array) {
         total += value.byteLength;
         if (total > maxBytes) {
-          try { await reader.cancel(); } catch { /* ignore */ }
+          try {
+            await reader.cancel();
+          } catch {
+            /* ignore */
+          }
           throw new EgressBlockedError(
             'body_too_large',
-            `response body exceeded ${maxBytes} bytes`,
+            `response body exceeded ${maxBytes} bytes`
           );
         }
         chunks.push(value);

@@ -78,24 +78,32 @@ describe('01C.1B-J2-C-R4 §13 — task-aware quality changes the synthesizer win
         modelId: 'model-text-specialist',
         canonicalModelId: 'model-text-specialist',
         qualityScore: 0.78,
-        taskCategoryScores: { chat_text: 0.95, code_webdev: 0.60 },
+        taskCategoryScores: { chat_text: 0.95, code_webdev: 0.6 },
         qualityScoreSources: ['lmarena'],
-        sourceScores: [{
-          source: 'lmarena', score: 0.78, confidence: 'high',
-          categoryScores: { chat_text: 0.95, code_webdev: 0.60 },
-        }],
+        sourceScores: [
+          {
+            source: 'lmarena',
+            score: 0.78,
+            confidence: 'high',
+            categoryScores: { chat_text: 0.95, code_webdev: 0.6 },
+          },
+        ],
       },
       {
         ...ENTRY_BASE,
         modelId: 'model-code-specialist',
         canonicalModelId: 'model-code-specialist',
         qualityScore: 0.78,
-        taskCategoryScores: { chat_text: 0.60, code_webdev: 0.95 },
+        taskCategoryScores: { chat_text: 0.6, code_webdev: 0.95 },
         qualityScoreSources: ['lmarena'],
-        sourceScores: [{
-          source: 'lmarena', score: 0.78, confidence: 'high',
-          categoryScores: { chat_text: 0.60, code_webdev: 0.95 },
-        }],
+        sourceScores: [
+          {
+            source: 'lmarena',
+            score: 0.78,
+            confidence: 'high',
+            categoryScores: { chat_text: 0.6, code_webdev: 0.95 },
+          },
+        ],
       },
     ],
   });

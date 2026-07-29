@@ -315,10 +315,7 @@ export async function beginIdempotentRequest(args: {
   return classifyExisting(existing, requestHash);
 }
 
-function classifyExisting(
-  record: IdempotencyRecord,
-  requestHash: string
-): IdempotencyBeginResult {
+function classifyExisting(record: IdempotencyRecord, requestHash: string): IdempotencyBeginResult {
   if (record.requestHash !== requestHash) {
     return { outcome: 'key_reuse', record };
   }

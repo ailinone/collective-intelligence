@@ -29,11 +29,7 @@ import {
   getFatalStatesForTesting,
   getTransientSkipStatesForTesting,
 } from '../dead-provider-audit';
-import {
-  resetMetricCountersForTesting,
-  getCounterValueForTesting,
-  METRIC_NAMES,
-} from '../metrics';
+import { resetMetricCountersForTesting, getCounterValueForTesting, METRIC_NAMES } from '../metrics';
 
 describe('detectBypass — Strategy C (TIME-WINDOW)', () => {
   beforeEach(() => {
@@ -206,10 +202,11 @@ describe('recordHttpOutcome — telemetry side effects', () => {
 
     // Counter labels include the reason string from the detector,
     // which embeds the state for diagnostic clarity.
-    const counter = getCounterValueForTesting(
-      METRIC_NAMES.DEAD_PROVIDER_HTTP_ATTEMPT_TOTAL,
-      { providerId: 'aihubmix', modelId: '', reason: 'bypass_within_cooldown:auth_failed' },
-    );
+    const counter = getCounterValueForTesting(METRIC_NAMES.DEAD_PROVIDER_HTTP_ATTEMPT_TOTAL, {
+      providerId: 'aihubmix',
+      modelId: '',
+      reason: 'bypass_within_cooldown:auth_failed',
+    });
     expect(counter).toBe(1);
   });
 
@@ -225,10 +222,11 @@ describe('recordHttpOutcome — telemetry side effects', () => {
 
     // Healthy state never triggers the audit increment, regardless of
     // which reason label we look up — count any (foo, *) entry.
-    const all = getCounterValueForTesting(
-      METRIC_NAMES.DEAD_PROVIDER_HTTP_ATTEMPT_TOTAL,
-      { providerId: 'foo', modelId: '', reason: 'bypass_within_cooldown:auth_failed' },
-    );
+    const all = getCounterValueForTesting(METRIC_NAMES.DEAD_PROVIDER_HTTP_ATTEMPT_TOTAL, {
+      providerId: 'foo',
+      modelId: '',
+      reason: 'bypass_within_cooldown:auth_failed',
+    });
     expect(all).toBe(0);
   });
 

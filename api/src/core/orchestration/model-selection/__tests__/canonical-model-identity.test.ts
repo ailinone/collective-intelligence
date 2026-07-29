@@ -19,7 +19,7 @@ import {
 describe('01C.1B-J1D-R4B §7 — normalizeModelId', () => {
   it('lowercases + preserves vendor/model shape', () => {
     expect(normalizeModelId('Qwen/Qwen3-235B-A22B-Thinking-2507')).toBe(
-      'qwen/qwen3-235b-a22b-thinking-2507',
+      'qwen/qwen3-235b-a22b-thinking-2507'
     );
   });
 
@@ -29,13 +29,13 @@ describe('01C.1B-J1D-R4B §7 — normalizeModelId', () => {
 
   it('strips huggingface wrapper', () => {
     expect(normalizeModelId('huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507')).toBe(
-      'qwen/qwen3-235b-a22b-thinking-2507',
+      'qwen/qwen3-235b-a22b-thinking-2507'
     );
   });
 
   it('strips hf: colon prefix', () => {
     expect(normalizeModelId('hf:Qwen/Qwen3-235B-A22B-Thinking-2507')).toBe(
-      'qwen/qwen3-235b-a22b-thinking-2507',
+      'qwen/qwen3-235b-a22b-thinking-2507'
     );
   });
 
@@ -44,9 +44,7 @@ describe('01C.1B-J1D-R4B §7 — normalizeModelId', () => {
   });
 
   it('strips edenai + nested deepinfra (two wrappers)', () => {
-    expect(normalizeModelId('edenai/deepinfra/openai/gpt-oss-120b')).toBe(
-      'openai/gpt-oss-120b',
-    );
+    expect(normalizeModelId('edenai/deepinfra/openai/gpt-oss-120b')).toBe('openai/gpt-oss-120b');
   });
 
   it('does NOT strip when leading segment is a real vendor', () => {

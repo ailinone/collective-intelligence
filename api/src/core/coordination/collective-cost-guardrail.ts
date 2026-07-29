@@ -148,7 +148,7 @@ function effectiveMaxOutputTokens(model: Model, request: ChatRequest): number {
  */
 function estimateModelCallCost(
   model: Model,
-  request: ChatRequest,
+  request: ChatRequest
 ): { input: number; output: number; cost: number } {
   const input = estimateRequestInputTokens(request);
   const output = effectiveMaxOutputTokens(model, request);
@@ -156,8 +156,7 @@ function estimateModelCallCost(
   const inputPricePer1k = Number.isFinite(model.inputCostPer1k) ? model.inputCostPer1k : 0;
   const outputPricePer1k = Number.isFinite(model.outputCostPer1k) ? model.outputCostPer1k : 0;
 
-  const cost =
-    (input / 1000) * inputPricePer1k + (output / 1000) * outputPricePer1k;
+  const cost = (input / 1000) * inputPricePer1k + (output / 1000) * outputPricePer1k;
 
   return { input, output, cost };
 }
@@ -169,7 +168,7 @@ function estimateModelCallCost(
 export function estimateRoundCost(
   models: Model[],
   request: ChatRequest,
-  state: CoordinationState,
+  state: CoordinationState
 ): RoundCostEstimate {
   const perModel: RoundCostEstimate['perModel'] = [];
   let estimatedRoundCostUsd = 0;
@@ -190,8 +189,7 @@ export function estimateRoundCost(
   const limitUsd = state.limits.maxCostUsd;
 
   const exceedsLimit =
-    typeof limitUsd === 'number' &&
-    projectedTotalUsd * PROJECTION_SAFETY_MARGIN > limitUsd;
+    typeof limitUsd === 'number' && projectedTotalUsd * PROJECTION_SAFETY_MARGIN > limitUsd;
 
   return {
     estimatedRoundCostUsd,
@@ -211,7 +209,7 @@ export function estimateRoundCost(
 export function wouldExceedCostLimit(
   models: Model[],
   request: ChatRequest,
-  state: CoordinationState,
+  state: CoordinationState
 ): boolean {
   return estimateRoundCost(models, request, state).exceedsLimit;
 }

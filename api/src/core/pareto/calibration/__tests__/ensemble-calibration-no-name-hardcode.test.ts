@@ -26,7 +26,11 @@ const SOURCES: Record<string, string> = {
   'ensemble-calibration-types.ts': resolve(__dirname, '..', 'ensemble-calibration-types.ts'),
   'peer-lift-calibrator.ts': resolve(__dirname, '..', 'peer-lift-calibrator.ts'),
   'marginal-gain-calibrator.ts': resolve(__dirname, '..', 'marginal-gain-calibrator.ts'),
-  'ensemble-expected-judge-estimator.ts': resolve(__dirname, '..', 'ensemble-expected-judge-estimator.ts'),
+  'ensemble-expected-judge-estimator.ts': resolve(
+    __dirname,
+    '..',
+    'ensemble-expected-judge-estimator.ts'
+  ),
   'ensemble-lift-policy.ts': resolve(__dirname, '..', 'ensemble-lift-policy.ts'),
   'ensemble-calibrated-optimizer.ts': resolve(__dirname, '..', 'ensemble-calibrated-optimizer.ts'),
   'tasktype-ensemble-approval.ts': resolve(__dirname, '..', 'tasktype-ensemble-approval.ts'),

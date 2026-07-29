@@ -22,7 +22,7 @@ type FetchCall = { url: string; init: RequestInit };
 
 function stubFetch(
   response: { ok?: boolean; status?: number; body: unknown },
-  opts: { delayMs?: number } = {},
+  opts: { delayMs?: number } = {}
 ) {
   const calls: FetchCall[] = [];
   const fn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

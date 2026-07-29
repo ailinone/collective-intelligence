@@ -104,42 +104,59 @@ export interface CapabilityInferenceResult {
 // Keyword dictionaries (compiled once)
 // ---------------------------------------------------------------------------
 
-const CODING_KEYWORDS = /\b(function|class|implement|debug|refactor|compile|syntax|algorithm|api|endpoint|typescript|javascript|python|rust|java|golang|sql|html|css|react|regex|codebase|repository|git|pr|pull\s*request|bug\s*fix|unit\s*test|integration\s*test)\b/i;
-const CODING_PHRASES = /\b(write\s+a\s+function|write\s+code|fix\s+(the|this|my)\s+(bug|error|issue)|implement\s+a|create\s+a\s+(class|module|component|service)|code\s+review|debug\s+(this|the|my))\b/i;
+const CODING_KEYWORDS =
+  /\b(function|class|implement|debug|refactor|compile|syntax|algorithm|api|endpoint|typescript|javascript|python|rust|java|golang|sql|html|css|react|regex|codebase|repository|git|pr|pull\s*request|bug\s*fix|unit\s*test|integration\s*test)\b/i;
+const CODING_PHRASES =
+  /\b(write\s+a\s+function|write\s+code|fix\s+(the|this|my)\s+(bug|error|issue)|implement\s+a|create\s+a\s+(class|module|component|service)|code\s+review|debug\s+(this|the|my))\b/i;
 const CODE_BLOCK_RE = /```[\s\S]*?```/;
 
-const REASONING_KEYWORDS = /\b(explain\s+why|prove|derive|compare\s+and\s+contrast|step[\s-]by[\s-]step|analyze|evaluate|critical\s*thinking|logical|theorem|hypothesis|infer|deduce|syllogism|paradox|dilemma|trade[\s-]?offs?)\b/i;
+const REASONING_KEYWORDS =
+  /\b(explain\s+why|prove|derive|compare\s+and\s+contrast|step[\s-]by[\s-]step|analyze|evaluate|critical\s*thinking|logical|theorem|hypothesis|infer|deduce|syllogism|paradox|dilemma|trade[\s-]?offs?)\b/i;
 
-const CREATIVE_KEYWORDS = /\b(write\s+a\s+(story|poem|essay|song|script|novel)|creative|brainstorm|imagine|fiction|narrative|metaphor|haiku|sonnet|limerick|short\s*story|world[\s-]?build)\b/i;
+const CREATIVE_KEYWORDS =
+  /\b(write\s+a\s+(story|poem|essay|song|script|novel)|creative|brainstorm|imagine|fiction|narrative|metaphor|haiku|sonnet|limerick|short\s*story|world[\s-]?build)\b/i;
 
-const FACTUAL_QA_KEYWORDS = /\b(what\s+is|who\s+is|when\s+did|where\s+is|how\s+many|how\s+much|define|definition\s+of|fact\s+check|true\s+or\s+false|is\s+it\s+true)\b/i;
+const FACTUAL_QA_KEYWORDS =
+  /\b(what\s+is|who\s+is|when\s+did|where\s+is|how\s+many|how\s+much|define|definition\s+of|fact\s+check|true\s+or\s+false|is\s+it\s+true)\b/i;
 
-const TRANSLATION_KEYWORDS = /\b(translate|translation|translat(e|ing)\s+(to|into|from)|in\s+(french|spanish|german|chinese|japanese|korean|arabic|hindi|portuguese|russian|italian|dutch|polish|turkish|swedish|norwegian|danish|finnish|greek|hebrew|thai|vietnamese|indonesian|malay))\b/i;
+const TRANSLATION_KEYWORDS =
+  /\b(translate|translation|translat(e|ing)\s+(to|into|from)|in\s+(french|spanish|german|chinese|japanese|korean|arabic|hindi|portuguese|russian|italian|dutch|polish|turkish|swedish|norwegian|danish|finnish|greek|hebrew|thai|vietnamese|indonesian|malay))\b/i;
 
-const SUMMARIZATION_KEYWORDS = /\b(summarize|summary|summarise|tldr|tl;?dr|key\s*points|main\s*points|brief\s*overview|condense|digest|recap|outline\s+the)\b/i;
+const SUMMARIZATION_KEYWORDS =
+  /\b(summarize|summary|summarise|tldr|tl;?dr|key\s*points|main\s*points|brief\s*overview|condense|digest|recap|outline\s+the)\b/i;
 
-const TOOL_USE_KEYWORDS = /\b(search|calculate|look\s*up|browse|fetch|retrieve|query|call\s+(the\s+)?api|run\s+(the\s+)?(tool|command|script)|execute|invoke|web\s*search|file\s*search)\b/i;
+const TOOL_USE_KEYWORDS =
+  /\b(search|calculate|look\s*up|browse|fetch|retrieve|query|call\s+(the\s+)?api|run\s+(the\s+)?(tool|command|script)|execute|invoke|web\s*search|file\s*search)\b/i;
 
-const MULTI_STEP_INDICATORS = /\b(first[\s,].*then|step\s*\d|phase\s*\d|part\s*\d|1\)|2\)|3\)|stage\s*\d|multi[\s-]?step|pipeline|workflow|chain|sequentially|afterwards|next[\s,]|finally[\s,])\b/i;
+const MULTI_STEP_INDICATORS =
+  /\b(first[\s,].*then|step\s*\d|phase\s*\d|part\s*\d|1\)|2\)|3\)|stage\s*\d|multi[\s-]?step|pipeline|workflow|chain|sequentially|afterwards|next[\s,]|finally[\s,])\b/i;
 const NUMBERED_LIST_RE = /(?:^|\n)\s*(?:\d+[.)]\s+|[-*]\s+).*(?:\n\s*(?:\d+[.)]\s+|[-*]\s+)){2,}/;
 
-const SAFETY_KEYWORDS = /\b(medical|diagnosis|diagnose|prescription|medication|dosage|symptom|disease|treatment|surgery|legal\s*advice|lawsuit|liability|court|attorney|financial\s*advice|invest|stock\s*pick|tax\s*advice|suicide|self[\s-]?harm|weapon|explosive|minor|child\s*safety|underage|drug\s*use|controlled\s*substance)\b/i;
-const SAFETY_CRITICAL_KEYWORDS = /\b(suicide|self[\s-]?harm|weapon|explosive|child\s*exploitation|abuse|violence\s*against|bomb|poison|how\s+to\s+make\s+a\s+(bomb|weapon|drug))\b/i;
+const SAFETY_KEYWORDS =
+  /\b(medical|diagnosis|diagnose|prescription|medication|dosage|symptom|disease|treatment|surgery|legal\s*advice|lawsuit|liability|court|attorney|financial\s*advice|invest|stock\s*pick|tax\s*advice|suicide|self[\s-]?harm|weapon|explosive|minor|child\s*safety|underage|drug\s*use|controlled\s*substance)\b/i;
+const SAFETY_CRITICAL_KEYWORDS =
+  /\b(suicide|self[\s-]?harm|weapon|explosive|child\s*exploitation|abuse|violence\s*against|bomb|poison|how\s+to\s+make\s+a\s+(bomb|weapon|drug))\b/i;
 
-const MATH_KEYWORDS = /\b(integral|derivative|matrix|vector|equation|theorem|proof|factorial|probability|statistics|regression|calculus|algebra|geometry|trigonometry|eigenvalue|determinant|gradient|lagrangian|fourier|laplace)\b/i;
-const MATH_NOTATION_RE = /[\u2200-\u22FF\u2A00-\u2AFF]|\\(?:frac|sqrt|sum|int|prod|lim|infty|alpha|beta|gamma|delta|epsilon|theta|lambda|sigma|omega)\b/;
+const MATH_KEYWORDS =
+  /\b(integral|derivative|matrix|vector|equation|theorem|proof|factorial|probability|statistics|regression|calculus|algebra|geometry|trigonometry|eigenvalue|determinant|gradient|lagrangian|fourier|laplace)\b/i;
+const MATH_NOTATION_RE =
+  /[\u2200-\u22FF\u2A00-\u2AFF]|\\(?:frac|sqrt|sum|int|prod|lim|infty|alpha|beta|gamma|delta|epsilon|theta|lambda|sigma|omega)\b/;
 
 // Major non-Latin script ranges (CJK, Hiragana, Katakana, Hangul, Arabic,
 // Devanagari, Thai, Cyrillic). Use Unicode property escapes (`\p{Script=\u2026}`)
 // instead of raw codepoint ranges so the regex semantically matches the
 // script class and ESLint can verify there are no surrogate-pair or
 // combining-character pitfalls (no-misleading-character-class).
-const MULTILINGUAL_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Arabic}\p{Script=Devanagari}\p{Script=Thai}\p{Script=Cyrillic}]/u;
+const MULTILINGUAL_RE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Arabic}\p{Script=Devanagari}\p{Script=Thai}\p{Script=Cyrillic}]/u;
 
 // Multimodal capability detection (image, audio, video)
-const IMAGE_GEN_KEYWORDS = /\b(gere|gerar|crie|criar|desenhe|desenhar|generate|create|draw|render|paint|design|make|produza|produzir)\s+.{0,30}\b(image[mn]|foto|picture|image|illustration|art|artwork|portrait|landscape|poster|banner|icon|logo|thumbnail|avatar|wallpaper|infographic|diagram|chart|graph|comic|cartoon|sketch|painting|drawing)\b/i;
-const IMAGE_GEN_DIRECT = /\b(dall[\-·]?e|midjourney|stable[\s-]?diffusion|imagen|image[\s-]?generat|text[\s-]?to[\s-]?image|txt2img|img2img)\b/i;
-const IMAGE_GEN_SIMPLE = /\b(gere|gerar|criar|crie|generate|create|make)\b.{0,10}\b(uma?\s+)?(image[mn]|foto|imagem|picture|image)\b/i;
+const IMAGE_GEN_KEYWORDS =
+  /\b(gere|gerar|crie|criar|desenhe|desenhar|generate|create|draw|render|paint|design|make|produza|produzir)\s+.{0,30}\b(image[mn]|foto|picture|image|illustration|art|artwork|portrait|landscape|poster|banner|icon|logo|thumbnail|avatar|wallpaper|infographic|diagram|chart|graph|comic|cartoon|sketch|painting|drawing)\b/i;
+const IMAGE_GEN_DIRECT =
+  /\b(dall[\-·]?e|midjourney|stable[\s-]?diffusion|imagen|image[\s-]?generat|text[\s-]?to[\s-]?image|txt2img|img2img)\b/i;
+const IMAGE_GEN_SIMPLE =
+  /\b(gere|gerar|criar|crie|generate|create|make)\b.{0,10}\b(uma?\s+)?(image[mn]|foto|imagem|picture|image)\b/i;
 
 // Unicode-aware word boundary. Plain `\b` is ASCII-only (`\w` = [A-Za-z0-9_]
 // even under the `u` flag), so it never asserts a boundary immediately
@@ -156,11 +173,13 @@ const WB_AFTER = '(?![\\p{L}\\p{N}_])';
 
 const AUDIO_GEN_KEYWORDS = new RegExp(
   `${WB_BEFORE}(?:generate|create|make|produce|synthesize|gere|gerar|crie|criar)${WB_AFTER}\\s+.{0,20}${WB_BEFORE}(?:audio|music|song|sound|voice|speech|narration|podcast|áudio|música|musica|som|voz|narração|narracao)${WB_AFTER}`,
-  'iu',
+  'iu'
 );
-const AUDIO_GEN_DIRECT = /\b(text[\s-]?to[\s-]?speech|tts|speech[\s-]?synth|voice[\s-]?gen|suno|elevenlabs|musicgen)\b/i;
+const AUDIO_GEN_DIRECT =
+  /\b(text[\s-]?to[\s-]?speech|tts|speech[\s-]?synth|voice[\s-]?gen|suno|elevenlabs|musicgen)\b/i;
 
-const VIDEO_GEN_KEYWORDS = /\b(generate|create|make|produce|gere|gerar|crie|criar)\s+.{0,20}\b(video|animation|clip|movie|vídeo|animação|filme)\b/i;
+const VIDEO_GEN_KEYWORDS =
+  /\b(generate|create|make|produce|gere|gerar|crie|criar)\s+.{0,20}\b(video|animation|clip|movie|vídeo|animação|filme)\b/i;
 const VIDEO_GEN_DIRECT = /\b(text[\s-]?to[\s-]?video|sora|runway|pika|kling|veo)\b/i;
 
 // File-generation detection (2026-07-14, restructured 2026-07-16 per
@@ -291,7 +310,10 @@ const FILE_GEN_TOOL_NOUN_LIKE_AFTER = '(?!-?like\\b)';
  * stays accepted. Pass `null` to disable the conversion alternative
  * entirely for a format.
  */
-function buildStandardFileFormatRegex(nounGroup: string, conversionNounGroup: string | null = nounGroup): RegExp {
+function buildStandardFileFormatRegex(
+  nounGroup: string,
+  conversionNounGroup: string | null = nounGroup
+): RegExp {
   const noun = `${FILE_GEN_TOOL_NOUN_BEFORE}${WB_BEFORE}(?:${nounGroup})${WB_AFTER}${FILE_GEN_TOOL_NOUN_AFTER}${FILE_GEN_TOOL_NOUN_LIKE_AFTER}`;
   const verbShape = `${GEN_VERBS}\\s+.{0,30}${noun}`;
   if (conversionNounGroup === null) return new RegExp(verbShape, 'iu');
@@ -299,7 +321,7 @@ function buildStandardFileFormatRegex(nounGroup: string, conversionNounGroup: st
 }
 
 const DOCX_GEN_KEYWORDS = buildStandardFileFormatRegex(
-  'docx|\\.docx\\s+file|word\\s+doc(?:ument)?|documento\\s+word|arquivo\\s+word',
+  'docx|\\.docx\\s+file|word\\s+doc(?:ument)?|documento\\s+word|arquivo\\s+word'
 );
 
 // Unlike the other file-format patterns, "spreadsheet"/"workbook" alone are
@@ -314,7 +336,7 @@ const DOCX_GEN_KEYWORDS = buildStandardFileFormatRegex(
 // paper practice workbook is "apostila"/"caderno de exercícios", never
 // "planilha".
 const XLSX_GEN_KEYWORDS = buildStandardFileFormatRegex(
-  'xlsx|\\.xlsx\\s+file|excel\\s+(?:spreadsheet|file|workbook)|planilha(?:\\s+(?:excel|em\\s+excel))?|arquivo\\s+excel',
+  'xlsx|\\.xlsx\\s+file|excel\\s+(?:spreadsheet|file|workbook)|planilha(?:\\s+(?:excel|em\\s+excel))?|arquivo\\s+excel'
 );
 // Unlike docx/xlsx, "pdf" alone isn't safe as a bare trigger noun either — it's
 // a very common qualifier for PDF-handling SOFTWARE requests ("build a pdf
@@ -333,7 +355,7 @@ const PDF_GEN_KEYWORDS = buildStandardFileFormatRegex('pdf|\\.pdf\\s+file');
 // — requires the "powerpoint"/"slides" companion, mirroring the English rule.
 const PPTX_GEN_KEYWORDS = buildStandardFileFormatRegex(
   'pptx|\\.pptx\\s+file|powerpoint(?:\\s+(?:presentation|file|deck))?|slide[\\s-]+deck|' +
-    'apresentação\\s+(?:powerpoint|em\\s+powerpoint|de\\s+slides)|arquivo\\s+powerpoint',
+    'apresentação\\s+(?:powerpoint|em\\s+powerpoint|de\\s+slides)|arquivo\\s+powerpoint'
 );
 const CSV_GEN_KEYWORDS = buildStandardFileFormatRegex('csv|comma[\\s-]?separated\\s+values?');
 // "returns json"/"sends json" API-building requests are excluded via the
@@ -346,10 +368,10 @@ const CSV_GEN_KEYWORDS = buildStandardFileFormatRegex('csv|comma[\\s-]?separated
 // download — only "…to a json file/export" converts to a file.
 const JSON_GEN_KEYWORDS = buildStandardFileFormatRegex(
   'json(?:\\s+(?:file|payload|object|export))?',
-  'json\\s+(?:file|export)',
+  'json\\s+(?:file|export)'
 );
 const MARKDOWN_GEN_KEYWORDS = buildStandardFileFormatRegex(
-  'markdown|readme|\\.md\\s+file|arquivo\\s+markdown',
+  'markdown|readme|\\.md\\s+file|arquivo\\s+markdown'
 );
 // Unlike every sibling format above, "zip"/"bundle"/"archive" are also
 // natural VERBS in everyday phrasing ("zip these files together", "bundle
@@ -536,10 +558,11 @@ const FILE_GEN_GENERIC_KEYWORDS = new RegExp(
  */
 export function inferCapabilities(
   messages: Array<{ role: string; content: string }>,
-  metadata?: { tools?: unknown[]; max_tokens?: number },
+  metadata?: { tools?: unknown[]; max_tokens?: number }
 ): CapabilityInferenceResult {
   const userMessages = messages.filter((m) => m.role === 'user');
-  const _lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
+  const _lastUserMessage =
+    userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
   const allUserText = userMessages.map((m) => m.content).join('\n');
   const totalCharCount = allUserText.length;
 
@@ -617,7 +640,11 @@ export function inferCapabilities(
   if (FACTUAL_QA_KEYWORDS.test(allUserText)) capabilities.add('groundedness');
 
   // Multimodal capabilities — image, audio, video generation and vision
-  if (IMAGE_GEN_KEYWORDS.test(allUserText) || IMAGE_GEN_DIRECT.test(allUserText) || IMAGE_GEN_SIMPLE.test(allUserText)) {
+  if (
+    IMAGE_GEN_KEYWORDS.test(allUserText) ||
+    IMAGE_GEN_DIRECT.test(allUserText) ||
+    IMAGE_GEN_SIMPLE.test(allUserText)
+  ) {
     capabilities.add('image_generation');
   }
   if (AUDIO_GEN_KEYWORDS.test(allUserText) || AUDIO_GEN_DIRECT.test(allUserText)) {
@@ -655,11 +682,9 @@ export function inferCapabilities(
   }
 
   // Vision: detect image_url content parts in messages
-  const hasImageContent = messages.some(m => {
+  const hasImageContent = messages.some((m) => {
     if (typeof m.content !== 'string' && Array.isArray(m.content)) {
-      return (m.content as Array<{ type?: string }>).some(
-        part => part.type === 'image_url',
-      );
+      return (m.content as Array<{ type?: string }>).some((part) => part.type === 'image_url');
     }
     return false;
   });
@@ -706,7 +731,16 @@ export function inferCapabilities(
   // ---- Composite confidence ----
 
   const confidence = Number(
-    Math.max(0.1, Math.min(1, taskConfidence * 0.6 + (capabilities.size > 0 ? 0.2 : 0) + (complexity !== 'simple' ? 0.1 : 0) + 0.1)).toFixed(3),
+    Math.max(
+      0.1,
+      Math.min(
+        1,
+        taskConfidence * 0.6 +
+          (capabilities.size > 0 ? 0.2 : 0) +
+          (complexity !== 'simple' ? 0.1 : 0) +
+          0.1
+      )
+    ).toFixed(3)
   );
 
   log.debug(
@@ -719,7 +753,7 @@ export function inferCapabilities(
       capabilities: [...capabilities],
       confidence,
     },
-    'Capability inference completed',
+    'Capability inference completed'
   );
 
   return {
@@ -744,7 +778,7 @@ export function inferCapabilities(
 function estimateComplexity(
   text: string,
   messageCount: number,
-  capabilityCount: number,
+  capabilityCount: number
 ): ComplexityLevel {
   let score = 0;
 
@@ -755,7 +789,8 @@ function estimateComplexity(
   else if (charLen > 800) score += 1;
 
   // Constraint density — count constraint-like phrases
-  const constraintRe = /\b(must|should|ensure|require|constraint|at\s+least|no\s+more\s+than|exactly|between|within|at\s+most|cannot|do\s+not)\b/gi;
+  const constraintRe =
+    /\b(must|should|ensure|require|constraint|at\s+least|no\s+more\s+than|exactly|between|within|at\s+most|cannot|do\s+not)\b/gi;
   const constraints = (text.match(constraintRe) || []).length;
   if (constraints > 8) score += 3;
   else if (constraints > 4) score += 2;
@@ -783,13 +818,15 @@ function estimateComplexity(
 // Cost sensitivity heuristic
 // ---------------------------------------------------------------------------
 
-const COST_SENSITIVE_RE = /\b(cheap|budget|low[\s-]?cost|cost[\s-]?effective|minimize\s*cost|affordable|save\s*money|economical|frugal)\b/i;
-const QUALITY_PRIORITY_RE = /\b(best\s*(possible|quality)|high[\s-]?quality|premium|top[\s-]?tier|state[\s-]?of[\s-]?the[\s-]?art|no\s*expense)\b/i;
+const COST_SENSITIVE_RE =
+  /\b(cheap|budget|low[\s-]?cost|cost[\s-]?effective|minimize\s*cost|affordable|save\s*money|economical|frugal)\b/i;
+const QUALITY_PRIORITY_RE =
+  /\b(best\s*(possible|quality)|high[\s-]?quality|premium|top[\s-]?tier|state[\s-]?of[\s-]?the[\s-]?art|no\s*expense)\b/i;
 
 function deriveCostSensitivity(
   text: string,
   complexity: ComplexityLevel,
-  contextNeeds: ContextNeed,
+  contextNeeds: ContextNeed
 ): CostSensitivity {
   if (COST_SENSITIVE_RE.test(text)) return 'high';
   if (QUALITY_PRIORITY_RE.test(text)) return 'low';

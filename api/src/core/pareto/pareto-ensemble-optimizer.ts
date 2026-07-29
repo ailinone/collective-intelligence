@@ -42,10 +42,7 @@
 
 import type { ContributionAwareScore } from '../contribution/contribution-aware-candidate-scorer';
 import { pairKey } from '../contribution/pair-contribution-profile';
-import {
-  computeParetoFrontier,
-  type ParetoExtractors,
-} from './cost-quality-frontier';
+import { computeParetoFrontier, type ParetoExtractors } from './cost-quality-frontier';
 import {
   resolveCollectiveSelectionPolicy,
   type CollectiveSelectionPolicy,
@@ -72,7 +69,7 @@ export function optimizeParetoEnsemble(input: ParetoEnsembleInput): EnsemblePlan
 
   if (accepted.length === 0) {
     return Object.freeze(
-      buildSingleFallbackPlan(input.candidates, input.baseline, rejected, policy),
+      buildSingleFallbackPlan(input.candidates, input.baseline, rejected, policy)
     );
   }
 
@@ -110,10 +107,9 @@ export function optimizeParetoEnsemble(input: ParetoEnsembleInput): EnsemblePlan
   // 7. Final pareto status + fallback decision.
   const expectedJudge = growth.expectedJudge;
   const expectedCost = growth.expectedCost;
-  const baselineOk = expectedJudge >=
-    input.baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
-  const costOk = expectedCost <=
-    input.baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
+  const baselineOk =
+    expectedJudge >= input.baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
+  const costOk = expectedCost <= input.baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
   const beatsBaseline = baselineOk && costOk;
   const enoughModels = growth.members.length >= policy.minModels;
 
@@ -123,33 +119,16 @@ export function optimizeParetoEnsemble(input: ParetoEnsembleInput): EnsemblePlan
     !policy.allowCritiqueRepairWhenCostExceedsBaseline
   ) {
     return Object.freeze(
-      buildSingleFallbackPlan(
-        input.candidates,
-        input.baseline,
-        rejected,
-        policy,
-        growth.marginal,
-      ),
+      buildSingleFallbackPlan(input.candidates, input.baseline, rejected, policy, growth.marginal)
     );
   }
   if (!enoughModels) {
     return Object.freeze(
-      buildSingleFallbackPlan(
-        input.candidates,
-        input.baseline,
-        rejected,
-        policy,
-        growth.marginal,
-      ),
+      buildSingleFallbackPlan(input.candidates, input.baseline, rejected, policy, growth.marginal)
     );
   }
 
-  const paretoStatus = classifyParetoStatus(
-    expectedJudge,
-    expectedCost,
-    input.baseline,
-    policy,
-  );
+  const paretoStatus = classifyParetoStatus(expectedJudge, expectedCost, input.baseline, policy);
 
   const plan: EnsemblePlan = {
     strategyId,
@@ -164,13 +143,7 @@ export function optimizeParetoEnsemble(input: ParetoEnsembleInput): EnsemblePlan
     paretoStatus,
     marginalContributions: Object.freeze(growth.marginal),
     rejectedCandidates: Object.freeze(rejected),
-    explanation: buildEnsembleExplanation(
-      strategyId,
-      paretoStatus,
-      growth,
-      input,
-      policy,
-    ),
+    explanation: buildEnsembleExplanation(strategyId, paretoStatus, growth, input, policy),
   };
   return Object.freeze(plan);
 }
@@ -180,7 +153,7 @@ export function optimizeParetoEnsemble(input: ParetoEnsembleInput): EnsemblePlan
 function filterAccepted(
   candidates: readonly ContributionAwareScore[],
   policy: CollectiveSelectionPolicy,
-  rejectedSink: RejectedCandidateRecord[],
+  rejectedSink: RejectedCandidateRecord[]
 ): ContributionAwareScore[] {
   const out: ContributionAwareScore[] = [];
   for (const c of candidates) {
@@ -216,7 +189,7 @@ interface GrowthResult {
 function growEnsemble(
   frontier: readonly ContributionAwareScore[],
   input: ParetoEnsembleInput,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): GrowthResult {
   const usedIds = new Set<string>();
   const members: ContributionAwareScore[] = [];
@@ -236,8 +209,7 @@ function growEnsemble(
   const costCeiling = baselineCost * policy.maxCostRatioVsSingle;
 
   // Seed: best anchor on the frontier, else highest-quality member.
-  const anchor =
-    frontier.find((c) => c.recommendedRole === 'anchor') ?? frontier[0];
+  const anchor = frontier.find((c) => c.recommendedRole === 'anchor') ?? frontier[0];
   members.push(anchor);
   usedIds.add(anchor.routeId);
   marginal.push({
@@ -269,7 +241,7 @@ function growEnsemble(
       members,
       c,
       input.pairProfiles,
-      input.taskType,
+      input.taskType
     );
     const newCost = runningCost + c.estimatedCostUsd;
     const newJudge = Math.min(1, runningJudge + probe.gain);
@@ -324,14 +296,12 @@ function computeMarginalGain(
   current: readonly ContributionAwareScore[],
   candidate: ContributionAwareScore,
   pairProfiles: ReadonlyMap<string, PairContributionProfile> | undefined,
-  taskType: string,
+  taskType: string
 ): MarginalGainResult {
   // Parallel best-of-N semantics: even a peer with slightly lower judge
   // adds value when its quality is close to current AND its harm is low.
   const peerThresholdRatio = 0.85;
-  const isPeer =
-    currentJudge > 0 &&
-    candidate.expectedJudge >= currentJudge * peerThresholdRatio;
+  const isPeer = currentJudge > 0 && candidate.expectedJudge >= currentJudge * peerThresholdRatio;
   const peerLift = isPeer ? 0.04 : 0;
 
   // Direct lift: candidate is materially better than the current best.
@@ -353,9 +323,8 @@ function computeMarginalGain(
       }
     }
   }
-  const compBonus = pairCount > 0
-    ? 0.4 * (complementaritySum / pairCount) - 0.3 * (redundancySum / pairCount)
-    : 0;
+  const compBonus =
+    pairCount > 0 ? 0.4 * (complementaritySum / pairCount) - 0.3 * (redundancySum / pairCount) : 0;
 
   // Cost discount — when the candidate is much cheaper than the average
   // member, give it a tiny budget-support bump.
@@ -363,15 +332,13 @@ function computeMarginalGain(
     current.length > 0
       ? current.reduce((s, c) => s + c.estimatedCostUsd, 0) / current.length
       : currentCost;
-  const cheaperBonus =
-    candidate.estimatedCostUsd < avgMemberCost * 0.25 ? 0.01 : 0;
+  const cheaperBonus = candidate.estimatedCostUsd < avgMemberCost * 0.25 ? 0.01 : 0;
 
   // Confidence multiplier — low confidence shrinks the gain toward zero.
   const confidence = 1 + candidate.breakdown.confidencePenalty; // penalty is negative
   const confidenceMultiplier = Math.max(0.5, Math.min(1, confidence + 0.5));
 
-  const gain =
-    (peerLift + directLift + compBonus + cheaperBonus) * confidenceMultiplier;
+  const gain = (peerLift + directLift + compBonus + cheaperBonus) * confidenceMultiplier;
 
   const reasonTokens: string[] = [];
   if (directLift > 0) reasonTokens.push('individual_lift');
@@ -387,7 +354,7 @@ function computeMarginalGain(
 function pickStrategy(
   growth: GrowthResult,
   input: ParetoEnsembleInput,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): EnsembleStrategyId {
   if (growth.members.length < policy.minModels) return 'single_fallback';
   if (policy.preferParallelForTaskTypes.indexOf(input.taskType) !== -1) {
@@ -405,12 +372,10 @@ function classifyParetoStatus(
   expectedJudge: number,
   expectedCost: number,
   baseline: ParetoEnsembleBaselines,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): EnsembleParetoStatus {
-  const judgeOk =
-    expectedJudge >= baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
-  const costOk =
-    expectedCost <= baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
+  const judgeOk = expectedJudge >= baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
+  const costOk = expectedCost <= baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
   if (judgeOk && costOk) return 'beats_baseline';
   if (judgeOk && !costOk) return 'cost_tradeoff';
   if (!judgeOk && costOk) return 'quality_tradeoff';
@@ -424,7 +389,7 @@ function buildSingleFallbackPlan(
   baseline: ParetoEnsembleBaselines,
   rejected: readonly RejectedCandidateRecord[],
   policy: CollectiveSelectionPolicy,
-  preservedMarginal: readonly MarginalContributionRecord[] = [],
+  preservedMarginal: readonly MarginalContributionRecord[] = []
 ): EnsemblePlan {
   // Pick the best non-rejected single by totalScore (deterministic tiebreaker).
   const usable = allCandidates.filter((c) => !c.rejected);
@@ -465,9 +430,7 @@ function buildSingleFallbackPlan(
     expectedJudge: top.expectedJudge,
     expectedCostUsd: top.estimatedCostUsd,
     expectedQualityPerDollar:
-      top.estimatedCostUsd > 1e-9
-        ? Math.min(top.expectedJudge / top.estimatedCostUsd, 10_000)
-        : 0,
+      top.estimatedCostUsd > 1e-9 ? Math.min(top.expectedJudge / top.estimatedCostUsd, 10_000) : 0,
     baselineJudge: baseline.singleModelJudge,
     baselineCostUsd: baseline.singleModelCostUsd,
     paretoStatus: 'single_fallback',
@@ -487,7 +450,7 @@ function buildEnsembleExplanation(
   paretoStatus: EnsembleParetoStatus,
   growth: GrowthResult,
   input: ParetoEnsembleInput,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): string {
   const parts: string[] = [
     `strategy=${strategyId}`,
@@ -508,8 +471,7 @@ function buildEnsembleExplanation(
 
 function compareScores(a: ContributionAwareScore, b: ContributionAwareScore): number {
   if (a.totalScore !== b.totalScore) return b.totalScore - a.totalScore;
-  if (a.estimatedCostUsd !== b.estimatedCostUsd)
-    return a.estimatedCostUsd - b.estimatedCostUsd;
+  if (a.estimatedCostUsd !== b.estimatedCostUsd) return a.estimatedCostUsd - b.estimatedCostUsd;
   if (a.routeId !== b.routeId) return a.routeId < b.routeId ? -1 : 1;
   return 0;
 }

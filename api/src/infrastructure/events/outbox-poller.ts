@@ -35,10 +35,23 @@ async function ensureMetrics() {
   if (outboxUnpublishedGauge) return;
   try {
     const promClient = await import('prom-client');
-    outboxUnpublishedGauge = new promClient.Gauge({ name: 'ailin_dev_outbox_unpublished_count', help: 'Unpublished events in outbox' });
-    outboxPublishLatency = new promClient.Histogram({ name: 'ailin_dev_outbox_publish_latency_seconds', help: 'Time from event creation to publish' });
-    outboxPoisonTotal = new promClient.Counter({ name: 'ailin_dev_outbox_poison_events_total', help: 'Events that exceeded max delivery attempts', labelNames: ['event_name'] });
-    outboxPublishedTotal = new promClient.Counter({ name: 'ailin_dev_outbox_published_total', help: 'Total events successfully published from outbox' });
+    outboxUnpublishedGauge = new promClient.Gauge({
+      name: 'ailin_dev_outbox_unpublished_count',
+      help: 'Unpublished events in outbox',
+    });
+    outboxPublishLatency = new promClient.Histogram({
+      name: 'ailin_dev_outbox_publish_latency_seconds',
+      help: 'Time from event creation to publish',
+    });
+    outboxPoisonTotal = new promClient.Counter({
+      name: 'ailin_dev_outbox_poison_events_total',
+      help: 'Events that exceeded max delivery attempts',
+      labelNames: ['event_name'],
+    });
+    outboxPublishedTotal = new promClient.Counter({
+      name: 'ailin_dev_outbox_published_total',
+      help: 'Total events successfully published from outbox',
+    });
   } catch {
     // Metrics unavailable — non-fatal
   }
@@ -69,12 +82,9 @@ class OutboxDomainEvent extends BaseDomainEvent {
     occurredAt: Date,
     correlationId: string,
     causationId: string | undefined,
-    data: Record<string, unknown>,
+    data: Record<string, unknown>
   ) {
-    super(
-      { occurredAt, aggregateId, eventVersion, correlationId, causationId },
-      eventName,
-    );
+    super({ occurredAt, aggregateId, eventVersion, correlationId, causationId }, eventName);
     // Override the auto-generated eventId with the stored one (for dedup)
     (this as { eventId: string }).eventId = eventId;
     this.data = data;
@@ -131,7 +141,7 @@ async function pollOnce(eventBus: IEventBus): Promise<number> {
           record.occurredAt,
           (metadata.correlationId as string) || record.eventId,
           metadata.causationId as string | undefined,
-          payload,
+          payload
         );
 
         await eventBus.publish(event);
@@ -148,20 +158,32 @@ async function pollOnce(eventBus: IEventBus): Promise<number> {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
 
-        await prisma.domainEventOutbox.update({
-          where: { id: record.id },
-          data: { lastError: errorMessage },
-        }).catch(() => {}); // Non-fatal if this update fails
+        await prisma.domainEventOutbox
+          .update({
+            where: { id: record.id },
+            data: { lastError: errorMessage },
+          })
+          .catch(() => {}); // Non-fatal if this update fails
 
         if (record.attempts + 1 >= MAX_ATTEMPTS) {
           outboxPoisonTotal?.inc({ event_name: record.eventName });
           log.error(
-            { eventId: record.eventId, eventName: record.eventName, attempts: record.attempts + 1, error: errorMessage },
+            {
+              eventId: record.eventId,
+              eventName: record.eventName,
+              attempts: record.attempts + 1,
+              error: errorMessage,
+            },
             'Outbox event exceeded max delivery attempts (poison)'
           );
         } else {
           log.warn(
-            { eventId: record.eventId, eventName: record.eventName, attempt: record.attempts + 1, error: errorMessage },
+            {
+              eventId: record.eventId,
+              eventName: record.eventName,
+              attempt: record.attempts + 1,
+              error: errorMessage,
+            },
             'Outbox event delivery failed, will retry'
           );
         }
@@ -220,7 +242,10 @@ export async function startOutboxPoller(eventBus: IEventBus): Promise<void> {
     collectMetrics().catch(() => {});
   }, METRICS_INTERVAL_MS);
 
-  log.info({ pollIntervalMs: POLL_INTERVAL_MS, batchSize: BATCH_SIZE, maxAttempts: MAX_ATTEMPTS }, 'Outbox poller started');
+  log.info(
+    { pollIntervalMs: POLL_INTERVAL_MS, batchSize: BATCH_SIZE, maxAttempts: MAX_ATTEMPTS },
+    'Outbox poller started'
+  );
 }
 
 /**

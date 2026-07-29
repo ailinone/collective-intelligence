@@ -115,7 +115,11 @@ export class TritonAdapter extends ProviderAdapter {
   constructor(config: TritonAdapterConfig) {
     super('triton', 'NVIDIA Triton', config);
     // Triton's KServe v2 endpoints are rooted at the host (no /v1 prefix).
-    this.baseUrl = (config.baseUrl || process.env.TRITON_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+    this.baseUrl = (
+      config.baseUrl ||
+      process.env.TRITON_BASE_URL ||
+      'http://localhost:8000'
+    ).replace(/\/$/, '');
     this.inputTensorName = config.inputTensorName || 'TEXT';
   }
 
@@ -152,28 +156,30 @@ export class TritonAdapter extends ProviderAdapter {
         signal: AbortSignal.timeout(Math.max(1000, this.config.timeout ?? 10_000)),
       });
       if (!res.ok) {
-        this.log.warn({ status: res.status }, 'triton: repository/index failed; returning empty catalog');
+        this.log.warn(
+          { status: res.status },
+          'triton: repository/index failed; returning empty catalog'
+        );
         return [];
       }
       const body = (await res.json()) as Array<{ name?: string; state?: string }>;
       return body
         .filter((m) => typeof m.name === 'string' && (m.state === 'READY' || !m.state))
-        .map(
-          (m) =>
-            narrowAs<Model>(({
-              id: m.name!,
-              name: m.name!,
-              displayName: m.name!,
-              provider: 'triton',
-              contextWindow: 0,
-              maxOutputTokens: 0,
-              capabilities: ['embeddings'],
-            })),
+        .map((m) =>
+          narrowAs<Model>({
+            id: m.name!,
+            name: m.name!,
+            displayName: m.name!,
+            provider: 'triton',
+            contextWindow: 0,
+            maxOutputTokens: 0,
+            capabilities: ['embeddings'],
+          })
         );
     } catch (err) {
       this.log.warn(
         { err: err instanceof Error ? err.message : String(err) },
-        'triton: getModels failed, returning empty catalog',
+        'triton: getModels failed, returning empty catalog'
       );
       return [];
     }
@@ -187,7 +193,7 @@ export class TritonAdapter extends ProviderAdapter {
     // front it with vLLM or use the OAI-compatible TensorRT-LLM frontend.
     throw new Error(
       'triton: chat completion not supported — Triton adapter currently exposes embeddings only. ' +
-        'For LLM inference, front Triton with vLLM or use TensorRT-LLM OAI-compat mode.',
+        'For LLM inference, front Triton with vLLM or use TensorRT-LLM OAI-compat mode.'
     );
   }
 
@@ -259,12 +265,12 @@ export class TritonAdapter extends ProviderAdapter {
     const [batchFromResp, dim] = output.shape;
     if (batchFromResp !== inputs.length) {
       throw new Error(
-        `triton: output batch (${batchFromResp}) mismatches input batch (${inputs.length})`,
+        `triton: output batch (${batchFromResp}) mismatches input batch (${inputs.length})`
       );
     }
     if (output.data.length !== batchFromResp * dim) {
       throw new Error(
-        `triton: output data length (${output.data.length}) !== batch×dim (${batchFromResp * dim})`,
+        `triton: output data length (${output.data.length}) !== batch×dim (${batchFromResp * dim})`
       );
     }
 

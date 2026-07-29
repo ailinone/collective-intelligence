@@ -38,13 +38,9 @@ export interface SignalValidationResult {
 // Constants
 // ============================================
 
-const VALID_DIRECTIONS = new Set<string>([
-  'increase', 'decrease', 'hold', 'block', 'unlock',
-]);
+const VALID_DIRECTIONS = new Set<string>(['increase', 'decrease', 'hold', 'block', 'unlock']);
 
-const VALID_SEVERITIES = new Set<string>([
-  'low', 'medium', 'high', 'critical',
-]);
+const VALID_SEVERITIES = new Set<string>(['low', 'medium', 'high', 'critical']);
 
 /** Maximum length for rationale strings (prevent token bloat) */
 const MAX_RATIONALE_LENGTH = 2000;
@@ -101,7 +97,8 @@ const PII_PATTERNS: PiiPattern[] = [
   },
   {
     name: 'api_key_generic',
-    regex: /((?:^|[\s:="'])\s*(?:sk|pk|ak|rk|ghp|gho|github_pat|glpat|xox[bpas])[-_][A-Za-z0-9_\-]{20,})/gm,
+    regex:
+      /((?:^|[\s:="'])\s*(?:sk|pk|ak|rk|ghp|gho|github_pat|glpat|xox[bpas])[-_][A-Za-z0-9_\-]{20,})/gm,
     replacement: '[REDACTED_API_KEY]',
   },
   {
@@ -111,10 +108,13 @@ const PII_PATTERNS: PiiPattern[] = [
   },
   {
     name: 'password_in_string',
-    regex: /(?:password|passwd|pwd|secret|token|api_?key|access_?key|private_?key)\s*[:=]\s*["']?[^\s"',;}\]]{8,}/gi,
+    regex:
+      /(?:password|passwd|pwd|secret|token|api_?key|access_?key|private_?key)\s*[:=]\s*["']?[^\s"',;}\]]{8,}/gi,
     replacement: (match: string) => {
       const sepIndex = Math.max(match.indexOf(':'), match.indexOf('='));
-      return sepIndex >= 0 ? match.substring(0, sepIndex + 1) + ' [REDACTED_SECRET]' : '[REDACTED_SECRET]';
+      return sepIndex >= 0
+        ? match.substring(0, sepIndex + 1) + ' [REDACTED_SECRET]'
+        : '[REDACTED_SECRET]';
     },
   },
   {
@@ -127,7 +127,8 @@ const PII_PATTERNS: PiiPattern[] = [
   },
   {
     name: 'private_ip',
-    regex: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/g,
+    regex:
+      /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/g,
     replacement: '[REDACTED_IP]',
   },
   {
@@ -172,9 +173,10 @@ export function redactPii(text: string): PiiRedactionResult {
       // callback. The PiiReplacer union covers both arms, but TS picks the
       // string overload from the union — explicit overload selection via
       // typeof keeps both arms type-safe without `any`/casts.
-      result = typeof pattern.replacement === 'string'
-        ? result.replace(pattern.regex, pattern.replacement)
-        : result.replace(pattern.regex, pattern.replacement);
+      result =
+        typeof pattern.replacement === 'string'
+          ? result.replace(pattern.regex, pattern.replacement)
+          : result.replace(pattern.regex, pattern.replacement);
     }
     pattern.regex.lastIndex = 0;
   }
@@ -209,7 +211,10 @@ function inRange(val: number, min: number, max: number): boolean {
 /**
  * Validate a single Sensitivity object.
  */
-export function validateSensitivity(s: unknown, index: number): { errors: string[]; warnings: string[]; sanitized?: Sensitivity } {
+export function validateSensitivity(
+  s: unknown,
+  index: number
+): { errors: string[]; warnings: string[]; sanitized?: Sensitivity } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -228,14 +233,18 @@ export function validateSensitivity(s: unknown, index: number): { errors: string
 
   // direction — required, valid enum
   if (!isString(raw.direction) || !VALID_DIRECTIONS.has(raw.direction)) {
-    errors.push(`sensitivity[${index}].direction: must be one of ${[...VALID_DIRECTIONS].join(', ')}`);
+    errors.push(
+      `sensitivity[${index}].direction: must be one of ${[...VALID_DIRECTIONS].join(', ')}`
+    );
   }
 
   // trigger — required, non-empty string
   if (!isString(raw.trigger) || raw.trigger.trim().length === 0) {
     errors.push(`sensitivity[${index}].trigger: required non-empty string`);
   } else if (raw.trigger.length > MAX_TRIGGER_LENGTH) {
-    warnings.push(`sensitivity[${index}].trigger: exceeds ${MAX_TRIGGER_LENGTH} chars, will be truncated`);
+    warnings.push(
+      `sensitivity[${index}].trigger: exceeds ${MAX_TRIGGER_LENGTH} chars, will be truncated`
+    );
   }
 
   // expectedDelta — optional number
@@ -247,19 +256,25 @@ export function validateSensitivity(s: unknown, index: number): { errors: string
   if (!isNumber(raw.confidence) || !inRange(raw.confidence, 0, 1)) {
     errors.push(`sensitivity[${index}].confidence: required number in [0, 1]`);
   } else if (raw.confidence < 0.3) {
-    warnings.push(`sensitivity[${index}].confidence: very low (${raw.confidence.toFixed(2)}), may be unreliable`);
+    warnings.push(
+      `sensitivity[${index}].confidence: very low (${raw.confidence.toFixed(2)}), may be unreliable`
+    );
   }
 
   // rationale — required, non-empty string
   if (!isString(raw.rationale) || raw.rationale.trim().length === 0) {
     errors.push(`sensitivity[${index}].rationale: required non-empty string`);
   } else if (raw.rationale.length > MAX_RATIONALE_LENGTH) {
-    warnings.push(`sensitivity[${index}].rationale: exceeds ${MAX_RATIONALE_LENGTH} chars, will be truncated`);
+    warnings.push(
+      `sensitivity[${index}].rationale: exceeds ${MAX_RATIONALE_LENGTH} chars, will be truncated`
+    );
   }
 
   // risk — optional, valid enum
   if (raw.risk !== undefined && (!isString(raw.risk) || !VALID_SEVERITIES.has(raw.risk))) {
-    errors.push(`sensitivity[${index}].risk: must be one of ${[...VALID_SEVERITIES].join(', ')} if present`);
+    errors.push(
+      `sensitivity[${index}].risk: must be one of ${[...VALID_SEVERITIES].join(', ')} if present`
+    );
   }
 
   if (errors.length > 0) {
@@ -272,7 +287,9 @@ export function validateSensitivity(s: unknown, index: number): { errors: string
     direction: raw.direction as SensitivityDirection,
     trigger: redactStringField((raw.trigger as string).trim().substring(0, MAX_TRIGGER_LENGTH)),
     confidence: raw.confidence as number,
-    rationale: redactStringField((raw.rationale as string).trim().substring(0, MAX_RATIONALE_LENGTH)),
+    rationale: redactStringField(
+      (raw.rationale as string).trim().substring(0, MAX_RATIONALE_LENGTH)
+    ),
   };
 
   if (raw.expectedDelta !== undefined) {
@@ -288,7 +305,11 @@ export function validateSensitivity(s: unknown, index: number): { errors: string
 /**
  * Validate an AgentDecision object.
  */
-export function validateDecision(d: unknown): { errors: string[]; warnings: string[]; sanitized?: AgentDecision } {
+export function validateDecision(d: unknown): {
+  errors: string[];
+  warnings: string[];
+  sanitized?: AgentDecision;
+} {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -325,7 +346,9 @@ export function validateDecision(d: unknown): { errors: string[]; warnings: stri
   };
 
   if (raw.rationale !== undefined) {
-    sanitized.rationale = redactStringField((raw.rationale as string).trim().substring(0, MAX_RATIONALE_LENGTH));
+    sanitized.rationale = redactStringField(
+      (raw.rationale as string).trim().substring(0, MAX_RATIONALE_LENGTH)
+    );
   }
 
   return { errors, warnings, sanitized };
@@ -376,7 +399,9 @@ export function validateCoordinationSignal(signal: unknown): SignalValidationRes
   } else if (raw.sensitivities.length < MIN_SENSITIVITIES) {
     errors.push(`sensitivities: must have at least ${MIN_SENSITIVITIES} sensitivity`);
   } else if (raw.sensitivities.length > MAX_SENSITIVITIES) {
-    warnings.push(`sensitivities: ${raw.sensitivities.length} exceeds max ${MAX_SENSITIVITIES}, extras will be dropped`);
+    warnings.push(
+      `sensitivities: ${raw.sensitivities.length} exceeds max ${MAX_SENSITIVITIES}, extras will be dropped`
+    );
   }
 
   const sanitizedSensitivities: Sensitivity[] = [];

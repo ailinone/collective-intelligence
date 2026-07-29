@@ -9,7 +9,7 @@
 
 /**
  * Logger configuration using Pino
- * 
+ *
  * NOTE: This module must NOT import from @/config to avoid circular dependencies.
  * Instead, it uses environment variables directly.
  */
@@ -75,41 +75,39 @@ export const logger = pino({
       // Safely extract error message and code without type assertions
       let errorMessage = '';
       let errorCode = '';
-      
+
       if (err && typeof err === 'object' && err !== null && 'message' in err) {
         const messageDescriptor = Object.getOwnPropertyDescriptor(err, 'message');
         if (messageDescriptor) {
           errorMessage = String(messageDescriptor.value || '').toLowerCase();
         }
       }
-      
+
       if (err && typeof err === 'object' && err !== null && 'code' in err) {
         const codeDescriptor = Object.getOwnPropertyDescriptor(err, 'code');
         if (codeDescriptor && typeof codeDescriptor.value === 'string') {
           errorCode = codeDescriptor.value;
         }
       }
-      
+
       // Don't serialize premature close errors - they're expected for metrics endpoint
       // This prevents them from being logged as errors
-      if (
-        errorMessage === 'premature close' ||
-        errorCode === 'ERR_STREAM_PREMATURE_CLOSE'
-      ) {
+      if (errorMessage === 'premature close' || errorCode === 'ERR_STREAM_PREMATURE_CLOSE') {
         // Return minimal info for premature close (these are expected)
         return {
           type: 'PrematureCloseError',
-          message: 'Client connection closed before response completed (expected for /metrics scraping)',
+          message:
+            'Client connection closed before response completed (expected for /metrics scraping)',
           code: errorCode || 'ERR_STREAM_PREMATURE_CLOSE',
         };
       }
-      
+
       // Use default pino error serialization for other errors
       // Safe to cast to Error here since stdSerializers.err handles unknown types
       if (err instanceof Error) {
         return stdSerializers.err(err);
       }
-      
+
       // For non-Error types, return a basic error object
       // Safely extract stack property without type assertion
       let stackValue: string | undefined;
@@ -119,7 +117,7 @@ export const logger = pino({
           stackValue = stackDescriptor.value;
         }
       }
-      
+
       return {
         type: 'UnknownError',
         message: typeof err === 'string' ? err : 'Unknown error',

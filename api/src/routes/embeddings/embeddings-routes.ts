@@ -69,10 +69,10 @@ const embeddingsResponseSchema = {
 
 function createEmbeddingsHandler(providerRegistry: ProviderRegistry) {
   const supportsEmbeddings = (adapter: ProviderAdapter): boolean => {
-    const baseImpl = (
-      narrowAs<Record<string, unknown>>(ProviderAdapter.prototype)
+    const baseImpl = narrowAs<Record<string, unknown>>(
+      ProviderAdapter.prototype
     ).generateEmbeddings;
-    const impl = (narrowAs<Record<string, unknown>>(adapter)).generateEmbeddings;
+    const impl = narrowAs<Record<string, unknown>>(adapter).generateEmbeddings;
     return typeof impl === 'function' && impl !== baseImpl;
   };
 
@@ -190,10 +190,7 @@ function createEmbeddingsHandler(providerRegistry: ProviderRegistry) {
         });
       } catch (fallbackError) {
         if (fallbackError instanceof NoFallbackCandidateError) {
-          requestLog.warn(
-            { model: requestedModel ?? 'auto' },
-            fallbackError.message
-          );
+          requestLog.warn({ model: requestedModel ?? 'auto' }, fallbackError.message);
           return reply.status(404).send({
             error: {
               message: fallbackError.message,
@@ -268,7 +265,10 @@ function createEmbeddingsHandler(providerRegistry: ProviderRegistry) {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate embeddings';
       requestLog.error({ error: errorMessage }, 'Failed to generate embeddings');
-      if (/embeddings?\s+not\s+supported/i.test(errorMessage) || /service unavailable/i.test(errorMessage)) {
+      if (
+        /embeddings?\s+not\s+supported/i.test(errorMessage) ||
+        /service unavailable/i.test(errorMessage)
+      ) {
         return reply.status(503).send({
           error: {
             message: errorMessage,

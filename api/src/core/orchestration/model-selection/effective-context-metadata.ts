@@ -107,7 +107,9 @@ const CONFIDENCE_RANK: Record<ContextMetadataConfidence, number> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function lower(v: string | undefined | null): string {
-  return String(v ?? '').trim().toLowerCase();
+  return String(v ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -140,10 +142,7 @@ function isValidMaxOutputTokens(n: number | undefined): boolean {
  *   - provider only          : 1
  *   - none                   : 0
  */
-function matchSpecificity(
-  o: ContextMetadataOverride,
-  q: ContextMetadataKeyInput,
-): number {
+function matchSpecificity(o: ContextMetadataOverride, q: ContextMetadataKeyInput): number {
   const qProvider = lower(q.providerId);
   const qRoute = lower(q.routeId);
   const qApi = lower(q.apiModelId);
@@ -169,11 +168,16 @@ function matchSpecificity(
 
 function matchKindFromScore(score: number): EffectiveContextMetadata['matchKind'] {
   switch (score) {
-    case 8: return 'route_provider_api';
-    case 4: return 'provider_api';
-    case 3: return 'provider_canonical';
-    case 2: return 'canonical';
-    default: return 'canonical';
+    case 8:
+      return 'route_provider_api';
+    case 4:
+      return 'provider_api';
+    case 3:
+      return 'provider_canonical';
+    case 2:
+      return 'canonical';
+    default:
+      return 'canonical';
   }
 }
 
@@ -195,7 +199,7 @@ export interface ResolveEffectiveContextInput extends ContextMetadataKeyInput {
  * its inputs.
  */
 export function resolveEffectiveContextMetadata(
-  input: ResolveEffectiveContextInput,
+  input: ResolveEffectiveContextInput
 ): EffectiveContextMetadata {
   const overrides = input.overrides ?? [];
 

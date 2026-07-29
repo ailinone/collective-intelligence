@@ -56,7 +56,9 @@ function resolveTenantHeader(
   headers: Record<string, string | string[] | undefined> | undefined,
   query?: unknown
 ): string | undefined {
-  return normalizeString(getHeaderString(headers, 'x-tenant-id')) ?? getQueryString(query, 'tenant_id');
+  return (
+    normalizeString(getHeaderString(headers, 'x-tenant-id')) ?? getQueryString(query, 'tenant_id')
+  );
 }
 
 function resolveWorkspaceHeader(
@@ -120,7 +122,9 @@ export function resolveWorkspaceId(
   return resolveCanonicalIdentityContext(headers, query).workspaceId;
 }
 
-export function buildCanonicalContextHeaders(context: CanonicalIdentityContext): Record<string, string> {
+export function buildCanonicalContextHeaders(
+  context: CanonicalIdentityContext
+): Record<string, string> {
   const headers: Record<string, string> = {};
   if (context.userId) headers['X-User-Id'] = context.userId;
   if (context.organizationId) headers['X-Organization-Id'] = context.organizationId;

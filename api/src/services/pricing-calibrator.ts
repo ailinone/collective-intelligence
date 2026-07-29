@@ -115,7 +115,7 @@ export const DEFAULT_CALIBRATOR_POLICY: CalibratorPolicy = {
 function dynamicMarkupRate(
   anchorRate: number,
   nextQualifierRate: number | undefined,
-  p: CalibratorPolicy,
+  p: CalibratorPolicy
 ): number {
   const desired = Math.ceil(anchorRate * (1 + p.targetMarkupPct));
   const floored = Math.ceil(anchorRate * (1 + p.floorMarkupPct));
@@ -144,7 +144,7 @@ function ceilPos(n: number): number {
 export function deriveRateCard(
   points: readonly BenchmarkPoint[],
   policy: CalibratorPolicy = DEFAULT_CALIBRATOR_POLICY,
-  tiers: Record<TierId, PricingTier> = TIERS,
+  tiers: Record<TierId, PricingTier> = TIERS
 ): CalibrationResult {
   const blended = (p: BenchmarkPoint): number =>
     p.inputPer1MUsd * policy.inputShare + p.outputPer1MUsd * (1 - policy.inputShare);
@@ -233,7 +233,7 @@ export function deriveRateCard(
 export function cogsBudgetForAnchor(
   anchor: TierAnchor,
   userPromptTokens: number,
-  expectedCompletionTokens: number,
+  expectedCompletionTokens: number
 ): number {
   const revenue =
     (userPromptTokens / 1_000_000) * anchor.inputPer1MUsd +

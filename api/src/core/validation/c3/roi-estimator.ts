@@ -121,7 +121,7 @@ export class ROIEstimator {
     if (cached && Date.now() - cached.at < ROIEstimator.REC_CACHE_TTL_MS) {
       return cached.rec;
     }
-    const points = this.dataPoints.filter(p => p.domain === domain);
+    const points = this.dataPoints.filter((p) => p.domain === domain);
     const rec = this.computeDomainROI(domain, points);
     this.recommendationCache.set(domain, { rec, at: Date.now() });
     return rec;
@@ -159,12 +159,15 @@ export class ROIEstimator {
     }
 
     // Summary
-    const domainsWhereCI = domainROIs.filter(r => r.recommendation === 'ci').map(r => r.domain);
-    const domainsWhereSingle = domainROIs.filter(r => r.recommendation === 'single').map(r => r.domain);
-    const domainsConditional = domainROIs.filter(r => r.recommendation === 'conditional').map(r => r.domain);
-    const overallROI = domainROIs.length > 0
-      ? domainROIs.reduce((s, r) => s + r.roi, 0) / domainROIs.length
-      : 0;
+    const domainsWhereCI = domainROIs.filter((r) => r.recommendation === 'ci').map((r) => r.domain);
+    const domainsWhereSingle = domainROIs
+      .filter((r) => r.recommendation === 'single')
+      .map((r) => r.domain);
+    const domainsConditional = domainROIs
+      .filter((r) => r.recommendation === 'conditional')
+      .map((r) => r.domain);
+    const overallROI =
+      domainROIs.length > 0 ? domainROIs.reduce((s, r) => s + r.roi, 0) / domainROIs.length : 0;
 
     return {
       domains: domainROIs,
@@ -180,17 +183,19 @@ export class ROIEstimator {
   }
 
   private computeDomainROI(domain: string, points: ExecutionDataPoint[]): DomainROI | null {
-    const ciPoints = points.filter(p => p.mode === 'ci');
-    const singlePoints = points.filter(p => p.mode === 'single');
+    const ciPoints = points.filter((p) => p.mode === 'ci');
+    const singlePoints = points.filter((p) => p.mode === 'single');
 
     if (ciPoints.length < 3 || singlePoints.length < 3) return null;
 
     const avgQualityCI = ciPoints.reduce((s, p) => s + p.qualityScore, 0) / ciPoints.length;
-    const avgQualitySingle = singlePoints.reduce((s, p) => s + p.qualityScore, 0) / singlePoints.length;
+    const avgQualitySingle =
+      singlePoints.reduce((s, p) => s + p.qualityScore, 0) / singlePoints.length;
     const avgCostCI = ciPoints.reduce((s, p) => s + p.costUsd, 0) / ciPoints.length;
     const avgCostSingle = singlePoints.reduce((s, p) => s + p.costUsd, 0) / singlePoints.length;
     const avgLatencyCI = ciPoints.reduce((s, p) => s + p.latencyMs, 0) / ciPoints.length;
-    const avgLatencySingle = singlePoints.reduce((s, p) => s + p.latencyMs, 0) / singlePoints.length;
+    const avgLatencySingle =
+      singlePoints.reduce((s, p) => s + p.latencyMs, 0) / singlePoints.length;
 
     const qualityDelta = avgQualityCI - avgQualitySingle;
     const costRatio = avgCostSingle > 0 ? avgCostCI / avgCostSingle : 1;
@@ -203,12 +208,12 @@ export class ROIEstimator {
     const roi = additionalCost > 0 ? qualityDelta / additionalCost : 0;
 
     // Break-even: what quality delta would justify the cost?
-    const breakEvenDelta = costRatio > 1 ? avgQualitySingle * (costRatio - 1) / costRatio : 0;
+    const breakEvenDelta = costRatio > 1 ? (avgQualitySingle * (costRatio - 1)) / costRatio : 0;
 
     // Statistical significance (basic Welch's t-test)
     const { pValue, effectSize } = this.basicSignificanceTest(
-      ciPoints.map(p => p.qualityScore),
-      singlePoints.map(p => p.qualityScore)
+      ciPoints.map((p) => p.qualityScore),
+      singlePoints.map((p) => p.qualityScore)
     );
 
     // Recommendation logic
@@ -283,7 +288,10 @@ export class ROIEstimator {
     const pValue = 2 * (1 - this.normalCDF(Math.abs(t)));
 
     // Cohen's d
-    const pooledSD = Math.sqrt(((groupA.length - 1) * varA + (groupB.length - 1) * varB) / (groupA.length + groupB.length - 2));
+    const pooledSD = Math.sqrt(
+      ((groupA.length - 1) * varA + (groupB.length - 1) * varB) /
+        (groupA.length + groupB.length - 2)
+    );
     const effectSize = pooledSD > 0 ? (meanA - meanB) / pooledSD : 0;
 
     return { pValue, effectSize };
@@ -291,12 +299,16 @@ export class ROIEstimator {
 
   private normalCDF(x: number): number {
     // Approximation of the standard normal CDF
-    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-    const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const a1 = 0.254829592,
+      a2 = -0.284496736,
+      a3 = 1.421413741;
+    const a4 = -1.453152027,
+      a5 = 1.061405429,
+      p = 0.3275911;
     const sign = x < 0 ? -1 : 1;
     x = Math.abs(x) / Math.sqrt(2);
     const t = 1.0 / (1.0 + p * x);
-    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    const y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
     return 0.5 * (1.0 + sign * y);
   }
 }

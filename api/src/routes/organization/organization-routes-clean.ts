@@ -144,7 +144,12 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
         const { id } = request.params;
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || !('organizationId' in currentUser)) {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          !('organizationId' in currentUser)
+        ) {
           return reply.status(401).send({
             error: 'Unauthorized',
             message: 'User not authenticated',
@@ -237,7 +242,12 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
         const { name, tier } = request.body || {};
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || !('organizationId' in currentUser)) {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          !('organizationId' in currentUser)
+        ) {
           return reply.status(401).send({
             error: 'Unauthorized',
             message: 'User not authenticated',
@@ -332,7 +342,12 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
         const { id } = request.params;
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || !('organizationId' in currentUser)) {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          !('organizationId' in currentUser)
+        ) {
           return reply.status(401).send({
             error: 'Unauthorized',
             message: 'User not authenticated',
@@ -408,7 +423,12 @@ export async function organizationRoutesClean(server: FastifyInstance): Promise<
         const { id, userId } = request.params;
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || !('organizationId' in currentUser)) {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          !('organizationId' in currentUser)
+        ) {
           return reply.status(401).send({
             error: 'Unauthorized',
             message: 'User not authenticated',

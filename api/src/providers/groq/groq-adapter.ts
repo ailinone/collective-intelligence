@@ -99,7 +99,7 @@ export class GroqAdapter extends OpenAICompatibleHubAdapter {
    */
   protected override getExtraChatPayloadFields(
     _resolvedModel: string,
-    request: ChatRequest,
+    request: ChatRequest
   ): Record<string, unknown> {
     const groqOpts = this.extractReasoningOptions(request);
     return groqOpts ? { ...groqOpts } : {};
@@ -110,10 +110,8 @@ export class GroqAdapter extends OpenAICompatibleHubAdapter {
    * keys are copied to prevent arbitrary option leakage into the upstream
    * payload.
    */
-  private extractReasoningOptions(
-    request: ChatRequest,
-  ): Partial<GroqReasoningOptions> | undefined {
-    const opts = (narrowAs<{ options?: Record<string, unknown> }>(request)).options;
+  private extractReasoningOptions(request: ChatRequest): Partial<GroqReasoningOptions> | undefined {
+    const opts = narrowAs<{ options?: Record<string, unknown> }>(request).options;
     if (!opts || typeof opts !== 'object') {
       // Also accept flattened top-level fields — some callers set them
       // directly on the request. Groq's API accepts either.

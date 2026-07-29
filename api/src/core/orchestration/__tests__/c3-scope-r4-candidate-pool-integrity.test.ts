@@ -36,7 +36,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-R4 — candidate pool integrity', () => {
-
   describe('canonical total', () => {
     it('C3_KNOWN_CANDIDATE_COUNT is 13808', () => {
       expect(C3_KNOWN_CANDIDATE_COUNT).toBe(13808);
@@ -135,9 +134,10 @@ describe('01C.1B-C3-SCOPE-R4 — candidate pool integrity', () => {
   describe('quality tier accounting', () => {
     it('AA-indexed count (high+mid+low) is 472 — unchanged from R3 baseline', () => {
       expect(C3_QUALITY_TIER_AA_INDEXED_COUNT).toBe(472);
-      const computed = C3_QUALITY_TIER_HIGH_KNOWN_COUNT
-        + C3_QUALITY_TIER_MID_KNOWN_COUNT
-        + C3_QUALITY_TIER_LOW_KNOWN_COUNT;
+      const computed =
+        C3_QUALITY_TIER_HIGH_KNOWN_COUNT +
+        C3_QUALITY_TIER_MID_KNOWN_COUNT +
+        C3_QUALITY_TIER_LOW_KNOWN_COUNT;
       expect(computed).toBe(C3_QUALITY_TIER_AA_INDEXED_COUNT);
     });
 
@@ -146,10 +146,11 @@ describe('01C.1B-C3-SCOPE-R4 — candidate pool integrity', () => {
     });
 
     it('all tiers sum to C3_KNOWN_CANDIDATE_COUNT (13808)', () => {
-      const total = C3_QUALITY_TIER_HIGH_KNOWN_COUNT
-        + C3_QUALITY_TIER_MID_KNOWN_COUNT
-        + C3_QUALITY_TIER_LOW_KNOWN_COUNT
-        + C3_QUALITY_TIER_UNKNOWN_KNOWN_COUNT;
+      const total =
+        C3_QUALITY_TIER_HIGH_KNOWN_COUNT +
+        C3_QUALITY_TIER_MID_KNOWN_COUNT +
+        C3_QUALITY_TIER_LOW_KNOWN_COUNT +
+        C3_QUALITY_TIER_UNKNOWN_KNOWN_COUNT;
       expect(total).toBe(C3_KNOWN_CANDIDATE_COUNT);
     });
   });

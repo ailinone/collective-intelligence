@@ -53,14 +53,14 @@ export class ProviderFailoverService {
    */
   private shouldPrioritizeAdvancedModels(request: ChatRequest, primaryModel?: Model): boolean {
     const taskType = request.task_type;
-    
+
     // Check if primary model has advanced capabilities (if available)
-    const hasAdvancedPrimaryModel = primaryModel && (
-      primaryModel.capabilities.includes('reasoning') ||
-      primaryModel.capabilities.includes('deep_research') ||
-      primaryModel.capabilities.includes('thinking_mode')
-    );
-    
+    const hasAdvancedPrimaryModel =
+      primaryModel &&
+      (primaryModel.capabilities.includes('reasoning') ||
+        primaryModel.capabilities.includes('deep_research') ||
+        primaryModel.capabilities.includes('thinking_mode'));
+
     const advancedModelIndicators = [
       hasAdvancedPrimaryModel, // Primary model has advanced capabilities
       taskType === 'analysis', // Use existing task type
@@ -122,7 +122,7 @@ export class ProviderFailoverService {
     // This is dynamic based on capabilities, not hardcoded model names
     const advancedCapabilities: ModelCapability[] = ['reasoning', 'deep_research', 'thinking_mode'];
     const advancedFallbacks = fallbackOptions.filter((f) =>
-      advancedCapabilities.some(cap => f.model.capabilities.includes(cap))
+      advancedCapabilities.some((cap) => f.model.capabilities.includes(cap))
     );
 
     if (advancedFallbacks.length > 0) {
@@ -132,7 +132,9 @@ export class ProviderFailoverService {
     }
 
     // If no advanced models available, keep original order but log
-    this.log.debug('No models with advanced capabilities (reasoning/deep_research) available in fallback options');
+    this.log.debug(
+      'No models with advanced capabilities (reasoning/deep_research) available in fallback options'
+    );
     return fallbackOptions;
   }
 
@@ -147,7 +149,11 @@ export class ProviderFailoverService {
     fallbackOptions: Array<{ adapter: ProviderAdapter; model: Model }>
   ): Promise<FailoverResult> {
     // Enhance fallback options by prioritizing advanced models (based on capabilities, not hardcoded names)
-    const enhancedFallbacks = await this.enhanceFallbacksWithAdvancedModels(request, primaryModel, fallbackOptions);
+    const enhancedFallbacks = await this.enhanceFallbacksWithAdvancedModels(
+      request,
+      primaryModel,
+      fallbackOptions
+    );
 
     return this.executeWithFailoverInternal(
       request,
@@ -341,10 +347,7 @@ export class ProviderFailoverService {
       excludeProviders?: string[]; // Exclude specific providers
     }
   ): Promise<Model[]> {
-    const excludeProviders = new Set([
-      primaryModel.provider,
-      ...(options?.excludeProviders || []),
-    ]);
+    const excludeProviders = new Set([primaryModel.provider, ...(options?.excludeProviders || [])]);
 
     // Filter models
     let fallbackModels = allModels.filter((m) => !excludeProviders.has(m.provider));
@@ -425,9 +428,7 @@ export class ProviderFailoverService {
     });
 
     // Sort by score (descending)
-    const sortedModels = scored
-      .sort((a, b) => b.score - a.score)
-      .map((s) => s.model);
+    const sortedModels = scored.sort((a, b) => b.score - a.score).map((s) => s.model);
 
     // Apply optional limit (default: no limit - return ALL capable models)
     const maxFallbacks = options?.maxFallbacks;

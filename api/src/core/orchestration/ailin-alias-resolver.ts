@@ -55,7 +55,8 @@ export interface AliasProfile {
 const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   // ─── Performance Tiers ──────────────────────────────────────────
   'ailin-ultra': {
-    description: 'Maximum quality — 9 diverse models with collaborative refinement from every major provider',
+    description:
+      'Maximum quality — 9 diverse models with collaborative refinement from every major provider',
     strategy: 'collaborative',
     quality_target: 0.98,
     model_count: 9,
@@ -72,7 +73,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-quality': {
     description: 'High quality — 3 diverse models with blind debate verification',
     strategy: 'blind-debate',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 3,
     diversity_mode: 'max-provider',
   },
@@ -85,7 +86,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-budget': {
     description: 'Minimize cost — cheapest single model with cost cascade',
     strategy: 'cost',
-    quality_target: 0.50,
+    quality_target: 0.5,
     max_cost: 0.005,
     model_count: 1,
     diversity_mode: 'any',
@@ -93,7 +94,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-nano': {
     description: 'Absolute minimum — smallest/cheapest single model',
     strategy: 'single',
-    quality_target: 0.30,
+    quality_target: 0.3,
     max_cost: 0.001,
     prefer_speed: true,
     model_count: 1,
@@ -105,7 +106,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Minimum latency — fastest available model',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.60,
+    quality_target: 0.6,
   },
   'ailin-small': {
     description: 'Small model, fast response — good for simple tasks',
@@ -116,7 +117,8 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
 
   // ─── Voice & Audio Profiles ─────────────────────────────────────
   'ailin-voice': {
-    description: 'Best voice model — covers all TTS/STT/STS providers (cloud + self-hosted). API selects optimal model by latency, quality, and health.',
+    description:
+      'Best voice model — covers all TTS/STT/STS providers (cloud + self-hosted). API selects optimal model by latency, quality, and health.',
     strategy: 'speed',
     prefer_speed: true,
     ailin_constraints: { requiredCapabilities: ['text_to_speech'] },
@@ -137,7 +139,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Realtime voice pipeline — optimized for lowest latency STS (speech-to-speech)',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.70,
+    quality_target: 0.7,
   },
 
   // ─── Realtime Audio Variants ────────────────────────────────────
@@ -145,20 +147,20 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Ultra-low latency realtime — smallest models for fastest response',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.40,
+    quality_target: 0.4,
     max_cost: 0.001,
   },
   'ailin-realtime-small': {
     description: 'Low latency realtime — small models balancing speed and quality',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.60,
+    quality_target: 0.6,
     max_cost: 0.005,
   },
   'ailin-realtime-large': {
     description: 'High quality realtime — larger models for better voice quality',
     strategy: 'quality',
-    quality_target: 0.90,
+    quality_target: 0.9,
   },
 
   // ─── STT (Speech-to-Text) Variants ────────────────────────────
@@ -166,7 +168,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Fastest STT — optimized for real-time transcription (Deepgram/self-hosted)',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.50,
+    quality_target: 0.5,
     ailin_constraints: { requiredCapabilities: ['speech_to_text'] },
   },
   'ailin-stt-quality': {
@@ -187,7 +189,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Fastest TTS — lowest latency voice synthesis (self-hosted/Cartesia)',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.50,
+    quality_target: 0.5,
     ailin_constraints: { requiredCapabilities: ['text_to_speech'] },
   },
   'ailin-tts-quality': {
@@ -213,7 +215,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-audio-quality': {
     description: 'High quality audio — best models for speech processing',
     strategy: 'quality',
-    quality_target: 0.90,
+    quality_target: 0.9,
     ailin_constraints: { requiredCapabilities: ['audio'] },
   },
 
@@ -228,7 +230,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     description: 'Fastest translation — CTranslate2 int8 NLLB-200 (~130ms per sentence)',
     strategy: 'speed',
     prefer_speed: true,
-    quality_target: 0.60,
+    quality_target: 0.6,
     ailin_constraints: { requiredCapabilities: ['translation'] },
   },
   'ailin-translation-quality': {
@@ -247,14 +249,14 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-expert': {
     description: 'Expert panel — 5 specialists from diverse providers collaborate',
     strategy: 'expert-panel',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 5,
     diversity_mode: 'max-provider',
   },
   'ailin-creative': {
     description: 'Creative tasks — 5 diverse models for maximum perspective diversity',
     strategy: 'diversity-ensemble',
-    quality_target: 0.80,
+    quality_target: 0.8,
     model_count: 5,
     diversity_mode: 'max-architecture',
   },
@@ -293,12 +295,12 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-devil': {
     description: "Devil's advocate consensus — forced dissent for critical analysis",
     strategy: 'devil-advocate-consensus',
-    quality_target: 0.90,
+    quality_target: 0.9,
   },
   'ailin-safety': {
     description: 'Safety quorum — majority vote for safety-critical tasks',
     strategy: 'safety-quorum',
-    quality_target: 0.80,
+    quality_target: 0.8,
   },
   'ailin-swarm': {
     description: 'Multi-angle exploration — 9 models explore different perspectives in parallel',
@@ -315,7 +317,8 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     ailin_constraints: { requiredCapabilities: ['chat', 'reasoning'] },
   },
   'ailin-pipeline': {
-    description: 'Strategy pipeline — compose strategies sequentially (e.g., debate then collaborative)',
+    description:
+      'Strategy pipeline — compose strategies sequentially (e.g., debate then collaborative)',
     strategy: 'compositor',
     quality_target: 0.85,
     model_count: 5,
@@ -331,12 +334,13 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-workflow': {
     description: 'Strategy workflow — DAG of sub-strategies with explicit dependencies',
     strategy: 'compositor',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 7,
     diversity_mode: 'max-provider',
   },
   'ailin-research': {
-    description: 'Deep research — parallel investigation with evidence ranking and confidence-based synthesis',
+    description:
+      'Deep research — parallel investigation with evidence ranking and confidence-based synthesis',
     strategy: 'research-synthesize',
     quality_target: 0.95,
     model_count: 7,
@@ -352,7 +356,7 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-consensus-large': {
     description: 'Large consensus — 9 models vote for maximum majority-vote accuracy',
     strategy: 'consensus',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 9,
     diversity_mode: 'max-architecture',
   },
@@ -365,9 +369,10 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
     model_count: 3,
   },
   'ailin-deep-research': {
-    description: 'Deep research — parallel investigation with evidence ranking and confidence synthesis',
+    description:
+      'Deep research — parallel investigation with evidence ranking and confidence synthesis',
     strategy: 'research-synthesize',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 5,
     diversity_mode: 'max-provider',
   },
@@ -381,20 +386,22 @@ const BUILT_IN_ALIASES: Record<string, AliasProfile> = {
   'ailin-diamond': {
     description: 'Double Diamond — structured discover→define→develop→deliver for complex problems',
     strategy: 'double-diamond',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 5,
     diversity_mode: 'max-provider',
     ailin_constraints: { enable_reasoning: true, enable_observer: true },
   },
   'ailin-multi-hop': {
-    description: 'Multi-hop reasoning — decomposes questions into sub-questions with dependency chain',
+    description:
+      'Multi-hop reasoning — decomposes questions into sub-questions with dependency chain',
     strategy: 'multi-hop-qa',
-    quality_target: 0.90,
+    quality_target: 0.9,
     model_count: 3,
     ailin_constraints: { enable_reasoning: true },
   },
   'ailin-personas': {
-    description: 'Persona exploration — 12+ diverse perspectives (CTO, auditor, economist, designer...)',
+    description:
+      'Persona exploration — 12+ diverse perspectives (CTO, auditor, economist, designer...)',
     strategy: 'persona-exploration',
     quality_target: 0.85,
     model_count: 4,
@@ -432,15 +439,22 @@ export function applyAliasToRequest(request: ChatRequest, profile: AliasProfile)
     quality_target: request.quality_target ?? profile.quality_target,
     max_cost: request.max_cost ?? profile.max_cost,
     prefer_speed: request.prefer_speed ?? profile.prefer_speed,
-    ailin_constraints: request.ailin_constraints ?? profile.ailin_constraints as ChatRequest['ailin_constraints'],
+    ailin_constraints:
+      request.ailin_constraints ?? (profile.ailin_constraints as ChatRequest['ailin_constraints']),
   };
 }
 
 /**
  * Get all available aliases for documentation/listing.
  */
-export function listAliases(): Record<string, { description: string; strategy?: string; quality_target?: number }> {
-  const result: Record<string, { description: string; strategy?: string; quality_target?: number }> = {};
+export function listAliases(): Record<
+  string,
+  { description: string; strategy?: string; quality_target?: number }
+> {
+  const result: Record<
+    string,
+    { description: string; strategy?: string; quality_target?: number }
+  > = {};
   for (const [key, profile] of Object.entries(BUILT_IN_ALIASES)) {
     result[key] = {
       description: profile.description,

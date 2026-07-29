@@ -40,11 +40,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import type {
-  DeliveryContext,
-  DeliveryOutcome,
-  DestinationAdapter,
-} from './destination-adapter';
+import type { DeliveryContext, DeliveryOutcome, DestinationAdapter } from './destination-adapter';
 import { EgressBlockedError, safeFetch } from './safe-http';
 
 // ─── Config types ───────────────────────────────────────────────────────
@@ -99,7 +95,11 @@ function parseConfig(raw: Record<string, unknown>): WebhookConfig | { error: str
     return { error: `invalid signatureScheme: ${String(scheme)}` };
   }
   let customHeaders: Record<string, string> | undefined;
-  if (raw.customHeaders && typeof raw.customHeaders === 'object' && !Array.isArray(raw.customHeaders)) {
+  if (
+    raw.customHeaders &&
+    typeof raw.customHeaders === 'object' &&
+    !Array.isArray(raw.customHeaders)
+  ) {
     customHeaders = {};
     for (const [k, v] of Object.entries(raw.customHeaders)) {
       const kl = k.toLowerCase();
@@ -111,10 +111,8 @@ function parseConfig(raw: Record<string, unknown>): WebhookConfig | { error: str
   return {
     url: raw.url,
     secret: raw.secret,
-    signatureHeader:
-      typeof raw.signatureHeader === 'string' ? raw.signatureHeader : undefined,
-    timestampHeader:
-      typeof raw.timestampHeader === 'string' ? raw.timestampHeader : undefined,
+    signatureHeader: typeof raw.signatureHeader === 'string' ? raw.signatureHeader : undefined,
+    timestampHeader: typeof raw.timestampHeader === 'string' ? raw.timestampHeader : undefined,
     signatureScheme: scheme as 'v1' | 'v2',
     ...(customHeaders ? { customHeaders } : {}),
   };
@@ -130,7 +128,7 @@ export function signRequest(
   body: string,
   cfg: Required<Pick<WebhookConfig, 'secret' | 'signatureScheme'>> &
     Pick<WebhookConfig, 'signatureHeader' | 'timestampHeader'>,
-  now: number = Date.now(),
+  now: number = Date.now()
 ): SignHeaders {
   const timestampSeconds = Math.floor(now / 1000).toString();
   const scheme = cfg.signatureScheme;
@@ -138,7 +136,9 @@ export function signRequest(
   const tsHeader = cfg.timestampHeader ?? 'X-Webhook-Timestamp';
 
   if (scheme === 'v1') {
-    const mac = createHmac('sha256', cfg.secret).update(timestampSeconds + '.' + body).digest('hex');
+    const mac = createHmac('sha256', cfg.secret)
+      .update(timestampSeconds + '.' + body)
+      .digest('hex');
     return {
       [sigHeader]: `t=${timestampSeconds},v1=${mac}`,
       // Also emit a plain timestamp header for convenience; receivers can
@@ -163,7 +163,7 @@ export function verifyV1Signature(
   header: string,
   secret: string,
   toleranceSeconds = 300,
-  now: number = Date.now(),
+  now: number = Date.now()
 ): boolean {
   // Parse "t=<ts>,v1=<hex>"
   const parts = header.split(',').map((p) => p.trim());
@@ -177,7 +177,9 @@ export function verifyV1Signature(
   if (!sig || !Number.isFinite(ts)) return false;
   const ageSeconds = Math.abs(Math.floor(now / 1000) - ts);
   if (ageSeconds > toleranceSeconds) return false;
-  const expected = createHmac('sha256', secret).update(ts.toString() + '.' + body).digest('hex');
+  const expected = createHmac('sha256', secret)
+    .update(ts.toString() + '.' + body)
+    .digest('hex');
   const sigBuf = Buffer.from(sig, 'hex');
   const expBuf = Buffer.from(expected, 'hex');
   if (sigBuf.length !== expBuf.length) return false;

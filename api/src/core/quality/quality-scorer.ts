@@ -155,10 +155,10 @@ export class QualityScorer {
 
   /**
    * Calculate quality score with optional LLM-as-Judge
-   * 
+   *
    * When enabled, uses an LLM to evaluate the response quality.
    * This provides higher accuracy for critical tasks but incurs additional API cost.
-   * 
+   *
    * Flow:
    * 1. Calculate heuristic score first (fast)
    * 2. If LLM judge enabled AND heuristic score below threshold, use LLM
@@ -179,7 +179,7 @@ export class QualityScorer {
     }
 
     const threshold = options.minScoreThreshold ?? 0.85;
-    
+
     // Skip LLM judge if heuristic score is already high enough
     if (heuristicScore.overall >= threshold) {
       log.debug(
@@ -261,8 +261,11 @@ export class QualityScorer {
     // Then findModel(id, provider) routes to the selected provider.
     const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub.js');
     const isNative = (m: { providerId?: string; provider?: string }): boolean => {
-      try { return getProviderOperabilityHub().isNativeProvider(m.providerId ?? m.provider ?? ''); }
-      catch { return false; }
+      try {
+        return getProviderOperabilityHub().isNativeProvider(m.providerId ?? m.provider ?? '');
+      } catch {
+        return false;
+      }
     };
     // Chat-capability for the JUDGE pool: require an EXPLICIT `chat` capability.
     // Rigorous on purpose — the judge calls chatCompletion, so a completions-only
@@ -279,7 +282,8 @@ export class QualityScorer {
     // steer to a working one). Never throws; falls back to the full pool.
     let judgePool = allModels;
     try {
-      const { filterModelsByProviderOperability } = await import('@/core/operability/operability-filter.js');
+      const { filterModelsByProviderOperability } =
+        await import('@/core/operability/operability-filter.js');
       const { eligible } = await filterModelsByProviderOperability(allModels, {
         reasonPrefix: 'llm_judge',
         // Camada 2: proven-operable judges only. allowUnknown:true let the
@@ -291,7 +295,10 @@ export class QualityScorer {
       });
       if (eligible.length > 0) judgePool = eligible;
     } catch (operErr) {
-      log.warn({ error: getErrorMessage(operErr) }, 'Judge operability filter unavailable — using full model pool');
+      log.warn(
+        { error: getErrorMessage(operErr) },
+        'Judge operability filter unavailable — using full model pool'
+      );
     }
 
     // ── Fully DYNAMIC judge with FALLBACK (Camada 2, 2026-06-28): build an
@@ -309,7 +316,9 @@ export class QualityScorer {
     const pinnedJudgeId = judgeModel;
     let pinnedNative: (typeof allModels)[number] | undefined;
     if (pinnedJudgeId) {
-      const pinMatches = judgePool.filter((m) => m.id === pinnedJudgeId || m.name === pinnedJudgeId);
+      const pinMatches = judgePool.filter(
+        (m) => m.id === pinnedJudgeId || m.name === pinnedJudgeId
+      );
       pinnedNative = pinMatches.find(isNative);
       if (!pinnedNative && !judgeModel) {
         const onHubOnly = pinMatches.length > 0;
@@ -317,7 +326,7 @@ export class QualityScorer {
           { pinnedJudgeId, onHubOnly },
           onHubOnly
             ? 'PRODUCTION_JUDGE_MODEL has no native-provider instance (hub-only) — using dynamic native pick instead'
-            : 'PRODUCTION_JUDGE_MODEL not found in catalog — using dynamic native pick',
+            : 'PRODUCTION_JUDGE_MODEL not found in catalog — using dynamic native pick'
         );
       }
     }
@@ -336,16 +345,13 @@ export class QualityScorer {
       return 1;
     };
     const byQuality = (a: (typeof allModels)[number], b: (typeof allModels)[number]): number =>
-      (rankTier(b) - rankTier(a)) ||
-      ((b.performance?.quality ?? 0) - (a.performance?.quality ?? 0));
+      rankTier(b) - rankTier(a) || (b.performance?.quality ?? 0) - (a.performance?.quality ?? 0);
 
     // Provider DIVERSITY: at most one (best) model per provider, so a failure falls
     // through to a DIFFERENT provider — not another model of the same dead one.
     const provKey = (m: { providerId?: string; provider?: string }): string =>
       (m.providerId ?? m.provider ?? '').toLowerCase();
-    const diverseByProvider = (
-      arr: (typeof allModels)[number][],
-    ): (typeof allModels)[number][] => {
+    const diverseByProvider = (arr: (typeof allModels)[number][]): (typeof allModels)[number][] => {
       const seen = new Set<string>();
       const out: (typeof allModels)[number][] = [];
       for (const m of arr) {
@@ -367,7 +373,9 @@ export class QualityScorer {
     // hub. No static pin — purely quality + operability + diversity. The route-aware
     // reorder below then sinks proven-dead natives so it converges to attempt 1.
     const diverseNative = diverseByProvider([...chat.filter(isNative)].sort(byQuality));
-    const diverseExternal = diverseByProvider([...chat.filter((m) => !isNative(m))].sort(byQuality));
+    const diverseExternal = diverseByProvider(
+      [...chat.filter((m) => !isNative(m))].sort(byQuality)
+    );
     const seenProviders = new Set<string>();
     const candidates: (typeof allModels)[number][] = [];
     const pushCandidate = (m: (typeof allModels)[number] | undefined): void => {
@@ -413,7 +421,7 @@ export class QualityScorer {
       // result judgeFailed=true — never silently emit a neutral score.
       log.warn(
         { pinnedJudgeProvided: Boolean(pinnedJudgeId) },
-        'No suitable judge model available — judge failed (result will be marked judgeFailed)',
+        'No suitable judge model available — judge failed (result will be marked judgeFailed)'
       );
       throw new Error('No suitable judge model available');
     }
@@ -508,7 +516,7 @@ Respond ONLY with valid JSON, no other text.`;
             max_tokens: 1000,
           }),
           JUDGE_ATTEMPT_TIMEOUT_MS,
-          `judge attempt timed out after ${JUDGE_ATTEMPT_TIMEOUT_MS}ms (provider ${judgeProviderKey})`,
+          `judge attempt timed out after ${JUDGE_ATTEMPT_TIMEOUT_MS}ms (provider ${judgeProviderKey})`
         );
         // SUCCESS. We deliberately do NOT record judge success: the judge shares the
         // flat provider key with base-strategy, so a success here could falsely clear
@@ -516,12 +524,18 @@ Respond ONLY with valid JSON, no other text.`;
         let judgeCostUsd = 0;
         try {
           const u = judgeResponse.usage;
-          judgeCostUsd = Math.max(0, adapter.calculateCost(cand, u?.prompt_tokens || 0, u?.completion_tokens || 0)) || 0;
-        } catch { judgeCostUsd = 0; }
+          judgeCostUsd =
+            Math.max(
+              0,
+              adapter.calculateCost(cand, u?.prompt_tokens || 0, u?.completion_tokens || 0)
+            ) || 0;
+        } catch {
+          judgeCostUsd = 0;
+        }
         if (i > 0) {
           log.info(
             { judgeProvider: judgeProviderKey, model: cand.id, attempt: i + 1 },
-            'LLM judge fell back to an alternate operable provider',
+            'LLM judge fell back to an alternate operable provider'
           );
         }
         const parsed = this.parseLLMJudgeResponse(safeResponseContent(judgeResponse));
@@ -533,10 +547,19 @@ Respond ONLY with valid JSON, no other text.`;
         // is the only other writer), so without this a broken provider (e.g. invalid
         // API key) would be re-picked forever.
         try {
-          const status = (judgeCallErr as { status?: number; statusCode?: number })?.status
-            ?? (judgeCallErr as { statusCode?: number })?.statusCode;
-          hub.recordRouteExecution(judgeProviderKey, cand.id, false, status, getErrorMessage(judgeCallErr));
-        } catch { /* non-blocking */ }
+          const status =
+            (judgeCallErr as { status?: number; statusCode?: number })?.status ??
+            (judgeCallErr as { statusCode?: number })?.statusCode;
+          hub.recordRouteExecution(
+            judgeProviderKey,
+            cand.id,
+            false,
+            status,
+            getErrorMessage(judgeCallErr)
+          );
+        } catch {
+          /* non-blocking */
+        }
         lastErr = judgeCallErr;
         // fall through to the next operable provider
       }
@@ -545,7 +568,7 @@ Respond ONLY with valid JSON, no other text.`;
     // Every attempted provider failed → HARD judge failure (caller marks judgeFailed).
     log.warn(
       { attempts: attempts.length, lastError: getErrorMessage(lastErr) },
-      'LLM judge exhausted all operable provider candidates — judge failed',
+      'LLM judge exhausted all operable provider candidates — judge failed'
     );
     throw lastErr instanceof Error ? lastErr : new Error('All judge provider candidates failed');
   }
@@ -586,9 +609,9 @@ Respond ONLY with valid JSON, no other text.`;
     if (originalRequest?.messages) {
       const userMessages = originalRequest.messages
         .filter((m) => m.role === 'user')
-        .map((m) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
         .join('\n');
-      
+
       if (userMessages) {
         prompt += `=== ORIGINAL USER REQUEST ===\n${userMessages.substring(0, 1000)}\n\n`;
       }
@@ -635,8 +658,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (verdict) {
       const dims = verdict.dimensions ?? {};
       const fallback = verdict.score;
-      const pick = (key: string): number =>
-        typeof dims[key] === 'number' ? dims[key]! : fallback;
+      const pick = (key: string): number => (typeof dims[key] === 'number' ? dims[key]! : fallback);
       return {
         correctness: pick('correctness'),
         completeness: pick('completeness'),
@@ -654,7 +676,7 @@ Respond ONLY with valid JSON, no other text.`;
 
     log.warn(
       { content: content.substring(0, 200) },
-      'Failed to normalize LLM judge response via unified schema — judge failed (neutral score marked judgeFailed)',
+      'Failed to normalize LLM judge response via unified schema — judge failed (neutral score marked judgeFailed)'
     );
 
     // Neutral evaluation on unrecoverable parse failure. TIER 1 (2026-06-11):
@@ -752,9 +774,10 @@ Respond ONLY with valid JSON, no other text.`;
 
     // Diff format enforcement for code edit/refactor tasks (Aider leaderboard insight)
     // Tasks involving code edits score higher when output is structured as diffs
-    const isEditTask = _context.taskType === 'refactoring'
-      || _context.taskType === 'code-review'
-      || _context.taskType === 'debugging';
+    const isEditTask =
+      _context.taskType === 'refactoring' ||
+      _context.taskType === 'code-review' ||
+      _context.taskType === 'debugging';
     if (isEditTask) {
       const diffCompliance = this.scoreDiffCompliance(content);
       if (diffCompliance > 0.5) {
@@ -781,16 +804,16 @@ Respond ONLY with valid JSON, no other text.`;
     if (/```diff\n/.test(content)) score += 0.35;
 
     // Check for unified diff markers (+++ / --- or @@ lines)
-    if (/^[-+]{3}\s/m.test(content) || /^@@\s.*@@/m.test(content)) score += 0.30;
+    if (/^[-+]{3}\s/m.test(content) || /^@@\s.*@@/m.test(content)) score += 0.3;
 
     // Check for add/remove lines (+ and - prefixed)
     const hasAdds = /^\+[^+]/m.test(content);
     const hasRemoves = /^-[^-]/m.test(content);
     if (hasAdds && hasRemoves) score += 0.25;
-    else if (hasAdds || hasRemoves) score += 0.10;
+    else if (hasAdds || hasRemoves) score += 0.1;
 
     // Bonus: file path header present
-    if (/^(?:---|\+\+\+)\s+[a-zA-Z]/m.test(content)) score += 0.10;
+    if (/^(?:---|\+\+\+)\s+[a-zA-Z]/m.test(content)) score += 0.1;
 
     return Math.min(1.0, score);
   }

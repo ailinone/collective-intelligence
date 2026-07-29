@@ -122,11 +122,22 @@ describe('parseOrganizationCollectiveSettings', () => {
   });
 
   it('extracts valid aggregationMethod values', () => {
-    expect(parseOrganizationCollectiveSettings({ aggregationMethod: 'weighted_confidence' }).aggregationMethod).toBe('weighted_confidence');
-    expect(parseOrganizationCollectiveSettings({ aggregationMethod: 'median' }).aggregationMethod).toBe('median');
-    expect(parseOrganizationCollectiveSettings({ aggregationMethod: 'trimmed_mean' }).aggregationMethod).toBe('trimmed_mean');
-    expect(parseOrganizationCollectiveSettings({ aggregationMethod: 'llm_synthesis' }).aggregationMethod).toBe('llm_synthesis');
-    expect(parseOrganizationCollectiveSettings({ aggregationMethod: 'hybrid' }).aggregationMethod).toBe('hybrid');
+    expect(
+      parseOrganizationCollectiveSettings({ aggregationMethod: 'weighted_confidence' })
+        .aggregationMethod
+    ).toBe('weighted_confidence');
+    expect(
+      parseOrganizationCollectiveSettings({ aggregationMethod: 'median' }).aggregationMethod
+    ).toBe('median');
+    expect(
+      parseOrganizationCollectiveSettings({ aggregationMethod: 'trimmed_mean' }).aggregationMethod
+    ).toBe('trimmed_mean');
+    expect(
+      parseOrganizationCollectiveSettings({ aggregationMethod: 'llm_synthesis' }).aggregationMethod
+    ).toBe('llm_synthesis');
+    expect(
+      parseOrganizationCollectiveSettings({ aggregationMethod: 'hybrid' }).aggregationMethod
+    ).toBe('hybrid');
   });
 
   it('drops invalid aggregationMethod', () => {

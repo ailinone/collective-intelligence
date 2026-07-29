@@ -34,7 +34,7 @@ describe('FeatherlessAdapter', () => {
           providerName: 'featherless-ai',
           apiKey: 'test-featherless-key',
           baseUrl: 'https://api.featherless.ai/v1',
-        }),
+        })
     ).not.toThrow();
   });
 
@@ -69,8 +69,6 @@ describe('FeatherlessAdapter', () => {
       apiKey: 'k',
       baseUrl: 'https://api.featherless.ai/v1',
     });
-    expect((adapter as unknown as { providerName: string }).providerName).toBe(
-      'featherless-ai',
-    );
+    expect((adapter as unknown as { providerName: string }).providerName).toBe('featherless-ai');
   });
 });

@@ -38,10 +38,18 @@ export type AnswerCheckSpec =
   /** Numeric equality within `tolerance` (default 0). Non-numeric answers fail. */
   | { readonly kind: 'numeric_equals'; readonly expected: number; readonly tolerance?: number }
   /** Answer must contain every listed substring (case-insensitive unless flagged). */
-  | { readonly kind: 'contains_all'; readonly needles: readonly string[]; readonly caseSensitive?: boolean }
+  | {
+      readonly kind: 'contains_all';
+      readonly needles: readonly string[];
+      readonly caseSensitive?: boolean;
+    }
   /** Answer must match against exactly one of a fixed set of accepted strings
    *  (same normalization as `string_equals`). */
-  | { readonly kind: 'one_of'; readonly accepted: readonly string[]; readonly caseSensitive?: boolean }
+  | {
+      readonly kind: 'one_of';
+      readonly accepted: readonly string[];
+      readonly caseSensitive?: boolean;
+    }
   /** Full-answer regex (anchored by the pattern itself). `flags` forwarded to RegExp. */
   | { readonly kind: 'regex'; readonly pattern: string; readonly flags?: string };
 
@@ -86,7 +94,7 @@ const toNumber = parseLocaleNumber;
  * the caller can leave `answerVerifier` unset (task treated as unverifiable).
  */
 export function resolveAnswerChecker(
-  spec: AnswerCheckSpec | undefined | null,
+  spec: AnswerCheckSpec | undefined | null
 ): ((answer: string) => boolean) | null {
   if (!spec || typeof spec !== 'object') return null;
 
@@ -118,7 +126,7 @@ export function resolveAnswerChecker(
     case 'one_of': {
       if (!Array.isArray(spec.accepted) || spec.accepted.length === 0) return null;
       const accepted = new Set(
-        spec.accepted.map((s) => normEq(String(s), spec.caseSensitive)).filter((s) => s !== ''),
+        spec.accepted.map((s) => normEq(String(s), spec.caseSensitive)).filter((s) => s !== '')
       );
       if (accepted.size === 0) return null;
       return (a) => accepted.has(normEq(a, spec.caseSensitive));
@@ -147,7 +155,7 @@ export function resolveAnswerChecker(
           // suite), which would silently mis-score a correct answer as
           // wrong in production too.
           return Boolean(
-            vm.runInNewContext('re.test(input)', { re, input: a.trim() }, { timeout: 750 }),
+            vm.runInNewContext('re.test(input)', { re, input: a.trim() }, { timeout: 750 })
           );
         } catch {
           return false;

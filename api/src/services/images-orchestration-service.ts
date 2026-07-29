@@ -24,7 +24,11 @@
 
 import { logger } from '@/utils/logger';
 import { ModelRepository } from '@/services/model-repository';
-import { normalizeStrategy, resolveFallbackDeadlineMs, diversifyProviders } from '@/services/modality/modality-execution-helpers';
+import {
+  normalizeStrategy,
+  resolveFallbackDeadlineMs,
+  diversifyProviders,
+} from '@/services/modality/modality-execution-helpers';
 import { runModalityFallback } from '@/services/modality/modality-fallback-driver';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderRegistry } from '@/providers/provider-registry';
@@ -160,7 +164,7 @@ export class ImagesOrchestrationService {
         strategy: strategyUsed,
         allowFallback,
       },
-      'Image generation orchestration started',
+      'Image generation orchestration started'
     );
 
     const catalogRows = await this.modelRepo.searchModels({
@@ -228,7 +232,7 @@ export class ImagesOrchestrationService {
         strategy: strategyUsed,
         allowFallback,
       },
-      'Image edit orchestration started',
+      'Image edit orchestration started'
     );
 
     // Image edit accepts EITHER `image_editing` OR `image_generation` rows
@@ -246,7 +250,7 @@ export class ImagesOrchestrationService {
       }),
     ]);
     const merged = Array.from(
-      new Map([...editRows, ...generationRows].map((m) => [m.id, m])).values(),
+      new Map([...editRows, ...generationRows].map((m) => [m.id, m])).values()
     );
     const ranked = this.sortModelsByStrategy(merged, strategyUsed, userContext);
     const preRanked = diversifyProviders(ranked);
@@ -270,7 +274,7 @@ export class ImagesOrchestrationService {
             prompt,
             size,
             options: { n, responseFormat },
-          },
+          }
         );
       },
       mapResult: (raw) => this.mapEditOrVariationResult(raw, responseFormat),
@@ -298,7 +302,7 @@ export class ImagesOrchestrationService {
 
     log.info(
       { requestId, model, n, size, strategy: strategyUsed, allowFallback },
-      'Image variation orchestration started',
+      'Image variation orchestration started'
     );
 
     const catalogRows = await this.modelRepo.searchModels({
@@ -410,11 +414,10 @@ export class ImagesOrchestrationService {
     return 2000;
   }
 
-
   private sortModelsByStrategy(
     models: Model[],
     strategy: ImageStrategy,
-    userContext: OrchestrationContext,
+    userContext: OrchestrationContext
   ): Model[] {
     const sorted = [...models];
     sorted.sort((a, b) => {
@@ -441,7 +444,8 @@ export class ImagesOrchestrationService {
         return costA - costB;
       }
 
-      const qualityWeight = userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
+      const qualityWeight =
+        userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
       const costWeight = userContext.maxCost !== undefined ? 0.45 : 0.3;
       const latencyWeight = 1 - qualityWeight - costWeight;
       const scoreA =
@@ -465,10 +469,10 @@ export class ImagesOrchestrationService {
   private applyParameterBonuses(models: Model[], quality: string, style: string): Model[] {
     return [...models].sort((a, b) => {
       const supportedA = ((a.metadata?.supported_parameters as string[] | undefined) ?? []).map(
-        (item) => item.toLowerCase(),
+        (item) => item.toLowerCase()
       );
       const supportedB = ((b.metadata?.supported_parameters as string[] | undefined) ?? []).map(
-        (item) => item.toLowerCase(),
+        (item) => item.toLowerCase()
       );
       const qualityBonusA =
         quality === 'hd' && (supportedA.includes('hd') || supportedA.includes('quality')) ? 1 : 0;
@@ -483,14 +487,13 @@ export class ImagesOrchestrationService {
     });
   }
 
-
   // ============================================
   // Result mappers
   // ============================================
 
   private mapGenerationResult(
     raw: Awaited<ReturnType<ProviderAdapter['imageGenerate']>>,
-    responseFormat: 'url' | 'b64_json',
+    responseFormat: 'url' | 'b64_json'
   ): ImageResult['images'] {
     const images = Array.isArray(raw.image) ? raw.image : [raw.image];
     interface ImageItem {
@@ -514,7 +517,7 @@ export class ImagesOrchestrationService {
 
   private mapEditOrVariationResult(
     raw: Awaited<ReturnType<ProviderAdapter['imageEdit']>>,
-    responseFormat: 'url' | 'b64_json',
+    responseFormat: 'url' | 'b64_json'
   ): ImageResult['images'] {
     const images = Array.isArray(raw.image) ? raw.image : [raw.image];
     interface ImageItem {

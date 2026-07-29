@@ -32,7 +32,14 @@ const artifact = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-PARITY-GATE — input lock', () => {
   it('case 43: contract keeps every authorization false; cost zero', () => {
-    for (const l of [C3_EXECUTION_AUTHORIZED, DRYRUN_FALSE_AUTHORIZED, BILLABLE_PROVIDER_CALLS_AUTHORIZED, PROVIDER_PROBES_AUTHORIZED, MODEL_PROBES_AUTHORIZED, K_AUTHORIZED] as false[]) {
+    for (const l of [
+      C3_EXECUTION_AUTHORIZED,
+      DRYRUN_FALSE_AUTHORIZED,
+      BILLABLE_PROVIDER_CALLS_AUTHORIZED,
+      PROVIDER_PROBES_AUTHORIZED,
+      MODEL_PROBES_AUTHORIZED,
+      K_AUTHORIZED,
+    ] as false[]) {
       expect(l).toBe(false);
     }
     expect(C3_TOTAL_COST_USD).toBe(0);

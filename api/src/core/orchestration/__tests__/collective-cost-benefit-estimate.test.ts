@@ -29,7 +29,7 @@ describe('01C.1B-J1G §17.5 — collective cost-benefit', () => {
 
   it('passes when collective > baseline IF quality gain >= 1.2', () => {
     const r = estimateCollectiveCostBenefit({
-      synthesizerCost: 0.020,
+      synthesizerCost: 0.02,
       participantCosts: [0.005, 0.005, 0.005],
       judgeCost: 0.005,
       baselineSingleModelId: 'gpt-4o',
@@ -42,7 +42,7 @@ describe('01C.1B-J1G §17.5 — collective cost-benefit', () => {
 
   it('fails when collective > baseline AND no quality gain', () => {
     const r = estimateCollectiveCostBenefit({
-      synthesizerCost: 0.020,
+      synthesizerCost: 0.02,
       participantCosts: [0.005, 0.005, 0.005],
       judgeCost: 0.005,
       baselineSingleModelId: 'gpt-4o',
@@ -60,7 +60,7 @@ describe('01C.1B-J1G §17.5 — collective cost-benefit', () => {
       judgeCost: 0.002,
       fallbackCost: 0.003,
       baselineSingleModelId: 'baseline',
-      baselineSingleModelCostUsd: 0.020,
+      baselineSingleModelCostUsd: 0.02,
     });
     expect(r.estimatedCollectiveCostUsd).toBeCloseTo(0.013);
     expect(r.pass).toBe(true);
@@ -68,11 +68,11 @@ describe('01C.1B-J1G §17.5 — collective cost-benefit', () => {
 
   it('emits cost ratio for transparency', () => {
     const r = estimateCollectiveCostBenefit({
-      synthesizerCost: 0.010,
+      synthesizerCost: 0.01,
       participantCosts: [0.002, 0.002, 0.002],
       judgeCost: 0.001,
       baselineSingleModelId: 'b',
-      baselineSingleModelCostUsd: 0.020,
+      baselineSingleModelCostUsd: 0.02,
     });
     expect(r.costRatioVsBaseline).toBeCloseTo(0.85, 2);
   });

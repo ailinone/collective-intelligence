@@ -30,34 +30,125 @@ function admit(req: any, env: any): string[] {
   if (gate.rejected) reasons.push(...gate.rejectionReasons);
   return [...new Set(reasons)];
 }
-const baseReq = () => ({ model: 'auto', messages: [{ role: 'user' as const, content: '[neg]' }], dryRun: true });
+const baseReq = () => ({
+  model: 'auto',
+  messages: [{ role: 'user' as const, content: '[neg]' }],
+  dryRun: true,
+});
 const baseEnv = () => ({
-  dryRun: true, planOnly: true, c3ExecutionAuthorized: false, billableProviderCallsAuthorized: false,
-  providerCallExecuted: false, cost_usd: 0, usage: { total_tokens: 0 },
-  selectedCandidates: [{ candidateId: 'cand_a', providerId: 'prov_a', modelId: 'Qwen/Qwen2.5-7B-Instruct', selectedExecutableModel: false }],
-  hiddenFallbackDetected: false, fanout: 1, fanoutCap: 1, planFingerprint: 'fp', promptFingerprint: 'fp2', provenance: { complete: true },
+  dryRun: true,
+  planOnly: true,
+  c3ExecutionAuthorized: false,
+  billableProviderCallsAuthorized: false,
+  providerCallExecuted: false,
+  cost_usd: 0,
+  usage: { total_tokens: 0 },
+  selectedCandidates: [
+    {
+      candidateId: 'cand_a',
+      providerId: 'prov_a',
+      modelId: 'Qwen/Qwen2.5-7B-Instruct',
+      selectedExecutableModel: false,
+    },
+  ],
+  hiddenFallbackDetected: false,
+  fanout: 1,
+  fanoutCap: 1,
+  planFingerprint: 'fp',
+  promptFingerprint: 'fp2',
+  provenance: { complete: true },
 });
 function rejected(req: any, env: any, reason: string) {
   expect(admit(req, env)).toContain(reason);
 }
 
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — negative cases (real guard + gate)', () => {
-  it('case 21: dryRun=false rejected (real guard)', () => rejected({ ...baseReq(), dryRun: false }, { ...baseEnv(), dryRun: false }, 'dryrun_false'));
-  it('case 22: planOnly=false rejected', () => rejected(baseReq(), { ...baseEnv(), planOnly: false }, 'planonly_false'));
-  it('case 23: c3ExecutionAuthorized=true rejected', () => rejected(baseReq(), { ...baseEnv(), c3ExecutionAuthorized: true }, 'c3_execution_authorized_true'));
-  it('case 24: billableProviderCallsAuthorized=true rejected', () => rejected(baseReq(), { ...baseEnv(), billableProviderCallsAuthorized: true }, 'billable_provider_calls_true'));
-  it('case 24b: providerCallExecuted=true rejected (parity with 14-case harness)', () => rejected(baseReq(), { ...baseEnv(), providerCallExecuted: true }, 'provider_call_executed_true'));
-  it('case 25: cost_usd=0.0001 rejected', () => rejected(baseReq(), { ...baseEnv(), cost_usd: 0.0001 }, 'cost_positive'));
-  it('case 26: usage.total_tokens=1 rejected', () => rejected(baseReq(), { ...baseEnv(), usage: { total_tokens: 1 } }, 'usage_tokens_positive'));
-  it('case 27: candidate outside manifest rejected', () => rejected(baseReq(), { ...baseEnv(), selectedCandidates: [{ candidateId: 'rogue', providerId: 'prov_a', modelId: 'Qwen/Qwen2.5-7B-Instruct' }] }, 'candidate_outside_manifest'));
-  it('case 28: provider outside manifest rejected', () => rejected(baseReq(), { ...baseEnv(), selectedCandidates: [{ candidateId: 'cand_a', providerId: 'rogue', modelId: 'Qwen/Qwen2.5-7B-Instruct' }] }, 'provider_outside_manifest'));
-  it('case 29: placeholder executable rejected', () => rejected(baseReq(), { ...baseEnv(), selectedCandidates: [{ candidateId: 'cand_a', providerId: 'prov_a', modelId: '__C3_DRYRUN_DESIGN_PLACEHOLDER_MODEL_deepseek_1__', selectedExecutableModel: true }] }, 'placeholder_executable'));
-  it('case 30: hidden fallback rejected', () => rejected(baseReq(), { ...baseEnv(), hiddenFallbackDetected: true }, 'hidden_fallback'));
-  it('case 31: fanout over cap rejected', () => rejected(baseReq(), { ...baseEnv(), fanout: 5, fanoutCap: 4 }, 'fanout_over_cap'));
-  it('case 32: invalid fingerprint rejected', () => rejected(baseReq(), { ...baseEnv(), planFingerprint: '', promptFingerprint: '' }, 'invalid_fingerprint'));
-  it('case 33: provenance incomplete rejected', () => rejected(baseReq(), { ...baseEnv(), provenance: { complete: false } }, 'provenance_incomplete'));
+  it('case 21: dryRun=false rejected (real guard)', () =>
+    rejected({ ...baseReq(), dryRun: false }, { ...baseEnv(), dryRun: false }, 'dryrun_false'));
+  it('case 22: planOnly=false rejected', () =>
+    rejected(baseReq(), { ...baseEnv(), planOnly: false }, 'planonly_false'));
+  it('case 23: c3ExecutionAuthorized=true rejected', () =>
+    rejected(
+      baseReq(),
+      { ...baseEnv(), c3ExecutionAuthorized: true },
+      'c3_execution_authorized_true'
+    ));
+  it('case 24: billableProviderCallsAuthorized=true rejected', () =>
+    rejected(
+      baseReq(),
+      { ...baseEnv(), billableProviderCallsAuthorized: true },
+      'billable_provider_calls_true'
+    ));
+  it('case 24b: providerCallExecuted=true rejected (parity with 14-case harness)', () =>
+    rejected(
+      baseReq(),
+      { ...baseEnv(), providerCallExecuted: true },
+      'provider_call_executed_true'
+    ));
+  it('case 25: cost_usd=0.0001 rejected', () =>
+    rejected(baseReq(), { ...baseEnv(), cost_usd: 0.0001 }, 'cost_positive'));
+  it('case 26: usage.total_tokens=1 rejected', () =>
+    rejected(baseReq(), { ...baseEnv(), usage: { total_tokens: 1 } }, 'usage_tokens_positive'));
+  it('case 27: candidate outside manifest rejected', () =>
+    rejected(
+      baseReq(),
+      {
+        ...baseEnv(),
+        selectedCandidates: [
+          { candidateId: 'rogue', providerId: 'prov_a', modelId: 'Qwen/Qwen2.5-7B-Instruct' },
+        ],
+      },
+      'candidate_outside_manifest'
+    ));
+  it('case 28: provider outside manifest rejected', () =>
+    rejected(
+      baseReq(),
+      {
+        ...baseEnv(),
+        selectedCandidates: [
+          { candidateId: 'cand_a', providerId: 'rogue', modelId: 'Qwen/Qwen2.5-7B-Instruct' },
+        ],
+      },
+      'provider_outside_manifest'
+    ));
+  it('case 29: placeholder executable rejected', () =>
+    rejected(
+      baseReq(),
+      {
+        ...baseEnv(),
+        selectedCandidates: [
+          {
+            candidateId: 'cand_a',
+            providerId: 'prov_a',
+            modelId: '__C3_DRYRUN_DESIGN_PLACEHOLDER_MODEL_deepseek_1__',
+            selectedExecutableModel: true,
+          },
+        ],
+      },
+      'placeholder_executable'
+    ));
+  it('case 30: hidden fallback rejected', () =>
+    rejected(baseReq(), { ...baseEnv(), hiddenFallbackDetected: true }, 'hidden_fallback'));
+  it('case 31: fanout over cap rejected', () =>
+    rejected(baseReq(), { ...baseEnv(), fanout: 5, fanoutCap: 4 }, 'fanout_over_cap'));
+  it('case 32: invalid fingerprint rejected', () =>
+    rejected(
+      baseReq(),
+      { ...baseEnv(), planFingerprint: '', promptFingerprint: '' },
+      'invalid_fingerprint'
+    ));
+  it('case 33: provenance incomplete rejected', () =>
+    rejected(
+      baseReq(),
+      { ...baseEnv(), provenance: { complete: false } },
+      'provenance_incomplete'
+    ));
 
-  const NR = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-controlled-runtime-smoke-negative-responses.json');
+  const NR = resolve(
+    process.cwd(),
+    'tmp',
+    '01c1b-c3-dryrun-controlled-runtime-smoke-negative-responses.json'
+  );
   const nr = existsSync(NR) ? JSON.parse(readFileSync(NR, 'utf8')) : null;
   const maybe = nr ? describe : describe.skip;
   maybe('generated negative responses (local verification)', () => {

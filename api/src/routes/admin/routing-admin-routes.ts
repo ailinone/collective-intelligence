@@ -78,7 +78,7 @@ export interface RoutingAdminRouteDeps {
  *     resp: RoutingExplainResult
  */
 export function createRoutingAdminRoutes(
-  deps: RoutingAdminRouteDeps,
+  deps: RoutingAdminRouteDeps
 ): ReadonlyArray<RoutingAdminRouteDescriptor> {
   const descriptors: RoutingAdminRouteDescriptor[] = [
     {
@@ -121,9 +121,10 @@ function coerceDryRunInput(body: unknown): RoutingDryRunInput {
     messages: 'messages' in raw ? raw.messages : undefined,
     // taskProfile passes through to redaction in the handler — caller can
     // pass any shape; redactRoutingTrace strips unsafe fields.
-    taskProfile: (raw.taskProfile && typeof raw.taskProfile === 'object'
-      ? (raw.taskProfile as RoutingDryRunInput['taskProfile'])
-      : undefined),
+    taskProfile:
+      raw.taskProfile && typeof raw.taskProfile === 'object'
+        ? (raw.taskProfile as RoutingDryRunInput['taskProfile'])
+        : undefined,
   };
 }
 
@@ -131,8 +132,7 @@ function coerceExplainInput(body: unknown): RoutingExplainInput {
   if (!body || typeof body !== 'object') return {};
   const raw = body as Record<string, unknown>;
   return {
-    canonicalModelId:
-      typeof raw.canonicalModelId === 'string' ? raw.canonicalModelId : undefined,
+    canonicalModelId: typeof raw.canonicalModelId === 'string' ? raw.canonicalModelId : undefined,
     offeringId: typeof raw.offeringId === 'string' ? raw.offeringId : undefined,
     routeId: typeof raw.routeId === 'string' ? raw.routeId : undefined,
   };

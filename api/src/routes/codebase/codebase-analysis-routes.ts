@@ -9,7 +9,7 @@
 
 /**
  * Codebase Analysis Routes
- * 
+ *
  * Endpoints for code analysis integration with CLI:
  * - Symbol storage and retrieval
  * - Dependency tracking
@@ -87,9 +87,20 @@ export async function registerCodebaseAnalysisRoutes(server: FastifyInstance): P
                       properties: {
                         name: { type: 'string' },
                         qualifiedName: { type: 'string' },
-                        type: { 
+                        type: {
                           type: 'string',
-                          enum: ['function', 'class', 'variable', 'method', 'interface', 'enum', 'constant', 'type', 'import', 'export']
+                          enum: [
+                            'function',
+                            'class',
+                            'variable',
+                            'method',
+                            'interface',
+                            'enum',
+                            'constant',
+                            'type',
+                            'import',
+                            'export',
+                          ],
                         },
                         kind: { type: 'string' },
                         startLine: { type: 'integer' },
@@ -98,7 +109,10 @@ export async function registerCodebaseAnalysisRoutes(server: FastifyInstance): P
                         endColumn: { type: 'integer' },
                         signature: { type: 'string' },
                         documentation: { type: 'string' },
-                        visibility: { type: 'string', enum: ['public', 'private', 'protected', 'internal'] },
+                        visibility: {
+                          type: 'string',
+                          enum: ['public', 'private', 'protected', 'internal'],
+                        },
                         isAsync: { type: 'boolean' },
                         isStatic: { type: 'boolean' },
                         isExported: { type: 'boolean' },
@@ -118,7 +132,15 @@ export async function registerCodebaseAnalysisRoutes(server: FastifyInstance): P
                         targetSymbolName: { type: 'string' },
                         dependencyType: {
                           type: 'string',
-                          enum: ['import', 'export', 'call', 'inherit', 'implement', 'reference', 'type_reference']
+                          enum: [
+                            'import',
+                            'export',
+                            'call',
+                            'inherit',
+                            'implement',
+                            'reference',
+                            'type_reference',
+                          ],
                         },
                         importPath: { type: 'string' },
                         isExternal: { type: 'boolean' },
@@ -144,7 +166,10 @@ export async function registerCodebaseAnalysisRoutes(server: FastifyInstance): P
         const errorMessage = error instanceof Error ? error.message : String(error);
         // ValidationError → 400 (caller can fix the payload). Anything else → 500.
         if (error instanceof ValidationError) {
-          log.warn({ error: errorMessage, details: error.details }, 'Invalid code analysis payload');
+          log.warn(
+            { error: errorMessage, details: error.details },
+            'Invalid code analysis payload'
+          );
           return reply.status(400).send({
             error: {
               code: error.code ?? 'validation_error',
@@ -538,4 +563,3 @@ export async function registerCodebaseAnalysisRoutes(server: FastifyInstance): P
     }
   );
 }
-

@@ -118,7 +118,7 @@ export function shouldInjectPeerReviewPrompt(args: ShouldInjectPeerReviewArgs): 
   }
 
   const alreadyMentionsPeer = args.request.messages.some(
-    (m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('peer'),
+    (m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('peer')
   );
   if (alreadyMentionsPeer) {
     incrementPromptMetric(PROMPT_METRIC_NAMES.PEER_REVIEW_SKIPPED, { reason: 'already-present' });
@@ -137,9 +137,6 @@ export function injectPeerReviewPrompt(request: ChatRequest): ChatRequest {
   incrementPromptMetric(PROMPT_METRIC_NAMES.PEER_REVIEW_INJECTIONS);
   return {
     ...request,
-    messages: [
-      { role: 'system', content: PEER_REVIEW_SYSTEM_PROMPT },
-      ...request.messages,
-    ],
+    messages: [{ role: 'system', content: PEER_REVIEW_SYSTEM_PROMPT }, ...request.messages],
   };
 }

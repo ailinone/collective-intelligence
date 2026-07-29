@@ -84,17 +84,58 @@ import { PROVIDER_CATALOG } from '../providers.catalog';
  */
 const RUNTIME_MATERIALIZED_2026_04_28 = new Set<string>([
   // Hub aggregators (Class A — 18 providers, 63,049 models)
-  'huggingface', 'orqai', 'nanogpt', 'cometapi', 'aiml', 'requesty', 'poe',
-  'openrouter', 'edenai', 'aihubmix', 'routeway', 'nvidia-hub', 'heliconeai',
-  'phala', 'gmi', 'chutes', 'infermatic', 'mancer',
+  'huggingface',
+  'orqai',
+  'nanogpt',
+  'cometapi',
+  'aiml',
+  'requesty',
+  'poe',
+  'openrouter',
+  'edenai',
+  'aihubmix',
+  'routeway',
+  'nvidia-hub',
+  'heliconeai',
+  'phala',
+  'gmi',
+  'chutes',
+  'infermatic',
+  'mancer',
   // Native single-vendor (Class B — 30 providers, 1,142 models)
-  'deepinfra', 'alibaba', 'nvidia', 'openai', 'bedrock', 'novita', 'mistral',
-  'vertex-ai', 'cohere', 'jina', 'wandb', 'upstage', 'perplexity', 'groq',
-  'moonshot', 'fireworks-ai', 'anthropic', 'databricks', 'sambanova', 'writer',
-  'friendli', 'minimax', 'inworld', 'hyperbolic', 'cerebras', 'atlascloud',
-  'avian', 'arcee', 'rekaai', 'deepseek',
+  'deepinfra',
+  'alibaba',
+  'nvidia',
+  'openai',
+  'bedrock',
+  'novita',
+  'mistral',
+  'vertex-ai',
+  'cohere',
+  'jina',
+  'wandb',
+  'upstage',
+  'perplexity',
+  'groq',
+  'moonshot',
+  'fireworks-ai',
+  'anthropic',
+  'databricks',
+  'sambanova',
+  'writer',
+  'friendli',
+  'minimax',
+  'inworld',
+  'hyperbolic',
+  'cerebras',
+  'atlascloud',
+  'avian',
+  'arcee',
+  'rekaai',
+  'deepseek',
   // Audio-specialty (Class C — 2 providers, 133 models)
-  'deepgram', 'elevenlabs',
+  'deepgram',
+  'elevenlabs',
   // Uncensored — Class D, partial overlap with Class A (mancer counted above)
   'venice',
 ]);
@@ -115,11 +156,20 @@ const RUNTIME_MATERIALIZED_2026_04_28 = new Set<string>([
  */
 const NATIVE_PROVIDERS_OUTSIDE_CATALOG = new Set<string>([
   // Tier-1 first-party (no catalog row, hardcoded in central-model-discovery-service)
-  'openai', 'anthropic', 'mistral', 'cohere', 'deepseek', 'xai',
-  'vertex-ai', 'bedrock', 'jina', 'deepgram', 'elevenlabs',
+  'openai',
+  'anthropic',
+  'mistral',
+  'cohere',
+  'deepseek',
+  'xai',
+  'vertex-ai',
+  'bedrock',
+  'jina',
+  'deepgram',
+  'elevenlabs',
   // Native cloud hubs without catalog rows
-  'openrouter',     // Wired via dedicated openrouter-aggregator source
-  'nvidia-hub',     // Synthesized peer of nvidia for hub-vs-native attribution
+  'openrouter', // Wired via dedicated openrouter-aggregator source
+  'nvidia-hub', // Synthesized peer of nvidia for hub-vs-native attribution
   // 'alibaba' removed 2026-06-11: the runnable-gap pass gave it a catalog
   // row (oai-compat-pure, dashscope), so it is no longer "outside the
   // catalog" — the AlibabaModelFetcher native source and the catalog row
@@ -133,71 +183,79 @@ const NATIVE_PROVIDERS_OUTSIDE_CATALOG = new Set<string>([
  */
 const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   // Self-hosted (8) — infra not part of local Docker stack
-  'vllm':              'self-hosted; needs vLLM server running locally',
-  'lm-studio':         'self-hosted; needs LM Studio app running locally',
-  'ollama':            'self-hosted; ollama container exposed but not seeded with models',
-  'xinference':        'self-hosted; needs Xinference deployment',
-  'triton':            'self-hosted; needs NVIDIA Triton server',
-  'local-llama':       'self-hosted; ad-hoc local llama.cpp',
-  'local-kobold':      'self-hosted; ad-hoc local KoboldCpp',
-  'local-embeddings':  'self-hosted; ad-hoc local embedding server',
+  vllm: 'self-hosted; needs vLLM server running locally',
+  'lm-studio': 'self-hosted; needs LM Studio app running locally',
+  ollama: 'self-hosted; ollama container exposed but not seeded with models',
+  xinference: 'self-hosted; needs Xinference deployment',
+  triton: 'self-hosted; needs NVIDIA Triton server',
+  'local-llama': 'self-hosted; ad-hoc local llama.cpp',
+  'local-kobold': 'self-hosted; ad-hoc local KoboldCpp',
+  'local-embeddings': 'self-hosted; ad-hoc local embedding server',
   // Catalog-only / pinnedFallback specialty (no list endpoint)
-  'sap':               'wired discovery+execution (SapAiCoreAdapter); creds-missing in local env; expected in prod via GCP',
-  'snowflake':         'wired discovery+execution (SnowflakeCortexAdapter); creds-missing in local env; expected in prod via GCP',
-  'topaz':             'catalog-only; Topaz needs adapter (Phase 9 evaluation)',
-  'inflection':        'oai-compat-pure execution-only (api.inflection.ai/v1); creds-missing in local env; expected in prod via GCP',
-  'relace':            'catalog-only; specialty code-edit, pinnedFallback used',
-  'recraft':           'image-only specialty, pinnedFallback',
-  'runwayml':          'video-only specialty, pinnedFallback',
-  'bfl':               'image-only specialty, pinnedFallback',
-  'azure-openai':      'per-deployment, no list endpoint, pinnedFallback',
+  sap: 'wired discovery+execution (SapAiCoreAdapter); creds-missing in local env; expected in prod via GCP',
+  snowflake:
+    'wired discovery+execution (SnowflakeCortexAdapter); creds-missing in local env; expected in prod via GCP',
+  topaz: 'catalog-only; Topaz needs adapter (Phase 9 evaluation)',
+  inflection:
+    'oai-compat-pure execution-only (api.inflection.ai/v1); creds-missing in local env; expected in prod via GCP',
+  relace: 'catalog-only; specialty code-edit, pinnedFallback used',
+  recraft: 'image-only specialty, pinnedFallback',
+  runwayml: 'video-only specialty, pinnedFallback',
+  bfl: 'image-only specialty, pinnedFallback',
+  'azure-openai': 'per-deployment, no list endpoint, pinnedFallback',
   // Credentials missing in local .env — expected to materialise in prod with GCP
-  'togetherai':        'creds-missing in local env; expected in prod via GCP',
-  'nscale':            'creds-missing in local env; expected in prod via GCP',
-  'anyscale':          'creds-missing in local env; expected in prod via GCP',
-  'featherless-ai':    'creds-missing in local env; expected in prod via GCP',
-  'nebius':            'creds-missing in local env; expected in prod via GCP',
-  'lambda-ai':         'creds-missing in local env; expected in prod via GCP',
-  'scaleway':          'creds-missing in local env; expected in prod via GCP',
-  'synthetic':         'creds-missing in local env; expected in prod via GCP',
-  'morph':             'creds-missing in local env; expected in prod via GCP',
-  'zai':               'creds-missing in local env; expected in prod via GCP',
-  'xiaomi-mimo':       'creds-missing in local env; expected in prod via GCP',
-  'v0':                'creds-missing in local env; expected in prod via GCP',
+  togetherai: 'creds-missing in local env; expected in prod via GCP',
+  nscale: 'creds-missing in local env; expected in prod via GCP',
+  anyscale: 'creds-missing in local env; expected in prod via GCP',
+  'featherless-ai': 'creds-missing in local env; expected in prod via GCP',
+  nebius: 'creds-missing in local env; expected in prod via GCP',
+  'lambda-ai': 'creds-missing in local env; expected in prod via GCP',
+  scaleway: 'creds-missing in local env; expected in prod via GCP',
+  synthetic: 'creds-missing in local env; expected in prod via GCP',
+  morph: 'creds-missing in local env; expected in prod via GCP',
+  zai: 'creds-missing in local env; expected in prod via GCP',
+  'xiaomi-mimo': 'creds-missing in local env; expected in prod via GCP',
+  v0: 'creds-missing in local env; expected in prod via GCP',
   'vercel-ai-gateway': 'creds-missing in local env; expected in prod via GCP',
-  'volcano':           'creds-missing in local env; expected in prod via GCP',
-  'watsonx':           'creds-missing in local env; expected in prod via GCP',
-  'ai302':             'creds-missing in local env; expected in prod via GCP',
+  volcano: 'creds-missing in local env; expected in prod via GCP',
+  watsonx: 'creds-missing in local env; expected in prod via GCP',
+  ai302: 'creds-missing in local env; expected in prod via GCP',
   'cloudflare-workers-ai': 'creds-missing in local env; expected in prod via GCP',
-  'gemini-openai':     'creds-missing in local env; expected in prod via GCP',
-  'github-models':     'creds-missing in local env; expected in prod via GCP',
-  'imagerouter':       'creds-missing in local env; expected in prod via GCP',
-  'stepfun':           'creds-missing in local env; expected in prod via GCP',
+  'gemini-openai': 'creds-missing in local env; expected in prod via GCP',
+  'github-models': 'creds-missing in local env; expected in prod via GCP',
+  imagerouter: 'creds-missing in local env; expected in prod via GCP',
+  stepfun: 'creds-missing in local env; expected in prod via GCP',
   // Single-cycle regressions (operator follow-up)
-  'bytez':             'BytezNativeModelFetcher regression; Phase 4d promotion did not survive rebuild',
-  'voyage':            'creds-revoked; needs operator rotation',
-  'replicate':         'API not enabled in current GCP project',
-  'siliconflow':       'API endpoint 404 in latest probe',
-  'qianfan':           'creds-format mismatch; needs operator',
+  bytez: 'BytezNativeModelFetcher regression; Phase 4d promotion did not survive rebuild',
+  voyage: 'creds-revoked; needs operator rotation',
+  replicate: 'API not enabled in current GCP project',
+  siliconflow: 'API endpoint 404 in latest probe',
+  qianfan: 'creds-format mismatch; needs operator',
   // LOTE O (2026-07-10/11) — catalog row + full secret wiring landed
   // 2026-07-10; live-probed successfully 2026-07-11 (real /v1/models 200 +
   // /v1/chat/completions 200 for both — see consolidation-matrix.ts
   // `live-validation` bucket for evidence). Absent from the frozen
   // RUNTIME_MATERIALIZED_2026_04_28 DB snapshot simply because that
   // capture predates this onboarding — not a gap.
-  'apertis':           'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
-  'inception':         'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
+  apertis:
+    'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
+  inception:
+    'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
   // LOTE P (2026-07-11) — same-day onboarding, same reasoning as apertis/inception.
-  'empiriolabs':       'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
+  empiriolabs:
+    'live-probed 2026-07-11 (200 on /v1/models + /v1/chat/completions); postdates the 2026-04-28 DB snapshot',
   // LOTE Q (2026-07-12) — full live probe completed same day (discovery
   // unauthenticated, then chat/completions once gcloud was re-authenticated).
-  'concentrate':       'live-probed 2026-07-12 (200 on /v1/models/ + /v1/chat/completions/); postdates the 2026-04-28 DB snapshot',
+  concentrate:
+    'live-probed 2026-07-12 (200 on /v1/models/ + /v1/chat/completions/); postdates the 2026-04-28 DB snapshot',
   // LOTE R (2026-07-13/15) — full live probe completed once gcloud was
   // re-authenticated a third time.
-  'fastrouter':        'live-probed 2026-07-15 (200 on /api/v1/providers + /api/v1/models + /api/v1/chat/completions); postdates the 2026-04-28 DB snapshot',
+  fastrouter:
+    'live-probed 2026-07-15 (200 on /api/v1/providers + /api/v1/models + /api/v1/chat/completions); postdates the 2026-04-28 DB snapshot',
   // LOTE S (2026-07-13) — full live probe same day (discovery authenticated,
   // execution confirmed for 6 of 7 requested vendors).
-  'perplexity-agent':  'live-probed 2026-07-13 (200 on /v1/models + /v1/agent for anthropic/openai/google/xai/z.ai/nvidia); postdates the 2026-04-28 DB snapshot',
+  'perplexity-agent':
+    'live-probed 2026-07-13 (200 on /v1/models + /v1/agent for anthropic/openai/google/xai/z.ai/nvidia); postdates the 2026-04-28 DB snapshot',
   // LOTE T (2026-07-13) — ailin. Unlike LOTE O-S, NOT live-probed this
   // session (no provisioned AILIN_API_KEY available). Wiring verified
   // contract-only against api.ailin.one's own openapi-spec.yaml: chat/
@@ -206,14 +264,22 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   // return a richer native shape the generic fetcher only partly
   // understands (documented as a follow-up in the catalog entry itself).
   // Postdates the 2026-04-28 DB snapshot, same as LOTE O-S.
-  'ailin':             'not live-probed (no AILIN_API_KEY provisioned this session); contract-verified against openapi-spec.yaml only — see catalog entry notes for the discovery-shape gap',
+  ailin:
+    'not live-probed (no AILIN_API_KEY provisioned this session); contract-verified against openapi-spec.yaml only — see catalog entry notes for the discovery-shape gap',
   // LOTE U (2026-07-29) — sakana-ai. Discovery live-probed successfully
-  // (200 on /v1/models, real 5-model list) but chat/completions execution
-  // could NOT be confirmed end-to-end this session: the provisioned key's
-  // account has no active subscription/PAYG billing (429
-  // usage_limit_reached on both fugu and fugu-ultra). Postdates the
-  // 2026-04-28 DB snapshot regardless — see catalog entry notes.
-  'sakana-ai':         'live-probed 2026-07-29 (200 on /v1/models); chat/completions execution blocked by account billing (429 usage_limit_reached, no active subscription) — see catalog entry notes',
+  // (200 on /v1/models, real 5-model list) same day as catalog onboarding.
+  // chat/completions execution was blocked at first probe (429
+  // usage_limit_reached — account had no active subscription/PAYG
+  // billing), but the operator activated pay-as-you-go billing later the
+  // same day and re-verified end-to-end: chat, streaming, tool calls,
+  // JSON mode, and vision all confirmed live with real HTTP 200 responses
+  // (see consolidation-matrix.ts `live-validation` bucket for the full
+  // writeup, and the catalog entry notes). Absent from
+  // RUNTIME_MATERIALIZED_2026_04_28 simply because that capture predates
+  // this onboarding, same as apertis/inception/empiriolabs/etc. — not a
+  // gap.
+  'sakana-ai':
+    'live-probed 2026-07-29 (200 on /v1/models + /v1/chat/completions, including streaming/tools/jsonMode/vision, after same-day billing activation); postdates the 2026-04-28 DB snapshot',
 };
 
 // ──────────────────────────────────────────────────────────────────────────

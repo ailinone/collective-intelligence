@@ -81,7 +81,7 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
         `;
         return ids;
       },
-      { timeout: 15_000 },
+      { timeout: 15_000 }
     );
   }
 
@@ -114,17 +114,14 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
     const seededSet = new Set(seeded);
 
     const results = await Promise.all(
-      Array.from({ length: pollerCount }, () => runClaim(perBatch)),
+      Array.from({ length: pollerCount }, () => runClaim(perBatch))
     );
 
     // ── Invariant 1: pairwise intersection is empty ───────────────────
     for (let i = 0; i < results.length; i++) {
       for (let j = i + 1; j < results.length; j++) {
         const overlap = results[i]!.filter((id) => results[j]!.includes(id));
-        expect(
-          overlap,
-          `pollers ${i} and ${j} double-claimed these ids`,
-        ).toHaveLength(0);
+        expect(overlap, `pollers ${i} and ${j} double-claimed these ids`).toHaveLength(0);
       }
     }
 
@@ -155,7 +152,7 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
 
     const start = Date.now();
     const results = await Promise.all(
-      Array.from({ length: pollerCount }, () => runClaim(perBatch)),
+      Array.from({ length: pollerCount }, () => runClaim(perBatch))
     );
     const elapsed = Date.now() - start;
 
@@ -163,7 +160,7 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
     // the winners' locks — 10 concurrent claims × ~50ms tx = way past
     // our budget. A passing SKIP LOCKED makes this complete near-instant.
     expect(elapsed, `SKIP LOCKED should not serialize pollers (took ${elapsed}ms)`).toBeLessThan(
-      5_000,
+      5_000
     );
 
     // Exactly 5 rows claimed across all pollers.
@@ -181,18 +178,14 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
     await seed(total);
 
     // First sweep drains everything.
-    const first = await Promise.all(
-      Array.from({ length: 4 }, () => runClaim(10)),
-    );
+    const first = await Promise.all(Array.from({ length: 4 }, () => runClaim(10)));
     const firstTotal = first.reduce((n, r) => n + r.length, 0);
     expect(firstTotal).toBe(total);
 
     // Second sweep — no claimable rows because drained_at IS NOT NULL
     // for all of them. The `WHERE drained_at IS NULL` predicate filters
     // them out regardless of row locks.
-    const second = await Promise.all(
-      Array.from({ length: 4 }, () => runClaim(10)),
-    );
+    const second = await Promise.all(Array.from({ length: 4 }, () => runClaim(10)));
     const secondTotal = second.reduce((n, r) => n + r.length, 0);
     expect(secondTotal).toBe(0);
   });
@@ -205,9 +198,7 @@ describe('broadcast outbox — SKIP LOCKED disjoint claims (integration)', () =>
 
     // Drain everything.
     await runClaim(total);
-    expect(
-      await prisma.broadcastTraceOutbox.count({ where: { drainedAt: null } }),
-    ).toBe(0);
+    expect(await prisma.broadcastTraceOutbox.count({ where: { drainedAt: null } })).toBe(0);
 
     // Simulate the stranded-reclaim sweep resetting a subset.
     const toReclaim = seeded.slice(0, 3);

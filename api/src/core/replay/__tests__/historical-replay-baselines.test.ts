@@ -60,28 +60,19 @@ describe('baselines', () => {
   });
 
   it('baseline carries actualHistoricalJudge when the holdout had one', () => {
-    const withActual = result.rows.filter(
-      (r) => r.baseline.actualHistoricalJudge !== undefined,
-    );
+    const withActual = result.rows.filter((r) => r.baseline.actualHistoricalJudge !== undefined);
     expect(withActual.length).toBeGreaterThan(0);
   });
 
   it('singleBudgetJudge is set when train had enough single rows', () => {
-    const withBudget = result.rows.filter(
-      (r) => r.baseline.singleBudgetJudge !== undefined,
-    );
+    const withBudget = result.rows.filter((r) => r.baseline.singleBudgetJudge !== undefined);
     expect(withBudget.length).toBeGreaterThan(0);
   });
 
   it('singleBudgetCostUsd <= singleCostUsd when both are present', () => {
     for (const r of result.rows) {
-      if (
-        r.baseline.singleBudgetCostUsd !== undefined &&
-        r.baseline.singleCostUsd !== undefined
-      ) {
-        expect(r.baseline.singleBudgetCostUsd).toBeLessThanOrEqual(
-          r.baseline.singleCostUsd + 1e-9,
-        );
+      if (r.baseline.singleBudgetCostUsd !== undefined && r.baseline.singleCostUsd !== undefined) {
+        expect(r.baseline.singleBudgetCostUsd).toBeLessThanOrEqual(r.baseline.singleCostUsd + 1e-9);
       }
     }
   });

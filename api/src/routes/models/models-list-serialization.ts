@@ -139,8 +139,14 @@ export function buildModelDto({ model, operability }: RankedEntry): Record<strin
  * filter WITHOUT building the full row DTO (so the filter stays cheap on 64k
  * rows — it only computes the lightweight endpoints string array).
  */
-export function entrySupportsEndpoint(entry: RankedEntry, endpoint: ModelOperationEndpoint): boolean {
-  const endpoints = inferSupportedEndpoints(entry.model.capabilities, getModelMetadata(entry.model));
+export function entrySupportsEndpoint(
+  entry: RankedEntry,
+  endpoint: ModelOperationEndpoint
+): boolean {
+  const endpoints = inferSupportedEndpoints(
+    entry.model.capabilities,
+    getModelMetadata(entry.model)
+  );
   return endpoints.includes(endpoint);
 }
 
@@ -166,10 +172,7 @@ export function resolveModelsPage(
   entries: readonly RankedEntry[],
   params: { limit?: number; offset?: number }
 ): ModelsPage {
-  const limit = Math.min(
-    Math.max(1, Math.trunc(params.limit ?? DEFAULT_PAGE_SIZE)),
-    MAX_PAGE_SIZE
-  );
+  const limit = Math.min(Math.max(1, Math.trunc(params.limit ?? DEFAULT_PAGE_SIZE)), MAX_PAGE_SIZE);
   const offset = Math.max(0, Math.trunc(params.offset ?? 0));
   const total = entries.length;
   const pageEntries = entries.slice(offset, offset + limit) as RankedEntry[];

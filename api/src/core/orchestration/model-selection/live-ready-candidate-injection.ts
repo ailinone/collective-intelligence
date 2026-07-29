@@ -122,7 +122,9 @@ export const DEFAULT_LIVE_READY_INJECTION_POLICY: LiveReadyCandidateInjectionPol
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function normalize(v: string | undefined | null): string {
-  return String(v ?? '').trim().toLowerCase();
+  return String(v ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -148,11 +150,8 @@ export function buildLiveReadyCandidateDedupeKey(input: LiveReadyDedupeKeyInput)
  * on a raw snapshot entry (no store reference required — pure).
  */
 export function isStateCurrentlyEligible(
-  state: Pick<
-    LiveChatOperabilityState,
-    'chatReady' | 'eligibleForCriticalRole' | 'cooldownUntil'
-  >,
-  now: number = Date.now(),
+  state: Pick<LiveChatOperabilityState, 'chatReady' | 'eligibleForCriticalRole' | 'cooldownUntil'>,
+  now: number = Date.now()
 ): boolean {
   if (!state.chatReady) return false;
   if (state.eligibleForCriticalRole === false) return false;
@@ -177,13 +176,15 @@ export interface InjectLiveReadyCandidatesInput<TCandidate, TState> {
    *   - multiple candidates → rejection `ambiguous_catalog_match` (we refuse
    *     to guess when the catalog returns >1 match for the same state)
    */
-  readonly resolveCatalogCandidate: (state: TState) => TCandidate | readonly TCandidate[] | undefined;
+  readonly resolveCatalogCandidate: (
+    state: TState
+  ) => TCandidate | readonly TCandidate[] | undefined;
   readonly candidateSupportsRole: (candidate: TCandidate, role: string) => boolean;
   readonly projectCandidateKey: (candidate: TCandidate, role: string) => string;
   readonly projectStateKey: (state: TState, role: string) => string;
   readonly attachInjectionMetadata: (
     candidate: TCandidate,
-    metadata: LiveReadyInjectionMetadata,
+    metadata: LiveReadyInjectionMetadata
   ) => TCandidate;
   readonly projectStateForTrace: (state: TState) => LiveReadyInjectionTraceEntry;
   readonly stateIsEligible: (state: TState) => boolean;
@@ -216,7 +217,7 @@ export interface InjectLiveReadyCandidatesInput<TCandidate, TState> {
  * Output: stable, deterministic, no I/O, no mutation of inputs.
  */
 export function injectLiveReadyCandidatesIntoRolePool<TCandidate, TState>(
-  input: InjectLiveReadyCandidatesInput<TCandidate, TState>,
+  input: InjectLiveReadyCandidatesInput<TCandidate, TState>
 ): LiveReadyCandidateInjectionResult<TCandidate> {
   const policy = input.policy ?? DEFAULT_LIVE_READY_INJECTION_POLICY;
   const metadata: LiveReadyInjectionMetadata = {
@@ -239,7 +240,9 @@ export function injectLiveReadyCandidatesIntoRolePool<TCandidate, TState>(
     };
   }
 
-  const baseKeys = new Set(input.baseCandidates.map((c) => input.projectCandidateKey(c, input.role)));
+  const baseKeys = new Set(
+    input.baseCandidates.map((c) => input.projectCandidateKey(c, input.role))
+  );
   const injected: TCandidate[] = [];
   const injectedKeys = new Set<string>();
   const dedupedExisting: TCandidate[] = [];
@@ -256,13 +259,22 @@ export function injectLiveReadyCandidatesIntoRolePool<TCandidate, TState>(
     const providerId = input.stateProvider(state);
     const stateModelId = input.stateModel(state);
     if (!providerId || !stateModelId) {
-      rejected.push({ reason: 'missing_provider_or_model', providerId, logicalModelId: stateModelId });
+      rejected.push({
+        reason: 'missing_provider_or_model',
+        providerId,
+        logicalModelId: stateModelId,
+      });
       continue;
     }
 
     const stateRole = input.stateLogicalRole?.(state);
     if (stateRole && stateRole !== input.role && !policy.allowCrossRoleByCapabilities) {
-      rejected.push({ reason: 'role_mismatch', providerId, logicalModelId: stateModelId, role: stateRole });
+      rejected.push({
+        reason: 'role_mismatch',
+        providerId,
+        logicalModelId: stateModelId,
+        role: stateRole,
+      });
       continue;
     }
 

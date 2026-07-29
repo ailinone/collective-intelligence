@@ -159,7 +159,7 @@ export const PROVIDER_MODEL_ALIASES: ProviderModelAliasMap = {
  */
 export function resolveProviderApiModelId(
   providerId: string,
-  catalogModelId: string,
+  catalogModelId: string
 ): { apiModelId: string; aliasUsed: boolean } {
   const providerMap = PROVIDER_MODEL_ALIASES[providerId.toLowerCase()];
   if (!providerMap) return { apiModelId: catalogModelId, aliasUsed: false };
@@ -175,7 +175,7 @@ export function resolveProviderApiModelId(
  */
 export function findCatalogIdForApiModelId(
   providerId: string,
-  apiModelId: string,
+  apiModelId: string
 ): string | undefined {
   const providerMap = PROVIDER_MODEL_ALIASES[providerId.toLowerCase()];
   if (!providerMap) return undefined;

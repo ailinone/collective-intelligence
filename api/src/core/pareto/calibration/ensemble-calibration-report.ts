@@ -14,10 +14,7 @@
  * approval verdict. Pure. No I/O.
  */
 
-import type {
-  EnsembleCalibrationMetrics,
-  EnsembleEstimator,
-} from './ensemble-calibration-types';
+import type { EnsembleCalibrationMetrics, EnsembleEstimator } from './ensemble-calibration-types';
 import type { EnsembleEstimatorEvaluation } from './ensemble-expected-judge-estimator';
 import type { EnsembleLiftPolicy } from './ensemble-lift-policy';
 import type { MarginalGainCalibrationResult } from './marginal-gain-calibrator';
@@ -67,7 +64,7 @@ export interface BuildEnsembleCalibrationReportInput {
 }
 
 export function buildEnsembleCalibrationReport(
-  input: BuildEnsembleCalibrationReportInput,
+  input: BuildEnsembleCalibrationReportInput
 ): EnsembleCalibrationReport {
   const approvedTaskTypes: string[] = [];
   const blockedTaskTypes: string[] = [];
@@ -85,19 +82,15 @@ export function buildEnsembleCalibrationReport(
   if (blockedTaskTypes.length > 0) {
     reasons.push(`blocked_task_types:${blockedTaskTypes.join(',')}`);
   }
+  reasons.push(`chosen_estimator:${input.chosenEstimator.name}`);
   reasons.push(
-    `chosen_estimator:${input.chosenEstimator.name}`,
+    `calibrated_judge_error:${input.calibratedMetrics.expectedVsObservedJudgeError.toFixed(3)}`
   );
-  reasons.push(
-    `calibrated_judge_error:${input.calibratedMetrics.expectedVsObservedJudgeError.toFixed(3)}`,
-  );
-  reasons.push(
-    `non_fallback_rate:${input.calibratedMetrics.nonFallbackRate.toFixed(3)}`,
-  );
+  reasons.push(`non_fallback_rate:${input.calibratedMetrics.nonFallbackRate.toFixed(3)}`);
   if (input.calibratedMetrics.nonFallbackRate < input.liftPolicy.minNonFallbackRate) {
     approved = false;
     reasons.push(
-      `non_fallback_rate_below_policy:${input.calibratedMetrics.nonFallbackRate.toFixed(3)}<${input.liftPolicy.minNonFallbackRate}`,
+      `non_fallback_rate_below_policy:${input.calibratedMetrics.nonFallbackRate.toFixed(3)}<${input.liftPolicy.minNonFallbackRate}`
     );
   }
 

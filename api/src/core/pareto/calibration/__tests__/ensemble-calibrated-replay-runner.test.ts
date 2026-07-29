@@ -82,10 +82,7 @@ describe('ensemble-calibrated replay runner — smoke', () => {
     expect(selection.chosen).toBeDefined();
 
     const result = optimizeEnsembleCalibrated({
-      candidates: [
-        score('m1', 0.7, 0.005),
-        score('m2', 0.65, 0.005),
-      ],
+      candidates: [score('m1', 0.7, 0.005), score('m2', 0.65, 0.005)],
       baseline: { singleModelJudge: 0.55, singleModelCostUsd: 0.02 },
       taskType: 'code',
       peerLiftCalibration: peerLift,

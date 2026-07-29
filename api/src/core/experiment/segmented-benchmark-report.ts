@@ -202,7 +202,7 @@ export function isMeasuredRow(r: ExperimentExecutionResult): boolean {
 function taskScoresFor(
   results: ExperimentExecutionResult[],
   mode: 'single-model' | 'collective',
-  strategy?: string,
+  strategy?: string
 ): TaskScore[] {
   return results
     .filter((r) => r.executionMode === mode && isMeasuredRow(r))
@@ -228,10 +228,14 @@ export function bestSinglePerTask(results: ExperimentExecutionResult[]): TaskSco
   return [...best.entries()].map(([taskIndex, value]) => ({ taskIndex, value }));
 }
 
-function classifyPaired(
-  deltas: number[],
-): { verdict: PairedVerdict; gain: number; pValue: number | null; effect: string | null } {
-  if (deltas.length < 2) return { verdict: 'INSUFFICIENT_DATA', gain: meanDelta(deltas), pValue: null, effect: null };
+function classifyPaired(deltas: number[]): {
+  verdict: PairedVerdict;
+  gain: number;
+  pValue: number | null;
+  effect: string | null;
+} {
+  if (deltas.length < 2)
+    return { verdict: 'INSUFFICIENT_DATA', gain: meanDelta(deltas), pValue: null, effect: null };
   const test = pairedTTest(deltas);
   const es = pairedCohensD(deltas);
   const gain = meanDelta(deltas);
@@ -257,7 +261,7 @@ function groupBy<T>(items: T[], key: (item: T) => string): Record<string, T[]> {
 export function generateSegmentedBenchmarkReport(
   experimentId: string,
   results: ExperimentExecutionResult[],
-  thresholds: GoNoGoThresholds = DEFAULT_THRESHOLDS,
+  thresholds: GoNoGoThresholds = DEFAULT_THRESHOLDS
 ): SegmentedBenchmarkReport {
   const confirmatoryTaskTypes = new Set(CONFIRMATORY_REGISTRY.map((r) => r.taskType));
 
@@ -302,14 +306,22 @@ export function generateSegmentedBenchmarkReport(
     const indices = sharedTaskIndices(collectiveTS, singleTS);
     if (gain > thresholds.minQualityGainForCollective) {
       exploratory.push({
-        kind: 'EXPLORATORY', scenario, verdict: 'COLLECTIVE_WINS',
-        pairedDeltaMean: gain, sharedTaskCount: indices.length, sharedTaskIndices: indices,
+        kind: 'EXPLORATORY',
+        scenario,
+        verdict: 'COLLECTIVE_WINS',
+        pairedDeltaMean: gain,
+        sharedTaskCount: indices.length,
+        sharedTaskIndices: indices,
         caveat: EXPLORATORY_CAVEAT,
       });
     } else if (gain <= NOT_WORTH_MARGIN) {
       exploratory.push({
-        kind: 'EXPLORATORY', scenario, verdict: 'COLLECTIVE_NOT_WORTH',
-        pairedDeltaMean: gain, sharedTaskCount: indices.length, sharedTaskIndices: indices,
+        kind: 'EXPLORATORY',
+        scenario,
+        verdict: 'COLLECTIVE_NOT_WORTH',
+        pairedDeltaMean: gain,
+        sharedTaskCount: indices.length,
+        sharedTaskIndices: indices,
         caveat: EXPLORATORY_CAVEAT,
       });
     }

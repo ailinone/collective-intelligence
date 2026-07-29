@@ -31,7 +31,12 @@ describe('operability hub — persisted overlay (Camada 1a)', () => {
   });
 
   it('remembers no_credits across a simulated restart (overlay rehydrated)', () => {
-    hub.setPersistedOverlayForTesting('p1a-credits', 'no_credits', 'runtime_credit_error', future());
+    hub.setPersistedOverlayForTesting(
+      'p1a-credits',
+      'no_credits',
+      'runtime_credit_error',
+      future()
+    );
     const r = hub.getProviderState('p1a-credits');
     expect(r.operabilityState).toBe('no_credits');
     expect(r.balanceStatus).toBe('no_credits');
@@ -53,7 +58,11 @@ describe('operability hub — persisted overlay (Camada 1a)', () => {
   });
 
   it('startPersistence is idempotent and unref-safe (no throw)', () => {
-    expect(() => { hub.startPersistence(999_999); hub.startPersistence(999_999); hub.stopPersistence(); }).not.toThrow();
+    expect(() => {
+      hub.startPersistence(999_999);
+      hub.startPersistence(999_999);
+      hub.stopPersistence();
+    }).not.toThrow();
   });
 });
 
@@ -95,7 +104,7 @@ describe('operability hub — credit-error classification (2026-06-29)', () => {
       'cred-anthropic-400',
       false,
       400,
-      'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing.',
+      'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing.'
     );
     expect(hub.getProviderState('cred-anthropic-400').operabilityState).toBe('no_credits');
   });

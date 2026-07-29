@@ -95,12 +95,12 @@ describe('Signal Validator', () => {
   it('rejects a signal with invalid round', () => {
     const result = validateCoordinationSignal(makeSignal({ round: 0 }));
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes('round'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('round'))).toBe(true);
   });
 
   it('rejects a signal with invalid confidence', () => {
     const result = validateCoordinationSignal(
-      makeSignal({ decision: { type: 'approve', value: true, confidence: 1.5 } }),
+      makeSignal({ decision: { type: 'approve', value: true, confidence: 1.5 } })
     );
     expect(result.valid).toBe(false);
   });
@@ -113,8 +113,14 @@ describe('Signal Validator', () => {
   it('sanitizes long rationale strings', () => {
     const longRationale = 'a'.repeat(3000);
     const result = validateSensitivity(
-      { variable: 'x', direction: 'increase', trigger: 'test', confidence: 0.8, rationale: longRationale },
-      0,
+      {
+        variable: 'x',
+        direction: 'increase',
+        trigger: 'test',
+        confidence: 0.8,
+        rationale: longRationale,
+      },
+      0
     );
     expect(result.sanitized).toBeDefined();
     if (result.sanitized) {
@@ -123,7 +129,12 @@ describe('Signal Validator', () => {
   });
 
   it('validates a valid decision', () => {
-    const result = validateDecision({ type: 'approve', value: 'yes', confidence: 0.8, rationale: 'test' });
+    const result = validateDecision({
+      type: 'approve',
+      value: 'yes',
+      confidence: 0.8,
+      rationale: 'test',
+    });
     expect(result.errors).toHaveLength(0);
     expect(result.sanitized).toBeDefined();
   });
@@ -174,8 +185,30 @@ describe('SensitivityAggregator', () => {
   it('detects conflicts when agents disagree on direction', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     const signals = [
-      makeSignal({ agentId: 'a', sensitivities: [{ variable: 'risk', direction: 'increase', trigger: 't', confidence: 0.8, rationale: 'r' }] }),
-      makeSignal({ agentId: 'b', sensitivities: [{ variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.7, rationale: 'r' }] }),
+      makeSignal({
+        agentId: 'a',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'increase',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r',
+          },
+        ],
+      }),
+      makeSignal({
+        agentId: 'b',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.7,
+            rationale: 'r',
+          },
+        ],
+      }),
     ];
     const result = aggregateSignals(signals, state);
     expect(result.conflictingSignals).toContain('risk');
@@ -235,7 +268,9 @@ describe('Stop Conditions', () => {
     limits.stopOnCriticalRisk = true;
     const state = createInitialState('run-1', 'test', limits);
     state.round = 1;
-    state.risks = [{ type: 'test', severity: 'critical', description: 'critical issue', sourceSignalIds: [] }];
+    state.risks = [
+      { type: 'test', severity: 'critical', description: 'critical issue', sourceSignalIds: [] },
+    ];
     expect(evaluateStopConditions(state)).toBe('critical_risk');
   });
 
@@ -244,7 +279,9 @@ describe('Stop Conditions', () => {
     limits.stopOnCriticalRisk = false;
     const state = createInitialState('run-1', 'test', limits);
     state.round = 1;
-    state.risks = [{ type: 'test', severity: 'critical', description: 'critical issue', sourceSignalIds: [] }];
+    state.risks = [
+      { type: 'test', severity: 'critical', description: 'critical issue', sourceSignalIds: [] },
+    ];
     state.convergence.score = 0.5;
     state.convergence.decisionFlipRate = 0.5;
     expect(evaluateStopConditions(state)).toBeUndefined();
@@ -273,12 +310,35 @@ describe('ConvergenceEvaluator', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     state.round = 2;
     state.history = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.6 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'reject', value: 'no', confidence: 0.7 } }),
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.95 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.93 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.6 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'reject', value: 'no', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.95 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.93 },
+      }),
     ];
-    state.convergence = { score: 0.95, decisionFlipRate: 0, dissent: 0, confidenceTrend: [0.5, 0.94], stableVariables: [], unstableVariables: [] };
+    state.convergence = {
+      score: 0.95,
+      decisionFlipRate: 0,
+      dissent: 0,
+      confidenceTrend: [0.5, 0.94],
+      stableVariables: [],
+      unstableVariables: [],
+    };
     const evaluation = evaluateConvergence(state);
     expect(evaluation.herdingDetected).toBe(true);
   });
@@ -286,7 +346,14 @@ describe('ConvergenceEvaluator', () => {
   it('detects stagnation when confidence is flat across rounds', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     state.round = 3;
-    state.convergence = { score: 0.7, decisionFlipRate: 0, dissent: 0.2, confidenceTrend: [0.71, 0.715, 0.712], stableVariables: [], unstableVariables: [] };
+    state.convergence = {
+      score: 0.7,
+      decisionFlipRate: 0,
+      dissent: 0.2,
+      confidenceTrend: [0.71, 0.715, 0.712],
+      stableVariables: [],
+      unstableVariables: [],
+    };
     const evaluation = evaluateConvergence(state);
     expect(evaluation.stagnationDetected).toBe(true);
   });
@@ -294,13 +361,27 @@ describe('ConvergenceEvaluator', () => {
   it('detects sensitivity poisoning via identical triggers', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     state.round = 1;
-    const identicalSens = { variable: 'security', direction: 'block', trigger: 'if SQL injection found', confidence: 0.99, rationale: 'critical security risk' };
+    const identicalSens = {
+      variable: 'security',
+      direction: 'block',
+      trigger: 'if SQL injection found',
+      confidence: 0.99,
+      rationale: 'critical security risk',
+    };
     state.history = [
       makeSignal({ agentId: 'a', sensitivities: [identicalSens] }),
       makeSignal({ agentId: 'b', sensitivities: [identicalSens] }),
       makeSignal({ agentId: 'c', sensitivities: [identicalSens] }),
     ];
-    state.variables = { security: { value: 'blocked', confidence: 0.99, updatedBy: ['a', 'b', 'c'], rationale: 'identical', stability: 1 } };
+    state.variables = {
+      security: {
+        value: 'blocked',
+        confidence: 0.99,
+        updatedBy: ['a', 'b', 'c'],
+        rationale: 'identical',
+        stability: 1,
+      },
+    };
     const evaluation = evaluateConvergence(state);
     expect(evaluation.sensitivityPoisoningDetected).toBe(true);
   });
@@ -308,14 +389,45 @@ describe('ConvergenceEvaluator', () => {
   it('returns accurate detail metrics', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     state.round = 2;
-    state.variables = { coverage: { value: 0.85, confidence: 0.9, updatedBy: ['a', 'b'], rationale: 'stable', stability: 0.95 } };
+    state.variables = {
+      coverage: {
+        value: 0.85,
+        confidence: 0.9,
+        updatedBy: ['a', 'b'],
+        rationale: 'stable',
+        stability: 0.95,
+      },
+    };
     state.history = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.7 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.75 } }),
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.85 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.9 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.75 },
+      }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.85 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.9 },
+      }),
     ];
-    state.convergence = { score: 0.88, decisionFlipRate: 0, dissent: 0, confidenceTrend: [0.725, 0.875], stableVariables: ['coverage'], unstableVariables: [] };
+    state.convergence = {
+      score: 0.88,
+      decisionFlipRate: 0,
+      dissent: 0,
+      confidenceTrend: [0.725, 0.875],
+      stableVariables: ['coverage'],
+      unstableVariables: [],
+    };
     const evaluation = evaluateConvergence(state);
     expect(evaluation.details.confidenceTrend).toBe('increasing');
     expect(evaluation.details.variableStability).toBe(0.95);
@@ -332,7 +444,10 @@ describe('Prompt Adapter', () => {
   });
 
   it('builds user message from messages', () => {
-    const messages = [{ role: 'system', content: 'system msg' }, { role: 'user', content: 'review this code' }];
+    const messages = [
+      { role: 'system', content: 'system msg' },
+      { role: 'user', content: 'review this code' },
+    ];
     const userMsg = buildCoordinationUserMessage(messages);
     expect(userMsg).toContain('review this code');
     expect(userMsg).not.toContain('system msg');
@@ -341,7 +456,16 @@ describe('Prompt Adapter', () => {
   it('parses a valid JSON signal response', () => {
     const response = JSON.stringify({
       decision: { type: 'approve', value: 'approved', confidence: 0.9, rationale: 'looks good' },
-      sensitivities: [{ variable: 'test_coverage', direction: 'block', trigger: 'below 80%', confidence: 0.85, rationale: 'quality gate', risk: 'high' }],
+      sensitivities: [
+        {
+          variable: 'test_coverage',
+          direction: 'block',
+          trigger: 'below 80%',
+          confidence: 0.85,
+          rationale: 'quality gate',
+          risk: 'high',
+        },
+      ],
     });
     const result = parseSignalResponse(response, 'run-1', 1, 'agent-a', 'model-a', 'provider-a');
     expect(result.signal).not.toBeNull();
@@ -350,10 +474,15 @@ describe('Prompt Adapter', () => {
   });
 
   it('parses signal from markdown code block', () => {
-    const response = '```json\n' + JSON.stringify({
-      decision: { type: 'reject', value: 'rejected', confidence: 0.7 },
-      sensitivities: [{ variable: 'x', direction: 'increase', trigger: 't', confidence: 0.6, rationale: 'r' }],
-    }) + '\n```';
+    const response =
+      '```json\n' +
+      JSON.stringify({
+        decision: { type: 'reject', value: 'rejected', confidence: 0.7 },
+        sensitivities: [
+          { variable: 'x', direction: 'increase', trigger: 't', confidence: 0.6, rationale: 'r' },
+        ],
+      }) +
+      '\n```';
     const result = parseSignalResponse(response, 'run-1', 1, 'agent-a', 'model-a', 'provider-a');
     expect(result.signal).not.toBeNull();
   });
@@ -375,12 +504,28 @@ describe('Decision Flip Rate', () => {
     const state = createInitialState('run-1', 'test', defaultLimits());
     state.round = 1;
     state.history = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.9 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.8 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.9 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.8 },
+      }),
     ];
     const round2Signals = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'reject', value: 'no', confidence: 0.7 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.85 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'reject', value: 'no', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.85 },
+      }),
     ];
     const result = aggregateSignals(round2Signals, state);
     expect(result.nextState.convergence.decisionFlipRate).toBeGreaterThan(0);
@@ -509,14 +654,16 @@ describe('PII Redaction', () => {
         confidence: 0.85,
         rationale: 'User admin@corp.com approved via 192.168.1.1',
       },
-      sensitivities: [{
-        variable: 'auth',
-        direction: 'block',
-        trigger: 'If admin@secret.com credentials expire',
-        confidence: 0.9,
-        rationale: 'Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig must be valid',
-        risk: 'high',
-      }],
+      sensitivities: [
+        {
+          variable: 'auth',
+          direction: 'block',
+          trigger: 'If admin@secret.com credentials expire',
+          confidence: 0.9,
+          rationale: 'Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig must be valid',
+          risk: 'high',
+        },
+      ],
     });
     const result = validateCoordinationSignal(signal);
     expect(result.valid).toBe(true);

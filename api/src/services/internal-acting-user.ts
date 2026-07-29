@@ -47,9 +47,7 @@ type ActingUser = Awaited<ReturnType<typeof prisma.user.findUnique>>;
  * Returns null when the user does not exist and cannot be provisioned — the
  * caller maps that to 409 `acting_user_not_provisioned`.
  */
-export async function resolveOrProvisionActingUser(
-  auth: ServiceAuthContext,
-): Promise<ActingUser> {
+export async function resolveOrProvisionActingUser(auth: ServiceAuthContext): Promise<ActingUser> {
   const { actingUserId, actingUserEmail, actingUserTenant } = auth;
 
   const existing = await prisma.user.findUnique({ where: { id: actingUserId } });
@@ -67,14 +65,14 @@ export async function resolveOrProvisionActingUser(
     });
     log.info(
       { actingUserId, organizationId: actingUserTenant },
-      'provisioned acting user on first internal on-behalf touch',
+      'provisioned acting user on first internal on-behalf touch'
     );
   } catch (error) {
     // e.g. email collision under a different id, inactive org, flag off, or a
     // transient DB error — never fabricate a principal; surface as 409.
     log.warn(
       { error, actingUserId, organizationId: actingUserTenant },
-      'on-behalf provisioning failed; treating acting user as unprovisioned',
+      'on-behalf provisioning failed; treating acting user as unprovisioned'
     );
     return null;
   }

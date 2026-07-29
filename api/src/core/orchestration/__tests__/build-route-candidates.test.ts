@@ -84,7 +84,9 @@ describe('buildRouteCandidatesForModel — happy paths', () => {
     // 01C.1B-J1R2 — `approved` is now the DISCOVERY view (capped by
     // `discoveryMaxRouteCandidates`, default 200). The runtime cap
     // applies to `approvedForExecution`, which is the strict slice.
-    expect(out.approvedForExecution.length).toBeLessThanOrEqual(STRICT_DEFAULT_ROUTE_SELECTION_POLICY.maxRouteAttempts);
+    expect(out.approvedForExecution.length).toBeLessThanOrEqual(
+      STRICT_DEFAULT_ROUTE_SELECTION_POLICY.maxRouteAttempts
+    );
     expect(out.coverage.role).toBe('participant');
     expect(out.coverage.hasNativeRoute).toBe(true);
   });
@@ -152,12 +154,14 @@ describe('buildRouteCandidatesForModel — rejection filters', () => {
       logicalModelId: 'gpt-4o',
       nativeProviderId: 'openai',
       taskCapability: 'chat',
-      resolveApiModelId: ({ providerId }) => providerId === 'openai' ? 'gpt-4o' : undefined,
+      resolveApiModelId: ({ providerId }) => (providerId === 'openai' ? 'gpt-4o' : undefined),
       lookupLiveOperability: liveReadyLookup(),
       lookupEconomics: defaultEconomics(),
       lookupAuthHandle: () => 'env:KEY',
     });
-    expect(out.approved.length).toBeLessThanOrEqual(STRICT_DEFAULT_ROUTE_SELECTION_POLICY.maxRouteAttempts);
+    expect(out.approved.length).toBeLessThanOrEqual(
+      STRICT_DEFAULT_ROUTE_SELECTION_POLICY.maxRouteAttempts
+    );
     const capabilityRejections = out.rejections.filter((r) => r.reason === 'capability_mismatch');
     expect(capabilityRejections.length).toBeGreaterThan(0);
   });
@@ -187,7 +191,7 @@ describe('buildRouteCandidatesForModel — rejection filters', () => {
       lookupLiveOperability: liveReadyLookup(),
       lookupEconomics: defaultEconomics(),
       lookupAuthHandle: () => 'env:KEY',
-      maxCostUsd: 0.0000001,  // absurdly tight; every route over-budget
+      maxCostUsd: 0.0000001, // absurdly tight; every route over-budget
     });
     expect(out.approved).toEqual([]);
     expect(out.rejections.some((r) => r.reason === 'over_budget')).toBe(true);
@@ -238,7 +242,12 @@ describe('classifyRouteEquivalence', () => {
 
   it('router serving same native → same_provider_model_via_router', () => {
     const k = classifyRouteEquivalence({
-      route: { providerId: 'openrouter', kind: 'router', nativeProviderId: 'openai', upstreamSlug: 'openai' },
+      route: {
+        providerId: 'openrouter',
+        kind: 'router',
+        nativeProviderId: 'openai',
+        upstreamSlug: 'openai',
+      },
       logicalModelId: 'gpt-4o',
       apiModelId: 'openai/gpt-4o',
       nativeProviderId: 'openai',
@@ -248,7 +257,12 @@ describe('classifyRouteEquivalence', () => {
 
   it('router serving different native → family_equivalent', () => {
     const k = classifyRouteEquivalence({
-      route: { providerId: 'openrouter', kind: 'router', nativeProviderId: 'anthropic', upstreamSlug: 'anthropic' },
+      route: {
+        providerId: 'openrouter',
+        kind: 'router',
+        nativeProviderId: 'anthropic',
+        upstreamSlug: 'anthropic',
+      },
       logicalModelId: 'gpt-4o',
       apiModelId: 'anthropic/claude-3.5-sonnet',
       nativeProviderId: 'openai',
@@ -344,17 +358,17 @@ describe('Route de-duplication', () => {
       logicalModelId: 'gpt-4o',
       nativeProviderId: 'openai',
       taskCapability: 'chat',
-      resolveApiModelId: () => 'gpt-4o',  // every route gets the same apiModelId
+      resolveApiModelId: () => 'gpt-4o', // every route gets the same apiModelId
       lookupLiveOperability: liveReadyLookup(),
       lookupEconomics: defaultEconomics(),
       lookupAuthHandle: () => 'env:KEY',
-      lookupAdapterKind: () => 'openai-compatible-chat',  // same adapter kind for all
+      lookupAdapterKind: () => 'openai-compatible-chat', // same adapter kind for all
       routeCandidatesOverride: [
         { providerId: 'openai', kind: 'native' },
-        { providerId: 'openai', kind: 'native' },  // intentional duplicate
+        { providerId: 'openai', kind: 'native' }, // intentional duplicate
       ],
     });
     expect(out.rejections.some((r) => r.reason === 'duplicate_route_id')).toBe(true);
-    expect(out.approved).toHaveLength(1);  // dedup yielded a single approved entry
+    expect(out.approved).toHaveLength(1); // dedup yielded a single approved entry
   });
 });

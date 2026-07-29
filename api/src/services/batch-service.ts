@@ -10,14 +10,14 @@
 /**
  * Batch Service
  * Manages async batch processing of API requests
- * 
+ *
  * Features:
  * - JSONL input/output format (OpenAI-compatible)
  * - Job queue integration (uses existing queue infrastructure)
  * - Status tracking (validating, in_progress, finalizing, completed, failed, cancelled)
  * - Results aggregation
  * - 50% cost discount for batch requests
- * 
+ *
  * NO HARDCODED - All processing via existing orchestration engine
  */
 
@@ -253,9 +253,10 @@ export class BatchService {
           completed: batch.requestCountsCompleted,
           failed: batch.requestCountsFailed,
         },
-        metadata: (batch.metadata && typeof batch.metadata === 'object' && !Array.isArray(batch.metadata))
-          ? batch.metadata as Record<string, string>
-          : null,
+        metadata:
+          batch.metadata && typeof batch.metadata === 'object' && !Array.isArray(batch.metadata)
+            ? (batch.metadata as Record<string, string>)
+            : null,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -399,4 +400,3 @@ export class BatchService {
     }
   }
 }
-

@@ -39,7 +39,9 @@ import type { ClassifiedModel, CapabilityTier } from '../model-classification';
 
 // ─── Test fixtures (no I/O) ────────────────────────────────────────────────
 
-function makeArm(overrides: Partial<ResolvedExperimentArm> & { policy: ArmEvaluationPolicy }): ResolvedExperimentArm {
+function makeArm(
+  overrides: Partial<ResolvedExperimentArm> & { policy: ArmEvaluationPolicy }
+): ResolvedExperimentArm {
   return Object.freeze({
     armId: overrides.armId ?? 'test-arm',
     mode: overrides.mode ?? 'single-model',
@@ -58,7 +60,9 @@ function makeArm(overrides: Partial<ResolvedExperimentArm> & { policy: ArmEvalua
   });
 }
 
-function makeModel(overrides: Partial<ClassifiedModel> & { modelId: string; providerId: string; modelFamily: string }): ClassifiedModel {
+function makeModel(
+  overrides: Partial<ClassifiedModel> & { modelId: string; providerId: string; modelFamily: string }
+): ClassifiedModel {
   return {
     modelId: overrides.modelId,
     providerId: overrides.providerId,
@@ -398,10 +402,19 @@ describe('isFallbackAllowed', () => {
       declaredModelId: 'gpt-4o',
       declaredModelFamily: 'openai',
     });
-    const from = makeModel({ modelId: 'gpt-4o', providerId: 'openai-native', modelFamily: 'openai' });
+    const from = makeModel({
+      modelId: 'gpt-4o',
+      providerId: 'openai-native',
+      modelFamily: 'openai',
+    });
     const to = makeModel({ modelId: 'gpt-4o', providerId: 'cometapi', modelFamily: 'openai' });
 
-    const ctx: FallbackContext = { fallbackDepth: 1, budgetSpentUsd: 0, elapsedMs: 0, forRequiredRole: false };
+    const ctx: FallbackContext = {
+      fallbackDepth: 1,
+      budgetSpentUsd: 0,
+      elapsedMs: 0,
+      forRequiredRole: false,
+    };
     const verdict = engine.isFallbackAllowed(arm, from, to, ctx);
     expect(verdict.allowed).toBe(false);
   });
@@ -413,10 +426,19 @@ describe('isFallbackAllowed', () => {
       role: 'family_baseline',
       declaredModelFamily: 'openai',
     });
-    const from = makeModel({ modelId: 'gpt-4o', providerId: 'openai-native', modelFamily: 'openai' });
+    const from = makeModel({
+      modelId: 'gpt-4o',
+      providerId: 'openai-native',
+      modelFamily: 'openai',
+    });
     const to = makeModel({ modelId: 'gpt-4o', providerId: 'cometapi', modelFamily: 'openai' });
 
-    const ctx: FallbackContext = { fallbackDepth: 1, budgetSpentUsd: 0, elapsedMs: 0, forRequiredRole: false };
+    const ctx: FallbackContext = {
+      fallbackDepth: 1,
+      budgetSpentUsd: 0,
+      elapsedMs: 0,
+      forRequiredRole: false,
+    };
     const verdict = engine.isFallbackAllowed(arm, from, to, ctx);
     expect(verdict.allowed).toBe(true);
     expect(verdict.substitutionLevel).toBe('same_family_different_provider');
@@ -429,8 +451,17 @@ describe('isFallbackAllowed', () => {
       role: 'dynamic_router',
       declaredCapabilityClass: 'frontier',
     });
-    const from = makeModel({ modelId: 'gpt-4o', providerId: 'openai-native', modelFamily: 'openai' });
-    const to = makeModel({ modelId: 'claude-3.5-sonnet', providerId: 'anthropic-native', modelFamily: 'anthropic', capabilityTier: 'frontier' });
+    const from = makeModel({
+      modelId: 'gpt-4o',
+      providerId: 'openai-native',
+      modelFamily: 'openai',
+    });
+    const to = makeModel({
+      modelId: 'claude-3.5-sonnet',
+      providerId: 'anthropic-native',
+      modelFamily: 'anthropic',
+      capabilityTier: 'frontier',
+    });
 
     const ctx: FallbackContext = {
       fallbackDepth: POLICY_DYNAMIC_ROUTER.maxFallbackDepth, // already at limit
@@ -508,8 +539,9 @@ describe('isParallelAttemptAllowed', () => {
       identityLevel: 'capability_class',
       role: 'dynamic_router',
     });
-    const candidates = Array.from({ length: POLICY_DYNAMIC_ROUTER.maxConcurrentInferences }, (_, i) =>
-      makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' }),
+    const candidates = Array.from(
+      { length: POLICY_DYNAMIC_ROUTER.maxConcurrentInferences },
+      (_, i) => makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' })
     );
 
     const verdict = engine.isParallelAttemptAllowed(arm, candidates);
@@ -524,7 +556,7 @@ describe('isParallelAttemptAllowed', () => {
     });
     const candidates = Array.from(
       { length: POLICY_DYNAMIC_ROUTER.maxConcurrentInferences + 1 },
-      (_, i) => makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' }),
+      (_, i) => makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' })
     );
 
     const verdict = engine.isParallelAttemptAllowed(arm, candidates);
@@ -539,7 +571,7 @@ describe('isParallelAttemptAllowed', () => {
     });
     const candidates = Array.from(
       { length: POLICY_COLLECTIVE_STRATEGY.maxConcurrentInferences },
-      (_, i) => makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' }),
+      (_, i) => makeModel({ modelId: `m${i}`, providerId: `p${i}`, modelFamily: 'f' })
     );
 
     const verdict = engine.isParallelAttemptAllowed(arm, candidates);
@@ -579,7 +611,7 @@ describe('classifyAttempt', () => {
         status: 'succeeded',
         timestampMs: Date.now(),
       },
-      classified,
+      classified
     );
 
     expect(result.allowedByPolicy).toBe(true);
@@ -612,7 +644,7 @@ describe('classifyAttempt', () => {
         status: 'succeeded',
         timestampMs: Date.now(),
       },
-      classified,
+      classified
     );
 
     expect(result.allowedByPolicy).toBe(false);
@@ -644,7 +676,7 @@ describe('classifyAttempt', () => {
         status: 'succeeded',
         timestampMs: Date.now(),
       },
-      classified,
+      classified
     );
 
     expect(result.allowedByPolicy).toBe(true);

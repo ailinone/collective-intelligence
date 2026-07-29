@@ -268,7 +268,7 @@ export const MODEL_CAPABILITY_PATTERNS: CapabilityPattern[] = [
  *          if no pattern matches.
  */
 export function inferCapabilitiesFromModelId(
-  modelId: string,
+  modelId: string
 ): { capabilities: ModelCapability[]; endpoint: string; modelType: string } | null {
   const lower = modelId.toLowerCase();
 
@@ -291,7 +291,7 @@ export function inferCapabilitiesFromModelId(
  * Internal: test a lowercased string against all pattern rules.
  */
 function matchPatternRules(
-  lowerStr: string,
+  lowerStr: string
 ): { capabilities: ModelCapability[]; endpoint: string; modelType: string } | null {
   for (const rule of MODEL_CAPABILITY_PATTERNS) {
     for (const pattern of rule.patterns) {

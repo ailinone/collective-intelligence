@@ -68,9 +68,7 @@ describe('contribution — determinism', () => {
     const result = scoreHistoricalContribution({
       executions: HISTORICAL_EXECUTIONS_FIXTURE,
     });
-    const keys = result.pairProfiles.map(
-      (p) => `${p.modelA}||${p.modelB}||${p.taskType}`,
-    );
+    const keys = result.pairProfiles.map((p) => `${p.modelA}||${p.modelB}||${p.taskType}`);
     const sorted = [...keys].sort();
     expect(keys).toEqual(sorted);
   });

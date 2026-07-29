@@ -12,10 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_ENSEMBLE_LIFT_POLICY,
-  resolveEnsembleLiftPolicy,
-} from '../ensemble-lift-policy';
+import { DEFAULT_ENSEMBLE_LIFT_POLICY, resolveEnsembleLiftPolicy } from '../ensemble-lift-policy';
 
 describe('DEFAULT_ENSEMBLE_LIFT_POLICY', () => {
   it('is strict by default', () => {

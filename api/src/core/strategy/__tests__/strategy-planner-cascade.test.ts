@@ -157,10 +157,7 @@ describe('planStrategy — latency-sensitive single_best', () => {
 describe('planStrategy — reasons are explicit on cascade choice', () => {
   it('cost_cascade reasons include high_cost_sensitivity_cost_cascade', () => {
     const result = planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-1' }),
-        makeResult({ routeId: 'r-2' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-1' }), makeResult({ routeId: 'r-2' })],
       context: CHEAP_CONTEXT,
     });
     expect(result.plan.reasons).toContain('high_cost_sensitivity_cost_cascade');
@@ -168,15 +165,10 @@ describe('planStrategy — reasons are explicit on cascade choice', () => {
 
   it('quality_cascade reasons include high_complexity_high_confidence_quality_cascade', () => {
     const result = planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-1' }),
-        makeResult({ routeId: 'r-2' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-1' }), makeResult({ routeId: 'r-2' })],
       context: QUALITY_CASCADE_CONTEXT,
     });
-    expect(result.plan.reasons).toContain(
-      'high_complexity_high_confidence_quality_cascade',
-    );
+    expect(result.plan.reasons).toContain('high_complexity_high_confidence_quality_cascade');
   });
 
   it('fast single_best reasons include high_latency_sensitivity_fastest_single', () => {

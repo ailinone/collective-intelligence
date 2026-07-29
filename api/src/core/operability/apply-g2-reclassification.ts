@@ -143,20 +143,18 @@ const SKIPPED_BUDGET_BUCKET_NAMES = new Set([
  *   8. unknown: refine into O / P / S / T / U / V using structural hints.
  */
 export function applyG2Reclassification(
-  input: ApplyG2ReclassificationInput,
+  input: ApplyG2ReclassificationInput
 ): ApplyG2ReclassificationResult {
   const skippedBudget = new Set((input.skippedByBudget ?? []).map((s) => s.toLowerCase()));
-  const requiresDeployment = new Set(
-    (input.requiresDeployment ?? []).map((s) => s.toLowerCase()),
-  );
+  const requiresDeployment = new Set((input.requiresDeployment ?? []).map((s) => s.toLowerCase()));
   const secretAliasMismatched = new Set(
-    (input.secretAliasMismatched ?? []).map((s) => s.toLowerCase()),
+    (input.secretAliasMismatched ?? []).map((s) => s.toLowerCase())
   );
   const authHeaderMismatched = new Set(
-    (input.authHeaderMismatched ?? []).map((s) => s.toLowerCase()),
+    (input.authHeaderMismatched ?? []).map((s) => s.toLowerCase())
   );
   const catalogIdMismatched = new Set(
-    (input.catalogIdMismatched ?? []).map((s) => s.toLowerCase()),
+    (input.catalogIdMismatched ?? []).map((s) => s.toLowerCase())
   );
 
   const distributionBefore: Record<string, number> = {};
@@ -256,8 +254,10 @@ function reclassifyOne(rec: GAuditRecordLike, ctx: ReclassifyContext): Reclassif
   }
 
   // 4. Auth-blocked refinement.
-  if (rec.bucket === 'D_registered_adapter_ready_blocked_by_auth' ||
-      rec.errorKind === 'invalid_auth') {
+  if (
+    rec.bucket === 'D_registered_adapter_ready_blocked_by_auth' ||
+    rec.errorKind === 'invalid_auth'
+  ) {
     if (ctx.secretAliasMismatched.has(providerId)) {
       return {
         bucket: 'R_secret_alias_mismatch',
@@ -283,8 +283,10 @@ function reclassifyOne(rec: GAuditRecordLike, ctx: ReclassifyContext): Reclassif
   }
 
   // 5. Model-not-supported refinement — apply the resolver + alias map.
-  if (rec.bucket === 'H_registered_adapter_ready_model_not_supported' ||
-      rec.errorKind === 'model_not_supported') {
+  if (
+    rec.bucket === 'H_registered_adapter_ready_model_not_supported' ||
+    rec.errorKind === 'model_not_supported'
+  ) {
     const aliasSuspect = looksLikeAliasMismatch({
       providerId,
       modelId: rec.sampleModelId ?? null,
@@ -385,7 +387,7 @@ function reclassifyOne(rec: GAuditRecordLike, ctx: ReclassifyContext): Reclassif
  *   - `null` when the input is not a known G bucket
  */
 function mapWordyToShortBucket(
-  gBucket: string,
+  gBucket: string
 ): ProviderReadinessBucket | 'PASS_TO_REFINEMENT' | null {
   switch (gBucket) {
     case 'A_registered_and_chat_ready':

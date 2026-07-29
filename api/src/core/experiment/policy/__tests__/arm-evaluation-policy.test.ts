@@ -150,7 +150,9 @@ describe('SUBSTITUTION_LEVEL_ORDER + isSubstitutionLevelAllowed', () => {
   });
 
   it('same_family ≤ same_capability_tier', () => {
-    expect(isSubstitutionLevelAllowed('same_family_different_provider', 'same_capability_tier')).toBe(true);
+    expect(
+      isSubstitutionLevelAllowed('same_family_different_provider', 'same_capability_tier')
+    ).toBe(true);
   });
 
   it('same_capability_tier > exact_provider_model', () => {
@@ -158,7 +160,9 @@ describe('SUBSTITUTION_LEVEL_ORDER + isSubstitutionLevelAllowed', () => {
   });
 
   it('local_degraded_fallback ≤ local_degraded_fallback', () => {
-    expect(isSubstitutionLevelAllowed('local_degraded_fallback', 'local_degraded_fallback')).toBe(true);
+    expect(isSubstitutionLevelAllowed('local_degraded_fallback', 'local_degraded_fallback')).toBe(
+      true
+    );
   });
 
   it('degraded_answer_mode is the strictly highest level', () => {

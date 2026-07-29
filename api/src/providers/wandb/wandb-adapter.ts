@@ -100,7 +100,7 @@ export class WandbAdapter extends OpenAICompatibleHubAdapter {
       // Single-shot warn per-process; the hub surfaces the actual 400 cleanly.
       if (!WandbAdapter.warnedOnce) {
         this.wlog.warn(
-          'WANDB_PROJECT is not set — requests will fail with HTTP 400 from W&B until it is configured',
+          'WANDB_PROJECT is not set — requests will fail with HTTP 400 from W&B until it is configured'
         );
         WandbAdapter.warnedOnce = true;
       }

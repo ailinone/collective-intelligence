@@ -68,7 +68,10 @@ function makeEnvelope(): TraceEnvelope {
   } as TraceEnvelope;
 }
 
-function makeCtx(endpoint: string, extra: Partial<DeliveryContext['config']> = {}): DeliveryContext {
+function makeCtx(
+  endpoint: string,
+  extra: Partial<DeliveryContext['config']> = {}
+): DeliveryContext {
   return {
     deliveryAttemptId: randomUUID(),
     envelope: makeEnvelope(),
@@ -86,7 +89,7 @@ interface CapturedRequest {
 }
 
 function startTestServer(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
+  handler: (req: IncomingMessage, res: ServerResponse) => void
 ): Promise<{ server: Server; port: number; calls: CapturedRequest[] }> {
   const calls: CapturedRequest[] = [];
   const server = createServer((req, res) => {
@@ -97,7 +100,7 @@ function startTestServer(
         method: req.method ?? 'GET',
         url: req.url ?? '/',
         headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)]),
+          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)])
         ),
         body,
       });
@@ -179,9 +182,7 @@ describe('OtlpCollectorDestinationAdapter — integration', () => {
     });
     try {
       const adapter = new OtlpCollectorDestinationAdapter();
-      await adapter.send(
-        makeCtx(`http://127.0.0.1:${port}`, { tracesPath: '/otel/traces' }),
-      );
+      await adapter.send(makeCtx(`http://127.0.0.1:${port}`, { tracesPath: '/otel/traces' }));
       expect(calls[0]?.url).toBe('/otel/traces');
     } finally {
       server.close();
@@ -202,7 +203,7 @@ describe('OtlpCollectorDestinationAdapter — integration', () => {
             'x-tenant': 'acme',
             host: 'bad.example.com', // reserved
           },
-        }),
+        })
       );
       expect(calls[0]?.headers.authorization).toBe('Bearer abc');
       expect(calls[0]?.headers['x-tenant']).toBe('acme');

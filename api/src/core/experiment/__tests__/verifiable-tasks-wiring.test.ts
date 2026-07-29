@@ -17,7 +17,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { EXPERIMENT_SUITE } from '../experiment-suite';
-import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
+import {
+  resolveAnswerChecker,
+  type AnswerCheckSpec,
+} from '@/core/orchestration/verification/answer-check-resolver';
 import { selectWithVerification } from '@/core/orchestration/verification/verified-selection';
 
 const verifiable = EXPERIMENT_SUITE.filter((t) => t.answerCheck);
@@ -148,15 +151,15 @@ describe('v4 verifiable tasks — declarative check chain', () => {
     // The correct answer and a COMMON wrong answer (the mistake the task is
     // designed to catch) for each hard task — locks both the spec and difficulty.
     const cases: Array<[number, string, string]> = [
-      [126, '0.4167', '0.5'],        // exactly-2-red vs "2 of 3"
-      [127, '9', '7'],               // 7^100 mod 13 via Fermat vs naive 7^1
-      [128, '126', '15120'],         // C(9,5) vs P(9,5) (arrangements)
-      [129, '3', '2.4'],             // combined rate WITH drain vs without
-      [130, '6', '4'],               // x+y vs x alone
-      [131, '24', '28'],             // definite integral vs upper term only
-      [132, '8', '7'],               // popcount(2026) — off-by-one on bits
-      [133, '40', '45'],            // harmonic vs arithmetic mean of speeds
-      [135, '9.0', '99.0'],          // Bayes vs base-rate neglect
+      [126, '0.4167', '0.5'], // exactly-2-red vs "2 of 3"
+      [127, '9', '7'], // 7^100 mod 13 via Fermat vs naive 7^1
+      [128, '126', '15120'], // C(9,5) vs P(9,5) (arrangements)
+      [129, '3', '2.4'], // combined rate WITH drain vs without
+      [130, '6', '4'], // x+y vs x alone
+      [131, '24', '28'], // definite integral vs upper term only
+      [132, '8', '7'], // popcount(2026) — off-by-one on bits
+      [133, '40', '45'], // harmonic vs arithmetic mean of speeds
+      [135, '9.0', '99.0'], // Bayes vs base-rate neglect
     ];
     for (const [index, right, wrong] of cases) {
       const task = EXPERIMENT_SUITE.find((t) => t.index === index)!;

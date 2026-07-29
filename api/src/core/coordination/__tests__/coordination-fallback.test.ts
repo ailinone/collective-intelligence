@@ -27,7 +27,11 @@ import {
   evaluateStopConditions,
 } from '../sensitivity-aggregator';
 import { evaluateConvergence } from '../convergence-evaluator';
-import type { CoordinationSignal, CoordinationLimits, AggregationMethod } from '../coordination-types';
+import type {
+  CoordinationSignal,
+  CoordinationLimits,
+  AggregationMethod,
+} from '../coordination-types';
 import { DEFAULT_COORDINATION_CONFIG } from '../coordination-types';
 
 const defaultLimits = (): CoordinationLimits => ({
@@ -206,20 +210,22 @@ describe('Fallback: Critical Risk → Immediate Stop', () => {
     const signals = [
       makeSignal({
         agentId: 'a',
-        sensitivities: [{
-          variable: 'data_loss',
-          direction: 'block' as const,
-          trigger: 'unrecoverable data loss possible',
-          confidence: 0.99,
-          rationale: 'critical issue detected',
-          risk: 'critical' as const,
-        }],
+        sensitivities: [
+          {
+            variable: 'data_loss',
+            direction: 'block' as const,
+            trigger: 'unrecoverable data loss possible',
+            confidence: 0.99,
+            rationale: 'critical issue detected',
+            risk: 'critical' as const,
+          },
+        ],
       }),
       makeSignal({ agentId: 'b' }),
     ];
 
     const result = aggregateSignals(signals, state);
-    expect(result.risks.some(r => r.severity === 'critical')).toBe(true);
+    expect(result.risks.some((r) => r.severity === 'critical')).toBe(true);
     const stopReason = evaluateStopConditions(result.nextState);
     expect(stopReason).toBe('critical_risk');
   });
@@ -235,14 +241,16 @@ describe('Fallback: Critical Risk → Immediate Stop', () => {
     const signals = [
       makeSignal({
         agentId: 'a',
-        sensitivities: [{
-          variable: 'data_loss',
-          direction: 'block' as const,
-          trigger: 'unrecoverable data loss',
-          confidence: 0.99,
-          rationale: 'critical',
-          risk: 'critical' as const,
-        }],
+        sensitivities: [
+          {
+            variable: 'data_loss',
+            direction: 'block' as const,
+            trigger: 'unrecoverable data loss',
+            confidence: 0.99,
+            rationale: 'critical',
+            risk: 'critical' as const,
+          },
+        ],
       }),
       makeSignal({ agentId: 'b' }),
     ];
@@ -271,10 +279,7 @@ describe('Fallback: Persistent Divergence → Stop', () => {
 describe('Fallback: llm_synthesis → Explicit Warning Fallback', () => {
   it('llm_synthesis method falls back to weighted_confidence without silent failure', () => {
     const state = createInitialState('run-llm-synthesis', 'sensitivity-consensus', defaultLimits());
-    const signals = [
-      makeSignal({ agentId: 'a' }),
-      makeSignal({ agentId: 'b' }),
-    ];
+    const signals = [makeSignal({ agentId: 'a' }), makeSignal({ agentId: 'b' })];
 
     const result = aggregateSignals(signals, state, 'llm_synthesis' as AggregationMethod);
     expect(result.nextState.round).toBe(1);
@@ -289,18 +294,42 @@ describe('Fallback: Convergence After Divergence', () => {
     let state = createInitialState('run-converge', 'sensitivity-consensus', limits);
 
     const round1 = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.6 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'reject', value: 'no', confidence: 0.7 } }),
-      makeSignal({ agentId: 'c', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.65 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.6 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'reject', value: 'no', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'c',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.65 },
+      }),
     ];
 
     state = aggregateSignals(round1, state).nextState;
     expect(state.convergence.dissent).toBeGreaterThan(0);
 
     const round2 = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.85 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.80 } }),
-      makeSignal({ agentId: 'c', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.82 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.85 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.8 },
+      }),
+      makeSignal({
+        agentId: 'c',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.82 },
+      }),
     ];
 
     state = aggregateSignals(round2, state).nextState;
@@ -330,7 +359,7 @@ describe('Fallback: Stagnation Detection', () => {
       score: 0.65,
       decisionFlipRate: 0,
       dissent: 0.2,
-      confidenceTrend: [0.65, 0.651, 0.650],
+      confidenceTrend: [0.65, 0.651, 0.65],
       stableVariables: [],
       unstableVariables: [],
     };

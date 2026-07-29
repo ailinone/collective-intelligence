@@ -21,9 +21,7 @@
  * Pure types — no runtime imports beyond MVP 8A/8B.
  */
 
-import type {
-  ContributionAwareScore,
-} from '../../contribution/contribution-aware-candidate-scorer';
+import type { ContributionAwareScore } from '../../contribution/contribution-aware-candidate-scorer';
 
 // ─── Calibration example (one ensemble execution in the train set) ──────
 

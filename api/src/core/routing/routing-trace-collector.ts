@@ -27,10 +27,7 @@
  *   - No I/O at module load.
  */
 
-import type {
-  RoutingDecisionTrace,
-  RoutingTraceMetrics,
-} from './routing-decision-trace';
+import type { RoutingDecisionTrace, RoutingTraceMetrics } from './routing-decision-trace';
 import { noopRoutingTraceMetrics } from './routing-decision-trace';
 import { redactRoutingTrace } from './routing-redaction';
 
@@ -103,9 +100,7 @@ export class RoutingTraceCollector {
     // queue evicts the entry before flush.
     const safe = this.redact ? redactRoutingTrace(trace) : trace;
     if (this.redact) {
-      this.metrics.increment(
-        ROUTING_TRACE_METRIC_NAMES.REDACTION_APPLIED_TOTAL,
-      );
+      this.metrics.increment(ROUTING_TRACE_METRIC_NAMES.REDACTION_APPLIED_TOTAL);
     }
 
     if (this.queue.length >= this.maxQueueSize) {
@@ -116,10 +111,7 @@ export class RoutingTraceCollector {
       });
     }
     this.queue.push(safe);
-    this.metrics.gauge(
-      ROUTING_TRACE_METRIC_NAMES.QUEUE_SIZE,
-      this.queue.length,
-    );
+    this.metrics.gauge(ROUTING_TRACE_METRIC_NAMES.QUEUE_SIZE, this.queue.length);
   }
 
   /**
@@ -134,34 +126,23 @@ export class RoutingTraceCollector {
         ? performance.now()
         : Date.now();
     const batch = this.queue.splice(0, this.batchSize);
-    this.metrics.gauge(
-      ROUTING_TRACE_METRIC_NAMES.QUEUE_SIZE,
-      this.queue.length,
-    );
+    this.metrics.gauge(ROUTING_TRACE_METRIC_NAMES.QUEUE_SIZE, this.queue.length);
     try {
       await this.persistor.persist(batch);
-      this.metrics.gauge(
-        ROUTING_TRACE_METRIC_NAMES.PERSIST_BATCH_SIZE,
-        batch.length,
-      );
+      this.metrics.gauge(ROUTING_TRACE_METRIC_NAMES.PERSIST_BATCH_SIZE, batch.length);
     } catch (err) {
       // Swallow — error is metricised but never propagated. The traces
       // are intentionally dropped because re-queueing would let a broken
       // persistor recursively drown the request path.
-      this.metrics.increment(
-        ROUTING_TRACE_METRIC_NAMES.PERSIST_ERROR_TOTAL,
-        { reason: classifyError(err) },
-      );
+      this.metrics.increment(ROUTING_TRACE_METRIC_NAMES.PERSIST_ERROR_TOTAL, {
+        reason: classifyError(err),
+      });
     } finally {
       const end =
-        typeof performance !== 'undefined' &&
-        typeof performance.now === 'function'
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
           ? performance.now()
           : Date.now();
-      this.metrics.gauge(
-        ROUTING_TRACE_METRIC_NAMES.FLUSH_DURATION_MS,
-        Math.max(0, end - start),
-      );
+      this.metrics.gauge(ROUTING_TRACE_METRIC_NAMES.FLUSH_DURATION_MS, Math.max(0, end - start));
     }
   }
 
@@ -181,8 +162,13 @@ export class RoutingTraceCollector {
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 function classifyError(err: unknown): string {
-  if (err && typeof err === 'object' && 'name' in err && typeof (err as { name?: unknown }).name === 'string') {
-    return ((err as { name: string }).name).slice(0, 64);
+  if (
+    err &&
+    typeof err === 'object' &&
+    'name' in err &&
+    typeof (err as { name?: unknown }).name === 'string'
+  ) {
+    return (err as { name: string }).name.slice(0, 64);
   }
   return 'unknown';
 }

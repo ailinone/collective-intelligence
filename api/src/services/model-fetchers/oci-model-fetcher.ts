@@ -25,9 +25,21 @@ let hasLoggedOciUnavailable = false;
 export class OCIModelFetcher {
   private baseUrl = 'https://inference.generativeai.us-chicago-1.oci.oraclecloud.com';
   private models: ProviderModel[] = [];
-  private config?: { tenancyId?: string; userId?: string; fingerprint?: string; privateKey?: string; region?: string };
+  private config?: {
+    tenancyId?: string;
+    userId?: string;
+    fingerprint?: string;
+    privateKey?: string;
+    region?: string;
+  };
 
-  constructor(config?: { tenancyId?: string; userId?: string; fingerprint?: string; privateKey?: string; region?: string }) {
+  constructor(config?: {
+    tenancyId?: string;
+    userId?: string;
+    fingerprint?: string;
+    privateKey?: string;
+    region?: string;
+  }) {
     // Store config for API calls
     this.config = config;
     // Models will be fetched dynamically from OCI API
@@ -52,7 +64,9 @@ export class OCIModelFetcher {
       // OCI Generative AI model listing endpoint not available yet
       // Log only once to avoid excessive logging during discovery cycles
       if (!hasLoggedOciUnavailable) {
-        log.debug('OCI Generative AI model listing endpoint not available yet; returning empty model set');
+        log.debug(
+          'OCI Generative AI model listing endpoint not available yet; returning empty model set'
+        );
         hasLoggedOciUnavailable = true;
       }
       return [];
@@ -69,7 +83,7 @@ export class OCIModelFetcher {
   }
 
   async validateModel(modelId: string): Promise<boolean> {
-    return this.models.some(model => model.id === modelId);
+    return this.models.some((model) => model.id === modelId);
   }
 
   getProviderName(): string {

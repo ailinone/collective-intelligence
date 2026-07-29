@@ -124,9 +124,7 @@ export function getUserSpecifiedModelFlag(request: ChatRequest | ChatRequestWith
 /**
  * Safely get task_type
  */
-export function getTaskType(
-  request: ChatRequest | ChatRequestWithMetadata
-): TaskType | undefined {
+export function getTaskType(request: ChatRequest | ChatRequestWithMetadata): TaskType | undefined {
   if (isChatRequestWithMetadata(request)) {
     return request.task_type;
   }

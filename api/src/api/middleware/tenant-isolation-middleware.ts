@@ -179,7 +179,9 @@ export async function tenantIsolationMiddleware(
   }
 
   const tier =
-    organization.tier || (isCustomUser(extendedRequest.user) ? extendedRequest.user.tier : undefined) || 'free';
+    organization.tier ||
+    (isCustomUser(extendedRequest.user) ? extendedRequest.user.tier : undefined) ||
+    'free';
   const tierPayload = defaultTierPayload(tier);
 
   extendedRequest.tenantContext = {
@@ -220,7 +222,8 @@ export function requireTenantContext(options: { requireUser?: boolean } = {}) {
 
     if (
       options.requireUser &&
-      (!extendedRequest.tenantContext.userId || extendedRequest.tenantContext.userId === 'anonymous')
+      (!extendedRequest.tenantContext.userId ||
+        extendedRequest.tenantContext.userId === 'anonymous')
     ) {
       reply.status(401).send({
         error: {

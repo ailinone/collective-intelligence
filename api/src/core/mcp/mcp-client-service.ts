@@ -94,7 +94,7 @@ class McpClientServiceImpl {
       } catch (err) {
         log.warn(
           { server: config.name, error: err instanceof Error ? err.message : String(err) },
-          'Failed to connect MCP server (non-fatal)',
+          'Failed to connect MCP server (non-fatal)'
         );
       }
     }
@@ -106,7 +106,7 @@ class McpClientServiceImpl {
         totalTools,
         serverNames: [...this.connections.keys()],
       },
-      'MCP client service initialized',
+      'MCP client service initialized'
     );
 
     this.initialized = true;
@@ -124,7 +124,8 @@ class McpClientServiceImpl {
     let transport: StdioClientTransport | unknown;
 
     if (config.transport === 'stdio') {
-      if (!config.command) throw new Error(`MCP server ${config.name}: stdio transport requires 'command'`);
+      if (!config.command)
+        throw new Error(`MCP server ${config.name}: stdio transport requires 'command'`);
 
       transport = new StdioClientTransport({
         command: config.command,
@@ -193,8 +194,8 @@ class McpClientServiceImpl {
 
         // MCP returns content array — extract text
         const textContent = (result.content as Array<{ type: string; text?: string }>)
-          .filter(c => c.type === 'text')
-          .map(c => c.text || '')
+          .filter((c) => c.type === 'text')
+          .map((c) => c.text || '')
           .join('\n');
 
         return {
@@ -248,7 +249,8 @@ class McpClientServiceImpl {
     for (const name of serverNames) {
       const command = process.env[`MCP_SERVER_${name}_COMMAND`];
       const url = process.env[`MCP_SERVER_${name}_URL`];
-      const transport = (process.env[`MCP_SERVER_${name}_TRANSPORT`] || (url ? 'sse' : 'stdio')) as 'stdio' | 'sse';
+      const transport = (process.env[`MCP_SERVER_${name}_TRANSPORT`] || (url ? 'sse' : 'stdio')) as
+        'stdio' | 'sse';
       const argsStr = process.env[`MCP_SERVER_${name}_ARGS`];
 
       servers.push({
@@ -271,9 +273,11 @@ class McpClientServiceImpl {
       const parsed: unknown = JSON.parse(raw);
       const fileServers: McpServerConfig[] = Array.isArray(parsed)
         ? (parsed as McpServerConfig[])
-        : (typeof parsed === 'object' && parsed !== null && Array.isArray((parsed as { servers?: unknown }).servers)
-            ? ((parsed as { servers: McpServerConfig[] }).servers)
-            : []);
+        : typeof parsed === 'object' &&
+            parsed !== null &&
+            Array.isArray((parsed as { servers?: unknown }).servers)
+          ? (parsed as { servers: McpServerConfig[] }).servers
+          : [];
       if (fileServers.length > 0) {
         log.info({ path: configPath, count: fileServers.length }, 'Loaded MCP config from file');
         return fileServers;
@@ -302,7 +306,7 @@ class McpClientServiceImpl {
 
   /** Get list of connected servers. */
   getConnectedServers(): Array<{ name: string; tools: string[]; connected: boolean }> {
-    return [...this.connections.values()].map(c => ({
+    return [...this.connections.values()].map((c) => ({
       name: c.config.name,
       tools: c.tools,
       connected: c.connected,

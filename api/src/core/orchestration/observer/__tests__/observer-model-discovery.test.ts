@@ -112,7 +112,11 @@ describe('ObserverService — dynamic Ollama model discovery (no hardcoded pin)'
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = String(input);
       if (url.endsWith('/models')) {
-        return { ok: true, status: 200, json: async () => ({ object: 'list', data: [] }) } as unknown as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ object: 'list', data: [] }),
+        } as unknown as Response;
       }
       return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
     });
@@ -123,7 +127,9 @@ describe('ObserverService — dynamic Ollama model discovery (no hardcoded pin)'
     await observer.flushPending(3000);
 
     expect(observer.isActive()).toBe(false);
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/chat/completions'))).toBe(false);
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/chat/completions'))).toBe(
+      false
+    );
     expect(observer.getNarrations().length).toBe(0);
   });
 
@@ -200,7 +206,7 @@ describe('ObserverService — dynamic Ollama model discovery (no hardcoded pin)'
           JSON.parse((c[1] as { body: string }).body) as {
             max_tokens: number;
             messages: Array<{ role: string; content: string }>;
-          },
+          }
       );
 
     // First narration: a small budget sized to a single sentence …
@@ -231,7 +237,11 @@ describe('ObserverService — dynamic Ollama model discovery (no hardcoded pin)'
         } as unknown as Response;
       }
       if (url.endsWith('/chat/completions')) {
-        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) } as unknown as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+        } as unknown as Response;
       }
       return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
     });

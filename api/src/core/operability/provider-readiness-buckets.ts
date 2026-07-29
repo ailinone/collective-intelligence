@@ -53,9 +53,7 @@ export type ProviderReadinessBucket =
  * Recommended-fix string per bucket. Stable IDs that operators can
  * automate against (CI jobs, run-books, etc.).
  */
-export const RECOMMENDED_FIX_BY_BUCKET: Readonly<
-  Record<ProviderReadinessBucket, string | null>
-> = {
+export const RECOMMENDED_FIX_BY_BUCKET: Readonly<Record<ProviderReadinessBucket, string | null>> = {
   A_chat_ready: null,
   B_discovery_ready_chat_not_probed: 'run_chat_probe',
   C_blocked_by_credit: 'top_up_provider_balance',
@@ -83,25 +81,35 @@ export const RECOMMENDED_FIX_BY_BUCKET: Readonly<
 
 export const BUCKET_DESCRIPTIONS: Readonly<Record<ProviderReadinessBucket, string>> = {
   A_chat_ready: 'Chat-completions endpoint responded 200 with valid content.',
-  B_discovery_ready_chat_not_probed: 'Discovery (/v1/models) worked but chat was not probed (budget/policy).',
+  B_discovery_ready_chat_not_probed:
+    'Discovery (/v1/models) worked but chat was not probed (budget/policy).',
   C_blocked_by_credit: 'Provider account has insufficient credit / balance too low.',
   D_blocked_by_auth_confirmed: 'API key rejected after secret presence + endpoint check.',
   E_blocked_by_suspension: 'Provider account suspended at vendor side.',
   F_rate_limited: 'Provider returned 429 / rate limit during probe.',
-  G_model_alias_mismatch_probable: '404/400 with strong heuristic that model id is catalog-formatted, not API-formatted.',
-  G2_model_alias_mismatch_confirmed: 'Reprobe with canonical alias succeeded (or discovery lists alias-form).',
-  H_model_not_supported_confirmed: 'Reprobe with canonical alias still 404 — model truly absent on provider plan.',
+  G_model_alias_mismatch_probable:
+    '404/400 with strong heuristic that model id is catalog-formatted, not API-formatted.',
+  G2_model_alias_mismatch_confirmed:
+    'Reprobe with canonical alias succeeded (or discovery lists alias-form).',
+  H_model_not_supported_confirmed:
+    'Reprobe with canonical alias still 404 — model truly absent on provider plan.',
   I_adapter_missing: 'Provider in registry but no adapter instance.',
   J_secret_missing: 'Adapter present, secret env var not loaded.',
   K_local_ollama_ready: 'Local Ollama host reachable with ≥1 model installed.',
   L_local_ollama_unreachable: 'OLLAMA_BASE_URL set but /api/tags failed.',
   M_local_ollama_not_configured: 'OLLAMA_BASE_URL / OLLAMA_HOSTS env unset.',
-  N_specialized_non_chat_provider: 'Provider is capability-specific (audio, embeddings, image) — chat probe inapplicable.',
-  O_no_catalog_model_bound_to_provider: 'Adapter present but no catalog row has providerId pointing at it.',
-  P_provider_id_catalog_mismatch: 'Catalog row points at a providerId that does not match the adapter.getName() — wrong binding.',
-  Q_auth_header_or_base_url_mismatch: 'Secret present but auth header scheme or base URL is wrong for this provider.',
-  R_secret_alias_mismatch: 'Secret in GCP but loader uses different env var name; adapter never sees it.',
-  S_provider_requires_deployment_or_endpoint: 'Provider needs deployment id / region / endpoint id (Azure, AWS Bedrock, Vertex).',
+  N_specialized_non_chat_provider:
+    'Provider is capability-specific (audio, embeddings, image) — chat probe inapplicable.',
+  O_no_catalog_model_bound_to_provider:
+    'Adapter present but no catalog row has providerId pointing at it.',
+  P_provider_id_catalog_mismatch:
+    'Catalog row points at a providerId that does not match the adapter.getName() — wrong binding.',
+  Q_auth_header_or_base_url_mismatch:
+    'Secret present but auth header scheme or base URL is wrong for this provider.',
+  R_secret_alias_mismatch:
+    'Secret in GCP but loader uses different env var name; adapter never sees it.',
+  S_provider_requires_deployment_or_endpoint:
+    'Provider needs deployment id / region / endpoint id (Azure, AWS Bedrock, Vertex).',
   T_probe_skipped_by_budget_or_policy: 'Audit reached budget cap before reaching this provider.',
   U_discovery_supported_but_empty: 'Discovery endpoint returned empty list (no models exposed).',
   V_unknown_unclassified: 'None of the above patterns matched — manual investigation required.',

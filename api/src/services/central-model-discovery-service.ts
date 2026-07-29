@@ -84,7 +84,7 @@ const PROVIDER_ID_ALIASES: Record<string, string> = {
   'helicone.ai': 'heliconeai',
   'helicone-ai': 'heliconeai',
   'comet-api': 'cometapi',
-  'comet': 'cometapi',
+  comet: 'cometapi',
   'nano-gpt': 'nanogpt',
   // Canonical providerId is `ai302` post-migration (2026-04-22). Aliases
   // target the canonical id so downstream lookups don't need the catalog
@@ -96,7 +96,7 @@ const PROVIDER_ID_ALIASES: Record<string, string> = {
   ollama: 'ollama',
   'llama-server': 'local-llama',
   'llama.cpp': 'local-llama',
-  'koboldcpp': 'local-kobold',
+  koboldcpp: 'local-kobold',
   'local-embeddings': 'local-embeddings',
   'local-ocr': 'local-ocr',
   'local-docling': 'local-docling',
@@ -274,7 +274,7 @@ export class CentralModelDiscoveryService {
     const sources = Array.from(this.sourceHealthMap.values());
     const criticalMissing = this.getCriticalProviderGaps();
     const totalSources = sources.length;
-    const healthySources = sources.filter(s => s.consecutiveFailures === 0).length;
+    const healthySources = sources.filter((s) => s.consecutiveFailures === 0).length;
     return {
       sources,
       criticalMissing,
@@ -335,7 +335,11 @@ export class CentralModelDiscoveryService {
       if (!source) continue;
 
       this.log.info(
-        { source: sourceName, previousFailures: health.consecutiveFailures, backoffMs: health.backoffMs },
+        {
+          source: sourceName,
+          previousFailures: health.consecutiveFailures,
+          backoffMs: health.backoffMs,
+        },
         'Self-healing: retrying previously failed discovery source'
       );
 
@@ -365,7 +369,11 @@ export class CentralModelDiscoveryService {
           this.recordSourceFailure(sourceName, 'Zero models returned', true);
         }
       } catch (err) {
-        this.recordSourceFailure(sourceName, err instanceof Error ? err.message : String(err), true);
+        this.recordSourceFailure(
+          sourceName,
+          err instanceof Error ? err.message : String(err),
+          true
+        );
       }
     }
 
@@ -435,7 +443,10 @@ export class CentralModelDiscoveryService {
     const source = this.discoverySources.get(sourceName);
     if (!source) return;
 
-    this.log.info({ envVar, source: sourceName }, 'API key became available — triggering re-discovery');
+    this.log.info(
+      { envVar, source: sourceName },
+      'API key became available — triggering re-discovery'
+    );
 
     try {
       const models = await source.fetcher();
@@ -448,7 +459,10 @@ export class CentralModelDiscoveryService {
         );
       }
     } catch (err) {
-      this.log.warn({ source: sourceName, error: String(err) }, 'Re-discovery after key availability failed');
+      this.log.warn(
+        { source: sourceName, error: String(err) },
+        'Re-discovery after key availability failed'
+      );
     }
   }
 
@@ -545,9 +559,8 @@ export class CentralModelDiscoveryService {
         priority: 1,
         providers: ['anthropic'],
         fetcher: async () => {
-          const { AnthropicModelFetcher } = await import(
-            './model-fetchers/anthropic-model-fetcher.js'
-          );
+          const { AnthropicModelFetcher } =
+            await import('./model-fetchers/anthropic-model-fetcher.js');
           const fetcher = new AnthropicModelFetcher(
             process.env.ANTHROPIC_API_KEY || '',
             process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com'
@@ -583,9 +596,8 @@ export class CentralModelDiscoveryService {
         priority: 1,
         providers: ['deepseek'],
         fetcher: async () => {
-          const { DeepSeekModelFetcher } = await import(
-            './model-fetchers/deepseek-model-fetcher.js'
-          );
+          const { DeepSeekModelFetcher } =
+            await import('./model-fetchers/deepseek-model-fetcher.js');
           const fetcher = new DeepSeekModelFetcher(
             process.env.DEEPSEEK_API_KEY || '',
             process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1'
@@ -600,7 +612,10 @@ export class CentralModelDiscoveryService {
         providers: ['xai'],
         fetcher: async () => {
           const { XAIModelFetcher } = await import('./model-fetchers/xai-model-fetcher.js');
-          const fetcher = new XAIModelFetcher(process.env.XAI_API_KEY || '', process.env.XAI_BASE_URL || 'https://api.x.ai/v1');
+          const fetcher = new XAIModelFetcher(
+            process.env.XAI_API_KEY || '',
+            process.env.XAI_BASE_URL || 'https://api.x.ai/v1'
+          );
           return await fetcher.getModels();
         },
       },
@@ -634,7 +649,8 @@ export class CentralModelDiscoveryService {
           const fetcher = new JinaModelFetcher({
             apiKey: process.env.JINA_API_KEY || '',
             apiBaseUrl: process.env.JINA_API_BASE_URL || 'https://api.jina.ai/v1',
-            deepSearchBaseUrl: process.env.JINA_DEEPSEARCH_BASE_URL || 'https://deepsearch.jina.ai/v1',
+            deepSearchBaseUrl:
+              process.env.JINA_DEEPSEARCH_BASE_URL || 'https://deepsearch.jina.ai/v1',
             seedModels,
           });
           return await fetcher.getModels();
@@ -647,59 +663,61 @@ export class CentralModelDiscoveryService {
         providers: ['qwen', 'alibaba'],
         fetcher: async () => {
           const { AlibabaModelFetcher } = await import('./model-fetchers/alibaba-model-fetcher.js');
-              
-              // Try both API keys - test each one
-              const apiKey1 = process.env.QWEN_API_KEY || '';
-              const apiKey2 = process.env.QWEN_API_KEY_2 || '';
 
-              // Model Studio keys are region-scoped: a key created in one region
-              // will 401 against any other region's endpoint. We don't know which
-              // region the user's key was provisioned in, so we probe all public
-              // Model Studio regions in order of popularity. If ALIBABA_BASE_URL
-              // is set, use ONLY that (explicit user preference).
-              //
-              // Source: https://help.aliyun.com/zh/model-studio/api-key-management
-              const explicitRegion = process.env.ALIBABA_BASE_URL || process.env.QWEN_BASE_URL;
-              const workspaceId = process.env.ALIBABA_WORKSPACE_ID || '';
-              const regions: string[] = explicitRegion ? [explicitRegion] : [
-                'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',  // Singapore (most common intl)
-                'https://dashscope-us.aliyuncs.com/compatible-mode/v1',    // US Virginia
-                'https://dashscope.aliyuncs.com/compatible-mode/v1',       // China Beijing
+          // Try both API keys - test each one
+          const apiKey1 = process.env.QWEN_API_KEY || '';
+          const apiKey2 = process.env.QWEN_API_KEY_2 || '';
+
+          // Model Studio keys are region-scoped: a key created in one region
+          // will 401 against any other region's endpoint. We don't know which
+          // region the user's key was provisioned in, so we probe all public
+          // Model Studio regions in order of popularity. If ALIBABA_BASE_URL
+          // is set, use ONLY that (explicit user preference).
+          //
+          // Source: https://help.aliyun.com/zh/model-studio/api-key-management
+          const explicitRegion = process.env.ALIBABA_BASE_URL || process.env.QWEN_BASE_URL;
+          const workspaceId = process.env.ALIBABA_WORKSPACE_ID || '';
+          const regions: string[] = explicitRegion
+            ? [explicitRegion]
+            : [
+                'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', // Singapore (most common intl)
+                'https://dashscope-us.aliyuncs.com/compatible-mode/v1', // US Virginia
+                'https://dashscope.aliyuncs.com/compatible-mode/v1', // China Beijing
                 'https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1', // Hong Kong
                 // Frankfurt requires workspaceId in path; only try if configured
                 ...(workspaceId
                   ? [`https://${workspaceId}.eu-central-1.maas.aliyuncs.com/compatible-mode/v1`]
                   : []),
               ];
-              
-              let models: DiscoveredModel[] = [];
-              
-              // Try both API keys with both regions
-              for (const regionUrl of regions) {
-                if (models.length > 0) break; // Stop if we got models
-                
-                // Try first API key
-                let fetcher = new AlibabaModelFetcher(
-                  apiKey1,
-                  regionUrl,
-                  process.env.ALIBABA_ACCESS_KEY_ID,
-                  process.env.ALIBABA_ACCESS_KEY_SECRET
-                );
-                models = await fetcher.getModels();
-                
-                // If first key fails, try second key
-                if (models.length === 0 && apiKey2) {
-                  fetcher = new AlibabaModelFetcher(
-                    apiKey2,
-                    regionUrl,
-                    process.env.ALIBABA_ACCESS_KEY_ID,
-                    process.env.ALIBABA_ACCESS_KEY_SECRET
-                  );
-                  models = await fetcher.getModels();
-                }
-              }
-              
-              return models;
+
+          let models: DiscoveredModel[] = [];
+
+          // Try both API keys with both regions
+          for (const regionUrl of regions) {
+            if (models.length > 0) break; // Stop if we got models
+
+            // Try first API key
+            let fetcher = new AlibabaModelFetcher(
+              apiKey1,
+              regionUrl,
+              process.env.ALIBABA_ACCESS_KEY_ID,
+              process.env.ALIBABA_ACCESS_KEY_SECRET
+            );
+            models = await fetcher.getModels();
+
+            // If first key fails, try second key
+            if (models.length === 0 && apiKey2) {
+              fetcher = new AlibabaModelFetcher(
+                apiKey2,
+                regionUrl,
+                process.env.ALIBABA_ACCESS_KEY_ID,
+                process.env.ALIBABA_ACCESS_KEY_SECRET
+              );
+              models = await fetcher.getModels();
+            }
+          }
+
+          return models;
         },
       },
       {
@@ -741,9 +759,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'nvidia',
@@ -765,9 +782,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'nvidia-hub',
@@ -789,9 +805,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'aihubmix',
@@ -813,9 +828,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'novita',
@@ -837,9 +851,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'moonshot',
@@ -861,9 +874,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'minimax',
@@ -878,7 +890,10 @@ export class CentralModelDiscoveryService {
           }
 
           const seededModelId = process.env.MINIMAX_SEED_MODEL || 'minimax-text-01';
-          this.log.info({ seededModelId }, 'MiniMax discovery empty, using conservative seed fallback');
+          this.log.info(
+            { seededModelId },
+            'MiniMax discovery empty, using conservative seed fallback'
+          );
 
           return [
             {
@@ -914,9 +929,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'friendli',
@@ -936,9 +950,7 @@ export class CentralModelDiscoveryService {
         priority: 2,
         providers: ['aiml', 'aimlapi'],
         fetcher: async () => {
-          const { AimlModelFetcher } = await import(
-            './model-fetchers/aiml-model-fetcher.js'
-          );
+          const { AimlModelFetcher } = await import('./model-fetchers/aiml-model-fetcher.js');
 
           const fetcher = new AimlModelFetcher({
             apiKey: process.env.AIML_API_KEY || '',
@@ -957,9 +969,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { ImageRouterModelFetcher } = await import(
-            './model-fetchers/imagerouter-model-fetcher.js'
-          );
+          const { ImageRouterModelFetcher } =
+            await import('./model-fetchers/imagerouter-model-fetcher.js');
           const fetcher = new ImageRouterModelFetcher(
             process.env.IMAGEROUTER_API_KEY || '',
             process.env.IMAGEROUTER_BASE_URL || 'https://api.imagerouter.io'
@@ -978,9 +989,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           // ORQ model catalog endpoint is documented under Platform API:
           // GET https://api.orq.ai/v2/models
@@ -1006,9 +1016,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'edenai',
@@ -1030,9 +1039,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'heliconeai',
@@ -1054,9 +1062,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'cometapi',
@@ -1078,9 +1085,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'nanogpt',
@@ -1102,9 +1108,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'requesty',
@@ -1131,9 +1136,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'ai302',
@@ -1156,9 +1160,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'poe',
@@ -1180,9 +1183,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'routeway',
@@ -1208,7 +1210,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { VertexAIModelFetcher } = await import('./model-fetchers/vertex-ai-model-fetcher.js');
+          const { VertexAIModelFetcher } =
+            await import('./model-fetchers/vertex-ai-model-fetcher.js');
           const fetcher = new VertexAIModelFetcher({
             apiKey:
               process.env.VERTEX_AI_API_KEY ||
@@ -1226,9 +1229,8 @@ export class CentralModelDiscoveryService {
         priority: 2,
         providers: ['amazon', 'aws', 'bedrock'],
         fetcher: async () => {
-          const { AWSBedrockModelFetcher } = await import(
-            './model-fetchers/aws-bedrock-model-fetcher.js'
-          );
+          const { AWSBedrockModelFetcher } =
+            await import('./model-fetchers/aws-bedrock-model-fetcher.js');
           const fetcher = new AWSBedrockModelFetcher({
             accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
             secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
@@ -1248,9 +1250,8 @@ export class CentralModelDiscoveryService {
             return [];
           }
 
-          const { AzureOpenAIModelFetcher } = await import(
-            './model-fetchers/azure-openai-model-fetcher.js'
-          );
+          const { AzureOpenAIModelFetcher } =
+            await import('./model-fetchers/azure-openai-model-fetcher.js');
           const fetcher = new AzureOpenAIModelFetcher({
             apiKey: process.env.AZURE_OPENAI_API_KEY,
             endpoint: process.env.AZURE_OPENAI_ENDPOINT,
@@ -1312,9 +1313,8 @@ export class CentralModelDiscoveryService {
           // same normalization translation-service applies.
           const baseUrl = rawUrl.replace(/\/v1\/?$/, '');
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'ollama',
             apiKey: 'ollama',
@@ -1333,9 +1333,8 @@ export class CentralModelDiscoveryService {
           const baseUrl = process.env.LOCAL_LLAMA_URL;
           if (!baseUrl) return [];
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'local-llama',
             apiKey: 'local',
@@ -1354,9 +1353,8 @@ export class CentralModelDiscoveryService {
           const baseUrl = process.env.LOCAL_KOBOLD_URL;
           if (!baseUrl) return [];
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'local-kobold',
             apiKey: 'local',
@@ -1375,9 +1373,8 @@ export class CentralModelDiscoveryService {
           const baseUrl = process.env.LOCAL_EMBEDDINGS_URL;
           if (!baseUrl) return [];
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'local-embeddings',
             apiKey: 'local',
@@ -1396,9 +1393,8 @@ export class CentralModelDiscoveryService {
           const baseUrl = process.env.LOCAL_OCR_URL;
           if (!baseUrl) return [];
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'local-ocr',
             apiKey: 'local',
@@ -1417,9 +1413,8 @@ export class CentralModelDiscoveryService {
           const baseUrl = process.env.LOCAL_DOCLING_URL;
           if (!baseUrl) return [];
 
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'local-docling',
             apiKey: 'local',
@@ -1449,7 +1444,7 @@ export class CentralModelDiscoveryService {
           });
           if (!resp.ok) return [];
 
-          const data = await resp.json() as {
+          const data = (await resp.json()) as {
             stt?: Array<{ name: string; canonical_name?: string }>;
             tts?: Array<{ name: string; canonical_name?: string }>;
           };
@@ -1457,18 +1452,22 @@ export class CentralModelDiscoveryService {
           const models: DiscoveredModel[] = [];
           for (const m of data.stt || []) {
             models.push({
-              id: `deepgram/${m.name}`, name: m.name,
+              id: `deepgram/${m.name}`,
+              name: m.name,
               displayName: `Deepgram ${m.canonical_name || m.name} (STT)`,
-              contextWindow: 0, maxOutputTokens: 0,
+              contextWindow: 0,
+              maxOutputTokens: 0,
               capabilities: ['speech_to_text', 'streaming'],
               metadata: { provider: 'deepgram', modalities: ['audio'] },
             });
           }
           for (const m of data.tts || []) {
             models.push({
-              id: `deepgram/${m.name}`, name: m.name,
+              id: `deepgram/${m.name}`,
+              name: m.name,
               displayName: `Deepgram ${m.canonical_name || m.name} (TTS)`,
-              contextWindow: 0, maxOutputTokens: 0,
+              contextWindow: 0,
+              maxOutputTokens: 0,
               capabilities: ['text_to_speech', 'streaming'],
               metadata: { provider: 'deepgram', modalities: ['audio'] },
             });
@@ -1495,11 +1494,17 @@ export class CentralModelDiscoveryService {
           });
           if (!resp.ok) return [];
 
-          const data = await resp.json() as Array<{ id: string; name: string; description?: string }>;
-          return (Array.isArray(data) ? data : []).map(m => ({
-            id: `cartesia/${m.id}`, name: m.id,
+          const data = (await resp.json()) as Array<{
+            id: string;
+            name: string;
+            description?: string;
+          }>;
+          return (Array.isArray(data) ? data : []).map((m) => ({
+            id: `cartesia/${m.id}`,
+            name: m.id,
             displayName: `Cartesia ${m.name} (TTS)`,
-            contextWindow: 0, maxOutputTokens: 0,
+            contextWindow: 0,
+            maxOutputTokens: 0,
             capabilities: ['text_to_speech', 'streaming'],
             metadata: { provider: 'cartesia', modalities: ['audio'] },
           }));
@@ -1521,16 +1526,19 @@ export class CentralModelDiscoveryService {
           });
           if (!resp.ok) return [];
 
-          const data = await resp.json() as Array<{
-            model_id: string; name: string;
+          const data = (await resp.json()) as Array<{
+            model_id: string;
+            name: string;
             can_do_text_to_speech?: boolean;
           }>;
           return (Array.isArray(data) ? data : [])
-            .filter(m => m.can_do_text_to_speech !== false)
-            .map(m => ({
-              id: `elevenlabs/${m.model_id}`, name: m.model_id,
+            .filter((m) => m.can_do_text_to_speech !== false)
+            .map((m) => ({
+              id: `elevenlabs/${m.model_id}`,
+              name: m.model_id,
               displayName: `ElevenLabs ${m.name} (TTS)`,
-              contextWindow: 0, maxOutputTokens: 0,
+              contextWindow: 0,
+              maxOutputTokens: 0,
               capabilities: ['text_to_speech', 'streaming'],
               metadata: { provider: 'elevenlabs', modalities: ['audio'] },
             }));
@@ -1562,8 +1570,9 @@ export class CentralModelDiscoveryService {
 
       for (const providerName of allProviderNames) {
         // Skip if already covered by a dedicated source
-        const existingSourceKey = Array.from(this.discoverySources.keys())
-          .find(key => key.toLowerCase().includes(providerName.toLowerCase()));
+        const existingSourceKey = Array.from(this.discoverySources.keys()).find((key) =>
+          key.toLowerCase().includes(providerName.toLowerCase())
+        );
         if (existingSourceKey) continue;
 
         const adapter = registry.get(providerName);
@@ -1579,7 +1588,7 @@ export class CentralModelDiscoveryService {
             try {
               const models = await adapter.getModels();
               if (!models || models.length === 0) return [];
-              return models.map(m => ({
+              return models.map((m) => ({
                 id: m.id || `${providerName}/${m.name}`,
                 name: m.name,
                 displayName: m.displayName,
@@ -1605,11 +1614,17 @@ export class CentralModelDiscoveryService {
       }
 
       if (added > 0) {
-        this.log.info({ added, total: allProviderNames.length }, 'Registered adapter discovery sources');
+        this.log.info(
+          { added, total: allProviderNames.length },
+          'Registered adapter discovery sources'
+        );
       }
     } catch (err) {
       // Provider registry may not be initialized yet — safe to skip
-      this.log.debug({ error: err instanceof Error ? err.message : String(err) }, 'Skipping adapter sources (registry not ready)');
+      this.log.debug(
+        { error: err instanceof Error ? err.message : String(err) },
+        'Skipping adapter sources (registry not ready)'
+      );
     }
   }
 
@@ -1652,9 +1667,8 @@ export class CentralModelDiscoveryService {
         priority: 8,
         providers: ['bytez'],
         fetcher: async (): Promise<DiscoveredModel[]> => {
-          const { BytezNativeModelFetcher } = await import(
-            './model-fetchers/bytez-native-model-fetcher.js'
-          );
+          const { BytezNativeModelFetcher } =
+            await import('./model-fetchers/bytez-native-model-fetcher.js');
           const fetcher = new BytezNativeModelFetcher(process.env.BYTEZ_API_KEY || '');
           return await fetcher.getModels();
         },
@@ -1683,9 +1697,8 @@ export class CentralModelDiscoveryService {
         fetcher: async (): Promise<DiscoveredModel[]> => {
           const apiKey = process.env.GITHUB_TOKEN || '';
           if (!apiKey) return [];
-          const { OpenAICompatibleHubModelFetcher } = await import(
-            './model-fetchers/openai-compatible-hub-model-fetcher.js'
-          );
+          const { OpenAICompatibleHubModelFetcher } =
+            await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
           const fetcher = new OpenAICompatibleHubModelFetcher({
             providerName: 'github-models',
             apiKey,
@@ -1714,12 +1727,11 @@ export class CentralModelDiscoveryService {
         priority: 8,
         providers: ['cloudflare-workers-ai'],
         fetcher: async (): Promise<DiscoveredModel[]> => {
-          const { CloudflareWorkersAIModelFetcher } = await import(
-            './model-fetchers/cloudflare-workers-ai-model-fetcher.js'
-          );
+          const { CloudflareWorkersAIModelFetcher } =
+            await import('./model-fetchers/cloudflare-workers-ai-model-fetcher.js');
           const fetcher = new CloudflareWorkersAIModelFetcher(
             process.env.CLOUDFLARE_API_TOKEN || '',
-            process.env.CLOUDFLARE_ACCOUNT_ID || '',
+            process.env.CLOUDFLARE_ACCOUNT_ID || ''
           );
           return await fetcher.getModels();
         },
@@ -1743,9 +1755,8 @@ export class CentralModelDiscoveryService {
         fetcher: async (): Promise<DiscoveredModel[]> => {
           const apiKey = process.env.FEATHERLESS_AI_API_KEY || '';
           if (!apiKey) return [];
-          const { FeatherlessModelFetcher } = await import(
-            './model-fetchers/featherless-model-fetcher.js'
-          );
+          const { FeatherlessModelFetcher } =
+            await import('./model-fetchers/featherless-model-fetcher.js');
           const fetcher = new FeatherlessModelFetcher(apiKey);
           return await fetcher.getModels();
         },
@@ -1763,9 +1774,8 @@ export class CentralModelDiscoveryService {
         priority: 8,
         providers: ['imagerouter'],
         fetcher: async (): Promise<DiscoveredModel[]> => {
-          const { ImageRouterModelFetcher } = await import(
-            './model-fetchers/imagerouter-model-fetcher.js'
-          );
+          const { ImageRouterModelFetcher } =
+            await import('./model-fetchers/imagerouter-model-fetcher.js');
           const fetcher = new ImageRouterModelFetcher(process.env.IMAGEROUTER_API_KEY || '');
           return await fetcher.getModels();
         },
@@ -1801,12 +1811,10 @@ export class CentralModelDiscoveryService {
   private async addCatalogProviderSources(): Promise<void> {
     try {
       const { PROVIDER_CATALOG } = await import('../providers/catalog/providers.catalog.js');
-      const { isOpenAICompatibleEntry, normalizePinnedModelEntry } = await import(
-        '../providers/catalog/provider-catalog.types.js'
-      );
-      const { OpenAICompatibleHubModelFetcher } = await import(
-        './model-fetchers/openai-compatible-hub-model-fetcher.js'
-      );
+      const { isOpenAICompatibleEntry, normalizePinnedModelEntry } =
+        await import('../providers/catalog/provider-catalog.types.js');
+      const { OpenAICompatibleHubModelFetcher } =
+        await import('./model-fetchers/openai-compatible-hub-model-fetcher.js');
 
       let added = 0;
       let skippedCovered = 0;
@@ -1918,9 +1926,7 @@ export class CentralModelDiscoveryService {
             if (isExecutionOnly && pinnedModels) {
               return pinnedModels.map(({ id: modelId, capabilities: declared }) => {
                 const capabilities =
-                  declared.length > 0
-                    ? [...declared]
-                    : inferModelCapabilities({ modelId }) ?? [];
+                  declared.length > 0 ? [...declared] : (inferModelCapabilities({ modelId }) ?? []);
                 return {
                   id: modelId,
                   name: modelId,
@@ -1937,8 +1943,7 @@ export class CentralModelDiscoveryService {
                     // Mark the source so downstream consumers (capability search,
                     // bandits, audits) can distinguish operator-declared from
                     // regex-inferred without re-running inference.
-                    capabilitySource:
-                      declared.length > 0 ? 'operator-declared' : 'name-regex',
+                    capabilitySource: declared.length > 0 ? 'operator-declared' : 'name-regex',
                   },
                 };
               });
@@ -2060,9 +2065,8 @@ export class CentralModelDiscoveryService {
         priority: 3,
         providers: ['*'], // All providers
         fetcher: async () => {
-          const { OpenRouterModelFetcher } = await import(
-            './model-fetchers/openrouter-model-fetcher.js'
-          );
+          const { OpenRouterModelFetcher } =
+            await import('./model-fetchers/openrouter-model-fetcher.js');
           const fetcher = new OpenRouterModelFetcher(process.env.OPENROUTER_API_KEY || '');
           return await fetcher.getModels();
         },
@@ -2110,8 +2114,13 @@ export class CentralModelDiscoveryService {
 
   /** Local/self-hosted provider names that never need balance checks. */
   private static readonly LOCAL_PROVIDERS = new Set([
-    'ollama', 'local-llama', 'local-kobold', 'local-embeddings',
-    'local-ocr', 'local-docling', 'local-piper',
+    'ollama',
+    'local-llama',
+    'local-kobold',
+    'local-embeddings',
+    'local-ocr',
+    'local-docling',
+    'local-piper',
   ]);
 
   /**
@@ -2120,7 +2129,11 @@ export class CentralModelDiscoveryService {
    */
   getModelBalanceStatus(providerName: string): 'has-credits' | 'no-credits' | 'unknown' | 'local' {
     const normalized = providerName.toLowerCase();
-    if (CentralModelDiscoveryService.LOCAL_PROVIDERS.has(normalized) || normalized.startsWith('local-') || normalized.startsWith('self-hosted')) {
+    if (
+      CentralModelDiscoveryService.LOCAL_PROVIDERS.has(normalized) ||
+      normalized.startsWith('local-') ||
+      normalized.startsWith('self-hosted')
+    ) {
       return 'local';
     }
     const balanceResult = this.providerBalanceStatus.get(normalized);
@@ -2138,9 +2151,10 @@ export class CentralModelDiscoveryService {
     for (const model of models) {
       const provider = model.provider || '';
       // Also check executionProvider in metadata (hub models route through a different provider)
-      const executionProvider = typeof model.metadata?.executionProvider === 'string'
-        ? model.metadata.executionProvider
-        : '';
+      const executionProvider =
+        typeof model.metadata?.executionProvider === 'string'
+          ? model.metadata.executionProvider
+          : '';
       // Use the most specific provider (executionProvider takes precedence if present)
       const effectiveProvider = executionProvider || provider;
       model.balanceStatus = this.getModelBalanceStatus(effectiveProvider);
@@ -2177,10 +2191,7 @@ export class CentralModelDiscoveryService {
             setTimeout(() => resolve(null), 5000);
           });
 
-          const result = await Promise.race([
-            adapter.checkBalance(),
-            timeoutPromise,
-          ]);
+          const result = await Promise.race([adapter.checkBalance(), timeoutPromise]);
 
           if (result !== null) {
             this.providerBalanceStatus.set(providerName, result);
@@ -2191,7 +2202,7 @@ export class CentralModelDiscoveryService {
             opHub.recordProbeResult(
               providerName,
               result.hasCredits ? 'healthy' : 'insufficient_credit',
-              result.hasCredits ? 'balance check: has credits' : 'balance check: no credits',
+              result.hasCredits ? 'balance check: has credits' : 'balance check: no credits'
             );
 
             if (!result.hasCredits) {
@@ -2292,20 +2303,18 @@ export class CentralModelDiscoveryService {
           // emits ~58k cursor pages, Bytez ships ~100k in one shot) and need
           // a much longer budget than native_api endpoints. Configurable via
           // env so operators can tighten or extend per environment.
-          const timeoutMs = source.type === 'aggregator'
-            ? Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '120000')
-            : Number(process.env.NATIVE_DISCOVERY_TIMEOUT_MS || '10000');
+          const timeoutMs =
+            source.type === 'aggregator'
+              ? Number(process.env.AGGREGATOR_DISCOVERY_TIMEOUT_MS || '120000')
+              : Number(process.env.NATIVE_DISCOVERY_TIMEOUT_MS || '10000');
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(
               () => reject(new Error(`Discovery timeout after ${timeoutMs}ms for ${sourceName}`)),
-              timeoutMs,
+              timeoutMs
             );
           });
 
-          const models = await Promise.race([
-            source.fetcher(),
-            timeoutPromise,
-          ]);
+          const models = await Promise.race([source.fetcher(), timeoutPromise]);
 
           // Processa e armazena modelos
           const result = await this.processDiscoveredModels(sourceName, source, models);
@@ -2335,15 +2344,24 @@ export class CentralModelDiscoveryService {
 
           // L1: Record source health — failure
           // Check if failure is retriable (key not loaded, timeout, etc.)
-          const isKeyMissing = errorMessage.includes('mock') || errorMessage.includes('API key') || errorMessage.includes('credentials');
+          const isKeyMissing =
+            errorMessage.includes('mock') ||
+            errorMessage.includes('API key') ||
+            errorMessage.includes('credentials');
           const isTimeout = errorMessage.includes('timeout');
           this.recordSourceFailure(sourceName, errorMessage, isKeyMissing || isTimeout);
 
           // Don't log timeout errors as errors, just warnings
           if (isTimeout) {
-            this.log.warn({ source: sourceName, duration }, 'Discovery timeout for source (provider may be slow or unavailable)');
+            this.log.warn(
+              { source: sourceName, duration },
+              'Discovery timeout for source (provider may be slow or unavailable)'
+            );
           } else {
-            this.log.warn({ source: sourceName, error: errorMessage }, 'Discovery failed for source (non-critical)');
+            this.log.warn(
+              { source: sourceName, error: errorMessage },
+              'Discovery failed for source (non-critical)'
+            );
           }
 
           return {
@@ -2412,7 +2430,7 @@ export class CentralModelDiscoveryService {
   /**
    * Bulk upsert models using PostgreSQL native INSERT ... ON CONFLICT
    * This is much more efficient than individual upserts, reducing roundtrips and transaction overhead
-   * 
+   *
    * @param models Array of normalized models to upsert
    * @param providerId Provider ID for all models
    * @param sourceName Source name for metadata
@@ -2444,7 +2462,7 @@ export class CentralModelDiscoveryService {
     // Process in batches to avoid very large SQL statements
     for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
       const batch = deduped.slice(i, i + BATCH_SIZE);
-      
+
       // Build VALUES clause for batch insert (includes uid for multi-provider PK)
       const values: string[] = [];
       const params: unknown[] = [];
@@ -2452,7 +2470,9 @@ export class CentralModelDiscoveryService {
 
       for (const { normalizedModel, provider: _provider } of batch) {
         const modelName = normalizedModel.name || normalizedModel.id;
-        const capabilities = Array.isArray(normalizedModel.capabilities) ? normalizedModel.capabilities : [];
+        const capabilities = Array.isArray(normalizedModel.capabilities)
+          ? normalizedModel.capabilities
+          : [];
         const pricing = normalizedModel.pricing || { prompt: 0, completion: 0, currency: 'USD' };
         const inputCostPer1k = (pricing.inputCostPer1M ?? 0) / 1000;
         const outputCostPer1k = (pricing.outputCostPer1M ?? 0) / 1000;
@@ -2466,7 +2486,7 @@ export class CentralModelDiscoveryService {
             discoveredAt: new Date().toISOString(),
             pricing,
           },
-          capabilities,
+          capabilities
         );
 
         const performancePayload = {
@@ -2497,7 +2517,7 @@ export class CentralModelDiscoveryService {
           JSON.stringify(metadataPayload), // metadata (JSON)
           JSON.stringify(performancePayload), // performance (JSON)
           'active', // status
-          new Date(), // updated_at
+          new Date() // updated_at
         );
 
         paramIndex += 14;
@@ -2546,7 +2566,7 @@ export class CentralModelDiscoveryService {
       try {
         // Execute bulk upsert
         await prisma.$executeRawUnsafe(sql, ...params);
-        
+
         // Count new vs updated based on pre-check
         for (const { normalizedModel } of batch) {
           if (existingIds.has(normalizedModel.id)) {
@@ -2570,7 +2590,13 @@ export class CentralModelDiscoveryService {
               await this.createNewModel(normalizedModel, provider, sourceName, source);
               newCount++;
             } else {
-              const updated = await this.updateExistingModel(existing, normalizedModel, provider, sourceName, source);
+              const updated = await this.updateExistingModel(
+                existing,
+                normalizedModel,
+                provider,
+                sourceName,
+                source
+              );
               if (updated) {
                 updatedCount++;
               }
@@ -2602,7 +2628,10 @@ export class CentralModelDiscoveryService {
     const errors: string[] = [];
 
     // Group models by provider for bulk processing
-    const modelsByProvider = new Map<string, Array<{ model: DiscoveredModel; provider: string; normalizedModel: DiscoveredModel }>>();
+    const modelsByProvider = new Map<
+      string,
+      Array<{ model: DiscoveredModel; provider: string; normalizedModel: DiscoveredModel }>
+    >();
 
     for (const model of models) {
       try {
@@ -2620,7 +2649,9 @@ export class CentralModelDiscoveryService {
           normalizedModel,
         });
       } catch (error) {
-        errors.push(`Failed to prepare model ${model.id}: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Failed to prepare model ${model.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
         this.log.warn({ modelId: model.id, error }, 'Failed to prepare discovered model');
       }
     }
@@ -2639,13 +2670,20 @@ export class CentralModelDiscoveryService {
         const providerRecord = await this.ensureProviderExists(provider, sourceName);
 
         // Bulk upsert models for this provider
-        const result = await this.bulkUpsertModels(providerModels, providerRecord.id, sourceName, source);
+        const result = await this.bulkUpsertModels(
+          providerModels,
+          providerRecord.id,
+          sourceName,
+          source
+        );
         modelsNew += result.new;
         modelsUpdated += result.updated;
       } catch (error) {
-        errors.push(`Failed to process provider ${provider}: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Failed to process provider ${provider}: ${error instanceof Error ? error.message : String(error)}`
+        );
         this.log.warn({ provider, error }, 'Failed to bulk process models for provider');
-        
+
         // Fall back to individual processing for this provider
         for (const { normalizedModel } of providerModels) {
           try {
@@ -2656,14 +2694,25 @@ export class CentralModelDiscoveryService {
               await this.createNewModel(normalizedModel, provider, sourceName, source);
               modelsNew++;
             } else {
-              const updated = await this.updateExistingModel(existing, normalizedModel, provider, sourceName, source);
+              const updated = await this.updateExistingModel(
+                existing,
+                normalizedModel,
+                provider,
+                sourceName,
+                source
+              );
               if (updated) {
                 modelsUpdated++;
               }
             }
           } catch (individualError) {
-            errors.push(`Failed to process model ${normalizedModel.id}: ${individualError instanceof Error ? individualError.message : String(individualError)}`);
-            this.log.warn({ modelId: normalizedModel.id, error: individualError }, 'Failed to process discovered model individually');
+            errors.push(
+              `Failed to process model ${normalizedModel.id}: ${individualError instanceof Error ? individualError.message : String(individualError)}`
+            );
+            this.log.warn(
+              { modelId: normalizedModel.id, error: individualError },
+              'Failed to process discovered model individually'
+            );
           }
         }
       }
@@ -2704,7 +2753,11 @@ export class CentralModelDiscoveryService {
   /**
    * Garante metadados consistentes para cada modelo descoberto
    */
-  private enrichModelMetadata(model: DiscoveredModel, provider: string, source: DiscoverySource): DiscoveredModel {
+  private enrichModelMetadata(
+    model: DiscoveredModel,
+    provider: string,
+    source: DiscoverySource
+  ): DiscoveredModel {
     const metadata: Record<string, unknown> = {
       ...(model.metadata || {}),
       discoverySource: source.name,
@@ -2793,7 +2846,13 @@ export class CentralModelDiscoveryService {
     });
 
     if (existingByProviderAndName) {
-      await this.updateExistingModel(existingByProviderAndName, model, provider, sourceName, source);
+      await this.updateExistingModel(
+        existingByProviderAndName,
+        model,
+        provider,
+        sourceName,
+        source
+      );
       return;
     }
 
@@ -2832,7 +2891,9 @@ export class CentralModelDiscoveryService {
             `;
             if (!lockResult.pg_try_advisory_xact_lock) {
               // Lock held by another process — skip this attempt, will retry
-              throw Object.assign(new Error('Advisory lock not acquired, retrying'), { code: 'LOCK_BUSY' });
+              throw Object.assign(new Error('Advisory lock not acquired, retrying'), {
+                code: 'LOCK_BUSY',
+              });
             }
 
             // Now check and create/update within the locked transaction
@@ -2861,7 +2922,7 @@ export class CentralModelDiscoveryService {
                       discoveredAt: new Date().toISOString(),
                       pricing,
                     },
-                    capabilities,
+                    capabilities
                   ),
                   status: 'active',
                 },
@@ -2897,7 +2958,7 @@ export class CentralModelDiscoveryService {
                       discoveredAt: new Date().toISOString(),
                       pricing,
                     },
-                    capabilities,
+                    capabilities
                   ),
                   status: 'active',
                 },
@@ -2932,7 +2993,7 @@ export class CentralModelDiscoveryService {
                     discoveredAt: new Date().toISOString(),
                     pricing,
                   },
-                  capabilities,
+                  capabilities
                 ),
                 status: 'active',
                 updatedAt: new Date(),
@@ -2957,7 +3018,7 @@ export class CentralModelDiscoveryService {
                     discoveredAt: new Date().toISOString(),
                     pricing,
                   },
-                  capabilities,
+                  capabilities
                 ),
                 status: 'active',
                 performance: {
@@ -3017,7 +3078,13 @@ export class CentralModelDiscoveryService {
 
           // Max retries exceeded - model was likely created by another process
           this.log.warn(
-            { modelId: model.id, modelName, providerId: providerRecord.id, attempts: attempt, constraintFields },
+            {
+              modelId: model.id,
+              modelName,
+              providerId: providerRecord.id,
+              attempts: attempt,
+              constraintFields,
+            },
             'Model creation failed after max retries - model may have been created by concurrent process'
           );
           return; // Silently continue - model exists now
@@ -3071,7 +3138,8 @@ export class CentralModelDiscoveryService {
 
     // Verifica mudanças de capacidades
     const newCapabilities = Array.isArray(model.capabilities) ? model.capabilities : [];
-    const existingCapabilities = existing.capabilities && Array.isArray(existing.capabilities) ? existing.capabilities : [];
+    const existingCapabilities =
+      existing.capabilities && Array.isArray(existing.capabilities) ? existing.capabilities : [];
     if (JSON.stringify(existingCapabilities.sort()) !== JSON.stringify(newCapabilities.sort())) {
       updates.capabilities = newCapabilities;
       changed = true;
@@ -3084,10 +3152,13 @@ export class CentralModelDiscoveryService {
     }
 
     // Convert existing.metadata (JsonValue) to a plain object for spreading
-    const existingMetadataObj = existing.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
-      ? existing.metadata as Record<string, unknown>
-      : {};
-    
+    const existingMetadataObj =
+      existing.metadata &&
+      typeof existing.metadata === 'object' &&
+      !Array.isArray(existing.metadata)
+        ? (existing.metadata as Record<string, unknown>)
+        : {};
+
     const metadataPayload: Record<string, unknown> = withNormalizedMetadata(
       {
         ...existingMetadataObj,
@@ -3097,7 +3168,7 @@ export class CentralModelDiscoveryService {
         lastUpdated: new Date().toISOString(),
         pricing: model.pricing,
       },
-      newCapabilities,
+      newCapabilities
     );
 
     const existingMetadataString = JSON.stringify(existing.metadata ?? {});
@@ -3120,7 +3191,11 @@ export class CentralModelDiscoveryService {
   }
 
   private defaultExecutionProviderForSource(source: DiscoverySource): string {
-    return this.resolveSourceExecutionProvider(source) || this.normalizeProviderId(source.name) || source.name;
+    return (
+      this.resolveSourceExecutionProvider(source) ||
+      this.normalizeProviderId(source.name) ||
+      source.name
+    );
   }
 
   private readStringMetadata(
@@ -3133,7 +3208,10 @@ export class CentralModelDiscoveryService {
 
   private normalizeProviderId(value?: string): string | undefined {
     if (!value) return undefined;
-    const normalized = value.trim().toLowerCase().replace(/[\s_]+/g, '-');
+    const normalized = value
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-');
     if (!normalized) return undefined;
     return PROVIDER_ID_ALIASES[normalized] || normalized;
   }
@@ -3244,7 +3322,9 @@ export class CentralModelDiscoveryService {
 
       if (metadataOverrides && Object.keys(metadataOverrides).length > 0) {
         const currentMetadata =
-          existing.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+          existing.metadata &&
+          typeof existing.metadata === 'object' &&
+          !Array.isArray(existing.metadata)
             ? (existing.metadata as Record<string, unknown>)
             : {};
 
@@ -3256,7 +3336,7 @@ export class CentralModelDiscoveryService {
         // intentionally NOT part of the check (its discoveredAt changes each call,
         // and a timestamp refresh is not worth a contended write on the hot path).
         const alreadyApplied = Object.entries(metadataOverrides).every(
-          ([k, v]) => currentMetadata[k] === v,
+          ([k, v]) => currentMetadata[k] === v
         );
         if (!alreadyApplied) {
           await prisma.provider.update({
@@ -3423,7 +3503,7 @@ export class CentralModelDiscoveryService {
 
   /**
    * Invalida caches após descoberta
-   * 
+   *
    * Strategy: Selective invalidation instead of full clear
    * - Only invalidate affected provider/model caches
    * - Preserve other cached data (reduces cache churn)

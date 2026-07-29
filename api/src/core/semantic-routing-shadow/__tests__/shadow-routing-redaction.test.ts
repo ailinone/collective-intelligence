@@ -23,7 +23,7 @@ describe('scrubString', () => {
   it('redacts email patterns', () => {
     expect(scrubString('user@example.com')).toBe('[REDACTED]');
     expect(scrubString('contact me at hello@foo.co.uk please')).toBe(
-      'contact me at [REDACTED] please',
+      'contact me at [REDACTED] please'
     );
   });
 

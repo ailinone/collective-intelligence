@@ -22,11 +22,7 @@ import {
   ROUTING_TRACE_ALLOWED_KEYS,
   ROUTING_TRACE_FORBIDDEN_KEYS,
 } from '../routing-decision-trace';
-import {
-  TRACE_WITH_PII,
-  VALID_TRACE,
-  makeValidTrace,
-} from './fixtures/routing-trace.fixture';
+import { TRACE_WITH_PII, VALID_TRACE, makeValidTrace } from './fixtures/routing-trace.fixture';
 
 function deepKeys(obj: unknown, out: string[] = []): string[] {
   if (!obj || typeof obj !== 'object') return out;

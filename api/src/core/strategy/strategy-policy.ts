@@ -63,9 +63,7 @@ export const DEFAULT_STRATEGY_POLICY: StrategyPolicy = Object.freeze({
  * Merges a partial override onto the default. Field by field — no
  * deep merge needed since `StrategyPolicy` is flat.
  */
-export function resolveStrategyPolicy(
-  override?: Partial<StrategyPolicy>,
-): StrategyPolicy {
+export function resolveStrategyPolicy(override?: Partial<StrategyPolicy>): StrategyPolicy {
   if (!override) return DEFAULT_STRATEGY_POLICY;
   return {
     minCandidatesForConsensus:
@@ -77,21 +75,16 @@ export function resolveStrategyPolicy(
     maxParallelismDefault:
       override.maxParallelismDefault ?? DEFAULT_STRATEGY_POLICY.maxParallelismDefault,
     allowCollectiveForHighRisk:
-      override.allowCollectiveForHighRisk ??
-      DEFAULT_STRATEGY_POLICY.allowCollectiveForHighRisk,
+      override.allowCollectiveForHighRisk ?? DEFAULT_STRATEGY_POLICY.allowCollectiveForHighRisk,
     allowCloudWhenLocalRequired: false,
     allowFallbackForExplicitPin:
-      override.allowFallbackForExplicitPin ??
-      DEFAULT_STRATEGY_POLICY.allowFallbackForExplicitPin,
+      override.allowFallbackForExplicitPin ?? DEFAULT_STRATEGY_POLICY.allowFallbackForExplicitPin,
     costCascadeMinCandidates:
-      override.costCascadeMinCandidates ??
-      DEFAULT_STRATEGY_POLICY.costCascadeMinCandidates,
+      override.costCascadeMinCandidates ?? DEFAULT_STRATEGY_POLICY.costCascadeMinCandidates,
     qualityCascadeMinCandidates:
-      override.qualityCascadeMinCandidates ??
-      DEFAULT_STRATEGY_POLICY.qualityCascadeMinCandidates,
+      override.qualityCascadeMinCandidates ?? DEFAULT_STRATEGY_POLICY.qualityCascadeMinCandidates,
     parallelDiverseMinCanonicals:
-      override.parallelDiverseMinCanonicals ??
-      DEFAULT_STRATEGY_POLICY.parallelDiverseMinCanonicals,
+      override.parallelDiverseMinCanonicals ?? DEFAULT_STRATEGY_POLICY.parallelDiverseMinCanonicals,
     localFirstScoreRatio:
       override.localFirstScoreRatio ?? DEFAULT_STRATEGY_POLICY.localFirstScoreRatio,
   };

@@ -66,7 +66,7 @@ function buildPareto(
   status: EnsemblePlan['paretoStatus'],
   strategyId: EnsemblePlan['strategyId'] = 'parallel',
   routes: readonly string[] = ['r-pareto-1', 'r-pareto-2'],
-  models: readonly string[] = ['m-pareto-1', 'm-pareto-2'],
+  models: readonly string[] = ['m-pareto-1', 'm-pareto-2']
 ): EnsemblePlan {
   return Object.freeze({
     strategyId,
@@ -116,7 +116,7 @@ function buildContribution(routeToModel: Record<string, string>): ContributionAw
         explanation: 'accepted',
         estimatedCostUsd: 0.02,
         expectedJudge: 0.7,
-      }),
+      })
     );
   }
   return Object.freeze({
@@ -171,10 +171,7 @@ describe('adaptStrategyPlan — pareto wins', () => {
     });
     expect(r.finalOfflinePlan.source).toBe('pareto');
     expect(r.finalOfflinePlan.strategy).toBe('parallel');
-    expect(r.finalOfflinePlan.selectedRouteIds).toEqual([
-      'r-pareto-1',
-      'r-pareto-2',
-    ]);
+    expect(r.finalOfflinePlan.selectedRouteIds).toEqual(['r-pareto-1', 'r-pareto-2']);
     expect(r.finalOfflinePlan.reason).toBe('pareto_beats_baseline');
   });
 

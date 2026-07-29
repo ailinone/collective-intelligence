@@ -49,7 +49,10 @@ export class InMemoryEventBus implements IEventBus {
     for (const handler of handlers) {
       promises.push(
         Promise.resolve(handler(event)).catch((error) => {
-          this.log.error({ error: serializeError(error), eventType, event }, 'Event handler failed');
+          this.log.error(
+            { error: serializeError(error), eventType, event },
+            'Event handler failed'
+          );
           // Don't throw - allow other handlers to execute
         })
       );

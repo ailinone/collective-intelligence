@@ -93,7 +93,7 @@ export class StaticRoutingConfigProvider implements RuntimeRoutingConfigProvider
  * for fixtures and the composer's default branch.
  */
 export function createStaticRoutingConfigProvider(
-  options: StaticRoutingConfigProviderOptions = {},
+  options: StaticRoutingConfigProviderOptions = {}
 ): RuntimeRoutingConfigProvider {
   return new StaticRoutingConfigProvider(options);
 }

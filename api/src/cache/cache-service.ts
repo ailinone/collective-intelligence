@@ -33,8 +33,7 @@ export interface CacheResult {
 }
 
 type CacheBusMessage =
-  | { action: 'invalidate'; key: string; source: string }
-  | { action: 'clear-all'; source: string };
+  { action: 'invalidate'; key: string; source: string } | { action: 'clear-all'; source: string };
 
 interface CircuitState {
   failures: number;
@@ -71,7 +70,10 @@ export class CacheService {
   constructor() {
     if (isCacheEnabled()) {
       this.setupInvalidationChannel().catch((error) => {
-        this.log.error({ error: serializeError(error) }, 'Failed to setup cache invalidation channel');
+        this.log.error(
+          { error: serializeError(error) },
+          'Failed to setup cache invalidation channel'
+        );
       });
     }
   }
@@ -155,7 +157,10 @@ export class CacheService {
 
     for (const write of redisWrites) {
       if (write.status === 'rejected') {
-        this.log.error({ error: serializeError(write.reason) }, 'Failed to write cache entry to Redis');
+        this.log.error(
+          { error: serializeError(write.reason) },
+          'Failed to write cache entry to Redis'
+        );
       }
     }
 
@@ -242,7 +247,10 @@ export class CacheService {
 
   private canonicalizeMessages(
     messages: ChatRequest['messages']
-  ): Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> {
+  ): Array<{
+    role: string;
+    content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+  }> {
     return messages.map((msg) => ({
       role: msg.role,
       content: msg.content,
@@ -261,7 +269,13 @@ export class CacheService {
 
   private canonicalizeWebSearchOptions(
     webSearchOptions: ChatRequest['webSearchOptions']
-  ): { max_results?: number; search_context_size?: 'low' | 'medium' | 'high'; engine?: 'native' | 'exa' } | undefined {
+  ):
+    | {
+        max_results?: number;
+        search_context_size?: 'low' | 'medium' | 'high';
+        engine?: 'native' | 'exa';
+      }
+    | undefined {
     if (!webSearchOptions) {
       return undefined;
     }

@@ -9,7 +9,7 @@
 
 /**
  * Authentication JWT Flow - Integration Tests
- * 
+ *
  * Tests complete authentication flow:
  * - Registration
  * - Login with password
@@ -48,7 +48,7 @@ describe('Authentication JWT Flow (Integration)', () => {
 
     // Create test server with auth routes
     server = await createTestServerWithAuthOnly();
-    
+
     await server.listen({ port: 0, host: '127.0.0.1' }); // Random port
 
     // Create test organization
@@ -90,7 +90,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(201);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.user).toBeDefined();
@@ -117,7 +117,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error?.toLowerCase()).toContain('password');
@@ -149,7 +149,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(409); // Conflict
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error).toContain('already exists');
@@ -184,7 +184,7 @@ describe('Authentication JWT Flow (Integration)', () => {
           organizationId: testOrgId,
         },
       });
-      
+
       const body = JSON.parse(response.body);
       testUserId = body.user.id;
     });
@@ -200,7 +200,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.user).toBeDefined();
@@ -222,7 +222,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error).toContain('Invalid');
@@ -239,7 +239,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
     });
@@ -261,7 +261,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(403);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error).toContain('suspended');
@@ -307,7 +307,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body);
       // Response format is { user: { ... } }
       expect(body.user).toBeDefined();
@@ -358,7 +358,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/expired|invalid/i);
     });
@@ -396,7 +396,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.tokens).toBeDefined();
@@ -415,7 +415,7 @@ describe('Authentication JWT Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
     });
@@ -444,7 +444,7 @@ describe('Authentication JWT Flow (Integration)', () => {
   describe('Security', () => {
     it('should hash passwords (not store plaintext)', async () => {
       const password = 'SecureP@ssw0rd123';
-      
+
       await server.inject({
         method: 'POST',
         url: '/v1/auth/register',
@@ -489,4 +489,3 @@ describe('Authentication JWT Flow (Integration)', () => {
     });
   });
 });
-

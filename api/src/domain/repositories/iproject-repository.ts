@@ -34,10 +34,7 @@ export interface IProjectRepository {
    * Find a project by (organizationId, slug). Returns null if not found.
    * The unique constraint guarantees at most one match.
    */
-  findBySlug(
-    organizationId: string,
-    slug: string
-  ): Promise<ProjectEntity | null>;
+  findBySlug(organizationId: string, slug: string): Promise<ProjectEntity | null>;
 
   /**
    * List projects for an organization. Default: active only, newest first.
@@ -47,10 +44,7 @@ export interface IProjectRepository {
   /**
    * Count projects for an org (used for tier-limit checks if needed later).
    */
-  countByOrganization(
-    organizationId: string,
-    status?: 'active' | 'archived'
-  ): Promise<number>;
+  countByOrganization(organizationId: string, status?: 'active' | 'archived'): Promise<number>;
 
   /**
    * Persist a project — INSERT on first save, UPDATE on subsequent saves.

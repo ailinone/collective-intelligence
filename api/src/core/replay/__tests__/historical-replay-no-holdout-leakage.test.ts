@@ -77,9 +77,7 @@ describe('no holdout leakage', () => {
       executions: split.train.map(adapt),
     });
     // The holdout-only model must not appear in the model profiles.
-    const has = history.modelProfiles.some(
-      (p) => p.modelId === 'holdout-only-secret-model',
-    );
+    const has = history.modelProfiles.some((p) => p.modelId === 'holdout-only-secret-model');
     expect(has).toBe(false);
     void augmentedHoldout;
   });
@@ -93,9 +91,7 @@ describe('no holdout leakage', () => {
     // holdout via the synthetic dataset; verify it's NOT in the pair
     // profiles.
     for (const p of history.pairProfiles) {
-      const ok = !(
-        p.modelA === 'fx-cheap-harmful' && p.modelB === 'fx-cheap-harmful'
-      );
+      const ok = !(p.modelA === 'fx-cheap-harmful' && p.modelB === 'fx-cheap-harmful');
       expect(ok).toBe(true);
     }
   });

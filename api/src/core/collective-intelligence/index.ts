@@ -96,11 +96,20 @@ export {
 
 // Re-import for the initialize function
 import { SemanticMemoryStore, getSemanticMemoryStore } from '@/core/memory/semantic-memory-store';
-import { MemoryContextService, getMemoryContextService } from '@/core/memory/memory-context-service';
+import {
+  MemoryContextService,
+  getMemoryContextService,
+} from '@/core/memory/memory-context-service';
 import { SemanticCache, getSemanticCache } from '@/core/cache/semantic-cache';
-import { ReasoningTransparencyService, getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
+import {
+  ReasoningTransparencyService,
+  getReasoningTransparency,
+} from '@/core/transparency/reasoning-transparency';
 import { SelfCritiqueEngine, getSelfCritiqueEngine } from '@/core/critique/self-critique-engine';
-import { AgenticWorkflowEngine, getAgenticWorkflowEngine } from '@/core/agentic/agentic-workflow-engine';
+import {
+  AgenticWorkflowEngine,
+  getAgenticWorkflowEngine,
+} from '@/core/agentic/agentic-workflow-engine';
 
 /**
  * Collective Intelligence services bundle

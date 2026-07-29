@@ -23,7 +23,9 @@ import {
   type ReconciledOperabilitySnapshot,
 } from '@/core/operability/reconciled-operability-snapshot';
 
-function snapshotWith(states: Record<string, { auth: string; credit: string; rate: string }>): ReconciledOperabilitySnapshot {
+function snapshotWith(
+  states: Record<string, { auth: string; credit: string; rate: string }>
+): ReconciledOperabilitySnapshot {
   return {
     observedAt: '2026-05-13T00:00:00.000Z',
     source: 'non_billable_probe',
@@ -39,7 +41,7 @@ function snapshotWith(states: Record<string, { auth: string; credit: string; rat
           rateState: s.rate as 'ok',
           source: 'non_billable_probe',
         },
-      ]),
+      ])
     ),
   };
 }
@@ -90,7 +92,11 @@ describe('Resolver — reconciled live state overrides cache', () => {
       constraints: {},
     });
     expect(r.selected[0]?.model.id).toBe('fallback');
-    expect(r.rejected.some((rej) => rej.modelId === 'looks-good-but-empty' && rej.reason === 'no_credits')).toBe(true);
+    expect(
+      r.rejected.some(
+        (rej) => rej.modelId === 'looks-good-but-empty' && rej.reason === 'no_credits'
+      )
+    ).toBe(true);
   });
 
   it('live auth_failed → resolver rejects with provider_unhealthy reason', async () => {

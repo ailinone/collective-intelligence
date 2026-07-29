@@ -23,20 +23,11 @@ import {
   generateAblationMatrix,
   ALL_ABLATION_COMPONENTS,
 } from '../ablation-config';
-import {
-  isValidForLearning,
-  checkRewardHackingDivergence,
-} from '../scoring-policy';
+import { isValidForLearning, checkRewardHackingDivergence } from '../scoring-policy';
 import type { PolicyAwareScore } from '../scoring-policy';
 import { IndependenceTestService } from '../independence-test';
-import {
-  HIDDEN_INFORMATION_SUITE,
-  calculateIRR,
-} from '../hidden-information-suite';
-import {
-  HERDING_SCENARIOS,
-  checkBiasFollowing,
-} from '../herding-test';
+import { HIDDEN_INFORMATION_SUITE, calculateIRR } from '../hidden-information-suite';
+import { HERDING_SCENARIOS, checkBiasFollowing } from '../herding-test';
 import { RewardHackingDetector } from '../reward-hacking-detector';
 import { ROIEstimator } from '../roi-estimator';
 import { HumanCalibrationService } from '../human-calibration';
@@ -83,7 +74,13 @@ describe('ScoringPolicy', () => {
   it('rejects observability scores for learning', () => {
     const score: PolicyAwareScore = {
       overall: 0.8,
-      dimensions: { correctness: 0.8, completeness: 0.8, clarity: 0.8, efficiency: 0.7, relevance: 0.8 },
+      dimensions: {
+        correctness: 0.8,
+        completeness: 0.8,
+        clarity: 0.8,
+        efficiency: 0.7,
+        relevance: 0.8,
+      },
       confidence: 0.9,
       reasoning: [],
       method: 'heuristic',
@@ -95,7 +92,13 @@ describe('ScoringPolicy', () => {
   it('rejects scores where judge failed', () => {
     const score: PolicyAwareScore = {
       overall: 0.8,
-      dimensions: { correctness: 0.8, completeness: 0.8, clarity: 0.8, efficiency: 0.7, relevance: 0.8 },
+      dimensions: {
+        correctness: 0.8,
+        completeness: 0.8,
+        clarity: 0.8,
+        efficiency: 0.7,
+        relevance: 0.8,
+      },
       confidence: 0.5,
       reasoning: [],
       method: 'heuristic',
@@ -108,7 +111,13 @@ describe('ScoringPolicy', () => {
   it('accepts valid learning scores', () => {
     const score: PolicyAwareScore = {
       overall: 0.75,
-      dimensions: { correctness: 0.8, completeness: 0.7, clarity: 0.8, efficiency: 0.7, relevance: 0.7 },
+      dimensions: {
+        correctness: 0.8,
+        completeness: 0.7,
+        clarity: 0.8,
+        efficiency: 0.7,
+        relevance: 0.7,
+      },
       confidence: 0.8,
       reasoning: [],
       method: 'llm-judge',
@@ -120,7 +129,13 @@ describe('ScoringPolicy', () => {
   it('detects reward hacking divergence', () => {
     const score: PolicyAwareScore = {
       overall: 0.8,
-      dimensions: { correctness: 0.8, completeness: 0.8, clarity: 0.8, efficiency: 0.7, relevance: 0.8 },
+      dimensions: {
+        correctness: 0.8,
+        completeness: 0.8,
+        clarity: 0.8,
+        efficiency: 0.7,
+        relevance: 0.8,
+      },
       confidence: 0.8,
       reasoning: [],
       method: 'llm-judge',
@@ -143,9 +158,27 @@ describe('IndependenceTestService', () => {
     const service = new IndependenceTestService();
     const result = await service.measureDiversity(
       [
-        { modelId: 'gpt-4o', provider: 'openai', content: 'The answer is 42 because of math', role: 'opening', round: 1 },
-        { modelId: 'claude', provider: 'anthropic', content: 'The answer is 42 because of science', role: 'opening', round: 1 },
-        { modelId: 'gemini', provider: 'google', content: 'Something completely different about cats and dogs', role: 'opening', round: 1 },
+        {
+          modelId: 'gpt-4o',
+          provider: 'openai',
+          content: 'The answer is 42 because of math',
+          role: 'opening',
+          round: 1,
+        },
+        {
+          modelId: 'claude',
+          provider: 'anthropic',
+          content: 'The answer is 42 because of science',
+          role: 'opening',
+          round: 1,
+        },
+        {
+          modelId: 'gemini',
+          provider: 'google',
+          content: 'Something completely different about cats and dogs',
+          role: 'opening',
+          round: 1,
+        },
       ],
       'debate',
       'reasoning',
@@ -156,7 +189,9 @@ describe('IndependenceTestService', () => {
     expect(result!.pairwiseSimilarities).toHaveLength(3); // 3 pairs from 3 outputs
     // Jaccard should show some similarity between first two, less with third
     const sim12 = result!.pairwiseSimilarities.find(
-      p => (p.modelA === 'gpt-4o' && p.modelB === 'claude') || (p.modelA === 'claude' && p.modelB === 'gpt-4o')
+      (p) =>
+        (p.modelA === 'gpt-4o' && p.modelB === 'claude') ||
+        (p.modelA === 'claude' && p.modelB === 'gpt-4o')
     );
     expect(sim12!.jaccardSimilarity).toBeGreaterThan(0.2);
   });
@@ -170,7 +205,7 @@ describe('HiddenInformationSuite', () => {
   });
 
   it('has all four task types', () => {
-    const types = new Set(HIDDEN_INFORMATION_SUITE.map(t => t.type));
+    const types = new Set(HIDDEN_INFORMATION_SUITE.map((t) => t.type));
     expect(types.has('multi-source')).toBe(true);
     expect(types.has('puzzle-assembly')).toBe(true);
     expect(types.has('expert-synthesis')).toBe(true);
@@ -180,17 +215,23 @@ describe('HiddenInformationSuite', () => {
   it('calculates IRR correctly', () => {
     const result = calculateIRR(
       'TechCorp revenue was $2.3B with 15% growth driven by cloud services which grew 40%. Hardware declined by 8%. DataInc is growing faster.',
-      ['TechCorp revenue $2.3B with 15% growth', 'Cloud services grew 40%', 'Hardware declined 8%', 'DataInc growing faster']
+      [
+        'TechCorp revenue $2.3B with 15% growth',
+        'Cloud services grew 40%',
+        'Hardware declined 8%',
+        'DataInc growing faster',
+      ]
     );
     expect(result.irr).toBeGreaterThanOrEqual(0.5);
     expect(result.recovered.length).toBeGreaterThan(0);
   });
 
   it('returns zero IRR for irrelevant response', () => {
-    const result = calculateIRR(
-      'Cats are wonderful pets that love to play with yarn.',
-      ['TechCorp revenue $2.3B', 'Cloud services grew 40%', 'Hardware declined']
-    );
+    const result = calculateIRR('Cats are wonderful pets that love to play with yarn.', [
+      'TechCorp revenue $2.3B',
+      'Cloud services grew 40%',
+      'Hardware declined',
+    ]);
     expect(result.irr).toBe(0);
     expect(result.missed.length).toBe(3);
   });
@@ -239,7 +280,7 @@ describe('RewardHackingDetector', () => {
     for (let i = 0; i < 50; i++) {
       detector.record({
         heuristicScore: 0.8 + Math.random() * 0.1, // Always high
-        judgeScore: 0.3 + Math.random() * 0.4,       // Variable
+        judgeScore: 0.3 + Math.random() * 0.4, // Variable
         tokenCount: 1000,
         headingsCount: 3,
         codeBlocksCount: 2,
@@ -262,12 +303,22 @@ describe('ROIEstimator', () => {
     // Add data points
     for (let i = 0; i < 20; i++) {
       estimator.addDataPoint({
-        domain: 'coding', taskType: 'code-generation', complexity: 'high',
-        mode: 'ci', qualityScore: 0.75 + Math.random() * 0.1, costUsd: 0.05, latencyMs: 5000,
+        domain: 'coding',
+        taskType: 'code-generation',
+        complexity: 'high',
+        mode: 'ci',
+        qualityScore: 0.75 + Math.random() * 0.1,
+        costUsd: 0.05,
+        latencyMs: 5000,
       });
       estimator.addDataPoint({
-        domain: 'coding', taskType: 'code-generation', complexity: 'high',
-        mode: 'single', qualityScore: 0.70 + Math.random() * 0.1, costUsd: 0.01, latencyMs: 2000,
+        domain: 'coding',
+        taskType: 'code-generation',
+        complexity: 'high',
+        mode: 'single',
+        qualityScore: 0.7 + Math.random() * 0.1,
+        costUsd: 0.01,
+        latencyMs: 2000,
       });
     }
 
@@ -282,12 +333,22 @@ describe('ROIEstimator', () => {
 
     for (let i = 0; i < 20; i++) {
       estimator.addDataPoint({
-        domain: 'documentation', taskType: 'documentation', complexity: 'medium',
-        mode: 'ci', qualityScore: 0.50 + Math.random() * 0.05, costUsd: 0.04, latencyMs: 8000,
+        domain: 'documentation',
+        taskType: 'documentation',
+        complexity: 'medium',
+        mode: 'ci',
+        qualityScore: 0.5 + Math.random() * 0.05,
+        costUsd: 0.04,
+        latencyMs: 8000,
       });
       estimator.addDataPoint({
-        domain: 'documentation', taskType: 'documentation', complexity: 'medium',
-        mode: 'single', qualityScore: 0.65 + Math.random() * 0.05, costUsd: 0.01, latencyMs: 2000,
+        domain: 'documentation',
+        taskType: 'documentation',
+        complexity: 'medium',
+        mode: 'single',
+        qualityScore: 0.65 + Math.random() * 0.05,
+        costUsd: 0.01,
+        latencyMs: 2000,
       });
     }
 
@@ -303,9 +364,15 @@ describe('HumanCalibrationService', () => {
   it('tracks samples needing annotation', () => {
     const service = new HumanCalibrationService();
     service.addSample({
-      id: 's1', prompt: 'test', response: 'answer', taskType: 'coding',
-      complexity: 'medium', heuristicScore: 0.8, judgeScore: 0.7,
-      heuristicDimensions: { correctness: 0.8 }, judgeDimensions: { correctness: 0.7 },
+      id: 's1',
+      prompt: 'test',
+      response: 'answer',
+      taskType: 'coding',
+      complexity: 'medium',
+      heuristicScore: 0.8,
+      judgeScore: 0.7,
+      heuristicDimensions: { correctness: 0.8 },
+      judgeDimensions: { correctness: 0.7 },
     });
 
     const needing = service.getSamplesNeedingAnnotation();

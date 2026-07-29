@@ -208,9 +208,25 @@ export interface CapabilityTestResult {
 export interface ModelClient {
   chat(model: Model, options: ChatTestOptions): Promise<ChatTestResult>;
   stream(model: Model, options: ChatTestOptions): Promise<StreamTestResult>;
-  callTools(model: Model, params: { prompt: string; tools: Array<{ type: string; function?: { name: string; description?: string; parameters?: Record<string, unknown> }; [key: string]: unknown }> }): Promise<FunctionCallTestResult>;
-  vision(model: Model, params: { prompt: string; image: Buffer | string; }): Promise<VisionTestResult>;
-  jsonMode(model: Model, params: { prompt: string; schema: Record<string, unknown> }): Promise<JsonModeTestResult>;
+  callTools(
+    model: Model,
+    params: {
+      prompt: string;
+      tools: Array<{
+        type: string;
+        function?: { name: string; description?: string; parameters?: Record<string, unknown> };
+        [key: string]: unknown;
+      }>;
+    }
+  ): Promise<FunctionCallTestResult>;
+  vision(
+    model: Model,
+    params: { prompt: string; image: Buffer | string }
+  ): Promise<VisionTestResult>;
+  jsonMode(
+    model: Model,
+    params: { prompt: string; schema: Record<string, unknown> }
+  ): Promise<JsonModeTestResult>;
 }
 
 export interface ChatTestOptions {

@@ -186,7 +186,11 @@ describe('buildDatabricksAdaptersFromSpecs', () => {
     // operator's workspace, never from this codebase.
     const specs: DatabricksEndpointSpec[] = [
       { alias: 'primary', endpoint: 'chat-endpoint-primary', workspaceHost: 'org.databricks.com' },
-      { alias: 'secondary', endpoint: 'chat-endpoint-secondary', workspaceHost: 'org.databricks.com' },
+      {
+        alias: 'secondary',
+        endpoint: 'chat-endpoint-secondary',
+        workspaceHost: 'org.databricks.com',
+      },
     ];
     const adapters = buildDatabricksAdaptersFromSpecs(specs, shared);
     expect(adapters).toHaveLength(2);

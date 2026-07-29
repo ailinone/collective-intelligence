@@ -100,7 +100,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: baselineMinimal,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const f2 = computePlanFingerprint(
       {
@@ -109,7 +109,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: baselineMinimal,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
   });
@@ -122,7 +122,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: baselineMinimal,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const on = computePlanFingerprint(
       {
@@ -131,7 +131,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: judgePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(off.planFingerprint).not.toBe(on.planFingerprint);
   });
@@ -144,7 +144,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeEligibilityPolicyVersion: '01C.1B-J1D-R4D-v1' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -153,7 +153,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeEligibilityPolicyVersion: '01C.1B-J1D-R4D-v2' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -166,7 +166,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeStructuredOutputWeakAllowed: false },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -175,7 +175,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeStructuredOutputWeakAllowed: true },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -188,7 +188,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeFullRegistryExpansionEnabled: false },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -197,7 +197,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeFullRegistryExpansionEnabled: true },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -210,7 +210,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeStructuredOutputBackfillHash: 'so-v1' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -219,7 +219,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...judgePolicy, judgeStructuredOutputBackfillHash: 'so-v2' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -232,7 +232,7 @@ describe('01C.1B-J1D-R4D — judgeEligibilityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: judgePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const s = JSON.stringify(f.snapshot);
     expect(s).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);

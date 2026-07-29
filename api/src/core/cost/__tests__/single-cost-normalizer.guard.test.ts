@@ -32,14 +32,14 @@ describe('single model-cost normalizer (DUP #3 guard)', () => {
   it('the dead @/core/cost/cost-normalizer path no longer resolves', async () => {
     await expect(
       // @ts-expect-error — module intentionally deleted; import must fail.
-      import('@/core/cost/cost-normalizer'),
+      import('@/core/cost/cost-normalizer')
     ).rejects.toThrow();
   });
 
   it('the dead @/core/cost/cost-types path no longer resolves', async () => {
     await expect(
       // @ts-expect-error — module intentionally deleted; import must fail.
-      import('@/core/cost/cost-types'),
+      import('@/core/cost/cost-types')
     ).rejects.toThrow();
   });
 });

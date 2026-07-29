@@ -46,8 +46,9 @@ const log = logger.child({ module: 'realtime-routes' });
  */
 function getUserContext(request: FastifyRequest): RequestUserContext {
   const extendedRequest = request as ExtendedFastifyRequest;
-  const user = extendedRequest.user as { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
-  
+  const user = extendedRequest.user as
+    { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
+
   return {
     requestId: request.id,
     organizationId: extendedRequest.organizationId || user?.organizationId || '',
@@ -138,17 +139,22 @@ class RealtimeClientFactory {
     // If still not found, try providers with verified WebSocket support first
     if (!selectedModel) {
       for (const prov of ['openai', 'google']) {
-        const models = await this.modelRepo.findModelsWithCapabilities(
-          ['realtime'],
-          { providers: [prov], limit: 1 }
-        );
-        if (models.length > 0) { selectedModel = models[0]; break; }
+        const models = await this.modelRepo.findModelsWithCapabilities(['realtime'], {
+          providers: [prov],
+          limit: 1,
+        });
+        if (models.length > 0) {
+          selectedModel = models[0];
+          break;
+        }
       }
     }
     // Last resort: any provider
     if (!selectedModel) {
       const models = await this.modelRepo.findModelsWithCapabilities(['realtime'], { limit: 1 });
-      if (models.length > 0) { selectedModel = models[0]; }
+      if (models.length > 0) {
+        selectedModel = models[0];
+      }
     }
 
     if (!selectedModel) {
@@ -184,8 +190,9 @@ class RealtimeClientFactory {
 
     // All other providers use OpenAI-compatible realtime protocol
     // (OpenAI native, OpenRouter, orqai, etc.)
-    const baseUrl = (narrowAs<{ config?: { baseUrl?: string } }>(adapter)).config?.baseUrl
-      || (selectedModel.provider === 'openai' ? 'https://api.openai.com/v1' : undefined);
+    const baseUrl =
+      narrowAs<{ config?: { baseUrl?: string } }>(adapter).config?.baseUrl ||
+      (selectedModel.provider === 'openai' ? 'https://api.openai.com/v1' : undefined);
 
     if (!baseUrl) {
       log.warn(
@@ -217,7 +224,8 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
       schema: {
         tags: ['Realtime'],
         summary: 'Create realtime session',
-        description: 'Creates an ephemeral session with a single-use, 5-minute session token (rst_) for the WebSocket connection. The caller\'s long-lived credential is never embedded in the wsUrl or echoed in the response.',
+        description:
+          "Creates an ephemeral session with a single-use, 5-minute session token (rst_) for the WebSocket connection. The caller's long-lived credential is never embedded in the wsUrl or echoed in the response.",
         body: {
           type: 'object',
           properties: {
@@ -231,8 +239,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
       const userContext = getUserContext(request);
       const extendedRequest = request as ExtendedFastifyRequest;
       const user = extendedRequest.user as
-        | { email?: string; name?: string; roles?: string[] }
-        | undefined;
+        { email?: string; name?: string; roles?: string[] } | undefined;
 
       // Mint a truly ephemeral, single-use session token. The caller's
       // long-lived credential (JWT/API key) is NEVER embedded in the wsUrl
@@ -259,7 +266,10 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
       const baseUrl = process.env.API_BASE_URL || `https://api.ailin.one`;
       const wsUrl = `${baseUrl.replace('https://', 'wss://').replace('http://', 'ws://')}/v1/realtime?token=${encodeURIComponent(session.sessionToken)}&sessionId=${session.sessionId}`;
 
-      log.info({ sessionId: session.sessionId, userId: userContext?.userId }, 'Realtime session created');
+      log.info(
+        { sessionId: session.sessionId, userId: userContext?.userId },
+        'Realtime session created'
+      );
       return reply.status(201).send({
         sessionId: session.sessionId,
         wsUrl,
@@ -302,8 +312,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
     },
     async (connection, request) => {
       const userContext = getUserContext(request);
-      const requestId =
-        typeof request.id === 'string' ? request.id : `realtime-${nanoid(16)}`;
+      const requestId = typeof request.id === 'string' ? request.id : `realtime-${nanoid(16)}`;
 
       log.info(
         { requestId, userId: userContext?.userId },
@@ -313,8 +322,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
       let realtimeClient: RealtimeClient | null = null;
       let currentProvider: string | null = null;
       // Initialize model from query param (e.g. ?model=ailin-auto)
-      let modelName: string | null =
-        (request.query as Record<string, string>)?.model || null;
+      let modelName: string | null = (request.query as Record<string, string>)?.model || null;
 
       // Handle incoming messages (text JSON or binary audio)
       connection.on('message', async (message: Buffer) => {
@@ -342,7 +350,15 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
           if (data.type === 'session.update') {
             const sessionConfig = data.session ?? {};
             const hasTranslation = !!(sessionConfig as Record<string, unknown>).translation;
-            log.info({ requestId, model: sessionConfig.model, hasTranslation, modalities: sessionConfig.modalities }, 'session.update received');
+            log.info(
+              {
+                requestId,
+                model: sessionConfig.model,
+                hasTranslation,
+                modalities: sessionConfig.modalities,
+              },
+              'session.update received'
+            );
 
             // Select model - require explicit model or find one dynamically
             if (sessionConfig.model) {
@@ -365,13 +381,16 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 let found = false;
 
                 for (const prov of providerPriority) {
-                  const models = await modelRepo.findModelsWithCapabilities(
-                    ['realtime'],
-                    { providers: [prov], limit: 1 }
-                  );
+                  const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
+                    providers: [prov],
+                    limit: 1,
+                  });
                   if (models.length > 0) {
                     modelName = models[0].name;
-                    log.info({ requestId, model: modelName, provider: prov }, 'Auto-selected realtime model (priority provider)');
+                    log.info(
+                      { requestId, model: modelName, provider: prov },
+                      'Auto-selected realtime model (priority provider)'
+                    );
                     found = true;
                     break;
                   }
@@ -379,13 +398,15 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
 
                 // Fallback: any provider with realtime capability
                 if (!found) {
-                  const models = await modelRepo.findModelsWithCapabilities(
-                    ['realtime'],
-                    { limit: 1 }
-                  );
+                  const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
+                    limit: 1,
+                  });
                   if (models.length > 0) {
                     modelName = models[0].name;
-                    log.info({ requestId, model: modelName }, 'Auto-selected realtime model (fallback)');
+                    log.info(
+                      { requestId, model: modelName },
+                      'Auto-selected realtime model (fallback)'
+                    );
                     found = true;
                   }
                 }
@@ -396,7 +417,8 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                       type: 'error',
                       error: {
                         type: 'no_realtime_model',
-                        message: 'No realtime-capable model available. Please specify a model in session.update.',
+                        message:
+                          'No realtime-capable model available. Please specify a model in session.update.',
                       },
                     })
                   );
@@ -409,11 +431,17 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             // When translation is enabled, use RealtimeTranslationAdapter directly.
             // No model search needed — the adapter manages its own STT→NLLB→TTS pipeline.
             const translationConfig = (sessionConfig as Record<string, unknown>).translation as
-              | { enabled: boolean; sourceLanguage: string; targetLanguage: string }
-              | undefined;
+              { enabled: boolean; sourceLanguage: string; targetLanguage: string } | undefined;
 
             if (translationConfig?.enabled) {
-              log.info({ requestId, sourceLanguage: translationConfig.sourceLanguage, targetLanguage: translationConfig.targetLanguage }, 'Translation mode: creating dedicated adapter');
+              log.info(
+                {
+                  requestId,
+                  sourceLanguage: translationConfig.sourceLanguage,
+                  targetLanguage: translationConfig.targetLanguage,
+                },
+                'Translation mode: creating dedicated adapter'
+              );
 
               const translationAdapter = new RealtimeTranslationAdapter({
                 organizationId: userContext?.organizationId || '',
@@ -428,31 +456,37 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 await translationAdapter.connect({
                   sourceLanguage: translationConfig.sourceLanguage,
                   targetLanguage: translationConfig.targetLanguage,
-                  modalities: (sessionConfig.modalities ?? ['text', 'audio']) as ('text' | 'audio')[],
+                  modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
+                    'text' | 'audio'
+                  )[],
                   voice: sessionConfig.voice,
                 });
 
                 setupEventForwarding(realtimeClient, connection, currentProvider);
 
-                connection.send(JSON.stringify({
-                  type: 'session.updated',
-                  session: {
-                    model: 'realtime-translation',
-                    provider: 'ailin-translation',
-                    modalities: sessionConfig.modalities ?? ['text', 'audio'],
-                    voice: sessionConfig.voice ?? 'alloy',
-                  },
-                }));
+                connection.send(
+                  JSON.stringify({
+                    type: 'session.updated',
+                    session: {
+                      model: 'realtime-translation',
+                      provider: 'ailin-translation',
+                      modalities: sessionConfig.modalities ?? ['text', 'audio'],
+                      voice: sessionConfig.voice ?? 'alloy',
+                    },
+                  })
+                );
 
                 log.info({ requestId }, 'Translation adapter connected and session.updated sent');
                 return; // Done — skip model search and normal client creation
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 log.error({ requestId, error: msg }, 'Translation adapter failed');
-                connection.send(JSON.stringify({
-                  type: 'error',
-                  error: { type: 'translation_error', message: msg },
-                }));
+                connection.send(
+                  JSON.stringify({
+                    type: 'error',
+                    error: { type: 'translation_error', message: msg },
+                  })
+                );
                 return;
               }
             }
@@ -460,9 +494,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             // ── Normal mode: model search + client creation ──────────
             // Try connecting with the selected model; retry with alternatives on failure
             const modelRepo = new ModelRepository();
-            const candidates = modelName
-              ? [modelName]
-              : [];
+            const candidates = modelName ? [modelName] : [];
 
             // Add fallback candidates from the database (different models, same
             // capability) — ONLY meaningful when userContext is absent (see the
@@ -472,9 +504,10 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             if (!sessionConfig.model && !userContext) {
               // User didn't specify a model — we can try alternatives
               for (const prov of ['openai', 'google']) {
-                const models = await modelRepo.findModelsWithCapabilities(
-                  ['realtime'], { providers: [prov], limit: 5 }
-                );
+                const models = await modelRepo.findModelsWithCapabilities(['realtime'], {
+                  providers: [prov],
+                  limit: 5,
+                });
                 for (const m of models) {
                   if (!candidates.includes(m.name)) candidates.push(m.name);
                 }
@@ -490,8 +523,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             if (!loopbackToken && userContext?.userId) {
               try {
                 const wsUser = (request as ExtendedFastifyRequest).user as
-                  | { email?: string; roles?: string[] }
-                  | undefined;
+                  { email?: string; roles?: string[] } | undefined;
                 loopbackToken = await getAuthService().generateEphemeralAccessToken({
                   userId: userContext.userId,
                   organizationId: userContext.organizationId,
@@ -500,13 +532,27 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 });
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
-                log.warn({ requestId, error: msg }, 'Failed to mint loopback token — internal calls will be unauthenticated');
+                log.warn(
+                  { requestId, error: msg },
+                  'Failed to mint loopback token — internal calls will be unauthenticated'
+                );
               }
             }
 
             let connectError: string | null = null;
             for (const candidateModel of candidates) {
-              const result = await clientFactory.createClient(candidateModel, connection, requestId, userContext ? { organizationId: userContext.organizationId, userId: userContext.userId, authToken: loopbackToken } : undefined);
+              const result = await clientFactory.createClient(
+                candidateModel,
+                connection,
+                requestId,
+                userContext
+                  ? {
+                      organizationId: userContext.organizationId,
+                      userId: userContext.userId,
+                      authToken: loopbackToken,
+                    }
+                  : undefined
+              );
               if (!result) continue;
 
               realtimeClient = result.client;
@@ -517,14 +563,21 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 if (realtimeClient instanceof GoogleLiveClient) {
                   await (realtimeClient as GoogleLiveClient).connect({
                     model: candidateModel.replace('models/', ''),
-                    modalities: (sessionConfig.modalities?.map((m) => m.toUpperCase()) ?? ['TEXT', 'AUDIO']) as ('TEXT' | 'AUDIO')[],
+                    modalities: (sessionConfig.modalities?.map((m) => m.toUpperCase()) ?? [
+                      'TEXT',
+                      'AUDIO',
+                    ]) as ('TEXT' | 'AUDIO')[],
                     systemInstruction: sessionConfig.instructions,
-                    speechConfig: sessionConfig.voice ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: sessionConfig.voice } } } : undefined,
+                    speechConfig: sessionConfig.voice
+                      ? { voiceConfig: { prebuiltVoiceConfig: { voiceName: sessionConfig.voice } } }
+                      : undefined,
                     generationConfig: { temperature: sessionConfig.temperature },
                   });
                 } else if (realtimeClient instanceof AilinRealtimeClient) {
                   await (realtimeClient as AilinRealtimeClient).connect({
-                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as ('text' | 'audio')[],
+                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
+                      'text' | 'audio'
+                    )[],
                     instructions: sessionConfig.instructions,
                     voice: sessionConfig.voice ?? 'alloy',
                     temperature: sessionConfig.temperature ?? 0.8,
@@ -534,7 +587,9 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 } else if (realtimeClient instanceof OpenAIRealtimeClient) {
                   await (realtimeClient as OpenAIRealtimeClient).connect({
                     model: candidateModel,
-                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as ('text' | 'audio')[],
+                    modalities: (sessionConfig.modalities ?? ['text', 'audio']) as (
+                      'text' | 'audio'
+                    )[],
                     instructions: sessionConfig.instructions,
                     voice: (sessionConfig.voice ?? 'alloy') as string,
                     temperature: sessionConfig.temperature ?? 1,
@@ -543,11 +598,17 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
 
                 // Connection succeeded — break out of retry loop
                 connectError = null;
-                log.info({ requestId, model: candidateModel, provider: currentProvider }, 'Realtime connection established');
+                log.info(
+                  { requestId, model: candidateModel, provider: currentProvider },
+                  'Realtime connection established'
+                );
                 break;
               } catch (err) {
                 connectError = err instanceof Error ? err.message : 'Connection failed';
-                log.warn({ requestId, model: candidateModel, error: connectError }, 'Realtime model failed — trying next');
+                log.warn(
+                  { requestId, model: candidateModel, error: connectError },
+                  'Realtime model failed — trying next'
+                );
                 realtimeClient.disconnect();
                 realtimeClient = null;
                 continue;
@@ -555,28 +616,33 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
             }
 
             if (!realtimeClient || connectError) {
-              connection.send(JSON.stringify({
-                type: 'error',
-                error: { type: 'connection_failed', message: connectError || 'No realtime model available' },
-              }));
+              connection.send(
+                JSON.stringify({
+                  type: 'error',
+                  error: {
+                    type: 'connection_failed',
+                    message: connectError || 'No realtime model available',
+                  },
+                })
+              );
               return;
             }
 
             // Forward events from client to WebSocket
             setupEventForwarding(realtimeClient, connection, currentProvider!);
 
-              connection.send(
-                JSON.stringify({
-                  type: 'session.updated',
-                  session: {
-                    model: modelName,
-                    provider: currentProvider,
-                    modalities: sessionConfig.modalities ?? ['text', 'audio'],
-                    instructions: sessionConfig.instructions,
-                    voice: sessionConfig.voice ?? 'alloy',
-                  },
-                })
-              );
+            connection.send(
+              JSON.stringify({
+                type: 'session.updated',
+                session: {
+                  model: modelName,
+                  provider: currentProvider,
+                  modalities: sessionConfig.modalities ?? ['text', 'audio'],
+                  instructions: sessionConfig.instructions,
+                  voice: sessionConfig.voice ?? 'alloy',
+                },
+              })
+            );
           }
           // Handle input.audio_buffer.append
           else if (data.type === 'input_audio_buffer.append' && realtimeClient) {
@@ -639,10 +705,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
           // Actual handler error
           const errorMessage =
             parseOrHandleError instanceof Error ? parseOrHandleError.message : 'Unknown error';
-          log.error(
-            { requestId, error: errorMessage },
-            'Error handling WebSocket message'
-          );
+          log.error({ requestId, error: errorMessage }, 'Error handling WebSocket message');
           try {
             if (connection.readyState === 1) {
               connection.send(
@@ -655,7 +718,9 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
                 })
               );
             }
-          } catch { /* connection may have closed */ }
+          } catch {
+            /* connection may have closed */
+          }
         }
       });
 
@@ -721,7 +786,9 @@ function setupEventForwarding(
     // OpenAI Realtime Client events
     client.on('session.created', (data: unknown) => forwardEvent('session.created', data));
     client.on('response.text.delta', (data: unknown) => forwardEvent('response.text.delta', data));
-    client.on('response.audio.delta', (data: unknown) => forwardEvent('response.audio.delta', data));
+    client.on('response.audio.delta', (data: unknown) =>
+      forwardEvent('response.audio.delta', data)
+    );
     client.on('response.function_call', (data: unknown) =>
       forwardEvent('response.function_call', data)
     );
@@ -735,21 +802,32 @@ function setupEventForwarding(
     client.on('response.audio.done', (data: unknown) => forwardEvent('response.audio.done', data));
 
     // Translation-specific events (AilinRealtimeClient translation mode)
-    client.on('translation.text.original', (data: unknown) => forwardEvent('translation.text.original', data));
-    client.on('translation.text.translated', (data: unknown) => forwardEvent('translation.text.translated', data));
+    client.on('translation.text.original', (data: unknown) =>
+      forwardEvent('translation.text.original', data)
+    );
+    client.on('translation.text.translated', (data: unknown) =>
+      forwardEvent('translation.text.translated', data)
+    );
 
     // VAD events (server-side voice activity detection)
-    client.on('input_audio_buffer.speech_started', (data: unknown) => forwardEvent('input_audio_buffer.speech_started', data));
-    client.on('input_audio_buffer.speech_stopped', (data: unknown) => forwardEvent('input_audio_buffer.speech_stopped', data));
+    client.on('input_audio_buffer.speech_started', (data: unknown) =>
+      forwardEvent('input_audio_buffer.speech_started', data)
+    );
+    client.on('input_audio_buffer.speech_stopped', (data: unknown) =>
+      forwardEvent('input_audio_buffer.speech_stopped', data)
+    );
 
     // STT transcription events (batch path — legacy)
     client.on('conversation.item.input_audio_transcription.completed', (data: unknown) =>
-      forwardEvent('conversation.item.input_audio_transcription.completed', data));
+      forwardEvent('conversation.item.input_audio_transcription.completed', data)
+    );
 
     // STT transcription events (streaming path — Deepgram phrase-level)
     client.on('stt.transcription', (data: unknown) => forwardEvent('stt.transcription', data));
 
     // Adapter diagnostic event
-    client.on('translation.adapter.status', (data: unknown) => forwardEvent('translation.adapter.status', data));
+    client.on('translation.adapter.status', (data: unknown) =>
+      forwardEvent('translation.adapter.status', data)
+    );
   }
 }

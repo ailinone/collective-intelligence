@@ -37,11 +37,7 @@
 import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 import { logger } from '@/utils/logger';
-import type {
-  HealthKey,
-  ProviderErrorClass,
-  ProviderHealthState,
-} from './types';
+import type { HealthKey, ProviderErrorClass, ProviderHealthState } from './types';
 
 const log = logger.child({ component: 'health-sync-bus' });
 
@@ -84,7 +80,11 @@ class HealthSyncBus {
    *
    * The caller passes both. They MUST be different physical connections.
    */
-  async connect(input: { publisher: Redis; subscriber: Redis; onMessage: (msg: HealthSyncMessage) => void }): Promise<void> {
+  async connect(input: {
+    publisher: Redis;
+    subscriber: Redis;
+    onMessage: (msg: HealthSyncMessage) => void;
+  }): Promise<void> {
     if (this.connected) return;
     this.publisher = input.publisher;
     this.subscriber = input.subscriber;
@@ -112,7 +112,9 @@ class HealthSyncBus {
     if (!this.connected) return;
     try {
       await this.subscriber?.unsubscribe(CHANNEL);
-    } catch { /* swallow */ }
+    } catch {
+      /* swallow */
+    }
     this.publisher = null;
     this.subscriber = null;
     this.inbound = null;

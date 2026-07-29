@@ -28,11 +28,7 @@ import * as synthPolicy from '@/core/orchestration/role-selection/synthesizer-ro
 import { ModelRoleResolver } from '@/core/orchestration/model-selection/model-role-resolver';
 import type { ModelCandidate } from '@/core/orchestration/model-selection/model-role-types';
 
-function makeCandidate(opts: {
-  id: string;
-  providerId: string;
-  quality?: number;
-}): ModelCandidate {
+function makeCandidate(opts: { id: string; providerId: string; quality?: number }): ModelCandidate {
   return {
     model: {
       id: opts.id,
@@ -46,8 +42,10 @@ function makeCandidate(opts: {
       capabilities: ['chat', 'reasoning', 'instruction_following'] as never,
       status: 'active',
       performance: {
-        latencyMs: 800, throughput: 100,
-        quality: opts.quality ?? 0.8, reliability: 0.9,
+        latencyMs: 800,
+        throughput: 100,
+        quality: opts.quality ?? 0.8,
+        reliability: 0.9,
       },
       metadata: {},
       providerName: opts.providerId,
@@ -174,7 +172,7 @@ describe('01C.1B-J1G-R0 §10.2 — no duplicate-scorer invariant', () => {
       candidatePool: pool,
     });
     expect(r1.synthesizerSelectionSummary!.candidatePoolHash).toBe(
-      r2.synthesizerSelectionSummary!.candidatePoolHash,
+      r2.synthesizerSelectionSummary!.candidatePoolHash
     );
     // And not the zero hash
     expect(r1.synthesizerSelectionSummary!.candidatePoolHash).not.toBe('00000000');
@@ -188,17 +186,21 @@ describe('01C.1B-J1G-R0 §10.2 — no duplicate-scorer invariant', () => {
     ];
     const resolver = new ModelRoleResolver({});
     const r1 = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool1,
+      constraints: {},
+      candidatePool: pool1,
     });
     const r2 = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool2,
+      constraints: {},
+      candidatePool: pool2,
     });
     expect(r1.synthesizerSelectionSummary!.candidatePoolHash).not.toBe(
-      r2.synthesizerSelectionSummary!.candidatePoolHash,
+      r2.synthesizerSelectionSummary!.candidatePoolHash
     );
   });
 });

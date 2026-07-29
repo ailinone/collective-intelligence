@@ -34,11 +34,7 @@
  *     never substituted.
  */
 
-import type {
-  ExplicitPinInfo,
-  PrivacyMode,
-  RouteKind,
-} from '../registry/types';
+import type { ExplicitPinInfo, PrivacyMode, RouteKind } from '../registry/types';
 import type { CandidateRetrievalRequest } from '../retrieval/candidate-retrieval-types';
 import { retrieveCandidates } from '../retrieval/candidate-retriever';
 import {
@@ -56,14 +52,9 @@ import type {
 } from '../strategy/strategy-types';
 import type { Sensitivity } from '../scoring/scoring-policy';
 import { profileTask } from '../task-profile/task-profiler';
-import type {
-  TaskProfile,
-} from '../task-profile/task-profile-types';
+import type { TaskProfile } from '../task-profile/task-profile-types';
 import { buildPipelineTrace } from './routing-pipeline-trace';
-import type {
-  RoutingPipelineInput,
-  RoutingPipelineResult,
-} from './routing-pipeline-types';
+import type { RoutingPipelineInput, RoutingPipelineResult } from './routing-pipeline-types';
 
 // ─── Constants (data, not logic) ────────────────────────────────────────
 
@@ -80,9 +71,7 @@ function riskToStrategy(r: TaskProfile['riskLevel']): StrategyRiskLevel {
   return r;
 }
 
-function sensitivityToStrategy(
-  s: TaskProfile['costSensitivity'],
-): StrategySensitivity {
+function sensitivityToStrategy(s: TaskProfile['costSensitivity']): StrategySensitivity {
   return s;
 }
 
@@ -97,7 +86,7 @@ function deriveLatencySensitivity(profile: TaskProfile): Sensitivity {
 function profileToRetrievalRequest(
   profile: TaskProfile,
   pin: ExplicitPinInfo | null | undefined,
-  input: RoutingPipelineInput,
+  input: RoutingPipelineInput
 ): CandidateRetrievalRequest {
   const required = Array.from(profile.requiredCapabilities);
   const desired = Array.from(profile.desiredCapabilities);
@@ -118,7 +107,7 @@ function profileToRetrievalRequest(
 
 function profileToPlannerContext(
   profile: TaskProfile,
-  pin: ExplicitPinInfo | null | undefined,
+  pin: ExplicitPinInfo | null | undefined
 ): StrategyPlanningContext {
   return {
     taskType: profile.taskType,
@@ -138,9 +127,7 @@ function profileToPlannerContext(
  * Runs the offline routing pipeline. Always returns a result with a
  * (redacted) trace — never throws on user-shaped errors.
  */
-export function composeRoutingPipeline(
-  input: RoutingPipelineInput,
-): RoutingPipelineResult {
+export function composeRoutingPipeline(input: RoutingPipelineInput): RoutingPipelineResult {
   const mode = input.configProvider.getMode();
   const timestamp = input.nowIso ?? DEFAULT_TIMESTAMP;
   const traceId = input.traceId ?? DEFAULT_TRACE_ID;
@@ -210,7 +197,7 @@ function runStructuralFull(
   input: RoutingPipelineInput,
   timestamp: string,
   traceId: string,
-  pin: ExplicitPinInfo | null,
+  pin: ExplicitPinInfo | null
 ): RoutingPipelineResult {
   // 1. Profile the request — heuristic, deterministic, offline.
   const { profile } = profileTask(input.profilerInput);
@@ -227,7 +214,10 @@ function runStructuralFull(
     candidates: retrievalResult.candidates,
     context: plannerContext,
     policy: input.strategyPolicy,
-    routesInfo: buildRoutesInfo(input, retrievalResult.candidates.map((c) => c.routeId)),
+    routesInfo: buildRoutesInfo(
+      input,
+      retrievalResult.candidates.map((c) => c.routeId)
+    ),
   };
   const strategyResult = planStrategy(plannerInput);
 
@@ -261,7 +251,7 @@ function runStructuralFull(
  */
 function buildRoutesInfo(
   input: RoutingPipelineInput,
-  routeIds: readonly string[],
+  routeIds: readonly string[]
 ): ReadonlyMap<string, { routeId: string; routeKind: RouteKind }> {
   const out = new Map<string, { routeId: string; routeKind: RouteKind }>();
   for (const id of routeIds) {

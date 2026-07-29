@@ -151,8 +151,7 @@ export class AzureOpenAIAdapter extends OpenAICompatibleHubAdapter {
       config.apiVersion?.trim() ||
       process.env.AZURE_OPENAI_API_VERSION?.trim() ||
       AZURE_OPENAI_DEFAULT_API_VERSION;
-    const endpoint =
-      config.endpoint?.trim() || process.env.AZURE_OPENAI_ENDPOINT?.trim() || '';
+    const endpoint = config.endpoint?.trim() || process.env.AZURE_OPENAI_ENDPOINT?.trim() || '';
 
     // Composing the URL fails fast when either deployment or resource is
     // missing UNLESS the operator already passed an explicit baseUrl (the
@@ -184,8 +183,7 @@ export class AzureOpenAIAdapter extends OpenAICompatibleHubAdapter {
     // Resolve providerName — allow the multi-deployment factory to register
     // this instance under a unique name (e.g. `azure-openai-<alias>`).
     // Default preserves the single-deployment name exactly.
-    const resolvedProviderName =
-      config.providerNameOverride?.trim() || 'azure-openai';
+    const resolvedProviderName = config.providerNameOverride?.trim() || 'azure-openai';
 
     super({
       ...config,
@@ -230,7 +228,7 @@ export class AzureOpenAIAdapter extends OpenAICompatibleHubAdapter {
   }
 
   override async *chatCompletionStream(
-    request: ChatRequest,
+    request: ChatRequest
   ): AsyncGenerator<ChatResponse, void, unknown> {
     yield* super.chatCompletionStream({ ...request, model: this.deployment });
   }

@@ -42,21 +42,26 @@ const REQ = {
 };
 
 const ALL_STRATEGIES = [
-  'single', 'cost-cascade', 'consensus', 'debate',
-  'quality-multipass', 'critique-repair', 'expert-panel',
+  'single',
+  'cost-cascade',
+  'consensus',
+  'debate',
+  'quality-multipass',
+  'critique-repair',
+  'expert-panel',
 ];
 
 function buildMeta(strategy: string) {
-  const result = buildPlanOnlyResult(
-    strategy, 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
-  );
+  const result = buildPlanOnlyResult(strategy, 'explicit', 'request-flag', REQ, CTX, null, 0.85, {
+    registered: true,
+  });
   return result.metadata as Record<string, unknown>;
 }
 
 // ── Fingerprint uniqueness ────────────────────────────────────────────────────
 describe('01C.1B-SM-R4 §13b — plan fingerprint uniqueness', () => {
   it('all 7 strategies produce unique fingerprints', () => {
-    const fps = ALL_STRATEGIES.map(s => {
+    const fps = ALL_STRATEGIES.map((s) => {
       const meta = buildMeta(s);
       return meta['planFingerprint'] as string;
     });
@@ -74,16 +79,50 @@ describe('01C.1B-SM-R4 §13b — plan fingerprint uniqueness', () => {
   it('different taskTypes produce different fingerprints for the same strategy', () => {
     const ctxA = { ...CTX, requestId: 'fp-a', taskType: 'analysis' };
     const ctxB = { ...CTX, requestId: 'fp-b', taskType: 'code-generation' };
-    const resultA = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, ctxA, null, 0.85);
-    const resultB = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, ctxB, null, 0.85);
+    const resultA = buildPlanOnlyResult(
+      'consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      ctxA,
+      null,
+      0.85
+    );
+    const resultB = buildPlanOnlyResult(
+      'consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      ctxB,
+      null,
+      0.85
+    );
     const metaA = resultA.metadata as Record<string, unknown>;
     const metaB = resultB.metadata as Record<string, unknown>;
     expect(metaA['planFingerprint']).not.toBe(metaB['planFingerprint']);
   });
 
   it('registered=false produces different fingerprint than registered=true', () => {
-    const trueResult = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true });
-    const falseResult = buildPlanOnlyResult('consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: false });
+    const trueResult = buildPlanOnlyResult(
+      'consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      CTX,
+      null,
+      0.85,
+      { registered: true }
+    );
+    const falseResult = buildPlanOnlyResult(
+      'consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      CTX,
+      null,
+      0.85,
+      { registered: false }
+    );
     const metaTrue = trueResult.metadata as Record<string, unknown>;
     const metaFalse = falseResult.metadata as Record<string, unknown>;
     expect(metaTrue['planFingerprint']).not.toBe(metaFalse['planFingerprint']);
@@ -107,7 +146,7 @@ describe('01C.1B-SM-R4 §13b — quality score differentiation', () => {
   });
 
   it('quality-multipass scores highest among all strategies', () => {
-    const scores = ALL_STRATEGIES.map(s => getQuality(s));
+    const scores = ALL_STRATEGIES.map((s) => getQuality(s));
     const qmp = getQuality('quality-multipass');
     expect(qmp).toBe(Math.max(...scores));
   });
@@ -142,7 +181,7 @@ describe('01C.1B-SM-R4 §13b — latency estimate differentiation', () => {
   });
 
   it('quality-multipass is the slowest strategy', () => {
-    const latencies = ALL_STRATEGIES.map(s => getLatency(s));
+    const latencies = ALL_STRATEGIES.map((s) => getLatency(s));
     const latQmp = getLatency('quality-multipass');
     expect(latQmp).toBe(Math.max(...latencies));
   });

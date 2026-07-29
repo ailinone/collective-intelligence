@@ -185,7 +185,7 @@ describe('buildPromptRuntimeTrace — missingVariables detection', () => {
       strategy: 'consensus',
       role: 'participant',
       registryEntry: entry,
-      variables: { a: 1 },  // b and c missing
+      variables: { a: 1 }, // b and c missing
       userMessages: [{ role: 'user', content: 'X' }],
     });
     expect(trace.missingVariables).toEqual(['b', 'c']);
@@ -208,17 +208,32 @@ describe('buildMultiRolePromptTrace — aggregate fingerprint stability', () => 
   function makeRegistry(): PromptTemplateRegistry {
     const m = new Map<PromptRuntimeTraceRole, PromptTemplateRegistryEntry>();
     m.set('participant', makeEntry({ id: 'p', version: 'p@v1', getBody: () => 'P-body' }));
-    m.set('synthesizer', makeEntry({ id: 's', version: 's@v1', variablesRequired: [], getBody: () => 'S-body' }));
-    m.set('judge', makeEntry({ id: 'j', version: 'j@v1', variablesRequired: [], getBody: () => 'J-body' }));
-    m.set('fallback', makeEntry({ id: 'f', version: 'f@v1', variablesRequired: [], getBody: () => 'F-body' }));
+    m.set(
+      'synthesizer',
+      makeEntry({ id: 's', version: 's@v1', variablesRequired: [], getBody: () => 'S-body' })
+    );
+    m.set(
+      'judge',
+      makeEntry({ id: 'j', version: 'j@v1', variablesRequired: [], getBody: () => 'J-body' })
+    );
+    m.set(
+      'fallback',
+      makeEntry({ id: 'f', version: 'f@v1', variablesRequired: [], getBody: () => 'F-body' })
+    );
     return m;
   }
 
   it('produces stable aggregate across runs', () => {
     const reg = makeRegistry();
-    const selected = new Map<PromptRuntimeTraceRole, {
-      modelId?: string; providerId?: string; routeId?: string; variables: Record<string, unknown>;
-    }>();
+    const selected = new Map<
+      PromptRuntimeTraceRole,
+      {
+        modelId?: string;
+        providerId?: string;
+        routeId?: string;
+        variables: Record<string, unknown>;
+      }
+    >();
     selected.set('participant', { modelId: 'm1', providerId: 'p1', variables: { userName: 'A' } });
     selected.set('synthesizer', { modelId: 'm2', providerId: 'p2', variables: {} });
 
@@ -239,9 +254,15 @@ describe('buildMultiRolePromptTrace — aggregate fingerprint stability', () => 
 
   it('emits role_not_selected_due_to_plan_blocker for unselected roles', () => {
     const reg = makeRegistry();
-    const selected = new Map<PromptRuntimeTraceRole, {
-      modelId?: string; providerId?: string; routeId?: string; variables: Record<string, unknown>;
-    }>();
+    const selected = new Map<
+      PromptRuntimeTraceRole,
+      {
+        modelId?: string;
+        providerId?: string;
+        routeId?: string;
+        variables: Record<string, unknown>;
+      }
+    >();
     selected.set('participant', { variables: { userName: 'A' } });
 
     const r = buildMultiRolePromptTrace({
@@ -251,15 +272,22 @@ describe('buildMultiRolePromptTrace — aggregate fingerprint stability', () => 
       userMessages: [{ role: 'user', content: 'hello' }],
       unselectedRoles: ['judge', 'synthesizer', 'fallback'],
     });
-    expect(r.issues.filter((i) => i.reason === 'role_not_selected_due_to_plan_blocker'))
-      .toHaveLength(3);
+    expect(
+      r.issues.filter((i) => i.reason === 'role_not_selected_due_to_plan_blocker')
+    ).toHaveLength(3);
   });
 
   it('emits template_not_found when role has no registry entry', () => {
     const emptyReg = new Map<PromptRuntimeTraceRole, PromptTemplateRegistryEntry>();
-    const selected = new Map<PromptRuntimeTraceRole, {
-      modelId?: string; providerId?: string; routeId?: string; variables: Record<string, unknown>;
-    }>();
+    const selected = new Map<
+      PromptRuntimeTraceRole,
+      {
+        modelId?: string;
+        providerId?: string;
+        routeId?: string;
+        variables: Record<string, unknown>;
+      }
+    >();
     selected.set('participant', { variables: {} });
 
     const r = buildMultiRolePromptTrace({
@@ -275,11 +303,20 @@ describe('buildMultiRolePromptTrace — aggregate fingerprint stability', () => 
   it('changing any role prompt changes the aggregate', () => {
     const reg1 = makeRegistry();
     const reg2 = new Map(reg1);
-    reg2.set('judge', makeEntry({ id: 'j', version: 'j@v2', variablesRequired: [], getBody: () => 'J-body-NEW' }));
+    reg2.set(
+      'judge',
+      makeEntry({ id: 'j', version: 'j@v2', variablesRequired: [], getBody: () => 'J-body-NEW' })
+    );
 
-    const selected = new Map<PromptRuntimeTraceRole, {
-      modelId?: string; providerId?: string; routeId?: string; variables: Record<string, unknown>;
-    }>();
+    const selected = new Map<
+      PromptRuntimeTraceRole,
+      {
+        modelId?: string;
+        providerId?: string;
+        routeId?: string;
+        variables: Record<string, unknown>;
+      }
+    >();
     selected.set('participant', { variables: { userName: 'A' } });
     selected.set('judge', { variables: {} });
 

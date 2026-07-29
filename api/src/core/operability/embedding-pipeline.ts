@@ -45,12 +45,7 @@ import {
 import { getEmbeddingCache } from './embedding-cache';
 import { getTEIClient, type TEIClient } from './tei-client';
 import { getSemanticIndex, type SemanticIndex, type SemanticIndexEntry } from './semantic-index';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  observeHistogram,
-  setGauge,
-} from './metrics';
+import { METRIC_NAMES, incrementCounter, observeHistogram, setGauge } from './metrics';
 
 const log = logger.child({ component: 'embedding-pipeline' });
 
@@ -123,7 +118,9 @@ class EmbeddingPipeline {
       const healthy = await tei.isHealthy();
       setGauge(METRIC_NAMES.TEI_HEALTH_STATE, healthy ? 1 : 0);
       if (!healthy) {
-        log.warn('TEI unreachable — skipping index rebuild (resolver will fall back to pool query)');
+        log.warn(
+          'TEI unreachable — skipping index rebuild (resolver will fall back to pool query)'
+        );
         incrementCounter(METRIC_NAMES.EMBEDDING_PIPELINE_FAILED_TOTAL, { reason: 'tei_unhealthy' });
         return this.lastEntryCount;
       }
@@ -148,7 +145,11 @@ class EmbeddingPipeline {
 
       const durationMs = Date.now() - t0;
       observeHistogram(METRIC_NAMES.EMBEDDING_PIPELINE_DURATION_MS, durationMs);
-      incrementCounter(METRIC_NAMES.EMBEDDING_PIPELINE_MODELS_EMBEDDED_TOTAL, {}, { by: entries.length });
+      incrementCounter(
+        METRIC_NAMES.EMBEDDING_PIPELINE_MODELS_EMBEDDED_TOTAL,
+        {},
+        { by: entries.length }
+      );
       setGauge(METRIC_NAMES.SEMANTIC_INDEX_SIZE, entries.length);
       setGauge(METRIC_NAMES.SEMANTIC_INDEX_LAST_REBUILD_AT, Math.floor(this.lastRunAt / 1000));
       incrementCounter(METRIC_NAMES.EMBEDDING_PIPELINE_RUN_TOTAL, { result: 'success' });
@@ -159,7 +160,7 @@ class EmbeddingPipeline {
           embedded: entries.length,
           durationMs,
         },
-        'Embedding pipeline run complete',
+        'Embedding pipeline run complete'
       );
 
       return entries.length;
@@ -183,7 +184,7 @@ class EmbeddingPipeline {
 
   private async embedAll(
     candidates: readonly OperationalCandidate[],
-    config: EmbeddingPipelineConfig,
+    config: EmbeddingPipelineConfig
   ): Promise<SemanticIndexEntry[]> {
     const tei = config.tei ?? getTEIClient();
     const batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -224,7 +225,7 @@ class EmbeddingPipeline {
       } catch (err) {
         log.warn(
           { err: String(err), batchStart: i, batchSize: batch.length },
-          'Embedding batch failed — continuing with remaining batches',
+          'Embedding batch failed — continuing with remaining batches'
         );
       }
     }
@@ -265,7 +266,7 @@ export async function rebuildEmbeddingIndex(config?: EmbeddingPipelineConfig): P
  */
 export async function embedSingleCandidate(
   candidate: OperationalCandidate,
-  tei: SemanticIndex extends infer _ ? TEIClient : TEIClient = getTEIClient(),
+  tei: SemanticIndex extends infer _ ? TEIClient : TEIClient = getTEIClient()
 ): Promise<SemanticIndexEntry> {
   const text = buildCandidateText(candidate);
   const embedding = await tei.embed(text);

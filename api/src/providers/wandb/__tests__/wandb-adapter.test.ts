@@ -29,10 +29,12 @@ function headersOf(adapter: WandbAdapter, includeJson = true): Record<string, st
   return protectedAccess.buildRequestHeaders(includeJson);
 }
 
-function makeAdapter(overrides: {
-  projectResolver?: () => string | undefined;
-  apiKey?: string;
-} = {}): WandbAdapter {
+function makeAdapter(
+  overrides: {
+    projectResolver?: () => string | undefined;
+    apiKey?: string;
+  } = {}
+): WandbAdapter {
   return new WandbAdapter({
     name: 'wandb',
     enabled: true,

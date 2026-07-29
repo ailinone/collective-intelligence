@@ -9,12 +9,7 @@
 
 import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
-import type {
-  ChatRequest,
-  OrchestrationContext,
-  OrchestrationResult,
-  Model,
-} from '@/types';
+import type { ChatRequest, OrchestrationContext, OrchestrationResult, Model } from '@/types';
 import { logger } from '@/utils/logger';
 
 /**
@@ -78,7 +73,7 @@ export class HierarchicalStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible — falling back to quality-sorted manager.',
+        'Preferred model not eligible — falling back to quality-sorted manager.'
       );
     }
     const manager = preference.pinnedExecutor ?? this.selectManager(models);
@@ -90,7 +85,11 @@ export class HierarchicalStrategy extends BaseStrategy {
     if (!adapter) {
       throw new Error(`No adapter found for model: ${manager.id}`);
     }
-    this.emitObserverEvent(context, { type: 'phase_start', models: [manager.name || manager.id], summary: `Hierarchical: manager executing task.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [manager.name || manager.id],
+      summary: `Hierarchical: manager executing task.`,
+    });
 
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     const reasoningEnabled = this.isReasoningEnabled(request);
@@ -100,7 +99,10 @@ export class HierarchicalStrategy extends BaseStrategy {
         ? await this.executeModelWithReasoning(adapter, manager, request, 'primary')
         : await this.executeModel(adapter, manager, request, 'primary');
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Hierarchical execution complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Hierarchical execution complete.',
+    });
 
     return {
       strategyUsed: this.getMetadata().name,
@@ -116,7 +118,19 @@ export class HierarchicalStrategy extends BaseStrategy {
         // `workers` list of models that never ran (see class doc).
         planCreated: false,
         stub: true,
-        ...(execution.reasoning ? { reasoning_traces: [{ model_id: execution.modelId, model_name: execution.modelName, role: execution.role, reasoning: execution.reasoning, reasoning_tokens: execution.reasoningTokens }] } : {}),
+        ...(execution.reasoning
+          ? {
+              reasoning_traces: [
+                {
+                  model_id: execution.modelId,
+                  model_name: execution.modelName,
+                  role: execution.role,
+                  reasoning: execution.reasoning,
+                  reasoning_tokens: execution.reasoningTokens,
+                },
+              ],
+            }
+          : {}),
       },
     };
   }

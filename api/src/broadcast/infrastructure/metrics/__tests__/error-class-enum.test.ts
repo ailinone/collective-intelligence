@@ -24,11 +24,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-import {
-  ERROR_CLASS_ENUM,
-  knownErrorClasses,
-  normalizeErrorClass,
-} from '../error-class-enum';
+import { ERROR_CLASS_ENUM, knownErrorClasses, normalizeErrorClass } from '../error-class-enum';
 
 describe('normalizeErrorClass', () => {
   it('passes known enum members through unchanged', () => {
@@ -94,11 +90,9 @@ describe('cardinality guardrail — static scan of broadcast/**', () => {
     }
 
     if (violators.length > 0) {
-      const report = violators
-        .map((v) => `  ${v.file}: "${v.literal}"`)
-        .join('\n');
+      const report = violators.map((v) => `  ${v.file}: "${v.literal}"`).join('\n');
       throw new Error(
-        `Unbounded errorClass literals found — add them to ERROR_CLASS_ENUM or pick an existing bucket:\n${report}`,
+        `Unbounded errorClass literals found — add them to ERROR_CLASS_ENUM or pick an existing bucket:\n${report}`
       );
     }
     expect(violators).toHaveLength(0);
@@ -122,6 +116,9 @@ describe('cardinality guardrail — static scan of broadcast/**', () => {
         }
       }
     }
-    expect(offenders, `Adapter(s) return a dynamic errorClass literal: ${offenders.join(', ')}`).toHaveLength(0);
+    expect(
+      offenders,
+      `Adapter(s) return a dynamic errorClass literal: ${offenders.join(', ')}`
+    ).toHaveLength(0);
   });
 });

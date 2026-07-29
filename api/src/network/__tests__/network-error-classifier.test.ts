@@ -49,7 +49,9 @@ describe('classifyNetworkError — network layer', () => {
   });
 
   it('SELF_SIGNED_CERT_IN_CHAIN → network_tls_error', () => {
-    expect(classifyNetworkError({ code: 'SELF_SIGNED_CERT_IN_CHAIN' }).category).toBe('network_tls_error');
+    expect(classifyNetworkError({ code: 'SELF_SIGNED_CERT_IN_CHAIN' }).category).toBe(
+      'network_tls_error'
+    );
   });
 });
 
@@ -80,7 +82,10 @@ describe('classifyNetworkError — HTTP status (provider layer)', () => {
   });
 
   it('403 with billing body → provider_quota_error', () => {
-    const r = classifyNetworkError({ httpStatus: 403, body: '{"error":"insufficient billing balance"}' });
+    const r = classifyNetworkError({
+      httpStatus: 403,
+      body: '{"error":"insufficient billing balance"}',
+    });
     expect(r.category).toBe('provider_quota_error');
   });
 

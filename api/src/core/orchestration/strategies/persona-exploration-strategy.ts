@@ -64,7 +64,7 @@ export class PersonaExplorationStrategy extends BaseStrategy {
       minModels: 2,
       maxModels: 5,
       estimatedCostMultiplier: 6.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 3.0,
       suitableFor: ['creative', 'analysis', 'general', 'documentation'],
     };
@@ -74,26 +74,56 @@ export class PersonaExplorationStrategy extends BaseStrategy {
     const startTime = Date.now();
     return Promise.race([
       this.executeCore(request, context, startTime),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Persona exploration timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Persona exploration timeout after ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS
+        )
+      ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const prep = await this.gatherPersonaPerspectives(request, context);
 
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: prep.activeAggregator.name || prep.activeAggregator.id, summary: 'Aggregating persona perspectives.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: prep.activeAggregator.name || prep.activeAggregator.id,
+      summary: 'Aggregating persona perspectives.',
+    });
 
     // executeModelWithRetry handles cross-provider failover on execution
     // failure (rate limit, 5xx, etc.) — the perspectives have already
     // been gathered, so the aggregator failing alone shouldn't tank the
     // whole strategy when other models in `context.models` could synthesize.
-    const aggExec = await this.executeModelWithRetry(prep.aggAdapter, prep.activeAggregator, prep.aggReq, 'aggregator', context);
+    const aggExec = await this.executeModelWithRetry(
+      prep.aggAdapter,
+      prep.activeAggregator,
+      prep.aggReq,
+      'aggregator',
+      context
+    );
     prep.executions.push(aggExec);
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Persona aggregation complete: ${prep.perspectivesCount} perspectives synthesized.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Persona aggregation complete: ${prep.perspectivesCount} perspectives synthesized.`,
+    });
 
     const reasoningTracesMeta = prep.reasoningEnabled
-      ? prep.executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens }))
+      ? prep.executions
+          .filter((e) => e.reasoning)
+          .map((e) => ({
+            model_id: e.modelId,
+            model_name: e.modelName,
+            role: e.role,
+            reasoning: e.reasoning,
+            reasoning_tokens: e.reasoningTokens,
+          }))
       : undefined;
 
     return {
@@ -120,7 +150,7 @@ export class PersonaExplorationStrategy extends BaseStrategy {
    */
   private async gatherPersonaPerspectives(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<{
     aggReq: ChatRequest;
     aggAdapter: import('@/providers/base/provider-adapter').ProviderAdapter;
@@ -139,14 +169,18 @@ export class PersonaExplorationStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Persona exploration: requested model not in operational pool — falling back to quality-sorted aggregator',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Persona exploration: requested model not in operational pool — falling back to quality-sorted aggregator'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const aggregator = sorted[0];
     const explorerModels = sorted.slice(0, Math.min(4, sorted.length));
@@ -154,13 +188,16 @@ export class PersonaExplorationStrategy extends BaseStrategy {
     const selectedPersonas = DEFAULT_PERSONAS.slice(0, numPersonas);
     const reasoningEnabled = this.isReasoningEnabled(request);
     const executions: ModelExecution[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
 
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: explorerModels.map(m => m.name || m.id),
+      models: explorerModels.map((m) => m.name || m.id),
       summary: `Persona exploration: ${numPersonas} personas across ${explorerModels.length} models.`,
     });
 
@@ -172,7 +209,11 @@ export class PersonaExplorationStrategy extends BaseStrategy {
       const adapter = await this.getAdapterForModel!(model, context);
       if (!adapter) throw new Error(`No adapter for ${model.id}`);
 
-      const personaPrompt = this.withReasoningPrompt(PROMPTS.personaExplorer(persona), request, model);
+      const personaPrompt = this.withReasoningPrompt(
+        PROMPTS.personaExplorer(persona),
+        request,
+        model
+      );
       const personaReq: ChatRequest = {
         ...request,
         messages: [{ role: 'system', content: personaPrompt }, ...request.messages],
@@ -200,16 +241,18 @@ export class PersonaExplorationStrategy extends BaseStrategy {
     if (perspectives.length === 0) throw new Error('All personas failed');
 
     this.emitObserverEvent(context, {
-      type: 'round_complete', round: 1, totalRounds: 2,
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 2,
       summary: `${perspectives.length} persona perspectives gathered. Aggregating.`,
     });
 
     // Phase 2: build the aggregator request. synthesis_start is emitted by
     // the caller (executeCore/executeStream) once the active aggregator —
     // post fallback-resolution below — is actually known.
-    const perspectivesText = perspectives.map((p, i) =>
-      `### Persona ${i + 1}: ${p.persona}\n${p.content}`
-    ).join('\n\n---\n\n');
+    const perspectivesText = perspectives
+      .map((p, i) => `### Persona ${i + 1}: ${p.persona}\n${p.content}`)
+      .join('\n\n---\n\n');
 
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
 
@@ -217,7 +260,10 @@ export class PersonaExplorationStrategy extends BaseStrategy {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.personaAggregator(perspectives.length) },
-        { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nPERSPECTIVES:\n${perspectivesText}${reasoningTraces}` },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nPERSPECTIVES:\n${perspectivesText}${reasoningTraces}`,
+        },
       ],
     };
 
@@ -236,7 +282,11 @@ export class PersonaExplorationStrategy extends BaseStrategy {
         aggAdapter = await this.getAdapterForModel(activeAggregator, context);
         if (aggAdapter) {
           log.warn(
-            { requestId: context.requestId, primary: aggregator.name, fallback: activeAggregator.name },
+            {
+              requestId: context.requestId,
+              primary: aggregator.name,
+              fallback: activeAggregator.name,
+            },
             'Persona aggregator: primary had no adapter, using fallback from sorted pool'
           );
           break;
@@ -251,22 +301,38 @@ export class PersonaExplorationStrategy extends BaseStrategy {
       activeAggregator,
       executions,
       perspectivesCount: perspectives.length,
-      personaLabels: perspectives.map(p => p.persona),
+      personaLabels: perspectives.map((p) => p.persona),
       reasoningEnabled,
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Persona exploration: gathering diverse perspectives.' });
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Persona exploration: gathering diverse perspectives.',
+    });
     yield this.progressChunk('Gathering persona perspectives...', 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const prep = await this.gatherPersonaPerspectives(request, context);
 
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: prep.activeAggregator.name || prep.activeAggregator.id, summary: `Aggregating ${prep.perspectivesCount} perspectives.` });
-    yield this.progressChunk(`${prep.perspectivesCount} perspectives collected. Synthesizing...`, 1, 2);
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: prep.activeAggregator.name || prep.activeAggregator.id,
+      summary: `Aggregating ${prep.perspectivesCount} perspectives.`,
+    });
+    yield this.progressChunk(
+      `${prep.perspectivesCount} perspectives collected. Synthesizing...`,
+      1,
+      2
+    );
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Genuine multi-perspective synthesis (like multi-hop-qa) — gets the
@@ -275,7 +341,7 @@ export class PersonaExplorationStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       prep.aggReq,
       [{ adapter: prep.aggAdapter, model: prep.activeAggregator }],
-      () => (typeof fallbackText === 'string' ? fallbackText.slice(0, 4000) : ''),
+      () => (typeof fallbackText === 'string' ? fallbackText.slice(0, 4000) : '')
     );
 
     for (const c of await this.drainObserverChunks(context)) yield c;

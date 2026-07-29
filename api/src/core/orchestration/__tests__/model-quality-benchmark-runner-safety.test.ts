@@ -33,21 +33,32 @@ import {
 } from '@/core/orchestration/quality-benchmark/run-model-quality-benchmark';
 
 const completeArgs = [
-  '--candidate-set', 'tmp/set.json',
-  '--tasks', 'tmp/tasks.json',
-  '--max-models', '6',
-  '--max-tasks', '3',
-  '--max-total-cost-usd', '0.01',
-  '--max-tokens', '120',
-  '--temperature', '0',
+  '--candidate-set',
+  'tmp/set.json',
+  '--tasks',
+  'tmp/tasks.json',
+  '--max-models',
+  '6',
+  '--max-tasks',
+  '3',
+  '--max-total-cost-usd',
+  '0.01',
+  '--max-tokens',
+  '120',
+  '--temperature',
+  '0',
   '--no-consensus',
   '--no-dryrun-false',
   '--no-chain-of-thought',
   '--sanitize',
-  '--write-json', 'tmp/results.json',
-  '--write-md', 'tmp/results.md',
-  '--write-quality-snapshot', 'tmp/snapshot.json',
-  '--ledger', 'tmp/ledger.json',
+  '--write-json',
+  'tmp/results.json',
+  '--write-md',
+  'tmp/results.md',
+  '--write-quality-snapshot',
+  'tmp/snapshot.json',
+  '--ledger',
+  'tmp/ledger.json',
 ];
 
 describe('01C.1B-J2-C-R2 §7 — runner safety guards', () => {
@@ -96,7 +107,9 @@ describe('01C.1B-J2-C-R2 §7 — runner safety guards', () => {
 
   describe('validateCliSafety — guard 2: budget cap', () => {
     it('aborts when maxTotalCostUsd > 0.03', () => {
-      const args = completeArgs.map((a, i) => (completeArgs[i - 1] === '--max-total-cost-usd' ? '0.05' : a));
+      const args = completeArgs.map((a, i) =>
+        completeArgs[i - 1] === '--max-total-cost-usd' ? '0.05' : a
+      );
       const cli = parseArgs(args);
       const r = validateCliSafety(cli);
       expect(r.ok).toBe(false);
@@ -104,7 +117,9 @@ describe('01C.1B-J2-C-R2 §7 — runner safety guards', () => {
     });
 
     it('aborts when maxTotalCostUsd <= 0', () => {
-      const args = completeArgs.map((a, i) => (completeArgs[i - 1] === '--max-total-cost-usd' ? '0' : a));
+      const args = completeArgs.map((a, i) =>
+        completeArgs[i - 1] === '--max-total-cost-usd' ? '0' : a
+      );
       const cli = parseArgs(args);
       const r = validateCliSafety(cli);
       expect(r.ok).toBe(false);
@@ -112,7 +127,9 @@ describe('01C.1B-J2-C-R2 §7 — runner safety guards', () => {
     });
 
     it('aborts when maxTokens > 4096', () => {
-      const args = completeArgs.map((a, i) => (completeArgs[i - 1] === '--max-tokens' ? '5000' : a));
+      const args = completeArgs.map((a, i) =>
+        completeArgs[i - 1] === '--max-tokens' ? '5000' : a
+      );
       const cli = parseArgs(args);
       const r = validateCliSafety(cli);
       expect(r.ok).toBe(false);

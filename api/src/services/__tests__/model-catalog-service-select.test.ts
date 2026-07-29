@@ -39,11 +39,7 @@ import path from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CATALOG_SERVICE_PATH = path.resolve(
-  __dirname,
-  '..',
-  'model-catalog-service.ts',
-);
+const CATALOG_SERVICE_PATH = path.resolve(__dirname, '..', 'model-catalog-service.ts');
 
 function loadSource(): string {
   return readFileSync(CATALOG_SERVICE_PATH, 'utf8');
@@ -152,7 +148,7 @@ describe('CATALOG_HOT_PATH_SELECT invariant (Phase 6 Fix 2)', () => {
     expect(
       missingFromSelect,
       `mapPrismaModel reads record.${missingFromSelect.join(', record.')} but ` +
-        `CATALOG_HOT_PATH_SELECT does not include them — runtime would crash.`,
+        `CATALOG_HOT_PATH_SELECT does not include them — runtime would crash.`
     ).toEqual([]);
   });
 
@@ -165,7 +161,7 @@ describe('CATALOG_HOT_PATH_SELECT invariant (Phase 6 Fix 2)', () => {
     expect(
       unread,
       `CATALOG_HOT_PATH_SELECT declares ${unread.join(', ')} but mapPrismaModel never reads them — ` +
-        `re-regresses the wire-bloat fix. Drop these from the select.`,
+        `re-regresses the wire-bloat fix. Drop these from the select.`
     ).toEqual([]);
   });
 
@@ -197,7 +193,7 @@ describe('CATALOG_HOT_PATH_SELECT invariant (Phase 6 Fix 2)', () => {
     expect(
       accidentallyIncluded,
       `CATALOG_HOT_PATH_SELECT re-introduced heavy columns: ${accidentallyIncluded.join(', ')}. ` +
-        `These are NOT read by mapPrismaModel — re-regresses the 13.9s findMany latency.`,
+        `These are NOT read by mapPrismaModel — re-regresses the 13.9s findMany latency.`
     ).toEqual([]);
   });
 });

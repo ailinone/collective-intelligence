@@ -86,14 +86,7 @@ import { PROVIDER_SECRETS } from '@/config/load-secrets-into-env';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const LOAD_SECRETS_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'config',
-  'load-secrets-into-env.ts',
-);
+const LOAD_SECRETS_PATH = join(__dirname, '..', '..', '..', 'config', 'load-secrets-into-env.ts');
 
 const LOAD_SECRETS_SRC = readFileSync(LOAD_SECRETS_PATH, 'utf8');
 
@@ -145,13 +138,11 @@ const SUBLOTE_D1_LIVE_PROMOTIONS = [
 // ──────────────────────────────────────────────────────────────────────────
 
 /** index PROVIDER_CATALOG by providerId for O(1) lookup. */
-const catalogByProviderId = new Map(
-  PROVIDER_CATALOG.map((entry) => [entry.providerId, entry]),
-);
+const catalogByProviderId = new Map(PROVIDER_CATALOG.map((entry) => [entry.providerId, entry]));
 
 /** Set of env vars that have a GCP→ENV tuple (gate #1). */
 const envVarsInProviderSecrets: ReadonlySet<string> = new Set(
-  PROVIDER_SECRETS.map((tuple) => tuple.envVar),
+  PROVIDER_SECRETS.map((tuple) => tuple.envVar)
 );
 
 /**
@@ -163,12 +154,12 @@ const envVarsInProviderSecrets: ReadonlySet<string> = new Set(
  */
 function extractEnvVarToProviderKeys(src: string): Set<string> {
   const blockMatch = src.match(
-    /const\s+ENV_VAR_TO_PROVIDER\s*:\s*Record<[^>]+>\s*=\s*\{([\s\S]*?)\};/,
+    /const\s+ENV_VAR_TO_PROVIDER\s*:\s*Record<[^>]+>\s*=\s*\{([\s\S]*?)\};/
   );
   if (!blockMatch) {
     throw new Error(
       'Could not locate ENV_VAR_TO_PROVIDER declaration in ' +
-        'load-secrets-into-env.ts — regex needs maintenance.',
+        'load-secrets-into-env.ts — regex needs maintenance.'
     );
   }
   const body = blockMatch[1];
@@ -187,13 +178,11 @@ function extractEnvVarToProviderKeys(src: string): Set<string> {
  * `const LLM_PROVIDER_ENV_VARS = [ ... ] as const;`.
  */
 function extractLlmProviderEnvVars(src: string): Set<string> {
-  const blockMatch = src.match(
-    /const\s+LLM_PROVIDER_ENV_VARS\s*=\s*\[([\s\S]*?)\]\s*as\s+const/,
-  );
+  const blockMatch = src.match(/const\s+LLM_PROVIDER_ENV_VARS\s*=\s*\[([\s\S]*?)\]\s*as\s+const/);
   if (!blockMatch) {
     throw new Error(
       'Could not locate LLM_PROVIDER_ENV_VARS declaration in ' +
-        'load-secrets-into-env.ts — regex needs maintenance.',
+        'load-secrets-into-env.ts — regex needs maintenance.'
     );
   }
   const body = blockMatch[1];

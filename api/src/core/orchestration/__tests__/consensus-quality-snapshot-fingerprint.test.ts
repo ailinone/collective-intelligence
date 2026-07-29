@@ -22,7 +22,10 @@ import {
   type RoleSelectionPolicySnapshot,
   PLANNER_VERSION,
 } from '@/core/orchestration/strategies/consensus-plan-fingerprint';
-import { makeCandidate, makeModel } from '@/core/orchestration/model-selection/__tests__/role-resolver.fixtures';
+import {
+  makeCandidate,
+  makeModel,
+} from '@/core/orchestration/model-selection/__tests__/role-resolver.fixtures';
 import type { ConsensusExecutionPlan } from '@/core/orchestration/strategies/consensus-execution-planner';
 
 function makePlan(): ConsensusExecutionPlan {
@@ -62,11 +65,15 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('same snapshot hash → same fingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
@@ -75,11 +82,15 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('different qualitySnapshotHash → DIFFERENT fingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: { ...basePolicy, qualitySnapshotHash: 'different_hash_value' },
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -88,11 +99,15 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('different qualitySnapshotVersion → DIFFERENT fingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: { ...basePolicy, qualitySnapshotVersion: '2.0.0' },
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -101,11 +116,15 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('different qualitySnapshotEntryCount → DIFFERENT fingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: { ...basePolicy, qualitySnapshotEntryCount: 32 },
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -114,7 +133,9 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('omitted snapshot fields → empty defaults in snapshot', () => {
     const plan = makePlan();
     const snap = buildSanitizedPlanSnapshot({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       // No roleSelectionPolicy at all
     });
     expect(snap.roleSelectionPolicy.qualitySnapshotVersion).toBe('');
@@ -125,7 +146,9 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('snapshot fields included in canonical JSON used for hashing', () => {
     const plan = makePlan();
     const snap = buildSanitizedPlanSnapshot({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     // All 7 keys present in roleSelectionPolicy
@@ -138,7 +161,9 @@ describe('01C.1B-J2 §17.2 — quality snapshot in planFingerprint', () => {
   it('plannerVersion in fingerprint result is 01C.1B-J2-C-R4', () => {
     const plan = makePlan();
     const f = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: basePolicy,
     });
     expect(f.plannerVersion).toBe('01C.1B-J2-C-R4');

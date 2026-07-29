@@ -207,7 +207,7 @@ function buildEnvelopeWithPii(args: {
  */
 async function loadResolvedDestinationFaithfully(
   envelope: TraceEnvelope,
-  destinationId: string,
+  destinationId: string
 ): Promise<ResolvedDestination> {
   const resolved = await destinationResolver.resolveForEnvelope(envelope, prisma);
   const match = resolved.find((d) => d.id === destinationId);
@@ -220,8 +220,7 @@ async function loadResolvedDestinationFaithfully(
   // Prisma's typed client returns Decimal; `.toNumber()` is the correct path the
   // resolver SHOULD use for the $queryRaw Decimal too.
   const correctRate = Number(
-    (row.samplingRate as unknown as { toNumber?: () => number }).toNumber?.() ??
-      row.samplingRate,
+    (row.samplingRate as unknown as { toNumber?: () => number }).toNumber?.() ?? row.samplingRate
   );
   return { ...match, samplingRate: correctRate };
 }
@@ -315,7 +314,7 @@ describe('Broadcast subsystem — END-TO-END delivery (integration)', () => {
     expect(
       resolved[0]!.samplingRate,
       'resolver Decimal→number conversion bug: NUMERIC(5,4) from $queryRaw is a ' +
-        'Decimal object, Number.isFinite() is false, so samplingRate collapses to 0',
+        'Decimal object, Number.isFinite() is false, so samplingRate collapses to 0'
     ).toBe(0);
   });
 
@@ -478,10 +477,10 @@ describe('Broadcast subsystem — END-TO-END delivery (integration)', () => {
               });
               const rate = Number(
                 (row.samplingRate as unknown as { toNumber?: () => number }).toNumber?.() ??
-                  row.samplingRate,
+                  row.samplingRate
               );
               return { ...d, samplingRate: rate };
-            }),
+            })
           );
         },
       };

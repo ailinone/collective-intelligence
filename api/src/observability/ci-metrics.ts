@@ -703,7 +703,10 @@ export function recordModelExecution(params: {
   modelExecutionCostUsd.observe({ model_id: modelId, provider }, costUsd);
 
   if (qualityScore !== undefined) {
-    modelExecutionQualityScore.observe({ model_id: modelId, provider, task_type: taskType }, qualityScore);
+    modelExecutionQualityScore.observe(
+      { model_id: modelId, provider, task_type: taskType },
+      qualityScore
+    );
   }
 }
 
@@ -914,10 +917,7 @@ export const triageUnderestimationRate = createGauge({
 /**
  * Record configuration archive state for monitoring.
  */
-export function recordArchiveState(params: {
-  cellCount: number;
-  avgFitness: number;
-}): void {
+export function recordArchiveState(params: { cellCount: number; avgFitness: number }): void {
   archiveCellCount.set(params.cellCount);
   archiveAvgFitness.set(params.avgFitness);
 }
@@ -1060,11 +1060,11 @@ export function recordAdaptiveQualityTarget(params: {
 }): void {
   adaptiveQualityTargetValue.set(
     { task_type: params.taskType, complexity: params.complexity, source: params.source },
-    params.target,
+    params.target
   );
   adaptiveQualityTargetConfidence.set(
     { task_type: params.taskType, complexity: params.complexity },
-    params.confidence,
+    params.confidence
   );
   adaptiveQualityProfileCount.set(params.profileCount);
 }
@@ -1134,8 +1134,14 @@ export function recordBenchmarkRun(params: {
   gamingSignals?: Array<{ type: string; severity: string }>;
 }): void {
   const {
-    verdict, overallScore, durationMs, totalCostUsd,
-    categoryScores, rewardCorrelation, driftDetected, gamingSignals,
+    verdict,
+    overallScore,
+    durationMs,
+    totalCostUsd,
+    categoryScores,
+    rewardCorrelation,
+    driftDetected,
+    gamingSignals,
   } = params;
 
   benchmarkRunsTotal.inc({ verdict });
@@ -1225,4 +1231,3 @@ export const ciMetrics = {
 };
 
 export { registry as ciMetricsRegistry };
-

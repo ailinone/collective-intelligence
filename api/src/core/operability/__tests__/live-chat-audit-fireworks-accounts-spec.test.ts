@@ -27,7 +27,7 @@ import path from 'node:path';
 
 const auditScriptSource = fs.readFileSync(
   path.resolve(__dirname, '../scripts/run-live-chat-operability-audit.ts'),
-  'utf8',
+  'utf8'
 );
 
 describe('01C.1B-J1C §9 — Fireworks audit spec', () => {

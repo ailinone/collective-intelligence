@@ -58,21 +58,21 @@ describe('inventory-lifecycle-policy', () => {
 
     it('I2: rejects INACTIVE_DAYS <= 0', () => {
       expect(() => resolveLifecycleThresholds({ INACTIVE_DAYS: '0' })).toThrow(/INACTIVE_DAYS/);
-      expect(() =>
-        resolveLifecycleThresholds({ STALE_HOURS: '12', INACTIVE_DAYS: '-1' }),
-      ).toThrow(/INACTIVE_DAYS/);
+      expect(() => resolveLifecycleThresholds({ STALE_HOURS: '12', INACTIVE_DAYS: '-1' })).toThrow(
+        /INACTIVE_DAYS/
+      );
     });
 
     it('I3: rejects thresholds where stale bucket would collapse', () => {
       // inactiveDays*24 must be strictly greater than staleHours.
       // 1 day * 24h = 24, STALE_HOURS=24 → boundary collapse.
-      expect(() =>
-        resolveLifecycleThresholds({ STALE_HOURS: '24', INACTIVE_DAYS: '1' }),
-      ).toThrow(/stale.*bucket.*collapses|I3/i);
+      expect(() => resolveLifecycleThresholds({ STALE_HOURS: '24', INACTIVE_DAYS: '1' })).toThrow(
+        /stale.*bucket.*collapses|I3/i
+      );
       // 48h vs 2d (=48h) — exact equality, collapse.
-      expect(() =>
-        resolveLifecycleThresholds({ STALE_HOURS: '48', INACTIVE_DAYS: '2' }),
-      ).toThrow(/stale.*bucket.*collapses|I3/i);
+      expect(() => resolveLifecycleThresholds({ STALE_HOURS: '48', INACTIVE_DAYS: '2' })).toThrow(
+        /stale.*bucket.*collapses|I3/i
+      );
     });
 
     it('I3: accepts the tightest valid ordering', () => {
@@ -119,9 +119,7 @@ describe('inventory-lifecycle-policy', () => {
 
   describe('WHERE fragment constants', () => {
     it('LIVE_UNIVERSE_WHERE restricts to catalog-active AND lifecycle-active', () => {
-      expect(LIVE_UNIVERSE_WHERE).toBe(
-        "status = 'active' AND lifecycle_status = 'active'",
-      );
+      expect(LIVE_UNIVERSE_WHERE).toBe("status = 'active' AND lifecycle_status = 'active'");
     });
 
     it('HISTORICAL_UNIVERSE_WHERE restricts to catalog-active only', () => {
@@ -211,7 +209,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: lastAt,
           now,
           maxClassifierAgeHours: 1,
-        }).fallback,
+        }).fallback
       ).toBe(true);
       // same data, tolerance 24h → fresh
       expect(
@@ -220,7 +218,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: lastAt,
           now,
           maxClassifierAgeHours: 24,
-        }).fallback,
+        }).fallback
       ).toBe(false);
     });
   });
@@ -237,7 +235,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: freshAt,
           now: freshNow,
         },
-        {},
+        {}
       );
       expect(r.mode).toBe('historical');
       expect(r.sql).toBe(HISTORICAL_UNIVERSE_WHERE);
@@ -252,7 +250,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: freshAt,
           now: freshNow,
         },
-        {},
+        {}
       );
       expect(r.mode).toBe('live');
       expect(r.sql).toBe(LIVE_UNIVERSE_WHERE);
@@ -267,7 +265,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: null,
           now: freshNow,
         },
-        {},
+        {}
       );
       expect(r.mode).toBe('historical');
       expect(r.sql).toBe(HISTORICAL_UNIVERSE_WHERE);
@@ -281,7 +279,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: freshAt,
           now: freshNow,
         },
-        { [DEFAULT_UNIVERSE_ENV_VAR]: 'live' },
+        { [DEFAULT_UNIVERSE_ENV_VAR]: 'live' }
       );
       expect(r.mode).toBe('live');
     });
@@ -294,7 +292,7 @@ describe('inventory-lifecycle-policy', () => {
           classifierLastEvaluatedAt: freshAt,
           now: freshNow,
         },
-        {}, // env default historical
+        {} // env default historical
       );
       expect(r.mode).toBe('historical');
     });

@@ -99,9 +99,7 @@ const CONFIDENCE_RANK: Record<ModelQualityConfidence, number> = {
   placeholder: 0,
 };
 
-function bestConfidence(
-  confs: readonly ModelQualityConfidence[],
-): ModelQualityConfidence {
+function bestConfidence(confs: readonly ModelQualityConfidence[]): ModelQualityConfidence {
   let best: ModelQualityConfidence = 'placeholder';
   for (const c of confs) {
     if (CONFIDENCE_RANK[c] > CONFIDENCE_RANK[best]) best = c;
@@ -118,7 +116,7 @@ function bestConfidence(
  * `qualityScoreSource` to infer the ExternalBenchmarkSource (best-effort).
  */
 function extractSourceScores(
-  entry: ModelQualityCalibrationEntry,
+  entry: ModelQualityCalibrationEntry
 ): readonly SourceSpecificQualityScore[] {
   if (entry.sourceScores && entry.sourceScores.length > 0) {
     return entry.sourceScores;
@@ -145,11 +143,13 @@ function extractSourceScores(
     default:
       inferredSource = 'manual';
   }
-  return [{
-    source: inferredSource,
-    score: entry.qualityScore,
-    confidence: entry.qualityConfidence,
-  }];
+  return [
+    {
+      source: inferredSource,
+      score: entry.qualityScore,
+      confidence: entry.qualityConfidence,
+    },
+  ];
 }
 
 // ─── Manual demotion ──────────────────────────────────────────────────────
@@ -164,9 +164,7 @@ function extractSourceScores(
  *   - effectiveSources: array used for aggregate calculations
  *   - demoted: list of source names that were demoted
  */
-function applyManualDemotion(
-  sources: readonly SourceSpecificQualityScore[],
-): {
+function applyManualDemotion(sources: readonly SourceSpecificQualityScore[]): {
   readonly effectiveSources: readonly SourceSpecificQualityScore[];
   readonly demoted: readonly ExternalBenchmarkSource[];
 } {
@@ -197,7 +195,7 @@ function applyManualDemotion(
  * (score, confidence) pairs and compute a confidence-weighted average.
  */
 function mergeCategoryScores(
-  sources: readonly SourceSpecificQualityScore[],
+  sources: readonly SourceSpecificQualityScore[]
 ): Partial<Record<QualityCategory, number>> {
   const out: Partial<Record<QualityCategory, number>> = {};
   const allCategories = new Set<QualityCategory>();
@@ -233,9 +231,7 @@ function mergeCategoryScores(
  * the first entry that has one. dimensionScores are merged by taking the
  * BEST (max) value per dimension across all entries.
  */
-function mergeEntriesForCanonical(
-  entries: readonly ModelQualityCalibrationEntry[],
-): {
+function mergeEntriesForCanonical(entries: readonly ModelQualityCalibrationEntry[]): {
   readonly entry: ModelQualityCalibrationEntry;
   readonly demoted: readonly ExternalBenchmarkSource[];
 } {
@@ -297,7 +293,7 @@ function mergeEntriesForCanonical(
 
   const sampleCount = entries.reduce(
     (sum, e) => sum + (typeof e.sampleCount === 'number' ? e.sampleCount : 0),
-    0,
+    0
   );
 
   const merged: ModelQualityCalibrationEntry = {

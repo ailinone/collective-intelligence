@@ -17,7 +17,10 @@ import {
   TOOL_CALLING_TASK_TYPE,
 } from '../experiment-suite';
 import { EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS } from '../experiment-tool-catalog';
-import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
+import {
+  resolveAnswerChecker,
+  type AnswerCheckSpec,
+} from '@/core/orchestration/verification/answer-check-resolver';
 
 describe('real-capability task coverage (2026-07-12)', () => {
   it('CODE-VERIFIED: 5 executed tasks carry a language/functionName/tests spec (no answerCheck)', () => {
@@ -27,41 +30,58 @@ describe('real-capability task coverage (2026-07-12)', () => {
     for (const t of code) {
       expect(t.codeTest?.language).toBe('javascript');
       expect(typeof t.codeTest?.functionName).toBe('string');
-      expect((t.codeTest?.tests.length ?? 0)).toBeGreaterThanOrEqual(4);
+      expect(t.codeTest?.tests.length ?? 0).toBeGreaterThanOrEqual(4);
       expect(t.answerCheck).toBeUndefined(); // graded by execution, not the pure checker
       expect(t.prompt).toMatch(/ONLY the function/i);
     }
   });
 
-  it("CODE-VERIFIED: the hidden test vectors match a reference implementation (answers are correct)", () => {
+  it('CODE-VERIFIED: the hidden test vectors match a reference implementation (answers are correct)', () => {
     const refs: Record<string, (...a: never[]) => unknown> = {
       clamp: ((v: number, mn: number, mx: number) => Math.max(mn, Math.min(mx, v))) as never,
       romanToInt: ((s: string) => {
         const m: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
         let t = 0;
-        for (let i = 0; i < s.length; i++) t += (i + 1 < s.length && m[s[i]] < m[s[i + 1]]) ? -m[s[i]] : m[s[i]];
+        for (let i = 0; i < s.length; i++)
+          t += i + 1 < s.length && m[s[i]] < m[s[i + 1]] ? -m[s[i]] : m[s[i]];
         return t;
       }) as never,
       isValidParens: ((s: string) => {
-        const st: string[] = []; const p: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
-        for (const c of s) { if ('([{'.includes(c)) st.push(c); else if (st.pop() !== p[c]) return false; }
+        const st: string[] = [];
+        const p: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+        for (const c of s) {
+          if ('([{'.includes(c)) st.push(c);
+          else if (st.pop() !== p[c]) return false;
+        }
         return st.length === 0;
       }) as never,
       longestCommonPrefix: ((a: string[]) => {
-        if (!a.length) return ''; let pre = a[0];
+        if (!a.length) return '';
+        let pre = a[0];
         for (const s of a) while (!s.startsWith(pre)) pre = pre.slice(0, -1);
         return pre;
       }) as never,
       countPrimesBelow: ((n: number) => {
         let c = 0;
-        for (let k = 2; k < n; k++) { let pr = true; for (let d = 2; d * d <= k; d++) if (k % d === 0) { pr = false; break; } if (pr) c++; }
+        for (let k = 2; k < n; k++) {
+          let pr = true;
+          for (let d = 2; d * d <= k; d++)
+            if (k % d === 0) {
+              pr = false;
+              break;
+            }
+          if (pr) c++;
+        }
         return c;
       }) as never,
     };
     for (const t of EXPERIMENT_SUITE.filter((x) => x.taskType === CODE_VERIFIED_TASK_TYPE)) {
       const fn = refs[t.codeTest!.functionName];
       for (const tc of t.codeTest!.tests) {
-        expect(fn(...(tc.args as never[])), `${t.codeTest!.functionName}(${JSON.stringify(tc.args)})`).toEqual(tc.expected);
+        expect(
+          fn(...(tc.args as never[])),
+          `${t.codeTest!.functionName}(${JSON.stringify(tc.args)})`
+        ).toEqual(tc.expected);
       }
     }
   });
@@ -73,7 +93,9 @@ describe('real-capability task coverage (2026-07-12)', () => {
       expect(t.prompt).toMatch(/ONLY these|Using ONLY/i); // sources embedded, closed-book
       expect(t.answerCheck).toBeDefined();
     }
-    const c161 = resolveAnswerChecker(EXPERIMENT_SUITE.find((t) => t.index === 161)!.answerCheck as AnswerCheckSpec)!;
+    const c161 = resolveAnswerChecker(
+      EXPERIMENT_SUITE.find((t) => t.index === 161)!.answerCheck as AnswerCheckSpec
+    )!;
     expect(c161('108000000')).toBe(true);
     expect(c161('96000000')).toBe(false); // forgot the 2022 shrink
   });
@@ -82,8 +104,8 @@ describe('real-capability task coverage (2026-07-12)', () => {
     const long = EXPERIMENT_SUITE.filter((t) => t.taskType === 'long-generation');
     expect(long.map((t) => t.index)).toEqual([164, 165]);
     for (const t of long) {
-      expect((t.minWords ?? 0)).toBeGreaterThanOrEqual(500);
-      expect((t.maxTokens ?? 0)).toBeGreaterThanOrEqual(4096); // headroom, not clipped
+      expect(t.minWords ?? 0).toBeGreaterThanOrEqual(500);
+      expect(t.maxTokens ?? 0).toBeGreaterThanOrEqual(4096); // headroom, not clipped
     }
   });
 
@@ -108,7 +130,7 @@ describe('real-capability task coverage (2026-07-12)', () => {
       for (const spec of t.tools!) {
         expect(
           EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS.some((r) => r.name === spec.function.name),
-          `task ${t.index} offers unregistered tool ${spec.function.name}`,
+          `task ${t.index} offers unregistered tool ${spec.function.name}`
         ).toBe(true);
       }
     }

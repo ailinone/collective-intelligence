@@ -54,7 +54,7 @@ export interface BroadcastMetricsJobDeps {
  * One metrics probe. Returns the observed values for logging/tests.
  */
 export async function runBroadcastMetricsProbe(
-  deps: BroadcastMetricsJobDeps = {},
+  deps: BroadcastMetricsJobDeps = {}
 ): Promise<{ backlogRows: number; headOfLineLagSeconds: number | null }> {
   const db = deps.db ?? defaultPrisma;
   const now = deps.now?.() ?? new Date();
@@ -63,9 +63,7 @@ export async function runBroadcastMetricsProbe(
   // time) rather than occurred_at (source-timestamp) for the HOL lag since
   // the queue's SLO is measured from "when we accepted the trace" — the
   // client's own latency is not our problem to alert on.
-  const rows = await db.$queryRaw<
-    Array<{ backlog: bigint; oldest: Date | null }>
-  >`
+  const rows = await db.$queryRaw<Array<{ backlog: bigint; oldest: Date | null }>>`
     SELECT
       COUNT(*)::bigint                                           AS backlog,
       MIN(created_at) FILTER (WHERE drained_at IS NULL)::timestamp
@@ -80,20 +78,14 @@ export async function runBroadcastMetricsProbe(
 
   let headOfLineLagSeconds: number | null = null;
   if (row?.oldest) {
-    headOfLineLagSeconds = Math.max(
-      0,
-      (now.getTime() - row.oldest.getTime()) / 1000,
-    );
+    headOfLineLagSeconds = Math.max(0, (now.getTime() - row.oldest.getTime()) / 1000);
     // A head-of-line observation is still a lag observation for the
     // histogram — it's the minimum lag any next-drain will see.
     broadcastMetrics.outboxLag.observe(headOfLineLagSeconds);
   }
 
   if (backlog > 0) {
-    log.debug(
-      { backlog, headOfLineLagSeconds },
-      'broadcast outbox metrics probe tick',
-    );
+    log.debug({ backlog, headOfLineLagSeconds }, 'broadcast outbox metrics probe tick');
   }
 
   return { backlogRows: backlog, headOfLineLagSeconds };
@@ -113,7 +105,7 @@ export const STRANDED_VISIBILITY_WINDOW_SECONDS = 300;
  * atomic and only matches rows that cannot have been re-claimed).
  */
 export async function runBroadcastStrandedReclaim(
-  deps: BroadcastMetricsJobDeps = {},
+  deps: BroadcastMetricsJobDeps = {}
 ): Promise<{ reclaimed: number }> {
   const db = deps.db ?? defaultPrisma;
   const cutoffSeconds = STRANDED_VISIBILITY_WINDOW_SECONDS;
@@ -135,7 +127,7 @@ export async function runBroadcastStrandedReclaim(
   if (reclaimed > 0) {
     log.warn(
       { reclaimed, cutoffSeconds },
-      'reclaimed stranded broadcast envelopes (poller likely crashed mid-dispatch)',
+      'reclaimed stranded broadcast envelopes (poller likely crashed mid-dispatch)'
     );
   }
 

@@ -18,10 +18,7 @@
  * Pure types + a small computer. No I/O.
  */
 
-import type {
-  ExecutionModality,
-  HistoricalExecution,
-} from './historical-execution-types';
+import type { ExecutionModality, HistoricalExecution } from './historical-execution-types';
 
 export interface ModelHarmProfile {
   readonly modelId: string;
@@ -55,7 +52,7 @@ export function buildModelHarmProfile(
   modelId: string,
   taskType: string,
   executions: readonly HistoricalExecution[],
-  expectedModality?: ExecutionModality,
+  expectedModality?: ExecutionModality
 ): ModelHarmProfile {
   const n = executions.length;
   if (n === 0) {
@@ -99,10 +96,7 @@ export function buildModelHarmProfile(
   // damaging. Failure is bad but often a transient infra issue.
   const harmScore = Math.min(
     1,
-    0.45 * zeroRate +
-      0.35 * modalityMismatchRate +
-      0.15 * degradedRate +
-      0.05 * failureRate,
+    0.45 * zeroRate + 0.35 * modalityMismatchRate + 0.15 * degradedRate + 0.05 * failureRate
   );
 
   return Object.freeze({

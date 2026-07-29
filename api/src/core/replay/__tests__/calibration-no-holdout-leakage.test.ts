@@ -102,8 +102,7 @@ describe('calibration — no holdout leakage', () => {
     });
     // Holdout-only pair from the fixture: (fx-cheap-harmful, fx-cheap-harmful).
     for (const p of history.pairProfiles) {
-      const isHoldoutOnly =
-        p.modelA === 'fx-cheap-harmful' && p.modelB === 'fx-cheap-harmful';
+      const isHoldoutOnly = p.modelA === 'fx-cheap-harmful' && p.modelB === 'fx-cheap-harmful';
       expect(isHoldoutOnly).toBe(false);
     }
   });

@@ -37,13 +37,13 @@ beforeEach(() => {
 describe('buildWorkersAIBaseUrl helper', () => {
   it('builds the canonical Workers AI v1 URL from an account id', () => {
     expect(buildWorkersAIBaseUrl('abc123')).toBe(
-      'https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1',
+      'https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1'
     );
   });
 
   it('trims whitespace from the account id', () => {
     expect(buildWorkersAIBaseUrl('  xyz789  ')).toBe(
-      'https://api.cloudflare.com/client/v4/accounts/xyz789/ai/v1',
+      'https://api.cloudflare.com/client/v4/accounts/xyz789/ai/v1'
     );
   });
 
@@ -68,7 +68,7 @@ describe('CloudflareWorkersAIAdapter — URL resolution', () => {
       accountId: 'acct_explicit',
     });
     expect(getResolvedBaseUrl(adapter)).toBe(
-      'https://api.cloudflare.com/client/v4/accounts/acct_explicit/ai/v1',
+      'https://api.cloudflare.com/client/v4/accounts/acct_explicit/ai/v1'
     );
   });
 
@@ -81,7 +81,7 @@ describe('CloudflareWorkersAIAdapter — URL resolution', () => {
       apiKey: 'cf_token',
     });
     expect(getResolvedBaseUrl(adapter)).toBe(
-      'https://api.cloudflare.com/client/v4/accounts/acct_from_env/ai/v1',
+      'https://api.cloudflare.com/client/v4/accounts/acct_from_env/ai/v1'
     );
   });
 
@@ -134,7 +134,7 @@ describe('CloudflareWorkersAIAdapter — identity', () => {
       accountId: 'x',
     });
     expect((adapter as unknown as { providerName: string }).providerName).toBe(
-      'cloudflare-workers-ai',
+      'cloudflare-workers-ai'
     );
   });
 

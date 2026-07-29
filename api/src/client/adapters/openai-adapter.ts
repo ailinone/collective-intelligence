@@ -229,28 +229,31 @@ export const OpenAIProviderAdapter: ProviderAdapter = {
       throw new Error(`OpenAI toolChat error: ${response.status} - ${text}`);
     }
 
-    const json = await response.json() as ChatCompletionResponse;
+    const json = (await response.json()) as ChatCompletionResponse;
 
-    const toolCalls = (
+    const toolCalls =
       json.choices[0]?.message?.tool_calls?.map((tc) => ({
         toolName: tc.function.name,
         arguments: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
-      })) ?? []
-    );
+      })) ?? [];
 
     return { toolCalls, raw: json };
   },
 
-  async structuredJson<T = unknown>(model: ModelRecord, req: TextRequest & { schema?: Record<string, unknown> }): Promise<{ json: T; raw: ProviderRawResponse }> {
+  async structuredJson<T = unknown>(
+    model: ModelRecord,
+    req: TextRequest & { schema?: Record<string, unknown> }
+  ): Promise<{ json: T; raw: ProviderRawResponse }> {
     const baseUrl = getOpenAIBaseUrl(model);
     const apiKey = getApiKey(model);
 
     const url = `${baseUrl}/chat/completions`;
 
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = req.messages ?? [
-      { role: 'system' as const, content: 'Você responde SEMPRE com JSON válido.' },
-      { role: 'user' as const, content: req.prompt },
-    ];
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> =
+      req.messages ?? [
+        { role: 'system' as const, content: 'Você responde SEMPRE com JSON válido.' },
+        { role: 'user' as const, content: req.prompt },
+      ];
 
     const body: ChatCompletionRequestBody = {
       model: model.providerModelId,
@@ -268,7 +271,7 @@ export const OpenAIProviderAdapter: ProviderAdapter = {
       body: JSON.stringify(body),
     });
 
-    const json = await response.json() as ChatCompletionResponse;
+    const json = (await response.json()) as ChatCompletionResponse;
     const content = json.choices[0]?.message?.content ?? '{}';
 
     let parsed: T;
@@ -305,7 +308,7 @@ export const OpenAIProviderAdapter: ProviderAdapter = {
       throw new Error(`OpenAI embeddings error: ${response.status} - ${text}`);
     }
 
-    const json = await response.json() as ProviderEmbeddingsResponse;
+    const json = (await response.json()) as ProviderEmbeddingsResponse;
     const vectors = json.data.map((item) => item.embedding);
 
     return { vectors, raw: json };
@@ -460,7 +463,11 @@ export const OpenAIProviderAdapter: ProviderAdapter = {
     };
   },
 
-  async rawInvoke(_model: ModelRecord, op: string, _payload: RawInvokePayload): Promise<RawInvokeResponse> {
+  async rawInvoke(
+    _model: ModelRecord,
+    op: string,
+    _payload: RawInvokePayload
+  ): Promise<RawInvokeResponse> {
     // fallback genérico, se precisar
     throw new Error(`rawInvoke not implemented for OpenAI: ${op}`);
   },

@@ -48,7 +48,7 @@ describe('shouldRunConsensusDryRun gate', () => {
         messages: [],
         // @ts-expect-error eval is an additive prop
         eval: { dryRun: true },
-      } as ChatRequest),
+      } as ChatRequest)
     ).toBe(false);
   });
 
@@ -61,7 +61,7 @@ describe('shouldRunConsensusDryRun gate', () => {
         messages: [],
         // @ts-expect-error
         eval: { dryRun: true },
-      } as ChatRequest),
+      } as ChatRequest)
     ).toBe(false);
   });
 
@@ -72,7 +72,7 @@ describe('shouldRunConsensusDryRun gate', () => {
         model: 'auto',
         strategy: 'consensus',
         messages: [],
-      } as ChatRequest),
+      } as ChatRequest)
     ).toBe(false);
   });
 
@@ -85,7 +85,7 @@ describe('shouldRunConsensusDryRun gate', () => {
         messages: [],
         // @ts-expect-error
         eval: { dryRun: true },
-      } as ChatRequest),
+      } as ChatRequest)
     ).toBe(true);
   });
 
@@ -98,7 +98,7 @@ describe('shouldRunConsensusDryRun gate', () => {
         messages: [],
         // @ts-expect-error
         eval: { planOnly: true },
-      } as ChatRequest),
+      } as ChatRequest)
     ).toBe(true);
   });
 });
@@ -121,7 +121,9 @@ describe('ConsensusPlanDryRunService', () => {
           max_cost: 0.5,
         },
         candidatePool: [
-          ...diversePool().filter((c) => c.hasCredits).map((c) => c.model),
+          ...diversePool()
+            .filter((c) => c.hasCredits)
+            .map((c) => c.model),
           makeCandidate({
             id: 'judge-candidate',
             model: makeModel({

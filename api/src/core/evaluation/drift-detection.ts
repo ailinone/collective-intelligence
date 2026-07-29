@@ -59,14 +59,14 @@ const CONFIG = {
 
   // Window sizes
   baselineWindowHours: 168, // 7 days
-  currentWindowHours: 24,   // 1 day
+  currentWindowHours: 24, // 1 day
 
   // Thresholds by metric (relative delta %)
   thresholds: {
     quality: { low: -5, medium: -10, high: -15, critical: -25 },
     successRate: { low: -3, medium: -8, high: -15, critical: -25 },
-    latency: { low: 20, medium: 40, high: 80, critical: 150 },  // increase = bad
-    cost: { low: 15, medium: 30, high: 60, critical: 100 },     // increase = bad
+    latency: { low: 20, medium: 40, high: 80, critical: 150 }, // increase = bad
+    cost: { low: 15, medium: 30, high: 60, critical: 100 }, // increase = bad
   } as Record<string, Record<DriftSeverity, number>>,
 
   // How often to check (controlled externally; this is used for rate-limiting)
@@ -101,19 +101,29 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
       // Baseline and current windows are independent reads — one round-trip
       // of wall-clock instead of two, per niche.
       const [baseline, current] = await Promise.all([
-        getWindowMetrics(niche.strategy, niche.taskType,
-          hoursAgo(CONFIG.baselineWindowHours), hoursAgo(CONFIG.currentWindowHours)),
-        getWindowMetrics(niche.strategy, niche.taskType,
-          hoursAgo(CONFIG.currentWindowHours), new Date()),
+        getWindowMetrics(
+          niche.strategy,
+          niche.taskType,
+          hoursAgo(CONFIG.baselineWindowHours),
+          hoursAgo(CONFIG.currentWindowHours)
+        ),
+        getWindowMetrics(
+          niche.strategy,
+          niche.taskType,
+          hoursAgo(CONFIG.currentWindowHours),
+          new Date()
+        ),
       ]);
 
       if (!baseline || !current) continue;
-      if (baseline.sampleSize < CONFIG.minSamples || current.sampleSize < CONFIG.minSamples) continue;
+      if (baseline.sampleSize < CONFIG.minSamples || current.sampleSize < CONFIG.minSamples)
+        continue;
 
       checksPerformed++;
 
       // Check quality drift (lower = worse)
-      const qualityDelta = ((current.avgQuality - baseline.avgQuality) / Math.max(baseline.avgQuality, 0.01)) * 100;
+      const qualityDelta =
+        ((current.avgQuality - baseline.avgQuality) / Math.max(baseline.avgQuality, 0.01)) * 100;
       const qualitySeverity = classifySeverity(qualityDelta, CONFIG.thresholds.quality, true);
       if (qualitySeverity) {
         driftsDetected.push({
@@ -135,7 +145,8 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
       }
 
       // Check success rate drift (lower = worse)
-      const successDelta = ((current.successRate - baseline.successRate) / Math.max(baseline.successRate, 0.01)) * 100;
+      const successDelta =
+        ((current.successRate - baseline.successRate) / Math.max(baseline.successRate, 0.01)) * 100;
       const successSeverity = classifySeverity(successDelta, CONFIG.thresholds.successRate, true);
       if (successSeverity) {
         driftsDetected.push({
@@ -146,13 +157,18 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
           baselineValue: baseline.successRate,
           currentValue: current.successRate,
           deltaPercent: successDelta,
-          evidence: { metric: 'successRate', baselineSamples: baseline.sampleSize, currentSamples: current.sampleSize },
+          evidence: {
+            metric: 'successRate',
+            baselineSamples: baseline.sampleSize,
+            currentSamples: current.sampleSize,
+          },
         });
       }
 
       // Check latency drift (higher = worse)
       if (baseline.avgLatencyMs > 0) {
-        const latencyDelta = ((current.avgLatencyMs - baseline.avgLatencyMs) / baseline.avgLatencyMs) * 100;
+        const latencyDelta =
+          ((current.avgLatencyMs - baseline.avgLatencyMs) / baseline.avgLatencyMs) * 100;
         const latencySeverity = classifySeverity(latencyDelta, CONFIG.thresholds.latency, false);
         if (latencySeverity) {
           driftsDetected.push({
@@ -163,7 +179,11 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
             baselineValue: baseline.avgLatencyMs,
             currentValue: current.avgLatencyMs,
             deltaPercent: latencyDelta,
-            evidence: { metric: 'latency', baselineSamples: baseline.sampleSize, currentSamples: current.sampleSize },
+            evidence: {
+              metric: 'latency',
+              baselineSamples: baseline.sampleSize,
+              currentSamples: current.sampleSize,
+            },
           });
         }
       }
@@ -181,7 +201,11 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
             baselineValue: baseline.avgCostUsd,
             currentValue: current.avgCostUsd,
             deltaPercent: costDelta,
-            evidence: { metric: 'cost', baselineSamples: baseline.sampleSize, currentSamples: current.sampleSize },
+            evidence: {
+              metric: 'cost',
+              baselineSamples: baseline.sampleSize,
+              currentSamples: current.sampleSize,
+            },
           });
         }
       }
@@ -191,11 +215,14 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
     await Promise.all(driftsDetected.map((drift) => persistDriftEvent(drift)));
 
     if (driftsDetected.length > 0) {
-      log.warn({
-        driftsDetected: driftsDetected.length,
-        checksPerformed,
-        severities: driftsDetected.map(d => d.severity),
-      }, 'Drift detection completed — drifts found');
+      log.warn(
+        {
+          driftsDetected: driftsDetected.length,
+          checksPerformed,
+          severities: driftsDetected.map((d) => d.severity),
+        },
+        'Drift detection completed — drifts found'
+      );
     } else {
       log.info({ checksPerformed }, 'Drift detection completed — no drift detected');
     }
@@ -213,25 +240,29 @@ export async function detectDrift(): Promise<DriftDetectionResult> {
 /**
  * Get open (unresolved) drift events.
  */
-export async function getOpenDriftEvents(): Promise<Array<{
-  id: string;
-  driftType: string;
-  scopeKey: string;
-  severity: string;
-  deltaPercent: number;
-  detectedAt: Date;
-  status: string;
-}>> {
+export async function getOpenDriftEvents(): Promise<
+  Array<{
+    id: string;
+    driftType: string;
+    scopeKey: string;
+    severity: string;
+    deltaPercent: number;
+    detectedAt: Date;
+    status: string;
+  }>
+> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      id: string;
-      drift_type: string;
-      scope_key: string;
-      severity: string;
-      delta_percent: number;
-      detected_at: Date;
-      status: string;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        drift_type: string;
+        scope_key: string;
+        severity: string;
+        delta_percent: number;
+        detected_at: Date;
+        status: string;
+      }>
+    >`
       SELECT id, drift_type, scope_key, severity, delta_percent, detected_at, status
       FROM drift_events
       WHERE status = 'open'
@@ -239,7 +270,7 @@ export async function getOpenDriftEvents(): Promise<Array<{
       LIMIT 100
     `;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       driftType: r.drift_type,
       scopeKey: r.scope_key,
@@ -268,7 +299,7 @@ function hoursAgo(hours: number): Date {
 function classifySeverity(
   delta: number,
   thresholds: Record<DriftSeverity, number>,
-  isNegativeBad: boolean,
+  isNegativeBad: boolean
 ): DriftSeverity | null {
   // For "negative is bad" metrics (quality, successRate): delta < 0 means degradation
   // For "positive is bad" metrics (latency, cost): delta > 0 means degradation
@@ -298,7 +329,7 @@ async function getActiveNiches(): Promise<Array<{ strategy: string; taskType: st
       FROM execution_outcomes
       WHERE created_at >= ${hoursAgo(CONFIG.baselineWindowHours)}
     `;
-    return rows.map(r => ({ strategy: r.strategy, taskType: r.task_type }));
+    return rows.map((r) => ({ strategy: r.strategy, taskType: r.task_type }));
   } catch {
     return [];
   }
@@ -308,7 +339,7 @@ async function getWindowMetrics(
   strategy: string,
   _taskType: string,
   since: Date,
-  until: Date,
+  until: Date
 ): Promise<{
   sampleSize: number;
   avgQuality: number;
@@ -318,14 +349,16 @@ async function getWindowMetrics(
   qualityP90: number;
 } | null> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      sample_size: bigint;
-      avg_quality: number | null;
-      avg_latency_ms: number | null;
-      avg_cost_usd: number | null;
-      success_rate: number | null;
-      quality_p90: number | null;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        sample_size: bigint;
+        avg_quality: number | null;
+        avg_latency_ms: number | null;
+        avg_cost_usd: number | null;
+        success_rate: number | null;
+        quality_p90: number | null;
+      }>
+    >`
       SELECT
         COUNT(*) as sample_size,
         AVG(quality_score) as avg_quality,

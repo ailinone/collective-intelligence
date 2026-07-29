@@ -39,7 +39,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-DESIGN-R3 §3 — provider route contract', () => {
-
   describe('chat-ready provider pool (R4: 23 providers — 17 R3 + 6 reprobe)', () => {
     it('C3_CHAT_READY_PROVIDER_COUNT is 23', () => {
       expect(C3_CHAT_READY_PROVIDER_COUNT).toBe(23);

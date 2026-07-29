@@ -75,10 +75,7 @@ export type ScoringMode =
  *                                    response but its fallback path is
  *                                    not quantitatively justified.
  */
-export type ValidationStatus =
-  | 'fully_validated'
-  | 'structurally_validated_only'
-  | 'unavailable';
+export type ValidationStatus = 'fully_validated' | 'structurally_validated_only' | 'unavailable';
 
 export function validationStatusForMode(mode: ScoringMode): ValidationStatus {
   switch (mode) {

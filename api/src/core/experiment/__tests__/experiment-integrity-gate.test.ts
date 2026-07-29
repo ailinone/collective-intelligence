@@ -85,19 +85,31 @@ describe('policy gating is DISABLED in persistExecution (synthetic-attempt guard
 
 describe('getModeKey', () => {
   it('uses a single colon for collective mode', () => {
-    const mode: ModeConfig = { mode: 'collective', strategy: 'collaborative', displayName: 'x' } as ModeConfig;
+    const mode: ModeConfig = {
+      mode: 'collective',
+      strategy: 'collaborative',
+      displayName: 'x',
+    } as ModeConfig;
     expect(getModeKey(mode)).toBe('collective:collaborative');
   });
 
   it('uses a single colon for single-model mode', () => {
-    const mode: ModeConfig = { mode: 'single-model', modelId: 'groq/compound', displayName: 'x' } as ModeConfig;
+    const mode: ModeConfig = {
+      mode: 'single-model',
+      modelId: 'groq/compound',
+      displayName: 'x',
+    } as ModeConfig;
     expect(getModeKey(mode)).toBe('single-model:groq/compound');
   });
 });
 
 describe('buildCanarySkipKey', () => {
   it('uses getModeKey single-colon scheme instead of the armId double-colon scheme', () => {
-    const mode: ModeConfig = { mode: 'collective', strategy: 'collaborative', displayName: 'x' } as ModeConfig;
+    const mode: ModeConfig = {
+      mode: 'collective',
+      strategy: 'collaborative',
+      displayName: 'x',
+    } as ModeConfig;
     // deriveArmId() would produce 'collective::collaborative' for this mode
     // (double colon by design — see policy-arm-resolver.ts). Simulating
     // that here without importing the real resolver, since the point of
@@ -118,14 +130,24 @@ describe('buildCanarySkipKey', () => {
   });
 
   it('produces a key consistent with arm_budget_exceeded style keys for the same mode', () => {
-    const mode: ModeConfig = { mode: 'single-model', modelId: 'xai/grok-4-1-fast-reasoning', displayName: 'x' } as ModeConfig;
+    const mode: ModeConfig = {
+      mode: 'single-model',
+      modelId: 'xai/grok-4-1-fast-reasoning',
+      displayName: 'x',
+    } as ModeConfig;
     const armIdToMode = new Map([['single-model::xai/grok-4-1-fast-reasoning', mode]]);
 
-    const canaryKey = buildCanarySkipKey('timeout', 'single-model::xai/grok-4-1-fast-reasoning', armIdToMode);
+    const canaryKey = buildCanarySkipKey(
+      'timeout',
+      'single-model::xai/grok-4-1-fast-reasoning',
+      armIdToMode
+    );
     const budgetExceededStyleKey = `arm_budget_exceeded:${getModeKey(mode)}`;
 
     // Both should share the same "single-model:<modelId>" suffix scheme.
     expect(canaryKey).toBe('canary_skip:timeout:single-model:xai/grok-4-1-fast-reasoning');
-    expect(budgetExceededStyleKey).toBe('arm_budget_exceeded:single-model:xai/grok-4-1-fast-reasoning');
+    expect(budgetExceededStyleKey).toBe(
+      'arm_budget_exceeded:single-model:xai/grok-4-1-fast-reasoning'
+    );
   });
 });

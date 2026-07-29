@@ -35,7 +35,11 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — provider boundary', () =
   });
 
   it('cases 10-13: invoking the real entrypoint triggers ZERO outbound fetch', () => {
-    const req = { model: 'auto', messages: [{ role: 'user' as const, content: '[boundary]' }], dryRun: true as const };
+    const req = {
+      model: 'auto',
+      messages: [{ role: 'user' as const, content: '[boundary]' }],
+      dryRun: true as const,
+    };
     const ctx = {
       requestId: 'smoke-boundary-1',
       taskType: 'general',
@@ -44,14 +48,27 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — provider boundary', () =
       models: [{ id: 'Qwen/Qwen2.5-7B-Instruct', provider: 'huggingface' }],
     } as any;
     // Drive the real production dry-run entrypoint under the fetch sentry.
-    const result = buildPlanOnlyResult('consensus', 'explicit', 'request.dryRun', req as any, ctx, null, 0.8, { registered: true });
+    const result = buildPlanOnlyResult(
+      'consensus',
+      'explicit',
+      'request.dryRun',
+      req as any,
+      ctx,
+      null,
+      0.8,
+      { registered: true }
+    );
     expect((result as any).totalCost).toBe(0);
     expect((result as any).metadata.provider_call_executed).toBe(false);
     // The critical assertion: the real entrypoint made no network call.
     expect(fetchAttempts).toBe(0);
   });
 
-  const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-controlled-runtime-smoke-provider-boundary-sentry.json');
+  const ART = resolve(
+    process.cwd(),
+    'tmp',
+    '01c1b-c3-dryrun-controlled-runtime-smoke-provider-boundary-sentry.json'
+  );
   const sentry = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
   const maybe = sentry ? describe : describe.skip;
   maybe('generated provider-boundary sentry artifact (local verification)', () => {

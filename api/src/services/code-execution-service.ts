@@ -10,7 +10,7 @@
 /**
  * Code Execution Service
  * Orchestrates code execution via models with code_interpreter capability
- * 
+ *
  * REAL IMPLEMENTATION - Uses LocalProcessSandbox for secure code execution
  */
 
@@ -66,7 +66,10 @@ export class CodeExecutionService {
   async executeCode(options: CodeExecutionOptions): Promise<CodeExecutionResult> {
     const { code, language, functionName, tests, timeoutMs, requestId } = options;
 
-    log.info({ requestId, language, hasTests: !!tests, hasFunctionName: !!functionName }, 'Code execution started');
+    log.info(
+      { requestId, language, hasTests: !!tests, hasFunctionName: !!functionName },
+      'Code execution started'
+    );
 
     try {
       // If tests are provided, use testFunction
@@ -88,7 +91,7 @@ export class CodeExecutionService {
             passed: testResult.passed,
             passedCases: testResult.details.passedCases,
             totalCases: testResult.details.totalCases,
-            failures: testResult.details.failures.map(f => ({
+            failures: testResult.details.failures.map((f) => ({
               args: f.args,
               expected: f.expected,
               received: f.received,
@@ -103,7 +106,9 @@ export class CodeExecutionService {
       // For simple code execution without tests, we need to wrap it
       // This is a limitation - we need functionName for the sandbox
       if (!functionName) {
-        throw new Error('functionName is required for code execution. Provide either functionName + tests, or use a model with code_interpreter capability.');
+        throw new Error(
+          'functionName is required for code execution. Provide either functionName + tests, or use a model with code_interpreter capability.'
+        );
       }
 
       // Try to find models with code_interpreter capability for advanced execution
@@ -113,7 +118,10 @@ export class CodeExecutionService {
       });
 
       if (models.length > 0) {
-        log.info({ requestId, availableModels: models.length }, 'Found models with code_interpreter capability');
+        log.info(
+          { requestId, availableModels: models.length },
+          'Found models with code_interpreter capability'
+        );
         // TODO: Integrate with model code execution when provider adapters support it
         // For now, use sandbox for execution
       }
@@ -138,7 +146,7 @@ export class CodeExecutionService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, error: errorMessage }, 'Code execution failed');
-      
+
       return {
         success: false,
         error: errorMessage,
@@ -146,4 +154,3 @@ export class CodeExecutionService {
     }
   }
 }
-

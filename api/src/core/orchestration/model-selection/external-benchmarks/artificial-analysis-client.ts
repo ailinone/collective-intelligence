@@ -103,7 +103,7 @@ class AaClientError extends Error {
  * `rateLimit` headers to their cache artifact for audit.
  */
 export async function fetchArtificialAnalysisLlmModels(
-  input: FetchArtificialAnalysisInput,
+  input: FetchArtificialAnalysisInput
 ): Promise<FetchArtificialAnalysisResult> {
   const apiKey = input.apiKey;
   if (typeof apiKey !== 'string' || apiKey.length === 0) {
@@ -142,19 +142,12 @@ export async function fetchArtificialAnalysisLlmModels(
     bodyText = await res.text();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new AaClientError(
-      `AA body read failed: ${sanitizeMessage(msg, apiKey)}`,
-      httpStatus,
-    );
+    throw new AaClientError(`AA body read failed: ${sanitizeMessage(msg, apiKey)}`, httpStatus);
   }
 
   if (!res.ok) {
     const bodyPrefix = bodyText.slice(0, 500);
-    throw new AaClientError(
-      `AA request failed; status=${httpStatus}`,
-      httpStatus,
-      bodyPrefix,
-    );
+    throw new AaClientError(`AA request failed; status=${httpStatus}`, httpStatus, bodyPrefix);
   }
 
   let parsed: unknown;
@@ -164,7 +157,7 @@ export async function fetchArtificialAnalysisLlmModels(
     throw new AaClientError(
       `AA response was not JSON; status=${httpStatus}`,
       httpStatus,
-      bodyText.slice(0, 200),
+      bodyText.slice(0, 200)
     );
   }
 
@@ -173,11 +166,7 @@ export async function fetchArtificialAnalysisLlmModels(
     typeof parsed !== 'object' ||
     !Array.isArray((parsed as { data?: unknown }).data)
   ) {
-    throw new AaClientError(
-      'AA response missing data array',
-      httpStatus,
-      bodyText.slice(0, 200),
-    );
+    throw new AaClientError('AA response missing data array', httpStatus, bodyText.slice(0, 200));
   }
 
   const response = parsed as ArtificialAnalysisModelsResponse;

@@ -9,7 +9,7 @@
 
 /**
  * Email Challenge Authentication Flow - Integration Tests
- * 
+ *
  * Tests passwordless authentication via email:
  * - Request email challenge
  * - Receive verification code
@@ -30,7 +30,9 @@ import { syncDefaultRoles } from '@/services/rbac-sync-service';
 vi.mock('@/services/email-service', () => ({
   getEmailService: () => ({
     sendEmail: vi.fn().mockResolvedValue({ success: true, messageId: 'test-message-id' }),
-    sendVerificationCode: vi.fn().mockResolvedValue({ success: true, messageId: 'test-message-id' }),
+    sendVerificationCode: vi
+      .fn()
+      .mockResolvedValue({ success: true, messageId: 'test-message-id' }),
   }),
 }));
 
@@ -60,7 +62,9 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
   afterAll(async () => {
     // Cleanup in reverse order of dependencies
     await prisma.userRole.deleteMany({ where: { userId: { in: [] } } }).catch(() => {});
-    await prisma.authLoginChallenge.deleteMany({ where: { organizationId: testOrgId } }).catch(() => {});
+    await prisma.authLoginChallenge
+      .deleteMany({ where: { organizationId: testOrgId } })
+      .catch(() => {});
     await prisma.user.deleteMany({ where: { organizationId: testOrgId } }).catch(() => {});
     await prisma.organization.delete({ where: { id: testOrgId } }).catch(() => {});
     await server.close();
@@ -94,7 +98,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.challengeId).toBeDefined();
@@ -194,10 +198,10 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       verificationCode = '123456';
       const bcrypt = require('bcrypt');
       const codeHash = await bcrypt.hash(verificationCode, 10);
-      
+
       // Normalize email to lowercase to match how users are stored
       const normalizedEmail = testEmail.trim().toLowerCase();
-      
+
       const challenge = await prisma.authLoginChallenge.create({
         data: {
           email: normalizedEmail,
@@ -222,7 +226,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
       expect(body.user).toBeDefined();
@@ -241,7 +245,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error).toMatch(/invalid|incorrect/i);
@@ -264,7 +268,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/expired/i);
     });
@@ -298,7 +302,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/attempts|locked|expired/i);
     });
@@ -325,7 +329,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/invalid|used|expired/i);
     });
@@ -359,4 +363,3 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
     });
   });
 });
-

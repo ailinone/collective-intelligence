@@ -10,13 +10,13 @@
 /**
  * Vector Stores API Routes
  * OpenAI-compatible vector stores endpoints
- * 
+ *
  * Features:
  * - Vector store creation and management
  * - File associations for RAG
  * - Status tracking
  * - Expiration management
- * 
+ *
  * NO HARDCODED MODELS - All embedding models selected dynamically
  */
 
@@ -45,8 +45,9 @@ const log = logger.child({ module: 'vector-stores-routes' });
  */
 function getUserContext(request: FastifyRequest): RequestUserContext {
   const extendedRequest = request as ExtendedFastifyRequest;
-  const user = extendedRequest.user as { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
-  
+  const user = extendedRequest.user as
+    { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
+
   return {
     requestId: request.id,
     organizationId: extendedRequest.organizationId || user?.organizationId || '',
@@ -62,7 +63,8 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Create vector store',
-      description: 'Create a new vector store for RAG (Retrieval-Augmented Generation). Vector stores enable efficient similarity search over large collections of documents for knowledge retrieval.',
+      description:
+        'Create a new vector store for RAG (Retrieval-Augmented Generation). Vector stores enable efficient similarity search over large collections of documents for knowledge retrieval.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -77,10 +79,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
           expires_after: {
             type: 'object',
             properties: {
-              anchor: { type: 'string', enum: ['last_active_at'], description: 'Anchor point for expiration calculation' },
+              anchor: {
+                type: 'string',
+                enum: ['last_active_at'],
+                description: 'Anchor point for expiration calculation',
+              },
               days: { type: 'number', minimum: 1, description: 'Number of days until expiration' },
             },
-            description: 'Expiration configuration. Vector store expires after specified days from last active time.',
+            description:
+              'Expiration configuration. Vector store expires after specified days from last active time.',
           },
           metadata: {
             type: 'object',
@@ -103,12 +110,19 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
               type: 'object',
               properties: {
                 in_progress: { type: 'integer', description: 'Number of files being processed' },
-                completed: { type: 'integer', description: 'Number of files successfully processed' },
+                completed: {
+                  type: 'integer',
+                  description: 'Number of files successfully processed',
+                },
                 failed: { type: 'integer', description: 'Number of files that failed processing' },
                 cancelled: { type: 'integer', description: 'Number of files cancelled' },
               },
             },
-            status: { type: 'string', enum: ['expired', 'in_progress', 'completed'], description: 'Current status of the vector store' },
+            status: {
+              type: 'string',
+              enum: ['expired', 'in_progress', 'completed'],
+              description: 'Current status of the vector store',
+            },
             expires_after: {
               type: ['object', 'null'],
               properties: {
@@ -116,9 +130,19 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
                 days: { type: 'number' },
               },
             },
-            expires_at: { type: ['integer', 'null'], description: 'Unix timestamp when the vector store expires' },
-            last_active_at: { type: ['integer', 'null'], description: 'Unix timestamp of last activity' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Vector store metadata' },
+            expires_at: {
+              type: ['integer', 'null'],
+              description: 'Unix timestamp when the vector store expires',
+            },
+            last_active_at: {
+              type: ['integer', 'null'],
+              description: 'Unix timestamp of last activity',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Vector store metadata',
+            },
           },
         },
         400: {
@@ -128,9 +152,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "invalid_file_id")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "invalid_file_id")',
+                },
               },
             },
           },
@@ -156,9 +186,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found", "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found", "file_not_found")',
+                },
               },
             },
           },
@@ -170,7 +206,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -180,7 +219,12 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Body: Omit<CreateVectorStoreRequest, 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Body: Omit<CreateVectorStoreRequest, 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const createRequest: CreateVectorStoreRequest = {
@@ -202,7 +246,8 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'List vector stores',
-      description: 'List all vector stores for the organization. Supports pagination using cursor-based navigation with `after` and `before` parameters.',
+      description:
+        'List all vector stores for the organization. Supports pagination using cursor-based navigation with `after` and `before` parameters.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       querystring: {
         type: 'object',
@@ -216,9 +261,20 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             default: 20,
             description: 'Maximum number of vector stores to return (1-100, default: 20)',
           },
-          order: { type: 'string', enum: ['asc', 'desc'], default: 'desc', description: 'Sort order: asc (oldest first) or desc (newest first, default)' },
-          after: { type: 'string', description: 'Cursor for pagination. Return results after this vector store ID.' },
-          before: { type: 'string', description: 'Cursor for pagination. Return results before this vector store ID.' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            default: 'desc',
+            description: 'Sort order: asc (oldest first) or desc (newest first, default)',
+          },
+          after: {
+            type: 'string',
+            description: 'Cursor for pagination. Return results after this vector store ID.',
+          },
+          before: {
+            type: 'string',
+            description: 'Cursor for pagination. Return results before this vector store ID.',
+          },
         },
       },
       response: {
@@ -233,22 +289,64 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
                 type: 'object',
                 properties: {
                   id: { type: 'string', description: 'Vector store ID' },
-                  object: { type: 'string', enum: ['vector_store'], description: 'Object type identifier' },
-                  created_at: { type: 'integer', description: 'Unix timestamp when the vector store was created' },
-                  name: { type: ['string', 'null'], description: 'Vector store name (null if unnamed)' },
-                  usage_bytes: { type: 'integer', description: 'Total storage size in bytes used by the vector store' },
-                  file_counts: { type: 'object', description: 'Object containing file count statistics (total, in_progress, completed, failed)' },
-                  status: { type: 'string', enum: ['expired', 'in_progress', 'completed'], description: 'Vector store status: expired (expired), in_progress (processing files), completed (ready for use)' },
-                  expires_at: { type: ['integer', 'null'], description: 'Unix timestamp when the vector store expires (null if no expiration)' },
-                  last_active_at: { type: ['integer', 'null'], description: 'Unix timestamp of last activity/usage (null if never used)' },
-                  metadata: { type: 'object', description: 'Metadata key-value pairs associated with the vector store' },
+                  object: {
+                    type: 'string',
+                    enum: ['vector_store'],
+                    description: 'Object type identifier',
+                  },
+                  created_at: {
+                    type: 'integer',
+                    description: 'Unix timestamp when the vector store was created',
+                  },
+                  name: {
+                    type: ['string', 'null'],
+                    description: 'Vector store name (null if unnamed)',
+                  },
+                  usage_bytes: {
+                    type: 'integer',
+                    description: 'Total storage size in bytes used by the vector store',
+                  },
+                  file_counts: {
+                    type: 'object',
+                    description:
+                      'Object containing file count statistics (total, in_progress, completed, failed)',
+                  },
+                  status: {
+                    type: 'string',
+                    enum: ['expired', 'in_progress', 'completed'],
+                    description:
+                      'Vector store status: expired (expired), in_progress (processing files), completed (ready for use)',
+                  },
+                  expires_at: {
+                    type: ['integer', 'null'],
+                    description:
+                      'Unix timestamp when the vector store expires (null if no expiration)',
+                  },
+                  last_active_at: {
+                    type: ['integer', 'null'],
+                    description: 'Unix timestamp of last activity/usage (null if never used)',
+                  },
+                  metadata: {
+                    type: 'object',
+                    description: 'Metadata key-value pairs associated with the vector store',
+                  },
                 },
               },
               description: 'Array of vector stores',
             },
-            first_id: { type: ['string', 'null'], description: 'ID of the first vector store in the list' },
-            last_id: { type: ['string', 'null'], description: 'ID of the last vector store in the list' },
-            has_more: { type: 'boolean', description: 'Whether more vector stores are available beyond this page (true if additional pages exist)' },
+            first_id: {
+              type: ['string', 'null'],
+              description: 'ID of the first vector store in the list',
+            },
+            last_id: {
+              type: ['string', 'null'],
+              description: 'ID of the last vector store in the list',
+            },
+            has_more: {
+              type: 'boolean',
+              description:
+                'Whether more vector stores are available beyond this page (true if additional pages exist)',
+            },
           },
         },
         400: {
@@ -258,7 +356,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -286,9 +387,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found", "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found", "file_not_found")',
+                },
               },
             },
           },
@@ -300,7 +407,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -310,7 +420,17 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Querystring: { limit?: number | string; order?: 'asc' | 'desc'; after?: string; before?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Querystring: {
+          limit?: number | string;
+          order?: 'asc' | 'desc';
+          after?: string;
+          before?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         let limit: number = 20;
@@ -347,13 +467,17 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Get vector store',
-      description: 'Retrieve a specific vector store by ID. Returns complete details including status, file counts, and expiration information.',
+      description:
+        'Retrieve a specific vector store by ID. Returns complete details including status, file counts, and expiration information.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
         required: ['vector_store_id'],
         properties: {
-          vector_store_id: { type: 'string', description: 'Unique identifier of the vector store to retrieve' },
+          vector_store_id: {
+            type: 'string',
+            description: 'Unique identifier of the vector store to retrieve',
+          },
         },
       },
       response: {
@@ -370,12 +494,19 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
               type: 'object',
               properties: {
                 in_progress: { type: 'integer', description: 'Number of files being processed' },
-                completed: { type: 'integer', description: 'Number of files successfully processed' },
+                completed: {
+                  type: 'integer',
+                  description: 'Number of files successfully processed',
+                },
                 failed: { type: 'integer', description: 'Number of files that failed processing' },
                 cancelled: { type: 'integer', description: 'Number of files cancelled' },
               },
             },
-            status: { type: 'string', enum: ['expired', 'in_progress', 'completed'], description: 'Current status of the vector store' },
+            status: {
+              type: 'string',
+              enum: ['expired', 'in_progress', 'completed'],
+              description: 'Current status of the vector store',
+            },
             expires_after: {
               type: ['object', 'null'],
               properties: {
@@ -383,9 +514,19 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
                 days: { type: 'number' },
               },
             },
-            expires_at: { type: ['integer', 'null'], description: 'Unix timestamp when the vector store expires' },
-            last_active_at: { type: ['integer', 'null'], description: 'Unix timestamp of last activity' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Vector store metadata' },
+            expires_at: {
+              type: ['integer', 'null'],
+              description: 'Unix timestamp when the vector store expires',
+            },
+            last_active_at: {
+              type: ['integer', 'null'],
+              description: 'Unix timestamp of last activity',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Vector store metadata',
+            },
           },
         },
         400: {
@@ -395,7 +536,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -423,9 +567,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the vector store was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found")',
+                },
               },
             },
           },
@@ -437,7 +587,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -447,7 +600,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { vector_store_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getRequest: GetVectorStoreRequest = {
@@ -470,23 +626,34 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Modify vector store',
-      description: 'Update an existing vector store. Can modify name, expiration settings, and metadata. Note: file associations cannot be modified through this endpoint; use file-specific endpoints.',
+      description:
+        'Update an existing vector store. Can modify name, expiration settings, and metadata. Note: file associations cannot be modified through this endpoint; use file-specific endpoints.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
         required: ['vector_store_id'],
         properties: {
-          vector_store_id: { type: 'string', description: 'Unique identifier of the vector store to modify' },
+          vector_store_id: {
+            type: 'string',
+            description: 'Unique identifier of the vector store to modify',
+          },
         },
       },
       body: {
         type: 'object',
         properties: {
-          name: { type: ['string', 'null'], description: 'New name for the vector store (null to remove)' },
+          name: {
+            type: ['string', 'null'],
+            description: 'New name for the vector store (null to remove)',
+          },
           expires_after: {
             type: ['object', 'null'],
             properties: {
-              anchor: { type: 'string', enum: ['last_active_at'], description: 'Anchor point for expiration calculation' },
+              anchor: {
+                type: 'string',
+                enum: ['last_active_at'],
+                description: 'Anchor point for expiration calculation',
+              },
               days: { type: 'number', minimum: 1, description: 'Number of days until expiration' },
             },
             description: 'Expiration configuration (null to remove expiration)',
@@ -523,7 +690,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -551,9 +721,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the vector store was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found")',
+                },
               },
             },
           },
@@ -565,7 +741,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -575,7 +754,13 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string }; Body: Omit<ModifyVectorStoreRequest, 'vectorStoreId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { vector_store_id: string };
+        Body: Omit<ModifyVectorStoreRequest, 'vectorStoreId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const modifyRequest: ModifyVectorStoreRequest = {
@@ -599,13 +784,17 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Delete vector store',
-      description: 'Permanently delete a vector store and all associated files. This action cannot be undone. All embeddings and indexed data will be removed.',
+      description:
+        'Permanently delete a vector store and all associated files. This action cannot be undone. All embeddings and indexed data will be removed.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
         required: ['vector_store_id'],
         properties: {
-          vector_store_id: { type: 'string', description: 'Unique identifier of the vector store to delete' },
+          vector_store_id: {
+            type: 'string',
+            description: 'Unique identifier of the vector store to delete',
+          },
         },
       },
       response: {
@@ -625,7 +814,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -653,9 +845,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the vector store was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found")',
+                },
               },
             },
           },
@@ -667,7 +865,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -677,7 +878,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { vector_store_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const deleteRequest: DeleteVectorStoreRequest = {
@@ -700,7 +904,8 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Create vector store file',
-      description: 'Associate a file with a vector store. The file will be processed and its embeddings will be added to the vector store for similarity search. Processing happens asynchronously.',
+      description:
+        'Associate a file with a vector store. The file will be processed and its embeddings will be added to the vector store for similarity search. Processing happens asynchronously.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -713,7 +918,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         type: 'object',
         required: ['file_id'],
         properties: {
-          file_id: { type: 'string', description: 'ID of the file to associate with the vector store. File must have been uploaded previously.' },
+          file_id: {
+            type: 'string',
+            description:
+              'ID of the file to associate with the vector store. File must have been uploaded previously.',
+          },
         },
       },
       response: {
@@ -721,11 +930,18 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
           description: 'File associated with vector store successfully',
           type: 'object',
           properties: {
-            id: { type: 'string', description: 'Unique identifier for the vector store file association' },
+            id: {
+              type: 'string',
+              description: 'Unique identifier for the vector store file association',
+            },
             object: { type: 'string', enum: ['vector_store.file'], description: 'Object type' },
             created_at: { type: 'integer', description: 'Unix timestamp of creation' },
             vector_store_id: { type: 'string', description: 'ID of the associated vector store' },
-            status: { type: 'string', enum: ['in_progress', 'completed', 'failed', 'cancelled'], description: 'Processing status of the file' },
+            status: {
+              type: 'string',
+              enum: ['in_progress', 'completed', 'failed', 'cancelled'],
+              description: 'Processing status of the file',
+            },
           },
         },
         400: {
@@ -735,9 +951,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "invalid_file_id")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "invalid_file_id")',
+                },
               },
             },
           },
@@ -763,9 +985,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store or file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the vector store or file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found", "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found", "file_not_found")',
+                },
               },
             },
           },
@@ -777,7 +1005,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -787,7 +1018,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string }; Body: { file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { vector_store_id: string }; Body: { file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const createRequest: CreateVectorStoreFileRequest = {
@@ -812,25 +1046,39 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       tags: ['Vector Stores'],
       summary: 'Search vector store',
       description:
-        'Run a semantic similarity search over a vector store. The query is embedded and ranked against the store\'s chunk embeddings using cosine similarity (pgvector HNSW). Returns the most relevant chunks with their similarity scores. Scoped to the calling organization.',
+        "Run a semantic similarity search over a vector store. The query is embedded and ranked against the store's chunk embeddings using cosine similarity (pgvector HNSW). Returns the most relevant chunks with their similarity scores. Scoped to the calling organization.",
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
         required: ['vector_store_id'],
         properties: {
-          vector_store_id: { type: 'string', description: 'Unique identifier of the vector store to search' },
+          vector_store_id: {
+            type: 'string',
+            description: 'Unique identifier of the vector store to search',
+          },
         },
       },
       body: {
         type: 'object',
         required: ['query'],
         properties: {
-          query: { type: 'string', minLength: 1, description: 'Natural-language query to search for' },
-          top_k: { type: 'integer', minimum: 1, maximum: 100, default: 10, description: 'Number of top-scoring chunks to return (1-100, default 10)' },
+          query: {
+            type: 'string',
+            minLength: 1,
+            description: 'Natural-language query to search for',
+          },
+          top_k: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            default: 10,
+            description: 'Number of top-scoring chunks to return (1-100, default 10)',
+          },
           file_ids: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional: restrict the search to chunks from these file IDs within the store',
+            description:
+              'Optional: restrict the search to chunks from these file IDs within the store',
           },
         },
       },
@@ -847,7 +1095,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
                 type: 'object',
                 properties: {
                   file_id: { type: 'string', description: 'ID of the file this chunk came from' },
-                  score: { type: 'number', description: 'Cosine similarity in [0,1] (1 = identical)' },
+                  score: {
+                    type: 'number',
+                    description: 'Cosine similarity in [0,1] (1 = identical)',
+                  },
                   content: {
                     type: 'array',
                     items: {
@@ -858,8 +1109,14 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
                       },
                     },
                   },
-                  chunk_index: { type: 'integer', description: 'Zero-based position of the chunk within its file' },
-                  metadata: { type: 'object', description: 'Chunk metadata (e.g. source filename)' },
+                  chunk_index: {
+                    type: 'integer',
+                    description: 'Zero-based position of the chunk within its file',
+                  },
+                  metadata: {
+                    type: 'object',
+                    description: 'Chunk metadata (e.g. source filename)',
+                  },
                 },
               },
             },
@@ -926,7 +1183,13 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string }; Body: { query: string; top_k?: number; file_ids?: string[] } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { vector_store_id: string };
+        Body: { query: string; top_k?: number; file_ids?: string[] };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const searchRequest: SearchVectorStoreRequest = {
@@ -954,7 +1217,8 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'List vector store files',
-      description: 'List all files associated with a vector store. Supports filtering by status and pagination using cursor-based navigation.',
+      description:
+        'List all files associated with a vector store. Supports filtering by status and pagination using cursor-based navigation.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -974,10 +1238,25 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             default: 20,
             description: 'Maximum number of files to return (1-100)',
           },
-          order: { type: 'string', enum: ['asc', 'desc'], default: 'desc', description: 'Sort order: asc (oldest first) or desc (newest first)' },
-          after: { type: 'string', description: 'Cursor for pagination. Return results after this file ID.' },
-          before: { type: 'string', description: 'Cursor for pagination. Return results before this file ID.' },
-          filter: { type: 'string', enum: ['in_progress', 'completed', 'failed', 'cancelled'], description: 'Filter files by processing status' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            default: 'desc',
+            description: 'Sort order: asc (oldest first) or desc (newest first)',
+          },
+          after: {
+            type: 'string',
+            description: 'Cursor for pagination. Return results after this file ID.',
+          },
+          before: {
+            type: 'string',
+            description: 'Cursor for pagination. Return results before this file ID.',
+          },
+          filter: {
+            type: 'string',
+            enum: ['in_progress', 'completed', 'failed', 'cancelled'],
+            description: 'Filter files by processing status',
+          },
         },
       },
       response: {
@@ -991,11 +1270,25 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
               items: {
                 type: 'object',
                 properties: {
-                  id: { type: 'string', description: 'Unique identifier for the vector store file' },
-                  object: { type: 'string', enum: ['vector_store.file'], description: 'Object type' },
+                  id: {
+                    type: 'string',
+                    description: 'Unique identifier for the vector store file',
+                  },
+                  object: {
+                    type: 'string',
+                    enum: ['vector_store.file'],
+                    description: 'Object type',
+                  },
                   created_at: { type: 'integer', description: 'Unix timestamp of creation' },
-                  vector_store_id: { type: 'string', description: 'ID of the associated vector store' },
-                  status: { type: 'string', enum: ['in_progress', 'completed', 'failed', 'cancelled'], description: 'Processing status' },
+                  vector_store_id: {
+                    type: 'string',
+                    description: 'ID of the associated vector store',
+                  },
+                  status: {
+                    type: 'string',
+                    enum: ['in_progress', 'completed', 'failed', 'cancelled'],
+                    description: 'Processing status',
+                  },
                 },
               },
               description: 'Array of vector store files',
@@ -1012,7 +1305,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1040,9 +1336,15 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the vector store was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "vector_store_not_found")',
+                },
               },
             },
           },
@@ -1054,7 +1356,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1064,7 +1369,19 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string }; Querystring: { limit?: number | string; order?: 'asc' | 'desc'; after?: string; before?: string; filter?: 'in_progress' | 'completed' | 'failed' | 'cancelled' } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { vector_store_id: string };
+        Querystring: {
+          limit?: number | string;
+          order?: 'asc' | 'desc';
+          after?: string;
+          before?: string;
+          filter?: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         let limit: number = 20;
@@ -1104,14 +1421,18 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
     schema: {
       tags: ['Vector Stores'],
       summary: 'Delete vector store file',
-      description: 'Remove a file association from a vector store. The file embeddings will be removed from the vector store, but the original file remains in the system.',
+      description:
+        'Remove a file association from a vector store. The file embeddings will be removed from the vector store, but the original file remains in the system.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
         required: ['vector_store_id', 'file_id'],
         properties: {
           vector_store_id: { type: 'string', description: 'Unique identifier of the vector store' },
-          file_id: { type: 'string', description: 'Unique identifier of the file to remove from the vector store' },
+          file_id: {
+            type: 'string',
+            description: 'Unique identifier of the file to remove from the vector store',
+          },
         },
       },
       response: {
@@ -1120,7 +1441,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
           type: 'object',
           properties: {
             id: { type: 'string', description: 'ID of the removed file' },
-            object: { type: 'string', enum: ['vector_store.file.deleted'], description: 'Object type' },
+            object: {
+              type: 'string',
+              enum: ['vector_store.file.deleted'],
+              description: 'Object type',
+            },
             deleted: { type: 'boolean', description: 'Deletion confirmation' },
           },
         },
@@ -1131,7 +1456,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1159,9 +1487,17 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the vector store, file, or association was not found' },
+                message: {
+                  type: 'string',
+                  description:
+                    'Error message indicating the vector store, file, or association was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "vector_store_not_found", "file_not_found", "association_not_found")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "vector_store_not_found", "file_not_found", "association_not_found")',
+                },
               },
             },
           },
@@ -1173,7 +1509,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1183,7 +1522,10 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { vector_store_id: string; file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { vector_store_id: string; file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const deleteRequest: DeleteVectorStoreFileRequest = {
@@ -1196,7 +1538,8 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         return reply.send(result);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
+        const statusCode =
+          errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
         return reply.code(statusCode).send({ error: { message: errorMessage } });
       }
     },

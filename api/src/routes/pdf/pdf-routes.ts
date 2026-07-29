@@ -10,12 +10,12 @@
 /**
  * PDF Processing Routes
  * Claude/Gemini-compatible PDF understanding
- * 
+ *
  * Features:
  * - PDF upload and parsing
  * - Multi-model orchestration (Claude, Gemini with PDF support)
  * - Text extraction, Q&A, summarization
- * 
+ *
  * NO HARDCODED - Dynamic model selection based on PDF capabilities
  */
 
@@ -35,7 +35,8 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
     schema: {
       tags: ['PDF'],
       summary: 'Analyze PDF with AI',
-      description: 'Uploads and analyzes PDF using models with PDF understanding (Claude, Gemini, etc.). Automatically selects the best model based on PDF complexity and analysis requirements.',
+      description:
+        'Uploads and analyzes PDF using models with PDF understanding (Claude, Gemini, etc.). Automatically selects the best model based on PDF complexity and analysis requirements.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       consumes: ['multipart/form-data'],
       body: {
@@ -54,7 +55,8 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
           model: {
             type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection. When "auto", Ailin selects the best model with PDF understanding capabilities.',
+            description:
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin selects the best model with PDF understanding capabilities.',
           },
         },
       },
@@ -65,7 +67,11 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
           properties: {
             text: { type: 'string', description: 'Extracted text from PDF' },
             summary: { type: 'string', nullable: true, description: 'AI-generated summary' },
-            answer: { type: 'string', nullable: true, description: 'Answer to prompt/question if provided' },
+            answer: {
+              type: 'string',
+              nullable: true,
+              description: 'Answer to prompt/question if provided',
+            },
             metadata: {
               type: 'object',
               properties: {
@@ -91,9 +97,16 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "missing_file", "invalid_file_format", "invalid_pdf")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "missing_file", "invalid_file_format", "invalid_pdf")',
+                },
               },
             },
           },
@@ -119,7 +132,10 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -133,7 +149,10 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -148,7 +167,7 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
         taskType: 'analysis',
         contextSize: 0,
       });
-      
+
       try {
         // Handle multipart/form-data for PDF upload
         // Note: Requires @fastify/multipart plugin to be registered
@@ -156,7 +175,7 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
           file?: () => Promise<{ filename?: string; toBuffer: () => Promise<Buffer> } | undefined>;
         };
         const data = multipartRequest.file ? await multipartRequest.file() : undefined;
-        
+
         if (!data) {
           return reply.code(400).send({
             error: {
@@ -169,12 +188,20 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
         const pdfBuffer = await data.toBuffer();
         const filename = data.filename || 'document.pdf';
         const body = request.body;
-        const promptValue = body && typeof body === 'object' && 'prompt' in body && typeof (body as { prompt?: unknown }).prompt === 'string'
-          ? (body as { prompt: string }).prompt
-          : undefined;
-        const modelValue = body && typeof body === 'object' && 'model' in body && typeof (body as { model?: unknown }).model === 'string'
-          ? (body as { model: string }).model
-          : undefined;
+        const promptValue =
+          body &&
+          typeof body === 'object' &&
+          'prompt' in body &&
+          typeof (body as { prompt?: unknown }).prompt === 'string'
+            ? (body as { prompt: string }).prompt
+            : undefined;
+        const modelValue =
+          body &&
+          typeof body === 'object' &&
+          'model' in body &&
+          typeof (body as { model?: unknown }).model === 'string'
+            ? (body as { model: string }).model
+            : undefined;
 
         const result = await pdfService.analyzePDF({
           pdfBuffer,
@@ -187,8 +214,9 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
 
         return reply.send(result);
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error);
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'internal_error';
@@ -207,4 +235,3 @@ export async function registerPDFRoutes(server: FastifyInstance): Promise<void> 
 
   log.info('PDF API routes registered successfully');
 }
-

@@ -16,10 +16,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { LLMJudgeEvaluator } from './llm-judge-evaluator';
-import type {
-  LLMJudgeClient,
-  LLMJudgeEvaluatorConfig,
-} from './llm-judge-evaluator.types';
+import type { LLMJudgeClient, LLMJudgeEvaluatorConfig } from './llm-judge-evaluator.types';
 
 const baseConfig: LLMJudgeEvaluatorConfig = {
   enabled: true,
@@ -123,7 +120,8 @@ describe('LLMJudgeEvaluator — happy path with mock client', () => {
 describe('LLMJudgeEvaluator — defensive parsing', () => {
   it('malformed judge response (NaN score) → uncertain + unavailable', async () => {
     const client: LLMJudgeClient = {
-      judge: async () => ({ score: NaN, verdict: 'pass' } as unknown as { score: number; verdict: 'pass' }),
+      judge: async () =>
+        ({ score: NaN, verdict: 'pass' }) as unknown as { score: number; verdict: 'pass' },
     };
     const ev = new LLMJudgeEvaluator(baseConfig, client);
     const r = await ev.evaluate(baseInput);
@@ -145,7 +143,9 @@ describe('LLMJudgeEvaluator — defensive parsing', () => {
 
   it('judge throws → uncertain + unavailable, never crashes the strategy', async () => {
     const client: LLMJudgeClient = {
-      judge: async () => { throw new Error('provider 503'); },
+      judge: async () => {
+        throw new Error('provider 503');
+      },
     };
     const ev = new LLMJudgeEvaluator(baseConfig, client);
     const r = await ev.evaluate(baseInput);
@@ -156,7 +156,10 @@ describe('LLMJudgeEvaluator — defensive parsing', () => {
 
   it('timeout returns uncertain + unavailable (no crash)', async () => {
     const client: LLMJudgeClient = {
-      judge: () => new Promise(() => { /* never resolves */ }),
+      judge: () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
     };
     const ev = new LLMJudgeEvaluator({ ...baseConfig, timeoutMs: 50 }, client);
     const r = await ev.evaluate(baseInput);

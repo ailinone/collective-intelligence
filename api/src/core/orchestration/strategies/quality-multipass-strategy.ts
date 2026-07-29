@@ -102,7 +102,11 @@ export class QualityMultiPassStrategy extends BaseStrategy {
     let bestQualityScore = 0;
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', models: [primaryModel.name || primaryModel.id, validatorModel.name || validatorModel.id], summary: `Quality multipass: up to ${this.MAX_PASSES} refinement passes.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [primaryModel.name || primaryModel.id, validatorModel.name || validatorModel.id],
+      summary: `Quality multipass: up to ${this.MAX_PASSES} refinement passes.`,
+    });
 
     // Multi-pass refinement loop
     for (let passNumber = 1; passNumber <= this.MAX_PASSES; passNumber++) {
@@ -113,12 +117,18 @@ export class QualityMultiPassStrategy extends BaseStrategy {
 
       // If generation failed, try a different primary model for remaining passes
       if (!generation.success) {
-        this.log.warn({ passNumber, model: primaryModel.name }, 'Generation failed, selecting alternate model');
+        this.log.warn(
+          { passNumber, model: primaryModel.name },
+          'Generation failed, selecting alternate model'
+        );
         passes.push({ passNumber, generation, qualityScore: 0 });
         // Pick next best model that's different from the failed one
-        const alternate = models.find(m =>
-          m.id !== primaryModel.id &&
-          (m.balanceStatus === 'has-credits' || m.balanceStatus === 'local' || m.balanceStatus === 'unknown')
+        const alternate = models.find(
+          (m) =>
+            m.id !== primaryModel.id &&
+            (m.balanceStatus === 'has-credits' ||
+              m.balanceStatus === 'local' ||
+              m.balanceStatus === 'unknown')
         );
         if (alternate) primaryModel = alternate;
         continue;
@@ -253,8 +263,18 @@ export class QualityMultiPassStrategy extends BaseStrategy {
           generationCost: pass.generation.cost,
           validationCost: pass.validation?.cost || 0,
         })),
-        ...(this.isReasoningEnabled(request) && allExecutions.some(e => e.reasoning)
-          ? { reasoning_traces: allExecutions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && allExecutions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: allExecutions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -275,7 +295,9 @@ export class QualityMultiPassStrategy extends BaseStrategy {
   ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < this.getMetadata().minModels!) {
-      throw new Error(`Quality Multi-Pass requires at least ${this.getMetadata().minModels} models`);
+      throw new Error(
+        `Quality Multi-Pass requires at least ${this.getMetadata().minModels} models`
+      );
     }
 
     const primaryModel = this.selectPrimaryModel(models, context);
@@ -319,7 +341,11 @@ export class QualityMultiPassStrategy extends BaseStrategy {
     }
 
     // Phase 2: stream final polished synthesis
-    yield this.progressChunk('Generating final polished version...', this.MAX_PASSES, this.MAX_PASSES + 1);
+    yield this.progressChunk(
+      'Generating final polished version...',
+      this.MAX_PASSES,
+      this.MAX_PASSES + 1
+    );
 
     if (!this.getAdapterForModel) {
       throw new Error('getAdapterForModel not injected');
@@ -336,7 +362,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       finalRequest,
       [{ adapter: primaryAdapter, model: primaryModel }],
-      () => safeResponseContent(bestExecution.response).slice(0, 4000),
+      () => safeResponseContent(bestExecution.response).slice(0, 4000)
     );
   }
 
@@ -395,7 +421,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
             requestedModel: preference.requestedId,
             poolSize: models.length,
           },
-          'Quality multipass: requested model not in operational pool — falling back to balance/quality sort',
+          'Quality multipass: requested model not in operational pool — falling back to balance/quality sort'
         );
       }
       if (preference.pinnedExecutor) return preference.pinnedExecutor;

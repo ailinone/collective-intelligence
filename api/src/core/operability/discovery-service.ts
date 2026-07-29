@@ -48,11 +48,7 @@ import { resolveProbeStrategy } from './probe-strategy';
 import { getProviderHealthRegistry } from './provider-health-registry';
 import { getProviderOperabilityHub } from '../provider-operability-hub';
 import { emitCandidateTrace } from './candidate-trace';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  observeHistogram,
-} from './metrics';
+import { METRIC_NAMES, incrementCounter, observeHistogram } from './metrics';
 
 const log = logger.child({ component: 'provider-discovery-service' });
 
@@ -95,11 +91,7 @@ export interface ProviderProbeCallbacks {
    * Probes the provider's billing/balance API. Only called when the
    * strategy declares a credit probe surface.
    */
-  probeCredit?(input: {
-    providerId: string;
-    apiKey: string;
-    timeoutMs: number;
-  }): Promise<{
+  probeCredit?(input: { providerId: string; apiKey: string; timeoutMs: number }): Promise<{
     status: 'has_credits' | 'exhausted' | 'unknown';
     balanceUsd?: number;
     reason?: string;
@@ -144,7 +136,7 @@ class ProviderDiscoveryService {
    */
   async runDiscovery(
     providers: readonly ConfiguredProvider[],
-    config: DiscoveryConfig = {},
+    config: DiscoveryConfig = {}
   ): Promise<ProviderDiscoverySnapshot> {
     const startedAt = Date.now();
     const timeoutMs = config.perProviderTimeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -164,16 +156,8 @@ class ProviderDiscoveryService {
     }
 
     // Bounded-concurrency executor (Promise.all with semaphore)
-    const results = await runWithConcurrency(
-      providers,
-      concurrency,
-      (provider) =>
-        this.probeProvider(
-          provider,
-          callbacks[provider.providerId],
-          timeoutMs,
-          validUntil,
-        ),
+    const results = await runWithConcurrency(providers, concurrency, (provider) =>
+      this.probeProvider(provider, callbacks[provider.providerId], timeoutMs, validUntil)
     );
 
     const durationMs = Date.now() - startedAt;
@@ -216,7 +200,7 @@ class ProviderDiscoveryService {
         totalAvailable,
         totalUnavailable,
       },
-      'Discovery snapshot produced',
+      'Discovery snapshot produced'
     );
 
     this.latestSnapshot = snapshot;
@@ -233,11 +217,12 @@ class ProviderDiscoveryService {
     provider: ConfiguredProvider,
     callbacks: ProviderProbeCallbacks | undefined,
     timeoutMs: number,
-    validUntil: string,
+    validUntil: string
   ): Promise<ProviderDiscoveryResult> {
     const t0 = Date.now();
-    const strategy = provider.probeStrategy
-      ?? resolveProbeStrategy({
+    const strategy =
+      provider.probeStrategy ??
+      resolveProbeStrategy({
         providerId: provider.providerId,
         integrationClass: provider.integrationClass,
       });
@@ -245,9 +230,10 @@ class ProviderDiscoveryService {
 
     // ─── 1. Credential check ────────────────────────────────────────
     const apiKey = provider.apiKeyEnvVar ? process.env[provider.apiKeyEnvVar] : undefined;
-    const credentialMissing = provider.apiKeyEnvVar !== undefined
-      && provider.apiKeyOptional !== true
-      && (apiKey === undefined || apiKey === '');
+    const credentialMissing =
+      provider.apiKeyEnvVar !== undefined &&
+      provider.apiKeyOptional !== true &&
+      (apiKey === undefined || apiKey === '');
 
     if (credentialMissing) {
       const result = this.buildUnavailable(provider, validUntil, t0, {
@@ -281,12 +267,16 @@ class ProviderDiscoveryService {
     });
 
     // Optional active credential probe (calls provider's auth endpoint)
-    if (strategy.credentialProbe !== 'env_only' && strategy.credentialProbe !== 'not_supported' && callbacks?.probeCredential) {
+    if (
+      strategy.credentialProbe !== 'env_only' &&
+      strategy.credentialProbe !== 'not_supported' &&
+      callbacks?.probeCredential
+    ) {
       try {
         const credResult = await withTimeout(
           callbacks.probeCredential({ providerId: provider.providerId, apiKey, timeoutMs }),
           timeoutMs,
-          'credential probe timed out',
+          'credential probe timed out'
         );
         if (!credResult.ok) {
           const result = this.buildUnavailable(provider, validUntil, t0, {
@@ -304,7 +294,11 @@ class ProviderDiscoveryService {
           // Camada 1b: bridge the probe verdict into the operability hub too, so
           // the hub (and its persisted overlay) reflect PROVEN operability — not
           // just organic runtime traffic. Dynamic verdict, never a static list.
-          getProviderOperabilityHub().recordProbeResult(provider.providerId, 'auth_failed', result.reason);
+          getProviderOperabilityHub().recordProbeResult(
+            provider.providerId,
+            'auth_failed',
+            result.reason
+          );
           emitCandidateTrace({
             providerId: provider.providerId,
             stage: 'credential_validated',
@@ -320,7 +314,7 @@ class ProviderDiscoveryService {
         // misbehavior shouldn't permanently disable the provider.
         log.warn(
           { providerId: provider.providerId, err: String(err) },
-          'Credential probe threw; treating as partially_verified',
+          'Credential probe threw; treating as partially_verified'
         );
       }
     }
@@ -333,11 +327,12 @@ class ProviderDiscoveryService {
         const creditResult = await withTimeout(
           callbacks.probeCredit({ providerId: provider.providerId, apiKey, timeoutMs }),
           timeoutMs,
-          'credit probe timed out',
+          'credit probe timed out'
         );
         if (creditResult.status === 'exhausted') {
           creditOk = false;
-          creditReason = creditResult.reason ?? `exhausted (balance: ${creditResult.balanceUsd ?? 'unknown'})`;
+          creditReason =
+            creditResult.reason ?? `exhausted (balance: ${creditResult.balanceUsd ?? 'unknown'})`;
         }
         incrementCounter(METRIC_NAMES.PROVIDER_CREDIT_STATUS_TOTAL, {
           providerId: provider.providerId,
@@ -346,7 +341,7 @@ class ProviderDiscoveryService {
       } catch (err) {
         log.warn(
           { providerId: provider.providerId, err: String(err) },
-          'Credit probe threw; treating as unknown credit status',
+          'Credit probe threw; treating as unknown credit status'
         );
         incrementCounter(METRIC_NAMES.PROVIDER_CREDIT_STATUS_TOTAL, {
           providerId: provider.providerId,
@@ -369,7 +364,11 @@ class ProviderDiscoveryService {
         errorClass: 'insufficient_credit',
       });
       // Camada 1b: bridge into the operability hub (see auth_failed case).
-      getProviderOperabilityHub().recordProbeResult(provider.providerId, 'insufficient_credit', result.reason);
+      getProviderOperabilityHub().recordProbeResult(
+        provider.providerId,
+        'insufficient_credit',
+        result.reason
+      );
       emitCandidateTrace({
         providerId: provider.providerId,
         stage: 'credit_validated',
@@ -396,7 +395,7 @@ class ProviderDiscoveryService {
         models = await withTimeout(
           callbacks.listModels({ providerId: provider.providerId, apiKey, timeoutMs }),
           timeoutMs,
-          'listModels timed out',
+          'listModels timed out'
         );
         endpointVerified = true;
         emitCandidateTrace({
@@ -409,7 +408,7 @@ class ProviderDiscoveryService {
       } catch (err) {
         log.warn(
           { providerId: provider.providerId, err: String(err) },
-          'listModels probe failed; treating as partially_verified',
+          'listModels probe failed; treating as partially_verified'
         );
         emitCandidateTrace({
           providerId: provider.providerId,
@@ -461,7 +460,7 @@ class ProviderDiscoveryService {
     // inference credits.)
     getProviderOperabilityHub().recordProbeResult(
       provider.providerId,
-      endpointVerified ? 'healthy' : 'unknown',
+      endpointVerified ? 'healthy' : 'unknown'
     );
 
     emitCandidateTrace({
@@ -485,7 +484,7 @@ class ProviderDiscoveryService {
       reason: string;
       errorClass: ProviderErrorClass;
       confidence: DiscoveryConfidence;
-    },
+    }
   ): ProviderDiscoveryResult {
     return {
       providerId: provider.providerId,
@@ -519,7 +518,11 @@ function computeConfidence(input: {
   return 'unknown';
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
@@ -536,7 +539,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessa
 async function runWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
-  worker: (item: T) => Promise<R>,
+  worker: (item: T) => Promise<R>
 ): Promise<R[]> {
   const results: R[] = new Array<R>(items.length);
   let nextIndex = 0;
@@ -599,7 +602,7 @@ export function resetProviderDiscoveryServiceForTesting(): void {
  */
 export async function runProviderDiscovery(
   providers: readonly ConfiguredProvider[],
-  config?: DiscoveryConfig,
+  config?: DiscoveryConfig
 ): Promise<ProviderDiscoverySnapshot> {
   return getProviderDiscoveryService().runDiscovery(providers, config);
 }

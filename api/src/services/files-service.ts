@@ -10,14 +10,14 @@
 /**
  * Files Service
  * Manages file uploads, storage, and retrieval
- * 
+ *
  * Features:
  * - GCS integration (Google Cloud Storage)
  * - Multi-format support (PDF, images, audio, video, text, JSONL, etc.)
  * - Automatic format validation
  * - Purpose-based organization
  * - Metadata tracking in database
- * 
+ *
  * NO HARDCODED - Bucket names and paths from environment
  */
 
@@ -221,7 +221,7 @@ export class FilesService {
 
       // Generate GCS path: {organizationId}/{purpose}/{fileId}/{filename}
       const gcsPath = `${userContext.organizationId}/${purpose}/${fileId}/${filename}`;
-      
+
       // Upload to GCS
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(gcsPath);
@@ -334,7 +334,7 @@ export class FilesService {
       const returnFiles = has_more ? files.slice(0, limit) : files;
 
       return {
-        files: returnFiles.map(f => ({
+        files: returnFiles.map((f) => ({
           id: f.id,
           object: 'file',
           bytes: f.bytes,
@@ -559,4 +559,3 @@ export class FilesService {
     return `file-${digest}`;
   }
 }
-

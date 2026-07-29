@@ -60,14 +60,7 @@ import { MoonshotAdapter } from '../../moonshot/moonshot-adapter';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const LOAD_SECRETS_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'config',
-  'load-secrets-into-env.ts',
-);
+const LOAD_SECRETS_PATH = join(__dirname, '..', '..', '..', 'config', 'load-secrets-into-env.ts');
 
 // ──────────────────────────────────────────────────────────────────────────
 // (1) Moonshot — defend the .ai base URL against .cn regression
@@ -109,13 +102,13 @@ describe('matrix promotion regression — aws-bedrock dual-auth secrets', () => 
     // via Bearer — the worst failure mode because it passes inventory
     // probes but fails at runtime.
     expect(source).toMatch(
-      /envVar:\s*['"]AWS_ACCESS_KEY_ID['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-key-id['"]/,
+      /envVar:\s*['"]AWS_ACCESS_KEY_ID['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-key-id['"]/
     );
   });
 
   it('maps AWS_SECRET_ACCESS_KEY to aws-secret (SigV4 invoke path)', () => {
     expect(source).toMatch(
-      /envVar:\s*['"]AWS_SECRET_ACCESS_KEY['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-secret['"]/,
+      /envVar:\s*['"]AWS_SECRET_ACCESS_KEY['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-secret['"]/
     );
   });
 
@@ -126,7 +119,7 @@ describe('matrix promotion regression — aws-bedrock dual-auth secrets', () => 
     // have verified the 163KB inventory response that promoted aws-bedrock
     // to live-validation.
     expect(source).toMatch(
-      /envVar:\s*['"]AWS_BEARER_TOKEN_BEDROCK['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-bearer-token['"]/,
+      /envVar:\s*['"]AWS_BEARER_TOKEN_BEDROCK['"][\s\S]*?secretKeys:\s*\[[^\]]*['"]aws-bearer-token['"]/
     );
   });
 });
@@ -146,9 +139,7 @@ describe('matrix promotion regression — gemini-openai vertex-key fallback', ()
    * non-emptiness so a malformed entry fails loudly.
    */
   function extractGeminiSecretKeys(src: string): string[] {
-    const match = src.match(
-      /envVar:\s*['"]GEMINI_API_KEY['"][\s\S]*?secretKeys:\s*\[([^\]]*)\]/,
-    );
+    const match = src.match(/envVar:\s*['"]GEMINI_API_KEY['"][\s\S]*?secretKeys:\s*\[([^\]]*)\]/);
     if (!match) return [];
     const inner = match[1];
     const keys: string[] = [];

@@ -29,13 +29,13 @@ export interface CreditCheckResult {
 
 export type CreditCheckReason =
   | 'approved'
-  | 'route_exhausted'            // This specific route has no credits
-  | 'route_rate_limited'         // Route is rate limited
-  | 'route_auth_failed'          // Route has auth failure
-  | 'route_unavailable'          // Route is temporarily unavailable
+  | 'route_exhausted' // This specific route has no credits
+  | 'route_rate_limited' // Route is rate limited
+  | 'route_auth_failed' // Route has auth failure
+  | 'route_unavailable' // Route is temporarily unavailable
   | 'experiment_budget_exceeded' // Global experiment budget exceeded
-  | 'arm_budget_exceeded'        // Per-arm budget exceeded
-  | 'structural_failure';        // ALL external routes exhausted
+  | 'arm_budget_exceeded' // Per-arm budget exceeded
+  | 'structural_failure'; // ALL external routes exhausted
 
 // ─── Budget Allocation ──────────────────────────────────────────────────
 

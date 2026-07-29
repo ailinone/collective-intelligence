@@ -9,7 +9,7 @@
 
 /**
  * Input Validation Security Tests
- * 
+ *
  * Tests protection against:
  * - SQL Injection
  * - NoSQL Injection
@@ -20,13 +20,16 @@
  * - LDAP Injection
  * - Header Injection
  * - Oversized Payloads
- * 
+ *
  * OWASP Top 10 Compliance Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServerWithAuthOnly, clearAuthOnlyServerInstance } from '../../../tests/utils/test-server';
+import {
+  createTestServerWithAuthOnly,
+  clearAuthOnlyServerInstance,
+} from '../../../tests/utils/test-server';
 import { prisma } from '@/database/client';
 import { nanoid } from 'nanoid';
 
@@ -64,7 +67,7 @@ describe('Input Validation Security Tests', () => {
     const bcrypt = await import('bcrypt');
     const keyValue = `ak_test_${nanoid(32)}`;
     const keyHash = await bcrypt.hash(keyValue, 10);
-    
+
     const apiKey = await prisma.apiKey.create({
       data: {
         name: 'Test API Key',
@@ -87,13 +90,13 @@ describe('Input Validation Security Tests', () => {
     } catch {
       // Ignore cleanup errors
     }
-    
+
     try {
       await server.close();
     } catch {
       // Ignore cleanup errors
     }
-    
+
     // Clear singleton instance to allow cleanup
     clearAuthOnlyServerInstance();
   });
@@ -105,9 +108,9 @@ describe('Input Validation Security Tests', () => {
       "' OR 1=1--",
       "admin'--",
       "' UNION SELECT NULL--",
-      "1; DROP TABLE users--",
+      '1; DROP TABLE users--',
       "' OR 'x'='x",
-      "105 OR 1=1",
+      '105 OR 1=1',
       "' OR EXISTS(SELECT * FROM users)--",
       "'; EXEC xp_cmdshell('dir')--",
     ];
@@ -125,7 +128,7 @@ describe('Input Validation Security Tests', () => {
 
         // Should reject (not 200) or safely handle
         expect(response.statusCode).not.toBe(200);
-        
+
         // Should not leak database structure
         const body = JSON.parse(response.body);
         expect(JSON.stringify(body).toLowerCase()).not.toMatch(/syntax|sql|query|database/);
@@ -163,9 +166,9 @@ describe('Input Validation Security Tests', () => {
     it('should use parameterized queries (Prisma protection)', async () => {
       // This test verifies Prisma is being used (not raw SQL)
       // Prisma automatically uses parameterized queries
-      
+
       const maliciousEmail = "admin' OR '1'='1' --";
-      
+
       const response = await server.inject({
         method: 'POST',
         url: '/v1/auth/login',
@@ -181,12 +184,7 @@ describe('Input Validation Security Tests', () => {
   });
 
   describe('NoSQL Injection Protection', () => {
-    const noSqlPayloads = [
-      { $gt: '' },
-      { $ne: null },
-      { $where: '1==1' },
-      { $regex: '.*' },
-    ];
+    const noSqlPayloads = [{ $gt: '' }, { $ne: null }, { $where: '1==1' }, { $regex: '.*' }];
 
     it('should reject NoSQL injection in JSON fields', async () => {
       for (const payload of noSqlPayloads) {
@@ -235,7 +233,7 @@ describe('Input Validation Security Tests', () => {
 
         if (response.statusCode === 201) {
           const body = JSON.parse(response.body);
-          
+
           // Should sanitize script tags
           expect(body.user.name).not.toContain('<script>');
           expect(body.user.name).not.toContain('javascript:');
@@ -333,7 +331,7 @@ describe('Input Validation Security Tests', () => {
 
         // Should reject traversal attempts
         expect(response.statusCode).not.toBe(200);
-        
+
         if (response.statusCode !== 404) {
           const body = JSON.parse(response.body);
           expect(body.error).toBeDefined();
@@ -446,33 +444,35 @@ describe('Input Validation Security Tests', () => {
       const BATCH_SIZE = 100;
       const TOTAL_ATTEMPTS = 1100;
       const BATCH_DELAY_MS = 10; // Small delay between batches to prevent resource exhaustion
-      
+
       const allResponses: Array<{ statusCode: number }> = [];
-      
+
       // Process in batches to avoid timeout and resource exhaustion
       for (let batchStart = 0; batchStart < TOTAL_ATTEMPTS; batchStart += BATCH_SIZE) {
         const batchEnd = Math.min(batchStart + BATCH_SIZE, TOTAL_ATTEMPTS);
         const batch: Promise<{ statusCode: number }>[] = [];
-        
+
         for (let i = batchStart; i < batchEnd; i++) {
           batch.push(
-            server.inject({
-              method: 'POST',
-              url: '/v1/auth/login',
-              payload: {
-                email: `test-${i}@example.com`, // Use unique emails to avoid duplicate account issues
-                password: 'wrong',
-              },
-            }).then(response => ({ statusCode: response.statusCode }))
+            server
+              .inject({
+                method: 'POST',
+                url: '/v1/auth/login',
+                payload: {
+                  email: `test-${i}@example.com`, // Use unique emails to avoid duplicate account issues
+                  password: 'wrong',
+                },
+              })
+              .then((response) => ({ statusCode: response.statusCode }))
           );
         }
-        
+
         const batchResponses = await Promise.all(batch);
         allResponses.push(...batchResponses);
-        
+
         // Small delay between batches to prevent overwhelming the server
         if (batchEnd < TOTAL_ATTEMPTS) {
-          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
         }
       }
 
@@ -480,10 +480,10 @@ describe('Input Validation Security Tests', () => {
       // In test environment with high limits, we may not hit the limit, so just verify no errors
       const rateLimited = allResponses.filter((r) => r.statusCode === 429);
       const errors = allResponses.filter((r) => r.statusCode >= 500);
-      
+
       // Verify no server errors occurred
       expect(errors.length).toBe(0);
-      
+
       // If rate limiting is working, some requests should be rate limited
       // But in test environment with high limits, this may not happen, which is acceptable
       if (rateLimited.length > 0) {
@@ -583,4 +583,3 @@ describe('Input Validation Security Tests', () => {
     });
   });
 });
-

@@ -39,9 +39,7 @@ export type ProviderFailureCode =
   | 'unknown';
 
 export type ProviderFailureSource =
-  | 'structured_provider_error'
-  | 'parsed_string_fallback'
-  | 'unknown';
+  'structured_provider_error' | 'parsed_string_fallback' | 'unknown';
 
 export interface ProviderFailure {
   readonly code: ProviderFailureCode;

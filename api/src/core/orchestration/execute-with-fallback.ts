@@ -179,7 +179,7 @@ export class FallbackExhaustedError extends ApplicationError {
       `All ${capabilityLabel} candidates failed: ${summary || 'no attempts'}`,
       503,
       'capability_dependency_unavailable',
-      { capability: capabilityLabel, attempts },
+      { capability: capabilityLabel, attempts }
     );
     this.name = 'FallbackExhaustedError';
     this.attempts = attempts;
@@ -248,11 +248,7 @@ export function classifyFallbackError(err: unknown): {
           : String(err);
 
   const name =
-    err instanceof Error
-      ? err.name
-      : errObj && typeof errObj.name === 'string'
-        ? errObj.name
-        : '';
+    err instanceof Error ? err.name : errObj && typeof errObj.name === 'string' ? errObj.name : '';
 
   const statusCode =
     errObj && typeof errObj.statusCode === 'number'
@@ -265,14 +261,17 @@ export function classifyFallbackError(err: unknown): {
     return { errorClass: 'timeout', statusCode, message };
   }
 
-  if (statusCode === 401 || /unauthor|invalid api key|invalid bearer|forbidden api key/i.test(message)) {
+  if (
+    statusCode === 401 ||
+    /unauthor|invalid api key|invalid bearer|forbidden api key/i.test(message)
+  ) {
     return { errorClass: 'auth', statusCode, message };
   }
 
   if (
     statusCode === 402 ||
     /quota|insufficient.*(credit|balance|fund)|out of credit|payment required|exceed.*usage/i.test(
-      message,
+      message
     )
   ) {
     return { errorClass: 'quota_exhausted', statusCode, message };
@@ -291,7 +290,7 @@ export function classifyFallbackError(err: unknown): {
 
   if (
     /not[\s-_]?support|capability.*mismatch|operation.*not.*allowed|invalid.*endpoint/i.test(
-      message,
+      message
     )
   ) {
     return { errorClass: 'capability_mismatch', statusCode, message };
@@ -328,7 +327,7 @@ export function selectCandidates(params: {
         declares(m) &&
         (m.name.toLowerCase() === target ||
           m.id.toLowerCase() === target ||
-          (typeof m.displayName === 'string' && m.displayName.toLowerCase() === target)),
+          (typeof m.displayName === 'string' && m.displayName.toLowerCase() === target))
     );
   }
 
@@ -340,7 +339,7 @@ export function selectCandidates(params: {
  * first success or an exhausted-error that lists every attempt.
  */
 export async function executeWithFallback<TResponse>(
-  options: FallbackOptions<TResponse>,
+  options: FallbackOptions<TResponse>
 ): Promise<FallbackResult<TResponse>> {
   const capabilities = Array.isArray(options.capability)
     ? options.capability
@@ -421,7 +420,7 @@ export async function executeWithFallback<TResponse>(
 
     log.info(
       { provider: model.provider, model: model.name, capability: capabilityLabel },
-      'fallback: attempting candidate',
+      'fallback: attempting candidate'
     );
 
     try {
@@ -454,7 +453,7 @@ export async function executeWithFallback<TResponse>(
           statusCode: classified.statusCode,
           message: classified.message,
         },
-        'fallback: candidate failed, advancing to next',
+        'fallback: candidate failed, advancing to next'
       );
       return { ok: false };
     }
@@ -479,7 +478,7 @@ export async function executeWithFallback<TResponse>(
             throw new Error('racer_failed');
           }
           return outcome;
-        }),
+        })
       );
       return {
         response: winner.response,
@@ -513,7 +512,7 @@ export async function executeWithFallback<TResponse>(
           candidatesRemaining: queue.length - attempts.length,
           deadlineMs,
         },
-        'fallback: search deadline exceeded, stopping before exhausting the full candidate pool',
+        'fallback: search deadline exceeded, stopping before exhausting the full candidate pool'
       );
       break;
     }

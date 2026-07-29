@@ -55,7 +55,14 @@ function makeSignal(overrides: Partial<CoordinationSignal> = {}): CoordinationSi
     providerId: 'p',
     decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' },
     sensitivities: [
-      { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r', expectedDelta: 0.5 },
+      {
+        variable: 'risk',
+        direction: 'decrease',
+        trigger: 't',
+        confidence: 0.8,
+        rationale: 'r',
+        expectedDelta: 0.5,
+      },
     ],
     metrics: { latencyMs: 200, inputTokens: 100, outputTokens: 50, estimatedCost: 0.001 },
     createdAt: new Date().toISOString(),
@@ -80,14 +87,14 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       limits,
       'sensitivity-consensus',
-      'run-int',
+      'run-int'
     );
     perAgentStates = result.nextStates;
 
     const runCost = signals.reduce((acc, s) => acc + (s.metrics?.estimatedCost ?? 0), 0);
     const runTokens = signals.reduce(
       (acc, s) => acc + (s.metrics?.inputTokens ?? 0) + (s.metrics?.outputTokens ?? 0),
-      0,
+      0
     );
 
     const synthesized = synthesizeSharedStateFromPerAgent({
@@ -113,16 +120,25 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
     expect(Object.keys(synthesized.variables)).toContain('risk');
   });
 
-  it('aligns dissent metric with the round\'s decision distribution', () => {
+  it("aligns dissent metric with the round's decision distribution", () => {
     const agentIds = ['a', 'b', 'c'];
     let perAgentStates = createInitialPerAgentStates(agentIds);
     const topology = createFullyConnectedTopology(agentIds);
 
     // 2 approve, 1 reject → dissent = 1/3 ≈ 0.333
     const signals = [
-      makeSignal({ agentId: 'a', decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' } }),
-      makeSignal({ agentId: 'b', decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' } }),
-      makeSignal({ agentId: 'c', decision: { type: 'reject', value: 'n', confidence: 0.7, rationale: 'r' } }),
+      makeSignal({
+        agentId: 'a',
+        decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'b',
+        decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'c',
+        decision: { type: 'reject', value: 'n', confidence: 0.7, rationale: 'r' },
+      }),
     ];
 
     const result = aggregatePerAgent(
@@ -132,7 +148,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-dissent',
+      'run-dissent'
     );
     perAgentStates = result.nextStates;
 
@@ -160,8 +176,16 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
     const topology = createFullyConnectedTopology(agentIds);
 
     const round1 = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'y', confidence: 0.6, rationale: 'r' } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'approve', value: 'y', confidence: 0.65, rationale: 'r' } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'y', confidence: 0.6, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'approve', value: 'y', confidence: 0.65, rationale: 'r' },
+      }),
     ];
     perAgentStates = aggregatePerAgent(
       perAgentStates,
@@ -170,7 +194,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-trend',
+      'run-trend'
     ).nextStates;
 
     const after1 = synthesizeSharedStateFromPerAgent({
@@ -190,8 +214,16 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
     expect(after1.convergence.confidenceTrend.length).toBe(1);
 
     const round2 = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'y', confidence: 0.85, rationale: 'r' } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'approve', value: 'y', confidence: 0.8, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'y', confidence: 0.85, rationale: 'r' },
+      }),
     ];
     perAgentStates = aggregatePerAgent(
       perAgentStates,
@@ -200,7 +232,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-trend',
+      'run-trend'
     ).nextStates;
 
     const after2 = synthesizeSharedStateFromPerAgent({
@@ -218,7 +250,9 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       priorConfidenceTrend: after1.convergence.confidenceTrend,
     });
     expect(after2.convergence.confidenceTrend.length).toBe(2);
-    expect(after2.convergence.confidenceTrend[0]).toBeCloseTo(after1.convergence.confidenceTrend[0]);
+    expect(after2.convergence.confidenceTrend[0]).toBeCloseTo(
+      after1.convergence.confidenceTrend[0]
+    );
   });
 
   it('decisionFlipRate measures cross-round flips deterministically', () => {
@@ -228,8 +262,16 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
 
     // Round 1: a/approve b/reject. Round 2: a flips to reject, b stays.
     const round1 = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'y', confidence: 0.7, rationale: 'r' } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'reject', value: 'n', confidence: 0.7, rationale: 'r' } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'y', confidence: 0.7, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'reject', value: 'n', confidence: 0.7, rationale: 'r' },
+      }),
     ];
     perAgentStates = aggregatePerAgent(
       perAgentStates,
@@ -238,12 +280,20 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-flip',
+      'run-flip'
     ).nextStates;
 
     const round2 = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'reject', value: 'n', confidence: 0.8, rationale: 'r' } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'reject', value: 'n', confidence: 0.8, rationale: 'r' } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'reject', value: 'n', confidence: 0.8, rationale: 'r' },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'reject', value: 'n', confidence: 0.8, rationale: 'r' },
+      }),
     ];
     perAgentStates = aggregatePerAgent(
       perAgentStates,
@@ -252,7 +302,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-flip',
+      'run-flip'
     ).nextStates;
 
     const synthesized = synthesizeSharedStateFromPerAgent({
@@ -285,19 +335,66 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
 
     // Signal exclusive to agent 'c' (only c's neighbors should observe).
     const signals = [
-      makeSignal({ agentId: 'a', sensitivities: [
-        { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r', expectedDelta: 0.5 },
-      ] }),
-      makeSignal({ agentId: 'b', sensitivities: [
-        { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r', expectedDelta: 0.4 },
-      ] }),
-      makeSignal({ agentId: 'c', sensitivities: [
-        { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r', expectedDelta: 0.6 },
-        { variable: 'cost', direction: 'increase', trigger: 't', confidence: 0.7, rationale: 'r', expectedDelta: 0.3 },
-      ] }),
-      makeSignal({ agentId: 'd', sensitivities: [
-        { variable: 'risk', direction: 'decrease', trigger: 't', confidence: 0.8, rationale: 'r', expectedDelta: 0.5 },
-      ] }),
+      makeSignal({
+        agentId: 'a',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r',
+            expectedDelta: 0.5,
+          },
+        ],
+      }),
+      makeSignal({
+        agentId: 'b',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r',
+            expectedDelta: 0.4,
+          },
+        ],
+      }),
+      makeSignal({
+        agentId: 'c',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r',
+            expectedDelta: 0.6,
+          },
+          {
+            variable: 'cost',
+            direction: 'increase',
+            trigger: 't',
+            confidence: 0.7,
+            rationale: 'r',
+            expectedDelta: 0.3,
+          },
+        ],
+      }),
+      makeSignal({
+        agentId: 'd',
+        sensitivities: [
+          {
+            variable: 'risk',
+            direction: 'decrease',
+            trigger: 't',
+            confidence: 0.8,
+            rationale: 'r',
+            expectedDelta: 0.5,
+          },
+        ],
+      }),
     ];
 
     const ringStates = aggregatePerAgent(
@@ -307,7 +404,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-ring',
+      'run-ring'
     ).nextStates;
 
     const sparseStates = aggregatePerAgent(
@@ -317,7 +414,7 @@ describe('Per-agent path → synthesized shared state (F2.6)', () => {
       'weighted_confidence',
       defaultLimits(),
       'sensitivity-consensus',
-      'run-sparse',
+      'run-sparse'
     ).nextStates;
 
     // Under ring topology, b and d (neighbors of c) observe 'cost'.

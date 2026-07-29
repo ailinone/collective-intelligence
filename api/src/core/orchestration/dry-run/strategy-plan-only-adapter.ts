@@ -65,7 +65,8 @@ export interface PlanOnlyTriageTrace {
   confidence?: number | null;
   recommendedStrategy?: string | null;
   discarded: boolean;
-  discardReason?: 'TRIAGE_CONFIDENCE_BELOW_THRESHOLD' | 'STRATEGY_NOT_AVAILABLE' | 'AUTO_STRATEGY_NOT_REQUESTED';
+  discardReason?:
+    'TRIAGE_CONFIDENCE_BELOW_THRESHOLD' | 'STRATEGY_NOT_AVAILABLE' | 'AUTO_STRATEGY_NOT_REQUESTED';
 }
 
 /** Cost-quality estimation trace for the plan. */
@@ -91,7 +92,12 @@ export interface ModelRankingTrace {
 /** Route candidates for the plan (structural, no provider calls). */
 export interface RouteCandidates {
   routeSelectionPolicy: string;
-  candidates: Array<{ provider?: string; model?: string; estimatedCostUsd?: number; available: boolean }>;
+  candidates: Array<{
+    provider?: string;
+    model?: string;
+    estimatedCostUsd?: number;
+    available: boolean;
+  }>;
   selectedRoute: string | null;
 }
 
@@ -210,24 +216,32 @@ export function buildPlanOnlyResult(
   strategyName: string,
   selectionSource: string,
   detectionPath: DryRunDetectionPath,
-  request: ChatRequest & { dryRun?: boolean; ailin_metadata?: Record<string, unknown>; eval?: Record<string, unknown> },
+  request: ChatRequest & {
+    dryRun?: boolean;
+    ailin_metadata?: Record<string, unknown>;
+    eval?: Record<string, unknown>;
+  },
   context: OrchestrationContext,
-  triageDecision: {
-    intent?: string | null;
-    complexity?: string | null;
-    confidence?: number | null;
-    recommendedStrategy?: string | null;
-    discarded?: boolean;
-    discardReason?: string;
-  } | null | undefined,
+  triageDecision:
+    | {
+        intent?: string | null;
+        complexity?: string | null;
+        confidence?: number | null;
+        recommendedStrategy?: string | null;
+        discarded?: boolean;
+        discardReason?: string;
+      }
+    | null
+    | undefined,
   qualityTarget: number,
-  options: PlanOnlyResultOptions = {},
+  options: PlanOnlyResultOptions = {}
 ): OrchestrationResult {
   const requestId = context.requestId ?? `dry-run-${Date.now()}`;
   const now = Math.floor(Date.now() / 1000);
   const registered = options.registered !== false; // default: true
   const blockers = options.blockers ?? (registered ? [] : ['BLOCKED_BY_MISSING_STRATEGY_REGISTRY']);
-  const missingCapabilities = options.missingCapabilities ?? (registered ? [] : [`strategy:${strategyName}`]);
+  const missingCapabilities =
+    options.missingCapabilities ?? (registered ? [] : [`strategy:${strategyName}`]);
 
   // ── Triage trace ─────────────────────────────────────────────────────────
   const triageInvoked = triageDecision !== null && triageDecision !== undefined;
@@ -237,9 +251,10 @@ export function buildPlanOnlyResult(
     complexity: triageDecision?.complexity ?? null,
     confidence: triageDecision?.confidence ?? null,
     recommendedStrategy: triageDecision?.recommendedStrategy ?? null,
-    discarded: triageDecision?.discarded === true ||
-      (triageInvoked && !triageDecision?.recommendedStrategy),
-    discardReason: triageDecision?.discardReason as PlanOnlyTriageTrace['discardReason'] ??
+    discarded:
+      triageDecision?.discarded === true || (triageInvoked && !triageDecision?.recommendedStrategy),
+    discardReason:
+      (triageDecision?.discardReason as PlanOnlyTriageTrace['discardReason']) ??
       (triageInvoked && !triageDecision?.recommendedStrategy
         ? 'TRIAGE_CONFIDENCE_BELOW_THRESHOLD'
         : undefined),
@@ -268,33 +283,33 @@ export function buildPlanOnlyResult(
     estimatedLatencyMs: estimateStrategyLatency(strategyName),
     providerCallExecuted: false,
     planExecutable: routeReadinessScore > 0,
-    planExecutableBlockers: routeReadinessScore === 0
-      ? ['NO_MODELS_AVAILABLE']
-      : [],
+    planExecutableBlockers: routeReadinessScore === 0 ? ['NO_MODELS_AVAILABLE'] : [],
   };
 
   // ── Route trace ───────────────────────────────────────────────────────────
   const routeTrace = buildRouteTrace(selectionSource, triageTrace);
 
   // ── Model ranking trace ───────────────────────────────────────────────────
-  const candidateModels = (context.models ?? []).slice(0, 5).map(m => ({
+  const candidateModels = (context.models ?? []).slice(0, 5).map((m) => ({
     id: m.id,
-    qualityScore: typeof (m as { qualityScore?: number }).qualityScore === 'number'
-      ? (m as { qualityScore?: number }).qualityScore
-      : undefined,
-    estimatedCostUsd: 0,  // dry-run — no real cost
+    qualityScore:
+      typeof (m as { qualityScore?: number }).qualityScore === 'number'
+        ? (m as { qualityScore?: number }).qualityScore
+        : undefined,
+    estimatedCostUsd: 0, // dry-run — no real cost
   }));
   const modelRankingTrace: ModelRankingTrace = {
     candidateModels,
     selectionPolicy: selectionSource,
-    finalSelectionScore: candidateModels.length > 0 ? estimateStrategyQuality(strategyName, qualityTarget) : 0,
+    finalSelectionScore:
+      candidateModels.length > 0 ? estimateStrategyQuality(strategyName, qualityTarget) : 0,
     modelCount: context.models?.length ?? 0,
   };
 
   // ── Route candidates ─────────────────────────────────────────────────────
   const routeCandidatesObj: RouteCandidates = {
     routeSelectionPolicy: selectionSource,
-    candidates: candidateModels.slice(0, 3).map(m => ({
+    candidates: candidateModels.slice(0, 3).map((m) => ({
       model: m.id,
       estimatedCostUsd: 0,
       available: registered,
@@ -303,11 +318,19 @@ export function buildPlanOnlyResult(
   };
 
   // ── Plan fingerprint ──────────────────────────────────────────────────────
-  const planFingerprint = computePlanFingerprint(strategyName, context.taskType ?? 'general', qualityTarget, registered);
+  const planFingerprint = computePlanFingerprint(
+    strategyName,
+    context.taskType ?? 'general',
+    qualityTarget,
+    registered
+  );
 
   // ── Execution plan ────────────────────────────────────────────────────────
-  const { steps: _steps, planNote: _planNote, strategySemantics } =
-    buildExecutionPlan(strategyName, registered, blockers, candidateModels);
+  const {
+    steps: _steps,
+    planNote: _planNote,
+    strategySemantics,
+  } = buildExecutionPlan(strategyName, registered, blockers, candidateModels);
   const executionPlan = { steps: _steps, planNote: _planNote, strategySemantics };
 
   // ── Payload ───────────────────────────────────────────────────────────────
@@ -321,7 +344,7 @@ export function buildPlanOnlyResult(
     model_ranking_trace: modelRankingTrace,
     route_candidates: routeCandidatesObj,
     route_trace: routeTrace,
-    models_considered: candidateModels.map(m => m.id),
+    models_considered: candidateModels.map((m) => m.id),
     executionPlan,
     planFingerprint,
     executable: registered && blockers.length === 0,
@@ -332,7 +355,8 @@ export function buildPlanOnlyResult(
   };
 
   // ── Synthetic ChatResponse ────────────────────────────────────────────────
-  const syntheticContent = `[DRY RUN — PLAN ONLY]\n` +
+  const syntheticContent =
+    `[DRY RUN — PLAN ONLY]\n` +
     `Strategy: ${strategyName} (selected via ${selectionSource})\n` +
     `Task type: ${context.taskType ?? 'general'}\n` +
     `Quality target: ${qualityTarget.toFixed(2)}\n` +
@@ -395,14 +419,14 @@ export function buildPlanOnlyResult(
 /** Rough quality estimate per strategy (0-1). */
 function estimateStrategyQuality(strategyName: string, qualityTarget: number): number {
   const qualityMap: Record<string, number> = {
-    'single': 0.70,
+    single: 0.7,
     'cost-cascade': 0.65,
-    'parallel': 0.75,
-    'debate': 0.82,
-    'consensus': 0.88,
+    parallel: 0.75,
+    debate: 0.82,
+    consensus: 0.88,
     'quality-multipass': 0.92,
-    'collaborative': 0.80,
-    'competitive': 0.83,
+    collaborative: 0.8,
+    competitive: 0.83,
     'expert-panel': 0.85,
     'diversity-ensemble': 0.84,
   };
@@ -412,14 +436,14 @@ function estimateStrategyQuality(strategyName: string, qualityTarget: number): n
 /** Rough latency estimate per strategy (milliseconds). */
 function estimateStrategyLatency(strategyName: string): number {
   const latencyMap: Record<string, number> = {
-    'single': 3000,
+    single: 3000,
     'cost-cascade': 4000,
-    'parallel': 5000,
-    'debate': 15000,
-    'consensus': 20000,
+    parallel: 5000,
+    debate: 15000,
+    consensus: 20000,
     'quality-multipass': 25000,
-    'collaborative': 12000,
-    'competitive': 10000,
+    collaborative: 12000,
+    competitive: 10000,
   };
   return latencyMap[strategyName] ?? 8000;
 }
@@ -437,12 +461,12 @@ function computePlanFingerprint(
   strategyName: string,
   taskType: string,
   qualityTarget: number,
-  registered: boolean,
+  registered: boolean
 ): string {
   const input = `${strategyName}|${taskType}|${qualityTarget.toFixed(2)}|${String(registered)}|${SEMANTIC_PLAN_VERSION}`;
   let h = 5381;
   for (let i = 0; i < input.length; i++) {
-    h = Math.imul((h << 5) + h, 1) + input.charCodeAt(i) | 0;
+    h = (Math.imul((h << 5) + h, 1) + input.charCodeAt(i)) | 0;
   }
   return `pf_${(h >>> 0).toString(16)}`;
 }
@@ -591,12 +615,9 @@ const STRATEGY_STEP_TEMPLATES: Record<string, StepTemplate[]> = {
 };
 
 /** Build strategy semantics metadata for strategies with deep templates. */
-function buildStrategySemantics(
-  strategyId: string,
-  templates: StepTemplate[],
-): StrategySemantics {
-  const phases = templates.map(t => t.phase);
-  const roles = templates.map(t => t.role).filter((r): r is string => r !== undefined);
+function buildStrategySemantics(strategyId: string, templates: StepTemplate[]): StrategySemantics {
+  const phases = templates.map((t) => t.phase);
+  const roles = templates.map((t) => t.role).filter((r): r is string => r !== undefined);
   const base: StrategySemantics = {
     semanticPlanVersion: SEMANTIC_PLAN_VERSION,
     strategyId,
@@ -648,11 +669,11 @@ function buildStrategySemantics(
  * leave role undefined — they have no inter-step role differentiation.
  */
 const STEP_ROLES: Record<string, { execute: string; synthesize: string }> = {
-  'consensus': { execute: 'voter',    synthesize: 'synthesizer' },
-  'debate': { execute: 'proposer', synthesize: 'judge'       },
-  'expert-panel': { execute: 'expert',   synthesize: 'judge'       },
-  'critique-repair': { execute: 'critic',   synthesize: 'repairer'    },
-  'quality-multipass': { execute: 'executor', synthesize: 'reviewer'    },
+  consensus: { execute: 'voter', synthesize: 'synthesizer' },
+  debate: { execute: 'proposer', synthesize: 'judge' },
+  'expert-panel': { execute: 'expert', synthesize: 'judge' },
+  'critique-repair': { execute: 'critic', synthesize: 'repairer' },
+  'quality-multipass': { execute: 'executor', synthesize: 'reviewer' },
 };
 
 /**
@@ -670,16 +691,18 @@ function buildExecutionPlan(
   strategyName: string,
   registered: boolean,
   blockers: string[],
-  candidateModels: Array<{ id: string }>,
+  candidateModels: Array<{ id: string }>
 ): { steps: ExecutionPlanStep[]; planNote: string; strategySemantics?: StrategySemantics } {
   if (!registered || blockers.length > 0) {
     return {
-      steps: [{
-        stepId: 'step-0-blocked',
-        action: 'blocked',
-        providerCallPlanned: false,
-        providerCallExecuted: false,
-      }],
+      steps: [
+        {
+          stepId: 'step-0-blocked',
+          action: 'blocked',
+          providerCallPlanned: false,
+          providerCallExecuted: false,
+        },
+      ],
       planNote: `Dry-run plan blocked: ${blockers.join(', ')}`,
     };
   }
@@ -706,14 +729,16 @@ function buildExecutionPlan(
 
   // ── SM-R5 STEP_ROLES fallback (consensus, debate, expert-panel, etc.) ──────
   const roles = STEP_ROLES[strategyName];
-  const steps: ExecutionPlanStep[] = [{
-    stepId: 'step-0-plan',
-    action: `${strategyName}/execute`,
-    role: roles?.execute,
-    modelId: candidateModels[0]?.id,
-    providerCallPlanned: true,   // would be called in live mode
-    providerCallExecuted: false, // never executed in dry-run
-  }];
+  const steps: ExecutionPlanStep[] = [
+    {
+      stepId: 'step-0-plan',
+      action: `${strategyName}/execute`,
+      role: roles?.execute,
+      modelId: candidateModels[0]?.id,
+      providerCallPlanned: true, // would be called in live mode
+      providerCallExecuted: false, // never executed in dry-run
+    },
+  ];
   if (['consensus', 'debate', 'expert-panel'].includes(strategyName)) {
     steps.push({
       stepId: 'step-1-synthesis',
@@ -750,7 +775,9 @@ function buildRouteTrace(selectionSource: string, triageTrace: PlanOnlyTriageTra
   trace.push('bandit→cold_start(no_confidence)');
 
   // Final resolution
-  trace.push(`${selectionSource}→resolved(${selectionSource.includes('cold-start') ? 'deterministic_policy' : 'heuristic_score'})`);
+  trace.push(
+    `${selectionSource}→resolved(${selectionSource.includes('cold-start') ? 'deterministic_policy' : 'heuristic_score'})`
+  );
 
   return trace;
 }

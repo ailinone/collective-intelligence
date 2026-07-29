@@ -34,7 +34,7 @@ import type {
 function input(
   overrides: Partial<EnsembleEstimateInput> & {
     members: { judgeMean: number; judgeMedian?: number; judgeP80?: number; judgeStdDev?: number }[];
-  },
+  }
 ): EnsembleEstimateInput {
   return {
     members: [],
@@ -55,7 +55,7 @@ function input(
 describe('additive_current', () => {
   it('= anchor + Σ peer_lift (no cap, no uncertainty)', () => {
     const e = additiveCurrentEstimator.estimate(
-      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 }),
+      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 })
     );
     expect(e.expectedJudge).toBeCloseTo(0.7 + 0.1, 6);
   });
@@ -64,7 +64,7 @@ describe('additive_current', () => {
 describe('multiplicative_bounded', () => {
   it('= anchor * (1 + min(maxLift, Σ peer_lift)), bounded', () => {
     const e = multiplicativeBoundedEstimator.estimate(
-      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 }),
+      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 })
     );
     // anchor=0.7, 1 extra * 0.1 = 0.1 lift, total 0.1
     expect(e.expectedJudge).toBeCloseTo(0.7 * 1.1, 6);
@@ -73,14 +73,9 @@ describe('multiplicative_bounded', () => {
   it('caps lift at 0.20', () => {
     const e = multiplicativeBoundedEstimator.estimate(
       input({
-        members: [
-          { judgeMean: 0.7 },
-          { judgeMean: 0.5 },
-          { judgeMean: 0.5 },
-          { judgeMean: 0.5 },
-        ],
+        members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }, { judgeMean: 0.5 }, { judgeMean: 0.5 }],
         peerLift: 0.5,
-      }),
+      })
     );
     // 3 extras × 0.5 = 1.5, capped to 0.20.
     expect(e.expectedJudge).toBeCloseTo(0.7 * 1.2, 6);
@@ -89,10 +84,13 @@ describe('multiplicative_bounded', () => {
   it('applies uncertainty penalty when stdDev present', () => {
     const e = multiplicativeBoundedEstimator.estimate(
       input({
-        members: [{ judgeMean: 0.7, judgeStdDev: 0.2 }, { judgeMean: 0.5, judgeStdDev: 0.2 }],
+        members: [
+          { judgeMean: 0.7, judgeStdDev: 0.2 },
+          { judgeMean: 0.5, judgeStdDev: 0.2 },
+        ],
         peerLift: 0,
         uncertaintyPenaltyWeight: 0.5,
-      }),
+      })
     );
     expect(e.uncertainty).toBeGreaterThan(0);
     expect(e.lowerBound).toBeLessThan(e.expectedJudge);
@@ -103,14 +101,9 @@ describe('capped_additive', () => {
   it('caps per-model and total gains', () => {
     const e = cappedAdditiveEstimator.estimate(
       input({
-        members: [
-          { judgeMean: 0.6 },
-          { judgeMean: 0.5 },
-          { judgeMean: 0.5 },
-          { judgeMean: 0.5 },
-        ],
+        members: [{ judgeMean: 0.6 }, { judgeMean: 0.5 }, { judgeMean: 0.5 }, { judgeMean: 0.5 }],
         peerLift: 0.3,
-      }),
+      })
     );
     // per-model cap 0.06 × 3 extras = 0.18, total cap 0.18 → +0.18
     expect(e.expectedJudge).toBeCloseTo(0.6 + 0.18, 6);
@@ -128,7 +121,7 @@ describe('weighted_anchor_support', () => {
           complementarityScore: 0.5,
         },
         uncertaintyPenaltyWeight: 0,
-      }),
+      })
     );
     // 0.7*0.8 + 0.25*0.6 + 0.05*0.5 = 0.56 + 0.15 + 0.025 = 0.735
     expect(e.expectedJudge).toBeCloseTo(0.735, 4);
@@ -146,14 +139,14 @@ describe('pair_aware_direct', () => {
           judgeMean: 0.9,
           paretoWinRate: 0.5,
         },
-      }),
+      })
     );
     expect(e.expectedJudge).toBeCloseTo(0.5 * 0.8 + 0.5 * 0.9, 4);
   });
 
   it('falls back to anchor + peer_lift when pair profile absent', () => {
     const e = pairAwareDirectEstimator.estimate(
-      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 }),
+      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 })
     );
     expect(e.expectedJudge).toBeCloseTo(0.8, 4);
   });
@@ -166,7 +159,7 @@ describe('lower_bound_ensemble', () => {
         members: [{ judgeMean: 0.7, judgeStdDev: 0.2 }, { judgeMean: 0.5 }],
         peerLift: 0.1,
         uncertaintyPenaltyWeight: 0.5,
-      }),
+      })
     );
     expect(e.expectedJudge).toBeLessThan(0.7);
     expect(e.uncertainty).toBeGreaterThan(0);
@@ -176,7 +169,7 @@ describe('lower_bound_ensemble', () => {
 describe('conservative_parallel', () => {
   it('= max(anchor, weightedSupport) + lift * 0.75', () => {
     const e = conservativeParallelEstimator.estimate(
-      input({ members: [{ judgeMean: 0.8 }, { judgeMean: 0.6 }], peerLift: 0.1 }),
+      input({ members: [{ judgeMean: 0.8 }, { judgeMean: 0.6 }], peerLift: 0.1 })
     );
     const base = Math.max(0.8, 0.7 * 0.8 + 0.3 * 0.6);
     expect(e.expectedJudge).toBeCloseTo(base + 0.075, 4);
@@ -188,33 +181,30 @@ describe('empirical_ensemble_calibrated', () => {
     const cal = { offset: 0.1, scale: 0.8 };
     const est = makeEmpiricalEnsembleEstimator(cal);
     const e = est.estimate(
-      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 }),
+      input({ members: [{ judgeMean: 0.7 }, { judgeMean: 0.5 }], peerLift: 0.1 })
     );
     // raw = 0.7 + 1*0.1 = 0.8; scaled = 0.8*0.8 + 0.1 = 0.74
     expect(e.expectedJudge).toBeCloseTo(0.74, 4);
   });
 
   it('learns from training examples', () => {
-    const examples: EnsembleCalibrationExample[] = Array.from(
-      { length: 10 },
-      (_, i) => ({
-        executionId: `e${i}`,
-        experimentId: 'exp',
-        taskId: 't',
-        taskType: 'code',
-        strategyId: 'parallel',
-        effectiveStrategyId: 'parallel',
-        selectedModelIds: ['a', 'b'],
-        observedJudge: 0.5 + 0.05 * i,
-        observedCostUsd: 0.01,
-        singleBaselineJudge: 0.5,
-        singleBaselineCostUsd: 0.02,
-        modelProfileJudges: [
-          { modelId: 'a', judgeMean: 0.5 + 0.05 * i, judgeMedian: 0.5, judgeP80: 0.5 },
-          { modelId: 'b', judgeMean: 0.4, judgeMedian: 0.4, judgeP80: 0.4 },
-        ],
-      }),
-    );
+    const examples: EnsembleCalibrationExample[] = Array.from({ length: 10 }, (_, i) => ({
+      executionId: `e${i}`,
+      experimentId: 'exp',
+      taskId: 't',
+      taskType: 'code',
+      strategyId: 'parallel',
+      effectiveStrategyId: 'parallel',
+      selectedModelIds: ['a', 'b'],
+      observedJudge: 0.5 + 0.05 * i,
+      observedCostUsd: 0.01,
+      singleBaselineJudge: 0.5,
+      singleBaselineCostUsd: 0.02,
+      modelProfileJudges: [
+        { modelId: 'a', judgeMean: 0.5 + 0.05 * i, judgeMedian: 0.5, judgeP80: 0.5 },
+        { modelId: 'b', judgeMean: 0.4, judgeMedian: 0.4, judgeP80: 0.4 },
+      ],
+    }));
     const cal = learnEmpiricalCalibration(examples, () => 0);
     expect(Number.isFinite(cal.offset)).toBe(true);
     expect(Number.isFinite(cal.scale)).toBe(true);

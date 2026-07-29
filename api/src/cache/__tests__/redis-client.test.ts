@@ -97,7 +97,7 @@ describe('redis-client', () => {
     process.env = ORIGINAL_ENV;
   });
 
-  it('defaults every client to the single general host/port (today\'s behavior, unchanged)', async () => {
+  it("defaults every client to the single general host/port (today's behavior, unchanged)", async () => {
     process.env.REDIS_HOST = 'shared-host';
     process.env.REDIS_PORT = '7000';
 

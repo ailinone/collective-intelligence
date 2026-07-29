@@ -46,9 +46,7 @@ import {
   resetPromptMetrics,
   incrementPromptMetric,
 } from '../prompts/prompt-metrics';
-import {
-  exportPromptMetricsAsPrometheus,
-} from '../prompts/prompt-metrics-exporter';
+import { exportPromptMetricsAsPrometheus } from '../prompts/prompt-metrics-exporter';
 
 // ────────────────────────────────────────────────────────────────────────────
 // S1 — Provider-kind classification

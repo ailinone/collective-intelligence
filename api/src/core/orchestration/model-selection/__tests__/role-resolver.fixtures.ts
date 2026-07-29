@@ -30,13 +30,12 @@ export function makeModel(overrides: Partial<Model> & { id: string }): Model {
     outputCostPer1k: overrides.outputCostPer1k ?? 0.002,
     capabilities: (overrides.capabilities ?? ['chat', 'text_generation']) as ModelCapability[],
     capabilityUris: overrides.capabilityUris,
-    performance:
-      overrides.performance ?? {
-        latencyMs: 1000,
-        throughput: 100,
-        quality: 0.9,
-        reliability: 0.95,
-      },
+    performance: overrides.performance ?? {
+      latencyMs: 1000,
+      throughput: 100,
+      quality: 0.9,
+      reliability: 0.95,
+    },
     status: overrides.status ?? 'active',
     balanceStatus: overrides.balanceStatus ?? 'has-credits',
     inventoryRole: overrides.inventoryRole,
@@ -46,9 +45,7 @@ export function makeModel(overrides: Partial<Model> & { id: string }): Model {
   };
 }
 
-export function makeCandidate(
-  overrides: Partial<ModelCandidate> & { id: string },
-): ModelCandidate {
+export function makeCandidate(overrides: Partial<ModelCandidate> & { id: string }): ModelCandidate {
   const model = overrides.model ?? makeModel({ id: overrides.id });
   return {
     model,
@@ -124,7 +121,13 @@ export function diversePool(): readonly ModelCandidate[] {
       model: makeModel({
         id: 'high-quality-a',
         provider: 'provider-x',
-        capabilities: ['chat', 'text_generation', 'reasoning', 'function_calling', 'json_mode'] as ModelCapability[],
+        capabilities: [
+          'chat',
+          'text_generation',
+          'reasoning',
+          'function_calling',
+          'json_mode',
+        ] as ModelCapability[],
         contextWindow: 200000,
         performance: { latencyMs: 1500, throughput: 80, quality: 0.95, reliability: 0.96 },
         inputCostPer1k: 0.005,
@@ -136,7 +139,12 @@ export function diversePool(): readonly ModelCandidate[] {
       model: makeModel({
         id: 'mid-quality-b',
         provider: 'provider-y',
-        capabilities: ['chat', 'text_generation', 'reasoning', 'code_generation'] as ModelCapability[],
+        capabilities: [
+          'chat',
+          'text_generation',
+          'reasoning',
+          'code_generation',
+        ] as ModelCapability[],
         contextWindow: 128000,
         performance: { latencyMs: 900, throughput: 130, quality: 0.85, reliability: 0.92 },
         inputCostPer1k: 0.002,
@@ -148,7 +156,12 @@ export function diversePool(): readonly ModelCandidate[] {
       model: makeModel({
         id: 'cheap-c',
         provider: 'provider-z',
-        capabilities: ['chat', 'text_generation', 'function_calling', 'json_mode'] as ModelCapability[],
+        capabilities: [
+          'chat',
+          'text_generation',
+          'function_calling',
+          'json_mode',
+        ] as ModelCapability[],
         contextWindow: 64000,
         performance: { latencyMs: 500, throughput: 250, quality: 0.7, reliability: 0.9 },
         inputCostPer1k: 0.0001,

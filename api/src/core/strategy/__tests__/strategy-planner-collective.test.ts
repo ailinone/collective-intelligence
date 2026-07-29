@@ -39,10 +39,7 @@ describe('planStrategy — consensus', () => {
 
   it('high risk but only 2 candidates → consensus rejected, falls through', () => {
     const result = planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-1' }),
-        makeResult({ routeId: 'r-2' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-1' }), makeResult({ routeId: 'r-2' })],
       context: HIGH_RISK_CONTEXT,
     });
     expect(result.plan.strategy).not.toBe('consensus');

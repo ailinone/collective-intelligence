@@ -36,7 +36,7 @@ type ExpertPanelInternals = {
   createExpertRequest: (
     request: ChatRequest,
     domain: string,
-    opts?: { slots?: unknown; variant?: unknown },
+    opts?: { slots?: unknown; variant?: unknown }
   ) => ChatRequest;
   buildCoordinatorMessages: (request: ChatRequest, coordinatorSystem: string) => ChatMessage[];
 };
@@ -106,7 +106,12 @@ describe('createExpertRequest — routes through the SOTA catalog', () => {
 
   it('a bandit variant overrides the canonical catalog text when supplied', () => {
     const req = internals().createExpertRequest(baseRequest, 'security', {
-      variant: { id: 'v1', promptKey: 'expertSpecialist', content: 'VARIANT-PROMPT-BODY', contentHash: 'abc' },
+      variant: {
+        id: 'v1',
+        promptKey: 'expertSpecialist',
+        content: 'VARIANT-PROMPT-BODY',
+        contentHash: 'abc',
+      },
     });
     expect(req.messages[0].content).toBe('VARIANT-PROMPT-BODY');
   });
@@ -143,10 +148,7 @@ describe('buildCoordinatorMessages — does not drop the client system message',
 
 describe('source guardrail — no inline expert prompt map survives', () => {
   it('expert-panel-strategy.ts references the catalog and dropped the inline map', async () => {
-    const src = await fs.readFile(
-      path.resolve(__dirname, '../expert-panel-strategy.ts'),
-      'utf8',
-    );
+    const src = await fs.readFile(path.resolve(__dirname, '../expert-panel-strategy.ts'), 'utf8');
     expect(src).toContain('PROMPTS.expertSpecialist');
     expect(src).not.toContain('const expertPrompts');
     expect(src).not.toContain('As a Code Quality Expert');

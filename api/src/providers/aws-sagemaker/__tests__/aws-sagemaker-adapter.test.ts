@@ -240,7 +240,7 @@ describe('buildRequestBody (dispatcher)', () => {
 
   it('throws on an unknown schema value (exhaustiveness)', () => {
     expect(() => buildRequestBody(req, 'invalid' as SageMakerPayloadSchema)).toThrow(
-      /unknown payloadSchema/,
+      /unknown payloadSchema/
     );
   });
 });
@@ -255,9 +255,7 @@ describe('flattenMessagesToPrompt', () => {
       { role: 'assistant', content: 'A1' },
       { role: 'user', content: 'Q2' },
     ]);
-    expect(prompt).toBe(
-      'System: Rule A\n\nUser: Q1\n\nAssistant: A1\n\nUser: Q2\n\nAssistant:',
-    );
+    expect(prompt).toBe('System: Rule A\n\nUser: Q1\n\nAssistant: A1\n\nUser: Q2\n\nAssistant:');
   });
 
   it('drops empty-content messages rather than emitting dangling labels', () => {
@@ -311,7 +309,7 @@ describe('parseEndpointResponse — openai schema', () => {
         }),
       } as unknown as Parameters<typeof parseEndpointResponse>[0],
       'my-endpoint',
-      'openai',
+      'openai'
     );
     expect(chat.choices[0].message?.content).toBe('Hi there');
     expect(chat.choices[0].finish_reason).toBe('stop');
@@ -326,7 +324,7 @@ describe('parseEndpointResponse — openai schema', () => {
     const chat = parseEndpointResponse(
       { Body: undefined } as unknown as Parameters<typeof parseEndpointResponse>[0],
       'ep',
-      'openai',
+      'openai'
     );
     expect(chat.choices[0].message?.content).toBe('');
     expect(chat.choices[0].finish_reason).toBe(null);
@@ -339,7 +337,7 @@ describe('parseEndpointResponse — openai schema', () => {
       >[0],
       'ep',
       // Route through hf-tgi so the wrapped { generated_text } shape is picked up.
-      'hf-tgi',
+      'hf-tgi'
     );
     expect(chat.choices[0].message?.content).toBe('plain-text-reply');
   });
@@ -352,7 +350,7 @@ describe('parseEndpointResponse — jumpstart/hf-tgi schemas', () => {
         Body: bytesOf([{ generated_text: 'Reply from TGI' }]),
       } as unknown as Parameters<typeof parseEndpointResponse>[0],
       'ep',
-      'hf-tgi',
+      'hf-tgi'
     );
     expect(chat.choices[0].message?.content).toBe('Reply from TGI');
   });
@@ -372,7 +370,7 @@ describe('parseEndpointResponse — jumpstart/hf-tgi schemas', () => {
         ]),
       } as unknown as Parameters<typeof parseEndpointResponse>[0],
       'ep',
-      'hf-tgi',
+      'hf-tgi'
     );
     expect(chat.choices[0].message?.content).toBe('Reply');
     expect(chat.choices[0].finish_reason).toBe('stop');
@@ -389,7 +387,7 @@ describe('parseEndpointResponse — jumpstart/hf-tgi schemas', () => {
         Body: bytesOf({ generated_text: 'Single-object reply' }),
       } as unknown as Parameters<typeof parseEndpointResponse>[0],
       'ep',
-      'jumpstart',
+      'jumpstart'
     );
     expect(chat.choices[0].message?.content).toBe('Single-object reply');
   });
@@ -401,7 +399,7 @@ describe('extractTextByScheme', () => {
   it('dispatches openai-shape to the OAI extractor', () => {
     const r = extractTextByScheme(
       { choices: [{ message: { content: 'X' }, finish_reason: 'length' }] },
-      'openai',
+      'openai'
     );
     expect(r.text).toBe('X');
     expect(r.finishReason).toBe('length');
@@ -497,15 +495,15 @@ describe('AWSSageMakerAdapter — construction', () => {
   });
 
   it('throws when accessKeyId is missing everywhere', () => {
-    expect(
-      () => new AWSSageMakerAdapter({ apiKey: '', secretAccessKey: 's' }),
-    ).toThrow(/accessKeyId/);
+    expect(() => new AWSSageMakerAdapter({ apiKey: '', secretAccessKey: 's' })).toThrow(
+      /accessKeyId/
+    );
   });
 
   it('throws when secretAccessKey is missing', () => {
-    expect(
-      () => new AWSSageMakerAdapter({ apiKey: 'k', accessKeyId: 'k' }),
-    ).toThrow(/secretAccessKey/);
+    expect(() => new AWSSageMakerAdapter({ apiKey: 'k', accessKeyId: 'k' })).toThrow(
+      /secretAccessKey/
+    );
   });
 });
 
@@ -627,7 +625,7 @@ describe('AWSSageMakerAdapter — chatCompletion integration (openai schema)', (
       adapter.chatCompletion({
         model: '',
         messages: [{ role: 'user', content: 'Hi' }],
-      }),
+      })
     ).rejects.toThrow(/no endpoint to invoke/);
   });
 });
@@ -694,7 +692,7 @@ describe('AWSSageMakerAdapter — listDeployedEndpoints', () => {
 
   it('returns [] and does NOT throw when ListEndpoints fails (IAM missing, etc.)', async () => {
     mockControlSend.mockRejectedValueOnce(
-      new Error('AccessDeniedException: sagemaker:ListEndpoints not allowed'),
+      new Error('AccessDeniedException: sagemaker:ListEndpoints not allowed')
     );
     const adapter = new AWSSageMakerAdapter({ apiKey: 'k' });
     const eps = await adapter.listDeployedEndpoints();
@@ -742,8 +740,8 @@ describe('AWSSageMakerAdapter — unsupported capabilities throw', () => {
     await expect(
       adapter.imageEdit(
         dummyModel,
-        {} as unknown as import('@/types/model-client').ImageEditRequest,
-      ),
+        {} as unknown as import('@/types/model-client').ImageEditRequest
+      )
     ).rejects.toThrow(/imageEdit/);
   });
 
@@ -751,8 +749,8 @@ describe('AWSSageMakerAdapter — unsupported capabilities throw', () => {
     await expect(
       adapter.imageVariation(
         dummyModel,
-        {} as unknown as import('@/types/model-client').ImageVariationRequest,
-      ),
+        {} as unknown as import('@/types/model-client').ImageVariationRequest
+      )
     ).rejects.toThrow(/imageVariation/);
   });
 
@@ -760,16 +758,14 @@ describe('AWSSageMakerAdapter — unsupported capabilities throw', () => {
     await expect(
       adapter.moderate(
         dummyModel,
-        {} as unknown as import('@/types/model-client').ModerationRequest,
-      ),
+        {} as unknown as import('@/types/model-client').ModerationRequest
+      )
     ).rejects.toThrow(/moderate/);
   });
 
   it('throws on generateEmbeddings with follow-up hint', async () => {
     await expect(
-      adapter.generateEmbeddings(
-        {} as unknown as import('@/types').EmbeddingRequest,
-      ),
+      adapter.generateEmbeddings({} as unknown as import('@/types').EmbeddingRequest)
     ).rejects.toThrow(/embeddings pack/);
   });
 });
@@ -794,7 +790,7 @@ describe('AWSSageMakerAdapter — calculateCost', () => {
       id: 'm',
       name: 'm',
       inputCostPer1k: 0.002,
-      outputCostPer1k: 0.010,
+      outputCostPer1k: 0.01,
     } as unknown as import('@/types').Model;
     // 1M input × $0.002/1k = $2 ; 0.5M output × $0.010/1k = $5 ; total $7
     expect(a.calculateCost(model, 1_000_000, 500_000)).toBeCloseTo(7, 5);

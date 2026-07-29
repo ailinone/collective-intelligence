@@ -40,17 +40,17 @@ declare global {
 
 /**
  * Create Prisma client with enterprise-grade configuration
- * 
+ *
  * Connection Pooling Strategy:
  * - Development: Small pool (5 connections)
  * - Production: Large pool (100 connections per instance)
  * - Staging: Medium pool (20 connections)
- * 
+ *
  * Pool Configuration:
  * - connection_limit: Max connections from this client
  * - pool_timeout: Max wait time for connection (seconds)
  * - connect_timeout: Max time to establish connection (seconds)
- * 
+ *
  * For massive scale (100K+ orgs), deploy PgBouncer:
  * - Transaction pooling mode
  * - 10K+ connections supported
@@ -61,68 +61,72 @@ declare global {
 function buildDatabaseUrl(): string {
   // In test environment, use process.env.DATABASE_URL directly
   // This allows Testcontainers to override at runtime
-  const baseUrl = process.env.NODE_ENV === 'test' && process.env.DATABASE_URL
-    ? process.env.DATABASE_URL
-    : config.database.url;
-  
+  const baseUrl =
+    process.env.NODE_ENV === 'test' && process.env.DATABASE_URL
+      ? process.env.DATABASE_URL
+      : config.database.url;
+
   // If URL doesn't look like postgres URL, return as-is
-  if (!baseUrl || !baseUrl.includes('postgresql://') && !baseUrl.includes('postgres://')) {
+  if (!baseUrl || (!baseUrl.includes('postgresql://') && !baseUrl.includes('postgres://'))) {
     return baseUrl;
   }
-  
+
   // Check if connection pooler (PgBouncer) is enabled
   // For enterprise scale, use PgBouncer for connection pooling
   // Note: This is synchronous, so we'll check the env var directly
   // The pooler config will be validated when connection is established
   const usePooler = process.env.DATABASE_USE_POOLER === 'true' && process.env.DATABASE_POOLER_HOST;
-  
+
   if (usePooler) {
     // Use pooler URL directly from env or construct it
     const poolerHost = process.env.DATABASE_POOLER_HOST;
     const poolerPort = process.env.DATABASE_POOLER_PORT || '6432';
-    const url = new URL(baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://'));
+    const url = new URL(
+      baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://')
+    );
     url.hostname = poolerHost!;
     url.port = poolerPort;
     url.searchParams.set('pgbouncer', 'true');
     return url.toString().replace('http://', 'postgresql://');
   }
-  
+
   // Parse existing URL
-  const url = new URL(baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://'));
-  
-    // Add/override connection pooling parameters based on environment
-    // Note: statement_timeout is set per-connection in transactions, not in connection string
-    // This allows different timeouts for different operation types
-    // For PgBouncer, connection_limit should be set at pooler level, not here
-    const poolConfig: Record<string, string> = {
-      // DATABASE_CONNECTION_LIMIT (operator override) takes precedence in
-      // every mode. Default is mode-aware: small in dev/test (5) to keep
-      // local Postgres usage modest, larger in prod (30) for real load.
-      // The override matters because dev orchestration runs 4+ concurrent
-      // background workers (auto-learning, periodic flushers) on top of
-      // request handlers, and at pool=5 they starve auth queries that
-      // then return as 401 "invalid api key" — the symptom that masks
-      // pool exhaustion.
-      connection_limit:
-        process.env.DATABASE_CONNECTION_LIMIT
-        || (isDevelopment || process.env.NODE_ENV === 'test' ? '5' : '30'),
-      pool_timeout: '60',
-      // Increase connect_timeout to handle slower connections (e.g., Cloud SQL proxy, network latency)
-      // In Docker/Cloud environments, connections may need more time
-      connect_timeout: process.env.DATABASE_CONNECT_TIMEOUT || '20', // 20 seconds default (was 10)
+  const url = new URL(
+    baseUrl.replace('postgresql://', 'http://').replace('postgres://', 'http://')
+  );
+
+  // Add/override connection pooling parameters based on environment
+  // Note: statement_timeout is set per-connection in transactions, not in connection string
+  // This allows different timeouts for different operation types
+  // For PgBouncer, connection_limit should be set at pooler level, not here
+  const poolConfig: Record<string, string> = {
+    // DATABASE_CONNECTION_LIMIT (operator override) takes precedence in
+    // every mode. Default is mode-aware: small in dev/test (5) to keep
+    // local Postgres usage modest, larger in prod (30) for real load.
+    // The override matters because dev orchestration runs 4+ concurrent
+    // background workers (auto-learning, periodic flushers) on top of
+    // request handlers, and at pool=5 they starve auth queries that
+    // then return as 401 "invalid api key" — the symptom that masks
+    // pool exhaustion.
+    connection_limit:
+      process.env.DATABASE_CONNECTION_LIMIT ||
+      (isDevelopment || process.env.NODE_ENV === 'test' ? '5' : '30'),
+    pool_timeout: '60',
+    // Increase connect_timeout to handle slower connections (e.g., Cloud SQL proxy, network latency)
+    // In Docker/Cloud environments, connections may need more time
+    connect_timeout: process.env.DATABASE_CONNECT_TIMEOUT || '20', // 20 seconds default (was 10)
     // Default statement timeout (can be overridden per transaction)
     // For production with PgBouncer, this should be set at pooler level
     statement_timeout: process.env.DATABASE_STATEMENT_TIMEOUT || '30000', // 30 seconds default
   };
-  
+
   for (const [key, value] of Object.entries(poolConfig)) {
     url.searchParams.set(key, value);
   }
-  
+
   // Convert back to postgresql://
   return url.toString().replace('http://', 'postgresql://');
 }
-
 
 // Re-evaluate database URL on each access in test mode
 function getDatabaseUrl(): string {
@@ -146,8 +150,10 @@ function createPgPool(): pg.Pool {
   // the connection timeout, surfacing as PrismaClientKnownRequestError and multi-second stalls. Raise
   // the dev pool (override via DB_POOL_MAX). Pairs with the per-model query batching below so the
   // extra connections reduce, not amplify, DB load.
-  const poolSize = Number(process.env.DB_POOL_MAX) || (isDevelopment || process.env.NODE_ENV === 'test' ? 20 : 100);
-  
+  const poolSize =
+    Number(process.env.DB_POOL_MAX) ||
+    (isDevelopment || process.env.NODE_ENV === 'test' ? 20 : 100);
+
   const pool = new pg.Pool({
     connectionString,
     max: poolSize,
@@ -181,10 +187,10 @@ function createPgPool(): pg.Pool {
       console.warn('[db pool] error', { code, message });
     }
   });
-  
+
   // Store pool reference for cleanup
   pgPoolInstance = pool;
-  
+
   return pool;
 }
 
@@ -200,21 +206,22 @@ function createPrismaClient(): PrismaClient {
   if (!process.env.DATABASE_URL) {
     process.env.DATABASE_URL = getDatabaseUrl();
   }
-  
+
   const pool = createPgPool();
   const adapter = new PrismaPg(pool);
-  
-  const logConfig = isDevelopment || process.env.NODE_ENV === 'test'
-    ? [
-        { emit: 'event' as const, level: 'query' as const },
-        { emit: 'event' as const, level: 'error' as const },
-        { emit: 'event' as const, level: 'warn' as const },
-      ]
-    : [
-        { emit: 'event' as const, level: 'query' as const }, // Enable in prod for slow query monitoring
-        { emit: 'event' as const, level: 'error' as const },
-        { emit: 'event' as const, level: 'warn' as const },
-      ];
+
+  const logConfig =
+    isDevelopment || process.env.NODE_ENV === 'test'
+      ? [
+          { emit: 'event' as const, level: 'query' as const },
+          { emit: 'event' as const, level: 'error' as const },
+          { emit: 'event' as const, level: 'warn' as const },
+        ]
+      : [
+          { emit: 'event' as const, level: 'query' as const }, // Enable in prod for slow query monitoring
+          { emit: 'event' as const, level: 'error' as const },
+          { emit: 'event' as const, level: 'warn' as const },
+        ];
 
   return new PrismaClient({
     adapter,
@@ -248,7 +255,7 @@ function getPrismaInstance(): PrismaClient {
 /**
  * Recreate Prisma Client with updated DATABASE_URL
  * Useful in test environment when Testcontainers updates DATABASE_URL after initial import
- * 
+ *
  * Note: This function does NOT disconnect/close the old instance, as it may still be in use.
  * Instead, it creates a new instance and updates the global reference. The old instance
  * will be garbage collected when no longer referenced.
@@ -258,19 +265,22 @@ export function recreatePrismaClient(): PrismaClient {
     // Store old instance reference (will be garbage collected)
     const oldInstance = prismaInstance;
     const oldPool = pgPoolInstance;
-    
+
     // Clear global instance to force new creation
     global.__prisma = undefined;
-    
+
     // Create new instance with updated DATABASE_URL
     prismaInstance = createPrismaClient();
     global.__prisma = prismaInstance;
-    
+
     logger.info(
-      { oldUrl: oldInstance ? 'previous' : 'none', newUrl: process.env.DATABASE_URL?.substring(0, 50) + '...' },
+      {
+        oldUrl: oldInstance ? 'previous' : 'none',
+        newUrl: process.env.DATABASE_URL?.substring(0, 50) + '...',
+      },
       'Prisma Client recreated with updated DATABASE_URL'
     );
-    
+
     // Asynchronously disconnect old instance and its pool if they exist.
     // Don't await to avoid blocking test boot, but ensure resources are released.
     if (oldInstance) {
@@ -284,20 +294,23 @@ export function recreatePrismaClient(): PrismaClient {
     if (oldPool && oldPool !== pgPoolInstance) {
       oldPool.end().catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
-        logger.debug({ error: message }, 'Error closing old PostgreSQL pool (expected in some cases)');
+        logger.debug(
+          { error: message },
+          'Error closing old PostgreSQL pool (expected in some cases)'
+        );
       });
     }
   }
-  
+
   return prismaInstance;
 }
 
 /**
  * Prisma Client singleton instance
- * 
+ *
  * In test mode, this getter ensures that modules always get the latest instance,
  * even if it was recreated after Testcontainers updates DATABASE_URL.
- * 
+ *
  * Note: We export as a getter function proxy to ensure modules always get
  * the current instance, not a stale reference.
  */
@@ -385,9 +398,12 @@ prisma.$on('query' as never, (e: PrismaQueryEvent) => {
 
     // Export to monitoring system (Prometheus)
     const operation = query.split(' ')[0]?.toUpperCase() || 'UNKNOWN';
-    const tableMatch = query.match(/FROM\s+"?(\w+)"?/i) || query.match(/INTO\s+"?(\w+)"?/i) || query.match(/UPDATE\s+"?(\w+)"?/i);
+    const tableMatch =
+      query.match(/FROM\s+"?(\w+)"?/i) ||
+      query.match(/INTO\s+"?(\w+)"?/i) ||
+      query.match(/UPDATE\s+"?(\w+)"?/i);
     const table = tableMatch?.[1] || 'unknown';
-    
+
     dbSlowQueries.inc({ operation, table });
     dbQueryDuration.observe({ operation, table }, duration / 1000);
   }
@@ -445,15 +461,16 @@ export async function runMigrations(): Promise<void> {
     logger.warn('Migrations skipped via SKIP_MIGRATIONS environment variable');
     return;
   }
-  
+
   // In containerized environments (Docker), always use migrate deploy
   // In local development, we can use migrate dev for interactive development
   // But for consistency and safety, we always run migrate deploy unless explicitly disabled
-  const isContainerized = process.env.DATABASE_AUTO_MIGRATE === 'true' || 
-                          process.env.CI === 'true' || 
-                          process.env.NODE_ENV === 'production' ||
-                          process.env.IN_DOCKER === 'true';
-  
+  const isContainerized =
+    process.env.DATABASE_AUTO_MIGRATE === 'true' ||
+    process.env.CI === 'true' ||
+    process.env.NODE_ENV === 'production' ||
+    process.env.IN_DOCKER === 'true';
+
   if (!isContainerized && (isDevelopment || process.env.NODE_ENV === 'test')) {
     // In local development, log info but still apply migrations for consistency
     logger.info('Development mode detected - migrations will still be applied for consistency');
@@ -464,7 +481,7 @@ export async function runMigrations(): Promise<void> {
     const prismaSchemaPath = join(process.cwd(), 'prisma', 'schema.prisma');
     const prismaConfigPath = join(process.cwd(), 'prisma', 'prisma.config.ts');
     const prismaBinPath = join(process.cwd(), 'node_modules', '.bin', 'prisma');
-    
+
     // Use absolute path to ensure we're using the correct Prisma binary
     // In Docker/container environments, node_modules may be in a different location
     const _prismaBinAbsolute = join(process.cwd(), 'node_modules', '@prisma', 'client', 'prisma');
@@ -472,10 +489,15 @@ export async function runMigrations(): Promise<void> {
 
     // Execute prisma migrate deploy - use sh to execute the shell script
     logger.info(
-      { schemaPath: prismaSchemaPath, configPath: prismaConfigPath, binPath: prismaBinToUse, cwd: process.cwd() },
+      {
+        schemaPath: prismaSchemaPath,
+        configPath: prismaConfigPath,
+        binPath: prismaBinToUse,
+        cwd: process.cwd(),
+      },
       'Running database migrations'
     );
-    
+
     // Ensure DATABASE_URL is set for migrations
     const databaseUrl = config.database.url || process.env.DATABASE_URL;
     if (!databaseUrl) {
@@ -514,23 +536,23 @@ export async function runMigrations(): Promise<void> {
     let stderr: string | undefined;
     let code: number | string | undefined;
     let signal: string | undefined;
-    
+
     // Safely extract process execution error properties without type assertions
     if (typeof error === 'object' && error !== null) {
       const errorRecord = error;
-      
+
       // Extract stdout using Object.getOwnPropertyDescriptor for safety
       const stdoutDescriptor = Object.getOwnPropertyDescriptor(errorRecord, 'stdout');
       if (stdoutDescriptor && typeof stdoutDescriptor.value === 'string') {
         stdout = stdoutDescriptor.value;
       }
-      
+
       // Extract stderr using Object.getOwnPropertyDescriptor for safety
       const stderrDescriptor = Object.getOwnPropertyDescriptor(errorRecord, 'stderr');
       if (stderrDescriptor && typeof stderrDescriptor.value === 'string') {
         stderr = stderrDescriptor.value;
       }
-      
+
       // Extract code safely (PropertyDescriptor.value is `any`; narrow to unknown)
       const codeDescriptor = Object.getOwnPropertyDescriptor(errorRecord, 'code');
       if (codeDescriptor) {
@@ -541,14 +563,14 @@ export async function runMigrations(): Promise<void> {
           code = codeValue;
         }
       }
-      
+
       // Extract signal safely
       const signalDescriptor = Object.getOwnPropertyDescriptor(errorRecord, 'signal');
       if (signalDescriptor && typeof signalDescriptor.value === 'string') {
         signal = signalDescriptor.value;
       }
     }
-    
+
     logger.error(
       {
         error: errorMessage,
@@ -609,10 +631,10 @@ export async function connectDatabase(): Promise<void> {
 
 /**
  * Disconnect from database
- * 
+ *
  * Note: In test environments, this may be called multiple times.
  * Prisma's $disconnect() is idempotent and safe to call multiple times.
- * 
+ *
  * IMPORTANT: There's a known issue with Prisma Query Engine and Rust panics
  * during cleanup when the process terminates. This is a Prisma bug and doesn't
  * affect test results - it only occurs during process shutdown.
@@ -621,15 +643,15 @@ export async function disconnectDatabase(): Promise<void> {
   try {
     // Add a small delay to allow any pending queries to complete
     // This helps reduce the chance of NAPI reference issues during cleanup
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     await prisma.$disconnect();
     logger.info('Database disconnected');
-    
+
     // Additional delay to allow Query Engine to clean up NAPI references
     // This is a workaround for a known Prisma issue where Rust panics can occur
     // during process exit if cleanup happens too quickly
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error({ error: errorMessage }, 'Error disconnecting from database');

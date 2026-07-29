@@ -138,12 +138,33 @@ export class SingleModelStrategy extends BaseStrategy {
       });
       const reasoningEnabled = this.isReasoningEnabled(request);
       const currentExecution = hasTools
-        ? await this.executeModelWithTools(selectedModel.adapter, selectedModel.model, requestWithSelectedModel, 'primary')
+        ? await this.executeModelWithTools(
+            selectedModel.adapter,
+            selectedModel.model,
+            requestWithSelectedModel,
+            'primary'
+          )
         : qualityTarget >= 0.9
-          ? await this.selfCritiqueLoop(selectedModel.adapter, selectedModel.model, requestWithSelectedModel, 'primary', qualityTarget)
+          ? await this.selfCritiqueLoop(
+              selectedModel.adapter,
+              selectedModel.model,
+              requestWithSelectedModel,
+              'primary',
+              qualityTarget
+            )
           : reasoningEnabled
-            ? await this.executeModelWithReasoning(selectedModel.adapter, selectedModel.model, requestWithSelectedModel, 'primary')
-            : await this.executeModel(selectedModel.adapter, selectedModel.model, requestWithSelectedModel, 'primary');
+            ? await this.executeModelWithReasoning(
+                selectedModel.adapter,
+                selectedModel.model,
+                requestWithSelectedModel,
+                'primary'
+              )
+            : await this.executeModel(
+                selectedModel.adapter,
+                selectedModel.model,
+                requestWithSelectedModel,
+                'primary'
+              );
       attempts.push(currentExecution);
 
       if (currentExecution.success) {
@@ -161,9 +182,13 @@ export class SingleModelStrategy extends BaseStrategy {
 
       // Detect balance/payment errors — try same model via different provider
       const errMsg = (currentExecution.error || '').toLowerCase();
-      const isBalanceError = errMsg.includes('402') || errMsg.includes('403') ||
-        errMsg.includes('insufficient') || errMsg.includes('balance') ||
-        errMsg.includes('quota') || errMsg.includes('credit');
+      const isBalanceError =
+        errMsg.includes('402') ||
+        errMsg.includes('403') ||
+        errMsg.includes('insufficient') ||
+        errMsg.includes('balance') ||
+        errMsg.includes('quota') ||
+        errMsg.includes('credit');
 
       if (isBalanceError && userSpecifiedModel && this.getAdapterForModel) {
         // Try same model ID via provider-registry fallback (tries all providers)
@@ -178,7 +203,12 @@ export class SingleModelStrategy extends BaseStrategy {
             { model: entry.id, fromProvider: failedProvider, toProvider: entry.provider },
             'Retrying user-specified model via alternative provider'
           );
-          const retryExec = await this.executeModel(altAdapter, entry, { ...request, model: entry.id }, 'primary');
+          const retryExec = await this.executeModel(
+            altAdapter,
+            entry,
+            { ...request, model: entry.id },
+            'primary'
+          );
           attempts.push(retryExec);
           if (retryExec.success) {
             execution = retryExec;
@@ -224,7 +254,19 @@ export class SingleModelStrategy extends BaseStrategy {
         modelCount: attempts.length,
         selectedModel: execution.modelName,
         selectedProvider: selectedProviderName || 'unknown',
-        ...(execution.reasoning ? { reasoning_traces: [{ model_id: execution.modelId, model_name: execution.modelName, role: execution.role, reasoning: execution.reasoning, reasoning_tokens: execution.reasoningTokens }] } : {}),
+        ...(execution.reasoning
+          ? {
+              reasoning_traces: [
+                {
+                  model_id: execution.modelId,
+                  model_name: execution.modelName,
+                  role: execution.role,
+                  reasoning: execution.reasoning,
+                  reasoning_tokens: execution.reasoningTokens,
+                },
+              ],
+            }
+          : {}),
       },
     };
 
@@ -296,12 +338,11 @@ export class SingleModelStrategy extends BaseStrategy {
       summary: `Single model execution: ${candidates[0].model.name || candidates[0].model.id}.`,
     });
 
-    yield* this.streamSynthesisWithFallback(
-      request,
-      candidates,
-      () => '',
-      { ...opts, throwOnTotalFailure: true, skipSynthesisCap: true },
-    );
+    yield* this.streamSynthesisWithFallback(request, candidates, () => '', {
+      ...opts,
+      throwOnTotalFailure: true,
+      skipSynthesisCap: true,
+    });
 
     this.emitObserverEvent(context, {
       type: 'synthesis_complete',
@@ -345,7 +386,10 @@ export class SingleModelStrategy extends BaseStrategy {
       !excludedModelIds.has(context.precomputedModelSelection.model.id)
     ) {
       this.log.info(
-        { model: context.precomputedModelSelection.model.name, reason: 'Reused speculative parallel selection' },
+        {
+          model: context.precomputedModelSelection.model.name,
+          reason: 'Reused speculative parallel selection',
+        },
         'Using precomputed model selection'
       );
       return context.precomputedModelSelection;
@@ -364,9 +408,7 @@ export class SingleModelStrategy extends BaseStrategy {
     // Otherwise, delegate to DynamicModelSelector for intelligent selection
     if (userSpecifiedModel && request.model && request.model !== 'auto') {
       const requestedModel = models.find(
-        (m) =>
-          !excludedModelIds.has(m.id) &&
-          (m.name === request.model || m.id === request.model)
+        (m) => !excludedModelIds.has(m.id) && (m.name === request.model || m.id === request.model)
       );
 
       if (requestedModel) {
@@ -462,8 +504,7 @@ export class SingleModelStrategy extends BaseStrategy {
           return historical.successRate >= 0.8 && historical.avgLatency <= 20_000;
         });
 
-        let candidatePool =
-          stableCandidates.length > 0 ? stableCandidates : rankedCandidates;
+        let candidatePool = stableCandidates.length > 0 ? stableCandidates : rankedCandidates;
         candidatePool = candidatePool.filter(
           (candidate) => !excludedModelIds.has(candidate.model.id)
         );
@@ -549,7 +590,10 @@ export class SingleModelStrategy extends BaseStrategy {
     // Fallback to original local scoring if DynamicModelSelector fails
     this.log.warn(
       {
-        taskType: ('task_type' in request && typeof request.task_type === 'string' ? request.task_type : undefined) || context.taskType,
+        taskType:
+          ('task_type' in request && typeof request.task_type === 'string'
+            ? request.task_type
+            : undefined) || context.taskType,
         totalModelsAvailable: models.length,
       },
       'Using fallback local scoring - DynamicModelSelector unavailable'
@@ -613,7 +657,10 @@ export class SingleModelStrategy extends BaseStrategy {
       case 'debugging':
       case 'refactoring':
         // Prefer models with code-related capabilities
-        if (model.capabilities.includes('code_generation') || model.capabilities.includes('code_interpreter')) {
+        if (
+          model.capabilities.includes('code_generation') ||
+          model.capabilities.includes('code_interpreter')
+        ) {
           score += 0.2;
         }
         if (model.capabilities.includes('function_calling')) {
@@ -711,11 +758,9 @@ export class SingleModelStrategy extends BaseStrategy {
         (msg) =>
           typeof msg.content === 'object' &&
           Array.isArray(msg.content) &&
-          msg.content.some((c): c is ImageContent => 
-            typeof c === 'object' &&
-            c !== null &&
-            'type' in c &&
-            c.type === 'image_url'
+          msg.content.some(
+            (c): c is ImageContent =>
+              typeof c === 'object' && c !== null && 'type' in c && c.type === 'image_url'
           )
       ) || false;
 
@@ -758,21 +803,31 @@ export class SingleModelStrategy extends BaseStrategy {
   /**
    * Extract required capabilities from request
    */
-  private extractRequiredCapabilities(request: ChatRequest, context?: import('@/types').OrchestrationContext): ModelCapability[] | undefined {
+  private extractRequiredCapabilities(
+    request: ChatRequest,
+    context?: import('@/types').OrchestrationContext
+  ): ModelCapability[] | undefined {
     // Start with context-required capabilities if available (from triage or inference).
     // Non-text modalities (image_generation, audio_generation, etc.) override the
     // default chat/text baseline — you can't generate images with a text-only model.
     const NON_TEXT_CAPS = new Set([
-      'image_generation', 'image_editing', 'video_generation', 'video_editing',
-      'audio_generation', 'text_to_speech', 'vision', 'multimodal', 'computer_use',
+      'image_generation',
+      'image_editing',
+      'video_generation',
+      'video_editing',
+      'audio_generation',
+      'text_to_speech',
+      'vision',
+      'multimodal',
+      'computer_use',
     ]);
 
     const contextCaps = context?.requiredCapabilities ?? [];
-    const hasNonTextRequirement = contextCaps.some(cap => NON_TEXT_CAPS.has(cap));
+    const hasNonTextRequirement = contextCaps.some((cap) => NON_TEXT_CAPS.has(cap));
 
     const capabilities: ModelCapability[] = hasNonTextRequirement
-      ? [...contextCaps] as ModelCapability[] // Use context caps directly (no chat/text baseline)
-      : ['chat', 'text_generation'];          // Default text baseline
+      ? ([...contextCaps] as ModelCapability[]) // Use context caps directly (no chat/text baseline)
+      : ['chat', 'text_generation']; // Default text baseline
 
     if (request.stream) {
       capabilities.push('streaming');
@@ -845,14 +900,15 @@ export class SingleModelStrategy extends BaseStrategy {
     if (capabilities?.includes('image_generation')) {
       return 'images';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && (cap === 'text_to_speech' || cap.includes('speech'))
-    )) {
+    if (
+      capabilities?.some(
+        (cap): boolean =>
+          typeof cap === 'string' && (cap === 'text_to_speech' || cap.includes('speech'))
+      )
+    ) {
       return 'audio_speech';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && cap === 'realtime'
-    )) {
+    if (capabilities?.some((cap): boolean => typeof cap === 'string' && cap === 'realtime')) {
       return 'realtime';
     }
 
@@ -860,4 +916,3 @@ export class SingleModelStrategy extends BaseStrategy {
     return undefined;
   }
 }
-

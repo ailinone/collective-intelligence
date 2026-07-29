@@ -113,7 +113,9 @@ describe('01C.1B-J1R2 — discovery vs runtime cap', () => {
       servingProviders: tenProviders,
     });
     expect(result.approved.length).toBe(3);
-    expect(result.rejections.filter((r) => r.reason === 'over_attempt_cap').length).toBeGreaterThan(0);
+    expect(result.rejections.filter((r) => r.reason === 'over_attempt_cap').length).toBeGreaterThan(
+      0
+    );
   });
 
   it('builder: discovery cap does NOT use legacy maxRouteAttempts=3 when default is in effect', () => {
@@ -143,6 +145,8 @@ describe('01C.1B-J1R2 — discovery vs runtime cap', () => {
       policy: { ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY, requireLiveReadyForCriticalRoles: false },
       servingProviders: tenProviders,
     });
-    expect(result.approvedForExecution).toEqual(result.approved.slice(0, result.approvedForExecution.length));
+    expect(result.approvedForExecution).toEqual(
+      result.approved.slice(0, result.approvedForExecution.length)
+    );
   });
 });

@@ -90,10 +90,7 @@ const factories = new Map<string, AdapterFactory>();
  * even if `registerDefaultAdapterFactories()` is called more than once in a
  * test scenario.
  */
-export function registerAdapterFactory(
-  adapterClass: string,
-  factory: AdapterFactory,
-): void {
+export function registerAdapterFactory(adapterClass: string, factory: AdapterFactory): void {
   if (factories.has(adapterClass)) {
     log.debug({ adapterClass }, 'adapter factory already registered — skipping duplicate');
     return;
@@ -108,7 +105,7 @@ export function registerAdapterFactory(
  * back to the default hub adapter.
  */
 export function resolveAdapterFactory(
-  adapterClass: string | undefined,
+  adapterClass: string | undefined
 ): AdapterFactory | undefined {
   if (!adapterClass) return undefined;
   return factories.get(adapterClass);

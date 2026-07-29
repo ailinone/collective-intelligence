@@ -84,7 +84,7 @@ function makeSignal(opts: SignalFactoryOptions): CoordinationSignal {
     },
     sensitivities: opts.sensitivities,
     metrics: {
-      latencyMs: 200 + (opts.agentIdx * 10),
+      latencyMs: 200 + opts.agentIdx * 10,
       inputTokens: 100,
       outputTokens: 50,
       estimatedCost: 0.001,
@@ -100,9 +100,9 @@ function honestSensitivity(variable: string, idx: number): Sensitivity {
     variable,
     direction: directions[idx % directions.length],
     trigger: `if downstream metric on ${variable} drifts (agent ${idx})`,
-    confidence: 0.65 + ((idx % 3) * 0.05),
+    confidence: 0.65 + (idx % 3) * 0.05,
     rationale: `agent ${idx} sees the ${variable} signal as moderate-strength`,
-    expectedDelta: 0.5 + ((idx % 4) * 0.05),
+    expectedDelta: 0.5 + (idx % 4) * 0.05,
   };
 }
 
@@ -135,7 +135,7 @@ export interface PoisoningScenarioOptions {
  * this pattern after at least one round.
  */
 export function buildPoisoningScenario(
-  options: PoisoningScenarioOptions = {},
+  options: PoisoningScenarioOptions = {}
 ): CoordinationSignal[][] {
   const agentCount = Math.max(3, options.agentCount ?? 6);
   // Allow adversaryCount up to agentCount so callers can construct
@@ -144,7 +144,8 @@ export function buildPoisoningScenario(
   // where honest signals diluted the structural anomaly below the
   // detector's threshold.
   const adversaryCount = Math.max(2, Math.min(agentCount, options.adversaryCount ?? 3));
-  const variables = options.variables && options.variables.length > 0 ? options.variables : ['target_var'];
+  const variables =
+    options.variables && options.variables.length > 0 ? options.variables : ['target_var'];
   const advConfidence = Math.max(0.5, Math.min(0.999, options.adversaryConfidence ?? 0.995));
   const rounds = Math.max(1, options.rounds ?? 2);
 
@@ -177,7 +178,7 @@ export function buildPoisoningScenario(
           decisionConfidence: isAdversary ? advConfidence : 0.7,
           rationale: isAdversary ? 'adversarial' : 'honest evaluation',
           sensitivities,
-        }),
+        })
       );
     }
     allRounds.push(signals);
@@ -200,9 +201,7 @@ export interface HerdingScenarioOptions {
  * signature `detectHerding` keys on. Returns the two-round signal
  * sequence.
  */
-export function buildHerdingScenario(
-  options: HerdingScenarioOptions = {},
-): CoordinationSignal[][] {
+export function buildHerdingScenario(options: HerdingScenarioOptions = {}): CoordinationSignal[][] {
   const agentCount = Math.max(7, options.agentCount ?? 14);
   const flipCount = Math.max(1, Math.min(Math.floor(agentCount * 0.14), options.flipCount ?? 2));
 
@@ -217,10 +216,10 @@ export function buildHerdingScenario(
         round: 1,
         decisionType: isDissenter ? 'reject' : 'approve',
         decisionValue: isDissenter ? 'n' : 'y',
-        decisionConfidence: 0.6 + ((agentIdx % 3) * 0.02), // <0.7 average so trend rises
+        decisionConfidence: 0.6 + (agentIdx % 3) * 0.02, // <0.7 average so trend rises
         rationale: 'round-1 reasoning',
         sensitivities: [honestSensitivity('risk', agentIdx)],
-      }),
+      })
     );
     round2.push(
       makeSignal({
@@ -232,7 +231,7 @@ export function buildHerdingScenario(
         decisionConfidence: 0.95,
         rationale: 'round-2 reasoning',
         sensitivities: [honestSensitivity('risk', agentIdx)],
-      }),
+      })
     );
   }
   return [round1, round2];
@@ -251,7 +250,7 @@ export interface ConfidenceSpamScenarioOptions {
  * confidence as a structural anomaly.
  */
 export function buildConfidenceSpamScenario(
-  options: ConfidenceSpamScenarioOptions = {},
+  options: ConfidenceSpamScenarioOptions = {}
 ): CoordinationSignal[][] {
   const agentCount = Math.max(3, options.agentCount ?? 5);
   // Allow all-spammer scenarios so the detector's
@@ -278,7 +277,7 @@ export function buildConfidenceSpamScenario(
             rationale: 'r',
           },
         ],
-      }),
+      })
     );
   }
   return [round1];
@@ -297,9 +296,7 @@ export interface OutlierScenarioOptions {
  * aggregators damp the outlier whereas weighted_confidence is more
  * exposed to it.
  */
-export function buildOutlierScenario(
-  options: OutlierScenarioOptions = {},
-): CoordinationSignal[][] {
+export function buildOutlierScenario(options: OutlierScenarioOptions = {}): CoordinationSignal[][] {
   const agentCount = Math.max(4, options.agentCount ?? 5);
   const outlierDelta = options.outlierExpectedDelta ?? 100;
 
@@ -327,10 +324,10 @@ export function buildOutlierScenario(
             trigger: isOutlier ? 'extreme cost projection' : `agent-${agentIdx} cost review`,
             confidence: 0.7,
             rationale: 'cost analysis',
-            expectedDelta: isOutlier ? outlierDelta : 1.0 + (agentIdx * 0.1),
+            expectedDelta: isOutlier ? outlierDelta : 1.0 + agentIdx * 0.1,
           },
         ],
-      }),
+      })
     );
   }
   return [round1];
@@ -351,7 +348,7 @@ export interface HostileMinorityScenarioOptions {
  * a baseline robustness test for the aggregator.
  */
 export function buildHostileMinorityScenario(
-  options: HostileMinorityScenarioOptions = {},
+  options: HostileMinorityScenarioOptions = {}
 ): CoordinationSignal[][] {
   const honestCount = Math.max(3, options.honestCount ?? 5);
   const hostileCount = Math.max(1, options.hostileCount ?? 2);
@@ -388,7 +385,7 @@ export function buildHostileMinorityScenario(
               rationale: 'evaluation',
             },
           ],
-        }),
+        })
       );
     }
     allRounds.push(signals);

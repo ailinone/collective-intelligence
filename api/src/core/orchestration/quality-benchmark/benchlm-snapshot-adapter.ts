@@ -89,7 +89,8 @@ export interface CandidateLike {
 export interface MatchResult {
   readonly matched: boolean;
   readonly candidate?: CandidateLike;
-  readonly matchKind: 'exact_canonical' | 'exact_model_id' | 'normalized_name' | 'alias' | 'unmatched';
+  readonly matchKind:
+    'exact_canonical' | 'exact_model_id' | 'normalized_name' | 'alias' | 'unmatched';
   readonly matchConfidence: ModelQualityConfidence;
   readonly matchReason: string;
 }
@@ -150,7 +151,7 @@ export function normalizeBenchLmScore(value: unknown): number | undefined {
  * synthesize 0 for missing data (would be misleading).
  */
 export function mapBenchLmDimensions(
-  row: BenchLmLeaderboardRow,
+  row: BenchLmLeaderboardRow
 ): Partial<Record<ModelQualityDimension, number>> {
   const cat = row.categoryScores ?? {};
   const out: Partial<Record<ModelQualityDimension, number>> = {};
@@ -188,8 +189,8 @@ export function canonicalizeBenchLmModelName(name: string): string {
   if (!name) return '';
   return name
     .toLowerCase()
-    .replace(/\s*\([^)]*\)\s*/g, ' ')   // drop parenthetical qualifiers
-    .replace(/\s+/g, ' ')               // collapse whitespace
+    .replace(/\s*\([^)]*\)\s*/g, ' ') // drop parenthetical qualifiers
+    .replace(/\s+/g, ' ') // collapse whitespace
     .trim();
 }
 
@@ -210,7 +211,7 @@ export function compactSlug(name: string): string {
  */
 export function matchBenchLmRowToCatalogModel(
   row: BenchLmLeaderboardRow,
-  candidates: readonly CandidateLike[],
+  candidates: readonly CandidateLike[]
 ): MatchResult {
   if (candidates.length === 0) {
     return {
@@ -227,14 +228,26 @@ export function matchBenchLmRowToCatalogModel(
   for (const c of candidates) {
     const canon = (c.canonicalModelId ?? '').toLowerCase();
     if (canon && benchName === canon) {
-      return { matched: true, candidate: c, matchKind: 'exact_canonical', matchConfidence: 'high', matchReason: 'exact_canonical_match' };
+      return {
+        matched: true,
+        candidate: c,
+        matchKind: 'exact_canonical',
+        matchConfidence: 'high',
+        matchReason: 'exact_canonical_match',
+      };
     }
   }
   // 2. Exact modelId / logicalModelId
   for (const c of candidates) {
     const m = (c.modelId ?? c.logicalModelId ?? '').toLowerCase();
     if (m && benchName === m) {
-      return { matched: true, candidate: c, matchKind: 'exact_model_id', matchConfidence: 'high', matchReason: 'exact_model_id_match' };
+      return {
+        matched: true,
+        candidate: c,
+        matchKind: 'exact_model_id',
+        matchConfidence: 'high',
+        matchReason: 'exact_model_id_match',
+      };
     }
   }
   // 3. Slug substring match — both directions
@@ -274,7 +287,7 @@ export function matchBenchLmRowToCatalogModel(
  */
 export function benchLmRowToCalibrationEntry(
   row: BenchLmLeaderboardRow,
-  opts: MappingOptions & { match?: MatchResult } = {},
+  opts: MappingOptions & { match?: MatchResult } = {}
 ): ModelQualityCalibrationEntry | undefined {
   const overall = normalizeBenchLmScore(row.overall);
   if (overall === undefined) {
@@ -290,7 +303,8 @@ export function benchLmRowToCalibrationEntry(
   }
 
   const canonicalFromCandidate = match?.candidate?.canonicalModelId;
-  const modelId = canonicalFromCandidate ?? row.modelId ?? canonicalizeBenchLmModelName(row.modelName);
+  const modelId =
+    canonicalFromCandidate ?? row.modelId ?? canonicalizeBenchLmModelName(row.modelName);
 
   const warnings: string[] = [opts.attributionWarning ?? ATTRIBUTION_WARNING];
   if (match) {
@@ -352,9 +366,7 @@ export interface SnapshotBuildResult {
  *     operator knows where coverage gaps are)
  *   - `skipped`: BenchLM rows that were dropped (missing overall, etc.)
  */
-export function buildBenchLmQualitySnapshot(
-  input: BuildBenchLmSnapshotInput,
-): SnapshotBuildResult {
+export function buildBenchLmQualitySnapshot(input: BuildBenchLmSnapshotInput): SnapshotBuildResult {
   const candidates = input.candidates ?? [];
   const matchedReports: Array<SnapshotBuildResult['matched'][number]> = [];
   const skippedReports: Array<SnapshotBuildResult['skipped'][number]> = [];
@@ -362,10 +374,9 @@ export function buildBenchLmQualitySnapshot(
   const matchedCanonicalIds = new Set<string>();
 
   for (const row of input.rows) {
-    const match = candidates.length > 0
-      ? matchBenchLmRowToCatalogModel(row, candidates)
-      : undefined;
-    const allowEmit = input.emitUnmatchedRows === true || (match?.matched === true);
+    const match =
+      candidates.length > 0 ? matchBenchLmRowToCatalogModel(row, candidates) : undefined;
+    const allowEmit = input.emitUnmatchedRows === true || match?.matched === true;
     if (!allowEmit) {
       skippedReports.push({
         modelName: row.modelName,
@@ -414,22 +425,34 @@ export function buildBenchLmQualitySnapshot(
   // collapse to canonical "deepseek-v4-pro"), keep the row with HIGHEST
   // qualityScore. We track the dropped variants in warnings.
   const byCanon = new Map<string, ModelQualityCalibrationEntry>();
-  const dedupDropped: Array<{ canonicalModelId: string; droppedScore: number; keptScore: number }> = [];
+  const dedupDropped: Array<{ canonicalModelId: string; droppedScore: number; keptScore: number }> =
+    [];
   for (const entry of entries) {
     const key = entry.canonicalModelId ?? entry.modelId;
     const existing = byCanon.get(key);
-    if (!existing) { byCanon.set(key, entry); continue; }
+    if (!existing) {
+      byCanon.set(key, entry);
+      continue;
+    }
     if (entry.qualityScore > existing.qualityScore) {
       byCanon.set(key, entry);
-      dedupDropped.push({ canonicalModelId: key, droppedScore: existing.qualityScore, keptScore: entry.qualityScore });
+      dedupDropped.push({
+        canonicalModelId: key,
+        droppedScore: existing.qualityScore,
+        keptScore: entry.qualityScore,
+      });
     } else {
-      dedupDropped.push({ canonicalModelId: key, droppedScore: entry.qualityScore, keptScore: existing.qualityScore });
+      dedupDropped.push({
+        canonicalModelId: key,
+        droppedScore: entry.qualityScore,
+        keptScore: existing.qualityScore,
+      });
     }
   }
   const dedupedEntries = Array.from(byCanon.values()).map((e) =>
     dedupDropped.some((d) => d.canonicalModelId === (e.canonicalModelId ?? e.modelId))
       ? { ...e, warnings: [...e.warnings, `deduplicated_variants_kept_best_score`] }
-      : e,
+      : e
   );
 
   const snapshot = buildSnapshot({

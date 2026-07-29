@@ -33,14 +33,8 @@ import {
   type HistoricalExecution,
   type JudgeThresholdPolicy,
 } from './historical-execution-types';
-import {
-  buildModelHarmProfile,
-  type ModelHarmProfile,
-} from './model-harm-profile';
-import type {
-  ModelRole,
-  ModelTaskPerformanceProfile,
-} from './model-task-performance-profile';
+import { buildModelHarmProfile, type ModelHarmProfile } from './model-harm-profile';
+import type { ModelRole, ModelTaskPerformanceProfile } from './model-task-performance-profile';
 import {
   buildPairContributionProfile,
   type PairBaselines,
@@ -86,7 +80,7 @@ const DEFAULT_MIN_SAMPLES = 4;
 // ─── Main entry ─────────────────────────────────────────────────────────
 
 export function scoreHistoricalContribution(
-  input: HistoricalContributionInput,
+  input: HistoricalContributionInput
 ): HistoricalContributionResult {
   const minSamples = input.minSamples ?? DEFAULT_MIN_SAMPLES;
   const thresholds = input.thresholds ?? DEFAULT_JUDGE_THRESHOLDS;
@@ -135,7 +129,7 @@ export function scoreHistoricalContribution(
   for (const [key, execs] of sortedEntries(pairBuckets)) {
     const [a, b, taskType] = splitPairKey(key);
     pairProfiles.push(
-      buildPairContributionProfile(a, b, taskType, execs, pairBaselines, perModelStats),
+      buildPairContributionProfile(a, b, taskType, execs, pairBaselines, perModelStats)
     );
   }
 
@@ -149,9 +143,7 @@ export function scoreHistoricalContribution(
 
 // ─── Filtering ──────────────────────────────────────────────────────────
 
-function filterExecutions(
-  input: HistoricalContributionInput,
-): readonly HistoricalExecution[] {
+function filterExecutions(input: HistoricalContributionInput): readonly HistoricalExecution[] {
   const { executions, taskType, complexity } = input;
   if (taskType === undefined && complexity === undefined) return executions;
   const out: HistoricalExecution[] = [];
@@ -165,9 +157,7 @@ function filterExecutions(
 
 // ─── Baselines ──────────────────────────────────────────────────────────
 
-function computeGlobalBaselines(
-  executions: readonly HistoricalExecution[],
-): GlobalBaselines {
+function computeGlobalBaselines(executions: readonly HistoricalExecution[]): GlobalBaselines {
   const single = filterByStrategy(executions, 'single');
   const singleBudget = filterByStrategy(executions, 'single_budget');
   const parallel = filterByStrategy(executions, 'parallel');
@@ -184,7 +174,7 @@ function computeGlobalBaselines(
 
 function filterByStrategy(
   executions: readonly HistoricalExecution[],
-  strategy: HistoricalExecution['strategyId'],
+  strategy: HistoricalExecution['strategyId']
 ): HistoricalExecution[] {
   const out: HistoricalExecution[] = [];
   for (const ex of executions) if (ex.effectiveStrategyId === strategy) out.push(ex);
@@ -203,7 +193,7 @@ function splitModelTaskKey(key: string): [string, string] {
 }
 
 function bucketByModelAndTask(
-  executions: readonly HistoricalExecution[],
+  executions: readonly HistoricalExecution[]
 ): Map<string, HistoricalExecution[]> {
   const buckets = new Map<string, HistoricalExecution[]>();
   for (const ex of executions) {
@@ -233,7 +223,7 @@ function splitPairKey(key: string): [string, string, string] {
 }
 
 function bucketByPair(
-  executions: readonly HistoricalExecution[],
+  executions: readonly HistoricalExecution[]
 ): Map<string, HistoricalExecution[]> {
   const buckets = new Map<string, HistoricalExecution[]>();
   for (const ex of executions) {
@@ -269,8 +259,14 @@ interface ModelProfileArgs {
 function buildModelProfile(args: ModelProfileArgs): ModelTaskPerformanceProfile {
   const { modelId, taskType, executions, harm, baselines, thresholds, minSamples } = args;
   const n = executions.length;
-  const judges = executions.map((e) => e.judgeScore).slice().sort(numAsc);
-  const costs = executions.map((e) => e.costUsd).slice().sort(numAsc);
+  const judges = executions
+    .map((e) => e.judgeScore)
+    .slice()
+    .sort(numAsc);
+  const costs = executions
+    .map((e) => e.costUsd)
+    .slice()
+    .sort(numAsc);
 
   const judgeMeanV = mean(judges);
   const judgeMedianV = percentile(judges, 0.5);
@@ -279,8 +275,7 @@ function buildModelProfile(args: ModelProfileArgs): ModelTaskPerformanceProfile 
   const judgeVarianceV = judgeStdDevV * judgeStdDevV;
   const costMeanV = mean(costs);
   const costP95V = percentile(costs, 0.95);
-  const qualityPerDollarV =
-    costMeanV > 1e-9 ? Math.min(judgeMeanV / costMeanV, 10_000) : 0;
+  const qualityPerDollarV = costMeanV > 1e-9 ? Math.min(judgeMeanV / costMeanV, 10_000) : 0;
 
   const baselineSingleJudge = baselines.singleModelJudgeMean;
   const winFloor = Math.max(thresholds.winFloor, baselineSingleJudge);
@@ -396,24 +391,21 @@ interface ContribArgs {
 }
 
 function computeContributionScore(a: ContribArgs): number {
-  const raw =
-    0.45 * a.judgeMean + 0.3 * a.winRate - 0.4 * a.harmRate;
+  const raw = 0.45 * a.judgeMean + 0.3 * a.winRate - 0.4 * a.harmRate;
   const scaled = Math.max(0, Math.min(1, raw));
   return scaled * a.confidence + (1 - a.confidence) * 0.3; // shrink toward prior 0.3
 }
 
 function computeHarmRate(
   executions: readonly HistoricalExecution[],
-  baselines: GlobalBaselines,
+  baselines: GlobalBaselines
 ): number {
   if (executions.length === 0) return 0;
   let bad = 0;
   for (const ex of executions) {
     const isCollective =
-      ex.effectiveStrategyId !== 'single' &&
-      ex.effectiveStrategyId !== 'single_budget';
-    const droppedBelowBaseline =
-      ex.judgeScore < baselines.singleModelJudgeMean * 0.6;
+      ex.effectiveStrategyId !== 'single' && ex.effectiveStrategyId !== 'single_budget';
+    const droppedBelowBaseline = ex.judgeScore < baselines.singleModelJudgeMean * 0.6;
     const degraded = ex.degraded === true;
     const failed = ex.success === false;
     if ((isCollective && droppedBelowBaseline) || degraded || failed) bad += 1;

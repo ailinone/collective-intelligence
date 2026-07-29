@@ -20,11 +20,7 @@
  * itself declares the safe surface area.
  */
 
-import type {
-  RoutingMode,
-  ExplicitPinInfo,
-  PinSubstitution,
-} from '../registry/types';
+import type { RoutingMode, ExplicitPinInfo, PinSubstitution } from '../registry/types';
 
 // ─── Semantic index backend (advertised in trace for audit) ─────────────
 
@@ -33,12 +29,7 @@ import type {
  * value matches §4 of the v1.1 plan; MVP 3 only ever sees `'none'`
  * (semantic retrieval not wired yet), but the type is forward-compatible.
  */
-export type SemanticIndexBackend =
-  | 'none'
-  | 'linear'
-  | 'hnsw'
-  | 'pgvector'
-  | 'sidecar';
+export type SemanticIndexBackend = 'none' | 'linear' | 'hnsw' | 'pgvector' | 'sidecar';
 
 // ─── TaskProfileSummary — CATEGORICAL ONLY ──────────────────────────────
 

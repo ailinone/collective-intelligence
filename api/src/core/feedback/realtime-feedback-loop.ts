@@ -102,7 +102,18 @@ export class RealtimeFeedbackLoop {
       // Calculate quality score (guard null response from failed strategies)
       const qualityScore = result.finalResponse?.choices
         ? this.scorer.calculateScore(result.finalResponse, context, primaryExecution)
-        : { overall: 0, dimensions: { correctness: 0, completeness: 0, clarity: 0, efficiency: 0, relevance: 0 }, confidence: 0, reasoning: ['No response available'] } as import('@/core/quality/quality-scorer').QualityScore;
+        : ({
+            overall: 0,
+            dimensions: {
+              correctness: 0,
+              completeness: 0,
+              clarity: 0,
+              efficiency: 0,
+              relevance: 0,
+            },
+            confidence: 0,
+            reasoning: ['No response available'],
+          } as import('@/core/quality/quality-scorer').QualityScore);
       result.qualityScore = qualityScore.overall;
       result.metadata = {
         ...result.metadata,
@@ -290,7 +301,10 @@ export class RealtimeFeedbackLoop {
               ...escalationResult.metadata,
               feedback_summary: {
                 totalIterations: iterations.length,
-                status: escalationQuality.overall >= qualityThreshold ? 'escalation-success' : 'escalation-partial',
+                status:
+                  escalationQuality.overall >= qualityThreshold
+                    ? 'escalation-success'
+                    : 'escalation-partial',
                 reason: `Primary strategy exhausted; escalated to ${config.escalationStrategy.getMetadata().name}`,
               },
               escalation: {

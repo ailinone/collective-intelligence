@@ -23,12 +23,33 @@ import type { ExperimentExecutionResult } from '../experiment-types';
 
 function row(over: Partial<ExperimentExecutionResult>): ExperimentExecutionResult {
   return {
-    experimentId: 'exp', taskIndex: 0, repetition: 1, executionMode: 'single-model',
-    strategy: 'single', model: 'gpt-5.4', taskType: 'reasoning', complexity: 'high', domain: 'tech',
-    prompt: 'p', qualityScore: 0.8, costUsd: 0.01, latencyMs: 1000, totalTokens: 500, success: true,
-    modelsUsed: ['gpt-5.4'], judgeScore: 0.8, judgeRubric: 'r', faithfulnessScore: null,
-    instructionFollowingScore: null, failureMode: null, phase: 'frozen', responseSummary: 'm',
-    ablationDisabled: [], ablationCondition: null, scoringPolicy: 'benchmark', judgeUsed: true,
+    experimentId: 'exp',
+    taskIndex: 0,
+    repetition: 1,
+    executionMode: 'single-model',
+    strategy: 'single',
+    model: 'gpt-5.4',
+    taskType: 'reasoning',
+    complexity: 'high',
+    domain: 'tech',
+    prompt: 'p',
+    qualityScore: 0.8,
+    costUsd: 0.01,
+    latencyMs: 1000,
+    totalTokens: 500,
+    success: true,
+    modelsUsed: ['gpt-5.4'],
+    judgeScore: 0.8,
+    judgeRubric: 'r',
+    faithfulnessScore: null,
+    instructionFollowingScore: null,
+    failureMode: null,
+    phase: 'frozen',
+    responseSummary: 'm',
+    ablationDisabled: [],
+    ablationCondition: null,
+    scoringPolicy: 'benchmark',
+    judgeUsed: true,
     heuristicScoreRaw: null,
     ...over,
   };
@@ -39,25 +60,37 @@ describe('generateReport head-to-head — paired, not pooled (STAT-4)', () => {
     const results: ExperimentExecutionResult[] = [
       // Single ran an EXTRA hard task (0.30) the collective never attempted —
       // this is what dragged pooled means around.
-      row({ taskIndex: 1, executionMode: 'single-model', qualityScore: 0.90 }),
-      row({ taskIndex: 2, executionMode: 'single-model', qualityScore: 0.90 }),
-      row({ taskIndex: 3, executionMode: 'single-model', qualityScore: 0.30 }),
+      row({ taskIndex: 1, executionMode: 'single-model', qualityScore: 0.9 }),
+      row({ taskIndex: 2, executionMode: 'single-model', qualityScore: 0.9 }),
+      row({ taskIndex: 3, executionMode: 'single-model', qualityScore: 0.3 }),
       // Collective only ran the two easy shared tasks.
-      row({ taskIndex: 1, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.60 }),
-      row({ taskIndex: 2, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.60 }),
+      row({
+        taskIndex: 1,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.6,
+      }),
+      row({
+        taskIndex: 2,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.6,
+      }),
     ];
 
     const report = generateReport('exp', 'Paired vs Pooled', results);
     const h2h = report.detailedResults.headToHead.find(
-      (c) => c.groupA === 'single-model' && c.groupB === 'collective',
+      (c) => c.groupA === 'single-model' && c.groupB === 'collective'
     );
     expect(h2h).toBeDefined();
 
     // PAIRED delta over shared tasks {1,2}: single 0.90 − collective 0.60 = +0.30.
     // POOLED would be mean(single 0.90,0.90,0.30)=0.70 − 0.60 = +0.10 — the wrong,
     // task-mix-confounded number.
-    expect(h2h!.qualityDelta).toBeCloseTo(0.30, 5);
-    expect(h2h!.qualityDelta).not.toBeCloseTo(0.10, 2);
+    expect(h2h!.qualityDelta).toBeCloseTo(0.3, 5);
+    expect(h2h!.qualityDelta).not.toBeCloseTo(0.1, 2);
 
     // Win rate is paired too: single wins both shared tasks.
     expect(h2h!.winRate.total).toBe(2);

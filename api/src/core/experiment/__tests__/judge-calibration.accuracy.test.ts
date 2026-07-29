@@ -32,9 +32,10 @@ function mockJudge(seq: Array<number | null>): void {
   let call = 0;
   global.fetch = vi.fn(async () => {
     const score = seq[call++];
-    const content = score === null
-      ? 'sorry, I cannot produce JSON'
-      : JSON.stringify({ score, issues: [], summary: 's', confidence: 0.9 });
+    const content =
+      score === null
+        ? 'sorry, I cannot produce JSON'
+        : JSON.stringify({ score, issues: [], summary: 's', confidence: 0.9 });
     return {
       ok: true,
       json: async () => ({ choices: [{ message: { content } }] }),
@@ -42,13 +43,20 @@ function mockJudge(seq: Array<number | null>): void {
   }) as unknown as typeof fetch;
 }
 
-const cfg = { runs: RUNS, apiBase: 'http://judge.local', bearerToken: 't', judgeModel: 'test-judge' };
+const cfg = {
+  runs: RUNS,
+  apiBase: 'http://judge.local',
+  bearerToken: 't',
+  judgeModel: 'test-judge',
+};
 
 // Build a per-call sequence from a per-case score picker.
 const seqFrom = (pick: (caseIdx: number, run: number) => number | null): Array<number | null> =>
   GOLD.flatMap((_g, c) => Array.from({ length: RUNS }, (_v, r) => pick(c, r)));
 
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('judge calibration — accuracy axis (vs gold)', () => {
   it('accurate + consistent judge → accurate=true, reliable=true, ~0 error', async () => {
@@ -74,15 +82,15 @@ describe('judge calibration — accuracy axis (vs gold)', () => {
     const spread: Record<number, [number, number]> = {
       0: [0.95, 0.78], // mean 0.865, err 0.085
       1: [0.62, 0.38], // mean 0.50,  err 0
-      2: [0.1, 0.0],   // mean 0.05,  err 0.05
+      2: [0.1, 0.0], // mean 0.05,  err 0.05
       3: [0.95, 0.75], // mean 0.85,  err 0
     };
     mockJudge(seqFrom((c, run) => spread[c][run]));
     const r = await calibrateJudge(cfg);
     expect(r.maxAbsError).toBeLessThan(0.15);
-    expect(r.accurate).toBe(true);          // tracks the gold
+    expect(r.accurate).toBe(true); // tracks the gold
     expect(r.maxStdDev).toBeGreaterThan(0.1);
-    expect(r.reliable).toBe(false);         // but variance-rich
+    expect(r.reliable).toBe(false); // but variance-rich
   });
 
   it('unreachable judge (no parseable scores) → enoughData=false, accurate=false, NaN error', async () => {
@@ -101,7 +109,7 @@ describe('judge calibration — accuracy axis (vs gold)', () => {
     const r = await calibrateJudge(cfg);
     expect(r.results[1].gated).toBe(false);
     expect(r.results[1].absError).toBeGreaterThan(0.4); // still measured + reported
-    expect(r.accurate).toBe(true);                       // but does not gate
+    expect(r.accurate).toBe(true); // but does not gate
   });
 
   it('every case carries its gold label, gated flag + per-case absError', async () => {

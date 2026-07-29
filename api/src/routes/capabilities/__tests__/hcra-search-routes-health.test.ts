@@ -138,7 +138,7 @@ describe('GET /v1/hcra/health (operational endpoint)', () => {
 
   it('handles concurrent calls without double-send', async () => {
     const calls = Array.from({ length: 20 }, () =>
-      app.inject({ method: 'GET', url: '/v1/hcra/health' }),
+      app.inject({ method: 'GET', url: '/v1/hcra/health' })
     );
     const responses = await Promise.all(calls);
     for (const res of responses) {

@@ -50,12 +50,54 @@ export interface PricingTier {
  * at the top (where single top-tier models cost $25–50).
  */
 export const TIERS: Record<TierId, PricingTier> = {
-  tiny: { id: 'tiny',   qualityTarget: 0.65, inputPer1MUsd: 1, outputPer1MUsd: 1,  marginTarget: 0.30, paretoAnchor: 'cheapest viable' },
-  small: { id: 'small',  qualityTarget: 0.70, inputPer1MUsd: 1, outputPer1MUsd: 2,  marginTarget: 0.35, paretoAnchor: 'DeepSeek V3.2 ($0.27/$1.1)' },
-  base: { id: 'base',   qualityTarget: 0.75, inputPer1MUsd: 1, outputPer1MUsd: 4,  marginTarget: 0.40, paretoAnchor: 'MiniMax M2.5 ($0.3/$1.2)' },
-  medium: { id: 'medium', qualityTarget: 0.80, inputPer1MUsd: 2, outputPer1MUsd: 8,  marginTarget: 0.50, paretoAnchor: 'Gemini 3.1 Pro ($2/$12)' },
-  large: { id: 'large',  qualityTarget: 0.88, inputPer1MUsd: 4, outputPer1MUsd: 20, marginTarget: 0.55, paretoAnchor: 'Opus 4.8 ($5/$25)' },
-  extra: { id: 'extra',  qualityTarget: 0.94, inputPer1MUsd: 8, outputPer1MUsd: 42, marginTarget: 0.55, paretoAnchor: 'Fable 5 ($10/$50)' },
+  tiny: {
+    id: 'tiny',
+    qualityTarget: 0.65,
+    inputPer1MUsd: 1,
+    outputPer1MUsd: 1,
+    marginTarget: 0.3,
+    paretoAnchor: 'cheapest viable',
+  },
+  small: {
+    id: 'small',
+    qualityTarget: 0.7,
+    inputPer1MUsd: 1,
+    outputPer1MUsd: 2,
+    marginTarget: 0.35,
+    paretoAnchor: 'DeepSeek V3.2 ($0.27/$1.1)',
+  },
+  base: {
+    id: 'base',
+    qualityTarget: 0.75,
+    inputPer1MUsd: 1,
+    outputPer1MUsd: 4,
+    marginTarget: 0.4,
+    paretoAnchor: 'MiniMax M2.5 ($0.3/$1.2)',
+  },
+  medium: {
+    id: 'medium',
+    qualityTarget: 0.8,
+    inputPer1MUsd: 2,
+    outputPer1MUsd: 8,
+    marginTarget: 0.5,
+    paretoAnchor: 'Gemini 3.1 Pro ($2/$12)',
+  },
+  large: {
+    id: 'large',
+    qualityTarget: 0.88,
+    inputPer1MUsd: 4,
+    outputPer1MUsd: 20,
+    marginTarget: 0.55,
+    paretoAnchor: 'Opus 4.8 ($5/$25)',
+  },
+  extra: {
+    id: 'extra',
+    qualityTarget: 0.94,
+    inputPer1MUsd: 8,
+    outputPer1MUsd: 42,
+    marginTarget: 0.55,
+    paretoAnchor: 'Fable 5 ($10/$50)',
+  },
 };
 
 export const TIER_ORDER: readonly TierId[] = ['tiny', 'small', 'base', 'medium', 'large', 'extra'];
@@ -106,22 +148,106 @@ export interface StrategyPolicy {
  */
 export const STRATEGY_POLICY: Record<string, StrategyPolicy> = {
   // Presets (intent)
-  auto: { cogsClass: 'light',        minTier: 'tiny',   maxTier: 'extra', fanoutFactor: 1.5, executionReady: true },
-  best: { cogsClass: 'deliberative', minTier: 'medium', maxTier: 'extra', fanoutFactor: 6,   executionReady: true },
-  fast: { cogsClass: 'solo',         minTier: 'tiny',   maxTier: 'base',  fanoutFactor: 1,   executionReady: true },
-  economy: { cogsClass: 'solo',         minTier: 'tiny',   maxTier: 'base',  fanoutFactor: 1,   executionReady: true },
+  auto: {
+    cogsClass: 'light',
+    minTier: 'tiny',
+    maxTier: 'extra',
+    fanoutFactor: 1.5,
+    executionReady: true,
+  },
+  best: {
+    cogsClass: 'deliberative',
+    minTier: 'medium',
+    maxTier: 'extra',
+    fanoutFactor: 6,
+    executionReady: true,
+  },
+  fast: {
+    cogsClass: 'solo',
+    minTier: 'tiny',
+    maxTier: 'base',
+    fanoutFactor: 1,
+    executionReady: true,
+  },
+  economy: {
+    cogsClass: 'solo',
+    minTier: 'tiny',
+    maxTier: 'base',
+    fanoutFactor: 1,
+    executionReady: true,
+  },
   // Mechanisms with distinct execution (launch-ready)
-  single: { cogsClass: 'solo',         minTier: 'tiny',   maxTier: 'base',  fanoutFactor: 1,   executionReady: true },
-  parallel: { cogsClass: 'light',        minTier: 'small',  maxTier: 'large', fanoutFactor: 2.5, executionReady: true },
-  consensus: { cogsClass: 'consensus',    minTier: 'medium', maxTier: 'extra', fanoutFactor: 5,   executionReady: true },
-  'expert-panel': { cogsClass: 'deliberative', minTier: 'large',  maxTier: 'extra', fanoutFactor: 6,   executionReady: true },
+  single: {
+    cogsClass: 'solo',
+    minTier: 'tiny',
+    maxTier: 'base',
+    fanoutFactor: 1,
+    executionReady: true,
+  },
+  parallel: {
+    cogsClass: 'light',
+    minTier: 'small',
+    maxTier: 'large',
+    fanoutFactor: 2.5,
+    executionReady: true,
+  },
+  consensus: {
+    cogsClass: 'consensus',
+    minTier: 'medium',
+    maxTier: 'extra',
+    fanoutFactor: 5,
+    executionReady: true,
+  },
+  'expert-panel': {
+    cogsClass: 'deliberative',
+    minTier: 'large',
+    maxTier: 'extra',
+    fanoutFactor: 6,
+    executionReady: true,
+  },
   // Shadow-wired (recognised; behaviour maturing — gate before selling)
-  debate: { cogsClass: 'deliberative', minTier: 'large',  maxTier: 'extra', fanoutFactor: 6, executionReady: false },
-  'blind-debate': { cogsClass: 'deliberative', minTier: 'large',  maxTier: 'extra', fanoutFactor: 6, executionReady: false },
-  'devil-advocate-consensus': { cogsClass: 'consensus',    minTier: 'medium', maxTier: 'extra', fanoutFactor: 5, executionReady: false },
-  'safety-quorum': { cogsClass: 'consensus',    minTier: 'medium', maxTier: 'extra', fanoutFactor: 5, executionReady: false },
-  'war-room': { cogsClass: 'deliberative', minTier: 'large',  maxTier: 'extra', fanoutFactor: 8, executionReady: false },
-  'persona-exploration': { cogsClass: 'deliberative', minTier: 'medium', maxTier: 'extra', fanoutFactor: 6, executionReady: false },
+  debate: {
+    cogsClass: 'deliberative',
+    minTier: 'large',
+    maxTier: 'extra',
+    fanoutFactor: 6,
+    executionReady: false,
+  },
+  'blind-debate': {
+    cogsClass: 'deliberative',
+    minTier: 'large',
+    maxTier: 'extra',
+    fanoutFactor: 6,
+    executionReady: false,
+  },
+  'devil-advocate-consensus': {
+    cogsClass: 'consensus',
+    minTier: 'medium',
+    maxTier: 'extra',
+    fanoutFactor: 5,
+    executionReady: false,
+  },
+  'safety-quorum': {
+    cogsClass: 'consensus',
+    minTier: 'medium',
+    maxTier: 'extra',
+    fanoutFactor: 5,
+    executionReady: false,
+  },
+  'war-room': {
+    cogsClass: 'deliberative',
+    minTier: 'large',
+    maxTier: 'extra',
+    fanoutFactor: 8,
+    executionReady: false,
+  },
+  'persona-exploration': {
+    cogsClass: 'deliberative',
+    minTier: 'medium',
+    maxTier: 'extra',
+    fanoutFactor: 6,
+    executionReady: false,
+  },
 };
 
 function tierIndex(t: TierId): number {
@@ -150,21 +276,25 @@ export interface ResolvedStrategyTier {
 }
 
 /** Parse `<strategy>[:<tier>]` (also accepts an `ailin-` prefix). null if unknown strategy. */
-export function parseStrategyTier(model: string | undefined): { strategy: string; tier: TierId } | null {
+export function parseStrategyTier(
+  model: string | undefined
+): { strategy: string; tier: TierId } | null {
   const raw = (model ?? '').trim().toLowerCase();
   if (!raw) return null;
   const sep = raw.indexOf(':');
   const stratPart = (sep >= 0 ? raw.slice(0, sep) : raw).replace(/^ailin-/, '');
   const tierPart = sep >= 0 ? raw.slice(sep + 1) : DEFAULT_TIER;
   if (!(stratPart in STRATEGY_POLICY)) return null;
-  const tier = (TIER_ORDER as readonly string[]).includes(tierPart) ? (tierPart as TierId) : DEFAULT_TIER;
+  const tier = (TIER_ORDER as readonly string[]).includes(tierPart)
+    ? (tierPart as TierId)
+    : DEFAULT_TIER;
   return { strategy: stratPart, tier };
 }
 
 /** Resolve a `<strategy>:<tier>` model id into its strategy + clamped tier + targets. */
 export function resolveStrategyTier(
   model: string | undefined,
-  rates: TierRateCard = STATIC_RATE_CARD,
+  rates: TierRateCard = STATIC_RATE_CARD
 ): ResolvedStrategyTier | null {
   const parsed = parseStrategyTier(model);
   if (!parsed) return null;
@@ -188,7 +318,7 @@ export function tierBilledCostUsd(
   tier: TierId,
   userPromptTokens: number,
   userCompletionTokens: number,
-  rates: TierRateCard = STATIC_RATE_CARD,
+  rates: TierRateCard = STATIC_RATE_CARD
 ): number {
   const r = rates[tier];
   return (
@@ -207,7 +337,7 @@ export function cogsBudgetUsd(
   tier: TierId,
   userPromptTokens: number,
   expectedCompletionTokens: number,
-  rates: TierRateCard = STATIC_RATE_CARD,
+  rates: TierRateCard = STATIC_RATE_CARD
 ): number {
   const t = TIERS[tier];
   const revenue = tierBilledCostUsd(tier, userPromptTokens, expectedCompletionTokens, rates);
@@ -274,7 +404,7 @@ export function quoteTierCharge(
   tier: TierId,
   userPromptTokens: number,
   userCompletionTokens: number,
-  rates: TierRateCard = STATIC_RATE_CARD,
+  rates: TierRateCard = STATIC_RATE_CARD
 ): TierCharge {
   return {
     tier,

@@ -32,9 +32,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 describe('operational-route boot invariant', () => {
   it('returns zero violations against the current code (positive baseline)', async () => {
-    const { checkOperationalRouteInvariant } = await import(
-      '@/config/operational-routes-invariant'
-    );
+    const { checkOperationalRouteInvariant } =
+      await import('@/config/operational-routes-invariant');
     const violations = checkOperationalRouteInvariant();
     // The current state of the three sibling lists honors every canonical
     // route. If you added a new entry to OPERATIONAL_ROUTES, you must
@@ -54,22 +53,17 @@ describe('operational-route boot invariant', () => {
       QUOTA_SKIP_ROUTES: ['/health', '/metrics', '/v1/enterprise/quotas'],
     }));
 
-    const { checkOperationalRouteInvariant } = await import(
-      '@/config/operational-routes-invariant'
-    );
+    const { checkOperationalRouteInvariant } =
+      await import('@/config/operational-routes-invariant');
     const violations = checkOperationalRouteInvariant();
 
     // Find the specific violation for /v1/hcra/health
     const hcraViolation = violations.find((v) => v.route === '/v1/hcra/health');
     expect(hcraViolation).toBeDefined();
-    expect(hcraViolation?.missingFrom).toContain(
-      'QUOTA_SKIP_ROUTES (gateway_middleware)'
-    );
+    expect(hcraViolation?.missingFrom).toContain('QUOTA_SKIP_ROUTES (gateway_middleware)');
     // Should NOT be flagged in the other two lists — they're correctly
     // configured with the route present.
-    expect(hcraViolation?.missingFrom).not.toContain(
-      'PUBLIC_ROUTES (api-key-auth-middleware)'
-    );
+    expect(hcraViolation?.missingFrom).not.toContain('PUBLIC_ROUTES (api-key-auth-middleware)');
     expect(hcraViolation?.missingFrom).not.toContain(
       'OPERATIONAL_ROUTE_PATHS (token-bucket-rate-limit)'
     );
@@ -84,25 +78,20 @@ describe('operational-route boot invariant', () => {
       QUOTA_SKIP_ROUTES: [], // strip out everything → maximal violation
     }));
 
-    const { assertOperationalRouteInvariant } = await import(
-      '@/config/operational-routes-invariant'
-    );
+    const { assertOperationalRouteInvariant } =
+      await import('@/config/operational-routes-invariant');
 
     expect(() => assertOperationalRouteInvariant()).toThrow(
       /OPERATIONAL ROUTE INVARIANT VIOLATION/
     );
-    expect(() => assertOperationalRouteInvariant()).toThrow(
-      /\/v1\/hcra\/health/
-    );
+    expect(() => assertOperationalRouteInvariant()).toThrow(/\/v1\/hcra\/health/);
 
     vi.doUnmock('@/middleware/gateway_middleware');
     vi.resetModules();
   });
 
   it('formatViolations produces a readable multi-line message with all missing-from labels', async () => {
-    const { formatViolations } = await import(
-      '@/config/operational-routes-invariant'
-    );
+    const { formatViolations } = await import('@/config/operational-routes-invariant');
 
     const message = formatViolations([
       {

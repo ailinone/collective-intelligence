@@ -61,13 +61,13 @@ export interface ProviderOperabilityRecord {
   operabilityState: OperabilityState;
   operabilityReasonCode: string;
   balanceStatus: 'has_credits' | 'no_credits' | 'unknown';
-  healthScore: number;           // 0-1, from performance tracker
-  recentSuccessRate: number;     // 0-1, from performance tracker sliding window
-  recentErrorRate: number;       // 0-1, inverse of success rate
-  lastSuccessAt: number | null;  // timestamp of last successful execution
-  lastFailureAt: number | null;  // timestamp of last failed execution
-  cooldownUntil: number | null;  // if rate-limited, when to retry
-  isNativeProvider: boolean;     // native (openai, anthropic) vs hub (aihubmix, cometapi)
+  healthScore: number; // 0-1, from performance tracker
+  recentSuccessRate: number; // 0-1, from performance tracker sliding window
+  recentErrorRate: number; // 0-1, inverse of success rate
+  lastSuccessAt: number | null; // timestamp of last successful execution
+  lastFailureAt: number | null; // timestamp of last failed execution
+  cooldownUntil: number | null; // if rate-limited, when to retry
+  isNativeProvider: boolean; // native (openai, anthropic) vs hub (aihubmix, cometapi)
   updatedAt: number;
 }
 
@@ -82,7 +82,7 @@ interface RuntimeEvent {
 
 const RUNTIME_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const RUNTIME_RING_MAX = 100;
-const RECOVERY_THRESHOLD = 3;  // 3 consecutive successes → recover from degraded
+const RECOVERY_THRESHOLD = 3; // 3 consecutive successes → recover from degraded
 const COOLDOWN_RATE_LIMIT_MS = 60 * 1000; // 60s cooldown after rate limit
 
 // ── Persistence overlay (Camada 1a) ──────────────────────────────────────
@@ -98,14 +98,14 @@ const PERSIST_TTL_MS: Partial<Record<OperabilityState, number>> = {
   // keep it warm → it expired and the next request re-paid the cold cascade).
   // A real success still overrides via runtime precedence. Belt-and-suspenders:
   // the deterministic credential (#2) + funding (#3) gates are the primary fix.
-  auth_failed: Number(process.env.OPERABILITY_PERSIST_TTL_AUTH_MS) || 12 * 60 * 60 * 1000,  // 12h
+  auth_failed: Number(process.env.OPERABILITY_PERSIST_TTL_AUTH_MS) || 12 * 60 * 60 * 1000, // 12h
   no_credits: Number(process.env.OPERABILITY_PERSIST_TTL_CREDITS_MS) || 6 * 60 * 60 * 1000, // 6h
-  healthy: Number(process.env.OPERABILITY_PERSIST_TTL_HEALTHY_MS) || 30 * 60 * 1000,        // 30m
+  healthy: Number(process.env.OPERABILITY_PERSIST_TTL_HEALTHY_MS) || 30 * 60 * 1000, // 30m
   // #1 prove-before-admit (2026-07-01): a 404/model-not-found ROUTE is DEAD (the model
   // does not exist at that provider) — a PERMANENT condition. Persist it long so the
   // selector stops re-picking it (the "404 dead-model not gated" cascade). Route-level
   // only; a real success resets it via runtime precedence.
-  dead: Number(process.env.OPERABILITY_PERSIST_TTL_DEAD_MS) || 24 * 60 * 60 * 1000,         // 24h
+  dead: Number(process.env.OPERABILITY_PERSIST_TTL_DEAD_MS) || 24 * 60 * 60 * 1000, // 24h
 };
 const PERSIST_INTERVAL_MS = Number(process.env.OPERABILITY_PERSIST_INTERVAL_MS) || 60 * 1000; // 60s
 
@@ -126,8 +126,19 @@ interface PersistedOverlay {
  * provider_id='bedrock' pending operator-bound DB migration.
  */
 const NATIVE_PROVIDERS = new Set([
-  'openai', 'anthropic', 'google', 'deepseek', 'xai', 'mistral',
-  'cohere', 'nvidia', 'meta', 'amazon', 'aws-bedrock', 'bedrock', 'vertex-ai',
+  'openai',
+  'anthropic',
+  'google',
+  'deepseek',
+  'xai',
+  'mistral',
+  'cohere',
+  'nvidia',
+  'meta',
+  'amazon',
+  'aws-bedrock',
+  'bedrock',
+  'vertex-ai',
 ]);
 
 /**
@@ -160,13 +171,22 @@ const SELF_HOSTED_PROVIDERS = new Set([
   'self-hosted',
   // OAI-compatible self-hosted (also catalog-registered with
   // integrationClass: 'self-hosted-oai-compat' or 'self-hosted-native').
-  'ollama', 'local-llama', 'local-kobold', 'local-embeddings',
-  'vllm', 'lm-studio', 'xinference', 'triton',
+  'ollama',
+  'local-llama',
+  'local-kobold',
+  'local-embeddings',
+  'vllm',
+  'lm-studio',
+  'xinference',
+  'triton',
   // Specialty self-hosted (intentionally NOT in catalog — their shapes
   // don't fit the catalog's integrationClass enum today). Documented
   // permanent exception; see provider-registry.ts "5 specialty non-OAI"
   // block.
-  'local-ocr', 'local-docling', 'local-piper', 'local-nllb',
+  'local-ocr',
+  'local-docling',
+  'local-piper',
+  'local-nllb',
 ]);
 
 /**
@@ -183,7 +203,12 @@ export function getSelfHostedProvidersForTesting(): ReadonlySet<string> {
 
 /** Hub providers (route requests through other providers' models) */
 const HUB_PROVIDERS = new Set([
-  'aihubmix', 'openrouter', 'orqai', 'edenai', 'heliconeai', 'cometapi',
+  'aihubmix',
+  'openrouter',
+  'orqai',
+  'edenai',
+  'heliconeai',
+  'cometapi',
 ]);
 
 class ProviderOperabilityHubImpl {
@@ -250,7 +275,13 @@ class ProviderOperabilityHubImpl {
     // Check for rate limiting cooldown
     const lastRateLimit = events.filter((e: RuntimeEvent) => e.errorType === 'rate_limit').pop();
     if (lastRateLimit && lastRateLimit.timestamp + COOLDOWN_RATE_LIMIT_MS > now) {
-      return this.buildRecord(key, 'rate_limited', 'recent_429', now, lastRateLimit.timestamp + COOLDOWN_RATE_LIMIT_MS);
+      return this.buildRecord(
+        key,
+        'rate_limited',
+        'recent_429',
+        now,
+        lastRateLimit.timestamp + COOLDOWN_RATE_LIMIT_MS
+      );
     }
 
     // Check for credit exhaustion (most recent credit-related event)
@@ -272,7 +303,11 @@ class ProviderOperabilityHubImpl {
     // gate it until a real success proves the model came back (runtime precedence).
     // ROUTE-level only (key has ':'): one dead model must NOT kill the whole provider.
     const lastNotFound = events.filter((e: RuntimeEvent) => e.errorType === 'not_found').pop();
-    if (lastNotFound && key.includes(':') && (!lastSuccess || lastNotFound.timestamp > lastSuccess.timestamp)) {
+    if (
+      lastNotFound &&
+      key.includes(':') &&
+      (!lastSuccess || lastNotFound.timestamp > lastSuccess.timestamp)
+    ) {
       return this.buildRecord(key, 'dead', 'model_not_found', now);
     }
 
@@ -285,14 +320,20 @@ class ProviderOperabilityHubImpl {
 
     // Recovering: had failures but recent successes streak
     const last3 = events.slice(-RECOVERY_THRESHOLD);
-    const last3AllSuccess = last3.length >= RECOVERY_THRESHOLD && last3.every((e: RuntimeEvent) => e.success);
+    const last3AllSuccess =
+      last3.length >= RECOVERY_THRESHOLD && last3.every((e: RuntimeEvent) => e.success);
     if (failureCount > 0 && last3AllSuccess) {
       return this.buildRecord(key, 'recovering', 'recent_recovery_streak', now);
     }
 
     // Degraded: >40% failure rate with enough samples
     if (total >= 3 && successRate < 0.6) {
-      return this.buildRecord(key, 'degraded', `high_failure_rate_${(successRate * 100).toFixed(0)}pct`, now);
+      return this.buildRecord(
+        key,
+        'degraded',
+        `high_failure_rate_${(successRate * 100).toFixed(0)}pct`,
+        now
+      );
     }
 
     // Temporarily unavailable: recent server errors
@@ -315,7 +356,12 @@ class ProviderOperabilityHubImpl {
    * For route-level precision (hub vs native isolation), prefer
    * `recordRouteExecution()` which also records against the composite route.
    */
-  recordExecution(providerKey: string, success: boolean, httpStatus?: number, errorMessage?: string): void {
+  recordExecution(
+    providerKey: string,
+    success: boolean,
+    httpStatus?: number,
+    errorMessage?: string
+  ): void {
     this.recordEvent(providerKey.toLowerCase(), success, httpStatus, errorMessage);
   }
 
@@ -334,7 +380,7 @@ class ProviderOperabilityHubImpl {
   recordProbeResult(
     providerKey: string,
     state: 'healthy' | 'auth_failed' | 'insufficient_credit' | 'unknown',
-    reason?: string,
+    reason?: string
   ): void {
     const key = providerKey.toLowerCase();
     switch (state) {
@@ -388,7 +434,7 @@ class ProviderOperabilityHubImpl {
     modelId: string,
     success: boolean,
     httpStatus?: number,
-    errorMessage?: string,
+    errorMessage?: string
   ): void {
     const ep = executionProvider.toLowerCase();
 
@@ -453,7 +499,7 @@ class ProviderOperabilityHubImpl {
   isRouteHot(
     executionProvider: string,
     modelId: string,
-    maxAgeMs: number = Number(process.env.OPERABILITY_HOT_ROUTE_TTL_MS) || 300_000,
+    maxAgeMs: number = Number(process.env.OPERABILITY_HOT_ROUTE_TTL_MS) || 300_000
   ): boolean {
     const rec = this.getRouteState(executionProvider, modelId);
     if (rec.lastSuccessAt == null) return false;
@@ -472,8 +518,15 @@ class ProviderOperabilityHubImpl {
     const now = Date.now();
     const routes: Record<string, RouteOperabilityRecord> = {};
     const summary: Record<OperabilityState, number> = {
-      healthy: 0, degraded: 0, recovering: 0, no_credits: 0,
-      rate_limited: 0, auth_failed: 0, temporarily_unavailable: 0, dead: 0, unknown: 0,
+      healthy: 0,
+      degraded: 0,
+      recovering: 0,
+      no_credits: 0,
+      rate_limited: 0,
+      auth_failed: 0,
+      temporarily_unavailable: 0,
+      dead: 0,
+      unknown: 0,
     };
     const externalSummary: Record<OperabilityState, number> = { ...summary };
 
@@ -488,9 +541,10 @@ class ProviderOperabilityHubImpl {
         executionProvider,
         modelFamily,
         providerKind,
-        parentHub: providerKind === 'hub' || providerKind === 'aggregator' || providerKind === 'router'
-          ? executionProvider
-          : null,
+        parentHub:
+          providerKind === 'hub' || providerKind === 'aggregator' || providerKind === 'router'
+            ? executionProvider
+            : null,
       };
 
       routes[key] = routeRecord;
@@ -502,7 +556,10 @@ class ProviderOperabilityHubImpl {
     }
 
     const usableStates: OperabilityState[] = ['healthy', 'recovering', 'degraded', 'unknown'];
-    const externalEligibleCount = usableStates.reduce((sum, s) => sum + (externalSummary[s] || 0), 0);
+    const externalEligibleCount = usableStates.reduce(
+      (sum, s) => sum + (externalSummary[s] || 0),
+      0
+    );
     const totalExternal = Object.values(externalSummary).reduce((a, b) => a + b, 0);
 
     return {
@@ -516,7 +573,12 @@ class ProviderOperabilityHubImpl {
     };
   }
 
-  private recordEvent(key: string, success: boolean, httpStatus?: number, errorMessage?: string): void {
+  private recordEvent(
+    key: string,
+    success: boolean,
+    httpStatus?: number,
+    errorMessage?: string
+  ): void {
     const event: RuntimeEvent = {
       timestamp: Date.now(),
       success,
@@ -580,7 +642,7 @@ class ProviderOperabilityHubImpl {
   private async persistDurableState(
     key: string,
     state: OperabilityState,
-    reasonCode: string,
+    reasonCode: string
   ): Promise<void> {
     const ttl = PERSIST_TTL_MS[state];
     if (!ttl) return;
@@ -628,7 +690,9 @@ class ProviderOperabilityHubImpl {
    */
   isProviderUsable(providerKey: string): boolean {
     const state = this.getProviderState(providerKey).operabilityState;
-    return state === 'healthy' || state === 'recovering' || state === 'degraded' || state === 'unknown';
+    return (
+      state === 'healthy' || state === 'recovering' || state === 'degraded' || state === 'unknown'
+    );
   }
 
   /**
@@ -673,7 +737,7 @@ class ProviderOperabilityHubImpl {
    */
   bootstrapKnownProviders(
     providerIds: readonly string[],
-    source: string,
+    source: string
   ): { added: number; alreadyKnown: number; total: number } {
     const now = Date.now();
     let added = 0;
@@ -871,7 +935,9 @@ class ProviderOperabilityHubImpl {
    */
   startPersistence(intervalMs: number = PERSIST_INTERVAL_MS): void {
     if (this.persistTimer) return;
-    this.persistTimer = setInterval(() => { void this.persistToStore(); }, intervalMs);
+    this.persistTimer = setInterval(() => {
+      void this.persistToStore();
+    }, intervalMs);
     if (typeof this.persistTimer.unref === 'function') this.persistTimer.unref();
     log.info({ intervalMs }, 'Operability overlay persistence started');
   }
@@ -893,7 +959,7 @@ class ProviderOperabilityHubImpl {
     providerKey: string,
     state: OperabilityState,
     reasonCode: string,
-    expiresAt: number,
+    expiresAt: number
   ): void {
     const key = providerKey.toLowerCase();
     this.persistedOverlay.set(key, {
@@ -910,7 +976,7 @@ class ProviderOperabilityHubImpl {
     const ring = this.runtimeEvents.get(key);
     if (!ring) return [];
     const cutoff = Date.now() - RUNTIME_WINDOW_MS;
-    return ring.filter(e => e.timestamp >= cutoff);
+    return ring.filter((e) => e.timestamp >= cutoff);
   }
 
   private classifyError(httpStatus?: number, errorMessage?: string): RuntimeEvent['errorType'] {
@@ -924,13 +990,23 @@ class ProviderOperabilityHubImpl {
     //      provider was never marked no_credits → the judge/selector re-picked it on
     //      every cold start, wasting the first cascade attempt (2026-06-29).
     const creditWords =
-      msg.includes('insufficient') || msg.includes('balance') || msg.includes('quota') ||
-      msg.includes('credit') || msg.includes('funds') || msg.includes('subscription') ||
-      msg.includes('payment') || msg.includes('top up') || msg.includes('recharge');
+      msg.includes('insufficient') ||
+      msg.includes('balance') ||
+      msg.includes('quota') ||
+      msg.includes('credit') ||
+      msg.includes('funds') ||
+      msg.includes('subscription') ||
+      msg.includes('payment') ||
+      msg.includes('top up') ||
+      msg.includes('recharge');
     const unambiguousCredit =
-      msg.includes('credit balance') || msg.includes('balance is too low') ||
-      msg.includes('insufficient') || msg.includes('out of credit') ||
-      msg.includes('top up') || msg.includes('recharge') || msg.includes('billing');
+      msg.includes('credit balance') ||
+      msg.includes('balance is too low') ||
+      msg.includes('insufficient') ||
+      msg.includes('out of credit') ||
+      msg.includes('top up') ||
+      msg.includes('recharge') ||
+      msg.includes('billing');
     if (((httpStatus === 402 || httpStatus === 403) && creditWords) || unambiguousCredit) {
       return 'credit';
     }
@@ -947,18 +1023,32 @@ class ProviderOperabilityHubImpl {
     // re-picking the banned route on every request. Classifying it as 'auth'
     // (sticky, 12h TTL, self-heals on a real success) gates it after the FIRST
     // ban. Credit-403s were already caught above; this is the forbidden path.
-    if (httpStatus === 401 || httpStatus === 403 || msg.includes('unauthorized') ||
-        msg.includes('forbidden') || msg.includes('access denied') || msg.includes('banned') ||
-        msg.includes('invalid api key') ||
-        msg.includes('api key not valid') || msg.includes('api_key_invalid') || msg.includes('invalid_api_key') ||
-        msg.includes('api key invalid') || msg.includes('api key expired') ||
-        msg.includes('authentication') || msg.includes('not configured')) {
+    if (
+      httpStatus === 401 ||
+      httpStatus === 403 ||
+      msg.includes('unauthorized') ||
+      msg.includes('forbidden') ||
+      msg.includes('access denied') ||
+      msg.includes('banned') ||
+      msg.includes('invalid api key') ||
+      msg.includes('api key not valid') ||
+      msg.includes('api_key_invalid') ||
+      msg.includes('invalid_api_key') ||
+      msg.includes('api key invalid') ||
+      msg.includes('api key expired') ||
+      msg.includes('authentication') ||
+      msg.includes('not configured')
+    ) {
       return 'auth';
     }
 
     // Rate limiting
-    if (httpStatus === 429 || msg.includes('rate limit') || msg.includes('rate_limit') ||
-        msg.includes('too many requests')) {
+    if (
+      httpStatus === 429 ||
+      msg.includes('rate limit') ||
+      msg.includes('rate_limit') ||
+      msg.includes('too many requests')
+    ) {
       return 'rate_limit';
     }
 
@@ -975,9 +1065,15 @@ class ProviderOperabilityHubImpl {
     // Dead model/route: a 404 (or explicit model-not-found wording) means the model
     // does not exist at this provider — PERMANENT, not transient. Gate it so the
     // selector stops re-picking a dead route (the "404 dead-model not gated" cascade).
-    if (httpStatus === 404 || msg.includes('model_not_found') || msg.includes('model not found') ||
-        msg.includes('no such model') || msg.includes('model does not exist') ||
-        msg.includes('does not exist') || msg.includes('unknown model')) {
+    if (
+      httpStatus === 404 ||
+      msg.includes('model_not_found') ||
+      msg.includes('model not found') ||
+      msg.includes('no such model') ||
+      msg.includes('model does not exist') ||
+      msg.includes('does not exist') ||
+      msg.includes('unknown model')
+    ) {
       return 'not_found';
     }
 
@@ -996,7 +1092,10 @@ class ProviderOperabilityHubImpl {
     return 'aggregator';
   }
 
-  private parseRouteKeyInternal(key: string): { executionProvider: string; modelFamily: string | null } {
+  private parseRouteKeyInternal(key: string): {
+    executionProvider: string;
+    modelFamily: string | null;
+  } {
     const parts = key.split(':');
     if (parts.length === 1) {
       return { executionProvider: parts[0], modelFamily: null };
@@ -1009,24 +1108,30 @@ class ProviderOperabilityHubImpl {
     state: OperabilityState,
     reasonCode: string,
     now: number,
-    cooldownUntil?: number,
+    cooldownUntil?: number
   ): ProviderOperabilityRecord {
     const events = this.getRecentEvents(key);
-    const successEvents = events.filter(e => e.success);
-    const failureEvents = events.filter(e => !e.success);
+    const successEvents = events.filter((e) => e.success);
+    const failureEvents = events.filter((e) => !e.success);
     const total = events.length;
 
     return {
       providerKey: key,
       operabilityState: state,
       operabilityReasonCode: reasonCode,
-      balanceStatus: state === 'no_credits' ? 'no_credits'
-        : (successEvents.length > 0 ? 'has_credits' : 'unknown'),
+      balanceStatus:
+        state === 'no_credits'
+          ? 'no_credits'
+          : successEvents.length > 0
+            ? 'has_credits'
+            : 'unknown',
       healthScore: total > 0 ? successEvents.length / total : 0.5,
       recentSuccessRate: total > 0 ? successEvents.length / total : 0,
       recentErrorRate: total > 0 ? failureEvents.length / total : 0,
-      lastSuccessAt: successEvents.length > 0 ? successEvents[successEvents.length - 1].timestamp : null,
-      lastFailureAt: failureEvents.length > 0 ? failureEvents[failureEvents.length - 1].timestamp : null,
+      lastSuccessAt:
+        successEvents.length > 0 ? successEvents[successEvents.length - 1].timestamp : null,
+      lastFailureAt:
+        failureEvents.length > 0 ? failureEvents[failureEvents.length - 1].timestamp : null,
       cooldownUntil: cooldownUntil ?? null,
       isNativeProvider: NATIVE_PROVIDERS.has(key),
       updatedAt: now,

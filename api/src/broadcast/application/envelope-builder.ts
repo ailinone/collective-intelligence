@@ -31,12 +31,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type {
-  ChatRequest,
-  ChatResponse,
-  ChatMessage,
-  AilinMetadata,
-} from '@/types';
+import type { ChatRequest, ChatResponse, ChatMessage, AilinMetadata } from '@/types';
 import {
   TRACE_ENVELOPE_SCHEMA_VERSION,
   parseTraceEnvelope,
@@ -96,10 +91,7 @@ export interface BuildEnvelopeArgs {
  */
 export function buildChatTraceEnvelope(args: BuildEnvelopeArgs): TraceEnvelope {
   const metadata = args.chatResponse.ailin_metadata as AilinMetadata | undefined;
-  const latencyMs = Math.max(
-    0,
-    Math.round(args.endedAt.getTime() - args.startedAt.getTime()),
-  );
+  const latencyMs = Math.max(0, Math.round(args.endedAt.getTime() - args.startedAt.getTime()));
 
   const finishReason = normalizeFinishReason(args.chatResponse.choices?.[0]?.finish_reason);
 
@@ -111,14 +103,11 @@ export function buildChatTraceEnvelope(args: BuildEnvelopeArgs): TraceEnvelope {
     'unknown';
 
   const provider =
-    (metadata?.provider as string | undefined) ??
-    inferProviderFromSlug(modelSlug) ??
-    'unknown';
+    (metadata?.provider as string | undefined) ?? inferProviderFromSlug(modelSlug) ?? 'unknown';
 
   const tokensInput = args.chatResponse.usage?.prompt_tokens ?? 0;
   const tokensOutput = args.chatResponse.usage?.completion_tokens ?? 0;
-  const tokensTotal =
-    args.chatResponse.usage?.total_tokens ?? tokensInput + tokensOutput;
+  const tokensTotal = args.chatResponse.usage?.total_tokens ?? tokensInput + tokensOutput;
 
   const costUsd =
     typeof metadata?.cost_usd === 'number' && Number.isFinite(metadata.cost_usd)
@@ -227,15 +216,8 @@ function normalizeRole(role: string): 'system' | 'user' | 'assistant' | 'tool' {
 }
 
 function normalizeFinishReason(
-  fr: string | null | undefined,
-):
-  | 'stop'
-  | 'length'
-  | 'tool_calls'
-  | 'content_filter'
-  | 'error'
-  | 'cancelled'
-  | undefined {
+  fr: string | null | undefined
+): 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'error' | 'cancelled' | undefined {
   if (!fr) return undefined;
   switch (fr) {
     case 'stop':

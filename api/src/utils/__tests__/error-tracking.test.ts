@@ -54,7 +54,9 @@ describe('scrubString', () => {
     // Mirrors client/adapters/openai-adapter.ts:
     //   throw new Error(`Invalid JSON from OpenAI: ${content}`)
     // where `content` is the raw model completion text.
-    const fakeCompletion = 'Sure, here is the analysis of your proprietary business data: '.repeat(50);
+    const fakeCompletion = 'Sure, here is the analysis of your proprietary business data: '.repeat(
+      50
+    );
     const message = `Invalid JSON from OpenAI: ${fakeCompletion}`;
 
     const scrubbed = scrubString(message);

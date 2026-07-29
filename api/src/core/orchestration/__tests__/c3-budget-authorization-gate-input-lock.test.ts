@@ -15,9 +15,15 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  C3_EXECUTION_AUTHORIZED, DRYRUN_FALSE_AUTHORIZED, BILLABLE_PROVIDER_CALLS_AUTHORIZED,
-  PROVIDER_PROBES_AUTHORIZED, MODEL_PROBES_AUTHORIZED, K_AUTHORIZED,
-  C3_BUDGET_AUTHORIZATION_GATE_MODE, C3_EFFECTIVE_AUTHORIZATION, C3_APPROVAL_STATUS,
+  C3_EXECUTION_AUTHORIZED,
+  DRYRUN_FALSE_AUTHORIZED,
+  BILLABLE_PROVIDER_CALLS_AUTHORIZED,
+  PROVIDER_PROBES_AUTHORIZED,
+  MODEL_PROBES_AUTHORIZED,
+  K_AUTHORIZED,
+  C3_BUDGET_AUTHORIZATION_GATE_MODE,
+  C3_EFFECTIVE_AUTHORIZATION,
+  C3_APPROVAL_STATUS,
 } from '@/core/experiment/c3-budget-authorization-gate-contract';
 
 const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-budget-authorization-gate-input-lock.json');
@@ -25,7 +31,14 @@ const artifact = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — input lock + mode', () => {
   it('case 29: contract keeps every authorization false', () => {
-    for (const l of [C3_EXECUTION_AUTHORIZED, DRYRUN_FALSE_AUTHORIZED, BILLABLE_PROVIDER_CALLS_AUTHORIZED, PROVIDER_PROBES_AUTHORIZED, MODEL_PROBES_AUTHORIZED, K_AUTHORIZED] as false[]) {
+    for (const l of [
+      C3_EXECUTION_AUTHORIZED,
+      DRYRUN_FALSE_AUTHORIZED,
+      BILLABLE_PROVIDER_CALLS_AUTHORIZED,
+      PROVIDER_PROBES_AUTHORIZED,
+      MODEL_PROBES_AUTHORIZED,
+      K_AUTHORIZED,
+    ] as false[]) {
       expect(l).toBe(false);
     }
   });

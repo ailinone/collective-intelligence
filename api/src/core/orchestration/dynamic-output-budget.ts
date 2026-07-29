@@ -60,7 +60,7 @@ export function deriveModelMaxOutputTokens(model: {
  */
 export function resolveDynamicMaxTokens(
   clientMaxTokens: number | null | undefined,
-  model: { maxOutputTokens?: number | null; contextWindow?: number | null },
+  model: { maxOutputTokens?: number | null; contextWindow?: number | null }
 ): number | undefined {
   const client = Number(clientMaxTokens);
   if (Number.isFinite(client) && client > 0) return client;

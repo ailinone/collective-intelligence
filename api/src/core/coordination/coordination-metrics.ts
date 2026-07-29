@@ -335,10 +335,7 @@ export function recordCollectiveTrace(strategy: string, stats: CollectiveTraceSt
     for (const [status, count] of Object.entries(stats.statusCounts)) {
       if (status === 'ok') continue;
       if (typeof count !== 'number' || count <= 0) continue;
-      coordinationTraceSpansTotal.inc(
-        { strategy, phase: 'aggregate-status', status },
-        count,
-      );
+      coordinationTraceSpansTotal.inc({ strategy, phase: 'aggregate-status', status }, count);
     }
   } catch {
     /* metrics failure must not break the response path */

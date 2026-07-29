@@ -27,18 +27,18 @@ export interface ModelAutoDiscovery {
 
 /**
  * Enterprise-grade Model Auto Discovery Implementation
- * 
+ *
  * 100% Dynamic - No mocks, stubs, or hardcoded data
  * Uses CentralModelDiscoveryService to fetch models from:
  * - Native provider APIs (OpenAI, Anthropic, Google, etc.)
  * - Cloud hubs (Vertex AI, AWS Bedrock, Azure OpenAI, OCI)
  * - Aggregators (OpenRouter)
- * 
+ *
  * All models are discovered in real-time from provider APIs
  */
 export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
   const log = logger.child({ component: 'model-auto-discovery' });
-  
+
   return {
     /**
      * Discover all available models from all sources
@@ -46,10 +46,11 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
      */
     async discoverModels(): Promise<Model[]> {
       try {
-        const { getCentralModelDiscoveryService } = await import('./central-model-discovery-service.js');
+        const { getCentralModelDiscoveryService } =
+          await import('./central-model-discovery-service.js');
         const centralService = await getCentralModelDiscoveryService();
         const results = await centralService.discoverAllModels();
-        
+
         // Extract all discovered models from results
         const allModels: Model[] = [];
         for (const result of results) {
@@ -61,12 +62,10 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
             allModels.push(...models);
           }
         }
-        
+
         // Deduplicate by model ID
-        const uniqueModels = Array.from(
-          new Map(allModels.map(m => [m.id, m])).values()
-        );
-        
+        const uniqueModels = Array.from(new Map(allModels.map((m) => [m.id, m])).values());
+
         log.info({ count: uniqueModels.length }, 'Models discovered from all sources');
         return uniqueModels;
       } catch (error) {
@@ -81,34 +80,35 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
      */
     async discoverNewModels(): Promise<{ success: boolean; models: Model[]; errors: string[] }> {
       try {
-        const { getCentralModelDiscoveryService } = await import('./central-model-discovery-service.js');
+        const { getCentralModelDiscoveryService } =
+          await import('./central-model-discovery-service.js');
         const centralService = await getCentralModelDiscoveryService();
         const results = await centralService.discoverAllModels();
-        
+
         const allErrors: string[] = [];
         let totalDiscovered = 0;
         let totalUpdated = 0;
         let totalNew = 0;
-        
+
         for (const result of results) {
           allErrors.push(...(result.errors || []));
           totalDiscovered += result.modelsDiscovered;
           totalUpdated += result.modelsUpdated;
           totalNew += result.modelsNew;
         }
-        
+
         // Fetch discovered models from database
         const { getAllCatalogModels } = await import('./model-catalog-service.js');
         const models = await getAllCatalogModels();
-        
+
         // Mark models with discovery action
-        const modelsWithAction = models.map(model => ({
+        const modelsWithAction = models.map((model) => ({
           ...model,
           action: totalNew > 0 ? 'discovered' : totalUpdated > 0 ? 'updated' : 'unchanged',
         }));
-        
+
         const success = allErrors.length === 0 || totalDiscovered > 0;
-        
+
         log.info(
           {
             success,
@@ -119,7 +119,7 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
           },
           'Model discovery completed'
         );
-        
+
         return {
           success,
           models: modelsWithAction,
@@ -138,10 +138,10 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
     /**
      * Get current model catalog from database
      * Enterprise implementation: Returns all dynamically discovered models
-     * 
+     *
      * NOTE: This is a synchronous method that may return stale data.
      * For real-time data, use discoverModels() instead.
-     * 
+     *
      * This method is kept for backward compatibility but should be avoided
      * in favor of async methods that fetch from database.
      */
@@ -149,7 +149,9 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
       // Synchronous method - cannot fetch from database
       // Return empty array and log warning
       // Callers should use discoverModels() for real-time data
-      log.warn('getModelCatalog() called synchronously - returns empty array. Use discoverModels() for real-time data from database');
+      log.warn(
+        'getModelCatalog() called synchronously - returns empty array. Use discoverModels() for real-time data from database'
+      );
       return [];
     },
 
@@ -167,14 +169,15 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
     }> {
       try {
         const { prisma } = await import('../database/client.js');
-        const { getCentralModelDiscoveryService } = await import('./central-model-discovery-service.js');
-        
+        const { getCentralModelDiscoveryService } =
+          await import('./central-model-discovery-service.js');
+
         const [totalModels, totalProviders, centralStats] = await Promise.all([
           prisma.model.count({ where: { status: 'active' } }),
           prisma.provider.count({ where: { status: 'active' } }),
-          getCentralModelDiscoveryService().then(s => s.getStats()),
+          getCentralModelDiscoveryService().then((s) => s.getStats()),
         ]);
-        
+
         return {
           totalModels,
           totalProviders,
@@ -214,7 +217,9 @@ export function getModelAutoDiscovery(logger: Logger): ModelAutoDiscovery {
  */
 export class ModelDiscoveryService {
   private readonly log: Logger;
-  private centralServicePromise: Promise<import('./central-model-discovery-service.js').CentralModelDiscoveryService> | null = null;
+  private centralServicePromise: Promise<
+    import('./central-model-discovery-service.js').CentralModelDiscoveryService
+  > | null = null;
 
   constructor(logger: Logger) {
     this.log = logger.child({ component: 'model-discovery-service' });
@@ -224,7 +229,9 @@ export class ModelDiscoveryService {
    * Get or initialize CentralModelDiscoveryService
    * Enterprise pattern: Lazy initialization with singleton
    */
-  private async getCentralService(): Promise<import('./central-model-discovery-service.js').CentralModelDiscoveryService> {
+  private async getCentralService(): Promise<
+    import('./central-model-discovery-service.js').CentralModelDiscoveryService
+  > {
     if (!this.centralServicePromise) {
       this.centralServicePromise = import('./central-model-discovery-service.js').then(
         ({ getCentralModelDiscoveryService }) => getCentralModelDiscoveryService()
@@ -241,25 +248,25 @@ export class ModelDiscoveryService {
     try {
       const centralService = await this.getCentralService();
       const results = await centralService.discoverAllModels();
-      
+
       const allErrors: string[] = [];
       let totalDiscovered = 0;
       let totalUpdated = 0;
       let totalNew = 0;
-      
+
       for (const result of results) {
         allErrors.push(...(result.errors || []));
         totalDiscovered += result.modelsDiscovered;
         totalUpdated += result.modelsUpdated;
         totalNew += result.modelsNew;
       }
-      
+
       // Fetch discovered models from database
       const { getAllCatalogModels } = await import('./model-catalog-service.js');
       const models = await getAllCatalogModels();
-      
+
       // Mark models with discovery action based on results
-      const modelsWithAction = models.map(model => {
+      const modelsWithAction = models.map((model) => {
         // Determine action based on discovery results
         // This is approximate - actual action is tracked in discovery results
         return {
@@ -267,9 +274,9 @@ export class ModelDiscoveryService {
           action: totalNew > 0 ? 'discovered' : totalUpdated > 0 ? 'updated' : 'unchanged',
         };
       });
-      
+
       const success = allErrors.length === 0 || totalDiscovered > 0;
-      
+
       this.log.info(
         {
           success,
@@ -280,7 +287,7 @@ export class ModelDiscoveryService {
         },
         'Model discovery completed - 100% dynamic'
       );
-      
+
       return {
         success,
         models: modelsWithAction,
@@ -306,26 +313,26 @@ export class ModelDiscoveryService {
     try {
       const centralService = await this.getCentralService();
       const results = await centralService.discoverAllModels();
-      
+
       // Fetch all models from database (already persisted by CentralModelDiscoveryService)
       const { getAllCatalogModels } = await import('./model-catalog-service.js');
       const models = await getAllCatalogModels();
-      
+
       const totalDiscovered = results.reduce((sum, r) => sum + r.modelsDiscovered, 0);
       const totalErrors = results.reduce((sum, r) => sum + (r.errors?.length || 0), 0);
-      
+
       if (totalErrors > 0) {
-      this.log.warn(
+        this.log.warn(
           { errors: totalErrors, discovered: totalDiscovered },
-        'Some providers failed during discovery, but continuing'
-      );
-    }
+          'Some providers failed during discovery, but continuing'
+        );
+      }
 
       this.log.info(
         { totalModels: models.length, sourcesProcessed: results.length },
         'Dynamic model discovery completed'
       );
-      
+
       return models;
     } catch (error) {
       this.log.error({ error }, 'Failed to discover models');
@@ -345,23 +352,23 @@ export class ModelDiscoveryService {
     try {
       const centralService = await this.getCentralService();
       const results = await centralService.discoverAllModels();
-      
+
       let discovered = 0;
       let updated = 0;
       let unchanged = 0;
-      
+
       for (const result of results) {
         discovered += result.modelsNew;
         updated += result.modelsUpdated;
         // Models that were checked but didn't change
         unchanged += result.modelsDiscovered - result.modelsNew - result.modelsUpdated;
       }
-      
+
       this.log.info(
         { discovered, updated, unchanged },
         'Model sync completed - all models from dynamic discovery'
       );
-      
+
       return { discovered, updated, unchanged };
     } catch (error) {
       this.log.error({ error }, 'Failed to sync discovered models');
@@ -385,7 +392,7 @@ export class ModelDiscoveryService {
     try {
       const centralService = await this.getCentralService();
       const centralStats = await centralService.getStats();
-      
+
       return {
         totalModels: centralStats.totalModels,
         totalProviders: centralStats.totalProviders,

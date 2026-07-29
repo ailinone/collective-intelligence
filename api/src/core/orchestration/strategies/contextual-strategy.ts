@@ -9,12 +9,7 @@
 
 import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
-import type {
-  ChatRequest,
-  OrchestrationContext,
-  OrchestrationResult,
-  Model,
-} from '@/types';
+import type { ChatRequest, OrchestrationContext, OrchestrationResult, Model } from '@/types';
 
 /**
  * Contextual Switching Strategy
@@ -54,7 +49,11 @@ export class ContextualStrategy extends BaseStrategy {
       throw new Error(`No adapter found for model: ${model.id}`);
     }
 
-    this.emitObserverEvent(context, { type: 'phase_start', models: [model.name || model.id], summary: 'Contextual: executing with context-selected model.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [model.name || model.id],
+      summary: 'Contextual: executing with context-selected model.',
+    });
 
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     const reasoningEnabled = this.isReasoningEnabled(request);
@@ -64,7 +63,10 @@ export class ContextualStrategy extends BaseStrategy {
         ? await this.executeModelWithReasoning(adapter, model, request, 'primary')
         : await this.executeModel(adapter, model, request, 'primary');
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Contextual execution complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Contextual execution complete.',
+    });
 
     return {
       strategyUsed: this.getMetadata().name,
@@ -76,7 +78,19 @@ export class ContextualStrategy extends BaseStrategy {
       metadata: {
         selectedModel: model.id,
         selectionReason: this.getSelectionReason(context),
-        ...(execution.reasoning ? { reasoning_traces: [{ model_id: execution.modelId, model_name: execution.modelName, role: execution.role, reasoning: execution.reasoning, reasoning_tokens: execution.reasoningTokens }] } : {}),
+        ...(execution.reasoning
+          ? {
+              reasoning_traces: [
+                {
+                  model_id: execution.modelId,
+                  model_name: execution.modelName,
+                  role: execution.role,
+                  reasoning: execution.reasoning,
+                  reasoning_tokens: execution.reasoningTokens,
+                },
+              ],
+            }
+          : {}),
       },
     };
   }
@@ -95,7 +109,7 @@ export class ContextualStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible — falling back to contextual heuristic.',
+        'Preferred model not eligible — falling back to contextual heuristic.'
       );
     }
     if (preference.pinnedExecutor) {

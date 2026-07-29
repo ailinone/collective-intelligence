@@ -25,10 +25,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import {
-  BroadcastDeliveryExecutor,
-  type DeliveryPrismaRunner,
-} from '../delivery-executor';
+import { BroadcastDeliveryExecutor, type DeliveryPrismaRunner } from '../delivery-executor';
 import type { ResolvedDestination } from '../destination-resolver';
 import type { TraceEnvelope } from '@/broadcast/domain/trace-envelope';
 import { TRACE_ENVELOPE_SCHEMA_VERSION } from '@/broadcast/domain/trace-envelope';
@@ -73,8 +70,7 @@ function makeMockDb(): DeliveryPrismaRunner & {
 } {
   const rows = new Map<string, DeliveryRow>();
   const dlq: DlqRow[] = [];
-  const key = (envelopeId: string, destinationId: string) =>
-    `${envelopeId}|${destinationId}`;
+  const key = (envelopeId: string, destinationId: string) => `${envelopeId}|${destinationId}`;
 
   const surface: DeliveryPrismaRunner['broadcastDelivery'] = {
     upsert: async (args: {
@@ -114,15 +110,10 @@ function makeMockDb(): DeliveryPrismaRunner & {
         status: String(upd.status ?? existing.status),
         attempts: nextAttempts,
         lastErrorClass:
-          'lastErrorClass' in upd
-            ? (upd.lastErrorClass as string | null)
-            : existing.lastErrorClass,
-        lastError:
-          'lastError' in upd ? (upd.lastError as string | null) : existing.lastError,
+          'lastErrorClass' in upd ? (upd.lastErrorClass as string | null) : existing.lastErrorClass,
+        lastError: 'lastError' in upd ? (upd.lastError as string | null) : existing.lastError,
         lastAttemptAt:
-          'lastAttemptAt' in upd
-            ? (upd.lastAttemptAt as Date | null)
-            : existing.lastAttemptAt,
+          'lastAttemptAt' in upd ? (upd.lastAttemptAt as Date | null) : existing.lastAttemptAt,
         sentAt: 'sentAt' in upd ? (upd.sentAt as Date | null) : existing.sentAt,
       };
       rows.set(k, merged);
@@ -172,7 +163,7 @@ function makeMockDb(): DeliveryPrismaRunner & {
 
 function makeMockCipher(
   config: Record<string, unknown> = { url: 'https://example.com/hook' },
-  opts: { fail?: boolean } = {},
+  opts: { fail?: boolean } = {}
 ): DestinationConfigCipher {
   return {
     encrypt: vi.fn(),
@@ -190,8 +181,10 @@ function makeMockCipher(
 function makeMockAdapter(
   type: DestinationType,
   outcome: DeliveryOutcome | (() => Promise<DeliveryOutcome>),
-  opts: { throws?: Error } = {},
-): DestinationAdapter & { calls: Array<{ envelope: TraceEnvelope; config: Record<string, unknown> }> } {
+  opts: { throws?: Error } = {}
+): DestinationAdapter & {
+  calls: Array<{ envelope: TraceEnvelope; config: Record<string, unknown> }>;
+} {
   const calls: Array<{ envelope: TraceEnvelope; config: Record<string, unknown> }> = [];
   const adapter = {
     type,
@@ -269,7 +262,7 @@ function registry(
   webhook?: DestinationAdapter,
   langfuse?: DestinationAdapter,
   datadog?: DestinationAdapter,
-  otlp?: DestinationAdapter,
+  otlp?: DestinationAdapter
 ): DestinationAdapterRegistry {
   return {
     webhook: webhook ?? makeMockAdapter('webhook', { kind: 'success', latencyMs: 10 }),
@@ -438,7 +431,7 @@ describe('BroadcastDeliveryExecutor — adapter dispatch', () => {
     const adapter = makeMockAdapter(
       'webhook',
       { kind: 'success', latencyMs: 0 },
-      { throws: new Error('boom') },
+      { throws: new Error('boom') }
     );
     const executor = new BroadcastDeliveryExecutor({
       cipher,
@@ -641,9 +634,9 @@ describe('BroadcastDeliveryExecutor — DLQ admission (ADR-019)', () => {
     const snapshotMsg = snapshot.content.messages[0]!.content as string;
     expect(snapshotMsg).not.toBe('super secret prompt');
     // Marker attribute proves redaction ran.
-    expect(
-      (snapshot.custom as Record<string, unknown>)['broadcast.privacy_mode_applied'],
-    ).toBe(true);
+    expect((snapshot.custom as Record<string, unknown>)['broadcast.privacy_mode_applied']).toBe(
+      true
+    );
   });
 
   it('pre-dispatch DLQ (config_decrypt_failed) snapshot is SOTA-redacted', async () => {
@@ -666,9 +659,9 @@ describe('BroadcastDeliveryExecutor — DLQ admission (ADR-019)', () => {
     // destination-specific policy), so the raw payload must NOT appear.
     const snapshotMsg = snapshot.content.messages[0]!.content as string;
     expect(snapshotMsg).not.toBe('leaky secret payload');
-    expect(
-      (snapshot.custom as Record<string, unknown>)['broadcast.privacy_mode_applied'],
-    ).toBe(true);
+    expect((snapshot.custom as Record<string, unknown>)['broadcast.privacy_mode_applied']).toBe(
+      true
+    );
   });
 
   it('inserts a broadcast_dlq row only at maxAttempts, not on each retryable failure', async () => {

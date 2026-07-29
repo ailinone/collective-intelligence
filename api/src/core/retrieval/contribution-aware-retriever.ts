@@ -83,7 +83,7 @@ export interface ContributionAwareRetrieverResult {
 
 export function rescoreCandidates(
   input: ContributionAwareRetrieverInput,
-  deps: ContributionAwareRetrieverDeps,
+  deps: ContributionAwareRetrieverDeps
 ): ContributionAwareRetrieverResult {
   const policy = resolveCollectiveSelectionPolicy(input.policy);
   const contributionPolicy: ContributionAwarePolicy = Object.freeze({
@@ -118,7 +118,12 @@ export function rescoreCandidates(
     }
 
     const modelId = route.providerModelId || candidate.canonicalModelId;
-    const profile = lookupProfile(profileIndex, modelId, candidate.canonicalModelId, input.taskProfile.taskType);
+    const profile = lookupProfile(
+      profileIndex,
+      modelId,
+      candidate.canonicalModelId,
+      input.taskProfile.taskType
+    );
     const enriched: ContributionAwareCandidate = {
       routeId: candidate.routeId,
       modelId,
@@ -189,9 +194,7 @@ interface ProfileIndex {
   readonly byModel: ReadonlyMap<string, ModelTaskPerformanceProfile>;
 }
 
-function buildProfileIndex(
-  history: HistoricalContributionResult,
-): ProfileIndex {
+function buildProfileIndex(history: HistoricalContributionResult): ProfileIndex {
   const byModel = new Map<string, ModelTaskPerformanceProfile>();
   for (const p of history.modelProfiles) {
     byModel.set(`${p.modelId}||${p.taskType}`, p);
@@ -203,7 +206,7 @@ function lookupProfile(
   idx: ProfileIndex,
   primaryId: string,
   fallbackId: string,
-  taskType: string,
+  taskType: string
 ): ModelTaskPerformanceProfile | undefined {
   const primary = idx.byModel.get(`${primaryId}||${taskType}`);
   if (primary) return primary;
@@ -231,18 +234,28 @@ function deriveCapabilities(route: ProviderModelRoute): readonly string[] {
 
 function deriveModality(
   route: ProviderModelRoute,
-  taskModality: CandidateModality,
+  taskModality: CandidateModality
 ): CandidateModality {
   // A model with vision/images is image-capable; audio is audio-capable.
   // When the task is text and the model is purely image/audio, we want
   // to flag a mismatch. So:
-  if (route.supportsVision && !route.supportsTools && !route.supportsJson && !route.supportsStreaming) {
+  if (
+    route.supportsVision &&
+    !route.supportsTools &&
+    !route.supportsJson &&
+    !route.supportsStreaming
+  ) {
     return 'image';
   }
   if (route.supportsImages && !route.supportsTools && !route.supportsJson) {
     return 'image';
   }
-  if (route.supportsAudio && !route.supportsTools && !route.supportsJson && !route.supportsStreaming) {
+  if (
+    route.supportsAudio &&
+    !route.supportsTools &&
+    !route.supportsJson &&
+    !route.supportsStreaming
+  ) {
     return 'audio';
   }
   // A multimodal route (e.g. text + vision) still serves text tasks
@@ -263,10 +276,7 @@ function pickTaskModality(profile: TaskProfile): CandidateModality {
  * route's per-1M pricing. Used ONLY for ranking — the real cost is
  * settled by the orchestrator at execution time.
  */
-function estimateCostUsd(
-  route: ProviderModelRoute,
-  profile: TaskProfile,
-): number {
+function estimateCostUsd(route: ProviderModelRoute, profile: TaskProfile): number {
   const inputTokens = Math.max(0, profile.contextRequirementTokens ?? 1_000);
   // Heuristic: output is ~25% of input or 500 tokens, whichever is bigger.
   const outputTokens = Math.max(500, Math.floor(inputTokens * 0.25));

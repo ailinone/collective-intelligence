@@ -47,10 +47,7 @@ describe('ModelRoleResolver — participant', () => {
 
   it('rejects rate-limited providers', async () => {
     const resolver = new ModelRoleResolver();
-    const pool = [
-      ...diversePool(),
-      makeCandidate({ id: 'rate-limited', rateLimited: true }),
-    ];
+    const pool = [...diversePool(), makeCandidate({ id: 'rate-limited', rateLimited: true })];
     const r = await resolver.resolve({
       taskProfile: { taskType: 'analysis' },
       strategyName: 'consensus',
@@ -58,15 +55,14 @@ describe('ModelRoleResolver — participant', () => {
       candidatePool: pool,
       constraints: {},
     });
-    expect(r.rejected.some((rej) => rej.modelId === 'rate-limited' && rej.reason === 'rate_limited')).toBe(true);
+    expect(
+      r.rejected.some((rej) => rej.modelId === 'rate-limited' && rej.reason === 'rate_limited')
+    ).toBe(true);
   });
 
   it('rejects unhealthy providers', async () => {
     const resolver = new ModelRoleResolver();
-    const pool = [
-      ...diversePool(),
-      makeCandidate({ id: 'unhealthy', providerHealthy: false }),
-    ];
+    const pool = [...diversePool(), makeCandidate({ id: 'unhealthy', providerHealthy: false })];
     const r = await resolver.resolve({
       taskProfile: { taskType: 'analysis' },
       strategyName: 'consensus',
@@ -74,7 +70,9 @@ describe('ModelRoleResolver — participant', () => {
       candidatePool: pool,
       constraints: {},
     });
-    expect(r.rejected.some((rej) => rej.modelId === 'unhealthy' && rej.reason === 'provider_unhealthy')).toBe(true);
+    expect(
+      r.rejected.some((rej) => rej.modelId === 'unhealthy' && rej.reason === 'provider_unhealthy')
+    ).toBe(true);
   });
 
   it('honors maxCostUsd by rejecting expensive candidates', async () => {
@@ -91,7 +89,9 @@ describe('ModelRoleResolver — participant', () => {
       constraints: { maxCostUsd: 0.01 },
     });
     expect(r.selected.find((c) => c.model.id === 'expensive')).toBeUndefined();
-    expect(r.rejected.some((rej) => rej.modelId === 'expensive' && rej.reason === 'cost_over_budget')).toBe(true);
+    expect(
+      r.rejected.some((rej) => rej.modelId === 'expensive' && rej.reason === 'cost_over_budget')
+    ).toBe(true);
   });
 
   it('selectionSource is "dynamic" — no explicit override', async () => {
@@ -136,7 +136,12 @@ describe('ModelRoleResolver — participant', () => {
           model: makeModel({
             id: 'code-capable',
             provider: 'p1',
-            capabilities: ['chat', 'text_generation', 'code_generation', 'reasoning'] as ModelCapability[],
+            capabilities: [
+              'chat',
+              'text_generation',
+              'code_generation',
+              'reasoning',
+            ] as ModelCapability[],
             performance: { latencyMs: 1000, throughput: 100, quality: 0.8, reliability: 0.92 },
           }),
         }),

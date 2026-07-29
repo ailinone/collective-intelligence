@@ -26,20 +26,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SOURCES: Record<string, string> = {
-  'runtime-routing-config-types.ts': resolve(
-    __dirname,
-    '..',
-    'runtime-routing-config-types.ts',
-  ),
+  'runtime-routing-config-types.ts': resolve(__dirname, '..', 'runtime-routing-config-types.ts'),
   'runtime-routing-config-provider.ts': resolve(
     __dirname,
     '..',
-    'runtime-routing-config-provider.ts',
+    'runtime-routing-config-provider.ts'
   ),
   'static-routing-config-provider.ts': resolve(
     __dirname,
     '..',
-    'static-routing-config-provider.ts',
+    'static-routing-config-provider.ts'
   ),
 };
 

@@ -18,7 +18,7 @@ import { harvestHistoricalResults } from '../harvest/historical-results-harveste
 import type { HistoricalRawRow } from '../harvest/historical-results-schema';
 
 function rawRow(
-  overrides: Partial<HistoricalRawRow> & { id: string; experiment_id: string },
+  overrides: Partial<HistoricalRawRow> & { id: string; experiment_id: string }
 ): HistoricalRawRow {
   return {
     id: overrides.id,

@@ -244,7 +244,8 @@ export class CapabilityExecutionService {
       const engine = this.getEngine();
 
       // Infer task type from capabilities if not provided
-      const taskType = options.taskType || inferTaskTypeFromCapabilities(options.requiredCapabilities);
+      const taskType =
+        options.taskType || inferTaskTypeFromCapabilities(options.requiredCapabilities);
 
       // Build the ChatRequest with capability hints
       // The OrchestrationEngine's strategies will use these to select appropriate models
@@ -274,7 +275,8 @@ export class CapabilityExecutionService {
       const executionTimeMs = Date.now() - startTime;
 
       // Extract execution details
-      const primaryExecution = result.modelsUsed.find((m) => m.role === 'primary') || result.modelsUsed[0];
+      const primaryExecution =
+        result.modelsUsed.find((m) => m.role === 'primary') || result.modelsUsed[0];
 
       this.log.info(
         {

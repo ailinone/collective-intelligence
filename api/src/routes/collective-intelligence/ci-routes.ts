@@ -19,7 +19,10 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getSemanticMemoryStore, type MemoryType } from '@/core/memory/semantic-memory-store';
-import { getAgenticWorkflowEngine, type WorkflowDefinition } from '@/core/agentic/agentic-workflow-engine';
+import {
+  getAgenticWorkflowEngine,
+  type WorkflowDefinition,
+} from '@/core/agentic/agentic-workflow-engine';
 import { getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
@@ -75,9 +78,7 @@ interface ExecuteWorkflowBody {
 // Route Registration
 // ============================================
 
-export async function registerCollectiveIntelligenceRoutes(
-  server: FastifyInstance
-): Promise<void> {
+export async function registerCollectiveIntelligenceRoutes(server: FastifyInstance): Promise<void> {
   const authenticatedServer = server as FastifyInstance & {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   };
@@ -142,10 +143,10 @@ export async function registerCollectiveIntelligenceRoutes(
           required: ['content'],
           properties: {
             content: { type: 'string', description: 'Memory content to store' },
-            type: { 
-              type: 'string', 
+            type: {
+              type: 'string',
               enum: ['episodic', 'semantic', 'procedural'],
-              default: 'semantic'
+              default: 'semantic',
             },
             metadata: { type: 'object', description: 'Additional metadata' },
             importance: { type: 'number', minimum: 0, maximum: 1, default: 0.5 },
@@ -471,11 +472,17 @@ export async function registerCollectiveIntelligenceRoutes(
         }
         log.error({ error: errorMessage, requestId: request.id }, 'Failed to create workflow');
         const statusCode =
-          error && typeof error === 'object' && 'statusCode' in error && typeof (error as { statusCode?: unknown }).statusCode === 'number'
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
+          typeof (error as { statusCode?: unknown }).statusCode === 'number'
             ? (error as { statusCode: number }).statusCode
             : 500;
         const code =
-          error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          typeof (error as { code?: unknown }).code === 'string'
             ? (error as { code: string }).code
             : 'workflow_creation_failed';
         return reply.status(statusCode).send({
@@ -538,7 +545,7 @@ export async function registerCollectiveIntelligenceRoutes(
 
         // Get workflow from ID or use inline definition
         let workflow: WorkflowDefinition | undefined;
-        
+
         if (workflowId) {
           workflow = workflowEngine.getWorkflow(workflowId);
           if (!workflow) {
@@ -547,7 +554,9 @@ export async function registerCollectiveIntelligenceRoutes(
         } else if (inlineWorkflow) {
           workflow = inlineWorkflow;
         } else {
-          return reply.status(400).send({ error: 'Either workflowId or workflow must be provided' });
+          return reply
+            .status(400)
+            .send({ error: 'Either workflowId or workflow must be provided' });
         }
 
         const result = await workflowEngine.execute({

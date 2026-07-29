@@ -21,10 +21,7 @@ import {
   generateSegmentedBenchmarkReport,
   CONFIRMATORY_REGISTRY,
 } from '../segmented-benchmark-report';
-import {
-  HARD_VERIFIABLE_TASK_TYPE,
-  CODE_VERIFIED_TASK_TYPE,
-} from '../experiment-suite';
+import { HARD_VERIFIABLE_TASK_TYPE, CODE_VERIFIED_TASK_TYPE } from '../experiment-suite';
 import type { ExperimentExecutionResult } from '../experiment-types';
 
 function row(over: Partial<ExperimentExecutionResult>): ExperimentExecutionResult {
@@ -69,12 +66,51 @@ describe('CONFIRMATORY_REGISTRY', () => {
 describe('generateSegmentedBenchmarkReport', () => {
   it('CONFIRMATORY: a genuine paired win on a pre-registered regime is COLLECTIVE_WINS, with full audit trail', () => {
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 146, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.60 }),
-      row({ taskIndex: 147, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.55 }),
-      row({ taskIndex: 148, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.62 }),
-      row({ taskIndex: 146, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.90 }),
-      row({ taskIndex: 147, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.88 }),
-      row({ taskIndex: 148, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.92 }),
+      row({
+        taskIndex: 146,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'single-model',
+        model: 'gpt-5.4',
+        qualityScore: 0.6,
+      }),
+      row({
+        taskIndex: 147,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'single-model',
+        model: 'gpt-5.4',
+        qualityScore: 0.55,
+      }),
+      row({
+        taskIndex: 148,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'single-model',
+        model: 'gpt-5.4',
+        qualityScore: 0.62,
+      }),
+      row({
+        taskIndex: 146,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.9,
+      }),
+      row({
+        taskIndex: 147,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.88,
+      }),
+      row({
+        taskIndex: 148,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.92,
+      }),
     ];
 
     const report = generateSegmentedBenchmarkReport('exp-seg', results);
@@ -99,10 +135,36 @@ describe('generateSegmentedBenchmarkReport', () => {
 
   it('CONFIRMATORY: a regime where the single wins is NO_ADVANTAGE, not silently omitted', () => {
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 156, taskType: CODE_VERIFIED_TASK_TYPE, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 1.0 }),
-      row({ taskIndex: 157, taskType: CODE_VERIFIED_TASK_TYPE, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 1.0 }),
-      row({ taskIndex: 156, taskType: CODE_VERIFIED_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.5 }),
-      row({ taskIndex: 157, taskType: CODE_VERIFIED_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.5 }),
+      row({
+        taskIndex: 156,
+        taskType: CODE_VERIFIED_TASK_TYPE,
+        executionMode: 'single-model',
+        model: 'gpt-5.4',
+        qualityScore: 1.0,
+      }),
+      row({
+        taskIndex: 157,
+        taskType: CODE_VERIFIED_TASK_TYPE,
+        executionMode: 'single-model',
+        model: 'gpt-5.4',
+        qualityScore: 1.0,
+      }),
+      row({
+        taskIndex: 156,
+        taskType: CODE_VERIFIED_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.5,
+      }),
+      row({
+        taskIndex: 157,
+        taskType: CODE_VERIFIED_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.5,
+      }),
     ];
     const report = generateSegmentedBenchmarkReport('exp-seg', results);
     const codeVerified = report.confirmatory.find((f) => f.regime === 'code-verified')!;
@@ -113,10 +175,38 @@ describe('generateSegmentedBenchmarkReport', () => {
   it('EXPLORATORY: a post-hoc scenario win is labeled EXPLORATORY with the non-confirmatory caveat, never merged into confirmatory', () => {
     // "reasoning/high" is NOT one of the 3 registered regimes' taskTypes.
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 10, taskType: 'reasoning', complexity: 'high', executionMode: 'single-model', qualityScore: 0.60 }),
-      row({ taskIndex: 11, taskType: 'reasoning', complexity: 'high', executionMode: 'single-model', qualityScore: 0.62 }),
-      row({ taskIndex: 10, taskType: 'reasoning', complexity: 'high', executionMode: 'collective', strategy: 'debate', model: null, qualityScore: 0.85 }),
-      row({ taskIndex: 11, taskType: 'reasoning', complexity: 'high', executionMode: 'collective', strategy: 'debate', model: null, qualityScore: 0.83 }),
+      row({
+        taskIndex: 10,
+        taskType: 'reasoning',
+        complexity: 'high',
+        executionMode: 'single-model',
+        qualityScore: 0.6,
+      }),
+      row({
+        taskIndex: 11,
+        taskType: 'reasoning',
+        complexity: 'high',
+        executionMode: 'single-model',
+        qualityScore: 0.62,
+      }),
+      row({
+        taskIndex: 10,
+        taskType: 'reasoning',
+        complexity: 'high',
+        executionMode: 'collective',
+        strategy: 'debate',
+        model: null,
+        qualityScore: 0.85,
+      }),
+      row({
+        taskIndex: 11,
+        taskType: 'reasoning',
+        complexity: 'high',
+        executionMode: 'collective',
+        strategy: 'debate',
+        model: null,
+        qualityScore: 0.83,
+      }),
     ];
 
     const report = generateSegmentedBenchmarkReport('exp-seg', results);
@@ -135,9 +225,29 @@ describe('generateSegmentedBenchmarkReport', () => {
     // Pooled means would show a spurious win; paired has only 1 shared task
     // (below the ≥2 floor) so nothing is reported for this scenario.
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 20, taskType: 'analysis', complexity: 'medium', executionMode: 'single-model', qualityScore: 0.90 }),
-      row({ taskIndex: 21, taskType: 'analysis', complexity: 'medium', executionMode: 'single-model', qualityScore: 0.40 }),
-      row({ taskIndex: 20, taskType: 'analysis', complexity: 'medium', executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.95 }),
+      row({
+        taskIndex: 20,
+        taskType: 'analysis',
+        complexity: 'medium',
+        executionMode: 'single-model',
+        qualityScore: 0.9,
+      }),
+      row({
+        taskIndex: 21,
+        taskType: 'analysis',
+        complexity: 'medium',
+        executionMode: 'single-model',
+        qualityScore: 0.4,
+      }),
+      row({
+        taskIndex: 20,
+        taskType: 'analysis',
+        complexity: 'medium',
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.95,
+      }),
     ];
     const report = generateSegmentedBenchmarkReport('exp-seg', results);
     expect(report.exploratory.find((f) => f.scenario === 'analysis/medium')).toBeUndefined();
@@ -145,10 +255,34 @@ describe('generateSegmentedBenchmarkReport', () => {
 
   it('every finding (confirmatory and exploratory) carries a full audit trail', () => {
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 146, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'single-model', qualityScore: 0.5 }),
-      row({ taskIndex: 147, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'single-model', qualityScore: 0.5 }),
-      row({ taskIndex: 146, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.6 }),
-      row({ taskIndex: 147, taskType: HARD_VERIFIABLE_TASK_TYPE, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.6 }),
+      row({
+        taskIndex: 146,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'single-model',
+        qualityScore: 0.5,
+      }),
+      row({
+        taskIndex: 147,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'single-model',
+        qualityScore: 0.5,
+      }),
+      row({
+        taskIndex: 146,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.6,
+      }),
+      row({
+        taskIndex: 147,
+        taskType: HARD_VERIFIABLE_TASK_TYPE,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.6,
+      }),
     ];
     const report = generateSegmentedBenchmarkReport('exp-seg', results);
     expect(report.methodologyNote.length).toBeGreaterThan(50);

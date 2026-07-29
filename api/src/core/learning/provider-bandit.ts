@@ -38,7 +38,7 @@ const FAILURE_THRESHOLD = 0.4; // reward < this → failure
 
 interface BetaParams {
   alpha: number; // successes + 1
-  beta: number;  // failures + 1
+  beta: number; // failures + 1
 }
 
 type BanditKey = string; // `${equivalenceGroup}|${providerId}`
@@ -123,17 +123,17 @@ export class ProviderBandit {
   selectProvider(
     equivalenceGroup: string,
     candidateProviders: string[],
-    excludeProviders: string[] = [],
+    excludeProviders: string[] = []
   ): ProviderSelectionResult {
-    const excluded = new Set(excludeProviders.map(p => p.toLowerCase()));
-    const eligible = candidateProviders.filter(p => !excluded.has(p.toLowerCase()));
+    const excluded = new Set(excludeProviders.map((p) => p.toLowerCase()));
+    const eligible = candidateProviders.filter((p) => !excluded.has(p.toLowerCase()));
 
     if (eligible.length === 0) {
       return { rankedProviders: [], decisionReason: 'No eligible providers after exclusion' };
     }
 
     // Sample from each arm's Beta distribution
-    const scored = eligible.map(providerId => {
+    const scored = eligible.map((providerId) => {
       const key = makeKey(equivalenceGroup, providerId.toLowerCase());
       const beta = this.params.get(key) ?? { alpha: 1, beta: 1 }; // uninformative prior
       const sampledScore = betaSample(beta.alpha, beta.beta);
@@ -154,9 +154,10 @@ export class ProviderBandit {
 
     return {
       rankedProviders: scored,
-      decisionReason: scored.length > 1
-        ? `Thompson Sampling: ${scored[0].providerId} scored ${scored[0].sampledScore.toFixed(3)} (α=${this.getAlpha(equivalenceGroup, scored[0].providerId)}, β=${this.getBeta(equivalenceGroup, scored[0].providerId)})`
-        : `Only one provider available: ${scored[0].providerId}`,
+      decisionReason:
+        scored.length > 1
+          ? `Thompson Sampling: ${scored[0].providerId} scored ${scored[0].sampledScore.toFixed(3)} (α=${this.getAlpha(equivalenceGroup, scored[0].providerId)}, β=${this.getBeta(equivalenceGroup, scored[0].providerId)})`
+          : `Only one provider available: ${scored[0].providerId}`,
     };
   }
 
@@ -212,7 +213,7 @@ export class ProviderBandit {
   getObservationCount(equivalenceGroup: string, providerId: string): number {
     const key = makeKey(equivalenceGroup, providerId.toLowerCase());
     const beta = this.params.get(key);
-    return beta ? (beta.alpha + beta.beta - 2) : 0;
+    return beta ? beta.alpha + beta.beta - 2 : 0;
   }
 
   /**

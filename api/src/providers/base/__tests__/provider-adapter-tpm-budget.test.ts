@@ -51,26 +51,56 @@ class FakeAdapter extends ProviderAdapter {
   constructor(config: ProviderConfig) {
     super('fake-tpm-provider', 'Fake TPM Provider', config);
   }
-  async getProvider(): Promise<Provider> { throw new Error('not used'); }
-  async getModels(): Promise<Model[]> { return []; }
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('not used'); }
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse, void, unknown> { throw new Error('not used'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('not used'); }
-  async healthCheck(): Promise<HealthCheckResult> { return { healthy: true, checkedAt: new Date() }; }
-  calculateCost(): number { return 0; }
-  normalizeModelName(modelName: string): string { return modelName; }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('not used'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('not used'); }
-  async moderate(): Promise<ModerationResponse> { throw new Error('not used'); }
+  async getProvider(): Promise<Provider> {
+    throw new Error('not used');
+  }
+  async getModels(): Promise<Model[]> {
+    return [];
+  }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('not used');
+  }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse, void, unknown> {
+    throw new Error('not used');
+  }
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('not used');
+  }
+  async healthCheck(): Promise<HealthCheckResult> {
+    return { healthy: true, checkedAt: new Date() };
+  }
+  calculateCost(): number {
+    return 0;
+  }
+  normalizeModelName(modelName: string): string {
+    return modelName;
+  }
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('not used');
+  }
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('not used');
+  }
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('not used');
+  }
 
-  public runThroughBulkhead<T>(op: () => Promise<T>, name: string, estimatedTokens?: number): Promise<T> {
-    return (this as unknown as {
-      executeThroughBulkhead: <U>(o: () => Promise<U>, n: string, t?: number) => Promise<U>;
-    }).executeThroughBulkhead(op, name, estimatedTokens);
+  public runThroughBulkhead<T>(
+    op: () => Promise<T>,
+    name: string,
+    estimatedTokens?: number
+  ): Promise<T> {
+    return (
+      this as unknown as {
+        executeThroughBulkhead: <U>(o: () => Promise<U>, n: string, t?: number) => Promise<U>;
+      }
+    ).executeThroughBulkhead(op, name, estimatedTokens);
   }
 
   public exposeGetTpmConfig() {
-    return (this as unknown as { getTpmConfig: () => { capacity: number; refillRatePerSecond: number } }).getTpmConfig();
+    return (
+      this as unknown as { getTpmConfig: () => { capacity: number; refillRatePerSecond: number } }
+    ).getTpmConfig();
   }
 }
 
@@ -108,7 +138,9 @@ describe('ProviderAdapter TPM budget', () => {
     const adapter = new FakeAdapter({ apiKey: 'sk-test' });
     const operation = vi.fn(async () => 'should not run');
 
-    await expect(adapter.runThroughBulkhead(operation, 'op', 1000)).rejects.toThrow(/TPM budget exhausted/);
+    await expect(adapter.runThroughBulkhead(operation, 'op', 1000)).rejects.toThrow(
+      /TPM budget exhausted/
+    );
     expect(operation).not.toHaveBeenCalled();
   });
 

@@ -67,7 +67,7 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — payload templates', () => {
           t.executionLocks.c3ExecutionAuthorized === false &&
           t.executionLocks.billableProviderCallsAuthorized === false &&
           t.executionLocks.providerProbesAuthorized === false &&
-          t.executionLocks.modelProbesAuthorized === false,
+          t.executionLocks.modelProbesAuthorized === false
       );
       expect(ok).toBe(true);
     });
@@ -79,7 +79,7 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — payload templates', () => {
           Boolean(t.strategyId || t.baselineId) &&
           Boolean(t.candidateSelectionRef) &&
           Boolean(t.budgetPolicyRef) &&
-          Boolean(t.provenancePolicyRef),
+          Boolean(t.provenancePolicyRef)
       );
       expect(ok).toBe(true);
     });

@@ -27,7 +27,10 @@
  *     call WITHOUT the loop consuming it; it's the "grade the request" fallback.
  */
 
-import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
+import {
+  resolveAnswerChecker,
+  type AnswerCheckSpec,
+} from '@/core/orchestration/verification/answer-check-resolver';
 import { extractFinalAnswer } from '@/core/orchestration/verification/best-of-n-verifier';
 import type { ExperimentTask } from './experiment-types';
 
@@ -70,7 +73,7 @@ function looseValueMatch(expected: string | number | boolean, actual: unknown): 
  */
 export function matchToolCall(
   observed: ReadonlyArray<ObservedToolCall> | undefined,
-  expect: NonNullable<ExperimentTask['expectTool']>,
+  expect: NonNullable<ExperimentTask['expectTool']>
 ): boolean {
   if (!observed || observed.length === 0) return false;
   const wantName = expect.name.trim().toLowerCase();
@@ -90,7 +93,9 @@ export function matchToolCall(
         // unparseable args → only name matched; fall through to arg check (fails)
       }
     }
-    const allMatch = Object.entries(expect.argsMatch).every(([k, v]) => looseValueMatch(v, args[k]));
+    const allMatch = Object.entries(expect.argsMatch).every(([k, v]) =>
+      looseValueMatch(v, args[k])
+    );
     if (allMatch) return true;
   }
   return false;
@@ -101,7 +106,7 @@ export function matchToolCall(
  */
 export function gradeToolCallingResponse(
   task: ExperimentTask,
-  resp: { content: string; toolCalls?: ReadonlyArray<ObservedToolCall> },
+  resp: { content: string; toolCalls?: ReadonlyArray<ObservedToolCall> }
 ): ToolGradeResult {
   const content = resp.content ?? '';
   // Mirrors the FINAL-scope path of experiment-runner.gradeObjectiveAnswer

@@ -53,7 +53,14 @@ const REQ = {
 
 function getQMResult() {
   return buildPlanOnlyResult(
-    'quality-multipass', 'explicit', 'request-flag', REQ, CTX, null, 0.92, { registered: true },
+    'quality-multipass',
+    'explicit',
+    'request-flag',
+    REQ,
+    CTX,
+    null,
+    0.92,
+    { registered: true }
   );
 }
 
@@ -239,12 +246,12 @@ describe('01C.1B-SM-R6 FIX-004 — quality-multipass semantic depth (4-step pipe
   describe('dry-run invariants', () => {
     it('no providerCallExecuted in any step', () => {
       const steps = getQMPlan().steps;
-      expect(steps.every(s => s.providerCallExecuted === false)).toBe(true);
+      expect(steps.every((s) => s.providerCallExecuted === false)).toBe(true);
     });
 
     it('all actions carry the quality-multipass/ prefix', () => {
-      const actions = getQMPlan().steps.map(s => s.action);
-      expect(actions.every(a => a.startsWith('quality-multipass/'))).toBe(true);
+      const actions = getQMPlan().steps.map((s) => s.action);
+      expect(actions.every((a) => a.startsWith('quality-multipass/'))).toBe(true);
     });
 
     it('totalCost is 0', () => {
@@ -264,7 +271,14 @@ describe('01C.1B-SM-R6 FIX-004 — quality-multipass semantic depth (4-step pipe
     it('plan fingerprint differs from single (distinct semantic content)', () => {
       const qmMeta = getQMResult().metadata as Record<string, unknown>;
       const singleResult = buildPlanOnlyResult(
-        'single', 'explicit', 'request-flag', REQ, CTX, null, 0.92, { registered: true },
+        'single',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.92,
+        { registered: true }
       );
       const singleMeta = singleResult.metadata as Record<string, unknown>;
       expect(qmMeta['planFingerprint']).not.toBe(singleMeta['planFingerprint']);

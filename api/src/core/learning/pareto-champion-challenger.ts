@@ -43,10 +43,10 @@ const log = logger.child({ component: 'pareto-champion-challenger' });
  * All are "higher is better" (cost is inverted).
  */
 export interface ParetoObjectives {
-  quality: number;        // avg quality score (0-1)
+  quality: number; // avg quality score (0-1)
   costEfficiency: number; // 1 / avgCostUsd (higher = cheaper)
-  speed: number;          // 1 / avgLatencyMs (higher = faster)
-  successRate: number;    // proportion of successful executions (0-1)
+  speed: number; // 1 / avgLatencyMs (higher = faster)
+  successRate: number; // proportion of successful executions (0-1)
 }
 
 /**
@@ -72,8 +72,8 @@ export interface ParetoCandidate {
 export interface ParetoFrontier {
   taskType: string;
   complexity: string;
-  nonDominated: ParetoCandidate[];       // Strategies on the frontier
-  dominated: ParetoCandidate[];          // Strategies below the frontier
+  nonDominated: ParetoCandidate[]; // Strategies on the frontier
+  dominated: ParetoCandidate[]; // Strategies below the frontier
   frontierSize: number;
   totalCandidates: number;
   computedAt: string;
@@ -86,8 +86,8 @@ export interface ParetoEvaluationResult {
   frontiers: ParetoFrontier[];
   totalNiches: number;
   avgFrontierSize: number;
-  newFrontierEntries: number;            // Strategies that entered the frontier
-  droppedFromFrontier: number;           // Strategies that fell off the frontier
+  newFrontierEntries: number; // Strategies that entered the frontier
+  droppedFromFrontier: number; // Strategies that fell off the frontier
   timestamp: string;
 }
 
@@ -139,7 +139,12 @@ function nicheKey(taskType: string, complexity: string): string {
  */
 function dominates(a: ParetoObjectives, b: ParetoObjectives): boolean {
   const eps = CONFIG.dominanceEpsilon;
-  const objectives: (keyof ParetoObjectives)[] = ['quality', 'costEfficiency', 'speed', 'successRate'];
+  const objectives: (keyof ParetoObjectives)[] = [
+    'quality',
+    'costEfficiency',
+    'speed',
+    'successRate',
+  ];
 
   let allAtLeastAsGood = true;
   let strictlyBetterInOne = false;
@@ -187,10 +192,16 @@ function computeFrontier(candidates: ParetoCandidate[]): {
   // If frontier exceeds max size, keep the ones with highest combined score
   if (nonDominated.length > CONFIG.maxFrontierPerNiche) {
     nonDominated.sort((a, b) => {
-      const scoreA = a.objectives.quality + a.objectives.costEfficiency * 0.3 +
-        a.objectives.speed * 0.2 + a.objectives.successRate * 0.5;
-      const scoreB = b.objectives.quality + b.objectives.costEfficiency * 0.3 +
-        b.objectives.speed * 0.2 + b.objectives.successRate * 0.5;
+      const scoreA =
+        a.objectives.quality +
+        a.objectives.costEfficiency * 0.3 +
+        a.objectives.speed * 0.2 +
+        a.objectives.successRate * 0.5;
+      const scoreB =
+        b.objectives.quality +
+        b.objectives.costEfficiency * 0.3 +
+        b.objectives.speed * 0.2 +
+        b.objectives.successRate * 0.5;
       return scoreB - scoreA;
     });
     const evicted = nonDominated.splice(CONFIG.maxFrontierPerNiche);
@@ -205,16 +216,19 @@ function computeFrontier(candidates: ParetoCandidate[]): {
  */
 function resultsToCandidates(results: BenchmarkResult[]): ParetoCandidate[] {
   // Aggregate by (taskType, complexity, strategy)
-  const buckets = new Map<string, {
-    taskType: string;
-    complexity: string;
-    strategy: string;
-    totalQuality: number;
-    totalCost: number;
-    totalLatency: number;
-    successCount: number;
-    count: number;
-  }>();
+  const buckets = new Map<
+    string,
+    {
+      taskType: string;
+      complexity: string;
+      strategy: string;
+      totalQuality: number;
+      totalCost: number;
+      totalLatency: number;
+      successCount: number;
+      count: number;
+    }
+  >();
 
   for (const r of results) {
     const key = `${r.taskType}|${r.complexity}|${r.strategy}`;
@@ -252,7 +266,7 @@ function resultsToCandidates(results: BenchmarkResult[]): ParetoCandidate[] {
     const normalizedSpeed = 1 - Math.min(avgLatencyMs / 30_000, 1);
 
     // Normalize cost efficiency to [0, 1] range using $0.10 as max reference cost.
-    const normalizedCostEfficiency = 1 - Math.min(avgCostUsd / 0.10, 1);
+    const normalizedCostEfficiency = 1 - Math.min(avgCostUsd / 0.1, 1);
 
     candidates.push({
       taskType: b.taskType,
@@ -319,8 +333,8 @@ export function evaluatePareto(benchmarkResults: BenchmarkResult[]): ParetoEvalu
     // Compare with previous frontier
     const previous = currentFrontiers.get(key);
     if (previous) {
-      const prevStrategies = new Set(previous.nonDominated.map(c => c.strategy));
-      const newStrategies = new Set(nonDominated.map(c => c.strategy));
+      const prevStrategies = new Set(previous.nonDominated.map((c) => c.strategy));
+      const newStrategies = new Set(nonDominated.map((c) => c.strategy));
 
       for (const s of newStrategies) {
         if (!prevStrategies.has(s)) newFrontierEntries++;
@@ -339,9 +353,10 @@ export function evaluatePareto(benchmarkResults: BenchmarkResult[]): ParetoEvalu
   const result: ParetoEvaluationResult = {
     frontiers,
     totalNiches: frontiers.length,
-    avgFrontierSize: frontiers.length > 0
-      ? frontiers.reduce((s, f) => s + f.frontierSize, 0) / frontiers.length
-      : 0,
+    avgFrontierSize:
+      frontiers.length > 0
+        ? frontiers.reduce((s, f) => s + f.frontierSize, 0) / frontiers.length
+        : 0,
     newFrontierEntries,
     droppedFromFrontier,
     timestamp,
@@ -354,12 +369,15 @@ export function evaluatePareto(benchmarkResults: BenchmarkResult[]): ParetoEvalu
   }
   lastEvaluatedAt = timestamp;
 
-  log.info({
-    niches: result.totalNiches,
-    avgFrontierSize: result.avgFrontierSize.toFixed(1),
-    newEntries: newFrontierEntries,
-    dropped: droppedFromFrontier,
-  }, 'Pareto evaluation completed (OI-09)');
+  log.info(
+    {
+      niches: result.totalNiches,
+      avgFrontierSize: result.avgFrontierSize.toFixed(1),
+      newEntries: newFrontierEntries,
+      dropped: droppedFromFrontier,
+    },
+    'Pareto evaluation completed (OI-09)'
+  );
 
   return result;
 }
@@ -372,7 +390,7 @@ export function evaluatePareto(benchmarkResults: BenchmarkResult[]): ParetoEvalu
 export function getBestFromFrontier(
   taskType: string,
   complexity: string,
-  preference: 'quality' | 'cost' | 'speed' | 'balanced',
+  preference: 'quality' | 'cost' | 'speed' | 'balanced'
 ): ParetoCandidate | null {
   const frontier = currentFrontiers.get(nicheKey(taskType, complexity));
   if (!frontier || frontier.nonDominated.length === 0) return null;
@@ -380,22 +398,29 @@ export function getBestFromFrontier(
   const candidates = frontier.nonDominated;
 
   // Score each candidate based on user preference
-  const scored = candidates.map(c => {
+  const scored = candidates.map((c) => {
     let score: number;
     switch (preference) {
       case 'quality':
         score = c.objectives.quality * 0.7 + c.objectives.successRate * 0.3;
         break;
       case 'cost':
-        score = c.objectives.costEfficiency * 0.5 + c.objectives.quality * 0.3 + c.objectives.successRate * 0.2;
+        score =
+          c.objectives.costEfficiency * 0.5 +
+          c.objectives.quality * 0.3 +
+          c.objectives.successRate * 0.2;
         break;
       case 'speed':
-        score = c.objectives.speed * 0.5 + c.objectives.quality * 0.3 + c.objectives.successRate * 0.2;
+        score =
+          c.objectives.speed * 0.5 + c.objectives.quality * 0.3 + c.objectives.successRate * 0.2;
         break;
       case 'balanced':
       default:
-        score = c.objectives.quality * 0.35 + c.objectives.costEfficiency * 0.2 +
-          c.objectives.speed * 0.15 + c.objectives.successRate * 0.3;
+        score =
+          c.objectives.quality * 0.35 +
+          c.objectives.costEfficiency * 0.2 +
+          c.objectives.speed * 0.15 +
+          c.objectives.successRate * 0.3;
         break;
     }
     return { candidate: c, score };
@@ -450,7 +475,7 @@ export function getParetoHistory(): ParetoEvaluationResult[] {
 export function isOnFrontier(taskType: string, complexity: string, strategy: string): boolean {
   const frontier = currentFrontiers.get(nicheKey(taskType, complexity));
   if (!frontier) return false;
-  return frontier.nonDominated.some(c => c.strategy === strategy);
+  return frontier.nonDominated.some((c) => c.strategy === strategy);
 }
 
 /**
@@ -477,7 +502,7 @@ export function getStrategyFrontierPresence(strategy: string): Array<{
       return sb - sa;
     });
 
-    const idx = sorted.findIndex(c => c.strategy === strategy);
+    const idx = sorted.findIndex((c) => c.strategy === strategy);
     if (idx !== -1) {
       results.push({
         taskType: frontier.taskType,
@@ -506,7 +531,7 @@ export async function persistFrontiers(): Promise<void> {
         key,
         taskType: f.taskType,
         complexity: f.complexity,
-        nonDominated: f.nonDominated.map(c => ({
+        nonDominated: f.nonDominated.map((c) => ({
           strategy: c.strategy,
           objectives: c.objectives,
           sampleCount: c.sampleCount,
@@ -545,16 +570,18 @@ export async function persistFrontiers(): Promise<void> {
 export async function loadFrontiersFromOutcomes(): Promise<number> {
   try {
     // Reconstruct frontiers from recent execution outcomes (last 7 days)
-    const rows = await prisma.$queryRaw<Array<{
-      strategy: string;
-      task_type: string;
-      complexity: string;
-      avg_quality: number;
-      avg_latency_ms: number;
-      avg_cost_usd: number;
-      success_rate: number;
-      sample_count: bigint;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        strategy: string;
+        task_type: string;
+        complexity: string;
+        avg_quality: number;
+        avg_latency_ms: number;
+        avg_cost_usd: number;
+        success_rate: number;
+        sample_count: bigint;
+      }>
+    >`
       SELECT
         strategy,
         (observed_metrics->>'taskType')::text as task_type,
@@ -592,10 +619,13 @@ export async function loadFrontiersFromOutcomes(): Promise<number> {
 
     if (syntheticResults.length > 0) {
       const result = evaluatePareto(syntheticResults);
-      log.info({
-        niches: result.totalNiches,
-        strategies: rows.length,
-      }, 'Pareto frontiers restored from execution outcomes on startup');
+      log.info(
+        {
+          niches: result.totalNiches,
+          strategies: rows.length,
+        },
+        'Pareto frontiers restored from execution outcomes on startup'
+      );
       return result.totalNiches;
     }
 

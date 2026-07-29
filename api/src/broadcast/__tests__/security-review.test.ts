@@ -34,7 +34,10 @@ import { randomBytes } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 
 import { isForbiddenIp } from '@/broadcast/infrastructure/destinations/safe-http';
-import { signRequest, verifyV1Signature } from '@/broadcast/infrastructure/destinations/webhook-adapter';
+import {
+  signRequest,
+  verifyV1Signature,
+} from '@/broadcast/infrastructure/destinations/webhook-adapter';
 import {
   DestinationConfigCipher,
   buildAad,
@@ -45,38 +48,38 @@ import { LocalKekProvider } from '@/broadcast/infrastructure/encryption/kek-prov
 
 describe('T1 — SSRF: isForbiddenIp rejects every sensitive range', () => {
   const MUST_BLOCK_V4 = [
-    '127.0.0.1',            // loopback
-    '127.53.99.88',         // loopback /8
-    '169.254.169.254',      // AWS IMDSv1/v2 + GCP metadata
-    '10.0.0.1',             // RFC1918
+    '127.0.0.1', // loopback
+    '127.53.99.88', // loopback /8
+    '169.254.169.254', // AWS IMDSv1/v2 + GCP metadata
+    '10.0.0.1', // RFC1918
     '10.255.255.255',
     '172.16.0.1',
     '172.20.99.99',
     '172.31.255.254',
     '192.168.1.1',
     '192.168.255.254',
-    '100.64.0.1',           // CGNAT
+    '100.64.0.1', // CGNAT
     '100.127.255.254',
-    '198.18.1.1',           // benchmarking
+    '198.18.1.1', // benchmarking
     '198.19.255.254',
-    '0.0.0.0',              // "this host"
-    '224.0.0.1',            // multicast
+    '0.0.0.0', // "this host"
+    '224.0.0.1', // multicast
     '239.255.255.255',
-    '240.0.0.1',            // reserved
-    '255.255.255.255',      // broadcast
+    '240.0.0.1', // reserved
+    '255.255.255.255', // broadcast
   ];
   const MUST_BLOCK_V6 = [
-    '::1',                  // loopback
-    '::',                   // unspecified
-    'fe80::1',              // link-local
+    '::1', // loopback
+    '::', // unspecified
+    'fe80::1', // link-local
     'fe80::dead:beef',
-    'fc00::1',              // ULA
-    'fd12:3456:789a::1',    // ULA
-    'ff02::1',              // multicast
-    'fd00:ec2::254',        // AWS IMDS IPv6
-    '::ffff:127.0.0.1',     // IPv4-mapped loopback
+    'fc00::1', // ULA
+    'fd12:3456:789a::1', // ULA
+    'ff02::1', // multicast
+    'fd00:ec2::254', // AWS IMDS IPv6
+    '::ffff:127.0.0.1', // IPv4-mapped loopback
     '::ffff:169.254.169.254', // IPv4-mapped metadata
-    '::ffff:10.0.0.1',      // IPv4-mapped RFC1918
+    '::ffff:10.0.0.1', // IPv4-mapped RFC1918
   ];
 
   it.each(MUST_BLOCK_V4)('blocks IPv4 %s', (ip) => {
@@ -94,7 +97,15 @@ describe('T1 — SSRF: isForbiddenIp rejects every sensitive range', () => {
   });
 
   it('does NOT over-block public ranges (false positives hurt real webhooks)', () => {
-    for (const ip of ['1.1.1.1', '8.8.8.8', '104.16.0.1', '172.15.0.1', '172.32.0.0', '192.167.255.254', '192.169.0.1']) {
+    for (const ip of [
+      '1.1.1.1',
+      '8.8.8.8',
+      '104.16.0.1',
+      '172.15.0.1',
+      '172.32.0.0',
+      '192.167.255.254',
+      '192.169.0.1',
+    ]) {
       expect(isForbiddenIp(ip)).toBe(false);
     }
   });
@@ -111,9 +122,7 @@ describe('T1 — SSRF: isForbiddenIp rejects every sensitive range', () => {
 
 describe('T2 — DNS rebinding: IP pinning closes the TOCTOU window', () => {
   it('buildPinnedLookup always returns the pinned IP regardless of hostname', async () => {
-    const { buildPinnedLookup } = await import(
-      '@/broadcast/infrastructure/destinations/safe-http'
-    );
+    const { buildPinnedLookup } = await import('@/broadcast/infrastructure/destinations/safe-http');
     const lookup = buildPinnedLookup('104.16.0.1', 4);
 
     // Single-result style — attacker's hostname ignored, pin wins.
@@ -230,7 +239,9 @@ describe('T3 — HMAC: verifyV1Signature resists timing attacks and replays', ()
     const now = Date.now();
     const headers = signRequest(body, { secret, signatureScheme: 'v1' }, now);
     const sig = headers['X-Webhook-Signature']!;
-    expect(verifyV1Signature(body, sig, 'different-secret-still-long-enough', 300, now)).toBe(false);
+    expect(verifyV1Signature(body, sig, 'different-secret-still-long-enough', 300, now)).toBe(
+      false
+    );
   });
 
   it('rejects malformed headers without throwing (defense in depth)', () => {
@@ -260,23 +271,43 @@ describe('T4 — Envelope cipher: AAD swap-resistance', () => {
 
   it('rejects decryption when tenantId differs (blob from tenant A → tenant B)', async () => {
     const cipher = await makeCipher();
-    const refA = { tenantType: 'organization' as const, tenantId: 'org-A', destinationId: 'dest-1' };
-    const refB = { tenantType: 'organization' as const, tenantId: 'org-B', destinationId: 'dest-1' };
+    const refA = {
+      tenantType: 'organization' as const,
+      tenantId: 'org-A',
+      destinationId: 'dest-1',
+    };
+    const refB = {
+      tenantType: 'organization' as const,
+      tenantId: 'org-B',
+      destinationId: 'dest-1',
+    };
     const blob = await cipher.encrypt({ secret: 'top-secret' }, refA);
     await expect(cipher.decrypt(blob, refB)).rejects.toThrow(/AAD mismatch/);
   });
 
   it('rejects decryption when destinationId differs (same tenant, different dest)', async () => {
     const cipher = await makeCipher();
-    const refA = { tenantType: 'organization' as const, tenantId: 'org-A', destinationId: 'dest-1' };
-    const refB = { tenantType: 'organization' as const, tenantId: 'org-A', destinationId: 'dest-2' };
+    const refA = {
+      tenantType: 'organization' as const,
+      tenantId: 'org-A',
+      destinationId: 'dest-1',
+    };
+    const refB = {
+      tenantType: 'organization' as const,
+      tenantId: 'org-A',
+      destinationId: 'dest-2',
+    };
     const blob = await cipher.encrypt({ secret: 'top-secret' }, refA);
     await expect(cipher.decrypt(blob, refB)).rejects.toThrow(/AAD mismatch/);
   });
 
   it('rejects decryption when tenantType differs (user vs organization)', async () => {
     const cipher = await makeCipher();
-    const refOrg = { tenantType: 'organization' as const, tenantId: 'same-id', destinationId: 'dest-1' };
+    const refOrg = {
+      tenantType: 'organization' as const,
+      tenantId: 'same-id',
+      destinationId: 'dest-1',
+    };
     const refUser = { tenantType: 'user' as const, tenantId: 'same-id', destinationId: 'dest-1' };
     const blob = await cipher.encrypt({ secret: 'top-secret' }, refOrg);
     await expect(cipher.decrypt(blob, refUser)).rejects.toThrow(/AAD mismatch/);
@@ -287,7 +318,10 @@ describe('T4 — Envelope cipher: AAD swap-resistance', () => {
     const ref = { tenantType: 'organization' as const, tenantId: 'org-1', destinationId: 'dest-1' };
     const blob = await cipher.encrypt({ secret: 'top-secret' }, ref);
     // Keep blob binary identical but attack the stored AAD to point at another tenant.
-    const tampered = { ...blob, aad: buildAad({ tenantType: 'organization', tenantId: 'attacker', destinationId: 'dest-1' }) };
+    const tampered = {
+      ...blob,
+      aad: buildAad({ tenantType: 'organization', tenantId: 'attacker', destinationId: 'dest-1' }),
+    };
     await expect(cipher.decrypt(tampered, ref)).rejects.toThrow(/AAD mismatch/);
   });
 });

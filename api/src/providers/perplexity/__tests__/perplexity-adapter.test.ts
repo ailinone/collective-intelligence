@@ -29,10 +29,7 @@ function makeAdapter(): PerplexityAdapter {
   });
 }
 
-function invokeHook(
-  adapter: PerplexityAdapter,
-  request: ChatRequest,
-): Record<string, unknown> {
+function invokeHook(adapter: PerplexityAdapter, request: ChatRequest): Record<string, unknown> {
   return (
     adapter as unknown as {
       getExtraChatPayloadFields: (m: string, r: ChatRequest) => Record<string, unknown>;

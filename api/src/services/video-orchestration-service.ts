@@ -14,7 +14,11 @@
 
 import { logger } from '@/utils/logger';
 import { ModelRepository } from '@/services/model-repository';
-import { normalizeStrategy, resolveFallbackDeadlineMs, diversifyProviders } from '@/services/modality/modality-execution-helpers';
+import {
+  normalizeStrategy,
+  resolveFallbackDeadlineMs,
+  diversifyProviders,
+} from '@/services/modality/modality-execution-helpers';
 import { runModalityFallback } from '@/services/modality/modality-fallback-driver';
 import type { CandidateAttempt } from '@/core/orchestration/execute-with-fallback';
 import { getProviderRegistry } from '@/providers/provider-registry';
@@ -80,14 +84,20 @@ export class VideoOrchestrationService {
   }
 
   private getModelQuality(model: Model): number {
-    if (typeof model.performance?.quality === 'number' && Number.isFinite(model.performance.quality)) {
+    if (
+      typeof model.performance?.quality === 'number' &&
+      Number.isFinite(model.performance.quality)
+    ) {
       return model.performance.quality;
     }
     return 0.5;
   }
 
   private getModelLatencyMs(model: Model): number {
-    if (typeof model.performance?.latencyMs === 'number' && Number.isFinite(model.performance.latencyMs)) {
+    if (
+      typeof model.performance?.latencyMs === 'number' &&
+      Number.isFinite(model.performance.latencyMs)
+    ) {
       return model.performance.latencyMs;
     }
     return 3000;
@@ -95,7 +105,16 @@ export class VideoOrchestrationService {
 
   private sortModelsByStrategy(
     models: Model[],
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic',
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic',
     userContext: OrchestrationContext
   ): Model[] {
     const sorted = [...models];
@@ -121,7 +140,8 @@ export class VideoOrchestrationService {
         return costA - costB;
       }
 
-      const qualityWeight = userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
+      const qualityWeight =
+        userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
       const costWeight = userContext.maxCost !== undefined ? 0.45 : 0.3;
       const latencyWeight = 1 - qualityWeight - costWeight;
       const scoreA =
@@ -139,7 +159,6 @@ export class VideoOrchestrationService {
     return sorted;
   }
 
-
   private determineRequiredCapability(options: VideoGenerationOptions): ModelCapability {
     if (options.video) {
       return 'video_to_video';
@@ -152,7 +171,8 @@ export class VideoOrchestrationService {
 
   private hasVideoCapability(model: Model, capability: ModelCapability): boolean {
     if (model.capabilities.includes(capability)) return true;
-    if (capability !== 'video_generation' && model.capabilities.includes('video_generation')) return true;
+    if (capability !== 'video_generation' && model.capabilities.includes('video_generation'))
+      return true;
     return false;
   }
 
@@ -220,7 +240,16 @@ export class VideoOrchestrationService {
     explicitModel: string | undefined,
     requiredCapability: ModelCapability,
     userContext: OrchestrationContext,
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic'
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic'
   ): Promise<Model[]> {
     if (explicitModel) {
       // Direct id/name lookup — the previous searchModels({}).find(...) only
@@ -241,7 +270,9 @@ export class VideoOrchestrationService {
       }
       const runnable = this.getRunnableVideoModels(capable);
       if (runnable.length === 0) {
-        throw new Error(`Model ${explicitModel} does not expose an operational videoGenerate adapter`);
+        throw new Error(
+          `Model ${explicitModel} does not expose an operational videoGenerate adapter`
+        );
       }
       // Order preserved from the repository (createdAt desc, uid tiebreak).
       return runnable;
@@ -384,70 +415,70 @@ export class VideoOrchestrationService {
     // 422-on-exhaustion via the onFallbackExhausted hook. Candidates are already
     // operability-filtered by selectVideoCandidateModels, so the primitive's
     // adapter resolution + the videoGenerate method probe suffice.
-    const result = await runModalityFallback<
-      Awaited<ReturnType<ProviderAdapter['videoGenerate']>>
-    >({
-      capability: requiredCapability as ModelCapability,
-      capabilityLabel: requiredCapability,
-      explicit: options.model ?? null,
-      catalog: candidates,
-      maxCandidates: candidates.length,
-      deadlineMs: resolveFallbackDeadlineMs(strategyUsed, allowFallback),
-      registry: this.getRegistry(),
-      supportsCapability: (adapter) =>
-        typeof (adapter as { videoGenerate?: unknown }).videoGenerate === 'function',
-      parallelDegree: maxParallel,
-      execute: async (selectedModel, adapter) => {
-        const response = await adapter.videoGenerate(selectedModel, {
-          prompt: options.prompt,
-          image: options.image,
-          startImage: options.startImage,
-          endImage: options.endImage,
-          audio: options.audio,
-          duration: options.duration,
-          aspectRatio: options.aspectRatio,
-          size: options.size,
-          options: {
-            n: options.n ?? 1,
-            response_format: responseFormat,
-            video: options.video,
-          },
-        });
-        // Empty-generation guard (2026-07-04, c3-v4 defect A): a candidate that
-        // resolves but normalizes to ZERO videos is a FAILED rung, not a
-        // success — otherwise the fallback stops here and the caller gets a
-        // 200 with an empty video.list (83/83 benchmark video rows did exactly
-        // this, scored ~0 while flagged success). Async job handles survive:
-        // normalizeVideoOutput keeps id-only objects, so only truly
-        // empty/unrecognized payloads throw and let the chain advance to the
-        // next candidate (exhaustion still raises the deliberate 422 below).
-        if (this.normalizeVideoOutput(response.video, responseFormat).length === 0) {
-          throw new Error(
-            `Model ${selectedModel.name} returned no video output (empty generation)`
-          );
-        }
-        return response;
-      },
-      onFallbackExhausted: (error, durationMs) => {
-        const err = new Error(
-          `Video orchestration exhausted ${candidates.length} candidate model(s) without success`
-        ) as Error & { statusCode?: number; code?: string; details?: Record<string, unknown> };
-        // Pool exhaustion is terminal; 422 avoids route-level retries.
-        err.statusCode = 422;
-        err.code = 'capability_dependency_unavailable';
-        err.details = {
-          capability: requiredCapability,
-          strategyUsed,
-          candidateCount: candidates.length,
-          durationMs,
-          attempts: error.attempts,
-        };
-        throw err;
-      },
-      log,
-      requestId: options.requestId,
-      startTime,
-    });
+    const result = await runModalityFallback<Awaited<ReturnType<ProviderAdapter['videoGenerate']>>>(
+      {
+        capability: requiredCapability as ModelCapability,
+        capabilityLabel: requiredCapability,
+        explicit: options.model ?? null,
+        catalog: candidates,
+        maxCandidates: candidates.length,
+        deadlineMs: resolveFallbackDeadlineMs(strategyUsed, allowFallback),
+        registry: this.getRegistry(),
+        supportsCapability: (adapter) =>
+          typeof (adapter as { videoGenerate?: unknown }).videoGenerate === 'function',
+        parallelDegree: maxParallel,
+        execute: async (selectedModel, adapter) => {
+          const response = await adapter.videoGenerate(selectedModel, {
+            prompt: options.prompt,
+            image: options.image,
+            startImage: options.startImage,
+            endImage: options.endImage,
+            audio: options.audio,
+            duration: options.duration,
+            aspectRatio: options.aspectRatio,
+            size: options.size,
+            options: {
+              n: options.n ?? 1,
+              response_format: responseFormat,
+              video: options.video,
+            },
+          });
+          // Empty-generation guard (2026-07-04, c3-v4 defect A): a candidate that
+          // resolves but normalizes to ZERO videos is a FAILED rung, not a
+          // success — otherwise the fallback stops here and the caller gets a
+          // 200 with an empty video.list (83/83 benchmark video rows did exactly
+          // this, scored ~0 while flagged success). Async job handles survive:
+          // normalizeVideoOutput keeps id-only objects, so only truly
+          // empty/unrecognized payloads throw and let the chain advance to the
+          // next candidate (exhaustion still raises the deliberate 422 below).
+          if (this.normalizeVideoOutput(response.video, responseFormat).length === 0) {
+            throw new Error(
+              `Model ${selectedModel.name} returned no video output (empty generation)`
+            );
+          }
+          return response;
+        },
+        onFallbackExhausted: (error, durationMs) => {
+          const err = new Error(
+            `Video orchestration exhausted ${candidates.length} candidate model(s) without success`
+          ) as Error & { statusCode?: number; code?: string; details?: Record<string, unknown> };
+          // Pool exhaustion is terminal; 422 avoids route-level retries.
+          err.statusCode = 422;
+          err.code = 'capability_dependency_unavailable';
+          err.details = {
+            capability: requiredCapability,
+            strategyUsed,
+            candidateCount: candidates.length,
+            durationMs,
+            attempts: error.attempts,
+          };
+          throw err;
+        },
+        log,
+        requestId: options.requestId,
+        startTime,
+      }
+    );
 
     const videos = this.normalizeVideoOutput(result.response.video, responseFormat);
 

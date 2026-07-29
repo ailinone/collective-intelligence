@@ -110,11 +110,7 @@ export interface SelectorProjection {
 }
 
 export type SelectorId =
-  | 'actual_historical'
-  | 'single_top'
-  | 'single_budget'
-  | 'structural_naive'
-  | 'pareto_aware';
+  'actual_historical' | 'single_top' | 'single_budget' | 'structural_naive' | 'pareto_aware';
 
 // ─── Per-row replay record ──────────────────────────────────────────────
 

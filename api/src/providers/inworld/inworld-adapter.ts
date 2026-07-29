@@ -124,7 +124,7 @@ export class InworldAdapter extends OpenAICompatibleHubAdapter {
     const file = new File(
       [new Blob([new Uint8Array(request.audio)], { type: mimeType })],
       filename,
-      { type: mimeType },
+      { type: mimeType }
     );
 
     const formData = new FormData();
@@ -180,7 +180,7 @@ export class InworldAdapter extends OpenAICompatibleHubAdapter {
   async cloneVoice(
     displayName: string,
     langCode: string,
-    voiceSamples: InworldVoiceSample[],
+    voiceSamples: InworldVoiceSample[]
   ): Promise<InworldVoiceCloneResult> {
     const payload: Record<string, unknown> = {
       displayName,
@@ -217,7 +217,7 @@ export class InworldAdapter extends OpenAICompatibleHubAdapter {
   async anthropicMessages(
     messages: unknown[],
     model: string,
-    options?: Record<string, unknown>,
+    options?: Record<string, unknown>
   ): Promise<unknown> {
     const payload: Record<string, unknown> = {
       model,

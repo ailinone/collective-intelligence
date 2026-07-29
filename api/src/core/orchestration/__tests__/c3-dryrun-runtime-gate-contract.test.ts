@@ -64,18 +64,26 @@ describe('01C.1B-C3-DRYRUN-RUNTIME-GATE — contract', () => {
 
   it('also false when an execution lock or counter flips', () => {
     expect(isC3RuntimeExecutionLocked({ ...safeResponse, providerCallExecuted: true })).toBe(false);
-    expect(isC3RuntimeExecutionLocked({ ...safeResponse, c3ExecutionAuthorized: true })).toBe(false);
+    expect(isC3RuntimeExecutionLocked({ ...safeResponse, c3ExecutionAuthorized: true })).toBe(
+      false
+    );
     expect(isC3RuntimeExecutionLocked({ ...safeResponse, providerCallsExecuted: 1 })).toBe(false);
     expect(isC3RuntimeExecutionLocked({ ...safeResponse, dryRun: false })).toBe(false);
   });
 
   it('case 37: isC3NonResolvableRuntimeSentinel detects PLACEHOLDER_MODEL sentinel', () => {
-    expect(isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_PLACEHOLDER_MODEL_deepseek_1__')).toBe(true);
+    expect(
+      isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_PLACEHOLDER_MODEL_deepseek_1__')
+    ).toBe(true);
   });
 
   it('case 38: isC3NonResolvableRuntimeSentinel detects MODEL_PROBE_VALIDATED sentinel', () => {
-    expect(isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')).toBe(true);
-    expect(isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_infermatic__')).toBe(true);
+    expect(
+      isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')
+    ).toBe(true);
+    expect(
+      isC3NonResolvableRuntimeSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_infermatic__')
+    ).toBe(true);
   });
 
   it('a genuinely resolvable model id is NOT flagged as a sentinel', () => {

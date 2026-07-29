@@ -176,7 +176,7 @@ describe('BroadcastEmitter — transactional call-site contract (Fase 3.5)', () 
     const emitter = new DefaultBroadcastEmitter(writer);
     const ok = await emitter.emitChatCompletion(
       makeArgs(),
-      sentinelTx as unknown as Parameters<typeof emitter.emitChatCompletion>[1],
+      sentinelTx as unknown as Parameters<typeof emitter.emitChatCompletion>[1]
     );
 
     expect(ok).toBe(true);

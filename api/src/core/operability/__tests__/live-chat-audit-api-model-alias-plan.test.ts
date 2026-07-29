@@ -27,7 +27,7 @@ import path from 'node:path';
 
 const auditScriptSource = fs.readFileSync(
   path.resolve(__dirname, '../scripts/run-live-chat-operability-audit.ts'),
-  'utf8',
+  'utf8'
 );
 
 describe('01C.1B-J1E §14.4 — audit plan uses resolved aliases', () => {
@@ -35,7 +35,9 @@ describe('01C.1B-J1E §14.4 — audit plan uses resolved aliases', () => {
     // Anti-regression: the audit script must not contain a pattern like
     // `${nativeProviderId}/${logicalModelId}` for building apiModelIds.
     // It only PROBES routes that the dry-run already resolved.
-    expect(auditScriptSource).not.toMatch(/\$\{[^}]*native(?:Provider)?Id[^}]*\}\/\$\{[^}]*logicalModelId[^}]*\}/);
+    expect(auditScriptSource).not.toMatch(
+      /\$\{[^}]*native(?:Provider)?Id[^}]*\}\/\$\{[^}]*logicalModelId[^}]*\}/
+    );
   });
 
   it('extractRoutesFromDryRunJson copies apiModelId verbatim from the plan', () => {
@@ -43,7 +45,9 @@ describe('01C.1B-J1E §14.4 — audit plan uses resolved aliases', () => {
     // It does NOT re-resolve or normalize.
     expect(auditScriptSource).toMatch(/c\.apiModelId/);
     // It does NOT contain a re-resolution step inside the extraction
-    expect(auditScriptSource).not.toMatch(/extractRoutesFromDryRunJson[\s\S]{0,2000}resolveProviderApiModelId/);
+    expect(auditScriptSource).not.toMatch(
+      /extractRoutesFromDryRunJson[\s\S]{0,2000}resolveProviderApiModelId/
+    );
   });
 
   it('PROVIDER_SPECS map does not double-prefix in normalizeModelId', () => {
@@ -51,7 +55,7 @@ describe('01C.1B-J1E §14.4 — audit plan uses resolved aliases', () => {
     // prepend `<provider>/` to an already-prefixed id.
     const block = auditScriptSource.slice(
       auditScriptSource.indexOf('PROVIDER_SPECS'),
-      auditScriptSource.indexOf('PROVIDER_SPECS') + 6000,
+      auditScriptSource.indexOf('PROVIDER_SPECS') + 6000
     );
     expect(block).not.toMatch(/normalizeModelId:\s*\(m\)\s*=>\s*['"`]\$\{?provider/i);
   });

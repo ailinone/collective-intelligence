@@ -72,7 +72,7 @@ describe('Consensus — no provider call when judge is disabled', () => {
           timeoutMs: 1000,
           rubricVersion: 'v1',
         },
-        { judge } as LLMJudgeClient,
+        { judge } as LLMJudgeClient
       ),
     });
     const models = threeHealthyModels();

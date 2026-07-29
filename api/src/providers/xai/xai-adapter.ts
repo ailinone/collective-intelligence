@@ -68,7 +68,7 @@ export class XAIAdapter extends ProviderAdapter {
     }
 
     // Remove provider prefix from model IDs to return normalized names
-    return models.map(model => ({
+    return models.map((model) => ({
       ...model,
       id: model.name, // Use 'name' which is the normalized ID without prefix
     }));
@@ -114,7 +114,11 @@ export class XAIAdapter extends ProviderAdapter {
       });
 
       if (!response.ok) {
-        const error = (await response.json().catch(() => ({ error: response.statusText }))) as { error?: string; message?: string; [key: string]: unknown };
+        const error = (await response.json().catch(() => ({ error: response.statusText }))) as {
+          error?: string;
+          message?: string;
+          [key: string]: unknown;
+        };
         throw new Error(`XAI API error: ${JSON.stringify(error)}`);
       }
 
@@ -190,21 +194,21 @@ export class XAIAdapter extends ProviderAdapter {
   /**
    * Generate embeddings
    * X.AI (Grok) does not provide a dedicated embeddings API
-   * 
+   *
    * Automatically falls back to a configured provider with embeddings support (OpenAI, Google).
    * If no fallback is available, throws a clear error.
-   * 
+   *
    * This ensures semantic accuracy for vector search and other embeddings-dependent functionality.
    */
   async generateEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     // Check if fallback is enabled via config (default: enabled)
     const fallbackEnabled = process.env.XAI_EMBEDDINGS_FALLBACK !== 'false';
-    
+
     if (!fallbackEnabled) {
       throw new Error(
         'X.AI (Grok) does not support embeddings natively. ' +
-        'Set XAI_EMBEDDINGS_FALLBACK=true to enable automatic fallback to OpenAI/Google embeddings, ' +
-        'or use a provider with native embeddings support directly.'
+          'Set XAI_EMBEDDINGS_FALLBACK=true to enable automatic fallback to OpenAI/Google embeddings, ' +
+          'or use a provider with native embeddings support directly.'
       );
     }
 
@@ -212,25 +216,26 @@ export class XAIAdapter extends ProviderAdapter {
       // Try to find a fallback provider with embeddings support
       const { getProviderRegistry } = await import('@/providers/provider-registry.js');
       const registry = getProviderRegistry();
-      
+
       // Priority order: OpenAI > Google (both have excellent embeddings APIs)
       const fallbackProviders = ['openai', 'google'];
-      
+
       for (const providerId of fallbackProviders) {
         const models = await registry.getAllModels();
         const embeddingModel = models.find(
-          (m) => m.providerId === providerId && 
-                 (m.capabilities?.includes('embeddings') || m.id.includes('embedding'))
+          (m) =>
+            m.providerId === providerId &&
+            (m.capabilities?.includes('embeddings') || m.id.includes('embedding'))
         );
 
         if (embeddingModel) {
           const providerResult = await registry.findModel(embeddingModel.id);
           if (providerResult?.adapter) {
             log.info(
-              { 
+              {
                 xaiModel: request.model,
                 fallbackProvider: providerId,
-                fallbackModel: embeddingModel.id 
+                fallbackModel: embeddingModel.id,
               },
               'Using embeddings fallback provider for X.AI request'
             );
@@ -241,13 +246,16 @@ export class XAIAdapter extends ProviderAdapter {
             });
 
             // Return response with updated model name
-            log.info({
-              originalProvider: 'xai',
-              originalModel: request.model,
-              fallbackProvider: providerId,
-              fallbackModel: embeddingModel.id,
-              reason: 'X.AI does not provide embeddings API',
-            }, 'Embeddings request handled by fallback provider');
+            log.info(
+              {
+                originalProvider: 'xai',
+                originalModel: request.model,
+                fallbackProvider: providerId,
+                fallbackModel: embeddingModel.id,
+                reason: 'X.AI does not provide embeddings API',
+              },
+              'Embeddings request handled by fallback provider'
+            );
 
             return {
               ...embeddingResponse,
@@ -260,20 +268,20 @@ export class XAIAdapter extends ProviderAdapter {
       // No fallback available
       throw new Error(
         'X.AI does not support embeddings and no fallback provider is available. ' +
-        'Please configure OpenAI or Google provider for embeddings support. ' +
-        'Embeddings are required for semantic search and other vector operations.'
+          'Please configure OpenAI or Google provider for embeddings support. ' +
+          'Embeddings are required for semantic search and other vector operations.'
       );
     } catch (error) {
       if (error instanceof Error && error.message.includes('X.AI does not support')) {
         throw error; // Re-throw our clear error messages
       }
-      
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.error({ error: errorMessage }, 'Embeddings fallback failed');
-      
+
       throw new Error(
         `X.AI embeddings failed: ${errorMessage}. ` +
-        `X.AI does not provide embeddings API. Please use a provider with native embeddings support (OpenAI, Google) or configure fallback.`
+          `X.AI does not provide embeddings API. Please use a provider with native embeddings support (OpenAI, Google) or configure fallback.`
       );
     }
   }
@@ -316,9 +324,12 @@ export class XAIAdapter extends ProviderAdapter {
       });
       if (!res.ok) return null;
       const data = (await res.json()) as { total_available?: number; balance?: number };
-      const balance = typeof data.total_available === 'number'
-        ? data.total_available
-        : typeof data.balance === 'number' ? data.balance : undefined;
+      const balance =
+        typeof data.total_available === 'number'
+          ? data.total_available
+          : typeof data.balance === 'number'
+            ? data.balance
+            : undefined;
       return {
         hasCredits: balance !== undefined ? balance > 0 : true,
         balance,
@@ -332,8 +343,7 @@ export class XAIAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Math.max(0, Number(model.inputCostPer1k) || 0);
     const outputRate = Math.max(0, Number(model.outputCostPer1k) || 0);
-    const cost = (inputTokens / 1000) * inputRate
-               + (outputTokens / 1000) * outputRate;
+    const cost = (inputTokens / 1000) * inputRate + (outputTokens / 1000) * outputRate;
     return Math.max(0, cost);
   }
 
@@ -345,8 +355,16 @@ export class XAIAdapter extends ProviderAdapter {
     // SSE chunk arrives as untrusted JSON. Narrow once at the entry point;
     // the function body still uses optional chaining and the existing
     // `isToolCallShape` guard for deeper levels.
-    const chunk: { id?: string; created?: number; choices?: Array<{ index?: number; delta?: { role?: string; content?: string; tool_calls?: unknown }; finish_reason?: string }>; usage?: unknown } =
-      isObject(rawChunk) ? narrowAs(rawChunk) : {};
+    const chunk: {
+      id?: string;
+      created?: number;
+      choices?: Array<{
+        index?: number;
+        delta?: { role?: string; content?: string; tool_calls?: unknown };
+        finish_reason?: string;
+      }>;
+      usage?: unknown;
+    } = isObject(rawChunk) ? narrowAs(rawChunk) : {};
     // Type guard for role
     function normalizeRole(role: string | undefined): 'user' | 'assistant' | 'system' {
       if (role === 'user' || role === 'assistant' || role === 'system') {
@@ -356,16 +374,27 @@ export class XAIAdapter extends ProviderAdapter {
     }
 
     // Type guard for finish_reason
-    function normalizeFinishReason(reason: string | undefined): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
-      if (reason === 'stop' || reason === 'length' || reason === 'tool_calls' || reason === 'content_filter') {
+    function normalizeFinishReason(
+      reason: string | undefined
+    ): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
+      if (
+        reason === 'stop' ||
+        reason === 'length' ||
+        reason === 'tool_calls' ||
+        reason === 'content_filter'
+      ) {
         return reason;
       }
       return null;
     }
 
     const isToolCallShape = (
-      value: unknown,
-    ): value is { id: string; type: 'function'; function: { name: string; arguments?: unknown } } => {
+      value: unknown
+    ): value is {
+      id: string;
+      type: 'function';
+      function: { name: string; arguments?: unknown };
+    } => {
       if (typeof value !== 'object' || value === null) return false;
       const v = value as { id?: unknown; type?: unknown; function?: unknown };
       if (typeof v.id !== 'string') return false;
@@ -379,7 +408,11 @@ export class XAIAdapter extends ProviderAdapter {
       // Type guard for tool_calls — same predicate-style narrow used in
       // mistral/deepseek adapters.
       let toolCalls: ToolCall[] | undefined = undefined;
-      if (choice.delta?.tool_calls !== undefined && choice.delta.tool_calls !== null && Array.isArray(choice.delta.tool_calls)) {
+      if (
+        choice.delta?.tool_calls !== undefined &&
+        choice.delta.tool_calls !== null &&
+        Array.isArray(choice.delta.tool_calls)
+      ) {
         const validToolCalls: ToolCall[] = [];
         for (const tc of choice.delta.tool_calls) {
           if (!isToolCallShape(tc)) continue;
@@ -397,7 +430,7 @@ export class XAIAdapter extends ProviderAdapter {
           toolCalls = validToolCalls;
         }
       }
-      
+
       return {
         index: choice.index || 0,
         delta: {
@@ -423,7 +456,8 @@ export class XAIAdapter extends ProviderAdapter {
         const usageObj = chunk.usage as Record<string, unknown>;
         return {
           prompt_tokens: typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : 0,
-          completion_tokens: typeof usageObj.completion_tokens === 'number' ? usageObj.completion_tokens : 0,
+          completion_tokens:
+            typeof usageObj.completion_tokens === 'number' ? usageObj.completion_tokens : 0,
           total_tokens: typeof usageObj.total_tokens === 'number' ? usageObj.total_tokens : 0,
         };
       })(),
@@ -456,7 +490,8 @@ export class XAIAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -474,8 +509,10 @@ export class XAIAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -487,8 +524,10 @@ export class XAIAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -497,7 +536,7 @@ export class XAIAdapter extends ProviderAdapter {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+
       return {
         flagged: false,
         categories: {
@@ -536,14 +575,21 @@ export class XAIAdapter extends ProviderAdapter {
    * X.AI (Grok) does not have image editing capability
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('X.AI (Grok) image editing is not yet implemented. X.AI does not provide image editing capabilities. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'X.AI (Grok) image editing is not yet implemented. X.AI does not provide image editing capabilities. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * X.AI (Grok) does not have image variation capability
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('X.AI (Grok) image variation is not yet implemented. X.AI does not provide image variation capabilities. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'X.AI (Grok) image variation is not yet implemented. X.AI does not provide image variation capabilities. Use OpenAI DALL-E for image variations.'
+    );
   }
 }

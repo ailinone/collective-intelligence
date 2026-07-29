@@ -57,19 +57,19 @@ describe('BflAdapter', () => {
 
     it('throws on chatCompletion with the BFL-is-image-only message', async () => {
       await expect(
-        adapter.chatCompletion({ messages: [], model: 'flux-pro' } as never),
+        adapter.chatCompletion({ messages: [], model: 'flux-pro' } as never)
       ).rejects.toThrow(/image-only/i);
     });
 
     it('throws on generateEmbeddings', async () => {
       await expect(adapter.generateEmbeddings({ input: 'x', model: 'x' } as never)).rejects.toThrow(
-        /image-only/i,
+        /image-only/i
       );
     });
 
     it('throws on imageVariation', async () => {
       await expect(
-        adapter.imageVariation({} as never, { image: Buffer.from(''), n: 1 } as never),
+        adapter.imageVariation({} as never, { image: Buffer.from(''), n: 1 } as never)
       ).rejects.toThrow(/imageVariation not supported/);
     });
 
@@ -77,8 +77,8 @@ describe('BflAdapter', () => {
       await expect(
         adapter.imageGenerate(
           { id: 'flux-fake', name: 'flux-fake' } as never,
-          { prompt: 'cat', n: 1 } as never,
-        ),
+          { prompt: 'cat', n: 1 } as never
+        )
       ).rejects.toThrow(/unknown model flux-fake/);
     });
 
@@ -86,8 +86,8 @@ describe('BflAdapter', () => {
       await expect(
         adapter.imageEdit(
           { id: 'flux-dev', name: 'flux-dev' } as never,
-          { image: Buffer.from(''), prompt: 'edit', n: 1 } as never,
-        ),
+          { image: Buffer.from(''), prompt: 'edit', n: 1 } as never
+        )
       ).rejects.toThrow(/imageEdit not supported on flux-dev/);
     });
   });
@@ -117,8 +117,11 @@ describe('BflAdapter', () => {
         // 1. Submit
         if (url.endsWith('/flux-pro-1.1') && method === 'POST') {
           return new Response(
-            JSON.stringify({ id: 'job-123', polling_url: 'https://api.bfl.ai/v1/get_result?id=job-123' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
+            JSON.stringify({
+              id: 'job-123',
+              polling_url: 'https://api.bfl.ai/v1/get_result?id=job-123',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
           );
         }
 
@@ -131,10 +134,10 @@ describe('BflAdapter', () => {
               headers: { 'content-type': 'application/json' },
             });
           }
-          return new Response(
-            JSON.stringify({ status: 'Ready', result: { sample: mockSample } }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          );
+          return new Response(JSON.stringify({ status: 'Ready', result: { sample: mockSample } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
         }
 
         // 3. Download
@@ -156,7 +159,7 @@ describe('BflAdapter', () => {
 
       const out = await adapter.imageGenerate(
         { id: 'flux-pro-1.1', name: 'flux-pro-1.1' } as never,
-        { prompt: 'a friendly fox', size: '1024x1024', n: 1 } as never,
+        { prompt: 'a friendly fox', size: '1024x1024', n: 1 } as never
       );
 
       expect(Buffer.isBuffer(out.image)).toBe(true);
@@ -180,14 +183,20 @@ describe('BflAdapter', () => {
         const method = init?.method || 'GET';
         if (url.endsWith('/flux-pro') && method === 'POST') {
           return new Response(
-            JSON.stringify({ id: 'job-bad', polling_url: 'https://api.bfl.ai/v1/get_result?id=job-bad' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
+            JSON.stringify({
+              id: 'job-bad',
+              polling_url: 'https://api.bfl.ai/v1/get_result?id=job-bad',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
           );
         }
         if (url.includes('get_result')) {
           return new Response(
-            JSON.stringify({ status: 'Content Moderated', error: 'prompt rejected by safety filter' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
+            JSON.stringify({
+              status: 'Content Moderated',
+              error: 'prompt rejected by safety filter',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
           );
         }
         return new Response('not found', { status: 404 });
@@ -204,8 +213,8 @@ describe('BflAdapter', () => {
       await expect(
         adapter.imageGenerate(
           { id: 'flux-pro', name: 'flux-pro' } as never,
-          { prompt: 'naughty', n: 1 } as never,
-        ),
+          { prompt: 'naughty', n: 1 } as never
+        )
       ).rejects.toThrow(/Content Moderated.*prompt rejected/);
     });
   });

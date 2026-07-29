@@ -159,8 +159,16 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             id: { type: 'string', description: 'Unique context ID' },
             name: { type: 'string', description: 'Context name' },
             token_count: { type: 'integer', description: 'Number of tokens cached' },
-            ttl: { type: 'string', enum: ['5min', '1h', '24h'], description: 'Time-to-live setting' },
-            expires_at: { type: 'string', format: 'date-time', description: 'Expiration timestamp (ISO 8601)' },
+            ttl: {
+              type: 'string',
+              enum: ['5min', '1h', '24h'],
+              description: 'Time-to-live setting',
+            },
+            expires_at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Expiration timestamp (ISO 8601)',
+            },
             hash: { type: 'string', description: 'Content hash for deduplication' },
           },
         },
@@ -171,9 +179,15 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "token_limit_exceeded")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "token_limit_exceeded")',
+                },
               },
             },
           },
@@ -199,7 +213,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -262,7 +279,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        log.error({ error: errorMessage, requestId: request.id }, 'Failed to create cached context');
+        log.error(
+          { error: errorMessage, requestId: request.id },
+          'Failed to create cached context'
+        );
         return reply.code(500).send({
           error: {
             message: errorMessage,
@@ -285,16 +305,16 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         type: 'object',
         required: [],
         properties: {
-          limit: { 
-            type: 'integer', 
-            minimum: 1, 
-            maximum: 100, 
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
             default: 20,
             description: 'Number of contexts to return (1-100, default: 20)',
           },
-          offset: { 
-            type: 'integer', 
-            minimum: 0, 
+          offset: {
+            type: 'integer',
+            minimum: 0,
             default: 0,
             description: 'Number of contexts to skip for pagination (default: 0)',
           },
@@ -315,9 +335,21 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
                   name: { type: 'string', description: 'Context name' },
                   token_count: { type: 'integer', description: 'Number of tokens' },
                   ttl: { type: 'string', enum: ['5min', '1h', '24h'], description: 'Time-to-live' },
-                  created_at: { type: 'string', format: 'date-time', description: 'Creation timestamp' },
-                  expires_at: { type: 'string', format: 'date-time', description: 'Expiration timestamp' },
-                  last_accessed_at: { type: 'string', format: 'date-time', description: 'Last access timestamp' },
+                  created_at: {
+                    type: 'string',
+                    format: 'date-time',
+                    description: 'Creation timestamp',
+                  },
+                  expires_at: {
+                    type: 'string',
+                    format: 'date-time',
+                    description: 'Expiration timestamp',
+                  },
+                  last_accessed_at: {
+                    type: 'string',
+                    format: 'date-time',
+                    description: 'Last access timestamp',
+                  },
                   access_count: { type: 'integer', description: 'Number of times accessed' },
                 },
               },
@@ -334,7 +366,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -362,7 +397,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -423,7 +461,8 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
     schema: {
       tags: ['Caching'],
       summary: 'Get cached context',
-      description: 'Retrieves detailed information about a specific cached context by ID, including all cached messages, token count, TTL settings, and access statistics. Use this endpoint to inspect cached contexts and verify their contents before using them in chat completions.',
+      description:
+        'Retrieves detailed information about a specific cached context by ID, including all cached messages, token count, TTL settings, and access statistics. Use this endpoint to inspect cached contexts and verify their contents before using them in chat completions.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -447,20 +486,49 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
                 description: 'Message object with role and content',
                 properties: {
                   role: { type: 'string', description: 'Message role: user, assistant, or system' },
-                  content: { 
-                    oneOf: [{ type: 'string', description: 'Text content as string' }, { type: 'array', description: 'Array of content parts (multimodal)' }],
+                  content: {
+                    oneOf: [
+                      { type: 'string', description: 'Text content as string' },
+                      { type: 'array', description: 'Array of content parts (multimodal)' },
+                    ],
                     description: 'Message content (string or array)',
                   },
                 },
               },
             },
-            token_count: { type: 'integer', description: 'Total number of tokens in the cached context' },
-            ttl: { type: 'string', enum: ['5min', '1h', '24h'], description: 'Time-to-live: 5min (5 minutes), 1h (1 hour), 24h (24 hours)' },
-            created_at: { type: 'string', format: 'date-time', description: 'ISO 8601 timestamp when the context was created' },
-            expires_at: { type: 'string', format: 'date-time', description: 'ISO 8601 timestamp when the context expires' },
-            last_accessed_at: { type: 'string', format: 'date-time', description: 'ISO 8601 timestamp of the last access to this context' },
-            access_count: { type: 'integer', description: 'Number of times this context has been accessed' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the context' },
+            token_count: {
+              type: 'integer',
+              description: 'Total number of tokens in the cached context',
+            },
+            ttl: {
+              type: 'string',
+              enum: ['5min', '1h', '24h'],
+              description: 'Time-to-live: 5min (5 minutes), 1h (1 hour), 24h (24 hours)',
+            },
+            created_at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'ISO 8601 timestamp when the context was created',
+            },
+            expires_at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'ISO 8601 timestamp when the context expires',
+            },
+            last_accessed_at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'ISO 8601 timestamp of the last access to this context',
+            },
+            access_count: {
+              type: 'integer',
+              description: 'Number of times this context has been accessed',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the context',
+            },
           },
         },
         400: {
@@ -470,7 +538,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -498,9 +569,15 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the context was not found or has expired' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the context was not found or has expired',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "context_not_found" or "context_expired")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "context_not_found" or "context_expired")',
+                },
               },
             },
           },
@@ -512,7 +589,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -578,7 +658,8 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
     schema: {
       tags: ['Caching'],
       summary: 'Delete cached context',
-      description: 'Permanently deletes a cached context by ID. This action cannot be undone and will free up the cached tokens. The context ID will no longer be valid after deletion. Use this endpoint to manage cache storage and remove unused contexts.',
+      description:
+        'Permanently deletes a cached context by ID. This action cannot be undone and will free up the cached tokens. The context ID will no longer be valid after deletion. Use this endpoint to manage cache storage and remove unused contexts.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -603,7 +684,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -631,7 +715,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the context was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the context was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "context_not_found")' },
               },
@@ -645,7 +732,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -677,7 +767,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        log.error({ error: errorMessage, requestId: request.id }, 'Failed to delete cached context');
+        log.error(
+          { error: errorMessage, requestId: request.id },
+          'Failed to delete cached context'
+        );
         return reply.code(500).send({
           error: {
             message: errorMessage,
@@ -714,12 +807,13 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
               type: 'object',
               description: 'Message object to append',
               properties: {
-                role: { 
-                  type: 'string', 
+                role: {
+                  type: 'string',
                   enum: ['system', 'user', 'assistant', 'function', 'tool'],
-                  description: 'Message role: system (instructions), user (input), assistant (response), function/tool (tool results)',
+                  description:
+                    'Message role: system (instructions), user (input), assistant (response), function/tool (tool results)',
                 },
-                content: { 
+                content: {
                   type: 'string',
                   description: 'Message content text',
                 },
@@ -745,7 +839,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
               description: 'Combined messages (cached + additional)',
             },
             cached_token_count: { type: 'integer', description: 'Number of tokens from cache' },
-            total_token_count: { type: 'integer', description: 'Total tokens (cached + additional)' },
+            total_token_count: {
+              type: 'integer',
+              description: 'Total tokens (cached + additional)',
+            },
             cache_hit: { type: 'boolean', description: 'Whether cache was found and used' },
           },
         },
@@ -756,7 +853,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -784,9 +884,15 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the context was not found or has expired' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the context was not found or has expired',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "context_not_found" or "context_expired")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "context_not_found" or "context_expired")',
+                },
               },
             },
           },
@@ -798,7 +904,10 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },

@@ -41,7 +41,11 @@
  */
 /** Capabilities that mark a model as retrieval/non-generative even if it ALSO (falsely) claims chat. */
 const DISQUALIFYING_CAPABILITIES = new Set<string>([
-  'embedding', 'embeddings', 'reranking', 'rerank', 'reranker',
+  'embedding',
+  'embeddings',
+  'reranking',
+  'rerank',
+  'reranker',
 ]);
 
 /**

@@ -23,11 +23,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  DestinationConfigCipher,
-  buildAad,
-  type TenantRef,
-} from '../destination-config-cipher';
+import { DestinationConfigCipher, buildAad, type TenantRef } from '../destination-config-cipher';
 import { LocalKekProvider } from '../kek-provider';
 
 function makeCipher(): DestinationConfigCipher {
@@ -223,9 +219,7 @@ describe('LocalKekProvider', () => {
   });
 
   it('rejects short master secrets', () => {
-    expect(() => new LocalKekProvider(randomBytes(16), 'local://short')).toThrow(
-      />= 32 bytes/,
-    );
+    expect(() => new LocalKekProvider(randomBytes(16), 'local://short')).toThrow(/>= 32 bytes/);
   });
 
   it('rejects non-32-byte DEKs', async () => {

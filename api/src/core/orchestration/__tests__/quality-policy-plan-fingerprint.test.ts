@@ -89,24 +89,44 @@ const qualityPolicy: RoleSelectionPolicySnapshot = {
 describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
   it('baseline disabled: fingerprint stable', () => {
     const f1 = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselineMinimal },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselineMinimal,
+      },
+      { planSource: 'dry_run' }
     );
     const f2 = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselineMinimal },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselineMinimal,
+      },
+      { planSource: 'dry_run' }
     );
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
   });
 
   it('enabling qualityPolicy CHANGES the fingerprint', () => {
     const off = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselineMinimal },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselineMinimal,
+      },
+      { planSource: 'dry_run' }
     );
     const on = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: qualityPolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: qualityPolicy,
+      },
+      { planSource: 'dry_run' }
     );
     expect(off.planFingerprint).not.toBe(on.planFingerprint);
   });
@@ -119,7 +139,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...qualityPolicy, qualitySnapshotHashFromR5: 'aaa' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -128,7 +148,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...qualityPolicy, qualitySnapshotHashFromR5: 'bbb' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -139,9 +159,12 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         plan: makePlan(),
         strict: true,
         roleSpecificRetrieval: true,
-        roleSelectionPolicy: { ...qualityPolicy, qualityRequireNoCatalogFallbackForSelected: false },
+        roleSelectionPolicy: {
+          ...qualityPolicy,
+          qualityRequireNoCatalogFallbackForSelected: false,
+        },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -150,7 +173,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...qualityPolicy, qualityRequireNoCatalogFallbackForSelected: true },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -163,10 +186,10 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: qualityPolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const variantCoverage = qualityPolicy.qualitySelectedCoverage!.map((c, i) =>
-      i === 0 ? { ...c, matchKind: 'exact_model_id' } : c,
+      i === 0 ? { ...c, matchKind: 'exact_model_id' } : c
     );
     const b = computePlanFingerprint(
       {
@@ -175,7 +198,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...qualityPolicy, qualitySelectedCoverage: variantCoverage },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -188,10 +211,10 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: qualityPolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const variantCoverage = qualityPolicy.qualitySelectedCoverage!.map((c, i) =>
-      i === 1 ? { ...c, catalogFallbackUsed: true } : c,
+      i === 1 ? { ...c, catalogFallbackUsed: true } : c
     );
     const b = computePlanFingerprint(
       {
@@ -200,7 +223,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...qualityPolicy, qualitySelectedCoverage: variantCoverage },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -213,7 +236,7 @@ describe('01C.1B-J2-C-R5 — qualityPolicy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: qualityPolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const s = JSON.stringify(f.snapshot);
     expect(s).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);

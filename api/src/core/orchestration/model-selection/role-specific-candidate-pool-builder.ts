@@ -133,10 +133,25 @@ export interface RoleSpecificPools {
   /** Lightweight per-role stats. Surfaced on the plan via
    *  `roleCandidateStats.<role>.sourceUniverseCount`. */
   readonly roleCandidateStats: {
-    readonly participant: { readonly sourceUniverseCount: number; readonly source: 'shared_pool' | 'role_specific_pool' };
-    readonly synthesizer: { readonly sourceUniverseCount: number; readonly source: 'shared_pool' | 'role_specific_pool'; readonly minContextWindow?: number };
-    readonly judge: { readonly sourceUniverseCount: number; readonly source: 'shared_pool' | 'role_specific_pool'; readonly minContextWindow?: number; readonly maxCostPer1k?: number };
-    readonly fallback: { readonly sourceUniverseCount: number; readonly source: 'shared_pool' | 'role_specific_pool' };
+    readonly participant: {
+      readonly sourceUniverseCount: number;
+      readonly source: 'shared_pool' | 'role_specific_pool';
+    };
+    readonly synthesizer: {
+      readonly sourceUniverseCount: number;
+      readonly source: 'shared_pool' | 'role_specific_pool';
+      readonly minContextWindow?: number;
+    };
+    readonly judge: {
+      readonly sourceUniverseCount: number;
+      readonly source: 'shared_pool' | 'role_specific_pool';
+      readonly minContextWindow?: number;
+      readonly maxCostPer1k?: number;
+    };
+    readonly fallback: {
+      readonly sourceUniverseCount: number;
+      readonly source: 'shared_pool' | 'role_specific_pool';
+    };
   };
   /** 01C.1B-J1D-R4A — present ONLY when `injectLiveReadyFromStore` was
    *  enabled AND the store yielded at least zero matches. Undefined when
@@ -164,7 +179,7 @@ export interface RoleSpecificPools {
  * the smaller pool (visible in `roleCandidateStats`).
  */
 export async function buildConsensusRoleSpecificCandidatePools(
-  opts: RoleSpecificPoolBuilderOptions,
+  opts: RoleSpecificPoolBuilderOptions
 ): Promise<RoleSpecificPools> {
   const sharedPoolLimit = opts.sharedPoolLimit ?? 256;
   const judgePoolLimit = opts.judgePoolLimit ?? 512;
@@ -231,7 +246,7 @@ export async function buildConsensusRoleSpecificCandidatePools(
     // This is a single DB query (status=active, no limit) filtered in
     // memory by the eligible set. Keeps lookups O(1) thereafter.
     const eligibleProviderModelPairs = new Set(
-      eligibleStates.map((s) => `${s.providerId.toLowerCase()}|${s.modelId.toLowerCase()}`),
+      eligibleStates.map((s) => `${s.providerId.toLowerCase()}|${s.modelId.toLowerCase()}`)
     );
     const catalogIndex = new Map<string, Model[]>();
     if (eligibleStates.length > 0) {
@@ -297,25 +312,26 @@ export async function buildConsensusRoleSpecificCandidatePools(
 
     const runForRole = (
       role: 'participant' | 'synthesizer' | 'judge' | 'fallback',
-      basePool: readonly Model[],
+      basePool: readonly Model[]
     ): { newPool: readonly Model[]; trace: LiveReadyInjectionPerRoleTrace } => {
-      const result: LiveReadyCandidateInjectionResult<Model> = injectLiveReadyCandidatesIntoRolePool({
-        role,
-        baseCandidates: basePool,
-        liveReadyStates: eligibleStates,
-        resolveCatalogCandidate: resolveCatalog,
-        candidateSupportsRole,
-        projectCandidateKey,
-        projectStateKey,
-        attachInjectionMetadata,
-        projectStateForTrace,
-        stateIsEligible: () => true, // we already pre-filtered eligibleStates
-        stateProvider: (s) => s.providerId,
-        stateModel: (s) => s.modelId,
-        policy: opts.liveReadyInjectionPolicy,
-        snapshotHash: opts.liveOperabilitySnapshotHash,
-        snapshotPath: opts.liveOperabilitySnapshotPath,
-      });
+      const result: LiveReadyCandidateInjectionResult<Model> =
+        injectLiveReadyCandidatesIntoRolePool({
+          role,
+          baseCandidates: basePool,
+          liveReadyStates: eligibleStates,
+          resolveCatalogCandidate: resolveCatalog,
+          candidateSupportsRole,
+          projectCandidateKey,
+          projectStateKey,
+          attachInjectionMetadata,
+          projectStateForTrace,
+          stateIsEligible: () => true, // we already pre-filtered eligibleStates
+          stateProvider: (s) => s.providerId,
+          stateModel: (s) => s.modelId,
+          policy: opts.liveReadyInjectionPolicy,
+          snapshotHash: opts.liveOperabilitySnapshotHash,
+          snapshotPath: opts.liveOperabilitySnapshotPath,
+        });
 
       const rejectionCounts: Record<string, number> = {};
       for (const r of result.rejected) {
@@ -341,7 +357,7 @@ export async function buildConsensusRoleSpecificCandidatePools(
           metadata: result.metadata,
         },
       };
-    }
+    };
 
     const sharedRun = runForRole('participant', sharedPool);
     augmentedSharedPool = sharedRun.newPool;
@@ -362,9 +378,7 @@ export async function buildConsensusRoleSpecificCandidatePools(
     // pool which is already augmented above — so we just record the
     // trace without changing pool wiring.
 
-    const judgeRun = judgePool
-      ? runForRole('judge', judgePool)
-      : runForRole('judge', sharedPool);
+    const judgeRun = judgePool ? runForRole('judge', judgePool) : runForRole('judge', sharedPool);
     augmentedJudgePool = judgePool ? judgeRun.newPool : judgePool;
 
     liveReadyInjection = {

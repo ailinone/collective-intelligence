@@ -18,9 +18,7 @@ import {
   resolveMarginalGainPolicy,
 } from '../marginal-gain-calibrator';
 import { calibratePeerLift } from '../peer-lift-calibrator';
-import {
-  multiplicativeBoundedEstimator,
-} from '../ensemble-expected-judge-estimator';
+import { multiplicativeBoundedEstimator } from '../ensemble-expected-judge-estimator';
 import type { EnsembleCalibrationExample } from '../ensemble-calibration-types';
 
 function example(members: { judgeMean: number }[], observed: number): EnsembleCalibrationExample {
@@ -87,9 +85,7 @@ describe('calibrateMarginalGain', () => {
     });
     // The lowest MAE policy must be at the top of evaluations.
     for (const ev of r.evaluations) {
-      expect(ev.meanAbsoluteError).toBeGreaterThanOrEqual(
-        r.chosenEvaluation.meanAbsoluteError,
-      );
+      expect(ev.meanAbsoluteError).toBeGreaterThanOrEqual(r.chosenEvaluation.meanAbsoluteError);
     }
   });
 

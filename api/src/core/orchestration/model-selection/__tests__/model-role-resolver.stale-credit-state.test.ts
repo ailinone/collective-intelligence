@@ -56,9 +56,9 @@ describe('Resolver — stale credit state', () => {
     // The high-quality model would normally win ranking, but the hub
     // says no_credits, so it's rejected.
     expect(r.selected[0]?.model.id).toBe('mid-quality-working');
-    expect(
-      r.rejected.find((rej) => rej.modelId === 'top-quality-but-stale')?.reason,
-    ).toBe('no_credits');
+    expect(r.rejected.find((rej) => rej.modelId === 'top-quality-but-stale')?.reason).toBe(
+      'no_credits'
+    );
   });
 
   it('the trace reports the resolver did NOT consult a live source — pricingStatus="available", providerHealthStatus="available" (signals are pool-bundled)', async () => {

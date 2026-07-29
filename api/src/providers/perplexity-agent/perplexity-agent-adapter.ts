@@ -202,22 +202,18 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
             yield {
               ...final,
               object: 'chat.completion.chunk',
-              choices: final.choices.map(
-                (choice): ChatChoice => ({
-                  index: choice.index,
-                  // Terminal chunk carries no repeated text (deltas already
-                  // streamed it) — just the finish_reason, plus tool_calls
-                  // when the model invoked a tool.
-                  delta: {
-                    role: 'assistant',
-                    content: '',
-                    ...(choice.message?.tool_calls
-                      ? { tool_calls: choice.message.tool_calls }
-                      : {}),
-                  },
-                  finish_reason: choice.finish_reason,
-                }),
-              ),
+              choices: final.choices.map((choice): ChatChoice => ({
+                index: choice.index,
+                // Terminal chunk carries no repeated text (deltas already
+                // streamed it) — just the finish_reason, plus tool_calls
+                // when the model invoked a tool.
+                delta: {
+                  role: 'assistant',
+                  content: '',
+                  ...(choice.message?.tool_calls ? { tool_calls: choice.message.tool_calls } : {}),
+                },
+                finish_reason: choice.finish_reason,
+              })),
             };
           }
         }
@@ -228,7 +224,7 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
 
     if (!sawTerminal) {
       throw new Error(
-        'perplexity-agent stream ended without a response.completed event (truncated upstream stream)',
+        'perplexity-agent stream ended without a response.completed event (truncated upstream stream)'
       );
     }
   }

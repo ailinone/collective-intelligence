@@ -67,9 +67,7 @@ export function getCapabilitySearchService(): CapabilitySearchService {
  *   beforeEach(() => setCapabilitySearchServiceForTests(mockService));
  *   afterEach(() => resetCapabilitySearchService());
  */
-export function setCapabilitySearchServiceForTests(
-  stub: CapabilitySearchService,
-): void {
+export function setCapabilitySearchServiceForTests(stub: CapabilitySearchService): void {
   instance = stub;
 }
 

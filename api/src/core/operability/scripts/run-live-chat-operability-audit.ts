@@ -139,17 +139,18 @@ function parseArgs(): Args {
     else if (a === '--from-dryrun-json') fromDryrunJson = argv[++i];
     else if (a === '--roles') {
       const v = argv[++i] ?? '';
-      const parts = v.split(',').map((x) => x.trim()).filter((x) =>
-        x === 'participant' || x === 'synthesizer' || x === 'judge' || x === 'fallback',
-      ) as Array<'participant' | 'synthesizer' | 'judge' | 'fallback'>;
+      const parts = v
+        .split(',')
+        .map((x) => x.trim())
+        .filter(
+          (x) => x === 'participant' || x === 'synthesizer' || x === 'judge' || x === 'fallback'
+        ) as Array<'participant' | 'synthesizer' | 'judge' | 'fallback'>;
       if (parts.length > 0) rolesFilter = parts;
-    }
-    else if (a === '--include-role-critical-only') includeRoleCriticalOnly = true;
+    } else if (a === '--include-role-critical-only') includeRoleCriticalOnly = true;
     else if (a === '--allow-unknown') {
       const v = argv[++i] ?? 'true';
       allowUnknown = v === 'true';
-    }
-    else if (a === '--model') {
+    } else if (a === '--model') {
       const next = argv[++i];
       if (typeof next === 'string') {
         const ix = next.indexOf(':');
@@ -157,8 +158,7 @@ function parseArgs(): Args {
           extraModels.push({ providerId: next.slice(0, ix), modelId: next.slice(ix + 1) });
         }
       }
-    }
-    else if (a === '--models-from-last-plan') {
+    } else if (a === '--models-from-last-plan') {
       // No-op placeholder; the `--from-dryrun-json` flag supersedes
       // this. Kept for backwards compatibility with the 01C.1B-F
       // command line.
@@ -171,18 +171,15 @@ function parseArgs(): Args {
         routeScope = v;
         routeScopeExplicitlySet = true;
       }
-    }
-    else if (a === '--max-routes-per-role') maxRoutesPerRole = Number(argv[++i] ?? '20');
+    } else if (a === '--max-routes-per-role') maxRoutesPerRole = Number(argv[++i] ?? '20');
     else if (a === '--max-total-route-probes') maxTotalRouteProbes = Number(argv[++i] ?? '60');
     else if (a === '--prioritize-no-live-evidence') {
       const v = argv[++i] ?? 'true';
       prioritizeNoLiveEvidence = v === 'true';
-    }
-    else if (a === '--stop-role-after-first-live-ready') {
+    } else if (a === '--stop-role-after-first-live-ready') {
       const v = argv[++i] ?? 'false';
       stopRoleAfterFirstLiveReady = v === 'true';
-    }
-    else if (a === '--write-plan') writePlanPath = argv[++i];
+    } else if (a === '--write-plan') writePlanPath = argv[++i];
     else if (a === '--plan-only') planOnly = true;
     else if (a === '--dry-run') planOnly = true;
     else if (a === '--no-provider-calls') noProviderCalls = true;
@@ -195,11 +192,29 @@ function parseArgs(): Args {
     routeScope = 'approved';
   }
   return {
-    maxTokens, prompt, maxTotalCostUsd, noRetries, sanitize, writeSnapshot,
-    snapshotPath, extraModels, source: 'direct_chat_probe', bootstrapRuntime,
-    fromDryrunJson, rolesFilter, includeRoleCriticalOnly, allowUnknown,
-    routeScope, maxRoutesPerRole, maxTotalRouteProbes, prioritizeNoLiveEvidence,
-    stopRoleAfterFirstLiveReady, writePlanPath, planOnly, noProviderCalls, writeJsonPath,
+    maxTokens,
+    prompt,
+    maxTotalCostUsd,
+    noRetries,
+    sanitize,
+    writeSnapshot,
+    snapshotPath,
+    extraModels,
+    source: 'direct_chat_probe',
+    bootstrapRuntime,
+    fromDryrunJson,
+    rolesFilter,
+    includeRoleCriticalOnly,
+    allowUnknown,
+    routeScope,
+    maxRoutesPerRole,
+    maxTotalRouteProbes,
+    prioritizeNoLiveEvidence,
+    stopRoleAfterFirstLiveReady,
+    writePlanPath,
+    planOnly,
+    noProviderCalls,
+    writeJsonPath,
   };
 }
 
@@ -219,7 +234,11 @@ export type ProbeRouteSpec = {
   readonly modelId: string;
   readonly endpoint: string;
   readonly buildHeaders: (apiKey: string) => Record<string, string>;
-  readonly buildBody: (prompt: string, maxTokens: number, modelId: string) => Record<string, unknown>;
+  readonly buildBody: (
+    prompt: string,
+    maxTokens: number,
+    modelId: string
+  ) => Record<string, unknown>;
   readonly envVar: string;
 };
 
@@ -235,14 +254,17 @@ export type ProbeRouteSpec = {
 // Exported for unit tests that assert spec presence + sanitization for
 // providers added across J1D-R* stages (J1D-R3 §10). Production code
 // uses `specForRoute()` below; tests use this map directly.
-export const PROVIDER_SPECS: Record<string, {
-  endpoint: string;
-  envVar: string;
-  buildHeaders: (apiKey: string) => Record<string, string>;
-  /** Optional model-id normalizer — some providers expect a different
-   *  form than the catalog id. */
-  normalizeModelId?: (modelId: string) => string;
-}> = {
+export const PROVIDER_SPECS: Record<
+  string,
+  {
+    endpoint: string;
+    envVar: string;
+    buildHeaders: (apiKey: string) => Record<string, string>;
+    /** Optional model-id normalizer — some providers expect a different
+     *  form than the catalog id. */
+    normalizeModelId?: (modelId: string) => string;
+  }
+> = {
   deepinfra: {
     endpoint: 'https://api.deepinfra.com/v1/openai/chat/completions',
     envVar: 'DEEPINFRA_API_KEY',
@@ -371,7 +393,11 @@ export function specForRoute(providerId: string, modelId: string): ProbeRouteSpe
     endpoint: family.endpoint,
     envVar: family.envVar,
     buildHeaders: family.buildHeaders,
-    buildBody: (prompt, max, m) => ({ model: m, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, m) => ({
+      model: m,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   };
 }
 
@@ -423,13 +449,15 @@ interface DryRunFile {
  *  tolerant. */
 function extractRoutesFromDryRunJson(
   path: string,
-  opts?: { scope?: 'selected' | 'approved' | 'all'; maxRoutesPerRole?: number },
+  opts?: { scope?: 'selected' | 'approved' | 'all'; maxRoutesPerRole?: number }
 ): ExtractedRoute[] {
   let raw: string;
   try {
     raw = readFileSync(path, 'utf-8');
   } catch (err) {
-    throw new Error(`could not read dry-run JSON at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `could not read dry-run JSON at ${path}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
   const lastBrace = raw.lastIndexOf('}');
   const jsonText = lastBrace >= 0 ? raw.slice(0, lastBrace + 1) : raw;
@@ -449,9 +477,10 @@ function extractRoutesFromDryRunJson(
         if (!r?.role) continue;
         // Map 'fallback' alias to the role name used by audit (already 'fallback').
         const role = r.role === 'fallbackSingle' ? 'fallback' : (r.role as ExtractedRoute['role']);
-        const list = scope === 'approved'
-          ? (r.approvedForExecution ?? r.candidates ?? [])
-          : (r.candidates ?? []);
+        const list =
+          scope === 'approved'
+            ? (r.approvedForExecution ?? r.candidates ?? [])
+            : (r.candidates ?? []);
         const capped = list.slice(0, maxPerRole);
         for (const c of capped) {
           if (!c?.providerId || !c?.apiModelId) continue;
@@ -484,7 +513,8 @@ function extractRoutesFromDryRunJson(
   }
   // Final fallback: stitch from individual role fields (oldest shape).
   const proj = (role: ExtractedRoute['role'], cand: unknown): ExtractedRoute | null => {
-    const c = cand as { model?: { id?: string; provider?: string }; providerId?: string } | null | undefined;
+    const c = cand as
+      { model?: { id?: string; provider?: string }; providerId?: string } | null | undefined;
     if (!c?.model?.id) return null;
     const providerId = c.providerId ?? c.model.provider;
     if (!providerId) return null;
@@ -510,7 +540,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
     endpoint: 'https://api.deepinfra.com/v1/openai/chat/completions',
     envVar: 'DEEPINFRA_API_KEY',
     buildHeaders: (k) => ({ Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
   {
     providerId: 'vercel-ai-gateway',
@@ -518,7 +552,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
     endpoint: 'https://ai-gateway.vercel.sh/v1/chat/completions',
     envVar: 'VERCEL_AI_GATEWAY_API_KEY',
     buildHeaders: (k) => ({ Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
   {
     providerId: 'huggingface',
@@ -526,7 +564,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
     endpoint: 'https://router.huggingface.co/v1/chat/completions',
     envVar: 'HF_TOKEN',
     buildHeaders: (k) => ({ Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
   {
     providerId: 'aiml',
@@ -534,7 +576,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
     endpoint: 'https://api.aimlapi.com/v1/chat/completions',
     envVar: 'AIML_API_KEY',
     buildHeaders: (k) => ({ Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
   {
     providerId: 'anthropic',
@@ -546,7 +592,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
   {
     providerId: 'gemini',
@@ -554,7 +604,11 @@ const ROUTE_SET: readonly ProbeRouteSpec[] = [
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     envVar: 'GEMINI_API_KEY',
     buildHeaders: (k) => ({ Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' }),
-    buildBody: (prompt, max, modelId) => ({ model: modelId, messages: [{ role: 'user', content: prompt }], max_tokens: max }),
+    buildBody: (prompt, max, modelId) => ({
+      model: modelId,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: max,
+    }),
   },
 ];
 
@@ -585,7 +639,10 @@ export async function probeOne(route: ProbeRouteSpec, args: ProbeArgs): Promise<
   const started = Date.now();
   if (!apiKey || apiKey.length < 4) {
     // Treat unset key as invalid_auth without contacting the provider.
-    const cls = classifyProviderError({ status: 401, body: 'unauthorized: api key missing in env' });
+    const cls = classifyProviderError({
+      status: 401,
+      body: 'unauthorized: api key missing in env',
+    });
     const store = getLiveChatOperabilityStore();
     store.record({
       providerId: route.providerId,
@@ -705,7 +762,7 @@ async function main(): Promise<void> {
       await bootstrapForScripts();
     } catch (err) {
       process.stderr.write(
-        `bootstrapForScripts failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `bootstrapForScripts failed: ${err instanceof Error ? err.message : String(err)}\n`
       );
     }
   }
@@ -732,7 +789,12 @@ async function main(): Promise<void> {
   };
   const plannedProbes: PlannedProbe[] = [];
   // Per-role count tracker (J1D §7.2 `--max-routes-per-role`).
-  const perRoleCount: Record<string, number> = { participant: 0, synthesizer: 0, judge: 0, fallback: 0 };
+  const perRoleCount: Record<string, number> = {
+    participant: 0,
+    synthesizer: 0,
+    judge: 0,
+    fallback: 0,
+  };
   if (args.fromDryrunJson) {
     const extracted = extractRoutesFromDryRunJson(args.fromDryrunJson, {
       scope: args.routeScope,
@@ -806,7 +868,8 @@ async function main(): Promise<void> {
         if (!p.skipped) acc[p.role] = (acc[p.role] ?? 0) + 1;
         return acc;
       }, {}),
-      synthesizerPlannedProbes: plannedProbes.filter((p) => p.role === 'synthesizer' && !p.skipped).length,
+      synthesizerPlannedProbes: plannedProbes.filter((p) => p.role === 'synthesizer' && !p.skipped)
+        .length,
       estimatedMaxCostUsd: plannedProbes.filter((p) => !p.skipped).length * 0.0005,
       noProviderCalls: true,
       dryRun: true,
@@ -851,7 +914,7 @@ async function main(): Promise<void> {
       // "unknown" so the snapshot reflects what was actually checked.
       process.stderr.write(
         `WARN: budget cap ${args.maxTotalCostUsd} reached after ${results.length} probes; ` +
-        `skipping ${routes.length - results.length} remaining.\n`,
+          `skipping ${routes.length - results.length} remaining.\n`
       );
       break;
     }
@@ -866,7 +929,7 @@ async function main(): Promise<void> {
       await store.writeSnapshot(args.snapshotPath);
     } catch (err) {
       process.stderr.write(
-        `WARN: snapshot write failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `WARN: snapshot write failed: ${err instanceof Error ? err.message : String(err)}\n`
       );
     }
   }
@@ -929,7 +992,7 @@ async function main(): Promise<void> {
       writeFileSync(args.writeJsonPath, summaryJson);
     } catch (err) {
       process.stderr.write(
-        `WARN: --write-json failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `WARN: --write-json failed: ${err instanceof Error ? err.message : String(err)}\n`
       );
     }
   }
@@ -938,6 +1001,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `ERROR: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
+  );
   process.exit(1);
 });

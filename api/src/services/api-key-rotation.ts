@@ -230,7 +230,10 @@ export async function validateApiKey(
         })
         .catch((err) => {
           // Don't fail validation if stats update fails
-          logger.warn({ error: serializeError(err), apiKeyId: apiKey.id }, 'Failed to update usage stats');
+          logger.warn(
+            { error: serializeError(err), apiKeyId: apiKey.id },
+            'Failed to update usage stats'
+          );
         });
     }
 
@@ -246,7 +249,10 @@ export async function validateApiKey(
 
     // Type assertion is safe here because we've selected the required fields
     // and the structure matches the expected type
-    return { isValid: true, apiKey: apiKey as ApiKey & { user?: User; organization?: Organization } };
+    return {
+      isValid: true,
+      apiKey: apiKey as ApiKey & { user?: User; organization?: Organization },
+    };
   } catch (error) {
     logger.error({ error }, 'Error validating API key');
     return { isValid: false, reason: 'Validation error' };
@@ -335,7 +341,11 @@ export async function createApiKey(
  */
 export async function rotateApiKey(
   options: ApiKeyRotationOptions
-): Promise<{ oldKey: ApiKey & { user: User; organization: Organization }; newKey: ApiKey & { user: User; organization: Organization }; plainKey: string }> {
+): Promise<{
+  oldKey: ApiKey & { user: User; organization: Organization };
+  newKey: ApiKey & { user: User; organization: Organization };
+  plainKey: string;
+}> {
   const gracePeriodDays = options.gracePeriodDays ?? DEFAULT_GRACE_PERIOD_DAYS;
   const expirationDate = new Date();
   expirationDate.setDate(expirationDate.getDate() + gracePeriodDays);
@@ -378,7 +388,9 @@ export async function rotateApiKey(
         rotationIntervalDays: oldKey.rotationIntervalDays,
         gracePeriodDays: oldKey.gracePeriodDays,
         ipWhitelist: oldKey.ipWhitelist,
-        permissions: oldKey.permissions ? (oldKey.permissions as Prisma.InputJsonValue) : Prisma.JsonNull,
+        permissions: oldKey.permissions
+          ? (oldKey.permissions as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         expiresAt: null, // New key doesn't expire
         rotationCount: oldKey.rotationCount + 1,
         previousKeyId: oldKey.id,

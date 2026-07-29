@@ -24,7 +24,10 @@ const IAM_URL = 'https://iam.cloud.ibm.com/identity/token';
 type FetchCall = { url: string; init: RequestInit };
 let calls: FetchCall[] = [];
 
-type RouteHandler = (url: string, init: RequestInit) => {
+type RouteHandler = (
+  url: string,
+  init: RequestInit
+) => {
   ok?: boolean;
   status?: number;
   body: unknown;
@@ -57,9 +60,7 @@ function installFetchRouter(routes: Record<string, RouteHandler>) {
   };
 }
 
-function makeAdapter(
-  opts: { projectId?: string; apiKey?: string } = {},
-): WatsonxAdapter {
+function makeAdapter(opts: { projectId?: string; apiKey?: string } = {}): WatsonxAdapter {
   return new WatsonxAdapter({
     apiKey: opts.apiKey ?? 'ibm-apikey-123',
     baseUrl: BASE,
@@ -112,7 +113,9 @@ describe('WatsonxAdapter — IAM token exchange', () => {
         body: {
           id: 'r1',
           model_id: 'meta-llama/llama-3-70b',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
           usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
         },
       }),
@@ -166,7 +169,9 @@ describe('WatsonxAdapter — chat body shape (model_id + project_id + version)',
         expect(body.messages).toEqual([{ role: 'user', content: 'hi' }]);
         return {
           body: {
-            choices: [{ index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' }],
+            choices: [
+              { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+            ],
             model_id: 'meta-llama/llama-3-70b',
             usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
           },
@@ -199,7 +204,7 @@ describe('WatsonxAdapter — chat body shape (model_id + project_id + version)',
         adapter.chatCompletion({
           model: 'x',
           messages: [{ role: 'user', content: 'hi' }],
-        }),
+        })
       ).rejects.toThrow(/WATSONX_PROJECT_ID/);
     } finally {
       if (prev !== undefined) process.env.WATSONX_PROJECT_ID = prev;

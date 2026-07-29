@@ -30,9 +30,7 @@ import type {
 import type { Model, ModelCapability } from '@/types';
 import type { LiveChatOperabilityState } from '@/core/operability/live-chat-operability-state';
 
-function mkModel(
-  overrides: Partial<Model> & Pick<Model, 'id' | 'provider'>,
-): Model {
+function mkModel(overrides: Partial<Model> & Pick<Model, 'id' | 'provider'>): Model {
   return {
     providerId: overrides.provider,
     name: overrides.id,
@@ -63,7 +61,7 @@ function mkStore(states: LiveChatOperabilityState[]): LiveChatOperabilityStoreLi
 
 function mkState(
   overrides: Partial<LiveChatOperabilityState> &
-    Pick<LiveChatOperabilityState, 'providerId' | 'modelId'>,
+    Pick<LiveChatOperabilityState, 'providerId' | 'modelId'>
 ): LiveChatOperabilityState {
   return {
     routeId: `${overrides.providerId}::${overrides.modelId}`,
@@ -105,9 +103,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     const popularModel = mkModel({ id: 'gpt-4o-mini', provider: 'openai' });
 
     const repo = mkRepo([popularModel, liveReadyModel]);
-    const store = mkStore([
-      mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' }),
-    ]);
+    const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
       repo,
@@ -125,7 +121,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     // so it's a dedupe match (already-present) — not a new injection.
     expect(
       (participantTrace!.injectedLiveReadyCount ?? 0) +
-        (participantTrace!.dedupedExistingLiveReadyCount ?? 0),
+        (participantTrace!.dedupedExistingLiveReadyCount ?? 0)
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -179,9 +175,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     // Catalog returns the live-ready model so it's both in the base
     // pool AND matched by the live-ready state.
     const repo = mkRepo([liveReadyModel]);
-    const store = mkStore([
-      mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' }),
-    ]);
+    const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
 
     const r = await buildConsensusRoleSpecificCandidatePools({
       repo,
@@ -202,9 +196,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
       provider: 'deepinfra',
     });
     const repo = mkRepo([liveReadyModel]);
-    const store = mkStore([
-      mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' }),
-    ]);
+    const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
       repo,
       injectLiveReadyFromStore: true,
@@ -215,12 +207,8 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('snapshot hash propagates into liveReadyInjection.snapshotHash', async () => {
-    const repo = mkRepo([
-      mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' }),
-    ]);
-    const store = mkStore([
-      mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' }),
-    ]);
+    const repo = mkRepo([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
+    const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'openai/gpt-oss-120b' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
       repo,
       injectLiveReadyFromStore: true,
@@ -270,13 +258,9 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
   });
 
   it('does NOT use provider-only readiness (provider OR model mismatch → no match)', async () => {
-    const repo = mkRepo([
-      mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' }),
-    ]);
+    const repo = mkRepo([mkModel({ id: 'openai/gpt-oss-120b', provider: 'deepinfra' })]);
     // Store has deepinfra but a different model id
-    const store = mkStore([
-      mkState({ providerId: 'deepinfra', modelId: 'some/other-model' }),
-    ]);
+    const store = mkStore([mkState({ providerId: 'deepinfra', modelId: 'some/other-model' })]);
     const r = await buildConsensusRoleSpecificCandidatePools({
       repo,
       injectLiveReadyFromStore: true,
@@ -286,7 +270,7 @@ describe('01C.1B-J1D-R4A — pool builder × live-ready injection', () => {
     // The mismatched (deepinfra, some/other-model) should be rejected as
     // not_in_catalog (since the catalog doesn't have that pair).
     expect(
-      r.liveReadyInjection!.byRole[0].rejectionCounts.live_ready_state_not_in_catalog,
+      r.liveReadyInjection!.byRole[0].rejectionCounts.live_ready_state_not_in_catalog
     ).toBeGreaterThanOrEqual(1);
   });
 

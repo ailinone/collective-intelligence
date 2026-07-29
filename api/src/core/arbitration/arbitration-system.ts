@@ -326,9 +326,13 @@ export class ArbitrationSystem {
     if (!verdict) {
       this.log.warn(
         { arbiter: arbiter.id, preview: contentStr.slice(0, 200) },
-        'Failed to normalize arbiter response via unified schema, using heuristic default',
+        'Failed to normalize arbiter response via unified schema, using heuristic default'
       );
-      return this.defaultArbiterEvaluation(arbiter, solutionCount, 'Unable to parse arbiter response');
+      return this.defaultArbiterEvaluation(
+        arbiter,
+        solutionCount,
+        'Unable to parse arbiter response'
+      );
     }
 
     // Canonical verdict → ArbiterEvaluation mapping. Dimensions map to the
@@ -337,7 +341,9 @@ export class ArbitrationSystem {
     const scores: number[] = [];
     for (let i = 0; i < solutionCount; i++) {
       const dim = verdict.dimensions?.[`solution_${i}`];
-      scores.push(typeof dim === 'number' ? Math.round(dim * 100) : Math.round(verdict.score * 100));
+      scores.push(
+        typeof dim === 'number' ? Math.round(dim * 100) : Math.round(verdict.score * 100)
+      );
     }
 
     // Group verdict issues by `solution N` location so each solution gets
@@ -367,7 +373,7 @@ export class ArbitrationSystem {
   private defaultArbiterEvaluation(
     arbiter: { id: string; name: string; provider: string },
     solutionCount: number,
-    recommendation: string,
+    recommendation: string
   ): ArbiterEvaluation {
     return {
       arbiterModel: arbiter.id,

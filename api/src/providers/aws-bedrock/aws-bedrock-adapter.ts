@@ -52,17 +52,9 @@ import {
  * a type alias.
  */
 type SmithyDocumentType =
-  | null
-  | boolean
-  | number
-  | string
-  | SmithyDocumentType[]
-  | { [prop: string]: SmithyDocumentType };
+  null | boolean | number | string | SmithyDocumentType[] | { [prop: string]: SmithyDocumentType };
 
-import {
-  BedrockClient,
-  ListFoundationModelsCommand,
-} from '@aws-sdk/client-bedrock';
+import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 
 import { ProviderAdapter, type HealthCheckResult } from '../base/provider-adapter';
 import { narrowAs } from '@/utils/type-guards';
@@ -124,10 +116,8 @@ export class AWSBedrockAdapter extends ProviderAdapter {
   constructor(config: AWSBedrockAdapterConfig) {
     super('aws-bedrock', 'AWS Bedrock', config);
 
-    const accessKeyId =
-      config.accessKeyId || process.env.AWS_ACCESS_KEY_ID || config.apiKey;
-    const secretAccessKey =
-      config.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+    const accessKeyId = config.accessKeyId || process.env.AWS_ACCESS_KEY_ID || config.apiKey;
+    const secretAccessKey = config.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
     const sessionToken = config.sessionToken || process.env.AWS_SESSION_TOKEN;
     this.region =
       config.region ||
@@ -240,9 +230,7 @@ export class AWSBedrockAdapter extends ProviderAdapter {
 
   // ── Chat completion (streaming) ─────────────────────────────────────
 
-  async *chatCompletionStream(
-    request: ChatRequest
-  ): AsyncGenerator<ChatResponse, void, unknown> {
+  async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const modelId = this.resolveModelId(request.model);
     const { messages, system } = splitSystemFromMessages(request.messages);
     const streamInput: ConverseCommandInput = {
@@ -255,9 +243,7 @@ export class AWSBedrockAdapter extends ProviderAdapter {
         : {}),
     };
 
-    const streamResponse = await this.runtimeClient.send(
-      new ConverseStreamCommand(streamInput)
-    );
+    const streamResponse = await this.runtimeClient.send(new ConverseStreamCommand(streamInput));
     if (!streamResponse.stream) return;
 
     // Accumulate deltas. Converse stream events are a discriminated union —
@@ -392,21 +378,25 @@ export class AWSBedrockAdapter extends ProviderAdapter {
  * All role:'system' messages are hoisted into the system array; their order
  * is preserved but they come out as separate SystemContentBlocks.
  */
-export function splitSystemFromMessages(
-  messages: ChatMessage[]
-): { messages: ChatMessage[]; system: SystemContentBlock[] } {
+export function splitSystemFromMessages(messages: ChatMessage[]): {
+  messages: ChatMessage[];
+  system: SystemContentBlock[];
+} {
   const system: SystemContentBlock[] = [];
   const rest: ChatMessage[] = [];
   for (const m of messages) {
     if (m.role === 'system') {
-      const text = typeof m.content === 'string'
-        ? m.content
-        : Array.isArray(m.content)
+      const text =
+        typeof m.content === 'string'
           ? m.content
-              .map((p) => (p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''))
-              .filter((s): s is string => typeof s === 'string' && s.length > 0)
-              .join('\n')
-          : String(m.content ?? '');
+          : Array.isArray(m.content)
+            ? m.content
+                .map((p) =>
+                  p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''
+                )
+                .filter((s): s is string => typeof s === 'string' && s.length > 0)
+                .join('\n')
+            : String(m.content ?? '');
       if (text.length > 0) system.push({ text });
     } else {
       rest.push(m);
@@ -421,8 +411,7 @@ export function splitSystemFromMessages(
  * friendly stub — expand in a follow-up vision pack.
  */
 export function convertMessageToConverse(message: ChatMessage): Message {
-  const role: 'user' | 'assistant' =
-    message.role === 'assistant' ? 'assistant' : 'user';
+  const role: 'user' | 'assistant' = message.role === 'assistant' ? 'assistant' : 'user';
   if (typeof message.content === 'string') {
     return { role, content: [{ text: message.content }] };
   }
@@ -466,7 +455,10 @@ export function buildInferenceConfig(request: ChatRequest): InferenceConfigurati
  * Converse shape: { toolSpec: { name, description, inputSchema: { json: ... } } }
  */
 export function convertTools(
-  tools: Array<{ type?: string; function: { name: string; description?: string; parameters?: unknown } }>
+  tools: Array<{
+    type?: string;
+    function: { name: string; description?: string; parameters?: unknown };
+  }>
 ): Tool[] {
   // The Converse ToolSpec type declares `description` as a required string
   // (not `string | undefined`). Under `exactOptionalPropertyTypes`, spreading

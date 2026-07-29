@@ -13,9 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { optimizeEnsembleCalibrated } from '../ensemble-calibrated-optimizer';
-import {
-  multiplicativeBoundedEstimator,
-} from '../ensemble-expected-judge-estimator';
+import { multiplicativeBoundedEstimator } from '../ensemble-expected-judge-estimator';
 import { DEFAULT_ENSEMBLE_LIFT_POLICY } from '../ensemble-lift-policy';
 import { calibratePeerLift } from '../peer-lift-calibrator';
 import type { ContributionAwareScore } from '../../../contribution/contribution-aware-candidate-scorer';
@@ -25,7 +23,7 @@ function score(
   modelId: string,
   expectedJudge: number,
   cost: number,
-  role: 'anchor' | 'support' | 'budget_support' = 'anchor',
+  role: 'anchor' | 'support' | 'budget_support' = 'anchor'
 ): ContributionAwareScore {
   return Object.freeze({
     routeId,
@@ -60,10 +58,7 @@ const peerLift = calibratePeerLift({ trainExamples: [] });
 describe('optimizeEnsembleCalibrated — happy path', () => {
   it('forms an ensemble when judge >= baseline and cost <= ceiling', () => {
     const r = optimizeEnsembleCalibrated({
-      candidates: [
-        score('r1', 'm1', 0.8, 0.005),
-        score('r2', 'm2', 0.75, 0.005),
-      ],
+      candidates: [score('r1', 'm1', 0.8, 0.005), score('r2', 'm2', 0.75, 0.005)],
       baseline,
       taskType: 'code',
       peerLiftCalibration: peerLift,
@@ -77,10 +72,7 @@ describe('optimizeEnsembleCalibrated — happy path', () => {
 
   it('falls back to single when judge would be below baseline', () => {
     const r = optimizeEnsembleCalibrated({
-      candidates: [
-        score('r1', 'm1', 0.3, 0.005),
-        score('r2', 'm2', 0.25, 0.005),
-      ],
+      candidates: [score('r1', 'm1', 0.3, 0.005), score('r2', 'm2', 0.25, 0.005)],
       baseline,
       taskType: 'code',
       peerLiftCalibration: peerLift,
@@ -159,10 +151,7 @@ describe('optimizeEnsembleCalibrated — happy path', () => {
 describe('optimizeEnsembleCalibrated — paretoStatus', () => {
   it('beats_baseline when judge >= and cost <= baseline', () => {
     const r = optimizeEnsembleCalibrated({
-      candidates: [
-        score('r1', 'm1', 0.8, 0.005),
-        score('r2', 'm2', 0.75, 0.005),
-      ],
+      candidates: [score('r1', 'm1', 0.8, 0.005), score('r2', 'm2', 0.75, 0.005)],
       baseline,
       taskType: 'code',
       peerLiftCalibration: peerLift,

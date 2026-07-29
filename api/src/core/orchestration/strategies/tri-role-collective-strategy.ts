@@ -94,7 +94,10 @@ function readTriRoleConfig(): TriRoleConfig {
   const env = (key: string, fallback: string): string => process.env[key] ?? fallback;
   const ambiguity = env('CI_TRI_ROLE_AUDITOR_THRESHOLD', 'accept');
   return {
-    maxTurns: Math.max(3, Math.min(HARD_MAX_TURNS_CAP, parseInt(env('CI_TRI_ROLE_MAX_TURNS', '5'), 10))),
+    maxTurns: Math.max(
+      3,
+      Math.min(HARD_MAX_TURNS_CAP, parseInt(env('CI_TRI_ROLE_MAX_TURNS', '5'), 10))
+    ),
     maxCostUsd: parseFloat(env('CI_TRI_ROLE_MAX_COST_USD', '0.30')),
     maxLatencyMs: parseInt(env('CI_TRI_ROLE_MAX_LATENCY_MS', '60000'), 10),
     ambiguityResolution: ambiguity === 'revise' ? 'revise' : 'accept',
@@ -144,7 +147,7 @@ const REVISE_PATTERN = /\bREVISE\b|\bREJECT(?:ED)?\b|\bREQUEST_CHANGES\b/i;
  */
 export function parseAuditorVerdict(
   rawResponse: string,
-  ambiguityResolution: 'accept' | 'revise',
+  ambiguityResolution: 'accept' | 'revise'
 ): AuditorVerdict {
   if (!rawResponse || typeof rawResponse !== 'string') {
     return { status: ambiguityResolution, feedback: '', inferred: true };
@@ -206,7 +209,7 @@ export interface RoleDecision {
  */
 export function decideRoleForTurn(
   turn: number,
-  transcript: ReadonlyArray<TurnRecord>,
+  transcript: ReadonlyArray<TurnRecord>
 ): RoleDecision {
   const SCHEDULER = 'fixed-state-machine';
 
@@ -216,7 +219,8 @@ export function decideRoleForTurn(
   // Turn ≥ 3 — alternate auditor / solver based on the previous turn.
   const previous = transcript[transcript.length - 1];
   if (!previous) return { role: 'auditor', reason: 'no-prev-turn', scheduler: SCHEDULER };
-  if (previous.role === 'solver') return { role: 'auditor', reason: 'after-solver', scheduler: SCHEDULER };
+  if (previous.role === 'solver')
+    return { role: 'auditor', reason: 'after-solver', scheduler: SCHEDULER };
   if (previous.role === 'auditor' && previous.verdict?.status === 'revise') {
     return { role: 'solver', reason: 'after-revise', scheduler: SCHEDULER };
   }
@@ -239,7 +243,7 @@ export function pickModelForTurn(
   pool: ReadonlyArray<Model>,
   role: TriRole,
   transcript: ReadonlyArray<TurnRecord>,
-  turn: number,
+  turn: number
 ): Model {
   if (pool.length === 0) {
     throw new Error('tri-role-collective: empty model pool');
@@ -314,7 +318,10 @@ function buildPlannerRequest(originalRequest: ChatRequest): ChatRequest {
     ...originalRequest,
     messages: [
       { role: 'system', content: PLANNER_INSTRUCTIONS },
-      { role: 'user', content: `Original request:\n${sanitizeForPromptContext(userText, 4000)}\n\nProduce the plan now.` },
+      {
+        role: 'user',
+        content: `Original request:\n${sanitizeForPromptContext(userText, 4000)}\n\nProduce the plan now.`,
+      },
     ],
     temperature: 0.3,
     max_tokens: 800,
@@ -323,16 +330,19 @@ function buildPlannerRequest(originalRequest: ChatRequest): ChatRequest {
 
 function buildSolverRequest(
   originalRequest: ChatRequest,
-  transcript: ReadonlyArray<TurnRecord>,
+  transcript: ReadonlyArray<TurnRecord>
 ): ChatRequest {
   const planner = transcript.find((t) => t.role === 'planner');
   const lastAuditor = [...transcript].reverse().find((t) => t.role === 'auditor');
   const userText = extractLatestUserText(originalRequest);
 
-  const plan = planner ? sanitizeForPromptContext(planner.responseText, 2000) : '(no plan available)';
-  const feedback = lastAuditor?.verdict?.status === 'revise'
-    ? `\n\nThe Auditor previously requested revision. Their feedback:\n${lastAuditor.verdict.feedback}\n\nIncorporate the feedback in this revised answer.`
-    : '';
+  const plan = planner
+    ? sanitizeForPromptContext(planner.responseText, 2000)
+    : '(no plan available)';
+  const feedback =
+    lastAuditor?.verdict?.status === 'revise'
+      ? `\n\nThe Auditor previously requested revision. Their feedback:\n${lastAuditor.verdict.feedback}\n\nIncorporate the feedback in this revised answer.`
+      : '';
 
   return {
     ...originalRequest,
@@ -352,14 +362,18 @@ function buildSolverRequest(
 
 function buildAuditorRequest(
   originalRequest: ChatRequest,
-  transcript: ReadonlyArray<TurnRecord>,
+  transcript: ReadonlyArray<TurnRecord>
 ): ChatRequest {
   const planner = transcript.find((t) => t.role === 'planner');
   const lastSolver = [...transcript].reverse().find((t) => t.role === 'solver');
   const userText = extractLatestUserText(originalRequest);
 
-  const plan = planner ? sanitizeForPromptContext(planner.responseText, 2000) : '(no plan available)';
-  const answer = lastSolver ? sanitizeForPromptContext(lastSolver.responseText, 4000) : '(no answer yet)';
+  const plan = planner
+    ? sanitizeForPromptContext(planner.responseText, 2000)
+    : '(no plan available)';
+  const answer = lastSolver
+    ? sanitizeForPromptContext(lastSolver.responseText, 4000)
+    : '(no answer yet)';
 
   return {
     ...originalRequest,
@@ -456,16 +470,13 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
       minModels: TRI_ROLE_MIN_MODELS,
       maxModels: TRI_ROLE_MAX_MODELS,
       estimatedCostMultiplier: 3.5,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 2.5,
       suitableFor: ['analysis', 'code-generation', 'code-review', 'reasoning', 'architecture'],
     };
   }
 
-  async execute(
-    request: ChatRequest,
-    context: OrchestrationContext,
-  ): Promise<OrchestrationResult> {
+  async execute(request: ChatRequest, context: OrchestrationContext): Promise<OrchestrationResult> {
     const startTime = Date.now();
     const metadata = this.getMetadata();
     const config = readTriRoleConfig();
@@ -474,7 +485,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
     if (eligible.length < TRI_ROLE_MIN_MODELS) {
       this.log.warn(
         { eligible: eligible.length, required: TRI_ROLE_MIN_MODELS },
-        'tri-role-collective: insufficient eligible models — falling back to consensus',
+        'tri-role-collective: insufficient eligible models — falling back to consensus'
       );
       return this.executeFallback(request, context);
     }
@@ -488,7 +499,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
         eligibleModels: pool.length,
         maxTurns: config.maxTurns,
       },
-      'Executing Tri-Role Collective strategy',
+      'Executing Tri-Role Collective strategy'
     );
 
     this.emitObserverEvent(context, {
@@ -518,7 +529,8 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
 
     try {
       let totalCostUsd = 0;
-      let stopReason: 'accepted' | 'max_turns' | 'max_cost' | 'max_latency' | 'no_solver' = 'max_turns';
+      let stopReason: 'accepted' | 'max_turns' | 'max_cost' | 'max_latency' | 'no_solver' =
+        'max_turns';
       // Phase 2c shadow snapshot — populated on turn 1 by the
       // onShadowResult hook, then attached to the turn-1 TriRoleTurnInput
       // when the run persists. Null while shadow disabled or pending.
@@ -539,19 +551,15 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
         // and are predictable from turn 1 + transcript shape. NEVER throws.
         if (turn === 1) {
           void runEnsembleInShadow(
-            buildEnsembleRequest(
-              'tri-role-collective',
-              'role-for-turn',
-              {
-                requestId: context.requestId,
-                turn,
-                transcriptLength: transcript.length,
-                taskType: context.taskType,
-                complexity: context.triage?.complexity ?? null,
-                poolSize: pool.length,
-                maxTurns: config.maxTurns,
-              },
-            ),
+            buildEnsembleRequest('tri-role-collective', 'role-for-turn', {
+              requestId: context.requestId,
+              turn,
+              transcriptLength: transcript.length,
+              taskType: context.taskType,
+              complexity: context.triage?.complexity ?? null,
+              poolSize: pool.length,
+              maxTurns: config.maxTurns,
+            }),
             {
               heuristicDecisionForComparison: {
                 role,
@@ -561,7 +569,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
               onShadowResult: (snapshot) => {
                 shadowSnapshot = snapshot;
               },
-            },
+            }
           ).catch((err: unknown) => {
             this.log.debug({ err: String(err) }, 'shadow runner promise rejected silently');
           });
@@ -618,7 +626,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
               projectedTotalUsd: projection.projectedTotalUsd,
               limitUsd: projection.limitUsd,
             },
-            'tri-role: aborting next turn — projected cost exceeds budget',
+            'tri-role: aborting next turn — projected cost exceeds budget'
           );
           trace.endSpan(turnSpanId, {
             status: 'cancelled',
@@ -631,7 +639,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
         if (Date.now() - startTime >= config.maxLatencyMs) {
           this.log.warn(
             { runId, turn, role, latencyMs: Date.now() - startTime, limitMs: config.maxLatencyMs },
-            'tri-role: latency budget exceeded — stopping',
+            'tri-role: latency budget exceeded — stopping'
           );
           trace.endSpan(turnSpanId, {
             status: 'cancelled',
@@ -737,8 +745,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
       if (process.env.CI_COORDINATION_PERSIST_AUDIT === 'true' && context.organizationId) {
         const finalConfidence =
           stopReason === 'accepted' ? 1.0 : stopReason === 'no_solver' ? 0.0 : 0.5;
-        const finalDecisionType =
-          stopReason === 'accepted' ? 'auditor-accept' : stopReason;
+        const finalDecisionType = stopReason === 'accepted' ? 'auditor-accept' : stopReason;
 
         // Unique participating models across the transcript. preserve
         // first-occurrence order so the audit trail is deterministic.
@@ -746,17 +753,16 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
         const participatingModels = transcript.flatMap((t) => {
           if (seen.has(t.model.id)) return [];
           seen.add(t.model.id);
-          return [{
-            modelId: t.model.id,
-            modelName: t.model.name ?? t.model.id,
-            providerId: t.model.providerId,
-          }];
+          return [
+            {
+              modelId: t.model.id,
+              modelName: t.model.name ?? t.model.id,
+              providerId: t.model.providerId,
+            },
+          ];
         });
 
-        const totalTokens = transcript.reduce(
-          (sum, t) => sum + t.inputTokens + t.outputTokens,
-          0,
-        );
+        const totalTokens = transcript.reduce((sum, t) => sum + t.inputTokens + t.outputTokens, 0);
 
         await persistTriRoleRun({
           organizationId: context.organizationId,
@@ -807,7 +813,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
         stopReason,
         runId,
         metadata,
-        trace,
+        trace
       );
     } catch (error) {
       this.log.error(
@@ -816,7 +822,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
           turnsCompleted: transcript.length,
           error: error instanceof Error ? error.message : String(error),
         },
-        'tri-role-collective failed — falling back to consensus',
+        'tri-role-collective failed — falling back to consensus'
       );
       return this.executeFallback(request, context);
     }
@@ -824,7 +830,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
 
   private async executeFallback(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<OrchestrationResult> {
     const { ConsensusStrategy } = await import('./consensus-strategy');
     const fallback = new ConsensusStrategy();
@@ -883,7 +889,7 @@ export class TriRoleCollectiveStrategy extends BaseStrategy {
     stopReason: string,
     runId: string,
     metadata: StrategyMetadata,
-    trace?: CollectiveTrace,
+    trace?: CollectiveTrace
   ): OrchestrationResult {
     const completionWords = finalResponseText.split(/\s+/).filter(Boolean).length;
     const completionTokens = Math.ceil(completionWords * 1.3);

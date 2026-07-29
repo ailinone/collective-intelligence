@@ -37,10 +37,7 @@ import type {
   ModelAttemptRecord,
   SubstitutionLevel,
 } from './arm-evaluation-policy';
-import {
-  isOllamaProviderId,
-  isSubstitutionLevelAllowed,
-} from './arm-evaluation-policy';
+import { isOllamaProviderId, isSubstitutionLevelAllowed } from './arm-evaluation-policy';
 import {
   type ExperimentPolicyEngine,
   computeSubstitutionLevel,
@@ -81,7 +78,7 @@ export interface ExperimentIntegrityGuard {
    */
   assertWithClassifications(
     record: ExecutionRecord,
-    classifications: ReadonlyMap<string, ClassifiedModel>,
+    classifications: ReadonlyMap<string, ClassifiedModel>
   ): IntegrityResult;
 }
 
@@ -99,7 +96,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
 
   assertWithClassifications(
     record: ExecutionRecord,
-    classifications: ReadonlyMap<string, ClassifiedModel>,
+    classifications: ReadonlyMap<string, ClassifiedModel>
   ): IntegrityResult {
     const policy = record.arm.policy;
     const violations: PolicyViolation[] = [];
@@ -132,7 +129,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
           violationCount: violations.length,
           violationKinds: [...new Set(violations.map((v) => v.kind))],
         },
-        'Integrity guard detected policy violations',
+        'Integrity guard detected policy violations'
       );
     }
 
@@ -144,7 +141,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
   private validateAttempt(
     arm: ResolvedExperimentArm,
     attempt: ModelAttemptRecord,
-    classifications: ReadonlyMap<string, ClassifiedModel>,
+    classifications: ReadonlyMap<string, ClassifiedModel>
   ): PolicyViolation[] {
     const violations: PolicyViolation[] = [];
     const classified = classifications.get(attempt.modelId);
@@ -155,7 +152,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
       // validation. The audit log will still flag it for investigation.
       log.warn(
         { armId: arm.armId, modelId: attempt.modelId, attemptIndex: attempt.attemptIndex },
-        'Integrity guard: attempt model could not be classified (DB lookup miss)',
+        'Integrity guard: attempt model could not be classified (DB lookup miss)'
       );
       return violations;
     }
@@ -273,7 +270,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
 
   private validateAggregate(
     arm: ResolvedExperimentArm,
-    record: ExecutionRecord,
+    record: ExecutionRecord
   ): PolicyViolation[] {
     const policy = arm.policy;
     const violations: PolicyViolation[] = [];
@@ -281,7 +278,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
     // Count "real" attempts (excluding skipped/cancelled ones the orchestrator
     // proactively rejected before any I/O — those don't count toward anything).
     const realAttempts = record.attempts.filter(
-      (a) => a.status !== 'skipped' && a.status !== 'cancelled',
+      (a) => a.status !== 'skipped' && a.status !== 'cancelled'
     );
 
     // `fallbackDepth` measures sequential recovery attempts only.
@@ -289,7 +286,7 @@ export class DefaultExperimentIntegrityGuard implements ExperimentIntegrityGuard
     // distinct positions in the strategy's design — not fallbacks. Only
     // attempts with `roleInStrategy ∈ {fallback, hedged}` count toward depth.
     const fallbackAttempts = realAttempts.filter(
-      (a) => a.roleInStrategy === 'fallback' || a.roleInStrategy === 'hedged',
+      (a) => a.roleInStrategy === 'fallback' || a.roleInStrategy === 'hedged'
     );
 
     if (fallbackAttempts.length > policy.maxFallbackDepth) {

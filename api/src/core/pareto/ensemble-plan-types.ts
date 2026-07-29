@@ -45,18 +45,10 @@ export interface ParetoEnsembleBaselines {
 
 // ─── Output ─────────────────────────────────────────────────────────────
 
-export type EnsembleStrategyId =
-  | 'parallel'
-  | 'consensus'
-  | 'critique-repair'
-  | 'single_fallback';
+export type EnsembleStrategyId = 'parallel' | 'consensus' | 'critique-repair' | 'single_fallback';
 
 export type EnsembleParetoStatus =
-  | 'beats_baseline'
-  | 'quality_tradeoff'
-  | 'cost_tradeoff'
-  | 'dominated'
-  | 'single_fallback';
+  'beats_baseline' | 'quality_tradeoff' | 'cost_tradeoff' | 'dominated' | 'single_fallback';
 
 export interface MarginalContributionRecord {
   readonly modelId: string;

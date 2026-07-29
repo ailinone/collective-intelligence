@@ -45,11 +45,11 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
 
     // Initialize client with API key (primary method)
     if (apiKey) {
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: baseUrl,
-      timeout: 30000,
-    });
+      this.client = new OpenAI({
+        apiKey,
+        baseURL: baseUrl,
+        timeout: 30000,
+      });
     }
   }
 
@@ -67,8 +67,15 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
             has401Status = true;
           } else {
             const responseDescriptor = Object.getOwnPropertyDescriptor(error, 'response');
-            if (responseDescriptor && responseDescriptor.value && typeof responseDescriptor.value === 'object') {
-              const responseStatusDescriptor = Object.getOwnPropertyDescriptor(responseDescriptor.value, 'status');
+            if (
+              responseDescriptor &&
+              responseDescriptor.value &&
+              typeof responseDescriptor.value === 'object'
+            ) {
+              const responseStatusDescriptor = Object.getOwnPropertyDescriptor(
+                responseDescriptor.value,
+                'status'
+              );
               if (responseStatusDescriptor && responseStatusDescriptor.value === 401) {
                 has401Status = true;
               }
@@ -77,7 +84,10 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
         }
         // If API key fails with 401, try AccessKey ID/Secret as fallback
         if (has401Status && this.accessKeyId && this.accessKeySecret) {
-          const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error);
+          const errorMessage =
+            error && typeof error === 'object' && 'message' in error
+              ? String(error.message)
+              : String(error);
           this.log.warn(
             {
               error: errorMessage,
@@ -88,7 +98,10 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
           try {
             return await this.fetchWithAccessKey();
           } catch (accessKeyError: unknown) {
-            const accessKeyErrorMessage = accessKeyError && typeof accessKeyError === 'object' && 'message' in accessKeyError ? String(accessKeyError.message) : String(accessKeyError);
+            const accessKeyErrorMessage =
+              accessKeyError && typeof accessKeyError === 'object' && 'message' in accessKeyError
+                ? String(accessKeyError.message)
+                : String(accessKeyError);
             this.log.error(
               {
                 apiKeyError: errorMessage,
@@ -105,7 +118,9 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
       // If no API key, try AccessKey ID/Secret directly
       return await this.fetchWithAccessKey();
     } else {
-      this.log.warn('Alibaba API client not initialized and no AccessKey provided - returning empty model list');
+      this.log.warn(
+        'Alibaba API client not initialized and no AccessKey provided - returning empty model list'
+      );
       return [];
     }
   }
@@ -121,10 +136,11 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
     // Alibaba DashScope uses OpenAI-compatible API
     // Endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1
     // Extract API key safely (OpenAI client may have apiKey property)
-    const apiKey = 'apiKey' in this.client && typeof this.client.apiKey === 'string' 
-      ? this.client.apiKey 
-      : undefined;
-    
+    const apiKey =
+      'apiKey' in this.client && typeof this.client.apiKey === 'string'
+        ? this.client.apiKey
+        : undefined;
+
     this.log.debug(
       {
         endpoint: this.client.baseURL,
@@ -148,7 +164,10 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
     }
 
     const models = response.data.map((model) => this.convertAlibabaModel(model));
-    this.log.info({ count: models.length }, 'Successfully fetched models from Alibaba API using API key');
+    this.log.info(
+      { count: models.length },
+      'Successfully fetched models from Alibaba API using API key'
+    );
     return models;
   }
 
@@ -188,7 +207,10 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
       }
 
       const models = response.data.map((model) => this.convertAlibabaModel(model));
-      this.log.info({ count: models.length }, 'Successfully fetched models from Alibaba API using AccessKey');
+      this.log.info(
+        { count: models.length },
+        'Successfully fetched models from Alibaba API using AccessKey'
+      );
       return models;
     } catch (error: unknown) {
       // AccessKey authentication also failed
@@ -201,17 +223,27 @@ export class AlibabaModelFetcher extends BaseProviderModelFetcher {
         error?: unknown;
         requestId?: unknown;
       } = {};
-      
+
       if ('status' in errorObj) {
         errorDetails.status = errorObj.status;
       }
-      if ('response' in errorObj && errorObj.response && typeof errorObj.response === 'object' && 'status' in errorObj.response) {
+      if (
+        'response' in errorObj &&
+        errorObj.response &&
+        typeof errorObj.response === 'object' &&
+        'status' in errorObj.response
+      ) {
         errorDetails.status = errorObj.response.status;
       }
       if ('statusText' in errorObj) {
         errorDetails.statusText = errorObj.statusText;
       }
-      if ('response' in errorObj && errorObj.response && typeof errorObj.response === 'object' && 'statusText' in errorObj.response) {
+      if (
+        'response' in errorObj &&
+        errorObj.response &&
+        typeof errorObj.response === 'object' &&
+        'statusText' in errorObj.response
+      ) {
         errorDetails.statusText = errorObj.response.statusText;
       }
       if ('message' in errorObj) {

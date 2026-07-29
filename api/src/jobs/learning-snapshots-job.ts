@@ -35,16 +35,28 @@ async function captureOnce(): Promise<void> {
   const snaps = await import('@/core/validation/c3/learning-snapshots');
   const results = await Promise.allSettled([
     // Bandit α/β per niche — the core longitudinal learning evidence.
-    ...strategyBandit.getAllParams().map(({ niche, alpha, beta }) =>
-      snaps.snapshotBanditParams(niche, alpha, beta, Math.max(0, Math.round(alpha + beta - 2)))
-    ),
+    ...strategyBandit
+      .getAllParams()
+      .map(({ niche, alpha, beta }) =>
+        snaps.snapshotBanditParams(niche, alpha, beta, Math.max(0, Math.round(alpha + beta - 2)))
+      ),
     // Archive coverage/fitness (aggregate niche: archive snapshot is global).
     (async () => {
       const archive = configurationArchive.getSnapshot();
-      const fitnesses = archive.topElites.map(e => e.fitness).filter((f): f is number => typeof f === 'number');
-      const avgFitness = fitnesses.length ? fitnesses.reduce((a, b) => a + b, 0) / fitnesses.length : 0;
+      const fitnesses = archive.topElites
+        .map((e) => e.fitness)
+        .filter((f): f is number => typeof f === 'number');
+      const avgFitness = fitnesses.length
+        ? fitnesses.reduce((a, b) => a + b, 0) / fitnesses.length
+        : 0;
       const bestFitness = fitnesses.length ? Math.max(...fitnesses) : 0;
-      await snaps.snapshotArchiveFitness('global', archive.cellCount, avgFitness, bestFitness, archive.totalElites);
+      await snaps.snapshotArchiveFitness(
+        'global',
+        archive.cellCount,
+        avgFitness,
+        bestFitness,
+        archive.totalElites
+      );
     })(),
     // Triage calibration accuracy.
     (async () => {
@@ -60,7 +72,7 @@ async function captureOnce(): Promise<void> {
     })(),
   ]);
 
-  const failed = results.filter(r => r.status === 'rejected').length;
+  const failed = results.filter((r) => r.status === 'rejected').length;
   if (failed > 0) {
     log.warn({ failed, total: results.length }, 'Some learning snapshots failed to persist');
   } else {
@@ -77,13 +89,17 @@ export function startLearningSnapshotsJob(): void {
 
   const intervalMs = Number(process.env.LEARNING_SNAPSHOTS_INTERVAL_MS) || 3_600_000;
   timer = setInterval(() => {
-    captureOnce().catch(err => log.warn({ err: String(err) }, 'Learning snapshot capture failed'));
+    captureOnce().catch((err) =>
+      log.warn({ err: String(err) }, 'Learning snapshot capture failed')
+    );
   }, intervalMs);
   timer.unref?.();
 
   // First capture shortly after boot, once learning systems have seeded.
   const warmup = setTimeout(() => {
-    captureOnce().catch(err => log.warn({ err: String(err) }, 'Initial learning snapshot failed'));
+    captureOnce().catch((err) =>
+      log.warn({ err: String(err) }, 'Initial learning snapshot failed')
+    );
   }, 60_000);
   warmup.unref?.();
 

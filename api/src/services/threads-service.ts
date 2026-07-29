@@ -10,7 +10,7 @@
 /**
  * Threads Service
  * Manages conversation threads and runs
- * 
+ *
  * NO HARDCODED MODELS - Dynamic selection per run
  * REAL IMPLEMENTATION - Persists threads, messages, and runs in database
  */
@@ -19,7 +19,10 @@ import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { prisma } from '@/database/client';
 import { nanoid } from 'nanoid';
-import { toPrismaJsonValue, toPrismaNullableJsonValue } from '@/services/assistants-service-helpers';
+import {
+  toPrismaJsonValue,
+  toPrismaNullableJsonValue,
+} from '@/services/assistants-service-helpers';
 import { threadRunQueueService } from '@/services/thread-run-queue-service';
 import type {
   CreateThreadRequest,
@@ -58,7 +61,7 @@ export class ThreadsService {
    */
   async createThread(options: CreateThreadRequest): Promise<Thread> {
     const { messages, metadata, userContext, requestId } = options;
-    
+
     const threadId = `thread_${nanoid(24)}`;
     // DB-generated createdAt is the source of truth; no local stamp needed.
 
@@ -79,10 +82,10 @@ export class ThreadsService {
       if (messages && messages.length > 0) {
         const messagePromises = messages.map((msg) => {
           const messageId = `msg_${nanoid(24)}`;
-          const contentArray = Array.isArray(msg.content) 
-            ? msg.content 
+          const contentArray = Array.isArray(msg.content)
+            ? msg.content
             : [{ type: 'text' as const, text: typeof msg.content === 'string' ? msg.content : '' }];
-          
+
           // Build metadata including tool_call_id and name for 'tool' role
           const messageMetadata: Record<string, string> = { ...(msg.metadata || {}) };
           if (msg.role === 'tool' && msg.tool_call_id) {
@@ -91,13 +94,17 @@ export class ThreadsService {
           if (msg.role === 'tool' && msg.name) {
             messageMetadata.tool_name = msg.name;
           }
-          
+
           return prisma.threadMessage.create({
             data: {
               id: messageId,
               threadId: threadId,
               role: msg.role,
-              content: contentArray as Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>,
+              content: contentArray as Array<{
+                type: string;
+                text?: string;
+                image_url?: { url: string; detail?: string };
+              }>,
               fileIds: msg.file_ids || [],
               metadata: messageMetadata,
             },
@@ -105,7 +112,10 @@ export class ThreadsService {
         });
 
         await Promise.all(messagePromises);
-        log.info({ requestId, threadId, messageCount: messages.length }, 'Thread created with messages');
+        log.info(
+          { requestId, threadId, messageCount: messages.length },
+          'Thread created with messages'
+        );
       }
 
       return {
@@ -151,7 +161,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'Get thread failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -200,7 +210,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'Modify thread failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -241,7 +251,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'Delete thread failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -254,7 +264,17 @@ export class ThreadsService {
    * REAL IMPLEMENTATION - Persists in database
    */
   async createMessage(options: CreateMessageRequest): Promise<ThreadMessage> {
-    const { threadId, role, content, file_ids, metadata, tool_call_id, name, userContext, requestId } = options;
+    const {
+      threadId,
+      role,
+      content,
+      file_ids,
+      metadata,
+      tool_call_id,
+      name,
+      userContext,
+      requestId,
+    } = options;
 
     const messageId = `msg_${nanoid(24)}`;
     // DB-generated createdAt is the source of truth; no local stamp needed.
@@ -286,9 +306,9 @@ export class ThreadsService {
 
       // Normalize content to array format compatible with ThreadMessage['content']
       let contentArray: ThreadMessage['content'];
-      
+
       if (Array.isArray(content)) {
-        contentArray = content.map(item => {
+        contentArray = content.map((item) => {
           if (typeof item === 'string') {
             return { type: 'text' as const, text: { value: item } };
           }
@@ -328,7 +348,11 @@ export class ThreadsService {
           id: messageId,
           threadId: threadId,
           role: role,
-          content: contentArray as Array<{ type: string; text?: { value: string }; image_url?: { url: string; detail?: string } }>,
+          content: contentArray as Array<{
+            type: string;
+            text?: { value: string };
+            image_url?: { url: string; detail?: string };
+          }>,
           fileIds: file_ids || [],
           metadata: messageMetadata,
         },
@@ -358,7 +382,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, messageId, error: errorMessage }, 'Create message failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -371,7 +395,16 @@ export class ThreadsService {
    * REAL IMPLEMENTATION - Queries from database
    */
   async listMessages(options: ListMessagesRequest): Promise<ListMessagesResponse> {
-    const { threadId, limit = 20, order = 'desc', after, before, run_id, userContext, requestId } = options;
+    const {
+      threadId,
+      limit = 20,
+      order = 'desc',
+      after,
+      before,
+      run_id,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, threadId, limit, order, after, before, run_id }, 'Listing messages');
 
@@ -442,12 +475,13 @@ export class ThreadsService {
         }),
         has_more,
         first_id: returnMessages.length > 0 ? returnMessages[0].id : undefined,
-        last_id: returnMessages.length > 0 ? returnMessages[returnMessages.length - 1].id : undefined,
+        last_id:
+          returnMessages.length > 0 ? returnMessages[returnMessages.length - 1].id : undefined,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'List messages failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -461,13 +495,13 @@ export class ThreadsService {
    * Runs are enqueued and processed asynchronously by thread-run-worker which uses OrchestrationEngine
    */
   async createRun(options: CreateRunRequest): Promise<ThreadRun> {
-    const { 
-      threadId, 
-      assistant_id, 
-      model, 
-      instructions, 
-      tools, 
-      file_ids, 
+    const {
+      threadId,
+      assistant_id,
+      model,
+      instructions,
+      tools,
+      file_ids,
       metadata,
       temperature,
       top_p,
@@ -476,7 +510,7 @@ export class ThreadsService {
       truncation_strategy,
       response_format,
       userContext,
-      requestId 
+      requestId,
     } = options;
 
     const runId = `run_${nanoid(24)}`;
@@ -516,8 +550,14 @@ export class ThreadsService {
           topP: top_p || null,
           maxPromptTokens: max_prompt_tokens || null,
           maxCompletionTokens: max_completion_tokens || null,
-          truncationStrategy: truncation_strategy ? toPrismaNullableJsonValue(truncation_strategy) : toPrismaNullableJsonValue(null),
-          responseFormat: response_format ? toPrismaNullableJsonValue(typeof response_format === 'string' ? { type: response_format } : response_format) : toPrismaNullableJsonValue(null),
+          truncationStrategy: truncation_strategy
+            ? toPrismaNullableJsonValue(truncation_strategy)
+            : toPrismaNullableJsonValue(null),
+          responseFormat: response_format
+            ? toPrismaNullableJsonValue(
+                typeof response_format === 'string' ? { type: response_format } : response_format
+              )
+            : toPrismaNullableJsonValue(null),
           parallelToolCalls: true,
           stream: false,
           expiresAt: new Date(expiresAt * 1000),
@@ -532,7 +572,7 @@ export class ThreadsService {
         try {
           // Calculate priority based on organization tier (lower = higher priority)
           const priority = 1000; // Default priority, can be adjusted based on org tier
-          
+
           await threadRunQueueService.enqueue({
             runId,
             threadId,
@@ -548,7 +588,7 @@ export class ThreadsService {
             priority,
             queuedAt: Date.now(),
           });
-          
+
           log.info({ requestId, threadId, runId }, 'Run enqueued for async processing');
         } catch (enqueueError) {
           log.error(
@@ -570,28 +610,34 @@ export class ThreadsService {
         thread_id: run.threadId,
         assistant_id: run.assistantId,
         status: run.status as ThreadRun['status'],
-        expires_at: run.expiresAt ? Math.floor(run.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600, // Default to 1 hour if null
+        expires_at: run.expiresAt
+          ? Math.floor(run.expiresAt.getTime() / 1000)
+          : Math.floor(Date.now() / 1000) + 3600, // Default to 1 hour if null
         started_at: run.startedAt ? Math.floor(run.startedAt.getTime() / 1000) : null,
         cancelled_at: run.cancelledAt ? Math.floor(run.cancelledAt.getTime() / 1000) : null,
         failed_at: run.failedAt ? Math.floor(run.failedAt.getTime() / 1000) : null,
         completed_at: run.completedAt ? Math.floor(run.completedAt.getTime() / 1000) : null,
         model: run.model || 'auto',
         instructions: run.instructions || '',
-        tools: (run.tools as Array<{ type: 'function' | 'file_search' | 'code_interpreter'; function?: { name: string; description: string; parameters: Record<string, unknown> } }>) || [],
+        tools:
+          (run.tools as Array<{
+            type: 'function' | 'file_search' | 'code_interpreter';
+            function?: { name: string; description: string; parameters: Record<string, unknown> };
+          }>) || [],
         file_ids: run.fileIds,
         metadata: run.metadata as Record<string, string>,
         temperature: run.temperature || undefined,
         top_p: run.topP || undefined,
         max_prompt_tokens: run.maxPromptTokens || undefined,
         max_completion_tokens: run.maxCompletionTokens || undefined,
-        required_action: run.requiredAction as ThreadRun['required_action'] || undefined,
-        last_error: run.lastError as ThreadRun['last_error'] || undefined,
-        usage: run.usage as ThreadRun['usage'] || undefined,
+        required_action: (run.requiredAction as ThreadRun['required_action']) || undefined,
+        last_error: (run.lastError as ThreadRun['last_error']) || undefined,
+        usage: (run.usage as ThreadRun['usage']) || undefined,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, error: errorMessage }, 'Create run failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -655,23 +701,29 @@ export class ThreadsService {
           thread_id: run.threadId,
           assistant_id: run.assistantId,
           status: run.status as ThreadRun['status'],
-          expires_at: run.expiresAt ? Math.floor(run.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600,
+          expires_at: run.expiresAt
+            ? Math.floor(run.expiresAt.getTime() / 1000)
+            : Math.floor(Date.now() / 1000) + 3600,
           started_at: run.startedAt ? Math.floor(run.startedAt.getTime() / 1000) : null,
           cancelled_at: run.cancelledAt ? Math.floor(run.cancelledAt.getTime() / 1000) : null,
           failed_at: run.failedAt ? Math.floor(run.failedAt.getTime() / 1000) : null,
           completed_at: run.completedAt ? Math.floor(run.completedAt.getTime() / 1000) : null,
           model: run.model || 'auto',
           instructions: run.instructions || '',
-          tools: (run.tools as Array<{ type: 'function' | 'file_search' | 'code_interpreter'; function?: { name: string; description: string; parameters: Record<string, unknown> } }>) || [],
+          tools:
+            (run.tools as Array<{
+              type: 'function' | 'file_search' | 'code_interpreter';
+              function?: { name: string; description: string; parameters: Record<string, unknown> };
+            }>) || [],
           file_ids: run.fileIds,
           metadata: run.metadata as Record<string, string>,
           temperature: run.temperature || undefined,
           top_p: run.topP || undefined,
           max_prompt_tokens: run.maxPromptTokens || undefined,
           max_completion_tokens: run.maxCompletionTokens || undefined,
-          required_action: run.requiredAction as ThreadRun['required_action'] || undefined,
-          last_error: run.lastError as ThreadRun['last_error'] || undefined,
-          usage: run.usage as ThreadRun['usage'] || undefined,
+          required_action: (run.requiredAction as ThreadRun['required_action']) || undefined,
+          last_error: (run.lastError as ThreadRun['last_error']) || undefined,
+          usage: (run.usage as ThreadRun['usage']) || undefined,
         })),
         has_more,
         first_id: returnRuns.length > 0 ? returnRuns[0].id : undefined,
@@ -680,7 +732,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, error: errorMessage }, 'List runs failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -729,28 +781,34 @@ export class ThreadsService {
         thread_id: run.threadId,
         assistant_id: run.assistantId,
         status: run.status as ThreadRun['status'],
-        expires_at: run.expiresAt ? Math.floor(run.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600,
+        expires_at: run.expiresAt
+          ? Math.floor(run.expiresAt.getTime() / 1000)
+          : Math.floor(Date.now() / 1000) + 3600,
         started_at: run.startedAt ? Math.floor(run.startedAt.getTime() / 1000) : null,
         cancelled_at: run.cancelledAt ? Math.floor(run.cancelledAt.getTime() / 1000) : null,
         failed_at: run.failedAt ? Math.floor(run.failedAt.getTime() / 1000) : null,
         completed_at: run.completedAt ? Math.floor(run.completedAt.getTime() / 1000) : null,
         model: run.model || 'auto',
         instructions: run.instructions || '',
-        tools: (run.tools as Array<{ type: 'function' | 'file_search' | 'code_interpreter'; function?: { name: string; description: string; parameters: Record<string, unknown> } }>) || [],
+        tools:
+          (run.tools as Array<{
+            type: 'function' | 'file_search' | 'code_interpreter';
+            function?: { name: string; description: string; parameters: Record<string, unknown> };
+          }>) || [],
         file_ids: run.fileIds,
         metadata: run.metadata as Record<string, string>,
         temperature: run.temperature || undefined,
         top_p: run.topP || undefined,
         max_prompt_tokens: run.maxPromptTokens || undefined,
         max_completion_tokens: run.maxCompletionTokens || undefined,
-        required_action: run.requiredAction as ThreadRun['required_action'] || undefined,
-        last_error: run.lastError as ThreadRun['last_error'] || undefined,
-        usage: run.usage as ThreadRun['usage'] || undefined,
+        required_action: (run.requiredAction as ThreadRun['required_action']) || undefined,
+        last_error: (run.lastError as ThreadRun['last_error']) || undefined,
+        usage: (run.usage as ThreadRun['usage']) || undefined,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, error: errorMessage }, 'Get run failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Run ${runId} not found`);
       }
@@ -813,7 +871,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, messageId, error: errorMessage }, 'Get message failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Message ${messageId} not found`);
       }
@@ -886,7 +944,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, messageId, error: errorMessage }, 'Modify message failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Message ${messageId} not found`);
       }
@@ -939,7 +997,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, messageId, error: errorMessage }, 'Delete message failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Message ${messageId} not found`);
       }
@@ -954,7 +1012,10 @@ export class ThreadsService {
   async submitToolOutputs(options: SubmitToolOutputsRequest): Promise<ThreadRun> {
     const { threadId, runId, tool_outputs, userContext, requestId } = options;
 
-    log.info({ requestId, threadId, runId, toolOutputCount: tool_outputs.length }, 'Submitting tool outputs');
+    log.info(
+      { requestId, threadId, runId, toolOutputCount: tool_outputs.length },
+      'Submitting tool outputs'
+    );
 
     try {
       // Verify thread exists
@@ -982,12 +1043,18 @@ export class ThreadsService {
       }
 
       if (run.status !== 'requires_action') {
-        throw new Error(`Run ${runId} is not in requires_action status. Current status: ${run.status}`);
+        throw new Error(
+          `Run ${runId} is not in requires_action status. Current status: ${run.status}`
+        );
       }
 
       // Verify required_action exists and has tool_calls
       const requiredAction = run.requiredAction as ThreadRun['required_action'];
-      if (!requiredAction || requiredAction.type !== 'submit_tool_outputs' || !requiredAction.submit_tool_outputs) {
+      if (
+        !requiredAction ||
+        requiredAction.type !== 'submit_tool_outputs' ||
+        !requiredAction.submit_tool_outputs
+      ) {
         throw new Error(`Run ${runId} does not require tool outputs`);
       }
 
@@ -1005,7 +1072,7 @@ export class ThreadsService {
       // Use 'tool' role as per OpenAI API specification
       const toolOutputMessages = tool_outputs.map((toolOutput) => {
         const toolCall = expectedToolCalls.find((tc) => tc.id === toolOutput.tool_call_id);
-        const outputText = toolOutput.error 
+        const outputText = toolOutput.error
           ? `Error: ${toolOutput.error}`
           : toolOutput.output || '';
 
@@ -1037,7 +1104,10 @@ export class ThreadsService {
       });
 
       await Promise.all(messagePromises);
-      log.info({ requestId, threadId, runId, messageCount: toolOutputMessages.length }, 'Tool output messages added to thread');
+      log.info(
+        { requestId, threadId, runId, messageCount: toolOutputMessages.length },
+        'Tool output messages added to thread'
+      );
 
       // Update run status back to queued and clear required_action
       const updatedRun = await prisma.threadRun.update({
@@ -1101,11 +1171,17 @@ export class ThreadsService {
         thread_id: updatedRun.threadId,
         assistant_id: updatedRun.assistantId,
         status: updatedRun.status as ThreadRun['status'],
-        expires_at: updatedRun.expiresAt ? Math.floor(updatedRun.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600,
+        expires_at: updatedRun.expiresAt
+          ? Math.floor(updatedRun.expiresAt.getTime() / 1000)
+          : Math.floor(Date.now() / 1000) + 3600,
         started_at: updatedRun.startedAt ? Math.floor(updatedRun.startedAt.getTime() / 1000) : null,
-        cancelled_at: updatedRun.cancelledAt ? Math.floor(updatedRun.cancelledAt.getTime() / 1000) : null,
+        cancelled_at: updatedRun.cancelledAt
+          ? Math.floor(updatedRun.cancelledAt.getTime() / 1000)
+          : null,
         failed_at: updatedRun.failedAt ? Math.floor(updatedRun.failedAt.getTime() / 1000) : null,
-        completed_at: updatedRun.completedAt ? Math.floor(updatedRun.completedAt.getTime() / 1000) : null,
+        completed_at: updatedRun.completedAt
+          ? Math.floor(updatedRun.completedAt.getTime() / 1000)
+          : null,
         model: updatedRun.model || 'auto',
         instructions: updatedRun.instructions || '',
         tools: (updatedRun.tools as ThreadRun['tools']) || [],
@@ -1116,13 +1192,13 @@ export class ThreadsService {
         max_prompt_tokens: updatedRun.maxPromptTokens || undefined,
         max_completion_tokens: updatedRun.maxCompletionTokens || undefined,
         required_action: undefined,
-        last_error: updatedRun.lastError as ThreadRun['last_error'] || undefined,
-        usage: updatedRun.usage as ThreadRun['usage'] || undefined,
+        last_error: (updatedRun.lastError as ThreadRun['last_error']) || undefined,
+        usage: (updatedRun.usage as ThreadRun['usage']) || undefined,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, error: errorMessage }, 'Submit tool outputs failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -1165,7 +1241,12 @@ export class ThreadsService {
       }
 
       // Check if run can be cancelled
-      if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled' || run.status === 'expired') {
+      if (
+        run.status === 'completed' ||
+        run.status === 'failed' ||
+        run.status === 'cancelled' ||
+        run.status === 'expired'
+      ) {
         throw new Error(`Run ${runId} cannot be cancelled. Current status: ${run.status}`);
       }
 
@@ -1204,11 +1285,17 @@ export class ThreadsService {
         thread_id: updatedRun.threadId,
         assistant_id: updatedRun.assistantId,
         status: updatedRun.status as ThreadRun['status'],
-        expires_at: updatedRun.expiresAt ? Math.floor(updatedRun.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600,
+        expires_at: updatedRun.expiresAt
+          ? Math.floor(updatedRun.expiresAt.getTime() / 1000)
+          : Math.floor(Date.now() / 1000) + 3600,
         started_at: updatedRun.startedAt ? Math.floor(updatedRun.startedAt.getTime() / 1000) : null,
-        cancelled_at: updatedRun.cancelledAt ? Math.floor(updatedRun.cancelledAt.getTime() / 1000) : null,
+        cancelled_at: updatedRun.cancelledAt
+          ? Math.floor(updatedRun.cancelledAt.getTime() / 1000)
+          : null,
         failed_at: updatedRun.failedAt ? Math.floor(updatedRun.failedAt.getTime() / 1000) : null,
-        completed_at: updatedRun.completedAt ? Math.floor(updatedRun.completedAt.getTime() / 1000) : null,
+        completed_at: updatedRun.completedAt
+          ? Math.floor(updatedRun.completedAt.getTime() / 1000)
+          : null,
         model: updatedRun.model || 'auto',
         instructions: updatedRun.instructions || '',
         tools: (updatedRun.tools as ThreadRun['tools']) || [],
@@ -1218,14 +1305,14 @@ export class ThreadsService {
         top_p: updatedRun.topP || undefined,
         max_prompt_tokens: updatedRun.maxPromptTokens || undefined,
         max_completion_tokens: updatedRun.maxCompletionTokens || undefined,
-        required_action: updatedRun.requiredAction as ThreadRun['required_action'] || undefined,
-        last_error: updatedRun.lastError as ThreadRun['last_error'] || undefined,
-        usage: updatedRun.usage as ThreadRun['usage'] || undefined,
+        required_action: (updatedRun.requiredAction as ThreadRun['required_action']) || undefined,
+        last_error: (updatedRun.lastError as ThreadRun['last_error']) || undefined,
+        usage: (updatedRun.usage as ThreadRun['usage']) || undefined,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, error: errorMessage }, 'Cancel run failed');
-      
+
       if (errorMessage.includes('not found') || errorMessage.includes('cannot be cancelled')) {
         throw new Error(errorMessage);
       }
@@ -1238,7 +1325,16 @@ export class ThreadsService {
    * REAL IMPLEMENTATION - Queries from database
    */
   async listRunSteps(options: ListRunStepsRequest): Promise<ListRunStepsResponse> {
-    const { threadId, runId, limit = 20, order = 'desc', after, before, userContext, requestId } = options;
+    const {
+      threadId,
+      runId,
+      limit = 20,
+      order = 'desc',
+      after,
+      before,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, threadId, runId, limit, order }, 'Listing run steps');
 
@@ -1278,7 +1374,7 @@ export class ThreadsService {
       if (before) {
         const beforeStep = await prisma.threadRunStep.findUnique({ where: { id: before } });
         if (beforeStep) {
-          where.createdAt = where.createdAt 
+          where.createdAt = where.createdAt
             ? { ...where.createdAt, lt: beforeStep.createdAt }
             : { lt: beforeStep.createdAt };
         }
@@ -1302,7 +1398,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, error: errorMessage }, 'List run steps failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -1358,7 +1454,7 @@ export class ThreadsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, threadId, runId, stepId, error: errorMessage }, 'Get run step failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }

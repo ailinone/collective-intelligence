@@ -25,7 +25,7 @@ import {
 import type { ModelTaskPerformanceProfile } from '../../contribution/model-task-performance-profile';
 
 function p(
-  overrides: Partial<ModelTaskPerformanceProfile> & { modelId: string; taskType: string },
+  overrides: Partial<ModelTaskPerformanceProfile> & { modelId: string; taskType: string }
 ): ModelTaskPerformanceProfile {
   return Object.freeze({
     modelId: overrides.modelId,

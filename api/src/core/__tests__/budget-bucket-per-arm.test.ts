@@ -45,21 +45,28 @@ import { CreditGovernor } from '../budget/credit-governor';
  * intentionally so a test failure points at "the runner changed its
  * bucket-key shape" rather than at the test file.
  */
-function modeKeyForTest(mode:
-  | { mode: 'single-model'; modelId: string }
-  | { mode: 'single-budget'; modelId: string }
-  | { mode: 'collective'; strategy: string }
-  | { mode: 'forced-pool-collective'; strategy: string }
-  | { mode: 'adaptive' }
-  | { mode: 'ablation'; strategy: string; disableComponents: string[] }
+function modeKeyForTest(
+  mode:
+    | { mode: 'single-model'; modelId: string }
+    | { mode: 'single-budget'; modelId: string }
+    | { mode: 'collective'; strategy: string }
+    | { mode: 'forced-pool-collective'; strategy: string }
+    | { mode: 'adaptive' }
+    | { mode: 'ablation'; strategy: string; disableComponents: string[] }
 ): string {
   switch (mode.mode) {
-    case 'single-model': return `single-model:${mode.modelId}`;
-    case 'collective': return `collective:${mode.strategy}`;
-    case 'forced-pool-collective': return `collective-tier1:${mode.strategy}`;
-    case 'single-budget': return `single-budget:${mode.modelId}`;
-    case 'adaptive': return 'adaptive';
-    case 'ablation': return `ablation:${mode.strategy}:${mode.disableComponents.join(',')}`;
+    case 'single-model':
+      return `single-model:${mode.modelId}`;
+    case 'collective':
+      return `collective:${mode.strategy}`;
+    case 'forced-pool-collective':
+      return `collective-tier1:${mode.strategy}`;
+    case 'single-budget':
+      return `single-budget:${mode.modelId}`;
+    case 'adaptive':
+      return 'adaptive';
+    case 'ablation':
+      return `ablation:${mode.strategy}:${mode.disableComponents.join(',')}`;
   }
 }
 
@@ -82,17 +89,24 @@ const PER_ARM = TOTAL_BUDGET / ARM_COUNT_FOR_RAMP; // ≈ $0.769
 describe('CreditGovernor — budget bucket per-arm (ramp-final regression)', () => {
   describe('bucket-key uniqueness', () => {
     it('produces 7 distinct keys for the 7 collective strategies', () => {
-      const keys = new Set(COLLECTIVE_STRATEGIES.map((s) => modeKeyForTest({ mode: 'collective', strategy: s })));
+      const keys = new Set(
+        COLLECTIVE_STRATEGIES.map((s) => modeKeyForTest({ mode: 'collective', strategy: s }))
+      );
       expect(keys.size).toBe(7);
       // And none of them collapse to the bare "collective" string.
       expect(keys.has('collective')).toBe(false);
-      expect([...keys]).toEqual(expect.arrayContaining(['collective:consensus', 'collective:parallel']));
+      expect([...keys]).toEqual(
+        expect.arrayContaining(['collective:consensus', 'collective:parallel'])
+      );
     });
 
     it('produces distinct keys for sibling single-model pins', () => {
       const keys = new Set([
         modeKeyForTest({ mode: 'single-model', modelId: 'xai/grok-4-fast-reasoning' }),
-        modeKeyForTest({ mode: 'single-model', modelId: 'accounts/fireworks/models/deepseek-v4-pro' }),
+        modeKeyForTest({
+          mode: 'single-model',
+          modelId: 'accounts/fireworks/models/deepseek-v4-pro',
+        }),
         modeKeyForTest({ mode: 'single-model', modelId: 'kimi-k2.6' }),
       ]);
       expect(keys.size).toBe(3);
@@ -135,7 +149,7 @@ describe('CreditGovernor — budget bucket per-arm (ramp-final regression)', () 
 
     beforeEach(() => {
       const armBudgets = Object.fromEntries(
-        COLLECTIVE_STRATEGIES.map((s) => [`collective:${s}`, PER_ARM] as const),
+        COLLECTIVE_STRATEGIES.map((s) => [`collective:${s}`, PER_ARM] as const)
       );
       governor = new CreditGovernor({
         experimentBudgetUsd: TOTAL_BUDGET,
@@ -192,7 +206,9 @@ describe('CreditGovernor — budget bucket per-arm (ramp-final regression)', () 
         },
       });
       governor3.recordSpend('p', 'cheap', PER_ARM + 0.01, 'single-budget:cheap');
-      expect(governor3.canExecute('p', 'premium', 0.005, 'single-model:premium').canProceed).toBe(true);
+      expect(governor3.canExecute('p', 'premium', 0.005, 'single-model:premium').canProceed).toBe(
+        true
+      );
       expect(governor3.canExecute('p', 'cmm', 0.005, 'collective:consensus').canProceed).toBe(true);
     });
   });

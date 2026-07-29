@@ -118,7 +118,7 @@ export interface CatalogLoaderOptions {
  * as env vars and DB connections are already initialized.
  */
 export async function loadProviderCatalog(
-  options: CatalogLoaderOptions = {},
+  options: CatalogLoaderOptions = {}
 ): Promise<CatalogLoadSummary> {
   const log = logger.child({ component: 'catalog-loader' });
 
@@ -145,7 +145,7 @@ export async function loadProviderCatalog(
     if (!parsed.success) {
       log.error(
         { issues: parsed.error.issues },
-        'Provider catalog failed Zod validation — registering ZERO catalog providers. Check catalog entries.',
+        'Provider catalog failed Zod validation — registering ZERO catalog providers. Check catalog entries.'
       );
       const summary = buildEmptySummary();
       lastSummary = summary;
@@ -157,7 +157,7 @@ export async function loadProviderCatalog(
 
   log.info(
     { total: validated.length },
-    'Provider catalog loaded & validated — beginning plugin registration',
+    'Provider catalog loaded & validated — beginning plugin registration'
   );
 
   // ── Iteration (isolated per entry) ────────────────────────────────────
@@ -195,7 +195,7 @@ export async function loadProviderCatalog(
       failed: summary.failed,
       reasonCounts: summary.reasonCounts,
     },
-    'Catalog loader complete',
+    'Catalog loader complete'
   );
 
   lastSummary = summary;
@@ -206,9 +206,7 @@ export async function loadProviderCatalog(
 /**
  * Load one catalog entry. Always returns a result — never throws.
  */
-async function loadSingleEntry(
-  entry: ProviderCatalogEntry,
-): Promise<CatalogLoadEntryResult> {
+async function loadSingleEntry(entry: ProviderCatalogEntry): Promise<CatalogLoadEntryResult> {
   const base = {
     providerId: entry.providerId,
     displayName: entry.displayName,
@@ -284,9 +282,7 @@ async function loadSingleEntry(
   }
 
   // ── Register via plugin manager (drives init → health → register) ───
-  let registrationResult: Awaited<
-    ReturnType<typeof providerPluginManager.registerPlugin>
-  >;
+  let registrationResult: Awaited<ReturnType<typeof providerPluginManager.registerPlugin>>;
   try {
     registrationResult = await providerPluginManager.registerPlugin(plugin);
   } catch (err) {
@@ -326,14 +322,9 @@ async function loadSingleEntry(
  * for stable substrings rather than exact matches to stay resilient to
  * log-message tweaks.
  */
-function classifyRegistrationError(
-  msg: string,
-): CatalogLoadSkipReason {
+function classifyRegistrationError(msg: string): CatalogLoadSkipReason {
   const lower = msg.toLowerCase();
-  if (
-    lower.includes('missing api key') ||
-    lower.includes('set ') && lower.includes('_api_key')
-  ) {
+  if (lower.includes('missing api key') || (lower.includes('set ') && lower.includes('_api_key'))) {
     return 'missing-api-key';
   }
   if (lower.includes('health check')) {

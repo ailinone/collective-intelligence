@@ -25,7 +25,16 @@ import multipart from '@fastify/multipart';
 import { config, isProduction, isDevelopment } from '@/config';
 import { registerHealthProbes } from '@/routes/health/health-probes';
 import { logger } from '@/utils/logger';
-import { isString, isError, isNodeError, getErrorMessage, getErrorCode, isObject, extractFastifyErrorProperties, getHeaderString } from '@/utils/type-guards';
+import {
+  isString,
+  isError,
+  isNodeError,
+  getErrorMessage,
+  getErrorCode,
+  isObject,
+  extractFastifyErrorProperties,
+  getHeaderString,
+} from '@/utils/type-guards';
 import { looksLikeApiKey } from '@/utils/api-key-format';
 // Types imported for future use
 // import type { ChatRequest, ChatResponse } from '@/types';
@@ -175,9 +184,8 @@ export async function createServer(): Promise<FastifyInstance> {
 
   // Helmet (security headers) - v5.0 Enhanced
   if (config.security.helmetEnabled) {
-    const { getHelmetConfig, validateSecurityHeaders } = await import(
-      './config/security-headers.js'
-    );
+    const { getHelmetConfig, validateSecurityHeaders } =
+      await import('./config/security-headers.js');
 
     // Validate configuration
     validateSecurityHeaders();
@@ -197,9 +205,8 @@ export async function createServer(): Promise<FastifyInstance> {
   }
 
   // Add custom security headers (v5.0)
-  const { CUSTOM_SECURITY_HEADERS, removeServerHeaders } = await import(
-    './config/security-headers.js'
-  );
+  const { CUSTOM_SECURITY_HEADERS, removeServerHeaders } =
+    await import('./config/security-headers.js');
   server.addHook('onSend', async (request, reply, payload) => {
     // Add custom headers
     for (const [key, value] of Object.entries(CUSTOM_SECURITY_HEADERS)) {
@@ -308,10 +315,17 @@ export async function createServer(): Promise<FastifyInstance> {
           { name: 'Chat', description: 'Chat completion endpoints' },
           { name: 'Embeddings', description: 'Embedding generation' },
           { name: 'Usage', description: 'Usage statistics' },
-          { name: 'Collective Intelligence', description: 'Collective Intelligence features: semantic memory, agentic workflows, reasoning transparency' },
+          {
+            name: 'Collective Intelligence',
+            description:
+              'Collective Intelligence features: semantic memory, agentic workflows, reasoning transparency',
+          },
           { name: 'Assistants', description: 'OpenAI-compatible Assistants API' },
           { name: 'Threads', description: 'Thread and message management for Assistants' },
-          { name: 'Vector Stores', description: 'Vector stores for RAG (Retrieval-Augmented Generation)' },
+          {
+            name: 'Vector Stores',
+            description: 'Vector stores for RAG (Retrieval-Augmented Generation)',
+          },
           { name: 'Files', description: 'File upload, storage, and retrieval' },
           { name: 'Fine-tuning', description: 'Fine-tuning jobs management' },
           { name: 'Batches', description: 'Batch API for asynchronous processing' },
@@ -413,7 +427,9 @@ export async function createServer(): Promise<FastifyInstance> {
     try {
       await request.jwtVerify();
       if (request.user && typeof request.user === 'object' && 'organizationId' in request.user) {
-        extendedRequest.organizationId = (request.user as { organizationId: string }).organizationId;
+        extendedRequest.organizationId = (
+          request.user as { organizationId: string }
+        ).organizationId;
       }
       return;
     } catch (error: unknown) {
@@ -497,11 +513,12 @@ export async function createServer(): Promise<FastifyInstance> {
   // resolved with env overrides applied. BEFORE listen so the failure
   // mode is "container won't start" rather than "5xx in production".
   {
-    const { assertOperationalRouteInvariant } = await import(
-      './config/operational-routes-invariant.js'
-    );
+    const { assertOperationalRouteInvariant } =
+      await import('./config/operational-routes-invariant.js');
     assertOperationalRouteInvariant();
-    logger.info('Operational-route invariant verified (canonical routes honored by all 3 allowlists)');
+    logger.info(
+      'Operational-route invariant verified (canonical routes honored by all 3 allowlists)'
+    );
   }
 
   // ==========================================
@@ -546,7 +563,9 @@ export async function createServer(): Promise<FastifyInstance> {
   // Health Check Routes
   // ==========================================
   registerHealthProbes(server);
-  logger.info('✅ Health probes registered (/health, /health/live, /health/ready, /health/startup)');
+  logger.info(
+    '✅ Health probes registered (/health, /health/live, /health/ready, /health/startup)'
+  );
 
   // ==========================================
   // AGPL §13 source offer (public, unauthenticated)
@@ -576,7 +595,7 @@ export async function createServer(): Promise<FastifyInstance> {
     // Extract FastifyError properties safely using type guards
     // Fastify always passes FastifyError, but we handle edge cases gracefully
     const errorProperties = extractFastifyErrorProperties(err);
-    
+
     // Create error object with all FastifyError properties
     // We create a plain object that satisfies the FastifyError interface
     const error: {
@@ -596,7 +615,7 @@ export async function createServer(): Promise<FastifyInstance> {
     // Extract error details - Fastify may wrap the error in 'err' property
     const errorMsg = error.message?.toLowerCase() || '';
     const errorCd = error.code || getErrorCode(err) || '';
-    
+
     // Safely extract nested error if it exists
     let nestedErr: { message?: string; code?: string } | undefined;
     if (isObject(err) && 'err' in err) {
@@ -607,7 +626,8 @@ export async function createServer(): Promise<FastifyInstance> {
           code: isNodeError(nested) ? nested.code : undefined,
         };
       } else if (isObject(nested)) {
-        const nestedMessage = 'message' in nested && isString(nested.message) ? nested.message : undefined;
+        const nestedMessage =
+          'message' in nested && isString(nested.message) ? nested.message : undefined;
         const nestedCode = 'code' in nested && isString(nested.code) ? nested.code : undefined;
         if (nestedMessage !== undefined || nestedCode !== undefined) {
           nestedErr = {
@@ -617,7 +637,7 @@ export async function createServer(): Promise<FastifyInstance> {
         }
       }
     }
-    
+
     const isPrematureClose =
       errorMsg === 'premature close' ||
       errorCd === 'ERR_STREAM_PREMATURE_CLOSE' ||
@@ -628,7 +648,7 @@ export async function createServer(): Promise<FastifyInstance> {
       // For /metrics endpoint (Prometheus scraping), this is expected behavior
       // Health checks and Prometheus scrapers often close connections after reading headers
       const isMetricsEndpoint = request.url === '/metrics' || request.url?.startsWith('/metrics');
-      
+
       if (isMetricsEndpoint) {
         // Use silent logger level to prevent ERROR logs for expected behavior
         // Prometheus scrapers and health checks frequently close connections early
@@ -642,7 +662,7 @@ export async function createServer(): Promise<FastifyInstance> {
           },
           'Metrics endpoint: client connection closed (normal for Prometheus scraping/health checks)'
         );
-        
+
         // Explicitly mark that we've handled this error to prevent default logging
         // by not throwing and returning early
       } else {
@@ -656,7 +676,7 @@ export async function createServer(): Promise<FastifyInstance> {
           'Client connection closed before response was completed'
         );
       }
-      
+
       // Check if connection is already closed before trying to send response
       if (!reply.sent && !reply.raw.destroyed && !reply.raw.writableEnded) {
         try {
@@ -665,7 +685,7 @@ export async function createServer(): Promise<FastifyInstance> {
           // Ignore errors when destroying already closed connections
         }
       }
-      
+
       // Nothing to send back because the client already closed the connection.
       // Return early to prevent any error response or additional logging
       return;
@@ -673,8 +693,11 @@ export async function createServer(): Promise<FastifyInstance> {
 
     // Rate limit errors - check before logging as unhandled
     // @fastify/rate-limit throws errors with statusCode 429
-    if (error.statusCode === 429 || error.code === 'FST_ERR_RATE_LIMIT_EXCEEDED' || 
-        (error.message && typeof error.message === 'string' && error.message.includes('rate_limit'))) {
+    if (
+      error.statusCode === 429 ||
+      error.code === 'FST_ERR_RATE_LIMIT_EXCEEDED' ||
+      (error.message && typeof error.message === 'string' && error.message.includes('rate_limit'))
+    ) {
       return reply.status(429).send({
         error: {
           code: 'rate_limit_exceeded',
@@ -686,7 +709,11 @@ export async function createServer(): Promise<FastifyInstance> {
     // Check if error object contains rate_limit_exceeded
     if (isObject(error) && 'error' in error) {
       const innerError = error.error;
-      if (isObject(innerError) && 'code' in innerError && innerError.code === 'rate_limit_exceeded') {
+      if (
+        isObject(innerError) &&
+        'code' in innerError &&
+        innerError.code === 'rate_limit_exceeded'
+      ) {
         return reply.status(429).send({
           error: {
             code: 'rate_limit_exceeded',
@@ -698,13 +725,14 @@ export async function createServer(): Promise<FastifyInstance> {
 
     // Extract error details for logging check (already extracted above)
     // errorMsg, errorCd, and nestedErr are already declared earlier
-    
+
     // Skip error logging for premature close errors on /metrics endpoint
     // They're already handled above and logged at appropriate level (debug for metrics)
-    const isPrematureCloseOnMetrics = 
-      (errorMsg === 'premature close' || errorCd === 'ERR_STREAM_PREMATURE_CLOSE' ||
-       nestedErr?.message?.toLowerCase() === 'premature close' ||
-       nestedErr?.code === 'ERR_STREAM_PREMATURE_CLOSE') &&
+    const isPrematureCloseOnMetrics =
+      (errorMsg === 'premature close' ||
+        errorCd === 'ERR_STREAM_PREMATURE_CLOSE' ||
+        nestedErr?.message?.toLowerCase() === 'premature close' ||
+        nestedErr?.code === 'ERR_STREAM_PREMATURE_CLOSE') &&
       (request.url === '/metrics' || request.url?.startsWith('/metrics'));
 
     if (!isPrematureCloseOnMetrics) {
@@ -840,13 +868,15 @@ export async function startServer(server: FastifyInstance): Promise<void> {
         `âŒ Failed to start server: Port ${port} already in use`
       );
       console.error(`\nâŒ ERROR: Port ${port} is already in use.`);
-      console.error(`   Please stop the process using this port or set a different PORT environment variable.\n`);
+      console.error(
+        `   Please stop the process using this port or set a different PORT environment variable.\n`
+      );
     } else {
       // Safely extract error information using type guards
       const errorMessage = getErrorMessage(error);
       const errorCode = getErrorCode(error);
       const errorStack = isError(error) ? error.stack : undefined;
-      
+
       server.log.error(
         {
           error: errorMessage,
@@ -879,16 +909,21 @@ export async function startServer(server: FastifyInstance): Promise<void> {
  */
 export async function shutdownServer(
   server: FastifyInstance,
-  drainTimeoutMs?: number,
+  drainTimeoutMs?: number
 ): Promise<void> {
-  server.log.info('Closing HTTP server — no longer accepting new connections, draining in-flight requests...');
+  server.log.info(
+    'Closing HTTP server — no longer accepting new connections, draining in-flight requests...'
+  );
 
   const closePromise = server
     .close()
     .then(() => true)
     .catch((error: unknown) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      server.log.error({ error: errorMessage }, 'Error while closing HTTP server (continuing shutdown)');
+      server.log.error(
+        { error: errorMessage },
+        'Error while closing HTTP server (continuing shutdown)'
+      );
       return true;
     });
 
@@ -914,8 +949,7 @@ export async function shutdownServer(
   } else {
     server.log.warn(
       { drainTimeoutMs },
-      'HTTP server drain exceeded timeout — proceeding with shutdown; remaining connections will be dropped',
+      'HTTP server drain exceeded timeout — proceeding with shutdown; remaining connections will be dropped'
     );
   }
 }
-

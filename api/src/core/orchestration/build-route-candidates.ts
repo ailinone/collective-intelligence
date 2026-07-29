@@ -29,7 +29,10 @@
  * excluded.
  */
 
-import { listModelRouteCandidates, type ModelRouteCandidate } from '../operability/provider-routing-taxonomy';
+import {
+  listModelRouteCandidates,
+  type ModelRouteCandidate,
+} from '../operability/provider-routing-taxonomy';
 import type { ProviderErrorKind } from './failures/provider-error-classifier';
 import {
   buildRouteId,
@@ -85,7 +88,9 @@ export interface LiveOperabilityLookupResult {
  * triple. When the route has never been audited, return `{ chatReady: false }`
  * — caller treats it as `unauditied_live_state` rejection in strict mode.
  */
-export type LiveOperabilityLookup = (input: LiveOperabilityLookupInput) => LiveOperabilityLookupResult;
+export type LiveOperabilityLookup = (
+  input: LiveOperabilityLookupInput
+) => LiveOperabilityLookupResult;
 
 export interface RouteEconomicsLookupInput {
   readonly providerId: string;
@@ -249,7 +254,7 @@ export function classifyRouteEquivalence(input: {
 function compareRoutes(
   a: ApprovedRouteCandidate,
   b: ApprovedRouteCandidate,
-  orderBy: readonly RouteOrderCriterion[],
+  orderBy: readonly RouteOrderCriterion[]
 ): number {
   for (const c of orderBy) {
     let cmp = 0;
@@ -302,13 +307,14 @@ function compareRoutes(
  *  11. Compute coverage summary.
  */
 export function buildRouteCandidatesForModel(
-  input: BuildRouteCandidatesInput,
+  input: BuildRouteCandidatesInput
 ): BuildRouteCandidatesResult {
   const policy = input.policy ?? STRICT_DEFAULT_ROUTE_SELECTION_POLICY;
   const adapterKindLookup = input.lookupAdapterKind ?? (() => 'openai-compatible-chat');
   const authHandleLookup = input.lookupAuthHandle ?? (() => 'unknown');
 
-  const taxonomyRoutes = input.routeCandidatesOverride ?? listModelRouteCandidates(input.nativeProviderId);
+  const taxonomyRoutes =
+    input.routeCandidatesOverride ?? listModelRouteCandidates(input.nativeProviderId);
 
   // 01C.1B-J1R2 — Union taxonomy routes with catalog-side serving
   // providers. Taxonomy gives us peerings (router fanout for true natives,
@@ -324,7 +330,10 @@ export function buildRouteCandidatesForModel(
   // can use the catalog's authoritative `apiModelId` instead of running
   // the resolver — which doesn't know provider-specific naming conventions
   // (e.g., deepinfra serves llama-3.2-11b as `meta-llama/Llama-3.2-11B-Vision-Instruct`).
-  type AugmentedRoute = { readonly route: ModelRouteCandidate; readonly catalogEntry?: ServingProviderEntry };
+  type AugmentedRoute = {
+    readonly route: ModelRouteCandidate;
+    readonly catalogEntry?: ServingProviderEntry;
+  };
   const augmentedTaxonomy: AugmentedRoute[] = taxonomyRoutes.map((r) => ({ route: r }));
   const augmentedCatalog: AugmentedRoute[] = [];
   if (input.servingProviders && input.servingProviders.length > 0) {
@@ -425,14 +434,17 @@ export function buildRouteCandidatesForModel(
     const econ = input.lookupEconomics({ providerId, apiModelId });
 
     // Budget filter — if both sides of pricing present and exceed cap, reject.
-    if (input.maxCostUsd !== undefined && econ.inputCostPerMTok !== undefined && econ.outputCostPerMTok !== undefined) {
+    if (
+      input.maxCostUsd !== undefined &&
+      econ.inputCostPerMTok !== undefined &&
+      econ.outputCostPerMTok !== undefined
+    ) {
       // Rough estimate: assume 200 input tokens + 200 output tokens for the
       // budget check. Caller can override with a custom maxCostUsd. The
       // estimate intentionally errs on the cheap side — real cost is
       // capped by `eval.maxTotalCostUsd` at runtime regardless.
       const estimated =
-        (econ.inputCostPerMTok / 1_000_000) * 200 +
-        (econ.outputCostPerMTok / 1_000_000) * 200;
+        (econ.inputCostPerMTok / 1_000_000) * 200 + (econ.outputCostPerMTok / 1_000_000) * 200;
       if (estimated > input.maxCostUsd) {
         rejections.push({
           routeId,

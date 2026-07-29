@@ -128,7 +128,8 @@ export class OpenAIAdapter extends ProviderAdapter {
       });
 
     const pooledKeys = this.getAllApiKeys();
-    this.clientPool = pooledKeys.length > 0 ? pooledKeys.map(buildClient) : [buildClient(config.apiKey)];
+    this.clientPool =
+      pooledKeys.length > 0 ? pooledKeys.map(buildClient) : [buildClient(config.apiKey)];
     this.client = this.clientPool[0]!;
   }
 
@@ -156,7 +157,9 @@ export class OpenAIAdapter extends ProviderAdapter {
   private estimateTokenCost(request: ChatRequest): number {
     const promptChars = request.messages.reduce((sum, message) => {
       const content =
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content ?? '');
       return sum + content.length;
     }, 0);
     const promptTokens = Math.ceil(promptChars / 4);
@@ -241,9 +244,10 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
 
     // Filter available models
-    const availableModels = models.filter(m =>
-      m.status === 'active' &&
-      (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+    const availableModels = models.filter(
+      (m) =>
+        m.status === 'active' &&
+        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
     );
 
     if (availableModels.length === 0) {
@@ -252,7 +256,7 @@ export class OpenAIAdapter extends ProviderAdapter {
 
     // Selection strategy: cheapest model with streaming capability
     const sortedByCost = availableModels
-      .filter(m => {
+      .filter((m) => {
         const hasStreaming = m.capabilities?.includes('streaming') ?? true;
         const hasChat = m.capabilities?.includes('chat') ?? true;
         return hasStreaming && hasChat && m.inputCostPer1k > 0;
@@ -278,7 +282,9 @@ export class OpenAIAdapter extends ProviderAdapter {
     return modelId;
   }
 
-  private async getDefaultModelForCapabilities(requiredCapabilities: ModelCapability[]): Promise<string> {
+  private async getDefaultModelForCapabilities(
+    requiredCapabilities: ModelCapability[]
+  ): Promise<string> {
     const models = await this.getModels();
     if (models.length === 0) {
       throw new Error('No OpenAI models available - check provider configuration');
@@ -313,7 +319,7 @@ export class OpenAIAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     // Check if this is a realtime model that requires WebSocket
-    if (request.model && await this.isRealtimeModel(request.model)) {
+    if (request.model && (await this.isRealtimeModel(request.model))) {
       return this.handleRealtimeChat(request);
     }
 
@@ -323,7 +329,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         'Sending chat completion request'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
@@ -344,22 +350,27 @@ export class OpenAIAdapter extends ProviderAdapter {
         // Responses API for advanced models - uses max_output_tokens
         // Based on OpenAI docs: https://platform.openai.com/docs/api-reference/responses/create
         // The API uses only 'model' and 'input', no 'output' or 'text' parameters in request body
-        
+
         // Get model object to check capabilities and metadata dynamically
         const modelObj = await this.getModelObject(normalizedModel);
-        
+
         // Determine if model requires temperature=1 based on capabilities/metadata
         let requiresTempOne = false;
         if (modelObj) {
           // Check metadata first
           if (modelObj.metadata && typeof modelObj.metadata === 'object') {
-            const requiresTemp = (modelObj.metadata as Record<string, unknown>).requires_temperature_one;
+            const requiresTemp = (modelObj.metadata as Record<string, unknown>)
+              .requires_temperature_one;
             if (typeof requiresTemp === 'boolean') {
               requiresTempOne = requiresTemp;
             }
           }
           // Infer from capabilities: reasoning/thinking models often require temperature=1
-          if (!requiresTempOne && (modelObj.capabilities.includes('reasoning') || modelObj.capabilities.includes('thinking_mode'))) {
+          if (
+            !requiresTempOne &&
+            (modelObj.capabilities.includes('reasoning') ||
+              modelObj.capabilities.includes('thinking_mode'))
+          ) {
             requiresTempOne = true;
           }
         }
@@ -380,7 +391,8 @@ export class OpenAIAdapter extends ProviderAdapter {
         if (modelObj) {
           // Check metadata first
           if (modelObj.metadata && typeof modelObj.metadata === 'object') {
-            const supportsTemp = (modelObj.metadata as Record<string, unknown>).supports_temperature;
+            const supportsTemp = (modelObj.metadata as Record<string, unknown>)
+              .supports_temperature;
             if (typeof supportsTemp === 'boolean') {
               supportsTemperature = supportsTemp;
             }
@@ -409,19 +421,24 @@ export class OpenAIAdapter extends ProviderAdapter {
         // Standard chat completions
         // Get model object to check capabilities and metadata dynamically
         const modelObj = await this.getModelObject(normalizedModel);
-        
+
         // Determine if model requires temperature=1 based on capabilities/metadata
         let requiresTempOne = endpoint === 'chat_completions_special';
         if (modelObj) {
           // Check metadata first
           if (modelObj.metadata && typeof modelObj.metadata === 'object') {
-            const requiresTemp = (modelObj.metadata as Record<string, unknown>).requires_temperature_one;
+            const requiresTemp = (modelObj.metadata as Record<string, unknown>)
+              .requires_temperature_one;
             if (typeof requiresTemp === 'boolean') {
               requiresTempOne = requiresTemp;
             }
           }
           // Infer from capabilities: reasoning/thinking models often require temperature=1
-          if (!requiresTempOne && (modelObj.capabilities.includes('reasoning') || modelObj.capabilities.includes('thinking_mode'))) {
+          if (
+            !requiresTempOne &&
+            (modelObj.capabilities.includes('reasoning') ||
+              modelObj.capabilities.includes('thinking_mode'))
+          ) {
             requiresTempOne = true;
           }
         }
@@ -469,13 +486,17 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       // Execute the request using the appropriate endpoint
-      const rawResponse = await this.withRetry(async () => {
-        return await this.executeModelRequest(endpoint, params as Record<string, unknown>);
-      }, 'model request', this.estimateTokenCost(request));
+      const rawResponse = await this.withRetry(
+        async () => {
+          return await this.executeModelRequest(endpoint, params as Record<string, unknown>);
+        },
+        'model request',
+        this.estimateTokenCost(request)
+      );
 
       // Convert Responses API format to ChatCompletion format if needed
       let response: OpenAI.Chat.Completions.ChatCompletion;
-      
+
       if (endpoint === 'responses') {
         // Convert Responses API response to ChatCompletion format
         response = this.convertResponsesToChatCompletion(rawResponse, normalizedModel);
@@ -538,7 +559,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         'Sending streaming chat completion'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
@@ -563,7 +584,8 @@ export class OpenAIAdapter extends ProviderAdapter {
         stop: request.stop,
         tools: request.tools,
         tool_choice: request.tool_choice,
-        response_format: request.response_format as { type: 'json_object' } | { type: 'text' } | undefined,
+        response_format: request.response_format as
+          { type: 'json_object' } | { type: 'text' } | undefined,
         stream: true as const,
       };
 
@@ -585,10 +607,14 @@ export class OpenAIAdapter extends ProviderAdapter {
         baseParams.top_p = 0.9; // Focused sampling
       }
 
-      const streamResponse = await this.withRetry(async () => {
-        return this.getRequestClient().chat.completions.create(paramsWithMaxTokens);
-      }, 'streaming chat completion', this.estimateTokenCost(request));
-      
+      const streamResponse = await this.withRetry(
+        async () => {
+          return this.getRequestClient().chat.completions.create(paramsWithMaxTokens);
+        },
+        'streaming chat completion',
+        this.estimateTokenCost(request)
+      );
+
       // OpenAI SDK returns Stream<ChatCompletionChunk> when stream: true
       // Stream implements AsyncIterable<ChatCompletionChunk>
       const response = streamResponse as AsyncIterable<ChatCompletionChunk>;
@@ -638,8 +664,7 @@ export class OpenAIAdapter extends ProviderAdapter {
 
       const response = await this.withRetry(async () => {
         const modelToUse =
-          request.model ||
-          (await this.getDefaultModelForCapabilities(['embedding', 'embeddings']));
+          request.model || (await this.getDefaultModelForCapabilities(['embedding', 'embeddings']));
         return await this.getRequestClient().embeddings.create({
           model: modelToUse,
           input: request.input,
@@ -695,7 +720,9 @@ export class OpenAIAdapter extends ProviderAdapter {
       this.providerLog.debug({ request }, 'Generating image');
 
       if (!request.model) {
-        throw new Error('Model parameter is required for image generation. Please specify a model with image_generation capability.');
+        throw new Error(
+          'Model parameter is required for image generation. Please specify a model with image_generation capability.'
+        );
       }
 
       const normalizedModel = await this.normalizeModelName(request.model);
@@ -718,7 +745,8 @@ export class OpenAIAdapter extends ProviderAdapter {
         n: ('n' in options ? options.n : undefined) || 1,
         quality: ('quality' in options ? options.quality : undefined) || 'standard',
         style: 'style' in options ? options.style : undefined,
-        response_format: ('response_format' in options ? options.response_format : undefined) || 'url',
+        response_format:
+          ('response_format' in options ? options.response_format : undefined) || 'url',
       };
 
       const response = await this.withRetry(async () => {
@@ -726,9 +754,7 @@ export class OpenAIAdapter extends ProviderAdapter {
       }, 'image generation');
 
       // Type guard for image generation response
-      const isImageGenerationResponse = (
-        res: unknown
-      ): res is OpenAI.Images.ImagesResponse => {
+      const isImageGenerationResponse = (res: unknown): res is OpenAI.Images.ImagesResponse => {
         return (
           typeof res === 'object' &&
           res !== null &&
@@ -795,7 +821,9 @@ export class OpenAIAdapter extends ProviderAdapter {
       this.providerLog.debug({ request }, 'Generating audio');
 
       if (!request.model) {
-        throw new Error('Model parameter is required for audio generation. Please specify a model with text_to_speech capability.');
+        throw new Error(
+          'Model parameter is required for audio generation. Please specify a model with text_to_speech capability.'
+        );
       }
       const normalizedModel = await this.normalizeModelName(request.model);
 
@@ -811,9 +839,19 @@ export class OpenAIAdapter extends ProviderAdapter {
       const params: Record<string, unknown> = {
         model: normalizedModel,
         input: request.text,
-        voice: request.voice || ('voice' in options && typeof options.voice === 'string' ? options.voice : undefined) || 'alloy',
-        response_format: request.format || ('response_format' in options && typeof options.response_format === 'string' ? options.response_format : undefined) || 'mp3',
-        speed: ('speed' in options && typeof options.speed === 'number' ? options.speed : undefined) || 1.0,
+        voice:
+          request.voice ||
+          ('voice' in options && typeof options.voice === 'string' ? options.voice : undefined) ||
+          'alloy',
+        response_format:
+          request.format ||
+          ('response_format' in options && typeof options.response_format === 'string'
+            ? options.response_format
+            : undefined) ||
+          'mp3',
+        speed:
+          ('speed' in options && typeof options.speed === 'number' ? options.speed : undefined) ||
+          1.0,
       };
 
       const response = await this.withRetry(async () => {
@@ -869,7 +907,9 @@ export class OpenAIAdapter extends ProviderAdapter {
       this.providerLog.debug({ request }, 'Transcribing audio');
 
       if (!request.model) {
-        throw new Error('Model parameter is required for audio transcription. Please specify a model with speech_to_text capability.');
+        throw new Error(
+          'Model parameter is required for audio transcription. Please specify a model with speech_to_text capability.'
+        );
       }
       const normalizedModel = await this.normalizeModelName(request.model);
 
@@ -891,7 +931,8 @@ export class OpenAIAdapter extends ProviderAdapter {
         file: request.audio,
         language: request.language,
         prompt: 'prompt' in options ? options.prompt : undefined,
-        response_format: ('response_format' in options ? options.response_format : undefined) || 'json',
+        response_format:
+          ('response_format' in options ? options.response_format : undefined) || 'json',
         temperature: ('temperature' in options ? options.temperature : undefined) || 0,
       };
 
@@ -901,7 +942,12 @@ export class OpenAIAdapter extends ProviderAdapter {
 
       // Type guard for audio STT response
       const isAudioSTTResponse = (res: unknown): res is { text: string } => {
-        return typeof res === 'object' && res !== null && 'text' in res && typeof (res as { text: unknown }).text === 'string';
+        return (
+          typeof res === 'object' &&
+          res !== null &&
+          'text' in res &&
+          typeof (res as { text: unknown }).text === 'string'
+        );
       };
 
       if (!isAudioSTTResponse(response)) {
@@ -1006,7 +1052,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         typeof rawResponse === 'object' &&
         'data' in rawResponse &&
         Array.isArray((rawResponse as { data?: unknown[] }).data)
-          ? ((rawResponse as { data: Array<{ id?: string; url?: string; b64_json?: string }> }).data)
+          ? (rawResponse as { data: Array<{ id?: string; url?: string; b64_json?: string }> }).data
           : [];
 
       const durationMs = Date.now() - startTime;
@@ -1111,8 +1157,8 @@ export class OpenAIAdapter extends ProviderAdapter {
       return this.modelEndpointCache.get(normalized)!;
     }
 
-    const model = modelObj || await this.getModelObject(modelId);
-    
+    const model = modelObj || (await this.getModelObject(modelId));
+
     // If we have the model object, use metadata or infer from capabilities (preferred method)
     if (model) {
       // Check metadata first
@@ -1123,16 +1169,16 @@ export class OpenAIAdapter extends ProviderAdapter {
           return endpoint;
         }
       }
-      
+
       // Infer from capabilities (dynamic, not hardcoded model names)
       const capabilities = model.capabilities;
-      
+
       if (capabilities.includes('image_generation')) {
         const endpoint = 'images';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       if (capabilities.includes('embedding') || capabilities.includes('embeddings')) {
         const endpoint = 'embeddings';
         this.modelEndpointCache.set(normalized, endpoint);
@@ -1144,38 +1190,38 @@ export class OpenAIAdapter extends ProviderAdapter {
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       if (capabilities.includes('video_generation')) {
         const endpoint = 'videos';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       if (capabilities.includes('realtime_audio') || capabilities.includes('realtime')) {
         const endpoint = 'realtime';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       if (capabilities.includes('text_to_speech') || capabilities.includes('speech_to_text')) {
         const endpoint = 'audio';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       if (capabilities.includes('computer_use')) {
         const endpoint = 'computer_use';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       // For advanced models with deep_research or reasoning, use Responses API
       if (capabilities.includes('deep_research') || capabilities.includes('reasoning')) {
         const endpoint = 'responses';
         this.modelEndpointCache.set(normalized, endpoint);
         return endpoint;
       }
-      
+
       // Default to chat_completions for chat-capable models
       if (capabilities.includes('chat')) {
         const endpoint = 'chat_completions';
@@ -1197,7 +1243,7 @@ export class OpenAIAdapter extends ProviderAdapter {
       { pattern: 'audio', endpoint: 'audio' },
       { pattern: 'computer', endpoint: 'computer_use' },
     ];
-    
+
     for (const { pattern, endpoint } of capabilityPatterns) {
       if (normalized.includes(pattern)) {
         this.modelEndpointCache.set(normalized, endpoint);
@@ -1215,7 +1261,9 @@ export class OpenAIAdapter extends ProviderAdapter {
    * Helper function to safely convert params to ChatCompletionCreateParams
    * Uses validation and type narrowing instead of direct type assertions
    */
-  private toChatCompletionParams(params: Record<string, unknown>): OpenAI.Chat.Completions.ChatCompletionCreateParams {
+  private toChatCompletionParams(
+    params: Record<string, unknown>
+  ): OpenAI.Chat.Completions.ChatCompletionCreateParams {
     // Validate required fields
     if (typeof params.model !== 'string') {
       throw new Error('Invalid params: model must be a string');
@@ -1228,12 +1276,12 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (!Array.isArray(params.messages)) {
       throw new Error('Invalid params: messages must be an array');
     }
-    
+
     const validated: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
       model: params.model,
       messages: params.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     };
-    
+
     // Add optional fields only if they are valid
     if (params.temperature !== undefined && typeof params.temperature === 'number') {
       validated.temperature = params.temperature;
@@ -1248,17 +1296,23 @@ export class OpenAIAdapter extends ProviderAdapter {
       validated.presence_penalty = params.presence_penalty;
     }
     if (params.stop !== undefined && params.stop !== null) {
-      if (typeof params.stop === 'string' || (Array.isArray(params.stop) && params.stop.every((s) => typeof s === 'string'))) {
+      if (
+        typeof params.stop === 'string' ||
+        (Array.isArray(params.stop) && params.stop.every((s) => typeof s === 'string'))
+      ) {
         validated.stop = params.stop;
       }
     }
     if (params.max_tokens !== undefined && typeof params.max_tokens === 'number') {
       validated.max_tokens = params.max_tokens;
     }
-    if (params.max_completion_tokens !== undefined && typeof params.max_completion_tokens === 'number') {
+    if (
+      params.max_completion_tokens !== undefined &&
+      typeof params.max_completion_tokens === 'number'
+    ) {
       validated.max_completion_tokens = params.max_completion_tokens;
     }
-    
+
     return validated;
   }
 
@@ -1276,7 +1330,7 @@ export class OpenAIAdapter extends ProviderAdapter {
       model: params.model,
       input: params.input,
     };
-    
+
     // Add optional fields only if they are valid
     // Note: ResponseCreateParams only supports temperature, top_p, max_output_tokens, and tools
     if (params.temperature !== undefined && typeof params.temperature === 'number') {
@@ -1291,14 +1345,16 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (params.tools !== undefined && params.tools !== null && Array.isArray(params.tools)) {
       validated.tools = params.tools;
     }
-    
+
     return validated;
   }
 
   /**
    * Helper function to safely convert params to ImageGenerateParams
    */
-  private toImageGenerateParams(params: Record<string, unknown>): OpenAI.Images.ImageGenerateParams {
+  private toImageGenerateParams(
+    params: Record<string, unknown>
+  ): OpenAI.Images.ImageGenerateParams {
     if (typeof params.model !== 'string') {
       throw new Error('Invalid params: model must be a string');
     }
@@ -1309,11 +1365,20 @@ export class OpenAIAdapter extends ProviderAdapter {
       model: params.model,
       prompt: params.prompt,
     };
-    
+
     // Add optional fields only if they are valid with proper type literals
     if (params.size !== undefined && typeof params.size === 'string') {
       const sizeValue = params.size;
-      if (sizeValue === '1024x1024' || sizeValue === '256x256' || sizeValue === '1536x1024' || sizeValue === '1024x1536' || sizeValue === '512x512' || sizeValue === '1792x1024' || sizeValue === '1024x1792' || sizeValue === 'auto') {
+      if (
+        sizeValue === '1024x1024' ||
+        sizeValue === '256x256' ||
+        sizeValue === '1536x1024' ||
+        sizeValue === '1024x1536' ||
+        sizeValue === '512x512' ||
+        sizeValue === '1792x1024' ||
+        sizeValue === '1024x1792' ||
+        sizeValue === 'auto'
+      ) {
         validated.size = sizeValue;
       }
     }
@@ -1322,7 +1387,14 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
     if (params.quality !== undefined && typeof params.quality === 'string') {
       const qualityValue = params.quality;
-      if (qualityValue === 'low' || qualityValue === 'high' || qualityValue === 'auto' || qualityValue === 'medium' || qualityValue === 'standard' || qualityValue === 'hd') {
+      if (
+        qualityValue === 'low' ||
+        qualityValue === 'high' ||
+        qualityValue === 'auto' ||
+        qualityValue === 'medium' ||
+        qualityValue === 'standard' ||
+        qualityValue === 'hd'
+      ) {
         validated.quality = qualityValue;
       }
     }
@@ -1338,14 +1410,16 @@ export class OpenAIAdapter extends ProviderAdapter {
         validated.response_format = formatValue;
       }
     }
-    
+
     return validated;
   }
 
   /**
    * Helper function to safely convert params to EmbeddingCreateParams
    */
-  private toEmbeddingParams(params: Record<string, unknown>): OpenAI.Embeddings.EmbeddingCreateParams {
+  private toEmbeddingParams(
+    params: Record<string, unknown>
+  ): OpenAI.Embeddings.EmbeddingCreateParams {
     if (typeof params.model !== 'string') {
       throw new Error('Invalid params: model must be a string');
     }
@@ -1370,12 +1444,12 @@ export class OpenAIAdapter extends ProviderAdapter {
         }
       }
     }
-    
+
     const validated: OpenAI.Embeddings.EmbeddingCreateParams = {
       model: params.model,
       input: inputValue,
     };
-    
+
     // Add optional fields only if they are valid
     if (params.encoding_format !== undefined && typeof params.encoding_format === 'string') {
       const formatValue = params.encoding_format;
@@ -1386,7 +1460,7 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (params.dimensions !== undefined && typeof params.dimensions === 'number') {
       validated.dimensions = params.dimensions;
     }
-    
+
     return validated;
   }
 
@@ -1404,31 +1478,40 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (params.voice === undefined || typeof params.voice !== 'string') {
       throw new Error('Invalid params: voice is required and must be a string');
     }
-    
+
     const validated: OpenAI.Audio.Speech.SpeechCreateParams = {
       model: params.model,
       input: params.input,
       voice: params.voice,
     };
-    
+
     // Add optional fields only if they are valid
     if (params.response_format !== undefined && typeof params.response_format === 'string') {
       const formatValue = params.response_format;
-      if (formatValue === 'mp3' || formatValue === 'wav' || formatValue === 'aac' || formatValue === 'flac' || formatValue === 'opus' || formatValue === 'pcm') {
+      if (
+        formatValue === 'mp3' ||
+        formatValue === 'wav' ||
+        formatValue === 'aac' ||
+        formatValue === 'flac' ||
+        formatValue === 'opus' ||
+        formatValue === 'pcm'
+      ) {
         validated.response_format = formatValue;
       }
     }
     if (params.speed !== undefined && typeof params.speed === 'number') {
       validated.speed = params.speed;
     }
-    
+
     return validated;
   }
 
   /**
    * Helper function to safely convert params to TranscriptionCreateParams
    */
-  private toTranscriptionParams(params: Record<string, unknown>): OpenAI.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming {
+  private toTranscriptionParams(
+    params: Record<string, unknown>
+  ): OpenAI.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming {
     if (typeof params.model !== 'string') {
       throw new Error('Invalid params: model must be a string');
     }
@@ -1436,20 +1519,20 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (!params.file || (typeof params.file !== 'object' && typeof params.file !== 'string')) {
       throw new Error('Invalid params: file must be a File, Blob, or Buffer object');
     }
-    
+
     // Check if it's a File-like object
     const fileValue = params.file;
     if (typeof fileValue === 'string') {
       throw new Error('Invalid params: file must be a File, Blob, or Buffer object, not a string');
     }
-    
+
     // Ensure non-streaming params
     const validated: OpenAI.Audio.Transcriptions.TranscriptionCreateParamsNonStreaming = {
       model: params.model,
       file: fileValue as File,
       stream: false,
     };
-    
+
     // Add optional fields only if they are valid
     if (params.language !== undefined && typeof params.language === 'string') {
       validated.language = params.language;
@@ -1460,14 +1543,20 @@ export class OpenAIAdapter extends ProviderAdapter {
     if (params.response_format !== undefined && typeof params.response_format === 'string') {
       // AudioResponseFormat can be 'json', 'text', 'srt', 'verbose_json', 'vtt'
       const formatValue = params.response_format;
-      if (formatValue === 'json' || formatValue === 'text' || formatValue === 'srt' || formatValue === 'verbose_json' || formatValue === 'vtt') {
+      if (
+        formatValue === 'json' ||
+        formatValue === 'text' ||
+        formatValue === 'srt' ||
+        formatValue === 'verbose_json' ||
+        formatValue === 'vtt'
+      ) {
         validated.response_format = formatValue;
       }
     }
     if (params.temperature !== undefined && typeof params.temperature === 'number') {
       validated.temperature = params.temperature;
     }
-    
+
     return validated;
   }
 
@@ -1481,7 +1570,9 @@ export class OpenAIAdapter extends ProviderAdapter {
     switch (endpoint) {
       case 'chat_completions':
       case 'chat_completions_special':
-        return await this.getRequestClient().chat.completions.create(this.toChatCompletionParams(params));
+        return await this.getRequestClient().chat.completions.create(
+          this.toChatCompletionParams(params)
+        );
 
       case 'responses':
         return await this.getRequestClient().responses.create(this.toResponseParams(params));
@@ -1498,12 +1589,16 @@ export class OpenAIAdapter extends ProviderAdapter {
         const hasSpeechPayload = 'input' in params || 'voice' in params;
 
         if (hasTranscriptionPayload) {
-          return await this.getRequestClient().audio.transcriptions.create(this.toTranscriptionParams(params));
+          return await this.getRequestClient().audio.transcriptions.create(
+            this.toTranscriptionParams(params)
+          );
         }
         if (hasSpeechPayload) {
           return await this.getRequestClient().audio.speech.create(this.toSpeechParams(params));
         }
-        throw new Error('Unsupported audio payload: expected speech (input/voice) or transcription (file/audio)');
+        throw new Error(
+          'Unsupported audio payload: expected speech (input/voice) or transcription (file/audio)'
+        );
       }
 
       case 'videos':
@@ -1516,13 +1611,17 @@ export class OpenAIAdapter extends ProviderAdapter {
 
       case 'chat_completions_audio':
         // Audio content models - may fail with dummy data but API is accessible
-        return await this.getRequestClient().chat.completions.create(this.toChatCompletionParams(params));
+        return await this.getRequestClient().chat.completions.create(
+          this.toChatCompletionParams(params)
+        );
 
       case 'computer_use':
         // Computer use API - REAL IMPLEMENTATION
         // Computer use models use chat completions API with special parameters
         // They can interact with computer interfaces (screens, keyboards, etc.)
-        return await this.getRequestClient().chat.completions.create(this.toChatCompletionParams(params));
+        return await this.getRequestClient().chat.completions.create(
+          this.toChatCompletionParams(params)
+        );
 
       default:
         throw new Error(`Unsupported endpoint: ${endpoint}`);
@@ -1535,8 +1634,9 @@ export class OpenAIAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -1559,7 +1659,7 @@ export class OpenAIAdapter extends ProviderAdapter {
 
     const models = await this.getModels();
     // Map using model.name (without provider prefix) instead of model.id
-    const modelMap = new Map(models.map(m => [m.name.toLowerCase(), m.name]));
+    const modelMap = new Map(models.map((m) => [m.name.toLowerCase(), m.name]));
     const lookupCandidates = [modelId, modelIdWithoutProviderPrefix];
 
     // Try exact match first (with and without provider prefix)
@@ -1593,7 +1693,10 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
 
     // Return as-is if no match (let provider handle it or fail gracefully)
-    this.providerLog.warn({ modelId, availableModels: Array.from(modelMap.keys()) }, 'Model not found in available models');
+    this.providerLog.warn(
+      { modelId, availableModels: Array.from(modelMap.keys()) },
+      'Model not found in available models'
+    );
     return modelId;
   }
 
@@ -1638,16 +1741,28 @@ export class OpenAIAdapter extends ProviderAdapter {
     return String(lastUserMessage.content || 'Hello');
   }
 
-  private async convertMessages(messages: ChatMessage[], model: string): Promise<ChatCompletionMessageParam[]> {
+  private async convertMessages(
+    messages: ChatMessage[],
+    model: string
+  ): Promise<ChatCompletionMessageParam[]> {
     const requiresStructuredContent = await this.requiresStructuredContent(model);
 
     return messages.map((msg): ChatCompletionMessageParam => {
       // Handle array content (multimodal)
       if (Array.isArray(msg.content)) {
         const content = msg.content.map((item) => {
-          if (item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
+          if (
+            item.type === 'text' &&
+            'text' in item &&
+            typeof (item as { text: unknown }).text === 'string'
+          ) {
             return { type: 'text' as const, text: (item as { text: string }).text };
-          } else if (item.type === 'image_url' && 'image_url' in item && typeof (item as { image_url: unknown }).image_url === 'object' && item.image_url !== null) {
+          } else if (
+            item.type === 'image_url' &&
+            'image_url' in item &&
+            typeof (item as { image_url: unknown }).image_url === 'object' &&
+            item.image_url !== null
+          ) {
             const imageUrl = item.image_url as { url: string; detail?: 'low' | 'high' | 'auto' };
             return {
               type: 'image_url' as const,
@@ -1670,18 +1785,24 @@ export class OpenAIAdapter extends ProviderAdapter {
         } else if (msg.role === 'assistant') {
           // Assistant messages can only have text content, not images
           // Filter to only text parts and convert to string or array of text parts
-          const assistantContentParts = content.filter((c): c is OpenAI.Chat.Completions.ChatCompletionContentPartText => {
-            return c.type === 'text' && 'text' in c && typeof (c as { text: unknown }).text === 'string';
-          }).map((c) => ({ type: 'text' as const, text: (c as { text: string }).text }));
-          
+          const assistantContentParts = content
+            .filter((c): c is OpenAI.Chat.Completions.ChatCompletionContentPartText => {
+              return (
+                c.type === 'text' &&
+                'text' in c &&
+                typeof (c as { text: unknown }).text === 'string'
+              );
+            })
+            .map((c) => ({ type: 'text' as const, text: (c as { text: string }).text }));
+
           // Use string if original was string, otherwise use filtered array
-          const assistantContent: string | OpenAI.Chat.Completions.ChatCompletionContentPartText[] = 
-            typeof msg.content === 'string' 
-              ? msg.content 
-              : assistantContentParts.length > 0 
-                ? assistantContentParts 
+          const assistantContent: string | OpenAI.Chat.Completions.ChatCompletionContentPartText[] =
+            typeof msg.content === 'string'
+              ? msg.content
+              : assistantContentParts.length > 0
+                ? assistantContentParts
                 : '';
-          
+
           const assistantMessage: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam = {
             role: 'assistant',
             content: assistantContent,
@@ -1695,20 +1816,22 @@ export class OpenAIAdapter extends ProviderAdapter {
           return assistantMessage;
         } else if (msg.role === 'system') {
           // System messages require string content, not array
-          const systemContent = content
-            .map((c) => ('text' in c && typeof c.text === 'string' ? c.text : ''))
-            .filter((s: string): s is string => s.length > 0)
-            .join('\n') || '';
+          const systemContent =
+            content
+              .map((c) => ('text' in c && typeof c.text === 'string' ? c.text : ''))
+              .filter((s: string): s is string => s.length > 0)
+              .join('\n') || '';
           return {
             role: 'system',
             content: systemContent,
           } satisfies OpenAI.Chat.Completions.ChatCompletionSystemMessageParam;
         } else if (msg.role === 'tool') {
           // Tool messages require string content, not array
-          const toolContent = content
-            .map((c) => ('text' in c && typeof c.text === 'string' ? c.text : ''))
-            .filter((s: string): s is string => s.length > 0)
-            .join('\n') || '';
+          const toolContent =
+            content
+              .map((c) => ('text' in c && typeof c.text === 'string' ? c.text : ''))
+              .filter((s: string): s is string => s.length > 0)
+              .join('\n') || '';
           return {
             role: 'tool',
             content: toolContent,
@@ -1729,24 +1852,31 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       // Handle string content
-      const stringContent = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
-      
+      const stringContent =
+        typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
+
       if (msg.role === 'user') {
         return {
           role: 'user',
-          content: requiresStructuredContent ? [{ type: 'text', text: stringContent }] : stringContent,
+          content: requiresStructuredContent
+            ? [{ type: 'text', text: stringContent }]
+            : stringContent,
         };
       } else if (msg.role === 'assistant') {
         return {
           role: 'assistant',
-          content: requiresStructuredContent ? [{ type: 'text', text: stringContent }] : stringContent,
+          content: requiresStructuredContent
+            ? [{ type: 'text', text: stringContent }]
+            : stringContent,
           ...(msg.name && { name: msg.name }),
           ...(msg.tool_calls && { tool_calls: msg.tool_calls }),
         };
       } else if (msg.role === 'system') {
         return {
           role: 'system',
-          content: requiresStructuredContent ? [{ type: 'text', text: stringContent }] : stringContent,
+          content: requiresStructuredContent
+            ? [{ type: 'text', text: stringContent }]
+            : stringContent,
         };
       } else if (msg.role === 'tool') {
         return {
@@ -1761,11 +1891,13 @@ export class OpenAIAdapter extends ProviderAdapter {
           name: msg.name || '',
         };
       }
-      
+
       // Default to user
       return {
         role: 'user',
-        content: requiresStructuredContent ? [{ type: 'text', text: stringContent }] : stringContent,
+        content: requiresStructuredContent
+          ? [{ type: 'text', text: stringContent }]
+          : stringContent,
       };
     });
   }
@@ -1780,7 +1912,11 @@ export class OpenAIAdapter extends ProviderAdapter {
     try {
       const models = await this.getModels();
       const normalized = modelId.toLowerCase();
-      return models.find(m => m.name.toLowerCase() === normalized || m.id.toLowerCase() === normalized) || null;
+      return (
+        models.find(
+          (m) => m.name.toLowerCase() === normalized || m.id.toLowerCase() === normalized
+        ) || null
+      );
     } catch {
       return null;
     }
@@ -1792,7 +1928,7 @@ export class OpenAIAdapter extends ProviderAdapter {
    */
   private async isChatCompletionModel(modelId: string): Promise<boolean> {
     const modelObj = await this.getModelObject(modelId);
-    
+
     // If we have the model object, use capabilities (preferred method)
     if (modelObj) {
       // Check if model has chat capability
@@ -1801,21 +1937,21 @@ export class OpenAIAdapter extends ProviderAdapter {
         // These capabilities indicate the model is NOT primarily for chat
         const exclusiveNonChatCapabilities: ModelCapability[] = [
           'text_to_speech',
-          'speech_to_text', 
+          'speech_to_text',
           'image_generation',
           'video_generation',
           'realtime_audio',
           'computer_use',
         ];
-        const hasExclusiveNonChat = exclusiveNonChatCapabilities.some(cap => 
+        const hasExclusiveNonChat = exclusiveNonChatCapabilities.some((cap) =>
           modelObj.capabilities.includes(cap)
         );
-        
+
         // If model has exclusive non-chat capability and no other chat-related capabilities, exclude
         if (hasExclusiveNonChat) {
           // Allow if model also has other chat-related capabilities
-          const hasOtherChatCapability = modelObj.capabilities.some(cap => 
-            cap === 'text_generation' || cap === 'function_calling' || cap === 'tool_use'
+          const hasOtherChatCapability = modelObj.capabilities.some(
+            (cap) => cap === 'text_generation' || cap === 'function_calling' || cap === 'tool_use'
           );
           return hasOtherChatCapability;
         }
@@ -1826,7 +1962,14 @@ export class OpenAIAdapter extends ProviderAdapter {
 
     // Fallback: infer based on resolved endpoint for this model identifier.
     const endpoint = await this.getModelEndpoint(modelId);
-    const nonChatEndpoints = new Set(['images', 'embeddings', 'videos', 'audio', 'realtime', 'computer_use']);
+    const nonChatEndpoints = new Set([
+      'images',
+      'embeddings',
+      'videos',
+      'audio',
+      'realtime',
+      'computer_use',
+    ]);
     return !nonChatEndpoints.has(endpoint);
   }
 
@@ -1844,9 +1987,10 @@ export class OpenAIAdapter extends ProviderAdapter {
     const modelObj = await this.getModelObject(modelId);
     if (!modelObj) return false;
 
-    const meta = (modelObj.metadata && typeof modelObj.metadata === 'object')
-      ? (modelObj.metadata as Record<string, unknown>)
-      : {};
+    const meta =
+      modelObj.metadata && typeof modelObj.metadata === 'object'
+        ? (modelObj.metadata as Record<string, unknown>)
+        : {};
 
     // 1. Explicit metadata flag (set by discovery fetchers)
     if (typeof meta.uses_max_completion_tokens === 'boolean') {
@@ -1854,12 +1998,14 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
 
     // 2. supported_parameters from provider API (OpenRouter, hub fetchers extract this)
-    const supportedParams = Array.isArray(meta.supported_parameters) ? meta.supported_parameters as string[] : [];
+    const supportedParams = Array.isArray(meta.supported_parameters)
+      ? (meta.supported_parameters as string[])
+      : [];
     if (supportedParams.includes('max_completion_tokens')) return true;
 
     // 3. Capability inference: advanced reasoning models use max_completion_tokens
     const advancedCapabilities: ModelCapability[] = ['deep_research', 'reasoning', 'thinking_mode'];
-    if (advancedCapabilities.some(cap => modelObj.capabilities.includes(cap))) return true;
+    if (advancedCapabilities.some((cap) => modelObj.capabilities.includes(cap))) return true;
 
     // 4. Responses API endpoint uses max_output_tokens (equivalent)
     const endpoint = await this.getModelEndpoint(modelId, modelObj);
@@ -1889,17 +2035,18 @@ export class OpenAIAdapter extends ProviderAdapter {
    */
   private async requiresStructuredContent(modelId: string): Promise<boolean> {
     const modelObj = await this.getModelObject(modelId);
-    
+
     // If we have the model object, use metadata or infer from capabilities (preferred method)
     if (modelObj) {
       // Check metadata first
       if (modelObj.metadata && typeof modelObj.metadata === 'object') {
-        const requiresStructured = (modelObj.metadata as Record<string, unknown>).requires_structured_content;
+        const requiresStructured = (modelObj.metadata as Record<string, unknown>)
+          .requires_structured_content;
         if (typeof requiresStructured === 'boolean') {
           return requiresStructured;
         }
       }
-      
+
       // Infer from capabilities: models with advanced capabilities often require structured content
       // This is a dynamic inference based on capabilities, not hardcoded model names
       const structuredContentCapabilities: ModelCapability[] = [
@@ -1908,7 +2055,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         'deep_research',
         'realtime_audio',
       ];
-      return structuredContentCapabilities.some(cap => modelObj.capabilities.includes(cap));
+      return structuredContentCapabilities.some((cap) => modelObj.capabilities.includes(cap));
     }
 
     // Fallback: No model object available - default to false (most models don't require structured content)
@@ -1982,7 +2129,10 @@ export class OpenAIAdapter extends ProviderAdapter {
   /**
    * Convert OpenAI response to our format
    */
-  private convertResponse(response: OpenAI.Chat.Completions.ChatCompletion, requestedModel: string): ChatResponse {
+  private convertResponse(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+    requestedModel: string
+  ): ChatResponse {
     return {
       id: response.id,
       object: 'chat.completion',
@@ -1994,7 +2144,20 @@ export class OpenAIAdapter extends ProviderAdapter {
         if (choice.message.tool_calls && Array.isArray(choice.message.tool_calls)) {
           convertedToolCalls = choice.message.tool_calls
             .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => {
-              return typeof tc === 'object' && tc !== null && 'id' in tc && typeof tc.id === 'string' && 'type' in tc && 'function' in tc && typeof tc.function === 'object' && tc.function !== null && 'name' in tc.function && typeof (tc.function as { name: unknown }).name === 'string' && 'arguments' in tc.function && typeof (tc.function as { arguments: unknown }).arguments === 'string';
+              return (
+                typeof tc === 'object' &&
+                tc !== null &&
+                'id' in tc &&
+                typeof tc.id === 'string' &&
+                'type' in tc &&
+                'function' in tc &&
+                typeof tc.function === 'object' &&
+                tc.function !== null &&
+                'name' in tc.function &&
+                typeof (tc.function as { name: unknown }).name === 'string' &&
+                'arguments' in tc.function &&
+                typeof (tc.function as { arguments: unknown }).arguments === 'string'
+              );
             })
             .map((tc) => ({
               id: tc.id,
@@ -2007,10 +2170,10 @@ export class OpenAIAdapter extends ProviderAdapter {
         }
 
         // Map finish_reason - OpenAI can return 'function_call' which we map to 'tool_calls'
-        const finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = 
-          choice.finish_reason === 'stop' || 
-          choice.finish_reason === 'length' || 
-          choice.finish_reason === 'tool_calls' || 
+        const finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null =
+          choice.finish_reason === 'stop' ||
+          choice.finish_reason === 'length' ||
+          choice.finish_reason === 'tool_calls' ||
           choice.finish_reason === 'content_filter'
             ? choice.finish_reason
             : choice.finish_reason === 'function_call'
@@ -2021,14 +2184,25 @@ export class OpenAIAdapter extends ProviderAdapter {
         let messageContent: string | undefined = undefined;
         if (typeof choice.message.content === 'string') {
           messageContent = choice.message.content;
-        } else if (choice.message.content !== null && choice.message.content !== undefined && Array.isArray(choice.message.content)) {
+        } else if (
+          choice.message.content !== null &&
+          choice.message.content !== undefined &&
+          Array.isArray(choice.message.content)
+        ) {
           const contentArray = choice.message.content as Array<unknown>;
           messageContent = contentArray
             .map((item: unknown): string => {
               if (typeof item === 'string') {
                 return item;
               }
-              if (item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
+              if (
+                item &&
+                typeof item === 'object' &&
+                'type' in item &&
+                item.type === 'text' &&
+                'text' in item &&
+                typeof (item as { text: unknown }).text === 'string'
+              ) {
                 return (item as { text: string }).text;
               }
               return '';
@@ -2042,7 +2216,9 @@ export class OpenAIAdapter extends ProviderAdapter {
           message: {
             role: choice.message.role,
             content: messageContent || '',
-            ...(convertedToolCalls && convertedToolCalls.length > 0 ? { tool_calls: convertedToolCalls } : {}),
+            ...(convertedToolCalls && convertedToolCalls.length > 0
+              ? { tool_calls: convertedToolCalls }
+              : {}),
           },
           finish_reason: finishReason,
           logprobs: choice.logprobs ? null : undefined,
@@ -2070,19 +2246,35 @@ export class OpenAIAdapter extends ProviderAdapter {
       choices: chunk.choices.map((choice) => {
         // Handle role conversion - OpenAI can return 'developer', we convert to 'assistant'
         const role = choice.delta.role === 'developer' ? 'assistant' : choice.delta.role;
-        const normalizedRole: 'user' | 'assistant' | 'system' = 
+        const normalizedRole: 'user' | 'assistant' | 'system' =
           role === 'user' || role === 'assistant' || role === 'system' ? role : 'assistant';
 
         // Handle tool calls with type safety
         let toolCalls: ToolCall[] | undefined = undefined;
         if (choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls)) {
-          const validToolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+          const validToolCalls: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }> = [];
           for (const tc of choice.delta.tool_calls) {
-            if (typeof tc === 'object' && tc !== null && 'id' in tc && typeof tc.id === 'string' && 'function' in tc && typeof (tc as { function: unknown }).function === 'object' && (tc as { function: unknown }).function !== null) {
+            if (
+              typeof tc === 'object' &&
+              tc !== null &&
+              'id' in tc &&
+              typeof tc.id === 'string' &&
+              'function' in tc &&
+              typeof (tc as { function: unknown }).function === 'object' &&
+              (tc as { function: unknown }).function !== null
+            ) {
               // Type guard for function property
               const tcObj = tc as { function: { name?: unknown; arguments?: unknown } };
               const func = tcObj.function;
-              if ('name' in func && typeof func.name === 'string' && 'arguments' in func && typeof func.arguments === 'string') {
+              if (
+                'name' in func &&
+                typeof func.name === 'string' &&
+                'arguments' in func &&
+                typeof func.arguments === 'string'
+              ) {
                 validToolCalls.push({
                   id: tc.id,
                   function: {
@@ -2106,12 +2298,12 @@ export class OpenAIAdapter extends ProviderAdapter {
         }
 
         // Handle finish_reason with type safety
-        const finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = 
-          choice.finish_reason === 'stop' || 
-          choice.finish_reason === 'length' || 
-          choice.finish_reason === 'tool_calls' || 
-          choice.finish_reason === 'content_filter' 
-            ? choice.finish_reason 
+        const finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null =
+          choice.finish_reason === 'stop' ||
+          choice.finish_reason === 'length' ||
+          choice.finish_reason === 'tool_calls' ||
+          choice.finish_reason === 'content_filter'
+            ? choice.finish_reason
             : null;
 
         const chatChoice: ChatChoice = {
@@ -2125,7 +2317,7 @@ export class OpenAIAdapter extends ProviderAdapter {
           logprobs: null,
         };
         return chatChoice;
-      })
+      }),
     };
   }
 
@@ -2134,7 +2326,9 @@ export class OpenAIAdapter extends ProviderAdapter {
    */
   private convertError(error: unknown): Error {
     // Check if it's an APIError (duck typing for better compatibility with mocks)
-    function isAPIError(err: unknown): err is { message?: string; status?: number; code?: string; type?: string; name?: string } {
+    function isAPIError(
+      err: unknown
+    ): err is { message?: string; status?: number; code?: string; type?: string; name?: string } {
       if (typeof err !== 'object' || err === null) {
         return false;
       }
@@ -2142,19 +2336,26 @@ export class OpenAIAdapter extends ProviderAdapter {
       let hasStatus = false;
       let hasName = false;
       let hasConstructorName = false;
-      
+
       if (typeof err === 'object' && err !== null) {
         const statusDescriptor = Object.getOwnPropertyDescriptor(err, 'status');
         hasStatus = statusDescriptor !== undefined;
-        
+
         const nameDescriptor = Object.getOwnPropertyDescriptor(err, 'name');
         if (nameDescriptor && typeof nameDescriptor.value === 'string') {
           hasName = nameDescriptor.value === 'APIError';
         }
-        
+
         const constructorDescriptor = Object.getOwnPropertyDescriptor(err, 'constructor');
-        if (constructorDescriptor && constructorDescriptor.value && typeof constructorDescriptor.value === 'object') {
-          const constructorNameDescriptor = Object.getOwnPropertyDescriptor(constructorDescriptor.value, 'name');
+        if (
+          constructorDescriptor &&
+          constructorDescriptor.value &&
+          typeof constructorDescriptor.value === 'object'
+        ) {
+          const constructorNameDescriptor = Object.getOwnPropertyDescriptor(
+            constructorDescriptor.value,
+            'name'
+          );
           if (constructorNameDescriptor && typeof constructorNameDescriptor.value === 'string') {
             hasConstructorName = constructorNameDescriptor.value === 'APIError';
           }
@@ -2192,16 +2393,19 @@ export class OpenAIAdapter extends ProviderAdapter {
   private async isRealtimeModel(model: string): Promise<boolean> {
     try {
       const models = await this.getModels();
-      const foundModel = models.find(m => 
-        m.name === model || 
-        m.id === model ||
-        m.name.toLowerCase().includes(model.toLowerCase()) ||
-        m.id.toLowerCase().includes(model.toLowerCase())
+      const foundModel = models.find(
+        (m) =>
+          m.name === model ||
+          m.id === model ||
+          m.name.toLowerCase().includes(model.toLowerCase()) ||
+          m.id.toLowerCase().includes(model.toLowerCase())
       );
-      
+
       if (foundModel) {
-        return foundModel.capabilities?.includes('realtime') === true ||
-               foundModel.capabilities?.includes('realtime_audio') === true;
+        return (
+          foundModel.capabilities?.includes('realtime') === true ||
+          foundModel.capabilities?.includes('realtime_audio') === true
+        );
       }
 
       const endpoint = await this.getModelEndpoint(model);
@@ -2222,9 +2426,10 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
 
     // Filter models with realtime capability
-    const realtimeModels = models.filter(m =>
-      m.status === 'active' &&
-      (m.capabilities?.includes('realtime') || m.capabilities?.includes('realtime_audio'))
+    const realtimeModels = models.filter(
+      (m) =>
+        m.status === 'active' &&
+        (m.capabilities?.includes('realtime') || m.capabilities?.includes('realtime_audio'))
     );
 
     if (realtimeModels.length === 0) {
@@ -2233,7 +2438,7 @@ export class OpenAIAdapter extends ProviderAdapter {
 
     // Select first available realtime model (sorted by cost if available)
     const sortedByCost = realtimeModels
-      .filter(m => m.inputCostPer1k > 0)
+      .filter((m) => m.inputCostPer1k > 0)
       .sort((a, b) => a.inputCostPer1k - b.inputCostPer1k);
 
     const selectedModel = sortedByCost.length > 0 ? sortedByCost[0] : realtimeModels[0];
@@ -2250,7 +2455,7 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
 
     // Get model dynamically if not specified
-    const modelToUse = request.model || await this.getDefaultRealtimeModel();
+    const modelToUse = request.model || (await this.getDefaultRealtimeModel());
     const normalizedModel = await this.normalizeModelName(modelToUse);
 
     // Connect to realtime session
@@ -2352,7 +2557,10 @@ export class OpenAIAdapter extends ProviderAdapter {
       return response;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.providerLog.error('Realtime chat completion failed', { error: errorMessage, model: normalizedModel });
+      this.providerLog.error('Realtime chat completion failed', {
+        error: errorMessage,
+        model: normalizedModel,
+      });
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -2365,14 +2573,19 @@ export class OpenAIAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     try {
-      this.providerLog.debug({ model: model.name, textLength: request.text.length, voice: request.voice }, 'Starting TTS request');
+      this.providerLog.debug(
+        { model: model.name, textLength: request.text.length, voice: request.voice },
+        'Starting TTS request'
+      );
 
       // Call OpenAI TTS API
       const response = await this.getRequestClient().audio.speech.create({
         model: model.name, // e.g., 'tts-1' or 'tts-1-hd'
         input: request.text,
-        voice: (request.voice || 'alloy') as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
-        response_format: (request.format || 'mp3') as 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm',
+        voice: (request.voice || 'alloy') as
+          'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+        response_format: (request.format || 'mp3') as
+          'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm',
         speed: typeof request.options?.speed === 'number' ? request.options.speed : 1.0,
       });
 
@@ -2383,12 +2596,12 @@ export class OpenAIAdapter extends ProviderAdapter {
       const latency = Date.now() - startTime;
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           audioSize: audioBuffer.length,
           format: request.format || 'mp3',
-        }, 
+        },
         'TTS request completed'
       );
 
@@ -2400,13 +2613,13 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'TTS request failed'
       );
 
@@ -2422,7 +2635,10 @@ export class OpenAIAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     try {
-      this.providerLog.debug({ model: model.name, audioSize: request.audio.length, language: request.language }, 'Starting STT request');
+      this.providerLog.debug(
+        { model: model.name, audioSize: request.audio.length, language: request.language },
+        'Starting STT request'
+      );
 
       // Create File object from Buffer for OpenAI API
       const blob = new Blob([new Uint8Array(request.audio)], { type: 'audio/mpeg' });
@@ -2434,12 +2650,14 @@ export class OpenAIAdapter extends ProviderAdapter {
         model: model.name, // e.g., 'whisper-1'
         language: request.language,
         prompt: request.options?.prompt as string | undefined,
-        response_format: (request.options?.responseFormat as 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt') || 'json',
+        response_format:
+          (request.options?.responseFormat as 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt') ||
+          'json',
         temperature: request.options?.temperature as number | undefined,
       });
 
       const latency = Date.now() - startTime;
-      
+
       // Calculate transcription length based on response type
       // OpenAI API returns object with text property when response_format is 'json' (default)
       let transcriptionLength = 0;
@@ -2452,11 +2670,11 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           transcriptionLength,
-        }, 
+        },
         'STT request completed'
       );
 
@@ -2478,13 +2696,13 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'STT request failed'
       );
 
@@ -2524,18 +2742,12 @@ export class OpenAIAdapter extends ProviderAdapter {
           },
         ],
         temperature:
-          typeof request.options?.temperature === 'number'
-            ? request.options.temperature
-            : 0.2,
+          typeof request.options?.temperature === 'number' ? request.options.temperature : 0.2,
         max_tokens:
-          typeof request.options?.max_tokens === 'number'
-            ? request.options.max_tokens
-            : 1024,
+          typeof request.options?.max_tokens === 'number' ? request.options.max_tokens : 1024,
       });
 
-      const content = this.extractTextFromChatContent(
-        response.choices?.[0]?.message?.content
-      );
+      const content = this.extractTextFromChatContent(response.choices?.[0]?.message?.content);
 
       this.providerLog.info(
         {
@@ -2581,9 +2793,7 @@ export class OpenAIAdapter extends ProviderAdapter {
               type: 'web_search_preview',
               web_search_preview: {
                 max_results:
-                  typeof request.maxResults === 'number'
-                    ? Math.max(1, request.maxResults)
-                    : 5,
+                  typeof request.maxResults === 'number' ? Math.max(1, request.maxResults) : 5,
               },
             },
           ],
@@ -2591,9 +2801,7 @@ export class OpenAIAdapter extends ProviderAdapter {
       }, 'web search');
 
       const normalized = this.convertResponsesToChatCompletion(rawResponse, normalizedModel);
-      const content = this.extractTextFromChatContent(
-        normalized.choices?.[0]?.message?.content
-      );
+      const content = this.extractTextFromChatContent(normalized.choices?.[0]?.message?.content);
 
       this.providerLog.info(
         {
@@ -2640,14 +2848,18 @@ export class OpenAIAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     try {
-      this.providerLog.debug({ model: model.name, promptLength: request.prompt.length, size: request.size }, 'Starting image generation request');
+      this.providerLog.debug(
+        { model: model.name, promptLength: request.prompt.length, size: request.size },
+        'Starting image generation request'
+      );
 
       // Call OpenAI Image Generation API
       const response = await this.getRequestClient().images.generate({
         model: model.name,
         prompt: request.prompt,
         n: request.options?.n as number | undefined,
-        size: request.size as '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792' | undefined,
+        size: request.size as
+          '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792' | undefined,
         quality: request.options?.quality as 'standard' | 'hd' | undefined,
         response_format: request.options?.responseFormat as 'url' | 'b64_json' | undefined,
         style: request.options?.style as 'vivid' | 'natural' | undefined,
@@ -2671,7 +2883,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         const imageResponse = await fetch(firstImage.url);
         const arrayBuffer = await imageResponse.arrayBuffer();
         imageBuffer = Buffer.from(arrayBuffer);
-        
+
         // Detect format from content-type or URL
         const contentType = imageResponse.headers.get('content-type');
         if (contentType?.includes('png')) format = 'png';
@@ -2682,12 +2894,12 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           imageSize: imageBuffer.length,
           format,
-        }, 
+        },
         'Image generation completed'
       );
 
@@ -2703,13 +2915,13 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'Image generation failed'
       );
 
@@ -2727,14 +2939,23 @@ export class OpenAIAdapter extends ProviderAdapter {
 
     try {
       this.providerLog.debug(
-        { model: model.name, promptLength: request.prompt.length, hasMask: !!request.mask, size: request.size },
+        {
+          model: model.name,
+          promptLength: request.prompt.length,
+          hasMask: !!request.mask,
+          size: request.size,
+        },
         'Starting image edit request'
       );
 
       // OpenAI Images API requires File objects for image and mask
       // Convert Buffers to File-like objects
-      const imageFile = new File([new Uint8Array(request.image)], 'image.png', { type: 'image/png' });
-      const maskFile = request.mask ? new File([new Uint8Array(request.mask)], 'mask.png', { type: 'image/png' }) : undefined;
+      const imageFile = new File([new Uint8Array(request.image)], 'image.png', {
+        type: 'image/png',
+      });
+      const maskFile = request.mask
+        ? new File([new Uint8Array(request.mask)], 'mask.png', { type: 'image/png' })
+        : undefined;
 
       // Call OpenAI Image Edit API
       const response = await this.getRequestClient().images.edit({
@@ -2764,7 +2985,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         const imageResponse = await fetch(firstImage.url);
         const arrayBuffer = await imageResponse.arrayBuffer();
         imageBuffer = Buffer.from(arrayBuffer);
-        
+
         // Detect format from content-type or URL
         const contentType = imageResponse.headers.get('content-type');
         if (contentType?.includes('png')) format = 'png';
@@ -2775,12 +2996,12 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           imageSize: imageBuffer.length,
           format,
-        }, 
+        },
         'Image edit completed'
       );
 
@@ -2795,13 +3016,13 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'Image edit failed'
       );
 
@@ -2814,7 +3035,10 @@ export class OpenAIAdapter extends ProviderAdapter {
    * Creates variations of an image using OpenAI Images API
    * Supports any OpenAI model with image variation capabilities
    */
-  async imageVariation(model: Model, request: ImageVariationRequest): Promise<ImageVariationResponse> {
+  async imageVariation(
+    model: Model,
+    request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
     const startTime = Date.now();
 
     try {
@@ -2824,7 +3048,9 @@ export class OpenAIAdapter extends ProviderAdapter {
       );
 
       // OpenAI Images API requires File object for image
-      const imageFile = new File([new Uint8Array(request.image)], 'image.png', { type: 'image/png' });
+      const imageFile = new File([new Uint8Array(request.image)], 'image.png', {
+        type: 'image/png',
+      });
 
       // Call OpenAI Image Variation API
       const response = await this.getRequestClient().images.createVariation({
@@ -2852,7 +3078,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         const imageResponse = await fetch(firstImage.url);
         const arrayBuffer = await imageResponse.arrayBuffer();
         imageBuffer = Buffer.from(arrayBuffer);
-        
+
         // Detect format from content-type or URL
         const contentType = imageResponse.headers.get('content-type');
         if (contentType?.includes('png')) format = 'png';
@@ -2863,12 +3089,12 @@ export class OpenAIAdapter extends ProviderAdapter {
       }
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           imageSize: imageBuffer.length,
           format,
-        }, 
+        },
         'Image variation completed'
       );
 
@@ -2883,13 +3109,13 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'Image variation failed'
       );
 
@@ -2966,7 +3192,14 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
   }
 
-  private sanitizeRequest(request: ChatRequest): { model: string; messageCount: number; temperature?: number; max_tokens?: number; stream?: boolean; toolCount: number } {
+  private sanitizeRequest(request: ChatRequest): {
+    model: string;
+    messageCount: number;
+    temperature?: number;
+    max_tokens?: number;
+    stream?: boolean;
+    toolCount: number;
+  } {
     return {
       model: request.model || 'unknown',
       messageCount: request.messages.length,
@@ -2983,7 +3216,7 @@ export class OpenAIAdapter extends ProviderAdapter {
    */
   private async generateVideoViaHTTP(params: Record<string, unknown>): Promise<unknown> {
     const startTime = Date.now();
-    
+
     try {
       // Validate required parameters
       if (typeof params.model !== 'string') {
@@ -3002,8 +3235,7 @@ export class OpenAIAdapter extends ProviderAdapter {
       const responseFormat =
         typeof params.response_format === 'string' ? params.response_format : undefined;
       const image = typeof params.image === 'string' ? params.image : undefined;
-      const startImage =
-        typeof params.start_image === 'string' ? params.start_image : undefined;
+      const startImage = typeof params.start_image === 'string' ? params.start_image : undefined;
       const endImage = typeof params.end_image === 'string' ? params.end_image : undefined;
       const audio = typeof params.audio === 'string' ? params.audio : undefined;
 
@@ -3117,7 +3349,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         throw new Error(`OpenAI Videos API error: ${errorMessage}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         data?: Array<{ url?: string; b64_json?: string }>;
         [key: string]: unknown;
       };
@@ -3133,10 +3365,7 @@ export class OpenAIAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.providerLog.error(
-        { error: errorMessage, durationMs },
-        'OpenAI Videos API call failed'
-      );
+      this.providerLog.error({ error: errorMessage, durationMs }, 'OpenAI Videos API call failed');
       throw this.convertError(error);
     }
   }

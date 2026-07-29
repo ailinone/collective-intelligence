@@ -44,17 +44,39 @@ class FakeAdapter extends ProviderAdapter {
   constructor(config: ProviderConfig) {
     super('fake-provider', 'Fake Provider', config);
   }
-  async getProvider(): Promise<Provider> { throw new Error('not used in this test'); }
-  async getModels(): Promise<Model[]> { return []; }
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('not used in this test'); }
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse, void, unknown> { throw new Error('not used in this test'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('not used in this test'); }
-  async healthCheck(): Promise<HealthCheckResult> { return { healthy: true, checkedAt: new Date() }; }
-  calculateCost(): number { return 0; }
-  normalizeModelName(modelName: string): string { return modelName; }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('not used in this test'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('not used in this test'); }
-  async moderate(): Promise<ModerationResponse> { throw new Error('not used in this test'); }
+  async getProvider(): Promise<Provider> {
+    throw new Error('not used in this test');
+  }
+  async getModels(): Promise<Model[]> {
+    return [];
+  }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('not used in this test');
+  }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse, void, unknown> {
+    throw new Error('not used in this test');
+  }
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('not used in this test');
+  }
+  async healthCheck(): Promise<HealthCheckResult> {
+    return { healthy: true, checkedAt: new Date() };
+  }
+  calculateCost(): number {
+    return 0;
+  }
+  normalizeModelName(modelName: string): string {
+    return modelName;
+  }
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('not used in this test');
+  }
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('not used in this test');
+  }
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('not used in this test');
+  }
 
   // Expose the protected mechanism for direct testing.
   public exposeGetAllApiKeys(): string[] {
@@ -119,9 +141,9 @@ describe('OpenAIAdapter account pool (reference implementation)', () => {
       apiKeyPool: ['sk-primary', 'sk-second', 'sk-third'],
       maxRetries: 0,
     });
-    const getRequestClient = (adapter as unknown as { getRequestClient: () => unknown }).getRequestClient.bind(
-      adapter
-    );
+    const getRequestClient = (
+      adapter as unknown as { getRequestClient: () => unknown }
+    ).getRequestClient.bind(adapter);
     const sequence = Array.from({ length: 6 }, () => getRequestClient());
     // Cycles with period 3: [A, B, C, A, B, C]
     expect(sequence[0]).toBe(sequence[3]);
@@ -133,9 +155,9 @@ describe('OpenAIAdapter account pool (reference implementation)', () => {
 
   it('getRequestClient always returns the same single client when no pool is configured', () => {
     const adapter = new OpenAIAdapter({ apiKey: 'sk-only', maxRetries: 0 });
-    const getRequestClient = (adapter as unknown as { getRequestClient: () => unknown }).getRequestClient.bind(
-      adapter
-    );
+    const getRequestClient = (
+      adapter as unknown as { getRequestClient: () => unknown }
+    ).getRequestClient.bind(adapter);
     const a = getRequestClient();
     const b = getRequestClient();
     expect(a).toBe(b);
@@ -144,7 +166,9 @@ describe('OpenAIAdapter account pool (reference implementation)', () => {
 
 describe('OpenAIAdapter estimateTokenCost (TPM budget feed, issue #152)', () => {
   function estimate(adapter: OpenAIAdapter, request: unknown): number {
-    return (adapter as unknown as { estimateTokenCost: (r: unknown) => number }).estimateTokenCost(request);
+    return (adapter as unknown as { estimateTokenCost: (r: unknown) => number }).estimateTokenCost(
+      request
+    );
   }
 
   it('estimates prompt tokens (~4 chars/token) plus requested max_tokens', () => {

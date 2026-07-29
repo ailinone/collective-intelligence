@@ -37,9 +37,7 @@ describe('optimizer — stops on negative/low marginal gain', () => {
       policy: { minMarginalQualityGain: 0.05, maxModels: 4 },
     });
     // Up to 2 anchors are accepted; cheap-good should be rejected for low gain.
-    const cheapRecord = plan.marginalContributions.find(
-      (m) => m.modelId === 'fx-cheap-good',
-    );
+    const cheapRecord = plan.marginalContributions.find((m) => m.modelId === 'fx-cheap-good');
     expect(cheapRecord, 'cheap-good marginal record').toBeDefined();
     expect(cheapRecord!.accepted).toBe(false);
     expect(cheapRecord!.reason).toContain('marginal_gain_below_threshold');
@@ -47,12 +45,7 @@ describe('optimizer — stops on negative/low marginal gain', () => {
 
   it('respects maxModels even if all marginal gains would be acceptable', () => {
     const plan = optimizeParetoEnsemble({
-      candidates: [
-        scorePairX(),
-        scorePairY(),
-        scoreAnchorA(),
-        scoreCheapGood(),
-      ],
+      candidates: [scorePairX(), scorePairY(), scoreAnchorA(), scoreCheapGood()],
       taskType: 'code-generation',
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
@@ -63,12 +56,7 @@ describe('optimizer — stops on negative/low marginal gain', () => {
 
   it('marginal-record list never accepts more than maxModels', () => {
     const plan = optimizeParetoEnsemble({
-      candidates: [
-        scorePairX(),
-        scorePairY(),
-        scoreAnchorA(),
-        scoreCheapGood(),
-      ],
+      candidates: [scorePairX(), scorePairY(), scoreAnchorA(), scoreCheapGood()],
       taskType: 'code-generation',
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
@@ -81,12 +69,7 @@ describe('optimizer — stops on negative/low marginal gain', () => {
   it('maximises useful_models — not raw model count', () => {
     // Tight cost ceiling forces only 2 contributive models.
     const plan = optimizeParetoEnsemble({
-      candidates: [
-        scorePairX(),
-        scorePairY(),
-        scoreCheapGood(),
-        scoreAnchorA(),
-      ],
+      candidates: [scorePairX(), scorePairY(), scoreCheapGood(), scoreAnchorA()],
       taskType: 'code-generation',
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
@@ -94,7 +77,7 @@ describe('optimizer — stops on negative/low marginal gain', () => {
     });
     // Combined cost must remain low; can't add many under the tight ceiling.
     expect(plan.expectedCostUsd).toBeLessThanOrEqual(
-      STANDARD_BASELINE.singleModelCostUsd * 0.3 + 1e-9,
+      STANDARD_BASELINE.singleModelCostUsd * 0.3 + 1e-9
     );
   });
 });

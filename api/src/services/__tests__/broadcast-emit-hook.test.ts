@@ -164,7 +164,7 @@ describe('emitBroadcastTrace — enabled path', () => {
         organizationId: 'org-1',
         startedAt: new Date(),
         endedAt: new Date(),
-      }),
+      })
     ).not.toThrow();
 
     // And the rejected emit must not surface as an unhandled rejection that

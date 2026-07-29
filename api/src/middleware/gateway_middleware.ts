@@ -9,10 +9,10 @@
 
 /**
  * Shared Gateway Middleware for Fastify Applications
- * 
+ *
  * This middleware provides quota and signature validation for Fastify services.
  * The gateway (Nginx) already validates JWT authentication and adds identity headers.
- * 
+ *
  * In test/development environments without the gateway services, this middleware
  * can be configured to skip external validation via GATEWAY_MIDDLEWARE_ENABLED=false
  */
@@ -174,7 +174,11 @@ const SIGNATURE_VERIFIER_URLS = parseServiceUrls(
   process.env.SIGNATURE_VERIFIER_URLS,
   DEFAULT_SIGNATURE_VERIFIER_URLS
 );
-const QUOTA_SERVICE_TIMEOUT = clamp(parseTimeoutMs(process.env.QUOTA_SERVICE_TIMEOUT, 5000), 250, 60000);
+const QUOTA_SERVICE_TIMEOUT = clamp(
+  parseTimeoutMs(process.env.QUOTA_SERVICE_TIMEOUT, 5000),
+  250,
+  60000
+);
 const SIGNATURE_VERIFIER_TIMEOUT = clamp(
   parseTimeoutMs(process.env.SIGNATURE_VERIFIER_TIMEOUT, 5000),
   250,
@@ -203,9 +207,11 @@ const gatewayExplicitlyEnabled = process.env.GATEWAY_MIDDLEWARE_ENABLED === 'tru
 const gatewayExplicitlyDisabled = process.env.GATEWAY_MIDDLEWARE_ENABLED === 'false';
 
 // By default: enabled in production, disabled in test, optional in development
-const GATEWAY_MIDDLEWARE_ENABLED = gatewayExplicitlyEnabled ? true : 
-                                    gatewayExplicitlyDisabled ? false :
-                                    !isTestEnvironment;
+const GATEWAY_MIDDLEWARE_ENABLED = gatewayExplicitlyEnabled
+  ? true
+  : gatewayExplicitlyDisabled
+    ? false
+    : !isTestEnvironment;
 
 type UpstreamRequestOptions = {
   baseUrls: string[];
@@ -271,9 +277,11 @@ async function fetchWithFallback(
  * Extract user ID from gateway identity headers
  */
 function getUserId(request: FastifyRequest): string | null {
-  return getHeaderString(request.headers, 'x-auth-request-user') ||
-         getHeaderString(request.headers, 'x-user-id') ||
-         null;
+  return (
+    getHeaderString(request.headers, 'x-auth-request-user') ||
+    getHeaderString(request.headers, 'x-user-id') ||
+    null
+  );
 }
 
 type QuotaCheckResponse = {
@@ -346,7 +354,7 @@ export async function quotaValidationHook(
       api_key: apiKey || userId,
       route: routePath,
       method: request.method,
-      tenant_id: tenantId
+      tenant_id: tenantId,
     };
     const contextHeaders = buildCanonicalContextHeaders({
       userId: identityContext.userId ?? userId ?? undefined,
@@ -364,10 +372,10 @@ export async function quotaValidationHook(
           'Content-Type': 'application/json',
           ...contextHeaders,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       },
       timeoutMs: QUOTA_SERVICE_TIMEOUT,
-      serviceName: 'quota-service'
+      serviceName: 'quota-service',
     });
 
     if (response.status === 200) {
@@ -378,7 +386,7 @@ export async function quotaValidationHook(
         request.log.error({ parseError, baseUrl }, 'Quota service returned non-JSON payload');
         reply.code(503).send({
           error: 'quota_service_invalid_response',
-          message: 'Quota validation service returned invalid response'
+          message: 'Quota validation service returned invalid response',
         });
         return;
       }
@@ -387,7 +395,7 @@ export async function quotaValidationHook(
         request.log.error({ data }, 'Quota service returned invalid payload');
         reply.code(503).send({
           error: 'quota_service_invalid_response',
-          message: 'Quota validation service returned invalid response'
+          message: 'Quota validation service returned invalid response',
         });
         return;
       }
@@ -402,7 +410,7 @@ export async function quotaValidationHook(
           error: 'quota_exceeded',
           reason: reason,
           remaining_daily: data.remaining_daily || 0,
-          remaining_monthly: data.remaining_monthly || 0
+          remaining_monthly: data.remaining_monthly || 0,
         });
         return;
       }
@@ -415,7 +423,7 @@ export async function quotaValidationHook(
       // Fail-closed: Deny access if quota service fails
       reply.code(503).send({
         error: 'quota_service_unavailable',
-        message: 'Quota validation service is temporarily unavailable'
+        message: 'Quota validation service is temporarily unavailable',
       });
       return;
     }
@@ -425,7 +433,7 @@ export async function quotaValidationHook(
       // Fail-closed: Deny access on timeout
       reply.code(503).send({
         error: 'quota_service_timeout',
-        message: 'Quota validation service timeout'
+        message: 'Quota validation service timeout',
       });
       return;
     }
@@ -433,7 +441,7 @@ export async function quotaValidationHook(
     // Fail-closed: Deny access on error
     reply.code(503).send({
       error: 'quota_validation_error',
-      message: 'Quota validation failed'
+      message: 'Quota validation failed',
     });
     return;
   }
@@ -467,7 +475,7 @@ export async function signatureValidationHook(
     // Fail-closed: Deny access without tenant_id
     reply.code(400).send({
       error: 'tenant_id_required',
-      message: 'Tenant ID required for signature validation'
+      message: 'Tenant ID required for signature validation',
     });
     return;
   }
@@ -481,7 +489,7 @@ export async function signatureValidationHook(
     // Fail-closed: Deny access without signature
     reply.code(403).send({
       error: 'signature_missing',
-      message: 'Request signature required for sensitive routes'
+      message: 'Request signature required for sensitive routes',
     });
     return;
   }
@@ -492,7 +500,7 @@ export async function signatureValidationHook(
       method: request.method,
       tenant_id: tenantId,
       date: xTimestamp ?? getHeaderString(request.headers, 'date') ?? '',
-      digest: getHeaderString(request.headers, 'content-digest') ?? ''
+      digest: getHeaderString(request.headers, 'content-digest') ?? '',
     });
 
     const headers: Record<string, string> = buildCanonicalContextHeaders({
@@ -513,10 +521,10 @@ export async function signatureValidationHook(
       endpointPath: `/verify?${params.toString()}`,
       init: {
         method: 'GET',
-        headers
+        headers,
       },
       timeoutMs: SIGNATURE_VERIFIER_TIMEOUT,
-      serviceName: 'signature-verifier'
+      serviceName: 'signature-verifier',
     });
 
     if (response.status === 204) {
@@ -528,7 +536,7 @@ export async function signatureValidationHook(
       reply.code(403).send({
         error: 'signature_invalid',
         reason: denyReason,
-        message: 'Request signature validation failed'
+        message: 'Request signature validation failed',
       });
       return;
     } else {
@@ -540,7 +548,7 @@ export async function signatureValidationHook(
       // Fail-closed: Deny access if verifier fails
       reply.code(503).send({
         error: 'signature_verifier_unavailable',
-        message: 'Signature validation service is temporarily unavailable'
+        message: 'Signature validation service is temporarily unavailable',
       });
       return;
     }
@@ -550,7 +558,7 @@ export async function signatureValidationHook(
       // Fail-closed: Deny access on timeout
       reply.code(503).send({
         error: 'signature_verifier_timeout',
-        message: 'Signature validation service timeout'
+        message: 'Signature validation service timeout',
       });
       return;
     }
@@ -558,7 +566,7 @@ export async function signatureValidationHook(
     // Fail-closed: Deny access on error
     reply.code(503).send({
       error: 'signature_validation_error',
-      message: 'Signature validation failed'
+      message: 'Signature validation failed',
     });
     return;
   }
@@ -566,7 +574,7 @@ export async function signatureValidationHook(
 
 /**
  * Apply gateway middlewares to Fastify app
- * 
+ *
  * Usage:
  *   import { applyGatewayMiddlewares } from './middleware/gateway_middleware';
  *   await applyGatewayMiddlewares(server);
@@ -574,9 +582,9 @@ export async function signatureValidationHook(
 export async function applyGatewayMiddlewares(server: FastifyInstance): Promise<void> {
   // Register quota validation hook (before other hooks)
   server.addHook('onRequest', quotaValidationHook);
-  
+
   // Register signature validation hook (before other hooks)
   server.addHook('onRequest', signatureValidationHook);
-  
+
   server.log.info('✅ Gateway middlewares applied (quota + signature)');
 }

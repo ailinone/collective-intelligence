@@ -152,12 +152,11 @@ export class SnowflakeCortexAdapter extends ProviderAdapter {
     let signer: SnowflakeJwtSigner | null = null;
     let configError: string | null = null;
     if (!this.account || !this.user || !privateKeyPem) {
-      configError =
-        !this.account
-          ? 'SNOWFLAKE_ACCOUNT missing'
-          : !this.user
-            ? 'SNOWFLAKE_USER missing'
-            : 'SNOWFLAKE_PRIVATE_KEY_PEM missing';
+      configError = !this.account
+        ? 'SNOWFLAKE_ACCOUNT missing'
+        : !this.user
+          ? 'SNOWFLAKE_USER missing'
+          : 'SNOWFLAKE_PRIVATE_KEY_PEM missing';
     } else {
       try {
         const factory = config.signerFactory ?? ((o) => new SnowflakeJwtSigner(o));
@@ -194,17 +193,16 @@ export class SnowflakeCortexAdapter extends ProviderAdapter {
   }
 
   async getModels(): Promise<Model[]> {
-    return STATIC_CORTEX_MODELS.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'snowflake',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: isEmbeddingModel(id) ? ['embeddings'] : ['chat'],
-        })),
+    return STATIC_CORTEX_MODELS.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'snowflake',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: isEmbeddingModel(id) ? ['embeddings'] : ['chat'],
+      })
     );
   }
 
@@ -367,7 +365,7 @@ export class SnowflakeCortexAdapter extends ProviderAdapter {
 
   private async fetchJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> },
+    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> }
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
     const timeoutMs = Math.max(1000, this.config.timeout ?? 60_000);

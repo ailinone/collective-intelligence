@@ -141,14 +141,12 @@ describe('SOTA guard: no production code path imports DEFAULT_MODEL_CATALOG', ()
     }
 
     if (offenders.length > 0) {
-      const detail = offenders
-        .map((o) => `  - ${o.file}:${o.line}  ${o.snippet}`)
-        .join('\n');
+      const detail = offenders.map((o) => `  - ${o.file}:${o.line}  ${o.snippet}`).join('\n');
       // eslint-disable-next-line no-console
       console.error(
         'no-static-model-catalog-fallback: production paths reference DEFAULT_MODEL_CATALOG. ' +
           'The static catalog is deprecated. Use central-model-discovery-service instead.\n' +
-          detail,
+          detail
       );
     }
     expect(offenders).toEqual([]);

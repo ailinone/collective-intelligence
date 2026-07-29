@@ -66,9 +66,24 @@ const contextPolicyOn: RoleSelectionPolicySnapshot = {
   contextPolicyJudgeMaxOutputTokens: 4096,
   contextPolicyBackfillHash: 'backfill-v1',
   contextPolicyByRole: [
-    { role: 'judge', minContextWindow: 25000, requiredInputTokens: 20000, safetyMarginTokens: 5000 },
-    { role: 'participant', minContextWindow: 3000, requiredInputTokens: 1500, safetyMarginTokens: 1500 },
-    { role: 'synthesizer', minContextWindow: 20000, requiredInputTokens: 16000, safetyMarginTokens: 4000 },
+    {
+      role: 'judge',
+      minContextWindow: 25000,
+      requiredInputTokens: 20000,
+      safetyMarginTokens: 5000,
+    },
+    {
+      role: 'participant',
+      minContextWindow: 3000,
+      requiredInputTokens: 1500,
+      safetyMarginTokens: 1500,
+    },
+    {
+      role: 'synthesizer',
+      minContextWindow: 20000,
+      requiredInputTokens: 16000,
+      safetyMarginTokens: 4000,
+    },
   ],
   contextPolicyAppliedOverrides: [
     {
@@ -92,7 +107,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: basePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const f2 = computePlanFingerprint(
       {
@@ -101,7 +116,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: basePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
   });
@@ -114,7 +129,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: basePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const fOn = computePlanFingerprint(
       {
@@ -123,7 +138,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: contextPolicyOn,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(fOff.planFingerprint).not.toBe(fOn.planFingerprint);
   });
@@ -134,18 +149,24 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         plan: makePlan(),
         strict: true,
         roleSpecificRetrieval: true,
-        roleSelectionPolicy: { ...contextPolicyOn, contextPolicyFormulaVersion: '01C.1B-J1D-R4C-v1' },
+        roleSelectionPolicy: {
+          ...contextPolicyOn,
+          contextPolicyFormulaVersion: '01C.1B-J1D-R4C-v1',
+        },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
         plan: makePlan(),
         strict: true,
         roleSpecificRetrieval: true,
-        roleSelectionPolicy: { ...contextPolicyOn, contextPolicyFormulaVersion: '01C.1B-J1D-R4D-v2' },
+        roleSelectionPolicy: {
+          ...contextPolicyOn,
+          contextPolicyFormulaVersion: '01C.1B-J1D-R4D-v2',
+        },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -158,7 +179,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...contextPolicyOn, contextPolicySafetyMarginRatio: 0.2 },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -167,7 +188,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...contextPolicyOn, contextPolicySafetyMarginRatio: 0.3 },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -180,7 +201,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...contextPolicyOn, contextPolicyParticipantCount: 3 },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -189,7 +210,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...contextPolicyOn, contextPolicyParticipantCount: 5 },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -202,7 +223,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: contextPolicyOn,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
@@ -224,7 +245,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
           ],
         },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -233,18 +254,43 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
     const policySorted: RoleSelectionPolicySnapshot = {
       ...contextPolicyOn,
       contextPolicyByRole: [
-        { role: 'judge', minContextWindow: 25000, requiredInputTokens: 20000, safetyMarginTokens: 5000 },
-        { role: 'participant', minContextWindow: 3000, requiredInputTokens: 1500, safetyMarginTokens: 1500 },
-        { role: 'synthesizer', minContextWindow: 20000, requiredInputTokens: 16000, safetyMarginTokens: 4000 },
+        {
+          role: 'judge',
+          minContextWindow: 25000,
+          requiredInputTokens: 20000,
+          safetyMarginTokens: 5000,
+        },
+        {
+          role: 'participant',
+          minContextWindow: 3000,
+          requiredInputTokens: 1500,
+          safetyMarginTokens: 1500,
+        },
+        {
+          role: 'synthesizer',
+          minContextWindow: 20000,
+          requiredInputTokens: 16000,
+          safetyMarginTokens: 4000,
+        },
       ],
     };
     const a = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: policySorted },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: policySorted,
+      },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: policySorted },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: policySorted,
+      },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).toBe(b.planFingerprint);
   });
@@ -257,7 +303,7 @@ describe('01C.1B-J1D-R4C — context policy × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: contextPolicyOn,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const s = JSON.stringify(f.snapshot);
     expect(s).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);

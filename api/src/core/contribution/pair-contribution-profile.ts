@@ -71,7 +71,7 @@ export function buildPairContributionProfile(
   taskType: string,
   pairExecutions: readonly HistoricalExecution[],
   baselines: PairBaselines,
-  perModelStats: { readonly [modelId: string]: PerModelStats },
+  perModelStats: { readonly [modelId: string]: PerModelStats }
 ): PairContributionProfile {
   // Canonicalise ordering — alphabetical — so (A,B) === (B,A).
   const [m1, m2] = modelA < modelB ? [modelA, modelB] : [modelB, modelA];
@@ -112,28 +112,19 @@ export function buildPairContributionProfile(
 
   const judgeMean = sumJudge / n;
   const costMean = sumCost / n;
-  const qualityPerDollar =
-    costMean > 1e-9 ? Math.min(judgeMean / costMean, 10_000) : 0;
+  const qualityPerDollar = costMean > 1e-9 ? Math.min(judgeMean / costMean, 10_000) : 0;
 
   // Complementarity = how much pair judge exceeds the average of the two singles
-  const avgSingle =
-    ((perModelStats[m1]?.judgeMean ?? 0) +
-      (perModelStats[m2]?.judgeMean ?? 0)) /
-    2;
+  const avgSingle = ((perModelStats[m1]?.judgeMean ?? 0) + (perModelStats[m2]?.judgeMean ?? 0)) / 2;
   const complementarity = Math.max(0, Math.min(1, judgeMean - avgSingle + 0.05));
 
   // Redundancy = penalty when pair judge is barely better than the
   // best individual (and both have similar harm profiles).
-  const bestSingle = Math.max(
-    perModelStats[m1]?.judgeMean ?? 0,
-    perModelStats[m2]?.judgeMean ?? 0,
-  );
+  const bestSingle = Math.max(perModelStats[m1]?.judgeMean ?? 0, perModelStats[m2]?.judgeMean ?? 0);
   const redundancyPenalty = Math.max(0, Math.min(1, 0.5 - (judgeMean - bestSingle)));
 
   // Risk = average harm score of the two members + penalty for high cost variance
-  const avgHarm =
-    ((perModelStats[m1]?.harmScore ?? 0) + (perModelStats[m2]?.harmScore ?? 0)) /
-    2;
+  const avgHarm = ((perModelStats[m1]?.harmScore ?? 0) + (perModelStats[m2]?.harmScore ?? 0)) / 2;
   const riskScore = Math.min(1, avgHarm);
 
   return Object.freeze({

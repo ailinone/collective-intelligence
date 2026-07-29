@@ -27,26 +27,15 @@
  * file just normalizes the audit result into the shape the resolver
  * wants.
  */
-import type {
-  ProviderCreditAuditResult,
-  ProviderProbeResult,
-} from './provider-credit-audit-types';
+import type { ProviderCreditAuditResult, ProviderProbeResult } from './provider-credit-audit-types';
 
 export type ReconciledAuthState = 'auth_ok' | 'auth_failed' | 'unknown';
 export type ReconciledCreditState = 'has_credits' | 'no_credits' | 'unknown' | 'stale';
 export type ReconciledRateState = 'ok' | 'rate_limited' | 'cooldown' | 'unknown';
 export type ReconciledRouteState =
-  | 'usable'
-  | 'model_not_found'
-  | 'unsupported'
-  | 'temporarily_unavailable'
-  | 'unknown';
+  'usable' | 'model_not_found' | 'unsupported' | 'temporarily_unavailable' | 'unknown';
 
-export type ReconciledSource =
-  | 'non_billable_probe'
-  | 'hub_cache'
-  | 'metadata_only'
-  | 'unknown';
+export type ReconciledSource = 'non_billable_probe' | 'hub_cache' | 'metadata_only' | 'unknown';
 
 export interface ReconciledProviderState {
   readonly providerId: string;
@@ -79,13 +68,14 @@ export interface ReconciledOperabilitySnapshot {
 
 function mapHubStateToReconciled(
   hubState: string,
-  hubBalance?: string,
+  hubBalance?: string
 ): { auth: ReconciledAuthState; credit: ReconciledCreditState; rate: ReconciledRateState } {
   let auth: ReconciledAuthState = 'unknown';
   let credit: ReconciledCreditState = 'unknown';
   let rate: ReconciledRateState = 'unknown';
 
-  if (hubState === 'healthy' || hubState === 'degraded' || hubState === 'recovering') auth = 'auth_ok';
+  if (hubState === 'healthy' || hubState === 'degraded' || hubState === 'recovering')
+    auth = 'auth_ok';
   if (hubState === 'auth_failed') auth = 'auth_failed';
   if (hubState === 'no_credits') credit = 'no_credits';
   if (hubBalance === 'has_credits') credit = 'has_credits';
@@ -99,7 +89,12 @@ function mapHubStateToReconciled(
 function mergeLiveOverCache(args: {
   readonly hub: { state: string; balance?: string };
   readonly probe?: ProviderProbeResult;
-}): { auth: ReconciledAuthState; credit: ReconciledCreditState; rate: ReconciledRateState; source: ReconciledSource } {
+}): {
+  auth: ReconciledAuthState;
+  credit: ReconciledCreditState;
+  rate: ReconciledRateState;
+  source: ReconciledSource;
+} {
   const fromHub = mapHubStateToReconciled(args.hub.state, args.hub.balance);
   if (!args.probe || args.probe.error) {
     return { ...fromHub, source: args.probe ? 'hub_cache' : 'hub_cache' };
@@ -121,7 +116,8 @@ function mergeLiveOverCache(args: {
           ? 'unknown'
           : fromHub.credit;
   const rate: ReconciledRateState =
-    args.probe.liveRateState ?? (args.probe.liveOperabilityState === 'rate_limited' ? 'rate_limited' : fromHub.rate);
+    args.probe.liveRateState ??
+    (args.probe.liveOperabilityState === 'rate_limited' ? 'rate_limited' : fromHub.rate);
 
   return { auth, credit, rate, source: 'non_billable_probe' };
 }
@@ -134,7 +130,7 @@ function mergeLiveOverCache(args: {
  * verdict. This converter just reshapes for the resolver.
  */
 export function buildReconciledSnapshot(
-  audit: ProviderCreditAuditResult,
+  audit: ProviderCreditAuditResult
 ): ReconciledOperabilitySnapshot {
   const providerStates: Record<string, ReconciledProviderState> = {};
   let probesActuallyRan = false;
@@ -180,7 +176,9 @@ export function buildReconciledSnapshot(
       source,
       observedAt: new Date(r.observedAt).toISOString(),
       staleWarning:
-        r.reconciliation && r.reconciliation.verdict !== 'aligned' && r.reconciliation.verdict !== 'provider_probe_not_supported'
+        r.reconciliation &&
+        r.reconciliation.verdict !== 'aligned' &&
+        r.reconciliation.verdict !== 'provider_probe_not_supported'
           ? r.reconciliation.verdict
           : undefined,
       critical: r.reconciliation?.isCriticalStale === true,
@@ -201,14 +199,16 @@ export function buildReconciledSnapshot(
  * snapshot's live state OVERRIDES the candidate's cached flags when
  * disagreement exists. Returns a new candidate (immutable input).
  */
-export function applySnapshotToCandidate<T extends {
-  providerId: string;
-  providerHealthy: boolean;
-  hasCredits: boolean;
-  rateLimited: boolean;
-}>(
+export function applySnapshotToCandidate<
+  T extends {
+    providerId: string;
+    providerHealthy: boolean;
+    hasCredits: boolean;
+    rateLimited: boolean;
+  },
+>(
   candidate: T,
-  snapshot: ReconciledOperabilitySnapshot,
+  snapshot: ReconciledOperabilitySnapshot
 ): T & { reconciliation?: ReconciledProviderState } {
   const state = snapshot.providerStates[candidate.providerId];
   if (!state) return { ...candidate, reconciliation: undefined };

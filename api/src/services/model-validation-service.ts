@@ -480,7 +480,11 @@ export class ModelValidationService {
       };
     } catch (error) {
       this.log.error({ error, model: model.id }, 'Erro no teste de chat');
-      return { success: false, score: 0, metadata: { error: error instanceof Error ? error.message : String(error) } };
+      return {
+        success: false,
+        score: 0,
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      };
     }
   }
 
@@ -527,7 +531,11 @@ export class ModelValidationService {
       };
     } catch (error) {
       this.log.error({ error, model: model.id }, 'Erro no teste de streaming');
-      return { success: false, score: 0, metadata: { error: error instanceof Error ? error.message : String(error) } };
+      return {
+        success: false,
+        score: 0,
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      };
     }
   }
 
@@ -560,10 +568,10 @@ export class ModelValidationService {
       const result = await client.toolChat({
         messages: [
           { role: 'system', content: 'Você é um assistente que pode chamar ferramentas.' },
-          { role: 'user', content: prompt }
+          { role: 'user', content: prompt },
         ],
         tools,
-        toolChoice: 'auto'
+        toolChoice: 'auto',
       });
 
       const toolCall = result.toolCalls[0];
@@ -585,15 +593,15 @@ export class ModelValidationService {
       };
     } catch (error) {
       this.log.error({ error, model: model.id }, 'Erro no teste de function calling');
-      return { success: false, score: 0, metadata: { error: error instanceof Error ? error.message : String(error) } };
+      return {
+        success: false,
+        score: 0,
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      };
     }
   }
 
-  private logCapabilityTest(
-    model: Model,
-    client: UniversalModelClient,
-    capability: string
-  ): void {
+  private logCapabilityTest(model: Model, client: UniversalModelClient, capability: string): void {
     this.log.debug(
       {
         modelId: model.id,
@@ -689,7 +697,11 @@ Explique o raciocínio e dê a resposta final no formato "Resposta: X".
       };
     } catch (error) {
       this.log.error({ error, model: model.id }, 'Erro no teste de reasoning');
-      return { success: false, score: 0, metadata: { error: error instanceof Error ? error.message : String(error) } };
+      return {
+        success: false,
+        score: 0,
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      };
     }
   }
 
@@ -733,7 +745,11 @@ Responda no formato "Resultado: X".
       };
     } catch (error) {
       this.log.error({ error, model: model.id }, 'Erro no teste de code interpreter');
-      return { success: false, score: 0, metadata: { error: error instanceof Error ? error.message : String(error) } };
+      return {
+        success: false,
+        score: 0,
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      };
     }
   }
 

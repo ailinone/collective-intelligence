@@ -106,7 +106,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: 'User not authenticated',
         });
       }
-      const query = request.query as { page?: number; limit?: number; status?: 'active' | 'suspended' | 'inactive' };
+      const query = request.query as {
+        page?: number;
+        limit?: number;
+        status?: 'active' | 'suspended' | 'inactive';
+      };
       const page = query.page ?? 1;
       const limit = query.limit ?? 20;
       const status = query.status;
@@ -171,7 +175,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -250,7 +254,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -266,7 +275,10 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
 
       try {
         // Users can view their own profile or admins can view any user
-        const canView = currentUser.userId === id || (Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin') || currentUser.roles.includes('owner')));
+        const canView =
+          currentUser.userId === id ||
+          (Array.isArray(currentUser.roles) &&
+            (currentUser.roles.includes('admin') || currentUser.roles.includes('owner')));
 
         if (!canView) {
           requestLog.warn('Forbidden: user cannot view other users');
@@ -327,7 +339,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -413,7 +425,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -431,7 +448,9 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
       try {
         // Check permissions
         const isSelf = currentUser.userId === id;
-        const isAdmin = Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin') || currentUser.roles.includes('owner'));
+        const isAdmin =
+          Array.isArray(currentUser.roles) &&
+          (currentUser.roles.includes('admin') || currentUser.roles.includes('owner'));
 
         // Users can update their own name
         // Admins can update any user
@@ -504,7 +523,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   // Also support PATCH for the same endpoint
@@ -586,7 +605,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -604,7 +628,9 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
       try {
         // Check permissions
         const isSelf = currentUser.userId === id;
-        const isAdmin = Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin') || currentUser.roles.includes('owner'));
+        const isAdmin =
+          Array.isArray(currentUser.roles) &&
+          (currentUser.roles.includes('admin') || currentUser.roles.includes('owner'));
 
         // Users can update their own name
         // Admins can update any user
@@ -683,7 +709,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -755,7 +781,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -820,7 +851,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -893,7 +924,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -945,7 +981,7 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -1016,7 +1052,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const currentUser = extendedRequest.user;
-      if (!currentUser || typeof currentUser !== 'object' || !('organizationId' in currentUser) || !('userId' in currentUser)) {
+      if (
+        !currentUser ||
+        typeof currentUser !== 'object' ||
+        !('organizationId' in currentUser) ||
+        !('userId' in currentUser)
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
@@ -1069,6 +1110,6 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 }

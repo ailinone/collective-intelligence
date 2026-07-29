@@ -167,11 +167,11 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
             organizationId,
             error: err instanceof Error ? err.message : String(err),
           },
-          'GET /v1/collective/runs/:id failed',
+          'GET /v1/collective/runs/:id failed'
         );
         return reply.status(500).send({ error: 'internal error' });
       }
-    },
+    }
   );
 
   // ─── GET /v1/collective/runs/:id/trace (F2.10) ────────────────────────
@@ -227,11 +227,11 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
             organizationId,
             error: err instanceof Error ? err.message : String(err),
           },
-          'GET /v1/collective/runs/:id/trace failed',
+          'GET /v1/collective/runs/:id/trace failed'
         );
         return reply.status(500).send({ error: 'internal error' });
       }
-    },
+    }
   );
 
   // ─── GET /v1/collective/runs?requestId=... ────────────────────────────
@@ -273,10 +273,10 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
             organizationId,
             error: err instanceof Error ? err.message : String(err),
           },
-          'GET /v1/collective/runs failed',
+          'GET /v1/collective/runs failed'
         );
         return reply.status(500).send({ error: 'internal error' });
       }
-    },
+    }
   );
 }

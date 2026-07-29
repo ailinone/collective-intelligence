@@ -47,8 +47,7 @@ import type { EvaluationResult } from '../evaluation/strategy-output-evaluator';
  * individual's ceiling. Keep the synthesis unless it is worse by MORE than this
  * margin. Read once at module load so `selectFinal` stays a pure function.
  */
-const SYNTHESIS_FALLBACK_MARGIN =
-  Number(process.env.CONSENSUS_SYNTHESIS_FALLBACK_MARGIN) || 0.05;
+const SYNTHESIS_FALLBACK_MARGIN = Number(process.env.CONSENSUS_SYNTHESIS_FALLBACK_MARGIN) || 0.05;
 
 export interface FinalSelectionInput {
   readonly synthesisAvailable: boolean;

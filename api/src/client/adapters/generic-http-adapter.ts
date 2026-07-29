@@ -52,7 +52,10 @@ function getApiKey(model: ModelRecord): string | undefined {
 }
 
 // Type-safe helper to get string from extra config
-function getExtraString(extra: Record<string, unknown> | undefined, key: string): string | undefined {
+function getExtraString(
+  extra: Record<string, unknown> | undefined,
+  key: string
+): string | undefined {
   const value = extra?.[key];
   return typeof value === 'string' ? value : undefined;
 }
@@ -115,9 +118,10 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
     const jsonData = await response.json();
 
     // Validate jsonData is an object to use as ProviderRawResponse
-    const rawResponse: ProviderRawResponse = jsonData && typeof jsonData === 'object' && jsonData !== null
-      ? jsonData as ProviderRawResponse
-      : {};
+    const rawResponse: ProviderRawResponse =
+      jsonData && typeof jsonData === 'object' && jsonData !== null
+        ? (jsonData as ProviderRawResponse)
+        : {};
 
     // Ponto crucial: como extrair o texto?
     // Você pode ter no model.config.extra algo como:
@@ -132,7 +136,10 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
 
   async *streamText(_model: ModelRecord, _req: TextRequest): AsyncIterable<StreamChunk> {
     // Streaming não é suportado pelo adaptador HTTP genérico sem configuração específica de SSE/chunked JSON.
-    const errorResponse: ProviderRawResponse = { error: true, message: 'streamText not implemented for GenericHTTP' };
+    const errorResponse: ProviderRawResponse = {
+      error: true,
+      message: 'streamText not implemented for GenericHTTP',
+    };
     yield { content: '[ERROR] streamText not implemented for GenericHTTP', raw: errorResponse };
     throw new Error('streamText not implemented for GenericHTTP (precisa de config específica)');
   },
@@ -143,24 +150,30 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
     throw new Error('toolChat not implemented for GenericHTTP');
   },
 
-  async structuredJson<T = unknown>(model: ModelRecord, req: TextRequest & { schema?: Record<string, unknown> }): Promise<{ json: T; raw: ProviderRawResponse }> {
+  async structuredJson<T = unknown>(
+    model: ModelRecord,
+    req: TextRequest & { schema?: Record<string, unknown> }
+  ): Promise<{ json: T; raw: ProviderRawResponse }> {
     // Pode mandar prompt instruindo JSON puro
     const response = await this.text(model, req);
     const content = response.content;
-    
+
     // Parse JSON safely
     let parsedJson: T;
     try {
       parsedJson = JSON.parse(content) as T;
     } catch (parseError) {
-      throw new Error(`Failed to parse JSON response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to parse JSON response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`
+      );
     }
-    
+
     // Validate raw response is ProviderRawResponse (already validated in text method)
-    const rawResponse: ProviderRawResponse = response.raw && typeof response.raw === 'object' && response.raw !== null
-      ? response.raw as ProviderRawResponse
-      : {};
-    
+    const rawResponse: ProviderRawResponse =
+      response.raw && typeof response.raw === 'object' && response.raw !== null
+        ? (response.raw as ProviderRawResponse)
+        : {};
+
     return { json: parsedJson, raw: rawResponse };
   },
 
@@ -187,20 +200,20 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
     }
 
     const jsonData = await response.json();
-    
+
     // Validate response structure matches ProviderEmbeddingsResponse
-    const embeddingsResponse: ProviderEmbeddingsResponse = 
+    const embeddingsResponse: ProviderEmbeddingsResponse =
       jsonData && typeof jsonData === 'object' && jsonData !== null
-        ? jsonData as ProviderEmbeddingsResponse
+        ? (jsonData as ProviderEmbeddingsResponse)
         : { data: [], object: 'list' };
 
     const vectorPath = getExtraString(model.config.extra, 'embeddingPath') ?? 'data.*.embedding';
     const extractedVectors = mapByWildcardPath(embeddingsResponse, vectorPath);
-    
+
     // Validate vectors is array of number arrays
-    const vectors: number[][] = Array.isArray(extractedVectors) 
-      ? extractedVectors.filter((vec): vec is number[] => 
-          Array.isArray(vec) && vec.every(v => typeof v === 'number')
+    const vectors: number[][] = Array.isArray(extractedVectors)
+      ? extractedVectors.filter(
+          (vec): vec is number[] => Array.isArray(vec) && vec.every((v) => typeof v === 'number')
         )
       : [];
 
@@ -220,10 +233,11 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
     const url = `${baseUrl}${endpoint}`;
 
     // Safely merge options
-    const options: Record<string, unknown> = req.options && typeof req.options === 'object' && req.options !== null
-      ? req.options as Record<string, unknown>
-      : {};
-    
+    const options: Record<string, unknown> =
+      req.options && typeof req.options === 'object' && req.options !== null
+        ? (req.options as Record<string, unknown>)
+        : {};
+
     const body: ImageGenerationRequestBody = {
       model: model.providerModelId,
       prompt: req.prompt,
@@ -269,7 +283,11 @@ export const GenericHTTPProviderAdapter: ProviderAdapter = {
     throw new Error('speechToText not implemented for GenericHTTP');
   },
 
-  async rawInvoke(model: ModelRecord, op: string, payload: RawInvokePayload): Promise<RawInvokeResponse> {
+  async rawInvoke(
+    model: ModelRecord,
+    op: string,
+    payload: RawInvokePayload
+  ): Promise<RawInvokeResponse> {
     const baseUrl = getBaseUrl(model);
     const headers = buildHeaders(model);
     const endpoint = model.config.endpointOverrides?.[op];

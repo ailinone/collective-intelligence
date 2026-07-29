@@ -24,10 +24,7 @@
  * quality routing).
  */
 import type { TaskType } from '@/types';
-import type {
-  ModelQualityCalibrationEntry,
-  QualityCategory,
-} from './model-quality-calibration';
+import type { ModelQualityCalibrationEntry, QualityCategory } from './model-quality-calibration';
 import { resolveQualityForTask } from './model-quality-calibration';
 
 // ─── Task → category mapping ──────────────────────────────────────────────
@@ -55,20 +52,20 @@ import { resolveQualityForTask } from './model-quality-calibration';
 const TASK_TYPE_CATEGORY_PRIORITY: Readonly<Record<TaskType, readonly QualityCategory[]>> = {
   'code-generation': ['code_webdev', 'chat_text'],
   'code-review': ['code_webdev', 'chat_text'],
-  'debugging': ['code_webdev', 'chat_text'],
-  'refactoring': ['code_webdev', 'chat_text'],
-  'documentation': ['chat_document', 'chat_text'],
-  'testing': ['code_webdev', 'chat_text'],
-  'analysis': ['chat_document', 'chat_text'],
-  'qa': ['chat_text'],
-  'general': ['chat_text'],
-  'caching': ['chat_text'],
-  'reasoning': ['chat_text'],
+  debugging: ['code_webdev', 'chat_text'],
+  refactoring: ['code_webdev', 'chat_text'],
+  documentation: ['chat_document', 'chat_text'],
+  testing: ['code_webdev', 'chat_text'],
+  analysis: ['chat_document', 'chat_text'],
+  qa: ['chat_text'],
+  general: ['chat_text'],
+  caching: ['chat_text'],
+  reasoning: ['chat_text'],
   'decision-making': ['chat_text'],
-  'architecture': ['chat_text', 'chat_document'],
-  'creative': ['chat_text'],
+  architecture: ['chat_text', 'chat_document'],
+  creative: ['chat_text'],
   'factual-qa': ['chat_text', 'chat_search'],
-  'adversarial': ['chat_text'],
+  adversarial: ['chat_text'],
   'document-understanding': ['chat_document', 'chat_text'],
 };
 
@@ -83,7 +80,7 @@ const TASK_TYPE_CATEGORY_PRIORITY: Readonly<Record<TaskType, readonly QualityCat
  */
 function applyFormatOverride(
   priority: readonly QualityCategory[],
-  expectedFormat: string | undefined,
+  expectedFormat: string | undefined
 ): readonly QualityCategory[] {
   if (!expectedFormat) return priority;
   switch (expectedFormat) {
@@ -144,7 +141,7 @@ export interface TaskAwareQualityResolution {
  */
 export function resolveTaskAwareQuality(
   entry: ModelQualityCalibrationEntry | undefined,
-  taskProfile: { readonly taskType?: string; readonly expectedFormat?: string },
+  taskProfile: { readonly taskType?: string; readonly expectedFormat?: string }
 ): TaskAwareQualityResolution {
   const priority = categoryPriorityForTask(taskProfile);
   if (!entry) {

@@ -160,7 +160,7 @@ export function vectorNorm(v: Float32Array): number {
 export function cosineSimilarity(
   query: Float32Array,
   queryNorm: number,
-  candidate: Float32Array,
+  candidate: Float32Array
 ): number {
   if (query.length !== candidate.length) {
     return 0; // dimension mismatch — can't compare
@@ -197,7 +197,7 @@ export interface CreateSemanticIndexInput {
 export function createSemanticIndex(input: CreateSemanticIndexInput = {}): SemanticIndex {
   if (input.implementation === 'hnsw') {
     log.warn(
-      'HNSW implementation requested but Phase 4 ships only linear_scan; falling back. Install hnswlib-node and swap implementation in a follow-up.',
+      'HNSW implementation requested but Phase 4 ships only linear_scan; falling back. Install hnswlib-node and swap implementation in a follow-up.'
     );
   }
   return new LinearScanIndex();

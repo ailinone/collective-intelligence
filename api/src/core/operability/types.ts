@@ -78,12 +78,7 @@ export type ProviderHealthState =
  * `'provider_model'` — only that tuple is removed; (aihubmix, claude-haiku-4-5)
  * remains healthy.
  */
-export type ProviderErrorScope =
-  | 'provider'
-  | 'provider_model'
-  | 'request'
-  | 'account'
-  | 'endpoint';
+export type ProviderErrorScope = 'provider' | 'provider_model' | 'request' | 'account' | 'endpoint';
 
 export type ProviderErrorRetryability =
   | 'non_retryable'
@@ -213,11 +208,7 @@ export interface CandidateTrace {
 
 // ─── Discovery types ───────────────────────────────────────────────────────
 
-export type DiscoveryConfidence =
-  | 'verified'
-  | 'partially_verified'
-  | 'inferred'
-  | 'unknown';
+export type DiscoveryConfidence = 'verified' | 'partially_verified' | 'inferred' | 'unknown';
 
 export interface DiscoveredModel {
   modelId: string;
@@ -256,29 +247,15 @@ export interface ProviderDiscoverySnapshot {
 // ─── Probe strategy ────────────────────────────────────────────────────────
 
 export type CredentialProbeKind =
-  | 'env_only'
-  | 'auth_endpoint'
-  | 'models_api'
-  | 'minimal_completion'
-  | 'not_supported';
+  'env_only' | 'auth_endpoint' | 'models_api' | 'minimal_completion' | 'not_supported';
 
-export type CreditProbeKind =
-  | 'billing_api'
-  | 'quota_header'
-  | 'manual_config'
-  | 'not_supported';
+export type CreditProbeKind = 'billing_api' | 'quota_header' | 'manual_config' | 'not_supported';
 
 export type EndpointProbeKind =
-  | 'models_api'
-  | 'minimal_completion'
-  | 'health_endpoint'
-  | 'not_supported';
+  'models_api' | 'minimal_completion' | 'health_endpoint' | 'not_supported';
 
 export type ModelProbeKind =
-  | 'list_models'
-  | 'known_catalog_alias'
-  | 'minimal_completion'
-  | 'not_supported';
+  'list_models' | 'known_catalog_alias' | 'minimal_completion' | 'not_supported';
 
 export interface ProviderProbeStrategy {
   providerId: string;
@@ -330,8 +307,16 @@ export const DEFAULT_COOLDOWNS: Readonly<Record<ProviderErrorClass, number>> = O
  * Used to keep the legacy hub in sync when this module records observations.
  */
 export function mapHealthStateToLegacyOperability(
-  state: ProviderHealthState,
-): 'healthy' | 'degraded' | 'recovering' | 'no_credits' | 'rate_limited' | 'auth_failed' | 'temporarily_unavailable' | 'unknown' {
+  state: ProviderHealthState
+):
+  | 'healthy'
+  | 'degraded'
+  | 'recovering'
+  | 'no_credits'
+  | 'rate_limited'
+  | 'auth_failed'
+  | 'temporarily_unavailable'
+  | 'unknown' {
   switch (state) {
     case 'healthy':
       return 'healthy';

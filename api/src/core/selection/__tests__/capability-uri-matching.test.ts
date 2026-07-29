@@ -48,7 +48,7 @@ import { legacyArrayToUriArray } from '@/capability/legacy-capability-uri';
  */
 function filterByRequiredCapabilities(
   models: readonly Model[],
-  requiredCapabilities: readonly ModelCapability[],
+  requiredCapabilities: readonly ModelCapability[]
 ): Model[] {
   if (requiredCapabilities.length === 0) return [...models];
   const requiredUris = legacyArrayToUriArray(requiredCapabilities);
@@ -86,10 +86,7 @@ describe('dynamic-model-selector capability-uri matching policy', () => {
       // capabilityUris has the URIs — should pass via URI track.
       const model = makeModel({
         capabilities: [], // empty — would fail legacy-track
-        capabilityUris: [
-          'http://ailin.dev/cap/v1/chat',
-          'http://ailin.dev/cap/v1/vision',
-        ],
+        capabilityUris: ['http://ailin.dev/cap/v1/chat', 'http://ailin.dev/cap/v1/vision'],
       });
       const result = filterByRequiredCapabilities([model], ['chat', 'vision']);
       expect(result).toHaveLength(1);
@@ -138,16 +135,10 @@ describe('dynamic-model-selector capability-uri matching policy', () => {
   describe('Invariant 3: ALL-of semantics on both tracks', () => {
     it('URI track rejects on any missing required cap', () => {
       const model = makeModel({
-        capabilityUris: [
-          'http://ailin.dev/cap/v1/chat',
-          'http://ailin.dev/cap/v1/streaming',
-        ],
+        capabilityUris: ['http://ailin.dev/cap/v1/chat', 'http://ailin.dev/cap/v1/streaming'],
       });
       // Requires 3 caps; model has 2 → reject.
-      const result = filterByRequiredCapabilities(
-        [model],
-        ['chat', 'streaming', 'vision'],
-      );
+      const result = filterByRequiredCapabilities([model], ['chat', 'streaming', 'vision']);
       expect(result).toHaveLength(0);
     });
 
@@ -155,10 +146,7 @@ describe('dynamic-model-selector capability-uri matching policy', () => {
       const model = makeModel({
         capabilities: ['chat', 'streaming'],
       });
-      const result = filterByRequiredCapabilities(
-        [model],
-        ['chat', 'streaming', 'vision'],
-      );
+      const result = filterByRequiredCapabilities([model], ['chat', 'streaming', 'vision']);
       expect(result).toHaveLength(0);
     });
 
@@ -181,10 +169,7 @@ describe('dynamic-model-selector capability-uri matching policy', () => {
       const backfilled = makeModel({
         id: 'backfilled',
         capabilities: [], // empty legacy — backfill replaced it
-        capabilityUris: [
-          'http://ailin.dev/cap/v1/chat',
-          'http://ailin.dev/cap/v1/vision',
-        ],
+        capabilityUris: ['http://ailin.dev/cap/v1/chat', 'http://ailin.dev/cap/v1/vision'],
       });
       const legacy = makeModel({
         id: 'legacy',
@@ -198,7 +183,7 @@ describe('dynamic-model-selector capability-uri matching policy', () => {
 
       const result = filterByRequiredCapabilities(
         [backfilled, legacy, partial],
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
 
       const ids = result.map((m) => m.id).sort();

@@ -10,7 +10,7 @@
 /**
  * PDF Service
  * Manages PDF processing via models with PDF understanding
- * 
+ *
  * REAL IMPLEMENTATION - Uses models with PDF capability (Gemini, Claude)
  */
 
@@ -51,7 +51,10 @@ export class PDFService {
     const { pdfBuffer, filename, prompt, model, userContext, requestId } = options;
     const startTime = Date.now();
 
-    log.info({ requestId, filename, pdfSize: pdfBuffer.length, hasPrompt: !!prompt }, 'PDF analysis started');
+    log.info(
+      { requestId, filename, pdfSize: pdfBuffer.length, hasPrompt: !!prompt },
+      'PDF analysis started'
+    );
 
     try {
       // Step 1: Convert PDF to base64 for model input
@@ -70,7 +73,9 @@ export class PDFService {
         : models;
 
       if (filteredModels.length === 0) {
-        throw new Error('No models with PDF understanding capability available. Ensure at least one provider with PDF support (Gemini, Claude) is configured.');
+        throw new Error(
+          'No models with PDF understanding capability available. Ensure at least one provider with PDF support (Gemini, Claude) is configured.'
+        );
       }
 
       // Step 3: Candidate chain. Every other modality (audio/images/video/
@@ -83,7 +88,9 @@ export class PDFService {
       const maxCandidates = model ? 1 : Number(process.env.PDF_MAX_CANDIDATES) || 3;
       const candidates = filteredModels.slice(0, maxCandidates);
 
-      const analysisPrompt = prompt || `Analyze this PDF file (${filename}). Extract all text content and provide a summary.`;
+      const analysisPrompt =
+        prompt ||
+        `Analyze this PDF file (${filename}). Extract all text content and provide a summary.`;
 
       const orchestrationEngine = getOrchestrationEngine();
       if (!orchestrationEngine) {
@@ -92,7 +99,10 @@ export class PDFService {
 
       let lastError: unknown = null;
       for (const selectedModel of candidates) {
-        log.info({ requestId, modelId: selectedModel.id, provider: selectedModel.provider }, 'Selected model for PDF analysis');
+        log.info(
+          { requestId, modelId: selectedModel.id, provider: selectedModel.provider },
+          'Selected model for PDF analysis'
+        );
 
         const chatRequest: ChatRequest = {
           model: selectedModel.id,
@@ -127,15 +137,19 @@ export class PDFService {
           const durationMs = Date.now() - startTime;
 
           const content = response.finalResponse.choices[0]?.message?.content;
-          const text = typeof content === 'string'
-            ? content
-            : (Array.isArray(content)
-              ? content.map((c) => {
-                  if (typeof c === 'string') return c;
-                  if (c && typeof c === 'object' && 'text' in c) return (c as { text: string }).text;
-                  return '';
-                }).join(' ')
-              : '');
+          const text =
+            typeof content === 'string'
+              ? content
+              : Array.isArray(content)
+                ? content
+                    .map((c) => {
+                      if (typeof c === 'string') return c;
+                      if (c && typeof c === 'object' && 'text' in c)
+                        return (c as { text: string }).text;
+                      return '';
+                    })
+                    .join(' ')
+                : '';
 
           // Try to extract structured data if response contains JSON
           let extractedData: Record<string, unknown> | undefined;
@@ -148,7 +162,10 @@ export class PDFService {
             // Not JSON, ignore
           }
 
-          log.info({ requestId, durationMs, textLength: text.length, modelId: selectedModel.id }, 'PDF analysis completed');
+          log.info(
+            { requestId, durationMs, textLength: text.length, modelId: selectedModel.id },
+            'PDF analysis completed'
+          );
 
           return {
             text,
@@ -160,9 +177,15 @@ export class PDFService {
           };
         } catch (candidateError: unknown) {
           lastError = candidateError;
-          const errorMessage = candidateError instanceof Error ? candidateError.message : String(candidateError);
+          const errorMessage =
+            candidateError instanceof Error ? candidateError.message : String(candidateError);
           log.warn(
-            { requestId, modelId: selectedModel.id, provider: selectedModel.provider, error: errorMessage },
+            {
+              requestId,
+              modelId: selectedModel.id,
+              provider: selectedModel.provider,
+              error: errorMessage,
+            },
             'PDF analysis candidate failed — trying next'
           );
         }
@@ -178,4 +201,3 @@ export class PDFService {
     }
   }
 }
-

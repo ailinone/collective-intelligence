@@ -154,22 +154,27 @@ export class WatsonxAdapter extends ProviderAdapter {
       });
       if (!response.ok) {
         const txt = await response.text().catch(() => '');
-        this.log.warn({ status: response.status, body: txt.slice(0, 300) }, 'foundation_model_specs failed');
+        this.log.warn(
+          { status: response.status, body: txt.slice(0, 300) },
+          'foundation_model_specs failed'
+        );
         return [];
       }
       const json = (await response.json()) as {
         resources?: Array<{ model_id: string; label?: string; provider?: string }>;
       };
       const resources = Array.isArray(json.resources) ? json.resources : [];
-      return resources.map((r) => (narrowAs<Model>({
-        id: r.model_id,
-        name: r.model_id,
-        displayName: r.label || r.model_id,
-        provider: 'watsonx',
-        contextWindow: 0,
-        maxOutputTokens: 0,
-        capabilities: [],
-      })));
+      return resources.map((r) =>
+        narrowAs<Model>({
+          id: r.model_id,
+          name: r.model_id,
+          displayName: r.label || r.model_id,
+          provider: 'watsonx',
+          contextWindow: 0,
+          maxOutputTokens: 0,
+          capabilities: [],
+        })
+      );
     } catch (err) {
       this.log.error({ err }, 'watsonx getModels failed');
       return [];
@@ -235,9 +240,7 @@ export class WatsonxAdapter extends ProviderAdapter {
     }, 'chat completion');
   }
 
-  async *chatCompletionStream(
-    request: ChatRequest,
-  ): AsyncGenerator<ChatResponse, void, unknown> {
+  async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     // watsonx chat streaming uses the same URL with Accept: text/event-stream.
     // First iteration ships non-streaming only — honest placeholder until
     // the SSE path gets hooked to the streaming pipeline.

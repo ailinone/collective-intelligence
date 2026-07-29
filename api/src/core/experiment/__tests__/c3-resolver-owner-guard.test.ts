@@ -23,7 +23,13 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-function row(id: string, displayName: string, provider: string, contextWindow = 128_000, inputCostPer1k = 0.005) {
+function row(
+  id: string,
+  displayName: string,
+  provider: string,
+  contextWindow = 128_000,
+  inputCostPer1k = 0.005
+) {
   return {
     id,
     displayName,
@@ -70,13 +76,18 @@ beforeEach(async () => {
   // mockResolvedValueOnce-style values; re-assert the base implementations
   // (awaited, so they are in place before the next test body runs).
   const { prisma } = await import('@/database/client');
-  (prisma.provider.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([{ name: 'openai' }, { name: 'huggingface' }]);
-  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation((args: { where?: { provider?: { name?: string } } }) => {
-    const providerName = args?.where?.provider?.name;
-    if (providerName === 'huggingface') return Promise.resolve([FORK]);
-    if (providerName === 'openai') return Promise.resolve([LEGIT]);
-    return Promise.resolve([FORK, LEGIT]);
-  });
+  (prisma.provider.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+    { name: 'openai' },
+    { name: 'huggingface' },
+  ]);
+  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation(
+    (args: { where?: { provider?: { name?: string } } }) => {
+      const providerName = args?.where?.provider?.name;
+      if (providerName === 'huggingface') return Promise.resolve([FORK]);
+      if (providerName === 'openai') return Promise.resolve([LEGIT]);
+      return Promise.resolve([FORK, LEGIT]);
+    }
+  );
 });
 
 describe('resolveTopTierModels / resolveBudgetModels — canonical-owner gate (2026-07-15)', () => {

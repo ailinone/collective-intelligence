@@ -43,11 +43,7 @@
  */
 
 import type { Pool } from 'pg';
-import {
-  type CapabilityEmbedder,
-  modelEmbeddingText,
-  ontologyEmbeddingText,
-} from './embedder';
+import { type CapabilityEmbedder, modelEmbeddingText, ontologyEmbeddingText } from './embedder';
 import { getCapabilityEmbedder } from './embedder-factory';
 import { logger } from '@/utils/logger';
 
@@ -81,7 +77,7 @@ const DEFAULT_MAX_ROWS_PER_RUN = 5_000;
  */
 export async function runEmbedWorker(
   pool: Pool,
-  opts: EmbedWorkerOptions = {},
+  opts: EmbedWorkerOptions = {}
 ): Promise<EmbedWorkerStats> {
   const embedder = opts.embedder ?? getCapabilityEmbedder();
   const maxRows = opts.maxRowsPerRun ?? DEFAULT_MAX_ROWS_PER_RUN;
@@ -130,7 +126,7 @@ async function embedOntology(
   pool: Pool,
   embedder: CapabilityEmbedder,
   maxRows: number,
-  stats: EmbedWorkerStats,
+  stats: EmbedWorkerStats
 ): Promise<void> {
   const { rows } = await pool.query<OntologyRow>(
     `SELECT uri, preferred_label, synonyms, description
@@ -144,7 +140,7 @@ async function embedOntology(
        )
      ORDER BY uri
      LIMIT $2;`,
-    [embedder.id, maxRows],
+    [embedder.id, maxRows]
   );
 
   if (rows.length === 0) {
@@ -159,7 +155,7 @@ async function embedOntology(
       preferredLabel: r.preferred_label,
       synonyms: r.synonyms ?? [],
       description: r.description,
-    }),
+    })
   );
 
   const results = await embedder.embedBatch(texts);
@@ -175,7 +171,7 @@ async function embedOntology(
            embedding_model = $2,
            embedding_updated_at = NOW()
        WHERE uri = $3;`,
-      [vectorToPgLiteral(result.vector), embedder.id, row.uri],
+      [vectorToPgLiteral(result.vector), embedder.id, row.uri]
     );
     stats.ontologyEmbedded += 1;
   }
@@ -195,7 +191,7 @@ async function embedModels(
   pool: Pool,
   embedder: CapabilityEmbedder,
   maxRows: number,
-  stats: EmbedWorkerStats,
+  stats: EmbedWorkerStats
 ): Promise<void> {
   const { rows } = await pool.query<ModelRow>(
     `SELECT
@@ -214,7 +210,7 @@ async function embedModels(
        )
      ORDER BY m.capability_updated_at NULLS FIRST, m.uid
      LIMIT $2;`,
-    [embedder.id, maxRows],
+    [embedder.id, maxRows]
   );
 
   if (rows.length === 0) {
@@ -234,7 +230,7 @@ async function embedModels(
       capabilityLabels: (r.capability_uris ?? [])
         .map((uri) => labelMap.get(uri) ?? uri)
         .slice(0, 20), // cap to keep prompt focused
-    }),
+    })
   );
 
   const results = await embedder.embedBatch(texts);
@@ -250,7 +246,7 @@ async function embedModels(
            embedding_model = $2,
            embedding_updated_at = NOW()
        WHERE uid = $3;`,
-      [vectorToPgLiteral(result.vector), embedder.id, row.uid],
+      [vectorToPgLiteral(result.vector), embedder.id, row.uid]
     );
     stats.modelsEmbedded += 1;
   }
@@ -276,7 +272,7 @@ async function loadOntologyLabelMap(pool: Pool): Promise<Map<string, string>> {
     return labelMapCache.map;
   }
   const { rows } = await pool.query<{ uri: string; preferred_label: string }>(
-    `SELECT uri, preferred_label FROM capability_ontology WHERE status != 'deprecated';`,
+    `SELECT uri, preferred_label FROM capability_ontology WHERE status != 'deprecated';`
   );
   const map = new Map<string, string>();
   for (const r of rows) map.set(r.uri, r.preferred_label);

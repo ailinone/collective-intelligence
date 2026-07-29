@@ -68,15 +68,18 @@ export async function runEvaluationPipeline(): Promise<{
 
   const durationMs = Date.now() - startedAt;
 
-  log.info({
-    snapshots,
-    driftsDetected: driftResult.driftsDetected.length,
-    rollbacksExecuted: rollbackResult.rollbacksExecuted,
-    learningReports: learningReports.length,
-    improvingStrategies: learningReports.filter(r => r.verdict === 'improving').length,
-    degradingStrategies: learningReports.filter(r => r.verdict === 'degrading').length,
-    durationMs,
-  }, 'Evaluation pipeline completed');
+  log.info(
+    {
+      snapshots,
+      driftsDetected: driftResult.driftsDetected.length,
+      rollbacksExecuted: rollbackResult.rollbacksExecuted,
+      learningReports: learningReports.length,
+      improvingStrategies: learningReports.filter((r) => r.verdict === 'improving').length,
+      degradingStrategies: learningReports.filter((r) => r.verdict === 'degrading').length,
+      durationMs,
+    },
+    'Evaluation pipeline completed'
+  );
 
   return {
     snapshots,
@@ -107,7 +110,7 @@ export function startEvaluationCronJob(): void {
         log.error({ error: String(err) }, 'Evaluation cron job failed');
       }
     },
-    { timezone: 'UTC' },
+    { timezone: 'UTC' }
   );
 
   log.info({ schedule: CONFIG.cronSchedule }, 'Evaluation cron job scheduled');

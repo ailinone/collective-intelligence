@@ -37,8 +37,9 @@ type UpdateFn = () => Promise<void>;
 
 function getUpdater(): UpdateFn {
   const service = new CentralModelDiscoveryService();
-  return (service as unknown as { updateProviderModelCountMetrics: UpdateFn })
-    .updateProviderModelCountMetrics.bind(service);
+  return (
+    service as unknown as { updateProviderModelCountMetrics: UpdateFn }
+  ).updateProviderModelCountMetrics.bind(service);
 }
 
 describe('central-model-discovery-service: updateProviderModelCountMetrics', () => {

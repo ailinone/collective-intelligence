@@ -70,10 +70,7 @@ export interface BroadcastEmitter {
 export class DefaultBroadcastEmitter implements BroadcastEmitter {
   constructor(private readonly writer: BroadcastOutboxWriter = broadcastOutboxWriter) {}
 
-  async emitChatCompletion(
-    args: BuildEnvelopeArgs,
-    tx?: OutboxPrismaRunner,
-  ): Promise<boolean> {
+  async emitChatCompletion(args: BuildEnvelopeArgs, tx?: OutboxPrismaRunner): Promise<boolean> {
     // Build phase: pure + validated. A build failure indicates schema drift
     // (bug in this builder, not a runtime condition). Log and drop.
     let envelope;
@@ -87,7 +84,7 @@ export class DefaultBroadcastEmitter implements BroadcastEmitter {
           organizationId: args.tenant.organizationId,
           err: err.message,
         },
-        'broadcast envelope build failed — skipping emission',
+        'broadcast envelope build failed — skipping emission'
       );
       // Build errors aren't counted in outboxWrites (whose label set is
       // {ok,error} for DB-side outcomes). A build failure is a pre-DB defect;
@@ -110,7 +107,7 @@ export class DefaultBroadcastEmitter implements BroadcastEmitter {
           envelopeId: envelope.envelopeId,
           err: err.message,
         },
-        'broadcast outbox write failed — user request is unaffected',
+        'broadcast outbox write failed — user request is unaffected'
       );
       return false;
     }

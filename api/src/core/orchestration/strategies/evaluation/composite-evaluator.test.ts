@@ -38,7 +38,12 @@ const baseInput = (overrides: Partial<EvaluatorInput> = {}): EvaluatorInput => (
   ...overrides,
 });
 
-function mockEvaluator(result: Partial<EvaluationResult> & { mode: EvaluationResult['scoringMode']; verdict: EvaluationResult['verdict'] }): StrategyOutputEvaluator {
+function mockEvaluator(
+  result: Partial<EvaluationResult> & {
+    mode: EvaluationResult['scoringMode'];
+    verdict: EvaluationResult['verdict'];
+  }
+): StrategyOutputEvaluator {
   return {
     mode: result.mode,
     id: `mock-${result.mode}`,
@@ -48,7 +53,11 @@ function mockEvaluator(result: Partial<EvaluationResult> & { mode: EvaluationRes
         evaluatorId: `mock-${result.mode}`,
         score: result.score,
         verdict: result.verdict,
-        structural: result.structural ?? { nonEmpty: true, meetsMinLength: true, executionError: false },
+        structural: result.structural ?? {
+          nonEmpty: true,
+          meetsMinLength: true,
+          executionError: false,
+        },
         validationStatus: result.validationStatus,
         notes: result.notes,
       };
@@ -61,7 +70,12 @@ describe('CompositeEvaluator — structural gate', () => {
     const judge = vi.fn();
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.9, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.9,
+        validationStatus: 'fully_validated',
+      }),
       llmJudge: { mode: 'llm_judge', id: 'judge', evaluate: judge },
     });
     const r = await ev.evaluate(baseInput({ output: '' })); // empty → structural fail
@@ -76,7 +90,12 @@ describe('CompositeEvaluator — score priority', () => {
   it('task_specific objective score wins when judge is not configured', async () => {
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.77, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.77,
+        validationStatus: 'fully_validated',
+      }),
     });
     const r = await ev.evaluate(baseInput({ output: 'A'.repeat(100) }));
     expect(r.score).toBe(0.77);
@@ -88,10 +107,21 @@ describe('CompositeEvaluator — score priority', () => {
     const judgeClient: LLMJudgeClient = { judge: async () => ({ score: 0.66, verdict: 'pass' }) };
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'uncertain', score: undefined, validationStatus: 'structurally_validated_only' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'uncertain',
+        score: undefined,
+        validationStatus: 'structurally_validated_only',
+      }),
       llmJudge: new LLMJudgeEvaluator(
-        { enabled: true, judgeModelId: 'j', maxCostUsd: 0.01, timeoutMs: 1000, rubricVersion: 'v1' },
-        judgeClient,
+        {
+          enabled: true,
+          judgeModelId: 'j',
+          maxCostUsd: 0.01,
+          timeoutMs: 1000,
+          rubricVersion: 'v1',
+        },
+        judgeClient
       ),
     });
     const r = await ev.evaluate(baseInput({ output: 'A'.repeat(100) }));
@@ -104,10 +134,21 @@ describe('CompositeEvaluator — score priority', () => {
     const judgeClient: LLMJudgeClient = { judge: async () => ({ score: 0.6, verdict: 'pass' }) };
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.9, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.9,
+        validationStatus: 'fully_validated',
+      }),
       llmJudge: new LLMJudgeEvaluator(
-        { enabled: true, judgeModelId: 'j', maxCostUsd: 0.01, timeoutMs: 1000, rubricVersion: 'v1' },
-        judgeClient,
+        {
+          enabled: true,
+          judgeModelId: 'j',
+          maxCostUsd: 0.01,
+          timeoutMs: 1000,
+          rubricVersion: 'v1',
+        },
+        judgeClient
       ),
       weights: { taskSpecific: 0.6, llmJudge: 0.4 },
     });
@@ -122,14 +163,20 @@ describe('CompositeEvaluator — never promotes structural to fully_validated', 
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
       taskSpecific: new TaskSpecificEvaluator(), // no runner → uncertain on code; we'll use plain_text
-      llmJudge: new LLMJudgeEvaluator(
-        { enabled: false, judgeModelId: undefined, maxCostUsd: 0, timeoutMs: 1000, rubricVersion: 'v1' },
-      ),
+      llmJudge: new LLMJudgeEvaluator({
+        enabled: false,
+        judgeModelId: undefined,
+        maxCostUsd: 0,
+        timeoutMs: 1000,
+        rubricVersion: 'v1',
+      }),
     });
-    const r = await ev.evaluate(baseInput({
-      task: { taskType: 'analysis', expectedFormat: 'free_text' },
-      output: 'A'.repeat(100),
-    }));
+    const r = await ev.evaluate(
+      baseInput({
+        task: { taskType: 'analysis', expectedFormat: 'free_text' },
+        output: 'A'.repeat(100),
+      })
+    );
     expect(r.score).toBeUndefined();
     expect(r.validationStatus).toBe('structurally_validated_only');
     expect(r.selectedScoreSource).toBe('none');
@@ -150,10 +197,15 @@ describe('CompositeEvaluator — judge respect', () => {
     const judge = vi.fn();
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.5, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.5,
+        validationStatus: 'fully_validated',
+      }),
       llmJudge: new LLMJudgeEvaluator(
         { enabled: false, judgeModelId: 'j', maxCostUsd: 1, timeoutMs: 1000, rubricVersion: 'v1' },
-        { judge },
+        { judge }
       ),
     });
     const r = await ev.evaluate(baseInput({ output: 'A'.repeat(100) }));
@@ -165,10 +217,15 @@ describe('CompositeEvaluator — judge respect', () => {
     const judge = vi.fn();
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.5, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.5,
+        validationStatus: 'fully_validated',
+      }),
       llmJudge: new LLMJudgeEvaluator(
         { enabled: true, judgeModelId: 'j', maxCostUsd: 0, timeoutMs: 1000, rubricVersion: 'v1' },
-        { judge },
+        { judge }
       ),
     });
     await ev.evaluate(baseInput({ output: 'A'.repeat(100) }));
@@ -180,7 +237,12 @@ describe('CompositeEvaluator — subResults + determinism', () => {
   it('records subResults from every sub-evaluator that ran', async () => {
     const ev = new CompositeEvaluator({
       structural: new StructuralOutputEvaluator(),
-      taskSpecific: mockEvaluator({ mode: 'task_specific', verdict: 'pass', score: 0.5, validationStatus: 'fully_validated' }),
+      taskSpecific: mockEvaluator({
+        mode: 'task_specific',
+        verdict: 'pass',
+        score: 0.5,
+        validationStatus: 'fully_validated',
+      }),
     });
     const r = await ev.evaluate(baseInput({ output: 'A'.repeat(100) }));
     expect(r.subResults?.map((s) => s.name)).toEqual(['structural', 'task_specific']);

@@ -19,7 +19,11 @@ import {
   C3_SMOKE_MAX_SUBSET_PLANS,
 } from '@/core/experiment/c3-dryrun-controlled-runtime-smoke-contract';
 
-const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-controlled-runtime-smoke-subset-manifest.json');
+const ART = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-dryrun-controlled-runtime-smoke-subset-manifest.json'
+);
 const subset = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — subset manifest', () => {
@@ -47,7 +51,11 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — subset manifest', () => 
       expect(subset.coverage.includesModelProbeValidatedPlan).toBe(true);
     });
     it('every subset entry carries a selectionReason', () => {
-      expect(subset.subset.every((e: any) => Array.isArray(e.selectionReason) && e.selectionReason.length > 0)).toBe(true);
+      expect(
+        subset.subset.every(
+          (e: any) => Array.isArray(e.selectionReason) && e.selectionReason.length > 0
+        )
+      ).toBe(true);
     });
   });
 });

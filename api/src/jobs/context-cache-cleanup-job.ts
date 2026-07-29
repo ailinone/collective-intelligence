@@ -132,7 +132,8 @@ async function deleteExpiredContexts(): Promise<number> {
       // Also clean up Redis keys (best effort)
       const redis = getRedisClient();
       const redisKeys = expiredContexts.map(
-        (c: { id: string; organizationId: string }) => `${CONFIG.redisKeyPrefix}:${c.organizationId}:${c.id}`
+        (c: { id: string; organizationId: string }) =>
+          `${CONFIG.redisKeyPrefix}:${c.organizationId}:${c.id}`
       );
 
       if (redisKeys.length > 0) {
@@ -270,4 +271,3 @@ export async function runContextCacheCleanupNow(): Promise<number> {
   log.info({ deletedCount, duration }, 'Manual context cache cleanup completed');
   return deletedCount;
 }
-

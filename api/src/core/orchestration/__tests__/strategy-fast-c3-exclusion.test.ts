@@ -49,9 +49,7 @@ const CTX: OrchestrationContext = {
   taskType: 'general',
   qualityTarget: 0.85,
   preferSpeed: true,
-  models: [
-    { id: 'model-fast', provider: 'openai' } as OrchestrationContext['models'][0],
-  ],
+  models: [{ id: 'model-fast', provider: 'openai' } as OrchestrationContext['models'][0]],
 };
 
 const REQ = {
@@ -93,7 +91,14 @@ describe('01C.1B-SM-R6 §13d — fast strategy C3 exclusion', () => {
 
   describe('plan identity — fast proxy equals sensitivity-consensus', () => {
     const proxyResult = buildPlanOnlyResult(
-      'sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+      'sensitivity-consensus',
+      'explicit',
+      'request-flag',
+      REQ,
+      CTX,
+      null,
+      0.85,
+      { registered: true }
     );
     const proxyMeta = proxyResult.metadata as Record<string, unknown>;
     const proxyPlan = proxyMeta['executionPlan'] as {

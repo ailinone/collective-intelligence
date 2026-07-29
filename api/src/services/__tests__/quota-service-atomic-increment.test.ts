@@ -65,7 +65,9 @@ describe('recordQuotaUsage — atomic increment (issue #149)', () => {
   });
 
   it('issues an atomic {increment} update, not a computed absolute value', async () => {
-    await recordQuotaUsage('org-1', { operation: { requests: 1, tokens: 500, cost: 0.02, files: 0 } });
+    await recordQuotaUsage('org-1', {
+      operation: { requests: 1, tokens: 500, cost: 0.02, files: 0 },
+    });
 
     expect(updateMock).toHaveBeenCalledWith({
       where: { id: 'quota-1' },

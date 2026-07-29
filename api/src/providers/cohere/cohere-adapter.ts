@@ -91,7 +91,7 @@ export class CohereAdapter extends ProviderAdapter {
     }
 
     // Remove provider prefix from model IDs to return normalized names
-    return models.map(model => ({
+    return models.map((model) => ({
       ...model,
       id: model.name, // Use 'name' which is the normalized ID without prefix
     }));
@@ -118,14 +118,15 @@ export class CohereAdapter extends ProviderAdapter {
 
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
     const messages = this.toCohereMessages(request);
-    
+
     // Get default model dynamically from available models (no hardcoding)
     let modelId = request.model;
     if (!modelId) {
       const models = await this.getModels();
-      const chatModels = models.filter(m => 
-        m.status === 'active' && 
-        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+      const chatModels = models.filter(
+        (m) =>
+          m.status === 'active' &&
+          (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
       );
       if (chatModels.length > 0) {
         // Select cheapest model
@@ -197,14 +198,15 @@ export class CohereAdapter extends ProviderAdapter {
 
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const messages = this.toCohereMessages(request);
-    
+
     // Get default model dynamically from available models (no hardcoding)
     let modelId = request.model;
     if (!modelId) {
       const models = await this.getModels();
-      const chatModels = models.filter(m => 
-        m.status === 'active' && 
-        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+      const chatModels = models.filter(
+        (m) =>
+          m.status === 'active' &&
+          (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
       );
       if (chatModels.length > 0) {
         // Select cheapest model
@@ -446,8 +448,9 @@ export class CohereAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -507,7 +510,8 @@ export class CohereAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -525,8 +529,10 @@ export class CohereAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -538,8 +544,10 @@ export class CohereAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -548,7 +556,7 @@ export class CohereAdapter extends ProviderAdapter {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+
       return {
         flagged: false,
         categories: {
@@ -587,14 +595,21 @@ export class CohereAdapter extends ProviderAdapter {
    * Cohere does not have image editing capability
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Cohere image editing is not yet implemented. Cohere does not provide image editing capabilities. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'Cohere image editing is not yet implemented. Cohere does not provide image editing capabilities. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * Cohere does not have image variation capability
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Cohere image variation is not yet implemented. Cohere does not provide image variation capabilities. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Cohere image variation is not yet implemented. Cohere does not provide image variation capabilities. Use OpenAI DALL-E for image variations.'
+    );
   }
 }

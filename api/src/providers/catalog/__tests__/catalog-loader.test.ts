@@ -26,9 +26,7 @@ import {
 } from '../catalog-loader';
 import type { ProviderCatalogEntry } from '../provider-catalog.types';
 
-function makeEntry(
-  overrides: Partial<ProviderCatalogEntry> = {},
-): ProviderCatalogEntry {
+function makeEntry(overrides: Partial<ProviderCatalogEntry> = {}): ProviderCatalogEntry {
   return {
     providerId: 'loader-test',
     displayName: 'Loader Test',
@@ -46,12 +44,12 @@ function makeEntry(
 
 function findResult(
   results: readonly CatalogLoadEntryResult[],
-  providerId: string,
+  providerId: string
 ): CatalogLoadEntryResult {
   const match = results.find((r) => r.providerId === providerId);
   if (!match) {
     throw new Error(
-      `test expected a result for providerId='${providerId}' — got [${results.map((r) => r.providerId).join(',')}]`,
+      `test expected a result for providerId='${providerId}' — got [${results.map((r) => r.providerId).join(',')}]`
     );
   }
   return match;
@@ -137,9 +135,7 @@ describe('loadProviderCatalog — pre-flight filters', () => {
 
     const result = findResult(summary.results, 'first-party-entry');
     expect(result.status).toBe('skipped');
-    expect(result.reason).toBe<CatalogLoadSkipReason>(
-      'unsupported-integration-class',
-    );
+    expect(result.reason).toBe<CatalogLoadSkipReason>('unsupported-integration-class');
   });
 
   it('skips embeddings-only specialty class (reason: unsupported-integration-class)', async () => {
@@ -157,9 +153,7 @@ describe('loadProviderCatalog — pre-flight filters', () => {
 
     const result = findResult(summary.results, 'specialty-embed');
     expect(result.status).toBe('skipped');
-    expect(result.reason).toBe<CatalogLoadSkipReason>(
-      'unsupported-integration-class',
-    );
+    expect(result.reason).toBe<CatalogLoadSkipReason>('unsupported-integration-class');
   });
 });
 
@@ -274,9 +268,7 @@ describe('loadProviderCatalog — real PROVIDER_CATALOG structural smoke', () =>
     const summary = await loadProviderCatalog({ force: true });
 
     expect(summary.attempted).toBeGreaterThan(0);
-    expect(summary.registered + summary.skipped + summary.failed).toBe(
-      summary.attempted,
-    );
+    expect(summary.registered + summary.skipped + summary.failed).toBe(summary.attempted);
     expect(summary.results).toHaveLength(summary.attempted);
 
     // In a completely keyless env, we expect registered=0.

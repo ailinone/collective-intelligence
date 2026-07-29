@@ -21,8 +21,7 @@ import { GetProjectQuery } from '../queries/get-project.query';
 import { IProjectRepository } from '@/domain/repositories/iproject-repository';
 import { ProjectEntity } from '@/domain/entities/project.entity';
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface GetProjectResult {
   success: boolean;
@@ -44,10 +43,7 @@ export class GetProjectHandler {
 
       const project = looksLikeUuid
         ? await this.projectRepository.findById(query.idOrSlug)
-        : await this.projectRepository.findBySlug(
-            query.organizationId,
-            query.idOrSlug
-          );
+        : await this.projectRepository.findBySlug(query.organizationId, query.idOrSlug);
 
       if (!project) {
         return {

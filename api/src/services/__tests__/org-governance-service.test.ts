@@ -365,9 +365,9 @@ describe('parseGovernanceFromSettings robustness', () => {
     expect(parseGovernanceFromSettings(undefined)).toEqual({});
     expect(parseGovernanceFromSettings(null)).toEqual({});
     expect(parseGovernanceFromSettings('not-an-object')).toEqual({});
-    expect(parseGovernanceFromSettings({ governance: { budget: { maxMonthlyCostUsd: 'x' } } })).toEqual(
-      {}
-    );
+    expect(
+      parseGovernanceFromSettings({ governance: { budget: { maxMonthlyCostUsd: 'x' } } })
+    ).toEqual({});
   });
 });
 

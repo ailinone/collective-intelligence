@@ -98,7 +98,7 @@ describe('writeProjection — legacy bridge behaviour', () => {
         { uri: uri('chat'), confidence: 0.9, sources: ['provider-declared'] },
         { uri: uri('vision'), confidence: 0.8, sources: ['modality-derived'] },
       ],
-      emptyStats(),
+      emptyStats()
     );
     expect(calls).toHaveLength(1);
     expect(calls[0].text).toContain('capabilities = $4::jsonb');
@@ -112,7 +112,7 @@ describe('writeProjection — legacy bridge behaviour', () => {
     await writeProjectionForTest(pool, 'model-2', [], stats);
     expect(calls).toHaveLength(1);
     expect(calls[0].text).not.toContain('capabilities =');
-    expect(calls[0].text).toContain("capability_uris = ARRAY[]::text[]");
+    expect(calls[0].text).toContain('capability_uris = ARRAY[]::text[]');
     expect(stats.modelsCleared).toBe(1);
   });
 
@@ -124,7 +124,7 @@ describe('writeProjection — legacy bridge behaviour', () => {
       pool,
       'model-3',
       [{ uri: uri('chat'), confidence: 0.05, sources: ['name-regex'] }],
-      emptyStats(),
+      emptyStats()
     );
     expect(calls).toHaveLength(1);
     expect(calls[0].text).not.toContain('capabilities =');
@@ -139,7 +139,7 @@ describe('writeProjection — legacy bridge behaviour', () => {
       pool,
       'model-4',
       [{ uri: uri('chat'), confidence: 0.9, sources: ['provider-declared'] }],
-      emptyStats(),
+      emptyStats()
     );
     expect(calls).toHaveLength(1);
     expect(calls[0].text).not.toContain('capabilities =');

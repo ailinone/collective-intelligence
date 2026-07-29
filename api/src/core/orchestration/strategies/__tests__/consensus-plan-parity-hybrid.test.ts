@@ -23,16 +23,10 @@ import {
   classifyParticipantFailure,
   computeHybridParityForPlan,
 } from '../consensus-strategy';
-import {
-  fullConsensusPool,
-} from '../../model-selection/__tests__/role-resolver.fixtures';
+import { fullConsensusPool } from '../../model-selection/__tests__/role-resolver.fixtures';
 import { ConsensusExecutionPlanner } from '../consensus-execution-planner';
 import { ModelRoleResolver } from '../../model-selection/model-role-resolver';
-import {
-  makeContext,
-  makeRequest,
-  wireStrategy,
-} from './consensus-strategy.fixtures';
+import { makeContext, makeRequest, wireStrategy } from './consensus-strategy.fixtures';
 import type { ChatRequest } from '@/types';
 import type { ConsensusExecutionPlan } from '../consensus-execution-planner';
 
@@ -47,53 +41,91 @@ async function buildPlan(): Promise<ConsensusExecutionPlan> {
 describe('classifyParticipantFailure', () => {
   it('maps 402 / "no credit" / "insufficient" to no_credits', () => {
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'HTTP 402 Payment Required', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'HTTP 402 Payment Required',
+        outlier: false,
+      })
     ).toBe('no_credits');
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'insufficient_balance', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'insufficient_balance',
+        outlier: false,
+      })
     ).toBe('no_credits');
   });
 
   it('maps 401 / auth to auth_failed', () => {
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'HTTP 401 Unauthorized', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'HTTP 401 Unauthorized',
+        outlier: false,
+      })
     ).toBe('auth_failed');
   });
 
   it('maps 429 / rate / quota to rate_limited', () => {
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'rate limit exceeded', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'rate limit exceeded',
+        outlier: false,
+      })
     ).toBe('rate_limited');
   });
 
   it('maps timeout / 404 / unsupported correctly', () => {
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'request timeout', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'request timeout',
+        outlier: false,
+      })
     ).toBe('timeout');
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'model not found', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'model not found',
+        outlier: false,
+      })
     ).toBe('model_not_found');
     expect(
-      classifyParticipantFailure({ executionSuccess: false, executionError: 'unsupported model', outlier: false }),
+      classifyParticipantFailure({
+        executionSuccess: false,
+        executionError: 'unsupported model',
+        outlier: false,
+      })
     ).toBe('unsupported_model');
   });
 
   it('maps outlier success → outlier_rejected (with empty_output / invalid_response specializations)', () => {
     expect(
-      classifyParticipantFailure({ executionSuccess: true, outlier: true, outlierReason: 'empty_output' }),
+      classifyParticipantFailure({
+        executionSuccess: true,
+        outlier: true,
+        outlierReason: 'empty_output',
+      })
     ).toBe('empty_response');
     expect(
-      classifyParticipantFailure({ executionSuccess: true, outlier: true, outlierReason: 'invalid_json' }),
+      classifyParticipantFailure({
+        executionSuccess: true,
+        outlier: true,
+        outlierReason: 'invalid_json',
+      })
     ).toBe('invalid_response');
     expect(
-      classifyParticipantFailure({ executionSuccess: true, outlier: true, outlierReason: 'output_too_short' }),
+      classifyParticipantFailure({
+        executionSuccess: true,
+        outlier: true,
+        outlierReason: 'output_too_short',
+      })
     ).toBe('outlier_rejected');
   });
 
   it('returns undefined when execution succeeded and not outlier', () => {
-    expect(
-      classifyParticipantFailure({ executionSuccess: true, outlier: false }),
-    ).toBeUndefined();
+    expect(classifyParticipantFailure({ executionSuccess: true, outlier: false })).toBeUndefined();
   });
 });
 
@@ -113,8 +145,14 @@ describe('computeHybridParityForPlan', () => {
       plannedParticipantModelIds: ['a', 'b', 'c'],
       evaluated: [
         { execution: { modelId: 'a', success: true }, outlierDetection: { outlier: false } },
-        { execution: { modelId: 'b', success: false, error: '402' }, outlierDetection: { outlier: false } },
-        { execution: { modelId: 'c', success: true }, outlierDetection: { outlier: true, outlierReason: 'empty_output' } },
+        {
+          execution: { modelId: 'b', success: false, error: '402' },
+          outlierDetection: { outlier: false },
+        },
+        {
+          execution: { modelId: 'c', success: true },
+          outlierDetection: { outlier: true, outlierReason: 'empty_output' },
+        },
       ],
       planSource: 'dynamic_role_resolver',
     });
@@ -225,7 +263,7 @@ describe('Strategy integration — Hybrid parity emitted on real execute()', () 
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,
@@ -251,7 +289,7 @@ describe('Strategy integration — Hybrid parity emitted on real execute()', () 
         i === 0
           ? { content: '', success: false, error: 'HTTP 402 Payment Required' }
           : { content: `output ${m.id} `.repeat(8) },
-      ]),
+      ])
     );
     const { strategy } = wireStrategy({
       responses,
@@ -267,6 +305,8 @@ describe('Strategy integration — Hybrid parity emitted on real execute()', () 
     expect(a.planParity.plannedParticipantExecutionSuccess[idx]).toBe(false);
     expect(a.planParity.plannedParticipantFailureReasons[idx]).toBe('no_credits');
     expect(a.planParity.planExecutionDegraded).toBe(true);
-    expect(a.planParity.planExecutionDegradationReason).toBe('insufficient_successful_participants');
+    expect(a.planParity.planExecutionDegradationReason).toBe(
+      'insufficient_successful_participants'
+    );
   });
 });

@@ -60,7 +60,15 @@ export interface CapabilityOntology {
 const CAPABILITIES: readonly CapabilityDefinition[] = Object.freeze([
   {
     id: 'audio_generation',
-    aliases: ['audio-generation', 'tts', 'text_to_speech', 'text-to-speech', 'speech_to_text', 'speech-to-text', 'audio'],
+    aliases: [
+      'audio-generation',
+      'tts',
+      'text_to_speech',
+      'text-to-speech',
+      'speech_to_text',
+      'speech-to-text',
+      'audio',
+    ],
     routeFlag: 'supportsAudio',
   },
   {
@@ -78,7 +86,14 @@ const CAPABILITIES: readonly CapabilityDefinition[] = Object.freeze([
   },
   {
     id: 'json_mode',
-    aliases: ['json', 'json-mode', 'json_output', 'json-output', 'structured_output', 'structured-output'],
+    aliases: [
+      'json',
+      'json-mode',
+      'json_output',
+      'json-output',
+      'structured_output',
+      'structured-output',
+    ],
     routeFlag: 'supportsJson',
   },
   {
@@ -168,7 +183,7 @@ export const capabilityOntology: CapabilityOntology = new CapabilityOntologyImpl
 
 /** Test seam — build a custom ontology in tests without touching the singleton. */
 export function buildCapabilityOntology(
-  definitions: readonly CapabilityDefinition[],
+  definitions: readonly CapabilityDefinition[]
 ): CapabilityOntology {
   return new CapabilityOntologyImpl(definitions);
 }

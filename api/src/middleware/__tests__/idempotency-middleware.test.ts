@@ -32,10 +32,7 @@ import {
   IDEMPOTENCY_REPLAYED_HEADER,
   IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
 } from '../idempotency-middleware';
-import {
-  MAX_IDEMPOTENCY_KEY_LENGTH,
-  type IdempotencyStore,
-} from '@/services/idempotency-service';
+import { MAX_IDEMPOTENCY_KEY_LENGTH, type IdempotencyStore } from '@/services/idempotency-service';
 
 class FakeStore implements IdempotencyStore {
   public data = new Map<string, string>();

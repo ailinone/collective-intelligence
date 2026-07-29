@@ -50,9 +50,7 @@ export interface StrategyDecisionTrace {
 }
 
 /** Pure helper — converts the full context into the categorical summary. */
-export function summariseContext(
-  ctx: StrategyPlanningContext,
-): StrategyPlanningContextSummary {
+export function summariseContext(ctx: StrategyPlanningContext): StrategyPlanningContextSummary {
   return {
     taskType: ctx.taskType,
     complexity: ctx.complexity,

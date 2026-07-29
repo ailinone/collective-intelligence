@@ -114,8 +114,8 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — matrices and policies', () => {
     it('every strategy cell is dryRun=true / planOnly=true / no execution', () => {
       expect(
         taskMatrix.taskStrategyCells.every(
-          (c: any) => c.dryRun === true && c.planOnly === true && c.c3ExecutionAuthorized === false,
-        ),
+          (c: any) => c.dryRun === true && c.planOnly === true && c.c3ExecutionAuthorized === false
+        )
       ).toBe(true);
     });
     it('no cell uses the excluded fast strategy', () => {
@@ -132,8 +132,8 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — matrices and policies', () => {
     it('every baseline cell is dryRun=true / planOnly=true / no execution', () => {
       expect(
         baselineMatrix.baselineCells.every(
-          (c: any) => c.dryRun === true && c.planOnly === true && c.c3ExecutionAuthorized === false,
-        ),
+          (c: any) => c.dryRun === true && c.planOnly === true && c.c3ExecutionAuthorized === false
+        )
       ).toBe(true);
     });
   });

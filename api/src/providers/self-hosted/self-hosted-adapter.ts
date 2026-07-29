@@ -19,9 +19,21 @@
  * Enabled when SELF_HOSTED_STT_URL or SELF_HOSTED_TTS_URL env vars are set.
  */
 
-import { ProviderAdapter, type ProviderConfig, type HealthCheckResult } from '@/providers/base/provider-adapter';
+import {
+  ProviderAdapter,
+  type ProviderConfig,
+  type HealthCheckResult,
+} from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
-import type { AudioTTSRequest, AudioTTSResponse, AudioSTTRequest, AudioSTTResponse, ModerationResponse, ImageEditResponse, ImageVariationResponse } from '@/types/model-client';
+import type {
+  AudioTTSRequest,
+  AudioTTSResponse,
+  AudioSTTRequest,
+  AudioSTTResponse,
+  ModerationResponse,
+  ImageEditResponse,
+  ImageVariationResponse,
+} from '@/types/model-client';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ provider: 'self-hosted' });
@@ -62,11 +74,11 @@ export class SelfHostedAdapter extends ProviderAdapter {
   private getSidecarModelName(modelName: string): string {
     const map: Record<string, string> = {
       'kokoro-tts': 'kokoro',
-      'melotts': 'melotts',
+      melotts: 'melotts',
       'fish-speech': 'fish-speech',
       'neutts-air': 'neutts-air',
       'dia2-2b': 'dia2-2b',
-      'faster-whisper': 'base',  // whisper model size
+      'faster-whisper': 'base', // whisper model size
     };
     return map[modelName] || modelName;
   }
@@ -83,7 +95,10 @@ export class SelfHostedAdapter extends ProviderAdapter {
       const form = new FormData();
       const mimeType = (request.options?.mimeType as string) || 'audio/wav';
       const filename = (request.options?.filename as string) || 'audio.wav';
-      form.set('file', new File([new Blob([request.audio], { type: mimeType })], filename, { type: mimeType }));
+      form.set(
+        'file',
+        new File([new Blob([request.audio], { type: mimeType })], filename, { type: mimeType })
+      );
       if (request.language) form.set('language', request.language);
 
       // OpenAI-compatible /v1/audio/transcriptions endpoint. Route connection
@@ -97,13 +112,20 @@ export class SelfHostedAdapter extends ProviderAdapter {
         return res;
       }, 'speech-to-text');
 
-      const data = await response.json() as { text: string; segments?: Array<{ text: string; start: number; end: number }>; language?: string };
+      const data = (await response.json()) as {
+        text: string;
+        segments?: Array<{ text: string; start: number; end: number }>;
+        language?: string;
+      };
       const latency = Date.now() - start;
       log.info({ latency, textLen: data.text.length }, 'Self-hosted STT completed');
 
       return { text: data.text, raw: { ...data, latency, method: 'self-hosted' } };
     } catch (error) {
-      log.error({ error: error instanceof Error ? error.message : String(error) }, 'Self-hosted STT failed');
+      log.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Self-hosted STT failed'
+      );
       throw error;
     }
   }
@@ -159,14 +181,24 @@ export class SelfHostedAdapter extends ProviderAdapter {
           const chunk = Buffer.from(value);
           totalBytes += chunk.length;
           if (firstChunk) {
-            log.info({ latency: Date.now() - start, chunkBytes: chunk.length }, 'Self-hosted TTS first chunk (streaming)');
+            log.info(
+              { latency: Date.now() - start, chunkBytes: chunk.length },
+              'Self-hosted TTS first chunk (streaming)'
+            );
             firstChunk = false;
           }
           onChunk(chunk);
         }
 
-        log.info({ latency: Date.now() - start, totalBytes }, 'Self-hosted TTS streaming completed');
-        return { audio: Buffer.alloc(0), format: request.format || 'wav', raw: { latency: Date.now() - start, method: 'self-hosted-stream', totalBytes } };
+        log.info(
+          { latency: Date.now() - start, totalBytes },
+          'Self-hosted TTS streaming completed'
+        );
+        return {
+          audio: Buffer.alloc(0),
+          format: request.format || 'wav',
+          raw: { latency: Date.now() - start, method: 'self-hosted-stream', totalBytes },
+        };
       }
 
       // BATCH fallback: Read entire response at once
@@ -174,9 +206,16 @@ export class SelfHostedAdapter extends ProviderAdapter {
       const latency = Date.now() - start;
       log.info({ latency, audioBytes: audioBuffer.length }, 'Self-hosted TTS completed');
 
-      return { audio: audioBuffer, format: request.format || 'wav', raw: { latency, method: 'self-hosted' } };
+      return {
+        audio: audioBuffer,
+        format: request.format || 'wav',
+        raw: { latency, method: 'self-hosted' },
+      };
     } catch (error) {
-      log.error({ error: error instanceof Error ? error.message : String(error) }, 'Self-hosted TTS failed');
+      log.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Self-hosted TTS failed'
+      );
       throw error;
     }
   }
@@ -185,7 +224,9 @@ export class SelfHostedAdapter extends ProviderAdapter {
 
   async getProvider(): Promise<Provider> {
     return {
-      id: 'self-hosted', name: 'self-hosted', displayName: 'Self-Hosted Inference',
+      id: 'self-hosted',
+      name: 'self-hosted',
+      displayName: 'Self-Hosted Inference',
       status: 'active',
       health: { status: 'healthy', lastCheck: new Date() },
       models: [],
@@ -193,31 +234,53 @@ export class SelfHostedAdapter extends ProviderAdapter {
   }
 
   async getModels(): Promise<Model[]> {
-    const perf: import('@/types').ModelPerformance = { latencyMs: 200, throughput: 0, quality: 0.85, reliability: 0.95 };
+    const perf: import('@/types').ModelPerformance = {
+      latencyMs: 200,
+      throughput: 0,
+      quality: 0.85,
+      reliability: 0.95,
+    };
     const base: Omit<Model, 'id' | 'name' | 'displayName' | 'capabilities'> = {
-      providerId: 'self-hosted', provider: 'self-hosted',
-      contextWindow: 0, maxOutputTokens: 0,
-      inputCostPer1k: 0, outputCostPer1k: 0,
-      status: 'active', performance: perf,
+      providerId: 'self-hosted',
+      provider: 'self-hosted',
+      contextWindow: 0,
+      maxOutputTokens: 0,
+      inputCostPer1k: 0,
+      outputCostPer1k: 0,
+      status: 'active',
+      performance: perf,
     };
 
     // Dynamically discover models from each running sidecar via /v1/models
     const models: Model[] = [];
 
-    const discoverFromSidecar = async (url: string, type: 'stt' | 'tts' | 'vad' | 'sts'): Promise<void> => {
+    const discoverFromSidecar = async (
+      url: string,
+      type: 'stt' | 'tts' | 'vad' | 'sts'
+    ): Promise<void> => {
       try {
         const response = await fetch(`${url}/v1/models`, { signal: AbortSignal.timeout(5000) });
         if (!response.ok) return;
-        const data = await response.json() as { data?: Array<{ id?: string; object?: string }> };
-        const caps: import('@/types').ModelCapability[] = type === 'stt' ? ['speech_to_text', 'streaming']
-          : type === 'tts' ? ['text_to_speech', 'streaming']
-          : type === 'sts' ? ['text_to_speech', 'speech_to_text', 'streaming']
-          : ['streaming'];
+        const data = (await response.json()) as { data?: Array<{ id?: string; object?: string }> };
+        const caps: import('@/types').ModelCapability[] =
+          type === 'stt'
+            ? ['speech_to_text', 'streaming']
+            : type === 'tts'
+              ? ['text_to_speech', 'streaming']
+              : type === 'sts'
+                ? ['text_to_speech', 'speech_to_text', 'streaming']
+                : ['streaming'];
 
         if (Array.isArray(data.data)) {
           for (const m of data.data) {
             const name = m.id || 'unknown';
-            models.push({ ...base, id: `self-hosted/${name}`, name, displayName: `${name} (self-hosted)`, capabilities: caps });
+            models.push({
+              ...base,
+              id: `self-hosted/${name}`,
+              name,
+              displayName: `${name} (self-hosted)`,
+              capabilities: caps,
+            });
           }
         }
       } catch {
@@ -252,8 +315,8 @@ export class SelfHostedAdapter extends ProviderAdapter {
     const start = Date.now();
     try {
       const checks = await Promise.all([
-        this.sttUrl ? fetch(`${this.sttUrl}/health`).then(r => r.ok) : Promise.resolve(true),
-        this.ttsUrl ? fetch(`${this.ttsUrl}/health`).then(r => r.ok) : Promise.resolve(true),
+        this.sttUrl ? fetch(`${this.sttUrl}/health`).then((r) => r.ok) : Promise.resolve(true),
+        this.ttsUrl ? fetch(`${this.ttsUrl}/health`).then((r) => r.ok) : Promise.resolve(true),
       ]);
       return { healthy: checks.every(Boolean), latency: Date.now() - start, checkedAt: new Date() };
     } catch {
@@ -262,13 +325,36 @@ export class SelfHostedAdapter extends ProviderAdapter {
   }
 
   // ── Not Supported ──────────────────
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('Self-hosted: audio-only'); }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('Self-hosted: audio-only');
+  }
+
   // eslint-disable-next-line require-yield -- audio-only provider; this generator never yields.
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse> { throw new Error('Self-hosted: audio-only'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('Not supported'); }
-  calculateCost(): number { return 0; }
-  normalizeModelName(name: string): string { return name; }
-  async moderate(): Promise<ModerationResponse> { throw new Error('Not supported'); }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('Not supported'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('Not supported'); }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse> {
+    throw new Error('Self-hosted: audio-only');
+  }
+
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('Not supported');
+  }
+
+  calculateCost(): number {
+    return 0;
+  }
+
+  normalizeModelName(name: string): string {
+    return name;
+  }
+
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('Not supported');
+  }
 }

@@ -102,7 +102,10 @@ export class PrismaUserRepository implements IUserRepository {
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, userId: userId.getValue() }, 'Failed to find user by ID');
+      this.log.error(
+        { error: errorMessage, userId: userId.getValue() },
+        'Failed to find user by ID'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -134,7 +137,10 @@ export class PrismaUserRepository implements IUserRepository {
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, email: email.getValue() }, 'Failed to find user by email');
+      this.log.error(
+        { error: errorMessage, email: email.getValue() },
+        'Failed to find user by email'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -171,7 +177,10 @@ export class PrismaUserRepository implements IUserRepository {
       );
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, organizationId }, 'Failed to find users by organization');
+      this.log.error(
+        { error: errorMessage, organizationId },
+        'Failed to find users by organization'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -362,7 +371,10 @@ export class PrismaUserRepository implements IUserRepository {
       return UserAggregate.reconstitute(userEntity, apiKeyEntities);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, userId: userId.getValue() }, 'Failed to find user aggregate');
+      this.log.error(
+        { error: errorMessage, userId: userId.getValue() },
+        'Failed to find user aggregate'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }

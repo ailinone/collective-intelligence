@@ -88,7 +88,7 @@ function embedCacheKey(text: string): string {
 
 async function embedWithCacheAndDeadline(
   embedder: CapabilityEmbedder,
-  text: string,
+  text: string
 ): Promise<EmbedResult> {
   const key = embedCacheKey(text);
 
@@ -121,7 +121,10 @@ async function embedWithCacheAndDeadline(
     const result = await Promise.race([
       raw,
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`embedding deadline exceeded (${EMBED_DEADLINE_MS}ms)`)), EMBED_DEADLINE_MS),
+        setTimeout(
+          () => reject(new Error(`embedding deadline exceeded (${EMBED_DEADLINE_MS}ms)`)),
+          EMBED_DEADLINE_MS
+        )
       ),
     ]);
     cacheResult(result);
@@ -151,7 +154,7 @@ export interface OntologySearchHit {
   category: string;
   synonyms: string[];
   description: string | null;
-  score: number;          // RRF combined score
+  score: number; // RRF combined score
   matchedBy: ReadonlyArray<'lexical' | 'vector'>;
 }
 
@@ -188,8 +191,13 @@ export interface ModelSearchOptions {
   minConfidence?: number;
   /** Only models whose evidence comes from these sources. */
   sources?: ReadonlyArray<
-    'provider-declared' | 'helicone-oracle' | 'modality-derived' |
-    'parameter-derived' | 'name-regex' | 'llm-extracted' | 'operator-override'
+    | 'provider-declared'
+    | 'helicone-oracle'
+    | 'modality-derived'
+    | 'parameter-derived'
+    | 'name-regex'
+    | 'llm-extracted'
+    | 'operator-override'
   >;
   /** Filter by provider ids. */
   providerIds?: readonly string[];
@@ -212,7 +220,7 @@ export interface ModelSearchOptions {
 export class CapabilitySearchService {
   constructor(
     private readonly pool: Pool,
-    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder(),
+    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder()
   ) {}
 
   // ─────────────────────────────────────────── Ontology
@@ -232,7 +240,11 @@ export class CapabilitySearchService {
     if (!opts.lexicalOnly) {
       try {
         queryEmbedding = await embedWithCacheAndDeadline(this.embedder, q);
-        vectorRows = await this.vectorOntologyRecall(queryEmbedding.vector, recallLimit, opts.category);
+        vectorRows = await this.vectorOntologyRecall(
+          queryEmbedding.vector,
+          recallLimit,
+          opts.category
+        );
       } catch (err) {
         log.warn({ err, query: q }, 'Vector recall failed — degrading to lexical-only');
       }
@@ -244,7 +256,7 @@ export class CapabilitySearchService {
   private async lexicalOntologyRecall(
     query: string,
     limit: number,
-    category?: string,
+    category?: string
   ): Promise<OntologyLexicalRow[]> {
     const params: unknown[] = [query, limit];
     let categoryClause = '';
@@ -272,7 +284,7 @@ export class CapabilitySearchService {
        WHERE sim > 0.10
        ORDER BY sim DESC
        LIMIT $2;`,
-      params,
+      params
     );
     return rows;
   }
@@ -280,7 +292,7 @@ export class CapabilitySearchService {
   private async vectorOntologyRecall(
     queryVec: number[],
     limit: number,
-    category?: string,
+    category?: string
   ): Promise<OntologyVectorRow[]> {
     if (queryVec.length !== EMBEDDING_DIM) {
       throw new Error(`Query embedding has dim ${queryVec.length}, expected ${EMBEDDING_DIM}`);
@@ -304,7 +316,7 @@ export class CapabilitySearchService {
          AND embedding IS NOT NULL ${categoryClause}
        ORDER BY embedding <=> $1::vector
        LIMIT $2;`,
-      params,
+      params
     );
     return rows;
   }
@@ -355,7 +367,12 @@ export class CapabilitySearchService {
     let vectorRows: ModelVectorRow[] = [];
     if (queryEmbedding) {
       try {
-        vectorRows = await this.vectorModelRecall(queryEmbedding.vector, recallLimit, filter, universeSql);
+        vectorRows = await this.vectorModelRecall(
+          queryEmbedding.vector,
+          recallLimit,
+          filter,
+          universeSql
+        );
       } catch (err) {
         log.warn({ err, query: opts.query }, 'Vector recall failed — degrading to lexical-only');
       }
@@ -371,9 +388,7 @@ export class CapabilitySearchService {
     return fused
       .filter((hit) => {
         if (minConfidence === 0 || requireCaps.length === 0) return true;
-        return requireCaps.every(
-          (uri) => (hit.capabilityConfidence[uri] ?? 0) >= minConfidence,
-        );
+        return requireCaps.every((uri) => (hit.capabilityConfidence[uri] ?? 0) >= minConfidence);
       })
       .map((hit) => applyPreferenceBoost(hit, prefersCaps))
       .sort((a, b) => b.score - a.score)
@@ -384,7 +399,7 @@ export class CapabilitySearchService {
     query: string,
     limit: number,
     filter: ModelFilterClause,
-    universeSql: string,
+    universeSql: string
   ): Promise<ModelLexicalRow[]> {
     const params: unknown[] = [query, limit, ...filter.params];
     const { rows } = await this.pool.query<ModelLexicalRow>(
@@ -407,7 +422,7 @@ export class CapabilitySearchService {
          ${filter.sql}
        ORDER BY sim DESC
        LIMIT $2;`,
-      params,
+      params
     );
     return rows.filter((r) => r.sim > 0.05);
   }
@@ -416,7 +431,7 @@ export class CapabilitySearchService {
     queryVec: number[],
     limit: number,
     filter: ModelFilterClause,
-    universeSql: string,
+    universeSql: string
   ): Promise<ModelVectorRow[]> {
     const params: unknown[] = [vectorLiteral(queryVec), limit, ...filter.params];
     const { rows } = await this.pool.query<ModelVectorRow>(
@@ -435,7 +450,7 @@ export class CapabilitySearchService {
          ${filter.sql}
        ORDER BY m.embedding <=> $1::vector
        LIMIT $2;`,
-      params,
+      params
     );
     return rows;
   }
@@ -443,7 +458,7 @@ export class CapabilitySearchService {
   private async capabilityOnlyRecall(
     limit: number,
     filter: ModelFilterClause,
-    universeSql: string,
+    universeSql: string
   ): Promise<ModelLexicalRow[]> {
     const params: unknown[] = [limit, ...filter.params];
     const { rows } = await this.pool.query<ModelLexicalRow>(
@@ -461,7 +476,7 @@ export class CapabilitySearchService {
          ${filter.sql}
        ORDER BY array_length(m.capability_uris, 1) DESC NULLS LAST, m.uid
        LIMIT $1;`,
-      params,
+      params
     );
     return rows;
   }
@@ -560,7 +575,7 @@ function rrfFuseOntology(
   lexical: OntologyLexicalRow[],
   vector: OntologyVectorRow[],
   k: number,
-  limit: number,
+  limit: number
 ): OntologySearchHit[] {
   const accum = new Map<string, OntologySearchHit>();
 
@@ -606,14 +621,14 @@ function rrfFuseModels(
   vector: ModelVectorRow[],
   capability: ModelLexicalRow[],
   k: number,
-  limit: number,
+  limit: number
 ): ModelSearchHit[] {
   const accum = new Map<string, ModelSearchHit>();
 
   const ingest = (
     row: ModelLexicalRow | ModelVectorRow,
     idx: number,
-    matchedBy: 'lexical' | 'vector' | 'capability_filter',
+    matchedBy: 'lexical' | 'vector' | 'capability_filter'
   ): void => {
     const score = 1 / (k + idx + 1);
     const existing = accum.get(row.uid);
@@ -654,10 +669,7 @@ function applyPreferenceBoost(hit: ModelSearchHit, prefers: readonly string[]): 
   return { ...hit, score: hit.score + boost };
 }
 
-function unionMatchedBy<T extends string>(
-  existing: ReadonlyArray<T>,
-  next: T,
-): ReadonlyArray<T> {
+function unionMatchedBy<T extends string>(existing: ReadonlyArray<T>, next: T): ReadonlyArray<T> {
   if (existing.includes(next)) return existing;
   return [...existing, next];
 }

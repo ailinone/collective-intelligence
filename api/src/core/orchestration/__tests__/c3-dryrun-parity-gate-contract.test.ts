@@ -25,14 +25,29 @@ import {
 } from '@/core/experiment/c3-dryrun-parity-gate-contract';
 
 const safe = {
-  dryRun: true, planOnly: true, c3ExecutionAuthorized: false, billableProviderCallsAuthorized: false,
-  providerCallExecuted: false, providerCallsExecuted: 0, modelProbesExecuted: 0, providerProbesExecuted: 0,
-  cost_usd: 0, usage: { total_tokens: 0 }, hiddenFallbackDetected: false,
+  dryRun: true,
+  planOnly: true,
+  c3ExecutionAuthorized: false,
+  billableProviderCallsAuthorized: false,
+  providerCallExecuted: false,
+  providerCallsExecuted: 0,
+  modelProbesExecuted: 0,
+  providerProbesExecuted: 0,
+  cost_usd: 0,
+  usage: { total_tokens: 0 },
+  hiddenFallbackDetected: false,
 };
 
 describe('01C.1B-C3-DRYRUN-PARITY-GATE — contract', () => {
   it('case 43: all execution authorizations are false', () => {
-    for (const l of [C3_EXECUTION_AUTHORIZED, DRYRUN_FALSE_AUTHORIZED, BILLABLE_PROVIDER_CALLS_AUTHORIZED, PROVIDER_PROBES_AUTHORIZED, MODEL_PROBES_AUTHORIZED, K_AUTHORIZED] as false[]) {
+    for (const l of [
+      C3_EXECUTION_AUTHORIZED,
+      DRYRUN_FALSE_AUTHORIZED,
+      BILLABLE_PROVIDER_CALLS_AUTHORIZED,
+      PROVIDER_PROBES_AUTHORIZED,
+      MODEL_PROBES_AUTHORIZED,
+      K_AUTHORIZED,
+    ] as false[]) {
       expect(l).toBe(false);
     }
   });

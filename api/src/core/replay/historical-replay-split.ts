@@ -35,7 +35,7 @@ export interface SplitOptions {
 
 export function splitTrainHoldout(
   executions: readonly HistoricalReplayExecution[],
-  options: SplitOptions = {},
+  options: SplitOptions = {}
 ): HistoricalReplaySplit {
   const holdoutFraction = clamp01(options.holdoutFraction ?? 0.3);
   const minPerSide = Math.max(0, options.minPerSide ?? 20);
@@ -51,7 +51,7 @@ export function splitTrainHoldout(
 function splitByExperimentId(
   executions: readonly HistoricalReplayExecution[],
   holdoutFraction: number,
-  minPerSide: number,
+  minPerSide: number
 ): HistoricalReplaySplit {
   const allExperiments = [...new Set(executions.map((e) => e.experimentId))].sort();
   const holdoutCount = Math.max(1, Math.round(allExperiments.length * holdoutFraction));
@@ -91,7 +91,7 @@ function splitByExperimentId(
 function splitByTime(
   executions: readonly HistoricalReplayExecution[],
   holdoutFraction: number,
-  minPerSide: number,
+  minPerSide: number
 ): HistoricalReplaySplit {
   // Sort by createdAt; first (1 - holdoutFraction) goes to train.
   const sortable = [...executions].sort((a, b) => {
@@ -130,7 +130,7 @@ function splitByTime(
 function checkLeakage(
   train: readonly HistoricalReplayExecution[],
   holdout: readonly HistoricalReplayExecution[],
-  strategy: SplitStrategy,
+  strategy: SplitStrategy
 ): string[] {
   const warnings: string[] = [];
   const trainExpIds = new Set(train.map((e) => e.experimentId));

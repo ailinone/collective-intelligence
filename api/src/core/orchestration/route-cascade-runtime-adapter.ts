@@ -37,7 +37,10 @@ import type { ChatRequest, Model, ModelExecution } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 // Local alias so the public type name stays readable.
 type ChatAdapter = ProviderAdapter;
-import { classifyProviderError, type ProviderErrorKind } from './failures/provider-error-classifier';
+import {
+  classifyProviderError,
+  type ProviderErrorKind,
+} from './failures/provider-error-classifier';
 import {
   runRouteCascade,
   type ProviderRouteAttempt,
@@ -117,8 +120,11 @@ export interface RunRoleViaRouteCascadeResult {
   readonly execution: ModelExecution | null;
   readonly attempts: readonly ProviderRouteAttempt[];
   readonly winningRoute: ApprovedRouteCandidate | null;
-  readonly aggregateFailure?: 'no_approved_route_candidates' | 'no_live_ready_routes' |
-                              'all_routes_failed' | 'attempt_cap_exhausted';
+  readonly aggregateFailure?:
+    | 'no_approved_route_candidates'
+    | 'no_live_ready_routes'
+    | 'all_routes_failed'
+    | 'attempt_cap_exhausted';
   readonly rejections?: readonly unknown[];
 }
 
@@ -130,7 +136,7 @@ export interface RunRoleViaRouteCascadeResult {
  * no DB calls, no globals.
  */
 export async function runRoleViaRouteCascade(
-  input: RunRoleViaRouteCascadeInput,
+  input: RunRoleViaRouteCascadeInput
 ): Promise<RunRoleViaRouteCascadeResult> {
   const policy: RouteSelectionPolicy = input.policy ?? STRICT_DEFAULT_ROUTE_SELECTION_POLICY;
 
@@ -148,7 +154,7 @@ export async function runRoleViaRouteCascade(
       resolveApiModelId: input.builderInjections.resolveApiModelId,
       lookupLiveOperability: input.builderInjections.lookupLiveOperability,
       lookupEconomics: input.builderInjections.lookupEconomics,
-      lookupAuthHandle: ({ providerId }) => `loader:${providerId}`,  // presence handle
+      lookupAuthHandle: ({ providerId }) => `loader:${providerId}`, // presence handle
       maxCostUsd: input.builderInjections.maxCostUsd,
       policy,
     });
@@ -180,7 +186,7 @@ export async function runRoleViaRouteCascade(
   let lastExecution: ModelExecution | null = null;
   const callRoute = async (
     candidate: ApprovedRouteCandidate,
-    _attempt: number,
+    _attempt: number
   ): Promise<RouteCallResult<ModelExecution>> => {
     // Resolve the adapter for this route's providerId.
     let adapter: ChatAdapter | null = null;
@@ -224,7 +230,7 @@ export async function runRoleViaRouteCascade(
         ok: true,
         response: execution,
         httpStatus: 200,
-        costUsd: 0,  // cost surfaced via the ModelExecution itself
+        costUsd: 0, // cost surfaced via the ModelExecution itself
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -266,10 +272,10 @@ export async function runRoleViaRouteCascade(
     cascade.aggregateFailure === 'no_approved_routes'
       ? 'no_approved_route_candidates'
       : cascade.aggregateFailure === 'all_routes_failed'
-      ? 'all_routes_failed'
-      : cascade.aggregateFailure === 'attempt_cap_exhausted'
-      ? 'attempt_cap_exhausted'
-      : undefined;
+        ? 'all_routes_failed'
+        : cascade.aggregateFailure === 'attempt_cap_exhausted'
+          ? 'attempt_cap_exhausted'
+          : undefined;
 
   return {
     success: cascade.success,
@@ -288,11 +294,11 @@ export async function runRoleViaRouteCascade(
  */
 export function isRouteInPlan(
   candidate: { readonly routeId: string; readonly providerId: string; readonly apiModelId: string },
-  approvedRoutes: readonly ApprovedRouteCandidate[],
+  approvedRoutes: readonly ApprovedRouteCandidate[]
 ): boolean {
   return approvedRoutes.some(
     (r) =>
       r.routeId === candidate.routeId ||
-      (r.providerId === candidate.providerId && r.apiModelId === candidate.apiModelId),
+      (r.providerId === candidate.providerId && r.apiModelId === candidate.apiModelId)
   );
 }

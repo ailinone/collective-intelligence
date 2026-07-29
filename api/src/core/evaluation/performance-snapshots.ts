@@ -37,19 +37,21 @@ export async function generateDailySnapshots(date?: Date): Promise<number> {
 
   try {
     // Get all active niches for that day
-    const niches = await prisma.$queryRaw<Array<{
-      strategy: string;
-      task_type: string;
-      complexity: string;
-      sample_size: bigint;
-      avg_quality: number | null;
-      avg_latency_ms: number | null;
-      avg_cost_usd: number | null;
-      success_rate: number | null;
-      quality_p10: number | null;
-      quality_p90: number | null;
-      quality_stddev: number | null;
-    }>>`
+    const niches = await prisma.$queryRaw<
+      Array<{
+        strategy: string;
+        task_type: string;
+        complexity: string;
+        sample_size: bigint;
+        avg_quality: number | null;
+        avg_latency_ms: number | null;
+        avg_cost_usd: number | null;
+        success_rate: number | null;
+        quality_p10: number | null;
+        quality_p90: number | null;
+        quality_stddev: number | null;
+      }>
+    >`
       SELECT
         strategy,
         (observed_metrics->>'taskType')::text as task_type,
@@ -133,32 +135,36 @@ export async function getCompetitiveBenchmark(params: {
   taskType?: string;
   complexity?: string;
   windowDays?: number;
-}): Promise<Array<{
-  strategy: string;
-  taskType: string;
-  avgQuality: number;
-  successRate: number;
-  avgLatencyMs: number;
-  avgCostUsd: number;
-  sampleSize: number;
-  stabilityIndex: number;
-  confidenceScore: number;
-}>> {
+}): Promise<
+  Array<{
+    strategy: string;
+    taskType: string;
+    avgQuality: number;
+    successRate: number;
+    avgLatencyMs: number;
+    avgCostUsd: number;
+    sampleSize: number;
+    stabilityIndex: number;
+    confidenceScore: number;
+  }>
+> {
   const days = params.windowDays ?? 7;
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      strategy: string;
-      task_type: string;
-      avg_quality: number;
-      success_rate: number;
-      avg_latency_ms: number;
-      avg_cost_usd: number;
-      total_samples: bigint;
-      avg_stability: number;
-      avg_confidence: number;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        strategy: string;
+        task_type: string;
+        avg_quality: number;
+        success_rate: number;
+        avg_latency_ms: number;
+        avg_cost_usd: number;
+        total_samples: bigint;
+        avg_stability: number;
+        avg_confidence: number;
+      }>
+    >`
       SELECT
         strategy,
         task_type,
@@ -178,7 +184,7 @@ export async function getCompetitiveBenchmark(params: {
       ORDER BY AVG(avg_quality) DESC
     `;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       strategy: r.strategy,
       taskType: r.task_type,
       avgQuality: r.avg_quality,

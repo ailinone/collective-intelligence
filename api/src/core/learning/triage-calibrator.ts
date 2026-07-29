@@ -76,9 +76,9 @@ export interface CorrectionRule {
     from: string;
     to: string;
   };
-  confidence: number;       // 0-1, how confident we are this rule is correct
-  evidenceCount: number;    // How many observations support this rule
-  accuracy: number;         // Measured accuracy when applied (0-1)
+  confidence: number; // 0-1, how confident we are this rule is correct
+  evidenceCount: number; // How many observations support this rule
+  accuracy: number; // Measured accuracy when applied (0-1)
   createdAt: number;
   lastApplied: number;
   appliedCount: number;
@@ -98,11 +98,11 @@ export interface CorrectionCondition {
  * Calibration score — how well triage predictions align with outcomes.
  */
 export interface CalibrationScore {
-  overall: number;                    // 0-1, higher = better calibration
-  complexityAccuracy: number;         // How often complexity prediction aligns with outcome
-  taskTypeStability: number;          // How often taskType doesn't need correction
-  overestimationRate: number;         // Rate of predicting higher complexity than needed
-  underestimationRate: number;        // Rate of predicting lower complexity than needed
+  overall: number; // 0-1, higher = better calibration
+  complexityAccuracy: number; // How often complexity prediction aligns with outcome
+  taskTypeStability: number; // How often taskType doesn't need correction
+  overestimationRate: number; // Rate of predicting higher complexity than needed
+  underestimationRate: number; // Rate of predicting lower complexity than needed
   sampleCount: number;
   timestamp: number;
 }
@@ -115,8 +115,8 @@ export interface MisclassificationPattern {
   predictedValue: string;
   suggestedValue: string;
   evidenceCount: number;
-  avgQualityImpact: number;           // How much quality was lost due to this misclassification
-  examplePromptLengths: number[];     // For pattern detection
+  avgQualityImpact: number; // How much quality was lost due to this misclassification
+  examplePromptLengths: number[]; // For pattern detection
   confidence: number;
 }
 
@@ -125,18 +125,18 @@ export interface MisclassificationPattern {
 const CONFIG = {
   // Observation window
   maxObservations: 2000,
-  calibrationThreshold: 500,          // Run calibration every N observations
-  minObservationsForRule: 10,         // Need at least this many examples before creating a rule
+  calibrationThreshold: 500, // Run calibration every N observations
+  minObservationsForRule: 10, // Need at least this many examples before creating a rule
 
   // Quality thresholds for misclassification detection
-  lowQualityThreshold: 0.5,           // Below this = likely under-resourced
-  highQualityWithSimple: 0.85,        // Above this with "single" = likely over-resourced
+  lowQualityThreshold: 0.5, // Below this = likely under-resourced
+  highQualityWithSimple: 0.85, // Above this with "single" = likely over-resourced
 
   // Rule management
-  maxRules: 30,                       // Cap number of active rules
-  ruleMinConfidence: 0.65,            // Minimum confidence to activate a rule
-  ruleDecayAfterDays: 30,             // Rules older than this start decaying
-  ruleMinAccuracy: 0.55,              // Rules below this accuracy are pruned
+  maxRules: 30, // Cap number of active rules
+  ruleMinConfidence: 0.65, // Minimum confidence to activate a rule
+  ruleDecayAfterDays: 30, // Rules older than this start decaying
+  ruleMinAccuracy: 0.55, // Rules below this accuracy are pruned
 };
 
 // ─── Implementation ─────────────────────────────────────────────────────────
@@ -208,11 +208,14 @@ class TriageCalibrator {
 
     if (appliedRules.length === 0) return null;
 
-    log.debug({
-      original: { taskType: params.predictedTaskType, complexity: params.predictedComplexity },
-      corrected: { taskType, complexity },
-      rulesApplied: appliedRules,
-    }, 'Triage corrections applied');
+    log.debug(
+      {
+        original: { taskType: params.predictedTaskType, complexity: params.predictedComplexity },
+        corrected: { taskType, complexity },
+        rulesApplied: appliedRules,
+      },
+      'Triage corrections applied'
+    );
 
     return {
       correctedTaskType: taskType,
@@ -252,14 +255,17 @@ class TriageCalibrator {
       this.calibrationHistory.shift();
     }
 
-    log.info({
-      calibration: score.overall.toFixed(3),
-      complexityAccuracy: score.complexityAccuracy.toFixed(3),
-      patterns: patterns.length,
-      activeRules: this.rules.filter(r => r.confidence >= CONFIG.ruleMinConfidence).length,
-      underestimationRate: score.underestimationRate.toFixed(3),
-      overestimationRate: score.overestimationRate.toFixed(3),
-    }, 'Triage calibration completed');
+    log.info(
+      {
+        calibration: score.overall.toFixed(3),
+        complexityAccuracy: score.complexityAccuracy.toFixed(3),
+        patterns: patterns.length,
+        activeRules: this.rules.filter((r) => r.confidence >= CONFIG.ruleMinConfidence).length,
+        underestimationRate: score.underestimationRate.toFixed(3),
+        overestimationRate: score.overestimationRate.toFixed(3),
+      },
+      'Triage calibration completed'
+    );
 
     return score;
   }
@@ -268,17 +274,19 @@ class TriageCalibrator {
    * Ingest benchmark results to run a precise calibration pass.
    * Benchmark tasks have known difficulty, making calibration more accurate.
    */
-  ingestBenchmarkCalibration(results: Array<{
-    taskType: string;
-    expectedComplexity: string;
-    predictedComplexity: string;
-    strategy: string;
-    qualityScore: number;
-    costUsd: number;
-    latencyMs: number;
-    success: boolean;
-    promptLength: number;
-  }>): CalibrationScore {
+  ingestBenchmarkCalibration(
+    results: Array<{
+      taskType: string;
+      expectedComplexity: string;
+      predictedComplexity: string;
+      strategy: string;
+      qualityScore: number;
+      costUsd: number;
+      latencyMs: number;
+      success: boolean;
+      promptLength: number;
+    }>
+  ): CalibrationScore {
     // Convert benchmark results to observations
     for (const r of results) {
       this.recordObservation({
@@ -320,12 +328,17 @@ class TriageCalibrator {
     for (const [complexity, obs] of byComplexity) {
       if (complexity === 'high') continue; // Can't underestimate if already high
 
-      const lowQualityObs = obs.filter(o => o.actualSuccess && o.actualQualityScore < CONFIG.lowQualityThreshold);
+      const lowQualityObs = obs.filter(
+        (o) => o.actualSuccess && o.actualQualityScore < CONFIG.lowQualityThreshold
+      );
       if (lowQualityObs.length >= CONFIG.minObservationsForRule) {
         const fraction = lowQualityObs.length / obs.length;
         if (fraction > 0.3) {
-          const avgImpact = lowQualityObs.reduce((s, o) =>
-            s + (CONFIG.lowQualityThreshold - o.actualQualityScore), 0) / lowQualityObs.length;
+          const avgImpact =
+            lowQualityObs.reduce(
+              (s, o) => s + (CONFIG.lowQualityThreshold - o.actualQualityScore),
+              0
+            ) / lowQualityObs.length;
 
           patterns.push({
             type: 'complexity-underestimate',
@@ -333,7 +346,7 @@ class TriageCalibrator {
             suggestedValue: complexity === 'low' ? 'medium' : 'high',
             evidenceCount: lowQualityObs.length,
             avgQualityImpact: avgImpact,
-            examplePromptLengths: lowQualityObs.slice(0, 10).map(o => o.promptLength),
+            examplePromptLengths: lowQualityObs.slice(0, 10).map((o) => o.promptLength),
             confidence: Math.min(fraction * 1.5, 0.95),
           });
         }
@@ -345,10 +358,11 @@ class TriageCalibrator {
     for (const [complexity, obs] of byComplexity) {
       if (complexity === 'low') continue; // Can't overestimate if already low
 
-      const overResourced = obs.filter(o =>
-        o.actualSuccess &&
-        o.actualQualityScore > CONFIG.highQualityWithSimple &&
-        o.executedStrategy === 'single'
+      const overResourced = obs.filter(
+        (o) =>
+          o.actualSuccess &&
+          o.actualQualityScore > CONFIG.highQualityWithSimple &&
+          o.executedStrategy === 'single'
       );
 
       if (overResourced.length >= CONFIG.minObservationsForRule) {
@@ -360,8 +374,8 @@ class TriageCalibrator {
             suggestedValue: complexity === 'high' ? 'medium' : 'low',
             evidenceCount: overResourced.length,
             avgQualityImpact: 0, // No quality loss — cost/latency savings
-            examplePromptLengths: overResourced.slice(0, 10).map(o => o.promptLength),
-            confidence: Math.min(fraction * 1.3, 0.90),
+            examplePromptLengths: overResourced.slice(0, 10).map((o) => o.promptLength),
+            confidence: Math.min(fraction * 1.3, 0.9),
           });
         }
       }
@@ -381,19 +395,25 @@ class TriageCalibrator {
       if (obs.length < CONFIG.minObservationsForRule * 2) continue;
 
       // Check if a different task type's typical strategy consistently outperforms
-      const lowQuality = obs.filter(o => o.actualSuccess && o.actualQualityScore < 0.5);
+      const lowQuality = obs.filter((o) => o.actualSuccess && o.actualQualityScore < 0.5);
       if (lowQuality.length > obs.length * 0.4) {
         // Find what strategies work well for tasks that were classified as this type
-        const highQuality = obs.filter(o => o.actualQualityScore >= 0.7);
+        const highQuality = obs.filter((o) => o.actualQualityScore >= 0.7);
         if (highQuality.length > 0) {
           // Look at common strategy patterns in high-quality results
           const strategyCountHigh = new Map<string, number>();
           for (const o of highQuality) {
-            strategyCountHigh.set(o.executedStrategy, (strategyCountHigh.get(o.executedStrategy) ?? 0) + 1);
+            strategyCountHigh.set(
+              o.executedStrategy,
+              (strategyCountHigh.get(o.executedStrategy) ?? 0) + 1
+            );
           }
           const strategyCountLow = new Map<string, number>();
           for (const o of lowQuality) {
-            strategyCountLow.set(o.executedStrategy, (strategyCountLow.get(o.executedStrategy) ?? 0) + 1);
+            strategyCountLow.set(
+              o.executedStrategy,
+              (strategyCountLow.get(o.executedStrategy) ?? 0) + 1
+            );
           }
 
           // If the dominant strategy differs significantly between high and low quality results,
@@ -404,12 +424,15 @@ class TriageCalibrator {
           if (topHighStrat && topLowStrat && topHighStrat[0] !== topLowStrat[0]) {
             // Strategy mismatch detected — log it but don't auto-correct taskType
             // (taskType correction requires more evidence than complexity correction)
-            log.info({
-              taskType,
-              highQualityStrategy: topHighStrat[0],
-              lowQualityStrategy: topLowStrat[0],
-              sampleSize: obs.length,
-            }, 'Task type may benefit from different default strategy');
+            log.info(
+              {
+                taskType,
+                highQualityStrategy: topHighStrat[0],
+                lowQualityStrategy: topLowStrat[0],
+                sampleSize: obs.length,
+              },
+              'Task type may benefit from different default strategy'
+            );
           }
         }
       }
@@ -436,8 +459,9 @@ class TriageCalibrator {
 
     // If evidence shows a prompt length pattern, use it
     if (pattern.examplePromptLengths.length >= 5) {
-      const medianLength = pattern.examplePromptLengths
-        .sort((a, b) => a - b)[Math.floor(pattern.examplePromptLengths.length / 2)];
+      const medianLength = pattern.examplePromptLengths.sort((a, b) => a - b)[
+        Math.floor(pattern.examplePromptLengths.length / 2)
+      ];
 
       if (pattern.type === 'complexity-underestimate') {
         // Long prompts classified as "low" → likely medium
@@ -449,10 +473,8 @@ class TriageCalibrator {
     }
 
     // Check for existing rule with same correction
-    const existingIdx = this.rules.findIndex(r =>
-      r.correction.field === field &&
-      r.correction.from === from &&
-      r.correction.to === to
+    const existingIdx = this.rules.findIndex(
+      (r) => r.correction.field === field && r.correction.from === from && r.correction.to === to
     );
 
     if (existingIdx >= 0) {
@@ -482,12 +504,15 @@ class TriageCalibrator {
         appliedCount: 0,
       });
 
-      log.info({
-        ruleId,
-        correction: `${field}: ${from} → ${to}`,
-        confidence: pattern.confidence.toFixed(3),
-        evidence: pattern.evidenceCount,
-      }, 'New triage correction rule generated');
+      log.info(
+        {
+          ruleId,
+          correction: `${field}: ${from} → ${to}`,
+          confidence: pattern.confidence.toFixed(3),
+          evidence: pattern.evidenceCount,
+        },
+        'New triage correction rule generated'
+      );
     }
   }
 
@@ -495,7 +520,7 @@ class TriageCalibrator {
     const now = Date.now();
     const decayThreshold = now - CONFIG.ruleDecayAfterDays * 86_400_000;
 
-    this.rules = this.rules.filter(rule => {
+    this.rules = this.rules.filter((rule) => {
       // Remove rules with low accuracy
       if (rule.appliedCount > 10 && rule.accuracy < CONFIG.ruleMinAccuracy) {
         log.debug({ ruleId: rule.id, accuracy: rule.accuracy }, 'Pruning low-accuracy rule');
@@ -552,7 +577,8 @@ class TriageCalibrator {
     const overestimationRate = overestimated / n;
 
     // Overall = weighted combination
-    const overall = complexityAccuracy * 0.5 + taskTypeStability * 0.35 + (1 - underestimationRate) * 0.15;
+    const overall =
+      complexityAccuracy * 0.5 + taskTypeStability * 0.35 + (1 - underestimationRate) * 0.15;
 
     return {
       overall,
@@ -589,19 +615,30 @@ class TriageCalibrator {
     return obs.predictedComplexity;
   }
 
-  private matchesCondition(condition: CorrectionCondition, params: {
-    predictedTaskType: string;
-    predictedComplexity: string;
-    promptLength: number;
-    hasTools: boolean;
-    messageCount: number;
-  }): boolean {
-    if (condition.predictedTaskType && condition.predictedTaskType !== params.predictedTaskType) return false;
-    if (condition.predictedComplexity && condition.predictedComplexity !== params.predictedComplexity) return false;
-    if (condition.promptLengthGte !== undefined && params.promptLength < condition.promptLengthGte) return false;
-    if (condition.promptLengthLte !== undefined && params.promptLength > condition.promptLengthLte) return false;
+  private matchesCondition(
+    condition: CorrectionCondition,
+    params: {
+      predictedTaskType: string;
+      predictedComplexity: string;
+      promptLength: number;
+      hasTools: boolean;
+      messageCount: number;
+    }
+  ): boolean {
+    if (condition.predictedTaskType && condition.predictedTaskType !== params.predictedTaskType)
+      return false;
+    if (
+      condition.predictedComplexity &&
+      condition.predictedComplexity !== params.predictedComplexity
+    )
+      return false;
+    if (condition.promptLengthGte !== undefined && params.promptLength < condition.promptLengthGte)
+      return false;
+    if (condition.promptLengthLte !== undefined && params.promptLength > condition.promptLengthLte)
+      return false;
     if (condition.hasTools !== undefined && condition.hasTools !== params.hasTools) return false;
-    if (condition.messageCountGte !== undefined && params.messageCount < condition.messageCountGte) return false;
+    if (condition.messageCountGte !== undefined && params.messageCount < condition.messageCountGte)
+      return false;
     return true;
   }
 
@@ -632,10 +669,11 @@ class TriageCalibrator {
       topRules: Array<{ ruleId: string; appliedCount: number; accuracy: number }>;
     };
   } {
-    const activeRules = this.rules.filter(r => r.confidence >= CONFIG.ruleMinConfidence);
-    const latestCalibration = this.calibrationHistory.length > 0
-      ? this.calibrationHistory[this.calibrationHistory.length - 1]
-      : null;
+    const activeRules = this.rules.filter((r) => r.confidence >= CONFIG.ruleMinConfidence);
+    const latestCalibration =
+      this.calibrationHistory.length > 0
+        ? this.calibrationHistory[this.calibrationHistory.length - 1]
+        : null;
 
     return {
       observationCount: this.observations.length,
@@ -645,10 +683,10 @@ class TriageCalibrator {
       ruleApplicationStats: {
         totalApplications: this.rules.reduce((s, r) => s + r.appliedCount, 0),
         topRules: this.rules
-          .filter(r => r.appliedCount > 0)
+          .filter((r) => r.appliedCount > 0)
           .sort((a, b) => b.appliedCount - a.appliedCount)
           .slice(0, 10)
-          .map(r => ({
+          .map((r) => ({
             ruleId: r.id,
             appliedCount: r.appliedCount,
             accuracy: r.accuracy,

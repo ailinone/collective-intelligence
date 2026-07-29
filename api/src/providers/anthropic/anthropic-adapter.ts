@@ -68,7 +68,8 @@ export class AnthropicAdapter extends ProviderAdapter {
       });
 
     const pooledKeys = this.getAllApiKeys();
-    this.clientPool = pooledKeys.length > 0 ? pooledKeys.map(buildClient) : [buildClient(config.apiKey)];
+    this.clientPool =
+      pooledKeys.length > 0 ? pooledKeys.map(buildClient) : [buildClient(config.apiKey)];
     this.client = this.clientPool[0]!;
   }
 
@@ -82,7 +83,9 @@ export class AnthropicAdapter extends ProviderAdapter {
   private estimateTokenCost(request: ChatRequest): number {
     const promptChars = request.messages.reduce((sum, message) => {
       const content =
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content ?? '');
       return sum + content.length;
     }, 0);
     return Math.ceil(promptChars / 4) + (request.max_tokens || 4096);
@@ -142,9 +145,10 @@ export class AnthropicAdapter extends ProviderAdapter {
     }
 
     // Filter available models
-    const availableModels = models.filter(m =>
-      m.status === 'active' &&
-      (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+    const availableModels = models.filter(
+      (m) =>
+        m.status === 'active' &&
+        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
     );
 
     if (availableModels.length === 0) {
@@ -153,7 +157,7 @@ export class AnthropicAdapter extends ProviderAdapter {
 
     // Selection strategy: cheapest model with streaming capability
     const sortedByCost = availableModels
-      .filter(m => {
+      .filter((m) => {
         const hasStreaming = m.capabilities?.includes('streaming') ?? true;
         const hasChat = m.capabilities?.includes('chat') ?? true;
         return hasStreaming && hasChat && m.inputCostPer1k > 0;
@@ -191,29 +195,33 @@ export class AnthropicAdapter extends ProviderAdapter {
         'Sending chat completion request'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
       const normalizedModel = await this.normalizeModelName(modelToUse);
       const { system, messages } = this.convertMessages(request.messages, normalizedModel);
 
-      const response = await this.withRetry(async () => {
-        const params: Anthropic.MessageCreateParams = {
-          model: normalizedModel,
-          max_tokens: request.max_tokens || 4096,
-          temperature: request.temperature,
-          top_p: request.top_p,
-          system,
-          messages,
-          stream: false,
-        };
-        // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
-        if (request.tools && request.tools.length > 0) {
-          params.tools = this.convertTools(request.tools);
-        }
-        return await this.getRequestClient().messages.create(params);
-      }, 'chat completion', this.estimateTokenCost(request));
+      const response = await this.withRetry(
+        async () => {
+          const params: Anthropic.MessageCreateParams = {
+            model: normalizedModel,
+            max_tokens: request.max_tokens || 4096,
+            temperature: request.temperature,
+            top_p: request.top_p,
+            system,
+            messages,
+            stream: false,
+          };
+          // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
+          if (request.tools && request.tools.length > 0) {
+            params.tools = this.convertTools(request.tools);
+          }
+          return await this.getRequestClient().messages.create(params);
+        },
+        'chat completion',
+        this.estimateTokenCost(request)
+      );
 
       const duration = Date.now() - startTime;
 
@@ -254,29 +262,33 @@ export class AnthropicAdapter extends ProviderAdapter {
         'Sending streaming chat completion'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
       const normalizedModel = await this.normalizeModelName(modelToUse);
       const { system, messages } = this.convertMessages(request.messages, normalizedModel);
 
-      const stream = await this.withRetry(async () => {
-        const params: Anthropic.MessageCreateParams = {
-          model: normalizedModel,
-          max_tokens: request.max_tokens || 4096,
-          temperature: request.temperature,
-          top_p: request.top_p,
-          system,
-          messages,
-          stream: true,
-        };
-        // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
-        if (request.tools && request.tools.length > 0) {
-          params.tools = this.convertTools(request.tools);
-        }
-        return await this.getRequestClient().messages.create(params);
-      }, 'streaming chat completion', this.estimateTokenCost(request));
+      const stream = await this.withRetry(
+        async () => {
+          const params: Anthropic.MessageCreateParams = {
+            model: normalizedModel,
+            max_tokens: request.max_tokens || 4096,
+            temperature: request.temperature,
+            top_p: request.top_p,
+            system,
+            messages,
+            stream: true,
+          };
+          // Add tools if provided (Anthropic SDK supports tools in MessageCreateParams)
+          if (request.tools && request.tools.length > 0) {
+            params.tools = this.convertTools(request.tools);
+          }
+          return await this.getRequestClient().messages.create(params);
+        },
+        'streaming chat completion',
+        this.estimateTokenCost(request)
+      );
 
       let firstChunk = true;
 
@@ -366,8 +378,9 @@ export class AnthropicAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -381,7 +394,7 @@ export class AnthropicAdapter extends ProviderAdapter {
     }
 
     const models = await this.getModels();
-    const modelMap = new Map(models.map(m => [m.id.toLowerCase(), m.id]));
+    const modelMap = new Map(models.map((m) => [m.id.toLowerCase(), m.id]));
 
     // Try exact match first
     if (modelMap.has(modelId.toLowerCase())) {
@@ -399,7 +412,7 @@ export class AnthropicAdapter extends ProviderAdapter {
     // Try partial match (e.g., "claude3" matches "claude-3-5-sonnet")
     // Prefer longer/more specific matches (e.g., "sonnet" should match "claude-3-5-sonnet" over "claude-3-sonnet")
     const partialMatches: Array<{ key: string; value: string; specificity: number }> = [];
-    
+
     for (const [key, value] of modelMap.entries()) {
       const keyNormalized = key.replace(/[-_.]/g, '');
       const inputNormalized = normalized;
@@ -410,7 +423,7 @@ export class AnthropicAdapter extends ProviderAdapter {
         partialMatches.push({ key, value, specificity });
       }
     }
-    
+
     // Sort by specificity (descending) and return the best match
     if (partialMatches.length > 0) {
       partialMatches.sort((a, b) => b.specificity - a.specificity);
@@ -418,7 +431,10 @@ export class AnthropicAdapter extends ProviderAdapter {
     }
 
     // Return as-is if no match (let provider handle it or fail gracefully)
-    logger.warn({ modelId, availableModels: Array.from(modelMap.keys()) }, 'Model not found in available models');
+    logger.warn(
+      { modelId, availableModels: Array.from(modelMap.keys()) },
+      'Model not found in available models'
+    );
     return modelId;
   }
 
@@ -571,7 +587,7 @@ export class AnthropicAdapter extends ProviderAdapter {
         typeof (block as { text: unknown }).text === 'string'
       );
     }
-    
+
     // Type guard for tool use blocks
     // Anthropic SDK doesn't export ToolUseBlock, so we use a custom type guard
     type ToolUseBlockType = {
@@ -580,7 +596,7 @@ export class AnthropicAdapter extends ProviderAdapter {
       name: string;
       input: Record<string, unknown>;
     };
-    
+
     function isToolUseBlock(block: unknown): block is ToolUseBlockType {
       return (
         typeof block === 'object' &&
@@ -597,12 +613,17 @@ export class AnthropicAdapter extends ProviderAdapter {
         (block as { input: unknown }).input !== null
       );
     }
-    
+
     // Extract text content
     const textContent = response.content.find(isTextBlock);
 
     // Extract tool uses with type guard
-    const toolUses: Array<{ type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }> = [];
+    const toolUses: Array<{
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    }> = [];
     for (const block of response.content) {
       if (isToolUseBlock(block)) {
         // Type guard ensures block is ToolUseBlockType, so we can safely access properties
@@ -629,14 +650,17 @@ export class AnthropicAdapter extends ProviderAdapter {
             content: textContent?.text || '',
             tool_calls:
               toolUses.length > 0
-                ? toolUses.map((tu) => ({
-                    id: tu.id,
-                    type: 'function' as const,
-                    function: {
-                      name: tu.name,
-                      arguments: JSON.stringify(tu.input),
-                    },
-                  } satisfies ToolCall))
+                ? toolUses.map(
+                    (tu) =>
+                      ({
+                        id: tu.id,
+                        type: 'function' as const,
+                        function: {
+                          name: tu.name,
+                          arguments: JSON.stringify(tu.input),
+                        },
+                      }) satisfies ToolCall
+                  )
                 : undefined,
           },
           finish_reason: response.stop_reason ? this.mapStopReason(response.stop_reason) : null,
@@ -654,7 +678,10 @@ export class AnthropicAdapter extends ProviderAdapter {
   /**
    * Convert streaming chunk to our format
    */
-  private convertStreamChunk(event: Anthropic.ContentBlockDeltaEvent & { delta?: { text?: string } }, requestedModel: string): ChatResponse {
+  private convertStreamChunk(
+    event: Anthropic.ContentBlockDeltaEvent & { delta?: { text?: string } },
+    requestedModel: string
+  ): ChatResponse {
     return {
       id: `chatcmpl-${Date.now()}`,
       object: 'chat.completion.chunk',
@@ -696,7 +723,9 @@ export class AnthropicAdapter extends ProviderAdapter {
    */
   private convertError(error: unknown): Error {
     // Check if it's an APIError (duck typing for better compatibility with mocks)
-    function isAPIError(err: unknown): err is { message?: string; status?: number; type?: string; name?: string } {
+    function isAPIError(
+      err: unknown
+    ): err is { message?: string; status?: number; type?: string; name?: string } {
       if (typeof err !== 'object' || err === null) {
         return false;
       }
@@ -704,19 +733,26 @@ export class AnthropicAdapter extends ProviderAdapter {
       let hasStatus = false;
       let hasName = false;
       let hasConstructorName = false;
-      
+
       if (typeof err === 'object' && err !== null) {
         const statusDescriptor = Object.getOwnPropertyDescriptor(err, 'status');
         hasStatus = statusDescriptor !== undefined;
-        
+
         const nameDescriptor = Object.getOwnPropertyDescriptor(err, 'name');
         if (nameDescriptor && typeof nameDescriptor.value === 'string') {
           hasName = nameDescriptor.value === 'APIError';
         }
-        
+
         const constructorDescriptor = Object.getOwnPropertyDescriptor(err, 'constructor');
-        if (constructorDescriptor && constructorDescriptor.value && typeof constructorDescriptor.value === 'object') {
-          const constructorNameDescriptor = Object.getOwnPropertyDescriptor(constructorDescriptor.value, 'name');
+        if (
+          constructorDescriptor &&
+          constructorDescriptor.value &&
+          typeof constructorDescriptor.value === 'object'
+        ) {
+          const constructorNameDescriptor = Object.getOwnPropertyDescriptor(
+            constructorDescriptor.value,
+            'name'
+          );
           if (constructorNameDescriptor && typeof constructorNameDescriptor.value === 'string') {
             hasConstructorName = constructorNameDescriptor.value === 'APIError';
           }
@@ -751,7 +787,9 @@ export class AnthropicAdapter extends ProviderAdapter {
   async moderate(_model: Model, _request: ModerationRequest): Promise<ModerationResponse> {
     // Anthropic handles content safety via safety settings in the messages API
     // There is no separate moderation endpoint like OpenAI
-    throw new Error('Anthropic Claude moderation is not yet implemented. Anthropic handles content safety via safety settings in the messages API, not a separate moderation endpoint. Use OpenAI moderation or implement Anthropic safety settings integration.');
+    throw new Error(
+      'Anthropic Claude moderation is not yet implemented. Anthropic handles content safety via safety settings in the messages API, not a separate moderation endpoint. Use OpenAI moderation or implement Anthropic safety settings integration.'
+    );
   }
 
   /**
@@ -759,21 +797,35 @@ export class AnthropicAdapter extends ProviderAdapter {
    * Anthropic Claude does not have image editing capability
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Anthropic Claude image editing is not yet implemented. Anthropic Claude does not provide image editing capabilities. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'Anthropic Claude image editing is not yet implemented. Anthropic Claude does not provide image editing capabilities. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * Anthropic Claude does not have image variation capability
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Anthropic Claude image variation is not yet implemented. Anthropic Claude does not provide image variation capabilities. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Anthropic Claude image variation is not yet implemented. Anthropic Claude does not provide image variation capabilities. Use OpenAI DALL-E for image variations.'
+    );
   }
 
   /**
    * Sanitize request for logging (remove sensitive data)
    */
-  private sanitizeRequest(request: ChatRequest): { model: string; messageCount: number; temperature?: number; max_tokens?: number; stream?: boolean; toolCount: number } {
+  private sanitizeRequest(request: ChatRequest): {
+    model: string;
+    messageCount: number;
+    temperature?: number;
+    max_tokens?: number;
+    stream?: boolean;
+    toolCount: number;
+  } {
     return {
       model: request.model || 'unknown',
       messageCount: request.messages.length,

@@ -10,21 +10,21 @@
 /**
  * Nonce Middleware for Replay Attack Protection
  * SECURITY: Prevents replay attacks on sensitive operations (T7 mitigation)
- * 
+ *
  * This middleware enforces one-time use nonces for sensitive operations like:
  * - Password changes
  * - Email changes
  * - Payment operations
  * - API key rotation
  * - Organization settings changes
- * 
+ *
  * Flow:
  * 1. Client requests nonce via GET /v1/nonce
  * 2. Server generates unique nonce and stores in Redis with TTL
  * 3. Client includes nonce in sensitive request header (X-Nonce)
  * 4. Server validates nonce exists and hasn't been used
  * 5. Server marks nonce as used (atomic operation)
- * 
+ *
  * Configuration:
  * - NONCE_ENABLED: Enable/disable nonce validation (default: true)
  * - NONCE_TTL_SECONDS: Nonce validity period (default: 300 = 5 minutes)
@@ -66,13 +66,13 @@ async function getRedisClient(): Promise<typeof redisClient> {
   if (redisClient) {
     return redisClient;
   }
-  
+
   try {
     const Redis = (await import('ioredis')).default;
-    const redisUrl = config.redis.password 
+    const redisUrl = config.redis.password
       ? `redis://:${config.redis.password}@${config.redis.host}:${config.redis.port}/${config.redis.db}`
       : `redis://${config.redis.host}:${config.redis.port}/${config.redis.db}`;
-    
+
     redisClient = new Redis(redisUrl, {
       maxRetriesPerRequest: 1,
       retryStrategy: (times) => {
@@ -82,18 +82,21 @@ async function getRedisClient(): Promise<typeof redisClient> {
       enableReadyCheck: true,
       connectTimeout: 5000,
     });
-    
+
     redisClient.on('error', (err) => {
       log.error({ error: err.message }, 'Redis connection error in nonce middleware');
     });
-    
+
     redisClient.on('connect', () => {
       log.info('Redis connected for nonce validation');
     });
-    
+
     return redisClient;
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to initialize Redis for nonce');
+    log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Failed to initialize Redis for nonce'
+    );
     return null;
   }
 }
@@ -110,25 +113,31 @@ export function generateNonce(): string {
 /**
  * Store nonce in Redis with TTL
  */
-export async function storeNonce(nonce: string, metadata?: Record<string, unknown>): Promise<boolean> {
+export async function storeNonce(
+  nonce: string,
+  metadata?: Record<string, unknown>
+): Promise<boolean> {
   const redis = await getRedisClient();
   if (!redis) {
     log.error('Cannot store nonce - Redis unavailable');
     return false;
   }
-  
+
   try {
     const key = `${NONCE_PREFIX}${nonce}`;
     const value = JSON.stringify({
       created_at: Date.now(),
       metadata: metadata || {},
     });
-    
+
     await redis.set(key, value, 'EX', NONCE_TTL_SECONDS);
     log.debug({ noncePrefix: nonce.substring(0, 16) }, 'Nonce stored');
     return true;
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Error storing nonce');
+    log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Error storing nonce'
+    );
     return false;
   }
 }
@@ -145,23 +154,26 @@ export async function validateAndConsumeNonce(nonce: string): Promise<boolean> {
     // Fail closed - reject request if we can't validate nonce
     return false;
   }
-  
+
   try {
     const key = `${NONCE_PREFIX}${nonce}`;
-    
+
     // Atomic operation: check existence and delete in one command
     // DEL returns 1 if key existed, 0 if not
     const deleted = await redis.del(key);
-    
+
     if (deleted === 1) {
       log.info({ noncePrefix: nonce.substring(0, 16) }, 'Nonce validated and consumed');
       return true;
     }
-    
+
     log.warn({ noncePrefix: nonce.substring(0, 16) }, 'Nonce not found or already used');
     return false;
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Error validating nonce');
+    log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Error validating nonce'
+    );
     // Fail closed
     return false;
   }
@@ -175,64 +187,70 @@ function requiresNonce(path: string, method: string): boolean {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
     return false;
   }
-  
+
   // Check if path matches any required pattern
-  return NONCE_REQUIRED_PATHS.some(pattern => pattern.test(path));
+  return NONCE_REQUIRED_PATHS.some((pattern) => pattern.test(path));
 }
 
 /**
  * Nonce Validation Middleware
- * 
+ *
  * Should be called AFTER authentication middleware.
  * Validates nonce for sensitive operations to prevent replay attacks.
  */
-export async function validateNonce(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function validateNonce(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Skip if nonce validation is disabled
   if (!NONCE_ENABLED) {
     return;
   }
-  
+
   // Check if this path requires nonce
   if (!requiresNonce(request.url, request.method)) {
     return;
   }
-  
+
   // Get nonce from header
   const nonce = getHeaderString(request.headers, 'x-nonce');
   if (!nonce) {
-    log.warn({
-      url: request.url,
-      method: request.method,
-    }, 'Nonce required but not provided');
-    
+    log.warn(
+      {
+        url: request.url,
+        method: request.method,
+      },
+      'Nonce required but not provided'
+    );
+
     return reply.code(400).send({
       error: 'Nonce Required',
       message: 'This operation requires a nonce. Request one via GET /v1/nonce',
     });
   }
-  
+
   // Validate and consume nonce
   const valid = await validateAndConsumeNonce(nonce);
   if (!valid) {
-    log.warn({
-      url: request.url,
-      method: request.method,
-      noncePrefix: nonce.substring(0, 16),
-    }, 'Invalid or already used nonce');
-    
+    log.warn(
+      {
+        url: request.url,
+        method: request.method,
+        noncePrefix: nonce.substring(0, 16),
+      },
+      'Invalid or already used nonce'
+    );
+
     return reply.code(403).send({
       error: 'Invalid Nonce',
       message: 'Nonce is invalid or has already been used. Request a new one via GET /v1/nonce',
     });
   }
-  
-  log.debug({
-    url: request.url,
-    method: request.method,
-  }, 'Nonce validated successfully');
+
+  log.debug(
+    {
+      url: request.url,
+      method: request.method,
+    },
+    'Nonce validated successfully'
+  );
 }
 
 /**

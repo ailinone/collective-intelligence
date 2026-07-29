@@ -35,7 +35,7 @@ describe('looksLikeAliasMismatch — double-prefix detection (signal 1)', () => 
       looksLikeAliasMismatch({
         providerId: 'openai',
         modelId: 'openai/openai-gpt-5.1-mini',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -46,7 +46,7 @@ describe('looksLikeAliasMismatch — double-prefix detection (signal 1)', () => 
       looksLikeAliasMismatch({
         providerId: 'vercel-ai-gateway',
         modelId: 'meta/llama-3.2-11b',
-      }),
+      })
     ).toBe(false);
   });
 });
@@ -57,7 +57,7 @@ describe('looksLikeAliasMismatch — native-provider prefix rejection (signal 2)
       looksLikeAliasMismatch({
         providerId: 'openai',
         modelId: 'openai/gpt-5.1-mini',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -66,7 +66,7 @@ describe('looksLikeAliasMismatch — native-provider prefix rejection (signal 2)
       looksLikeAliasMismatch({
         providerId: 'huggingface',
         modelId: 'huggingface/meta-llama-3-8b',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -75,7 +75,7 @@ describe('looksLikeAliasMismatch — native-provider prefix rejection (signal 2)
       looksLikeAliasMismatch({
         providerId: 'deepseek',
         modelId: 'deepseek-chat',
-      }),
+      })
     ).toBe(false);
   });
 });
@@ -87,7 +87,7 @@ describe('looksLikeAliasMismatch — discovery cross-check (signal 4)', () => {
         providerId: 'openai',
         modelId: 'openai/gpt-5.1-mini',
         discoveredModelIds: ['gpt-5.1-mini', 'gpt-4o-mini'],
-      }),
+      })
     ).toBe(true);
   });
 
@@ -97,7 +97,7 @@ describe('looksLikeAliasMismatch — discovery cross-check (signal 4)', () => {
         providerId: 'someprovider',
         modelId: 'someprovider-only-model',
         discoveredModelIds: ['totally-different-model'],
-      }),
+      })
     ).toBe(false);
   });
 });
@@ -183,9 +183,7 @@ describe('resolveCanonicalProbeModel', () => {
   it('applies alias when catalog form maps in PROVIDER_MODEL_ALIASES', () => {
     const r = resolveCanonicalProbeModel({
       providerId: 'openai',
-      catalogModels: [
-        { id: 'openai/openai-gpt-5.1-mini', capabilities: ['chat'] },
-      ],
+      catalogModels: [{ id: 'openai/openai-gpt-5.1-mini', capabilities: ['chat'] }],
     });
     expect(r?.source).toBe('catalog_alias');
     expect(r?.modelId).toBe('openai/openai-gpt-5.1-mini');
@@ -195,9 +193,7 @@ describe('resolveCanonicalProbeModel', () => {
   it('falls back to catalog_direct when no alias exists', () => {
     const r = resolveCanonicalProbeModel({
       providerId: 'deepseek',
-      catalogModels: [
-        { id: 'deepseek-chat', capabilities: ['chat'] },
-      ],
+      catalogModels: [{ id: 'deepseek-chat', capabilities: ['chat'] }],
     });
     expect(r?.source).toBe('catalog_direct');
     expect(r?.modelId).toBe('deepseek-chat');

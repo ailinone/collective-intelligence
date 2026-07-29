@@ -167,7 +167,7 @@ export class VoyageAdapter extends ProviderAdapter {
    */
   async getModels(): Promise<Model[]> {
     this.log.debug(
-      'Voyage has no /v1/models endpoint — returning empty list (model IDs come from catalog/DB)',
+      'Voyage has no /v1/models endpoint — returning empty list (model IDs come from catalog/DB)'
     );
     // KNOWN_MODEL_PREFIXES remains the extension point if discovery returns —
     // suppress the unused-const warning without silencing it at lint level.
@@ -180,16 +180,12 @@ export class VoyageAdapter extends ProviderAdapter {
    * dispatches a chat request to Voyage.
    */
   async chatCompletion(_request: ChatRequest): Promise<ChatResponse> {
-    throw new Error(
-      'voyage: chatCompletion not supported — Voyage is embeddings + rerank only',
-    );
+    throw new Error('voyage: chatCompletion not supported — Voyage is embeddings + rerank only');
   }
 
-  async *chatCompletionStream(
-    _request: ChatRequest,
-  ): AsyncGenerator<ChatResponse, void, unknown> {
+  async *chatCompletionStream(_request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     throw new Error(
-      'voyage: chatCompletionStream not supported — Voyage is embeddings + rerank only',
+      'voyage: chatCompletionStream not supported — Voyage is embeddings + rerank only'
     );
     // unreachable yield for generator type conformance
     yield undefined as never;
@@ -207,7 +203,7 @@ export class VoyageAdapter extends ProviderAdapter {
     // `input_type` is Voyage-specific. If the caller passes it via a
     // per-request option on EmbeddingRequest, we forward it. We don't invent
     // a default — Voyage's server-side default is fine.
-    const extra = (narrowAs<{ input_type?: string }>(request)).input_type;
+    const extra = narrowAs<{ input_type?: string }>(request).input_type;
     if (extra === 'query' || extra === 'document') {
       body.input_type = extra;
     }
@@ -238,7 +234,8 @@ export class VoyageAdapter extends ProviderAdapter {
       model: request.model,
     };
     if (typeof request.top_k === 'number') body.top_k = request.top_k;
-    if (typeof request.return_documents === 'boolean') body.return_documents = request.return_documents;
+    if (typeof request.return_documents === 'boolean')
+      body.return_documents = request.return_documents;
     if (typeof request.truncation === 'boolean') body.truncation = request.truncation;
 
     return this.fetchJson<VoyageRerankResponse>('/rerank', {
@@ -292,7 +289,7 @@ export class VoyageAdapter extends ProviderAdapter {
     const trimmed = modelName?.trim();
     if (!trimmed) {
       throw new Error(
-        'voyage.normalizeModelName: model is required — no hardcoded default is applied at adapter level',
+        'voyage.normalizeModelName: model is required — no hardcoded default is applied at adapter level'
       );
     }
     return trimmed;
@@ -322,7 +319,7 @@ export class VoyageAdapter extends ProviderAdapter {
 
   private async fetchJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> },
+    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> }
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
     const timeoutMs = Math.max(1000, this.config.timeout ?? 30000);

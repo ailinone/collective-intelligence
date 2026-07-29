@@ -60,14 +60,7 @@ import { getProviderKindRegistry } from '../provider-kind';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const REGISTRY_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'providers',
-  'provider-registry.ts',
-);
+const REGISTRY_PATH = join(__dirname, '..', '..', '..', 'providers', 'provider-registry.ts');
 
 function extractSwitchCaseProviderIds(source: string): string[] {
   const regex = /^\s*case\s+'([a-z][a-z0-9-]*)'\s*:/gm;

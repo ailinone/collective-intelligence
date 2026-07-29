@@ -49,7 +49,7 @@ function safeJsonValueToRecord(value: unknown): Record<string, unknown> {
   if (!value) {
     return {};
   }
-  
+
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     // Type guard: verify all values are valid
     const result: Record<string, unknown> = {};
@@ -58,7 +58,7 @@ function safeJsonValueToRecord(value: unknown): Record<string, unknown> {
     }
     return result;
   }
-  
+
   if (typeof value === 'string') {
     try {
       const parsed: unknown = JSON.parse(value);
@@ -69,7 +69,7 @@ function safeJsonValueToRecord(value: unknown): Record<string, unknown> {
       // Invalid JSON, return empty object
     }
   }
-  
+
   return {};
 }
 
@@ -253,14 +253,7 @@ export class SemanticMemoryStore {
     limit?: number;
     minSimilarity?: number;
   }): Promise<MemorySearchResult[]> {
-    const {
-      organizationId,
-      query,
-      type,
-      userId,
-      limit = 10,
-      minSimilarity = 0.7,
-    } = params;
+    const { organizationId, query, type, userId, limit = 10, minSimilarity = 0.7 } = params;
 
     log.debug({ organizationId, type, limit }, 'Searching memories');
 
@@ -281,10 +274,7 @@ export class SemanticMemoryStore {
     // Update access counts for returned memories
     await this.updateAccessCounts(results.map((r) => r.entry.id));
 
-    log.info(
-      { organizationId, resultCount: results.length, type },
-      'Memory search completed'
-    );
+    log.info({ organizationId, resultCount: results.length, type }, 'Memory search completed');
 
     return results;
   }
@@ -380,15 +370,11 @@ export class SemanticMemoryStore {
 
     if (count > (this.options.maxMemoriesPerOrg || 10000)) {
       const excess = count - (this.options.maxMemoriesPerOrg || 10000);
-      
+
       // Delete lowest importance memories
       const toDelete = await prisma.semanticMemory.findMany({
         where: { organizationId },
-        orderBy: [
-          { importance: 'asc' },
-          { accessCount: 'asc' },
-          { lastAccessedAt: 'asc' },
-        ],
+        orderBy: [{ importance: 'asc' }, { accessCount: 'asc' }, { lastAccessedAt: 'asc' }],
         take: excess,
         select: { id: true },
       });
@@ -454,7 +440,7 @@ export class SemanticMemoryStore {
     try {
       const { getProviderRegistry } = await import('@/providers/provider-registry.js');
       const registry = getProviderRegistry();
-      
+
       // Find an embedding-capable model
       const allModels = await registry.getAllModels();
       const embeddingModel = allModels.find(
@@ -486,7 +472,7 @@ export class SemanticMemoryStore {
 
       // Cache the embedding
       this.embeddingCache.set(cacheKey, normalizedEmbedding);
-      
+
       // Limit cache size
       if (this.embeddingCache.size > 1000) {
         const firstKey = this.embeddingCache.keys().next().value;
@@ -542,23 +528,23 @@ export class SemanticMemoryStore {
   ): Promise<MemorySearchResult[]> {
     // Use raw SQL for pgvector cosine similarity search
     // Note: This requires pgvector extension to be installed
-    
+
     try {
       // Convert embedding to PostgreSQL vector format
       // Note: embedding comes from generateEmbedding() which always returns number[],
       // so this is safe from SQL injection. The join(',') creates a valid PostgreSQL array.
       const embeddingStr = `[${queryEmbedding.join(',')}]`;
-      
+
       // Build query parameters array - using parameterized queries to prevent SQL injection
       const params: unknown[] = [organizationId, minSimilarity];
       const conditions: string[] = [
         'organization_id = $1',
         '(expires_at IS NULL OR expires_at > NOW())',
-        `1 - (embedding <=> '${embeddingStr}'::vector) >= $2`
+        `1 - (embedding <=> '${embeddingStr}'::vector) >= $2`,
       ];
-      
+
       let paramIndex = 3;
-      
+
       // Add type filter with parameterized query to prevent SQL injection
       if (type) {
         // Validate type is one of the allowed MemoryType values
@@ -569,7 +555,7 @@ export class SemanticMemoryStore {
           paramIndex++;
         }
       }
-      
+
       // Add user filter with parameterized query to prevent SQL injection
       if (userId) {
         // Validate userId is a valid UUID format to prevent injection
@@ -580,11 +566,11 @@ export class SemanticMemoryStore {
           paramIndex++;
         }
       }
-      
+
       // Add limit parameter (always use parameterized query)
       params.push(limit);
       const limitParamIndex = paramIndex;
-      
+
       // Build query string with parameterized placeholders
       const query = `SELECT 
           id,
@@ -604,20 +590,22 @@ export class SemanticMemoryStore {
         ORDER BY similarity DESC
         LIMIT $${limitParamIndex}`;
 
-      const results = await prisma.$queryRawUnsafe<Array<{
-        id: string;
-        organization_id: string;
-        user_id: string | null;
-        type: string;
-        content: string;
-        metadata: unknown;
-        importance: number;
-        access_count: number;
-        last_accessed_at: Date;
-        created_at: Date;
-        expires_at: Date | null;
-        similarity: number;
-      }>>(query, ...params);
+      const results = await prisma.$queryRawUnsafe<
+        Array<{
+          id: string;
+          organization_id: string;
+          user_id: string | null;
+          type: string;
+          content: string;
+          metadata: unknown;
+          importance: number;
+          access_count: number;
+          last_accessed_at: Date;
+          created_at: Date;
+          expires_at: Date | null;
+          similarity: number;
+        }>
+      >(query, ...params);
 
       return results.map((row) => {
         const entry: MemoryEntry = {
@@ -636,10 +624,7 @@ export class SemanticMemoryStore {
 
         // Calculate relevance score (combines similarity, importance, and recency)
         const recencyScore = this.calculateRecencyScore(entry.lastAccessedAt);
-        const relevanceScore = 
-          row.similarity * 0.6 + 
-          entry.importance * 0.25 + 
-          recencyScore * 0.15;
+        const relevanceScore = row.similarity * 0.6 + entry.importance * 0.25 + recencyScore * 0.15;
 
         return {
           entry,
@@ -652,7 +637,7 @@ export class SemanticMemoryStore {
         { error: getErrorMessage(error), organizationId },
         'Vector search failed - pgvector may not be installed'
       );
-      
+
       // Fallback: Return empty results
       return [];
     }
@@ -665,7 +650,7 @@ export class SemanticMemoryStore {
     const now = Date.now();
     const accessTime = lastAccessed.getTime();
     const daysSinceAccess = (now - accessTime) / (24 * 60 * 60 * 1000);
-    
+
     // Exponential decay: halves every 7 days
     return Math.exp(-daysSinceAccess / 7);
   }

@@ -64,10 +64,7 @@ export function initializeDIContainer(): void {
 
     container.registerSingleton<IApiKeyRepository>('IApiKeyRepository', PrismaApiKeyRepository);
 
-    container.registerSingleton<IProjectRepository>(
-      'IProjectRepository',
-      PrismaProjectRepository
-    );
+    container.registerSingleton<IProjectRepository>('IProjectRepository', PrismaProjectRepository);
 
     // ==========================================
     // EVENT BUS (Singleton)

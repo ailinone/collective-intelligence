@@ -64,7 +64,7 @@ export class DeepSeekAdapter extends ProviderAdapter {
     }
 
     // Remove provider prefix from model IDs to return normalized names
-    return models.map(model => ({
+    return models.map((model) => ({
       ...model,
       id: model.name, // Use 'name' which is the normalized ID without prefix
     }));
@@ -239,8 +239,9 @@ export class DeepSeekAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -262,30 +263,46 @@ export class DeepSeekAdapter extends ProviderAdapter {
     const choices = Array.isArray(chunkObj.choices) ? chunkObj.choices : [];
 
     // Type guard for role
-    const isValidRole = (role: unknown): role is 'system' | 'user' | 'assistant' | 'function' | 'tool' => {
-      return typeof role === 'string' && ['system', 'user', 'assistant', 'function', 'tool'].includes(role);
+    const isValidRole = (
+      role: unknown
+    ): role is 'system' | 'user' | 'assistant' | 'function' | 'tool' => {
+      return (
+        typeof role === 'string' &&
+        ['system', 'user', 'assistant', 'function', 'tool'].includes(role)
+      );
     };
 
     // Type guard for finish_reason
-    const isValidFinishReason = (reason: unknown): reason is 'stop' | 'length' | 'tool_calls' | 'content_filter' | null => {
-      return reason === null || (typeof reason === 'string' && ['stop', 'length', 'tool_calls', 'content_filter'].includes(reason));
+    const isValidFinishReason = (
+      reason: unknown
+    ): reason is 'stop' | 'length' | 'tool_calls' | 'content_filter' | null => {
+      return (
+        reason === null ||
+        (typeof reason === 'string' &&
+          ['stop', 'length', 'tool_calls', 'content_filter'].includes(reason))
+      );
     };
 
     return {
-      id: (typeof chunkObj.id === 'string' ? chunkObj.id : `deepseek-${Date.now()}`),
+      id: typeof chunkObj.id === 'string' ? chunkObj.id : `deepseek-${Date.now()}`,
       object: 'chat.completion.chunk',
-      created: (typeof chunkObj.created === 'number' ? chunkObj.created : Math.floor(Date.now() / 1000)),
+      created:
+        typeof chunkObj.created === 'number' ? chunkObj.created : Math.floor(Date.now() / 1000),
       model: requestedModel,
       choices: choices.map((choice: unknown) => {
         if (!choice || typeof choice !== 'object') {
           throw new Error('Invalid choice format');
         }
         const choiceObj = choice as Record<string, unknown>;
-        const delta = choiceObj.delta && typeof choiceObj.delta === 'object' ? choiceObj.delta as Record<string, unknown> : {};
+        const delta =
+          choiceObj.delta && typeof choiceObj.delta === 'object'
+            ? (choiceObj.delta as Record<string, unknown>)
+            : {};
         const role = delta.role && isValidRole(delta.role) ? delta.role : undefined;
-        const finishReason = choiceObj.finish_reason && isValidFinishReason(choiceObj.finish_reason) 
-          ? choiceObj.finish_reason 
-          : null;
+        const finishReason =
+          choiceObj.finish_reason && isValidFinishReason(choiceObj.finish_reason)
+            ? choiceObj.finish_reason
+            : null;
 
         // Type guard for delta content
         let deltaContent: string | undefined = undefined;
@@ -300,7 +317,14 @@ export class DeepSeekAdapter extends ProviderAdapter {
                 if (typeof item === 'string') {
                   return item;
                 }
-                if (item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
+                if (
+                  item &&
+                  typeof item === 'object' &&
+                  'type' in item &&
+                  item.type === 'text' &&
+                  'text' in item &&
+                  typeof (item as { text: unknown }).text === 'string'
+                ) {
                   return (item as { text: string }).text;
                 }
                 return '';
@@ -314,8 +338,12 @@ export class DeepSeekAdapter extends ProviderAdapter {
         // of the loop a real type instead of `any` (see mistral-adapter for
         // the same pattern).
         const isToolCallShape = (
-          value: unknown,
-        ): value is { id: string; type: 'function'; function: { name: string; arguments?: unknown } } => {
+          value: unknown
+        ): value is {
+          id: string;
+          type: 'function';
+          function: { name: string; arguments?: unknown };
+        } => {
           if (typeof value !== 'object' || value === null) return false;
           const v = value as { id?: unknown; type?: unknown; function?: unknown };
           if (typeof v.id !== 'string') return false;
@@ -326,7 +354,11 @@ export class DeepSeekAdapter extends ProviderAdapter {
         };
 
         let toolCalls: ToolCall[] | undefined = undefined;
-        if (delta.tool_calls !== undefined && delta.tool_calls !== null && Array.isArray(delta.tool_calls)) {
+        if (
+          delta.tool_calls !== undefined &&
+          delta.tool_calls !== null &&
+          Array.isArray(delta.tool_calls)
+        ) {
           const validToolCalls: ToolCall[] = [];
           for (const tc of delta.tool_calls) {
             if (!isToolCallShape(tc)) continue;
@@ -361,14 +393,21 @@ export class DeepSeekAdapter extends ProviderAdapter {
           return undefined;
         }
         const usageObj = chunkObj.usage as Record<string, unknown>;
-        const promptTokens = typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : undefined;
-        const completionTokens = typeof usageObj.completion_tokens === 'number' ? usageObj.completion_tokens : undefined;
-        const totalTokens = typeof usageObj.total_tokens === 'number' ? usageObj.total_tokens : undefined;
-        
-        if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) {
+        const promptTokens =
+          typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : undefined;
+        const completionTokens =
+          typeof usageObj.completion_tokens === 'number' ? usageObj.completion_tokens : undefined;
+        const totalTokens =
+          typeof usageObj.total_tokens === 'number' ? usageObj.total_tokens : undefined;
+
+        if (
+          promptTokens === undefined &&
+          completionTokens === undefined &&
+          totalTokens === undefined
+        ) {
           return undefined;
         }
-        
+
         return {
           prompt_tokens: promptTokens ?? 0,
           completion_tokens: completionTokens ?? 0,
@@ -404,7 +443,8 @@ export class DeepSeekAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -422,8 +462,10 @@ export class DeepSeekAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -435,8 +477,10 @@ export class DeepSeekAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -445,7 +489,7 @@ export class DeepSeekAdapter extends ProviderAdapter {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
       log.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+
       return {
         flagged: false,
         categories: {
@@ -485,7 +529,9 @@ export class DeepSeekAdapter extends ProviderAdapter {
    * Returns an error response indicating the limitation
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('DeepSeek does not support image editing. This provider does not have image manipulation capabilities. Please use OpenAI DALL-E or another provider that supports image editing.');
+    throw new Error(
+      'DeepSeek does not support image editing. This provider does not have image manipulation capabilities. Please use OpenAI DALL-E or another provider that supports image editing.'
+    );
   }
 
   /**
@@ -493,7 +539,12 @@ export class DeepSeekAdapter extends ProviderAdapter {
    * DeepSeek does not have native image variation capability
    * Returns an error response indicating the limitation
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('DeepSeek does not support image variations. This provider does not have image manipulation capabilities. Please use OpenAI DALL-E or another provider that supports image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'DeepSeek does not support image variations. This provider does not have image manipulation capabilities. Please use OpenAI DALL-E or another provider that supports image variations.'
+    );
   }
 }

@@ -57,7 +57,10 @@ export class DaytonaSandbox implements CodeSandbox {
     throw new Error(`Daytona sandbox inline harness not implemented for language: ${lang}`);
   }
 
-  private async executeCommand(command: string, timeoutMs: number): Promise<DaytonaExecutionOutput> {
+  private async executeCommand(
+    command: string,
+    timeoutMs: number
+  ): Promise<DaytonaExecutionOutput> {
     const { apiUrl, apiKey, workspaceImage } = this.ensureConfigured();
     const packageName = 'daytona-sdk';
     const module = (await import(packageName)) as Record<string, unknown>;
@@ -153,13 +156,6 @@ export class DaytonaSandbox implements CodeSandbox {
       };
     }
 
-    return parseHarnessOutput(
-      lang,
-      functionName,
-      tests,
-      output.stdout,
-      output.stderr,
-      'daytona'
-    );
+    return parseHarnessOutput(lang, functionName, tests, output.stdout, output.stderr, 'daytona');
   }
 }

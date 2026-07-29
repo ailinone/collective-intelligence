@@ -82,22 +82,127 @@ interface MockBenchmarkResult {
 function makeBenchmarkResults(): MockBenchmarkResult[] {
   return [
     // code-generation / medium — single vs debate (genuine trade-off)
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.75, success: true, durationMs: 2000 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.78, success: true, durationMs: 1800 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.80, success: true, durationMs: 2200 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.72, success: true, durationMs: 1900 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.77, success: true, durationMs: 2100 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'debate', qualityScore: 0.90, success: true, durationMs: 5000 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'debate', qualityScore: 0.88, success: true, durationMs: 4800 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'debate', qualityScore: 0.92, success: true, durationMs: 5200 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'debate', qualityScore: 0.85, success: true, durationMs: 4500 },
-    { taskType: 'code-generation', complexity: 'medium', strategy: 'debate', qualityScore: 0.89, success: true, durationMs: 5100 },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'single',
+      qualityScore: 0.75,
+      success: true,
+      durationMs: 2000,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'single',
+      qualityScore: 0.78,
+      success: true,
+      durationMs: 1800,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'single',
+      qualityScore: 0.8,
+      success: true,
+      durationMs: 2200,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'single',
+      qualityScore: 0.72,
+      success: true,
+      durationMs: 1900,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'single',
+      qualityScore: 0.77,
+      success: true,
+      durationMs: 2100,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'debate',
+      qualityScore: 0.9,
+      success: true,
+      durationMs: 5000,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'debate',
+      qualityScore: 0.88,
+      success: true,
+      durationMs: 4800,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'debate',
+      qualityScore: 0.92,
+      success: true,
+      durationMs: 5200,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'debate',
+      qualityScore: 0.85,
+      success: true,
+      durationMs: 4500,
+    },
+    {
+      taskType: 'code-generation',
+      complexity: 'medium',
+      strategy: 'debate',
+      qualityScore: 0.89,
+      success: true,
+      durationMs: 5100,
+    },
     // analysis / high — consensus
-    { taskType: 'analysis', complexity: 'high', strategy: 'consensus', qualityScore: 0.82, success: true, durationMs: 6000 },
-    { taskType: 'analysis', complexity: 'high', strategy: 'consensus', qualityScore: 0.85, success: true, durationMs: 5800 },
-    { taskType: 'analysis', complexity: 'high', strategy: 'consensus', qualityScore: 0.80, success: true, durationMs: 6200 },
-    { taskType: 'analysis', complexity: 'high', strategy: 'consensus', qualityScore: 0.84, success: true, durationMs: 5500 },
-    { taskType: 'analysis', complexity: 'high', strategy: 'consensus', qualityScore: 0.88, success: true, durationMs: 5900 },
+    {
+      taskType: 'analysis',
+      complexity: 'high',
+      strategy: 'consensus',
+      qualityScore: 0.82,
+      success: true,
+      durationMs: 6000,
+    },
+    {
+      taskType: 'analysis',
+      complexity: 'high',
+      strategy: 'consensus',
+      qualityScore: 0.85,
+      success: true,
+      durationMs: 5800,
+    },
+    {
+      taskType: 'analysis',
+      complexity: 'high',
+      strategy: 'consensus',
+      qualityScore: 0.8,
+      success: true,
+      durationMs: 6200,
+    },
+    {
+      taskType: 'analysis',
+      complexity: 'high',
+      strategy: 'consensus',
+      qualityScore: 0.84,
+      success: true,
+      durationMs: 5500,
+    },
+    {
+      taskType: 'analysis',
+      complexity: 'high',
+      strategy: 'consensus',
+      qualityScore: 0.88,
+      success: true,
+      durationMs: 5900,
+    },
   ];
 }
 
@@ -106,22 +211,36 @@ function makeBenchmarkResults(): MockBenchmarkResult[] {
 describe('SOTA Pipeline Integration', () => {
   it('benchmark results flow through archive → Pareto → KG', async () => {
     const { configurationArchive } = await import('../configuration-archive');
-    const { evaluatePareto, getParetoSnapshot, getBestFromFrontier } = await import('../pareto-champion-challenger');
+    const { evaluatePareto, getParetoSnapshot, getBestFromFrontier } =
+      await import('../pareto-champion-challenger');
     const { knowledgeGraphService } = await import('../knowledge-graph-service');
 
     const results = makeBenchmarkResults();
 
     // ── Step 1: Aggregate and ingest into archive ────────────────────
-    const archiveAggregates = new Map<string, {
-      taskType: string; complexity: string; strategy: string;
-      totalQuality: number; totalLatency: number; successCount: number; count: number;
-    }>();
+    const archiveAggregates = new Map<
+      string,
+      {
+        taskType: string;
+        complexity: string;
+        strategy: string;
+        totalQuality: number;
+        totalLatency: number;
+        successCount: number;
+        count: number;
+      }
+    >();
 
     for (const r of results) {
       const key = `${r.taskType}|${r.complexity}|${r.strategy}`;
       const agg = archiveAggregates.get(key) ?? {
-        taskType: r.taskType, complexity: r.complexity, strategy: r.strategy,
-        totalQuality: 0, totalLatency: 0, successCount: 0, count: 0,
+        taskType: r.taskType,
+        complexity: r.complexity,
+        strategy: r.strategy,
+        totalQuality: 0,
+        totalLatency: 0,
+        successCount: 0,
+        count: 0,
       };
       agg.totalQuality += r.qualityScore;
       agg.totalLatency += r.durationMs;
@@ -131,7 +250,7 @@ describe('SOTA Pipeline Integration', () => {
     }
 
     const archiveIngestion = configurationArchive.ingestBenchmarkResults(
-      [...archiveAggregates.values()].map(a => ({
+      [...archiveAggregates.values()].map((a) => ({
         taskType: a.taskType,
         complexity: a.complexity,
         strategy: a.strategy,
@@ -140,7 +259,7 @@ describe('SOTA Pipeline Integration', () => {
         avgLatency: a.totalLatency / a.count,
         successRate: a.successCount / a.count,
         sampleCount: a.count,
-      })),
+      }))
     );
 
     expect(archiveIngestion.totalInserted).toBeGreaterThanOrEqual(2);
@@ -157,7 +276,7 @@ describe('SOTA Pipeline Integration', () => {
     expect(paretoResult.totalNiches).toBe(2);
 
     // Both single (fast) and debate (quality) should be non-dominated
-    const codeGenFrontier = paretoResult.frontiers.find(f => f.taskType === 'code-generation');
+    const codeGenFrontier = paretoResult.frontiers.find((f) => f.taskType === 'code-generation');
     expect(codeGenFrontier).toBeDefined();
     expect(codeGenFrontier!.nonDominated.length).toBeGreaterThanOrEqual(1);
 
@@ -172,12 +291,14 @@ describe('SOTA Pipeline Integration', () => {
 
     // ── Step 3: Knowledge graph recording ────────────────────────────
     await knowledgeGraphService.recordBenchmarkResults(
-      results.filter(r => r.success).map(r => ({
-        taskType: r.taskType,
-        strategy: r.strategy,
-        qualityScore: r.qualityScore,
-        complexity: r.complexity,
-      })),
+      results
+        .filter((r) => r.success)
+        .map((r) => ({
+          taskType: r.taskType,
+          strategy: r.strategy,
+          qualityScore: r.qualityScore,
+          complexity: r.complexity,
+        }))
     );
     // KG recording completes without error
 
@@ -186,20 +307,20 @@ describe('SOTA Pipeline Integration', () => {
     expect(archiveSnapshot.topElites.length).toBeGreaterThan(0);
 
     await knowledgeGraphService.recordArchiveElites(
-      archiveSnapshot.topElites.map(e => ({
+      archiveSnapshot.topElites.map((e) => ({
         taskType: e.taskType,
         complexity: e.complexity,
         dimension: e.dimension,
         strategy: e.strategy,
         fitness: e.fitness,
         avgQuality: e.avgQuality,
-      })),
+      }))
     );
 
     // ── Step 5: Verify alternatives for escalation (OI-10) ──────────
     const alternatives = configurationArchive.getAlternatives('code-generation', 'medium');
     expect(alternatives.length).toBeGreaterThan(0);
-    const dimensions = alternatives.map(a => a.dimension);
+    const dimensions = alternatives.map((a) => a.dimension);
     expect(dimensions).toContain('quality');
     expect(dimensions).toContain('balanced');
   });
@@ -246,14 +367,26 @@ describe('SOTA Pipeline Integration', () => {
     // Override findMany for this test to return strategy weight rows
     mockFindMany.mockResolvedValue([
       {
-        id: 1, taskType: 'code-generation', complexity: 'medium',
-        strategy: 'single', weight: 1.0, avgQuality: 0.78,
-        avgCostEfficiency: 80, successRate: 0.85, sampleCount: 30,
+        id: 1,
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        weight: 1.0,
+        avgQuality: 0.78,
+        avgCostEfficiency: 80,
+        successRate: 0.85,
+        sampleCount: 30,
       },
       {
-        id: 2, taskType: 'code-generation', complexity: 'medium',
-        strategy: 'debate', weight: 1.2, avgQuality: 0.92,
-        avgCostEfficiency: 20, successRate: 0.90, sampleCount: 25,
+        id: 2,
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'debate',
+        weight: 1.2,
+        avgQuality: 0.92,
+        avgCostEfficiency: 20,
+        successRate: 0.9,
+        sampleCount: 25,
       },
     ]);
 
@@ -270,9 +403,15 @@ describe('SOTA Pipeline Integration', () => {
   it('archive excludes speed/quality-per-token dimensions for DB-seeded data', async () => {
     mockFindMany.mockResolvedValue([
       {
-        id: 1, taskType: 'code-generation', complexity: 'medium',
-        strategy: 'single', weight: 1.0, avgQuality: 0.8,
-        avgCostEfficiency: 80, successRate: 0.9, sampleCount: 20,
+        id: 1,
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        weight: 1.0,
+        avgQuality: 0.8,
+        avgCostEfficiency: 80,
+        successRate: 0.9,
+        sampleCount: 20,
       },
     ]);
 
@@ -283,11 +422,15 @@ describe('SOTA Pipeline Integration', () => {
 
     // Speed and quality-per-token should NOT be populated
     expect(configurationArchive.getElite('code-generation', 'medium', 'speed')).toBeNull();
-    expect(configurationArchive.getElite('code-generation', 'medium', 'quality-per-token')).toBeNull();
+    expect(
+      configurationArchive.getElite('code-generation', 'medium', 'quality-per-token')
+    ).toBeNull();
 
     // Quality, balanced, reliability SHOULD be populated
     expect(configurationArchive.getElite('code-generation', 'medium', 'quality')).not.toBeNull();
     expect(configurationArchive.getElite('code-generation', 'medium', 'balanced')).not.toBeNull();
-    expect(configurationArchive.getElite('code-generation', 'medium', 'reliability')).not.toBeNull();
+    expect(
+      configurationArchive.getElite('code-generation', 'medium', 'reliability')
+    ).not.toBeNull();
   });
 });

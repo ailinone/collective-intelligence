@@ -32,14 +32,8 @@ import {
   ConsensusExecutionPlanner,
   type ConsensusExecutionPlan,
 } from './consensus-execution-planner';
-import {
-  ModelRoleResolver,
-  isLocalProvider,
-} from '../model-selection/model-role-resolver';
-import type {
-  ModelCandidate,
-  TaskProfile,
-} from '../model-selection/model-role-types';
+import { ModelRoleResolver, isLocalProvider } from '../model-selection/model-role-resolver';
+import type { ModelCandidate, TaskProfile } from '../model-selection/model-role-types';
 
 const log = logger.child({ component: 'consensus-plan-dry-run-service' });
 
@@ -104,11 +98,7 @@ const HEALTHY_OPERABILITY_STATES: ReadonlySet<string> = new Set([
   'unknown',
 ]);
 
-function estimateCostPerCall(
-  model: Model,
-  promptTokens: number,
-  completionTokens: number,
-): number {
+function estimateCostPerCall(model: Model, promptTokens: number, completionTokens: number): number {
   const input = (model.inputCostPer1k ?? 0) * (promptTokens / 1000);
   const output = (model.outputCostPer1k ?? 0) * (completionTokens / 1000);
   return Math.max(0, input + output);
@@ -124,7 +114,7 @@ function estimateCostPerCall(
 function wrapAsCandidate(
   model: Model,
   promptTokens: number,
-  completionTokens: number,
+  completionTokens: number
 ): ModelCandidate {
   let providerHealthy = true;
   let hasCredits = true;
@@ -138,7 +128,10 @@ function wrapAsCandidate(
       rateLimited = record.operabilityState === 'rate_limited';
     }
   } catch (err) {
-    log.debug({ err: String(err), provider: model.provider }, 'operability hub unreachable for candidate; assuming healthy');
+    log.debug(
+      { err: String(err), provider: model.provider },
+      'operability hub unreachable for candidate; assuming healthy'
+    );
   }
   return {
     model,
@@ -153,9 +146,8 @@ function wrapAsCandidate(
 
 function buildTaskProfile(req: ChatRequest, context: Partial<OrchestrationContext>): TaskProfile {
   const lastUser = [...(req.messages ?? [])].reverse().find((m) => m.role === 'user');
-  const excerpt = typeof lastUser?.content === 'string'
-    ? lastUser.content.slice(0, 200)
-    : undefined;
+  const excerpt =
+    typeof lastUser?.content === 'string' ? lastUser.content.slice(0, 200) : undefined;
   const taskType = typeof context.taskType === 'string' ? context.taskType : undefined;
   let expectedFormat: TaskProfile['expectedFormat'];
   if (taskType?.toLowerCase().indexOf('code') !== -1) expectedFormat = 'code';
@@ -165,7 +157,7 @@ function buildTaskProfile(req: ChatRequest, context: Partial<OrchestrationContex
     taskType,
     userMessageExcerpt: excerpt,
     expectedFormat,
-    approximateInputTokens: Math.ceil((context.contextSize ?? 0)),
+    approximateInputTokens: Math.ceil(context.contextSize ?? 0),
   };
 }
 
@@ -187,7 +179,7 @@ export class ConsensusPlanDryRunService {
         input.candidatePool as Model[],
         qualityThreshold,
         ctx.maxCost,
-        requiredCaps,
+        requiredCaps
       );
       poolModels = poolResult.models;
     } catch (err) {
@@ -197,19 +189,16 @@ export class ConsensusPlanDryRunService {
 
     const promptTokens = ctx.contextSize ?? 1000;
     const completionTokens =
-      typeof input.chatRequest.max_tokens === 'number'
-        ? input.chatRequest.max_tokens
-        : 1000;
+      typeof input.chatRequest.max_tokens === 'number' ? input.chatRequest.max_tokens : 1000;
     let wrappedPool: ModelCandidate[] = poolModels.map((m) =>
-      wrapAsCandidate(m, promptTokens, completionTokens),
+      wrapAsCandidate(m, promptTokens, completionTokens)
     );
     // Strategy 01C.0.3 — apply reconciled snapshot when present, so the
     // resolver sees live operability state (live no_credits overrides
     // cached has_credits; live has_credits overrides cached no_credits).
     if (input.reconciledSnapshot) {
-      const { applySnapshotToCandidate } = await import(
-        '@/core/operability/reconciled-operability-snapshot'
-      );
+      const { applySnapshotToCandidate } =
+        await import('@/core/operability/reconciled-operability-snapshot');
       wrappedPool = wrappedPool.map((c) => applySnapshotToCandidate(c, input.reconciledSnapshot!));
     }
 
@@ -223,12 +212,10 @@ export class ConsensusPlanDryRunService {
     // uses the shared `wrappedPool` for every role (legacy behavior,
     // still correct for tests that supply a tight handcrafted pool).
     const wrapPool = (
-      models: readonly Model[] | undefined,
+      models: readonly Model[] | undefined
     ): readonly ModelCandidate[] | undefined => {
       if (!models) return undefined;
-      let wrapped = models.map((m) =>
-        wrapAsCandidate(m, promptTokens, completionTokens),
-      );
+      let wrapped = models.map((m) => wrapAsCandidate(m, promptTokens, completionTokens));
       if (input.reconciledSnapshot) {
         // Use the SAME snapshot the shared pool used so per-role
         // reconciliation is consistent.
@@ -255,56 +242,61 @@ export class ConsensusPlanDryRunService {
     //
     // The filter is OPT-IN via `eval.requireLiveChatOperability=true`.
     // When the policy is off (default), behavior is unchanged.
-    const evalBag = (input.chatRequest as ChatRequest & {
-      eval?: {
-        requireLiveChatOperability?: boolean;
-        allowUnknownLiveOperability?: boolean;
-        preferRecentChatSuccess?: boolean;
-        liveChatSuccessMaxAgeMs?: number;
-        perAttemptTimeoutMs?: number;
-        participantDeadlineMs?: number;
-        strategyDeadlineMs?: number;
-        serverResponseDeadlineMs?: number;
-        // 01C.1B-I3A — promptTrace + routeCandidates flags. Both default
-        // off; setting either to `true` opts the dry-run into producing
-        // the corresponding metadata + fingerprint snapshots.
-        tracePromptPayload?: boolean;
-        sanitizePromptTrace?: boolean;
-        includeRouteCandidates?: boolean;
-        maxRouteAttempts?: number;
-        allowOutOfPlanRoutes?: boolean;
-        // 01C.1B-J1R2 — split caps. `discoveryMaxRouteCandidates` controls
-        // how many routes the preprobe exposes; `runtimeMaxRouteAttempts`
-        // controls how many the executor will try. Both default to the
-        // strict policy values when omitted.
-        discoveryMaxRouteCandidates?: number;
-        runtimeMaxRouteAttempts?: number;
-        // 01C.1B-J1D — route-level evidence flags. When set, the strict
-        // path requires route-level liveReady (provider chatReady alone
-        // doesn't count). The fields are recorded on the response so
-        // operators can audit which scope drove the decision.
-        requireRouteLevelLiveEvidence?: boolean;
-        liveEvidenceScope?: 'provider' | 'logicalRoute' | 'route';
-      };
-    }).eval;
+    const evalBag = (
+      input.chatRequest as ChatRequest & {
+        eval?: {
+          requireLiveChatOperability?: boolean;
+          allowUnknownLiveOperability?: boolean;
+          preferRecentChatSuccess?: boolean;
+          liveChatSuccessMaxAgeMs?: number;
+          perAttemptTimeoutMs?: number;
+          participantDeadlineMs?: number;
+          strategyDeadlineMs?: number;
+          serverResponseDeadlineMs?: number;
+          // 01C.1B-I3A — promptTrace + routeCandidates flags. Both default
+          // off; setting either to `true` opts the dry-run into producing
+          // the corresponding metadata + fingerprint snapshots.
+          tracePromptPayload?: boolean;
+          sanitizePromptTrace?: boolean;
+          includeRouteCandidates?: boolean;
+          maxRouteAttempts?: number;
+          allowOutOfPlanRoutes?: boolean;
+          // 01C.1B-J1R2 — split caps. `discoveryMaxRouteCandidates` controls
+          // how many routes the preprobe exposes; `runtimeMaxRouteAttempts`
+          // controls how many the executor will try. Both default to the
+          // strict policy values when omitted.
+          discoveryMaxRouteCandidates?: number;
+          runtimeMaxRouteAttempts?: number;
+          // 01C.1B-J1D — route-level evidence flags. When set, the strict
+          // path requires route-level liveReady (provider chatReady alone
+          // doesn't count). The fields are recorded on the response so
+          // operators can audit which scope drove the decision.
+          requireRouteLevelLiveEvidence?: boolean;
+          liveEvidenceScope?: 'provider' | 'logicalRoute' | 'route';
+        };
+      }
+    ).eval;
     const liveOpRequired = evalBag?.requireLiveChatOperability === true;
     type LiveRejectionLine = {
-      modelId: string; providerId: string; routeId: string; reason: string;
-      lastErrorKind?: string; lastHttpStatus?: number; cooldownUntil?: string;
+      modelId: string;
+      providerId: string;
+      routeId: string;
+      reason: string;
+      lastErrorKind?: string;
+      lastHttpStatus?: number;
+      cooldownUntil?: string;
     };
     let liveOperabilityRejections: LiveRejectionLine[] = [];
     let liveOperabilitySnapshotUsed = false;
     if (liveOpRequired) {
-      const { filterCandidatesByLiveOperability } = await import(
-        '@/core/operability/live-chat-operability-planner-filter'
-      );
+      const { filterCandidatesByLiveOperability } =
+        await import('@/core/operability/live-chat-operability-planner-filter');
       liveOperabilitySnapshotUsed = true;
       const policy = {
         requireLiveChatOperability: true,
         allowUnknownLiveOperability: evalBag?.allowUnknownLiveOperability ?? false,
         preferRecentChatSuccess: evalBag?.preferRecentChatSuccess ?? true,
-        liveChatSuccessMaxAgeMs:
-          evalBag?.liveChatSuccessMaxAgeMs ?? 24 * 60 * 60 * 1000,
+        liveChatSuccessMaxAgeMs: evalBag?.liveChatSuccessMaxAgeMs ?? 24 * 60 * 60 * 1000,
       } as const;
       const aggregated: LiveRejectionLine[] = [];
       // Filter the shared pool first — used by participant + fallback.
@@ -314,7 +306,7 @@ export class ConsensusPlanDryRunService {
       // And each role-specific pool when present.
       if (roleSpecificPools) {
         const filterPool = (
-          pool: readonly ModelCandidate[] | undefined,
+          pool: readonly ModelCandidate[] | undefined
         ): readonly ModelCandidate[] | undefined => {
           if (!pool) return undefined;
           const r = filterCandidatesByLiveOperability(pool, policy);
@@ -347,7 +339,7 @@ export class ConsensusPlanDryRunService {
           rejectedRouteCount: liveOperabilityRejections.length,
           remainingSharedPoolCount: wrappedPool.length,
         },
-        '01C.1B-F: live-chat-operability filter applied',
+        '01C.1B-F: live-chat-operability filter applied'
       );
     }
 
@@ -394,9 +386,8 @@ export class ConsensusPlanDryRunService {
     // 01C.1B-F2 — extract `selectedRoutes` per role from the resolved plan
     // and compute coverage stats. This is the surface the audit script
     // reads to probe EXACTLY the routes the planner would execute.
-    const { getLiveChatOperabilityStore } = await import(
-      '@/core/operability/live-chat-operability-state'
-    );
+    const { getLiveChatOperabilityStore } =
+      await import('@/core/operability/live-chat-operability-state');
     const liveStore = getLiveChatOperabilityStore();
     type SelectedRouteLine = {
       role: 'participant' | 'synthesizer' | 'judge' | 'fallback';
@@ -411,20 +402,23 @@ export class ConsensusPlanDryRunService {
     };
     const projectSelectedRoute = (
       role: SelectedRouteLine['role'],
-      cand: ModelCandidate | undefined,
+      cand: ModelCandidate | undefined
     ): SelectedRouteLine | null => {
       if (!cand) return null;
       const providerId = (cand.providerId ?? cand.model.provider ?? '').toLowerCase();
       const modelId = cand.model.id;
-      const routeIdGuess =
-        (cand.model as { routeId?: string }).routeId ?? modelId;
+      const routeIdGuess = (cand.model as { routeId?: string }).routeId ?? modelId;
       // Use the same route-tolerant lookup the filter uses so the
       // coverage reflects what the planner sees.
       const exact = liveStore.get({ providerId, routeId: routeIdGuess, modelId });
       const byModel = exact ? undefined : liveStore.getByModel(providerId, modelId);
-      const state = exact ?? (byModel && byModel.length > 0
-        ? [...byModel].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]
-        : undefined);
+      const state =
+        exact ??
+        (byModel && byModel.length > 0
+          ? [...byModel].sort(
+              (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+            )[0]
+          : undefined);
       return {
         role,
         providerId,
@@ -449,24 +443,29 @@ export class ConsensusPlanDryRunService {
     if (fallback) selectedRoutes.push(fallback);
 
     const selectedRoutesUnauditedCount = selectedRoutes.filter(
-      (r) => !r.chatReadyInSnapshot && !r.lastErrorKind,
+      (r) => !r.chatReadyInSnapshot && !r.lastErrorKind
     ).length;
     const selectedRoutesAllLiveReady =
-      selectedRoutes.length > 0 &&
-      selectedRoutes.every((r) => r.chatReadyInSnapshot);
+      selectedRoutes.length > 0 && selectedRoutes.every((r) => r.chatReadyInSnapshot);
     const criticalRoutesCoverage = {
-      participantsReady:
-        selectedRoutes.filter((r) => r.role === 'participant').every((r) => r.chatReadyInSnapshot),
-      synthesizerReady:
-        selectedRoutes.filter((r) => r.role === 'synthesizer').every((r) => r.chatReadyInSnapshot),
-      judgeReady:
-        selectedRoutes.filter((r) => r.role === 'judge').every((r) => r.chatReadyInSnapshot),
-      fallbackReady:
-        selectedRoutes.filter((r) => r.role === 'fallback').every((r) => r.chatReadyInSnapshot),
+      participantsReady: selectedRoutes
+        .filter((r) => r.role === 'participant')
+        .every((r) => r.chatReadyInSnapshot),
+      synthesizerReady: selectedRoutes
+        .filter((r) => r.role === 'synthesizer')
+        .every((r) => r.chatReadyInSnapshot),
+      judgeReady: selectedRoutes
+        .filter((r) => r.role === 'judge')
+        .every((r) => r.chatReadyInSnapshot),
+      fallbackReady: selectedRoutes
+        .filter((r) => r.role === 'fallback')
+        .every((r) => r.chatReadyInSnapshot),
       allCriticalRoutesReady: selectedRoutesAllLiveReady,
     };
     const liveOperabilityMode: 'strict' | 'permissive' | 'off' = liveOpRequired
-      ? (evalBag?.allowUnknownLiveOperability === false ? 'strict' : 'permissive')
+      ? evalBag?.allowUnknownLiveOperability === false
+        ? 'strict'
+        : 'permissive'
       : 'off';
 
     // 01C.1B-F2 — minimal providerRouteAttempts artifact. For dry-run
@@ -480,30 +479,35 @@ export class ConsensusPlanDryRunService {
     // `ProviderRouteAttemptArtifact` in `../provider-route-attempt-artifact`.
     // The runtime executor's `ProviderRouteAttempt` is a strict superset
     // that adds timing + error kind + cost + route provenance.
-    type ProviderRouteAttemptArtifact = import('../provider-route-attempt-artifact').ProviderRouteAttemptArtifact;
-    const providerRouteAttempts: ProviderRouteAttemptArtifact[] = selectedRoutes.map(
-      (r) => ({
-        role: r.role,
-        providerId: r.providerId,
-        routeId: r.routeId,
-        modelId: r.modelId,
-        attempt: 1,
-        maxAttempts: 1,
-        ok: r.chatReadyInSnapshot,
-        startedAt: new Date().toISOString(),
-        wasRetried: false,
-        wasRouteFallback: false,
-        wasModelFallback: false,
-      }),
-    );
+    type ProviderRouteAttemptArtifact =
+      import('../provider-route-attempt-artifact').ProviderRouteAttemptArtifact;
+    const providerRouteAttempts: ProviderRouteAttemptArtifact[] = selectedRoutes.map((r) => ({
+      role: r.role,
+      providerId: r.providerId,
+      routeId: r.routeId,
+      modelId: r.modelId,
+      attempt: 1,
+      maxAttempts: 1,
+      ok: r.chatReadyInSnapshot,
+      startedAt: new Date().toISOString(),
+      wasRetried: false,
+      wasRouteFallback: false,
+      wasModelFallback: false,
+    }));
 
     // 01C.1B-F2 — surface the deadline policy in the plan so the gate
     // / consumers can verify the fingerprint reflects it.
     const deadlinePolicy = {
-      perAttemptTimeoutMs: typeof evalBag?.perAttemptTimeoutMs === 'number' ? evalBag.perAttemptTimeoutMs : 30_000,
-      participantDeadlineMs: typeof evalBag?.participantDeadlineMs === 'number' ? evalBag.participantDeadlineMs : 45_000,
-      strategyDeadlineMs: typeof evalBag?.strategyDeadlineMs === 'number' ? evalBag.strategyDeadlineMs : 180_000,
-      serverResponseDeadlineMs: typeof evalBag?.serverResponseDeadlineMs === 'number' ? evalBag.serverResponseDeadlineMs : 240_000,
+      perAttemptTimeoutMs:
+        typeof evalBag?.perAttemptTimeoutMs === 'number' ? evalBag.perAttemptTimeoutMs : 30_000,
+      participantDeadlineMs:
+        typeof evalBag?.participantDeadlineMs === 'number' ? evalBag.participantDeadlineMs : 45_000,
+      strategyDeadlineMs:
+        typeof evalBag?.strategyDeadlineMs === 'number' ? evalBag.strategyDeadlineMs : 180_000,
+      serverResponseDeadlineMs:
+        typeof evalBag?.serverResponseDeadlineMs === 'number'
+          ? evalBag.serverResponseDeadlineMs
+          : 240_000,
     };
 
     // ─────────────────────────────────────────────────────────────────
@@ -531,12 +535,10 @@ export class ConsensusPlanDryRunService {
       | undefined;
     if (evalBag?.tracePromptPayload === true) {
       try {
-        const { buildMultiRolePromptTrace, sanitizeTraceForSurface } = await import(
-          '@/core/orchestration/prompt-runtime-trace'
-        );
-        const { CONSENSUS_PROMPT_REGISTRY } = await import(
-          '@/core/orchestration/consensus-prompt-registry'
-        );
+        const { buildMultiRolePromptTrace, sanitizeTraceForSurface } =
+          await import('@/core/orchestration/prompt-runtime-trace');
+        const { CONSENSUS_PROMPT_REGISTRY } =
+          await import('@/core/orchestration/consensus-prompt-registry');
         // Map plan roles → selection records the trace builder consumes.
         type SelectionRec = {
           modelId?: string;
@@ -548,7 +550,8 @@ export class ConsensusPlanDryRunService {
           'participant' | 'synthesizer' | 'judge' | 'fallbackSingle',
           SelectionRec
         >();
-        const unselectedRoles: Array<'participant' | 'synthesizer' | 'judge' | 'fallbackSingle'> = [];
+        const unselectedRoles: Array<'participant' | 'synthesizer' | 'judge' | 'fallbackSingle'> =
+          [];
         if (plan.participants && plan.participants.length > 0) {
           // Track the FIRST participant — the registry entry is the same for all participants.
           const p = plan.participants[0];
@@ -619,7 +622,7 @@ export class ConsensusPlanDryRunService {
       } catch (err) {
         log.warn(
           { error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) },
-          '01C.1B-I3A: promptTrace generation failed — leaving promptTraceMetadata undefined',
+          '01C.1B-I3A: promptTrace generation failed — leaving promptTraceMetadata undefined'
         );
       }
     }
@@ -660,12 +663,10 @@ export class ConsensusPlanDryRunService {
       | undefined;
     if (evalBag?.includeRouteCandidates === true) {
       try {
-        const { buildRouteCandidatesForModel } = await import(
-          '@/core/orchestration/build-route-candidates'
-        );
-        const { STRICT_DEFAULT_ROUTE_SELECTION_POLICY } = await import(
-          '@/core/orchestration/route-candidates'
-        );
+        const { buildRouteCandidatesForModel } =
+          await import('@/core/orchestration/build-route-candidates');
+        const { STRICT_DEFAULT_ROUTE_SELECTION_POLICY } =
+          await import('@/core/orchestration/route-candidates');
         // 01C.1B-J1R §11 — honor `allowUnknownLiveOperability` flag in
         // the routeCandidates builder policy:
         //   - allowUnknownLiveOperability=true (discovery/pre-probe):
@@ -685,15 +686,20 @@ export class ConsensusPlanDryRunService {
         // Legacy `maxRouteAttempts` from the request is honored as the
         // runtime cap when the dedicated field is omitted.
         const runtimeCap =
-          typeof evalBag?.runtimeMaxRouteAttempts === 'number' && evalBag.runtimeMaxRouteAttempts > 0
+          typeof evalBag?.runtimeMaxRouteAttempts === 'number' &&
+          evalBag.runtimeMaxRouteAttempts > 0
             ? evalBag.runtimeMaxRouteAttempts
             : typeof evalBag?.maxRouteAttempts === 'number' && evalBag.maxRouteAttempts > 0
               ? evalBag.maxRouteAttempts
               : STRICT_DEFAULT_ROUTE_SELECTION_POLICY.maxRouteAttempts;
         const discoveryCap =
-          typeof evalBag?.discoveryMaxRouteCandidates === 'number' && evalBag.discoveryMaxRouteCandidates > 0
+          typeof evalBag?.discoveryMaxRouteCandidates === 'number' &&
+          evalBag.discoveryMaxRouteCandidates > 0
             ? Math.max(evalBag.discoveryMaxRouteCandidates, runtimeCap)
-            : Math.max(STRICT_DEFAULT_ROUTE_SELECTION_POLICY.discoveryMaxRouteCandidates ?? 200, runtimeCap);
+            : Math.max(
+                STRICT_DEFAULT_ROUTE_SELECTION_POLICY.discoveryMaxRouteCandidates ?? 200,
+                runtimeCap
+              );
         const policy = {
           ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY,
           // Legacy alias kept = runtime cap (existing tests + executor reads this).
@@ -716,9 +722,8 @@ export class ConsensusPlanDryRunService {
         //   2. Strips duplicate prefixes structurally (conservative derivation)
         //   3. Records resolutionSource + confidence so the route candidate
         //      can carry alias provenance into the fingerprint.
-        const { resolveApiModelId: resolveApiModelIdCentral } = await import(
-          '@/core/orchestration/model-routing/provider-api-model-id-resolver'
-        );
+        const { resolveApiModelId: resolveApiModelIdCentral } =
+          await import('@/core/orchestration/model-routing/provider-api-model-id-resolver');
         const resolveApiModelId = (args: {
           providerId: string;
           logicalModelId: string;
@@ -743,15 +748,21 @@ export class ConsensusPlanDryRunService {
             routeId: args.routeId,
             modelId: args.apiModelId,
           });
-          const byModel = exact ? undefined : liveStore.getByModel(args.providerId, args.apiModelId);
-          const state = exact ?? (byModel && byModel.length > 0
-            ? [...byModel].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]
-            : undefined);
+          const byModel = exact
+            ? undefined
+            : liveStore.getByModel(args.providerId, args.apiModelId);
+          const state =
+            exact ??
+            (byModel && byModel.length > 0
+              ? [...byModel].sort(
+                  (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+                )[0]
+              : undefined);
           return {
             chatReady: state?.chatReady === true,
             lastSuccessAt: state?.lastChatSuccessAt,
             lastFailureKind: state?.lastErrorKind as never,
-            lastFailureAt: state?.updatedAt,  // use updatedAt as proxy when no dedicated failure-at field
+            lastFailureAt: state?.updatedAt, // use updatedAt as proxy when no dedicated failure-at field
           };
         };
         const lookupAuthHandle = (args: { providerId: string }) => `loader:${args.providerId}`;
@@ -761,10 +772,13 @@ export class ConsensusPlanDryRunService {
         // reads, so dry-run sees the exact set of providers the runtime
         // would consider. Falls back to `[]` if Prisma is unavailable
         // (unit tests / cold-start) — the taxonomy path continues to work.
-        const { lookupServingProvidersFromCatalog } = await import(
-          '@/core/orchestration/lookup-serving-providers'
-        );
-        const lookupCatalogRows = async (q: { patterns: readonly string[]; containsTerms?: readonly string[]; limit?: number }) => {
+        const { lookupServingProvidersFromCatalog } =
+          await import('@/core/orchestration/lookup-serving-providers');
+        const lookupCatalogRows = async (q: {
+          patterns: readonly string[];
+          containsTerms?: readonly string[];
+          limit?: number;
+        }) => {
           try {
             // 01C.1B-J1B — Performance fix. The model table has no
             // single-column index on `name`, so `WHERE name = ANY (...)`
@@ -778,7 +792,7 @@ export class ConsensusPlanDryRunService {
             const TIMEOUT_MS = 8000;
             const snapshotPromise = getAllCatalogModels();
             const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('catalog_snapshot_timeout')), TIMEOUT_MS),
+              setTimeout(() => reject(new Error('catalog_snapshot_timeout')), TIMEOUT_MS)
             );
             const allModels = await Promise.race([snapshotPromise, timeoutPromise]);
             const containsTerms = q.containsTerms ?? [];
@@ -812,8 +826,10 @@ export class ConsensusPlanDryRunService {
             return rows.map((r) => {
               const caps = Array.isArray(r.capabilities)
                 ? (r.capabilities as string[])
-                : (r.capabilities && typeof r.capabilities === 'object' && Array.isArray((r.capabilities as { set?: unknown[] }).set))
-                  ? ((r.capabilities as { set: string[] }).set)
+                : r.capabilities &&
+                    typeof r.capabilities === 'object' &&
+                    Array.isArray((r.capabilities as { set?: unknown[] }).set)
+                  ? (r.capabilities as { set: string[] }).set
                   : [];
               return {
                 providerId: r.providerId,
@@ -825,8 +841,10 @@ export class ConsensusPlanDryRunService {
             });
           } catch (err) {
             log.warn(
-              { error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) },
-              '01C.1B-J1R2: catalog lookup failed — falling back to taxonomy-only fanout',
+              {
+                error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+              },
+              '01C.1B-J1R2: catalog lookup failed — falling back to taxonomy-only fanout'
             );
             return [];
           }
@@ -847,7 +865,9 @@ export class ConsensusPlanDryRunService {
         // staleness; this cleanup matters only when a single request
         // has multiple roles sharing one logical model and the first
         // lookup fails.
-        type ServingProvidersList = readonly Awaited<ReturnType<typeof lookupServingProvidersFromCatalog>>[number][];
+        type ServingProvidersList = readonly Awaited<
+          ReturnType<typeof lookupServingProvidersFromCatalog>
+        >[number][];
         const servingProvidersCache = new Map<string, Promise<ServingProvidersList>>();
         const getServingProviders = (logicalModelId: string): Promise<ServingProvidersList> => {
           const key = logicalModelId.toLowerCase();
@@ -871,16 +891,24 @@ export class ConsensusPlanDryRunService {
         };
         const buildOneRole = async (
           role: 'participant' | 'synthesizer' | 'judge' | 'fallback',
-          cand: ModelCandidate | undefined,
+          cand: ModelCandidate | undefined
         ) => {
           if (!cand) return null;
           const logicalModelId = cand.model.id;
-          const nativeProviderId = (cand.providerId ?? cand.model.provider ?? 'unknown').toLowerCase();
+          const nativeProviderId = (
+            cand.providerId ??
+            cand.model.provider ??
+            'unknown'
+          ).toLowerCase();
           const econ = (_m: { providerId: string; apiModelId: string }) => ({
             inputCostPerMTok:
-              typeof cand.model.inputCostPer1k === 'number' ? cand.model.inputCostPer1k * 1000 : undefined,
+              typeof cand.model.inputCostPer1k === 'number'
+                ? cand.model.inputCostPer1k * 1000
+                : undefined,
             outputCostPerMTok:
-              typeof cand.model.outputCostPer1k === 'number' ? cand.model.outputCostPer1k * 1000 : undefined,
+              typeof cand.model.outputCostPer1k === 'number'
+                ? cand.model.outputCostPer1k * 1000
+                : undefined,
             maxContextTokens: cand.model.contextWindow,
             costRank: undefined,
             latencyRank: undefined,
@@ -917,17 +945,19 @@ export class ConsensusPlanDryRunService {
             if (!providerChatReadyMap.has(p)) providerChatReadyMap.set(p, false);
             if (c.liveReady) providerChatReadyMap.set(p, true);
           }
-          const providerReadyRouteUnauditedCount = approvedForExecution.filter((c) =>
-            !c.liveReady
-            && c.lastFailureKind === undefined
-            && providerChatReadyMap.get(c.providerId.toLowerCase()) === true,
+          const providerReadyRouteUnauditedCount = approvedForExecution.filter(
+            (c) =>
+              !c.liveReady &&
+              c.lastFailureKind === undefined &&
+              providerChatReadyMap.get(c.providerId.toLowerCase()) === true
           ).length;
           // J1D §9 — "not audited for logical model" excludes routes that were
           // audited and failed (those have lastFailureKind set).
-          const routeNotAuditedForLogicalModelCount = approvedForExecution.filter((c) =>
-            !c.liveReady
-            && c.lastFailureKind === undefined
-            && providerChatReadyMap.get(c.providerId.toLowerCase()) !== true,
+          const routeNotAuditedForLogicalModelCount = approvedForExecution.filter(
+            (c) =>
+              !c.liveReady &&
+              c.lastFailureKind === undefined &&
+              providerChatReadyMap.get(c.providerId.toLowerCase()) !== true
           ).length;
           return {
             role,
@@ -942,25 +972,27 @@ export class ConsensusPlanDryRunService {
             servingProviderCount: servingProviders.length,
             // J1D §9 — route-level readiness explainability per role.
             approvedRoutesCount: approvedForExecution.length,
-            auditedApprovedRoutesCount: approvedForExecution.filter((c) =>
-              c.liveReady || c.lastFailureKind !== undefined,
+            auditedApprovedRoutesCount: approvedForExecution.filter(
+              (c) => c.liveReady || c.lastFailureKind !== undefined
             ).length,
             liveReadyApprovedRoutesCount: routeLiveReadyCount,
             providerReadyRouteUnauditedCount,
             routeNotAuditedForLogicalModelCount,
           };
         };
-        const perRole = (await Promise.all([
-          buildOneRole('participant', plan.participants[0]),
-          buildOneRole('synthesizer', plan.synthesizer),
-          buildOneRole('judge', plan.judge),
-          buildOneRole('fallback', plan.fallbackSingle),
-        ])).filter((r): r is NonNullable<typeof r> => r !== null);
+        const perRole = (
+          await Promise.all([
+            buildOneRole('participant', plan.participants[0]),
+            buildOneRole('synthesizer', plan.synthesizer),
+            buildOneRole('judge', plan.judge),
+            buildOneRole('fallback', plan.fallbackSingle),
+          ])
+        ).filter((r): r is NonNullable<typeof r> => r !== null);
 
         const totalCandidates = perRole.reduce((a, r) => a + r.candidates.length, 0);
         const liveReadyTotal = perRole.reduce(
           (a, r) => a + r.candidates.filter((c) => (c as { liveReady?: boolean }).liveReady).length,
-          0,
+          0
         );
         routeCandidatesMetadata = {
           routeCandidatesIncluded: true,
@@ -976,7 +1008,7 @@ export class ConsensusPlanDryRunService {
       } catch (err) {
         log.warn(
           { error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) },
-          '01C.1B-I3A: routeCandidates generation failed — leaving routeCandidatesMetadata undefined',
+          '01C.1B-I3A: routeCandidates generation failed — leaving routeCandidatesMetadata undefined'
         );
       }
     }
@@ -1074,7 +1106,8 @@ export class ConsensusPlanDryRunService {
 export function shouldRunConsensusDryRun(chatRequest: ChatRequest): boolean {
   if (process.env.ENABLE_CONSENSUS_PLAN_DRY_RUN !== 'true') return false;
   if (chatRequest.strategy !== 'consensus') return false;
-  const evalBag = (chatRequest as ChatRequest & { eval?: { dryRun?: boolean; planOnly?: boolean } }).eval;
+  const evalBag = (chatRequest as ChatRequest & { eval?: { dryRun?: boolean; planOnly?: boolean } })
+    .eval;
   if (!evalBag || typeof evalBag !== 'object') return false;
   return evalBag.dryRun === true || evalBag.planOnly === true;
 }

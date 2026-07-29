@@ -117,7 +117,11 @@ export class CollaborativeStrategy extends BaseStrategy {
     const executions: ModelExecution[] = [];
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: selectedModels.map(m => m.model.name || m.model.id), summary: `Collaborative: primary generates, reviewer checks, validator confirms.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: selectedModels.map((m) => m.model.name || m.model.id),
+      summary: `Collaborative: primary generates, reviewer checks, validator confirms.`,
+    });
 
     // PHASE 1: Primary generates initial solution (with fallback on provider failure)
     this.log.debug('Phase 1: Primary execution');
@@ -132,7 +136,13 @@ export class CollaborativeStrategy extends BaseStrategy {
     // If primary model failed, try fallback models from context
     if (!primaryExecution.success) {
       this.log.warn({ model: primary.model.name }, 'Primary model failed, trying fallback');
-      primaryExecution = await this.executeModelWithRetry(primary.adapter, primary.model, request, 'primary', context);
+      primaryExecution = await this.executeModelWithRetry(
+        primary.adapter,
+        primary.model,
+        request,
+        'primary',
+        context
+      );
     }
     executions.push(primaryExecution);
 
@@ -141,7 +151,12 @@ export class CollaborativeStrategy extends BaseStrategy {
     }
 
     // Observer: primary done
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: 'Primary generated initial solution. Reviewer checking.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: 'Primary generated initial solution. Reviewer checking.',
+    });
 
     // PHASE 2: Reviewer checks the solution
     this.log.debug('Phase 2: Review');
@@ -154,13 +169,23 @@ export class CollaborativeStrategy extends BaseStrategy {
           ...reviewRequest,
           messages: [
             ...reviewRequest.messages.slice(0, -1),
-            { ...lastMsg, content: lastMsg.content + `\n\n## Primary's Reasoning Process:\n${primaryExecution.reasoning}` },
+            {
+              ...lastMsg,
+              content:
+                lastMsg.content +
+                `\n\n## Primary's Reasoning Process:\n${primaryExecution.reasoning}`,
+            },
           ],
         };
       }
     }
     const reviewExecution = reasoningEnabled
-      ? await this.executeModelWithReasoning(reviewer.adapter, reviewer.model, reviewRequest, 'reviewer')
+      ? await this.executeModelWithReasoning(
+          reviewer.adapter,
+          reviewer.model,
+          reviewRequest,
+          'reviewer'
+        )
       : await this.executeModel(reviewer.adapter, reviewer.model, reviewRequest, 'reviewer');
     executions.push(reviewExecution);
 
@@ -177,7 +202,12 @@ export class CollaborativeStrategy extends BaseStrategy {
       );
 
       const refinedExecution = reasoningEnabled
-        ? await this.executeModelWithReasoning(primary.adapter, primary.model, refinementRequest, 'primary')
+        ? await this.executeModelWithReasoning(
+            primary.adapter,
+            primary.model,
+            refinementRequest,
+            'primary'
+          )
         : await this.executeModel(primary.adapter, primary.model, refinementRequest, 'primary');
       executions.push(refinedExecution);
 
@@ -190,7 +220,12 @@ export class CollaborativeStrategy extends BaseStrategy {
           this.log.debug('Phase 3.5: Verification review of refined output');
           const verifyRequest = this.createReviewRequest(request, refinedExecution.response);
           const verifyExecution = reasoningEnabled
-            ? await this.executeModelWithReasoning(reviewer.adapter, reviewer.model, verifyRequest, 'reviewer')
+            ? await this.executeModelWithReasoning(
+                reviewer.adapter,
+                reviewer.model,
+                verifyRequest,
+                'reviewer'
+              )
             : await this.executeModel(reviewer.adapter, reviewer.model, verifyRequest, 'reviewer');
           executions.push(verifyExecution);
 
@@ -203,8 +238,18 @@ export class CollaborativeStrategy extends BaseStrategy {
               verifyExecution.response
             );
             const secondRefined = reasoningEnabled
-              ? await this.executeModelWithReasoning(primary.adapter, primary.model, secondRefinement, 'primary')
-              : await this.executeModel(primary.adapter, primary.model, secondRefinement, 'primary');
+              ? await this.executeModelWithReasoning(
+                  primary.adapter,
+                  primary.model,
+                  secondRefinement,
+                  'primary'
+                )
+              : await this.executeModel(
+                  primary.adapter,
+                  primary.model,
+                  secondRefinement,
+                  'primary'
+                );
             executions.push(secondRefined);
             if (secondRefined.success) {
               finalResponse = secondRefined.response;
@@ -215,14 +260,29 @@ export class CollaborativeStrategy extends BaseStrategy {
     }
 
     // Observer: refinement done
-    this.emitObserverEvent(context, { type: 'round_complete', round: 3, totalRounds: 4, summary: 'Review and refinement complete. Validator checking quality.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 3,
+      totalRounds: 4,
+      summary: 'Review and refinement complete. Validator checking quality.',
+    });
 
     // PHASE 4: Quality validation
     this.log.debug('Phase 4: Quality validation');
     const validationRequest = this.createValidationRequest(request, finalResponse);
     const validationExecution = reasoningEnabled
-      ? await this.executeModelWithReasoning(validator.adapter, validator.model, validationRequest, 'quality-checker')
-      : await this.executeModel(validator.adapter, validator.model, validationRequest, 'quality-checker');
+      ? await this.executeModelWithReasoning(
+          validator.adapter,
+          validator.model,
+          validationRequest,
+          'quality-checker'
+        )
+      : await this.executeModel(
+          validator.adapter,
+          validator.model,
+          validationRequest,
+          'quality-checker'
+        );
     executions.push(validationExecution);
 
     const totalDuration = Date.now() - startTime;
@@ -233,7 +293,10 @@ export class CollaborativeStrategy extends BaseStrategy {
       executions.find((e) => e.role === 'primary' && e.success) || executions[0]
     );
     // Observer: complete
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Collaborative complete. ${executions.length} phases executed.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Collaborative complete. ${executions.length} phases executed.`,
+    });
 
     const qualityScore = Math.min(1, baseQuality * 1.25); // 25% boost for collaborative
 
@@ -253,7 +316,19 @@ export class CollaborativeStrategy extends BaseStrategy {
         executionCount: executions.length,
         phasesCompleted: executions.length,
         refined: executions.length > 3,
-        ...(reasoningEnabled ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) } : {}),
+        ...(reasoningEnabled
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
+          : {}),
       },
     };
 
@@ -272,16 +347,25 @@ export class CollaborativeStrategy extends BaseStrategy {
     return result;
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const selectedModels = await this.selectModels(request, context);
     if (selectedModels.length < 3) throw new Error('Collaborative requires at least 3 models');
     const primary = selectedModels[0];
     const reviewer = selectedModels[1];
     const reasoningEnabled = this.isReasoningEnabled(request);
 
-    this.emitObserverEvent(context, { type: 'phase_start', models: selectedModels.map(m => m.model.name || m.model.id), summary: 'Collaborative: primary → reviewer → refinement → validation.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: selectedModels.map((m) => m.model.name || m.model.id),
+      summary: 'Collaborative: primary → reviewer → refinement → validation.',
+    });
     yield this.progressChunk('Primary generating initial solution...', 0, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -290,11 +374,22 @@ export class CollaborativeStrategy extends BaseStrategy {
       ? await this.executeModelWithReasoning(primary.adapter, primary.model, request, 'primary')
       : await this.executeModel(primary.adapter, primary.model, request, 'primary');
     if (!primaryExec.success) {
-      primaryExec = await this.executeModelWithRetry(primary.adapter, primary.model, request, 'primary', context);
+      primaryExec = await this.executeModelWithRetry(
+        primary.adapter,
+        primary.model,
+        request,
+        'primary',
+        context
+      );
     }
     if (!primaryExec.success) throw new Error('Primary failed');
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: 'Primary done. Reviewer checking.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: 'Primary done. Reviewer checking.',
+    });
     yield this.progressChunk('Reviewer evaluating...', 1, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -303,21 +398,47 @@ export class CollaborativeStrategy extends BaseStrategy {
     if (reasoningEnabled && primaryExec.reasoning) {
       const lastMsg = reviewRequest.messages[reviewRequest.messages.length - 1];
       if (lastMsg && typeof lastMsg.content === 'string') {
-        reviewRequest = { ...reviewRequest, messages: [...reviewRequest.messages.slice(0, -1), { ...lastMsg, content: lastMsg.content + `\n\n## Primary's Reasoning:\n${primaryExec.reasoning}` }] };
+        reviewRequest = {
+          ...reviewRequest,
+          messages: [
+            ...reviewRequest.messages.slice(0, -1),
+            {
+              ...lastMsg,
+              content: lastMsg.content + `\n\n## Primary's Reasoning:\n${primaryExec.reasoning}`,
+            },
+          ],
+        };
       }
     }
     const reviewExec = reasoningEnabled
-      ? await this.executeModelWithReasoning(reviewer.adapter, reviewer.model, reviewRequest, 'reviewer')
+      ? await this.executeModelWithReasoning(
+          reviewer.adapter,
+          reviewer.model,
+          reviewRequest,
+          'reviewer'
+        )
       : await this.executeModel(reviewer.adapter, reviewer.model, reviewRequest, 'reviewer');
 
     // Phase 3: Stream refinement (or stream primary if no improvements needed)
     if (reviewExec.success && this.hasImprovements(reviewExec.response)) {
-      this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: 'Reviewer suggests improvements. Refining.' });
+      this.emitObserverEvent(context, {
+        type: 'round_complete',
+        round: 2,
+        totalRounds: 4,
+        summary: 'Reviewer suggests improvements. Refining.',
+      });
       yield this.progressChunk('Refining based on review...', 2, 4);
       for (const c of await this.drainObserverChunks(context)) yield c;
 
-      const refinementRequest = this.createRefinementRequest(request, primaryExec.response, reviewExec.response);
-      this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Streaming refined response.' });
+      const refinementRequest = this.createRefinementRequest(
+        request,
+        primaryExec.response,
+        reviewExec.response
+      );
+      this.emitObserverEvent(context, {
+        type: 'synthesis_start',
+        summary: 'Streaming refined response.',
+      });
       yield this.progressChunk('Generating refined answer...', 3, 4);
       for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -332,10 +453,15 @@ export class CollaborativeStrategy extends BaseStrategy {
         () => {
           const c = primaryExec.response?.choices?.[0]?.message?.content;
           return typeof c === 'string' ? c : '';
-        },
+        }
       );
     } else {
-      this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: 'Reviewer approved. No refinement needed.' });
+      this.emitObserverEvent(context, {
+        type: 'round_complete',
+        round: 2,
+        totalRounds: 4,
+        summary: 'Reviewer approved. No refinement needed.',
+      });
       yield this.progressChunk('Review passed, delivering response...', 3, 4);
       for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -343,7 +469,10 @@ export class CollaborativeStrategy extends BaseStrategy {
       yield primaryExec.response;
     }
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Collaborative execution complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Collaborative execution complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
@@ -371,9 +500,8 @@ export class CollaborativeStrategy extends BaseStrategy {
           : null;
         if (adapter) {
           // Select 2 additional models for reviewer and validator
-          const { getDynamicModelSelector } = await import(
-            '../../selection/dynamic-model-selector.js'
-          );
+          const { getDynamicModelSelector } =
+            await import('../../selection/dynamic-model-selector.js');
           const selector = getDynamicModelSelector();
           const taskType = getTaskType(request) || context.taskType || 'chat';
           const complexity = this.calculateComplexity(request);
@@ -429,7 +557,7 @@ export class CollaborativeStrategy extends BaseStrategy {
       const selectedModels = await selector.selectModels(
         null, // ✅ null = automatic search from database
         {
-              taskType: taskType as TaskType,
+          taskType: taskType as TaskType,
           complexity,
           contextSize,
           preferSpeed: context.preferSpeed,
@@ -451,7 +579,10 @@ export class CollaborativeStrategy extends BaseStrategy {
         const selected: Array<{ model: Model; adapter: ProviderAdapter }> = [];
         for (let i = 0; i < selectedModels.length && i < results.length; i++) {
           if (results[i]) {
-            selected.push({ model: selectedModels[i].model, adapter: results[i] as ProviderAdapter });
+            selected.push({
+              model: selectedModels[i].model,
+              adapter: results[i] as ProviderAdapter,
+            });
           }
         }
 
@@ -516,7 +647,10 @@ export class CollaborativeStrategy extends BaseStrategy {
   /**
    * Create review request
    */
-  private createReviewRequest(originalRequest: ChatRequest, primaryResponse: ChatResponse): ChatRequest {
+  private createReviewRequest(
+    originalRequest: ChatRequest,
+    primaryResponse: ChatResponse
+  ): ChatRequest {
     // Type guard for message content
     const getMessageContent = (message: ChatMessage | undefined): string => {
       if (!message) return '';
@@ -536,7 +670,7 @@ export class CollaborativeStrategy extends BaseStrategy {
       return '';
     };
 
-    const primaryContent = primaryResponse.choices[0]?.message 
+    const primaryContent = primaryResponse.choices[0]?.message
       ? getMessageContent(primaryResponse.choices[0].message)
       : '';
 
@@ -566,7 +700,7 @@ export class CollaborativeStrategy extends BaseStrategy {
   private hasImprovements(reviewResponse: ChatResponse): boolean {
     const message = reviewResponse.choices[0]?.message;
     if (!message) return false;
-    
+
     let content = '';
     if (typeof message.content === 'string') {
       content = message.content;
@@ -625,10 +759,10 @@ export class CollaborativeStrategy extends BaseStrategy {
       return '';
     };
 
-    const primaryContent = primaryResponse.choices[0]?.message 
+    const primaryContent = primaryResponse.choices[0]?.message
       ? getMessageContent(primaryResponse.choices[0].message)
       : '';
-    const reviewContent = reviewResponse.choices[0]?.message 
+    const reviewContent = reviewResponse.choices[0]?.message
       ? getMessageContent(reviewResponse.choices[0].message)
       : '';
 
@@ -653,7 +787,10 @@ export class CollaborativeStrategy extends BaseStrategy {
   /**
    * Create validation request
    */
-  private createValidationRequest(originalRequest: ChatRequest, finalResponse: ChatResponse): ChatRequest {
+  private createValidationRequest(
+    originalRequest: ChatRequest,
+    finalResponse: ChatResponse
+  ): ChatRequest {
     // Type guard for message content
     const getMessageContent = (message: ChatMessage | undefined): string => {
       if (!message) return '';
@@ -668,7 +805,7 @@ export class CollaborativeStrategy extends BaseStrategy {
       return '';
     };
 
-    const finalContent = finalResponse.choices[0]?.message 
+    const finalContent = finalResponse.choices[0]?.message
       ? getMessageContent(finalResponse.choices[0].message)
       : '';
 
@@ -768,7 +905,12 @@ export class CollaborativeStrategy extends BaseStrategy {
     return request.tools
       .map((tool): string | null => {
         // Type guard for Tool
-        if (typeof tool === 'object' && tool !== null && 'type' in tool && tool.type === 'function') {
+        if (
+          typeof tool === 'object' &&
+          tool !== null &&
+          'type' in tool &&
+          tool.type === 'function'
+        ) {
           const toolObj = tool as Tool;
           if (
             'function' in toolObj &&

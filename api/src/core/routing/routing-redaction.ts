@@ -33,10 +33,7 @@ import type {
   RoutingStrategyPlanRef,
   TaskProfileSummary,
 } from './routing-decision-trace';
-import {
-  ROUTING_TRACE_ALLOWED_KEYS,
-  ROUTING_TRACE_FORBIDDEN_KEYS,
-} from './routing-decision-trace';
+import { ROUTING_TRACE_ALLOWED_KEYS, ROUTING_TRACE_FORBIDDEN_KEYS } from './routing-decision-trace';
 import type { ExplicitPinInfo, PinSubstitution } from '../registry/types';
 
 const REDACTION_TOKEN = '[REDACTED]';
@@ -58,8 +55,7 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
  * Conservative enough to NOT flag arbitrary 3-digit ids (e.g. route p99).
  * Requires at least 9 digits total to qualify.
  */
-const PHONE_REGEX =
-  /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{4}/g;
+const PHONE_REGEX = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{4}/g;
 
 function isPhoneCandidate(s: string): boolean {
   // Cheap pre-filter: must have ≥ 9 digits before regex tries.
@@ -100,17 +96,12 @@ function redactTaskProfile(input: unknown): TaskProfileSummary {
   // Strict allowlist: any other key gets dropped (e.g., prompt, messages).
   return {
     taskType: typeof raw.taskType === 'string' ? scrubString(raw.taskType) : 'unknown',
-    complexity:
-      typeof raw.complexity === 'string' ? scrubString(raw.complexity) : 'unknown',
+    complexity: typeof raw.complexity === 'string' ? scrubString(raw.complexity) : 'unknown',
     modalities: Array.isArray(raw.modalities)
-      ? raw.modalities
-          .filter((m): m is string => typeof m === 'string')
-          .map(scrubString)
+      ? raw.modalities.filter((m): m is string => typeof m === 'string').map(scrubString)
       : [],
-    riskLevel:
-      typeof raw.riskLevel === 'string' ? scrubString(raw.riskLevel) : 'unknown',
-    privacyMode:
-      typeof raw.privacyMode === 'string' ? scrubString(raw.privacyMode) : 'unknown',
+    riskLevel: typeof raw.riskLevel === 'string' ? scrubString(raw.riskLevel) : 'unknown',
+    privacyMode: typeof raw.privacyMode === 'string' ? scrubString(raw.privacyMode) : 'unknown',
   };
   // Note: ALLOWED_TASK_PROFILE_KEYS is exported in spirit via this fn —
   // unused symbols cause lint noise so we reference it below.
@@ -142,16 +133,12 @@ function redactStrategyPlan(input: unknown): RoutingStrategyPlanRef {
   return {
     strategy: typeof raw.strategy === 'string' ? scrubString(raw.strategy) : 'unknown',
     routes: Array.isArray(raw.routes)
-      ? raw.routes
-          .filter((r): r is string => typeof r === 'string')
-          .map(scrubString)
+      ? raw.routes.filter((r): r is string => typeof r === 'string').map(scrubString)
       : [],
   };
 }
 
-function redactStringRecord(
-  input: unknown,
-): Readonly<Record<string, number>> {
+function redactStringRecord(input: unknown): Readonly<Record<string, number>> {
   if (!input || typeof input !== 'object') return {};
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
@@ -177,17 +164,12 @@ function redactPin(input: unknown): ExplicitPinInfo | null {
   return {
     source,
     canonicalModelId:
-      typeof raw.canonicalModelId === 'string'
-        ? scrubString(raw.canonicalModelId)
-        : undefined,
-    offeringId:
-      typeof raw.offeringId === 'string' ? scrubString(raw.offeringId) : undefined,
+      typeof raw.canonicalModelId === 'string' ? scrubString(raw.canonicalModelId) : undefined,
+    offeringId: typeof raw.offeringId === 'string' ? scrubString(raw.offeringId) : undefined,
     routeId: typeof raw.routeId === 'string' ? scrubString(raw.routeId) : undefined,
     allowSubstitution: raw.allowSubstitution === true,
     authorizingPolicy:
-      typeof raw.authorizingPolicy === 'string'
-        ? scrubString(raw.authorizingPolicy)
-        : undefined,
+      typeof raw.authorizingPolicy === 'string' ? scrubString(raw.authorizingPolicy) : undefined,
   };
 }
 
@@ -209,9 +191,7 @@ function redactSubstitution(input: unknown): PinSubstitution | null {
   return {
     originalCanonicalModelId: scrubString(String(raw.originalCanonicalModelId ?? '')),
     originalRouteId: scrubString(String(raw.originalRouteId ?? '')),
-    substitutedCanonicalModelId: scrubString(
-      String(raw.substitutedCanonicalModelId ?? ''),
-    ),
+    substitutedCanonicalModelId: scrubString(String(raw.substitutedCanonicalModelId ?? '')),
     substitutedRouteId: scrubString(String(raw.substitutedRouteId ?? '')),
     reason: raw.reason as PinSubstitution['reason'],
     policyAuthorized: true,
@@ -246,20 +226,15 @@ export function redactRoutingTrace(input: unknown): RoutingDecisionTrace {
   // through the per-field reducers.
   const sanitised: RoutingDecisionTrace = {
     traceId: typeof raw.traceId === 'string' ? scrubString(raw.traceId) : '',
-    requestId:
-      typeof raw.requestId === 'string' ? scrubString(raw.requestId) : '',
-    timestamp:
-      typeof raw.timestamp === 'string'
-        ? raw.timestamp
-        : new Date(0).toISOString(),
+    requestId: typeof raw.requestId === 'string' ? scrubString(raw.requestId) : '',
+    timestamp: typeof raw.timestamp === 'string' ? raw.timestamp : new Date(0).toISOString(),
     routingMode: validRoutingMode(raw.routingMode),
 
     taskProfile: redactTaskProfile(raw.taskProfile),
 
     semanticIndexBackend: validBackend(raw.semanticIndexBackend),
     candidatesEvaluated:
-      typeof raw.candidatesEvaluated === 'number' &&
-      Number.isFinite(raw.candidatesEvaluated)
+      typeof raw.candidatesEvaluated === 'number' && Number.isFinite(raw.candidatesEvaluated)
         ? raw.candidatesEvaluated
         : 0,
     candidatesByStage: redactStringRecord(raw.candidatesByStage),
@@ -270,13 +245,9 @@ export function redactRoutingTrace(input: unknown): RoutingDecisionTrace {
         ? scrubString(raw.selectedCanonicalModelId)
         : null,
     selectedOfferingId:
-      typeof raw.selectedOfferingId === 'string'
-        ? scrubString(raw.selectedOfferingId)
-        : null,
+      typeof raw.selectedOfferingId === 'string' ? scrubString(raw.selectedOfferingId) : null,
     selectedRouteId:
-      typeof raw.selectedRouteId === 'string'
-        ? scrubString(raw.selectedRouteId)
-        : null,
+      typeof raw.selectedRouteId === 'string' ? scrubString(raw.selectedRouteId) : null,
 
     scoreBreakdown: redactStringRecord(raw.scoreBreakdown),
 
@@ -289,8 +260,7 @@ export function redactRoutingTrace(input: unknown): RoutingDecisionTrace {
 
     outcomeStatus: validOutcomeStatus(raw.outcomeStatus),
     outcomeLatencyMs:
-      typeof raw.outcomeLatencyMs === 'number' &&
-      Number.isFinite(raw.outcomeLatencyMs)
+      typeof raw.outcomeLatencyMs === 'number' && Number.isFinite(raw.outcomeLatencyMs)
         ? raw.outcomeLatencyMs
         : undefined,
     paretoSummary: redactParetoSummary(raw.paretoSummary),
@@ -316,8 +286,7 @@ function redactParetoSummary(input: unknown): ParetoTraceSummary | undefined {
   if (!input || typeof input !== 'object') return undefined;
   const raw = input as Record<string, unknown>;
   return Object.freeze({
-    paretoStatus:
-      typeof raw.paretoStatus === 'string' ? scrubString(raw.paretoStatus) : 'unknown',
+    paretoStatus: typeof raw.paretoStatus === 'string' ? scrubString(raw.paretoStatus) : 'unknown',
     baselineSingleJudge: numericOrZero(raw.baselineSingleJudge),
     baselineSingleCostUsd: numericOrZero(raw.baselineSingleCostUsd),
     expectedEnsembleJudge: numericOrZero(raw.expectedEnsembleJudge),
@@ -326,9 +295,7 @@ function redactParetoSummary(input: unknown): ParetoTraceSummary | undefined {
     selectedModelIds: scrubStringArray(raw.selectedModelIds),
     selectedRouteIds: scrubStringArray(raw.selectedRouteIds),
     ensembleExplanation:
-      typeof raw.ensembleExplanation === 'string'
-        ? scrubString(raw.ensembleExplanation)
-        : '',
+      typeof raw.ensembleExplanation === 'string' ? scrubString(raw.ensembleExplanation) : '',
     marginalContributions: redactMarginalArray(raw.marginalContributions),
     rejectedCandidates: redactRejectedArray(raw.rejectedCandidates),
     structuralPlanSummary: redactPlanSummary(raw.structuralPlanSummary),
@@ -413,21 +380,13 @@ function validRoutingMode(v: unknown): RoutingDecisionTrace['routingMode'] {
 }
 
 function validBackend(v: unknown): RoutingDecisionTrace['semanticIndexBackend'] {
-  if (
-    v === 'none' ||
-    v === 'linear' ||
-    v === 'hnsw' ||
-    v === 'pgvector' ||
-    v === 'sidecar'
-  ) {
+  if (v === 'none' || v === 'linear' || v === 'hnsw' || v === 'pgvector' || v === 'sidecar') {
     return v;
   }
   return 'none';
 }
 
-function validOutcomeStatus(
-  v: unknown,
-): RoutingDecisionTrace['outcomeStatus'] | undefined {
+function validOutcomeStatus(v: unknown): RoutingDecisionTrace['outcomeStatus'] | undefined {
   if (v === 'success' || v === 'fallback' || v === 'error') return v;
   return undefined;
 }

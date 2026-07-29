@@ -99,7 +99,9 @@ describe('consumeRealtimeSession', () => {
 
   it('is single-use: the second consume fails', async () => {
     const session = await createRealtimeSession(identity, store);
-    expect(await consumeRealtimeSession(session.sessionId, session.sessionToken, store)).toEqual(identity);
+    expect(await consumeRealtimeSession(session.sessionId, session.sessionToken, store)).toEqual(
+      identity
+    );
     expect(await consumeRealtimeSession(session.sessionId, session.sessionToken, store)).toBeNull();
   });
 
@@ -109,18 +111,24 @@ describe('consumeRealtimeSession', () => {
 
     expect(await consumeRealtimeSession(session.sessionId, wrongToken, store)).toBeNull();
     // The legitimate client must still be able to connect.
-    expect(await consumeRealtimeSession(session.sessionId, session.sessionToken, store)).toEqual(identity);
+    expect(await consumeRealtimeSession(session.sessionId, session.sessionToken, store)).toEqual(
+      identity
+    );
   });
 
   it('rejects an unknown sessionId', async () => {
     const session = await createRealtimeSession(identity, store);
-    expect(await consumeRealtimeSession('rs_does-not-exist', session.sessionToken, store)).toBeNull();
+    expect(
+      await consumeRealtimeSession('rs_does-not-exist', session.sessionToken, store)
+    ).toBeNull();
   });
 
   it('rejects malformed sessionId/token prefixes without touching the store', async () => {
     const session = await createRealtimeSession(identity, store);
     expect(await consumeRealtimeSession('bogus', session.sessionToken, store)).toBeNull();
-    expect(await consumeRealtimeSession(session.sessionId, 'ak_live_not-a-session-token', store)).toBeNull();
+    expect(
+      await consumeRealtimeSession(session.sessionId, 'ak_live_not-a-session-token', store)
+    ).toBeNull();
     expect(store.data.size).toBe(1);
   });
 

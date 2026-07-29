@@ -21,8 +21,15 @@ const ctx = { where: 'judge-schema.tolerant.test' };
 describe('normalizeJudgeOutput — tolerant salvage of real LLM judge drift', () => {
   it('#0 confidence as string + extra keys (maxScore, breakdown)', () => {
     const v = normalizeJudgeOutput(
-      { score: 0.7, maxScore: 1, breakdown: { a: 1 }, issues: [], summary: 'ok', confidence: '0.9' },
-      ctx,
+      {
+        score: 0.7,
+        maxScore: 1,
+        breakdown: { a: 1 },
+        issues: [],
+        summary: 'ok',
+        confidence: '0.9',
+      },
+      ctx
     );
     expect(v?.score).toBe(0.7);
     expect(v?.confidence).toBe(0.9);
@@ -31,18 +38,31 @@ describe('normalizeJudgeOutput — tolerant salvage of real LLM judge drift', ()
   it('#1 overallScore instead of score + alternate dimension keys', () => {
     const v = normalizeJudgeOutput(
       {
-        rubricAdherence: 0.2, clarity: 0.3, efficiency: 0.1, edgeCaseHandling: 0,
-        overallScore: 0.15, justification: 'weak', issues: [], summary: 's', confidence: 0.9,
+        rubricAdherence: 0.2,
+        clarity: 0.3,
+        efficiency: 0.1,
+        edgeCaseHandling: 0,
+        overallScore: 0.15,
+        justification: 'weak',
+        issues: [],
+        summary: 's',
+        confidence: 0.9,
       },
-      ctx,
+      ctx
     );
     expect(v?.score).toBeCloseTo(0.15);
   });
 
   it('#2 extra `reasoning` key, rest canonical', () => {
     const v = normalizeJudgeOutput(
-      { score: 0, reasoning: 'why', issues: [{ severity: 'critical', location: 'x', description: 'd' }], summary: 's', confidence: 1 },
-      ctx,
+      {
+        score: 0,
+        reasoning: 'why',
+        issues: [{ severity: 'critical', location: 'x', description: 'd' }],
+        summary: 's',
+        confidence: 1,
+      },
+      ctx
     );
     expect(v?.score).toBe(0);
     expect(v?.issues.length).toBe(1);
@@ -51,7 +71,7 @@ describe('normalizeJudgeOutput — tolerant salvage of real LLM judge drift', ()
   it('#3 0-100 score + confidence as non-numeric string', () => {
     const v = normalizeJudgeOutput(
       { score: 85, breakdown: {}, issues: [], summary: 's', confidence: 'high' },
-      ctx,
+      ctx
     );
     expect(v?.score).toBeCloseTo(0.85);
     expect(v?.confidence).toBeUndefined(); // 'high' is not numeric → omitted, not a crash
@@ -59,11 +79,14 @@ describe('normalizeJudgeOutput — tolerant salvage of real LLM judge drift', ()
 
   it('coerces non-enum issue severities (high→major, low→minor)', () => {
     const v = normalizeJudgeOutput(
-      { score: 0.5, issues: [
-        { severity: 'high', location: 'l', description: 'd' },
-        { severity: 'low', location: 'l2', description: 'd2' },
-      ] },
-      ctx,
+      {
+        score: 0.5,
+        issues: [
+          { severity: 'high', location: 'l', description: 'd' },
+          { severity: 'low', location: 'l2', description: 'd2' },
+        ],
+      },
+      ctx
     );
     expect(v?.issues.map((i) => i.severity)).toEqual(['major', 'minor']);
   });
@@ -73,7 +96,10 @@ describe('normalizeJudgeOutput — tolerant salvage of real LLM judge drift', ()
   });
 
   it('no regression: still accepts a fully-canonical verdict', () => {
-    const v = normalizeJudgeOutput({ score: 0.95, issues: [], summary: 'good', confidence: 0.9 }, ctx);
+    const v = normalizeJudgeOutput(
+      { score: 0.95, issues: [], summary: 'good', confidence: 0.9 },
+      ctx
+    );
     expect(v?.score).toBe(0.95);
   });
 });
@@ -105,8 +131,12 @@ describe('normalizeJudgeOutput — regex salvage of UNPARSEABLE judge JSON', () 
   });
 
   it('handles overallScore / overall_score spellings', () => {
-    expect(normalizeJudgeOutput('{"overallScore": 0.6, "notes": "truncated', ctx)?.score).toBeCloseTo(0.6);
-    expect(normalizeJudgeOutput('{"overall_score": 0.4, "notes": "truncated', ctx)?.score).toBeCloseTo(0.4);
+    expect(
+      normalizeJudgeOutput('{"overallScore": 0.6, "notes": "truncated', ctx)?.score
+    ).toBeCloseTo(0.6);
+    expect(
+      normalizeJudgeOutput('{"overall_score": 0.4, "notes": "truncated', ctx)?.score
+    ).toBeCloseTo(0.4);
   });
 
   it('still returns undefined when NO numeric score is present in the text', () => {

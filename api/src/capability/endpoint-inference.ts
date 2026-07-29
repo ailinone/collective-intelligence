@@ -39,11 +39,14 @@
 const VIDEO_GENERATION_CAPS = ['video_generation', 'image_to_video', 'video_to_video'] as const;
 const TRANSCRIPTION_CAPS = ['speech_to_text', 'transcription', 'video_transcription'] as const;
 
-type LooseMetadata = {
-  endpoint?: unknown;
-  tier?: unknown;
-  [key: string]: unknown;
-} | null | undefined;
+type LooseMetadata =
+  | {
+      endpoint?: unknown;
+      tier?: unknown;
+      [key: string]: unknown;
+    }
+  | null
+  | undefined;
 
 /**
  * Returns the endpoint slug for a model given its capabilities and (optional)
@@ -52,10 +55,7 @@ type LooseMetadata = {
  * in priority order (most specific first) and fall back to `chat_completions`,
  * which covers the bulk of LLM models.
  */
-export function inferEndpoint(
-  capabilities: readonly string[],
-  metadata?: LooseMetadata,
-): string {
+export function inferEndpoint(capabilities: readonly string[], metadata?: LooseMetadata): string {
   if (typeof metadata?.endpoint === 'string' && metadata.endpoint.trim().length > 0) {
     return metadata.endpoint;
   }
@@ -83,7 +83,7 @@ export function inferEndpoint(
  */
 export function withInferredEndpoint<T extends Record<string, unknown>>(
   metadata: T,
-  capabilities: readonly string[],
+  capabilities: readonly string[]
 ): T & { endpoint: string } {
   if (typeof metadata.endpoint === 'string' && metadata.endpoint.trim().length > 0) {
     return metadata as T & { endpoint: string };

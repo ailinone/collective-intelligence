@@ -41,11 +41,18 @@ import { isNonGenerativeModel } from './non-generative-filter';
 import type { PoolResult, PoolStage } from './pool-types';
 
 const NON_CHAT_CAPABILITIES = new Set([
-  'image_generation', 'image_editing', 'image_upscaling',
-  'video_generation', 'video_editing',
-  'audio_generation', 'text_to_speech', 'speech_to_text',
-  'embedding', 'reranking',
-  'moderation', 'classification',
+  'image_generation',
+  'image_editing',
+  'image_upscaling',
+  'video_generation',
+  'video_editing',
+  'audio_generation',
+  'text_to_speech',
+  'speech_to_text',
+  'embedding',
+  'reranking',
+  'moderation',
+  'classification',
 ]);
 
 const SOURCE_PRIORITY: Record<string, number> = {
@@ -85,9 +92,8 @@ export class PoolBuilder {
           return false;
         }
         // Exclude models that ONLY have non-chat caps + streaming
-        const hasOnlyNonChat = caps.length > 0 && caps.every(
-          (c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming'
-        );
+        const hasOnlyNonChat =
+          caps.length > 0 && caps.every((c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming');
         if (hasOnlyNonChat) {
           reasons['only_non_chat_capabilities'] = (reasons['only_non_chat_capabilities'] ?? 0) + 1;
           return false;
@@ -104,7 +110,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'modality_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'modality_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -128,7 +139,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'capability_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'capability_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -155,7 +171,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'operability_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'operability_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -175,7 +196,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'credit_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'credit_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -199,7 +225,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'quality_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'quality_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -212,13 +243,19 @@ export class PoolBuilder {
 
     this.models = this.models.filter((model) => {
       if (model.status !== 'active') {
-        reasons[`status_${model.status ?? 'unknown'}`] = (reasons[`status_${model.status ?? 'unknown'}`] ?? 0) + 1;
+        reasons[`status_${model.status ?? 'unknown'}`] =
+          (reasons[`status_${model.status ?? 'unknown'}`] ?? 0) + 1;
         return false;
       }
       return true;
     });
 
-    this.stages.push({ name: 'status_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'status_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -239,7 +276,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'cost_filter', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'cost_filter',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -262,7 +304,12 @@ export class PoolBuilder {
       return true;
     });
 
-    this.stages.push({ name: 'self_hosted_exclusion', inputCount, outputCount: this.models.length, droppedReasons: reasons });
+    this.stages.push({
+      name: 'self_hosted_exclusion',
+      inputCount,
+      outputCount: this.models.length,
+      droppedReasons: reasons,
+    });
     return this;
   }
 
@@ -312,7 +359,7 @@ export class PoolBuilder {
     }
 
     const summary = this.stages
-      .map(s => `${s.name}: ${s.inputCount}→${s.outputCount}`)
+      .map((s) => `${s.name}: ${s.inputCount}→${s.outputCount}`)
       .join(' | ');
 
     return {
@@ -335,7 +382,7 @@ export function buildChatExecutionPool(
   allModels: Model[],
   qualityThreshold: number,
   maxCost?: number,
-  requiredCapabilities?: string[],
+  requiredCapabilities?: string[]
 ): PoolResult {
   let builder = new PoolBuilder(allModels)
     .filterByModality('chat')

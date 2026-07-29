@@ -12,10 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  normaliseRow,
-  normaliseRows,
-} from '../harvest/historical-results-normalizer';
+import { normaliseRow, normaliseRows } from '../harvest/historical-results-normalizer';
 
 describe('normaliseRow — judge scale detection', () => {
   it('detects 0..1 scale', () => {
@@ -112,7 +109,13 @@ describe('normaliseRow — defensive parsing', () => {
 describe('normaliseRows', () => {
   it('skips rows that fail to normalise', () => {
     const out = normaliseRows([
-      { executionId: 'e1', experimentId: 'exp1', taskType: 'code', modelsUsed: ['m'], judgeScore: 0.5 },
+      {
+        executionId: 'e1',
+        experimentId: 'exp1',
+        taskType: 'code',
+        modelsUsed: ['m'],
+        judgeScore: 0.5,
+      },
       { foo: 'bar' },
     ]);
     expect(out.normalised.length).toBe(1);

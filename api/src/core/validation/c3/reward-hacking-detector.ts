@@ -113,23 +113,23 @@ export class RewardHackingDetector {
       };
     }
 
-    const heuristic = this.window.map(p => p.heuristicScore);
-    const judge = this.window.map(p => p.judgeScore);
+    const heuristic = this.window.map((p) => p.heuristicScore);
+    const judge = this.window.map((p) => p.judgeScore);
 
     const correlation = this.pearsonCorrelation(heuristic, judge);
-    const meanDivergence = this.window.reduce(
-      (sum, p) => sum + Math.abs(p.heuristicScore - p.judgeScore), 0
-    ) / this.window.length;
+    const meanDivergence =
+      this.window.reduce((sum, p) => sum + Math.abs(p.heuristicScore - p.judgeScore), 0) /
+      this.window.length;
 
     // Detect token inflation
     const tokenInflation = this.detectInflation(
-      this.window.map(p => p.tokenCount),
+      this.window.map((p) => p.tokenCount),
       judge,
-      0.2, // 20% increase threshold
+      0.2 // 20% increase threshold
     );
 
     // Detect formatting inflation
-    const formattingScores = this.window.map(p => p.headingsCount + p.codeBlocksCount);
+    const formattingScores = this.window.map((p) => p.headingsCount + p.codeBlocksCount);
     const formattingInflation = this.detectInflation(formattingScores, judge, 0.2);
 
     const report: RewardHackingReport = {
@@ -155,8 +155,12 @@ export class RewardHackingDetector {
    */
   hasAlarm(): boolean {
     const report = this.getReport();
-    return report.correlationAlarm || report.divergenceAlarm
-      || report.tokenInflation || report.formattingInflation;
+    return (
+      report.correlationAlarm ||
+      report.divergenceAlarm ||
+      report.tokenInflation ||
+      report.formattingInflation
+    );
   }
 
   private pearsonCorrelation(x: number[], y: number[]): number {
@@ -166,7 +170,9 @@ export class RewardHackingDetector {
     const meanX = x.reduce((a, b) => a + b, 0) / n;
     const meanY = y.reduce((a, b) => a + b, 0) / n;
 
-    let num = 0, denomX = 0, denomY = 0;
+    let num = 0,
+      denomX = 0,
+      denomY = 0;
     for (let i = 0; i < n; i++) {
       const dx = x[i] - meanX;
       const dy = y[i] - meanY;
@@ -183,11 +189,7 @@ export class RewardHackingDetector {
    * Detect inflation: metric rising while quality (judge) stays flat or drops.
    * Compares first half vs second half of the window.
    */
-  private detectInflation(
-    metric: number[],
-    quality: number[],
-    threshold: number
-  ): boolean {
+  private detectInflation(metric: number[], quality: number[], threshold: number): boolean {
     const half = Math.floor(metric.length / 2);
     if (half < 5) return false;
 
@@ -202,12 +204,9 @@ export class RewardHackingDetector {
     const avgQualitySecond = secondQuality.reduce((a, b) => a + b, 0) / secondQuality.length;
 
     // Inflation = metric rises significantly while quality doesn't
-    const metricRise = avgMetricFirst > 0
-      ? (avgMetricSecond - avgMetricFirst) / avgMetricFirst
-      : 0;
-    const qualityChange = avgQualityFirst > 0
-      ? (avgQualitySecond - avgQualityFirst) / avgQualityFirst
-      : 0;
+    const metricRise = avgMetricFirst > 0 ? (avgMetricSecond - avgMetricFirst) / avgMetricFirst : 0;
+    const qualityChange =
+      avgQualityFirst > 0 ? (avgQualitySecond - avgQualityFirst) / avgQualityFirst : 0;
 
     return metricRise > threshold && qualityChange < threshold / 2;
   }

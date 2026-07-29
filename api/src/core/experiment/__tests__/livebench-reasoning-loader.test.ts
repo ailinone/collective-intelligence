@@ -41,7 +41,9 @@ describe('loadLiveBenchReasoningTasks', () => {
     expect(byDomain.get('spatial')).toBe(50);
     expect(byDomain.get('web_of_lies_v2')).toBe(50);
     // exactly those three subtasks, nothing else
-    expect(new Set(byDomain.keys())).toEqual(new Set(['zebra_puzzle', 'spatial', 'web_of_lies_v2']));
+    expect(new Set(byDomain.keys())).toEqual(
+      new Set(['zebra_puzzle', 'spatial', 'web_of_lies_v2'])
+    );
   });
 
   it('uses the reserved 40000 index range, unique + disjoint from the other benchmarks', () => {
@@ -49,7 +51,9 @@ describe('loadLiveBenchReasoningTasks', () => {
     expect(tasks[0].index).toBe(LIVEBENCH_REASONING_INDEX_BASE);
     const uniq = new Set(tasks.map((t) => t.index));
     expect(uniq.size).toBe(tasks.length);
-    expect(Math.min(...tasks.map((t) => t.index))).toBeGreaterThanOrEqual(LIVEBENCH_REASONING_INDEX_BASE);
+    expect(Math.min(...tasks.map((t) => t.index))).toBeGreaterThanOrEqual(
+      LIVEBENCH_REASONING_INDEX_BASE
+    );
     // 40000+ never collides with HumanEval (10000+) / GSM8K (20000+) / HumanEval+ (30000+)
     expect(LIVEBENCH_REASONING_INDEX_BASE).toBeGreaterThan(HUMANEVAL_INDEX_BASE);
     expect(LIVEBENCH_REASONING_INDEX_BASE).toBeGreaterThan(GSM8K_INDEX_BASE);
@@ -101,7 +105,9 @@ describe('loadLiveBenchReasoningTasks', () => {
 
     // zebra defers to LiveBench's release-date selector (new <solution> scorer)
     expect(zebra.groundTruthScorer!.scorerSource).toContain('def zebra_puzzle_process_results');
-    expect(zebra.groundTruthScorer!.scorerSource).toContain('_fn = get_zebra_puzzle_evaluator("2024-11-25")');
+    expect(zebra.groundTruthScorer!.scorerSource).toContain(
+      '_fn = get_zebra_puzzle_evaluator("2024-11-25")'
+    );
 
     expect(spatial.groundTruthScorer!.scorerSource).toContain('def spatial_process_results');
     expect(spatial.groundTruthScorer!.scorerSource).toContain('_fn = spatial_process_results');
@@ -114,12 +120,16 @@ describe('loadLiveBenchReasoningTasks', () => {
     // No kept zebra task may reference the unfaithful old evaluator directly, and
     // none may bind the old release date into the selector.
     for (const t of tasks.filter((x) => x.domain === 'zebra_puzzle')) {
-      expect(t.groundTruthScorer!.scorerSource).not.toContain('get_zebra_puzzle_evaluator("2024-06-24")');
+      expect(t.groundTruthScorer!.scorerSource).not.toContain(
+        'get_zebra_puzzle_evaluator("2024-06-24")'
+      );
     }
   });
 
   it('respects the limit option', () => {
     expect(loadLiveBenchReasoningTasks({ limit: 10 }).length).toBe(10);
-    expect(loadLiveBenchReasoningTasks({ limit: 10 })[0].index).toBe(LIVEBENCH_REASONING_INDEX_BASE);
+    expect(loadLiveBenchReasoningTasks({ limit: 10 })[0].index).toBe(
+      LIVEBENCH_REASONING_INDEX_BASE
+    );
   });
 });

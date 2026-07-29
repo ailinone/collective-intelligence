@@ -18,29 +18,63 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SOURCES: Record<string, string> = {
   // Harvest layer.
-  'historical-results-schema.ts': resolve(__dirname, '..', 'harvest', 'historical-results-schema.ts'),
-  'historical-results-sanitizer.ts': resolve(__dirname, '..', 'harvest', 'historical-results-sanitizer.ts'),
-  'historical-results-normalizer.ts': resolve(__dirname, '..', 'harvest', 'historical-results-normalizer.ts'),
-  'historical-results-deduper.ts': resolve(__dirname, '..', 'harvest', 'historical-results-deduper.ts'),
-  'historical-results-quality-gate.ts': resolve(__dirname, '..', 'harvest', 'historical-results-quality-gate.ts'),
-  'historical-results-harvester.ts': resolve(__dirname, '..', 'harvest', 'historical-results-harvester.ts'),
+  'historical-results-schema.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-schema.ts'
+  ),
+  'historical-results-sanitizer.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-sanitizer.ts'
+  ),
+  'historical-results-normalizer.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-normalizer.ts'
+  ),
+  'historical-results-deduper.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-deduper.ts'
+  ),
+  'historical-results-quality-gate.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-quality-gate.ts'
+  ),
+  'historical-results-harvester.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-harvester.ts'
+  ),
   // Calibration layer.
   'calibration-policy.ts': resolve(__dirname, '..', 'calibration', 'calibration-policy.ts'),
-  'expected-judge-calibrator.ts': resolve(__dirname, '..', 'calibration', 'expected-judge-calibrator.ts'),
-  'calibrated-expected-judge-estimator.ts': resolve(__dirname, '..', 'calibration', 'calibrated-expected-judge-estimator.ts'),
+  'expected-judge-calibrator.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'expected-judge-calibrator.ts'
+  ),
+  'calibrated-expected-judge-estimator.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'calibrated-expected-judge-estimator.ts'
+  ),
   'tasktype-calibration.ts': resolve(__dirname, '..', 'calibration', 'tasktype-calibration.ts'),
   'calibration-metrics.ts': resolve(__dirname, '..', 'calibration', 'calibration-metrics.ts'),
   'calibration-report.ts': resolve(__dirname, '..', 'calibration', 'calibration-report.ts'),

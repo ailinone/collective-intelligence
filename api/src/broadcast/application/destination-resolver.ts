@@ -63,13 +63,16 @@ export type ResolverRunner = Pick<Prisma.TransactionClient, '$queryRaw'>;
 // ─── Public API ─────────────────────────────────────────────────────────
 
 export interface DestinationResolver {
-  resolveForEnvelope(envelope: TraceEnvelope, runner?: ResolverRunner): Promise<ResolvedDestination[]>;
+  resolveForEnvelope(
+    envelope: TraceEnvelope,
+    runner?: ResolverRunner
+  ): Promise<ResolvedDestination[]>;
 }
 
 export class DefaultDestinationResolver implements DestinationResolver {
   async resolveForEnvelope(
     envelope: TraceEnvelope,
-    runner: ResolverRunner = prisma,
+    runner: ResolverRunner = prisma
   ): Promise<ResolvedDestination[]> {
     const orgId = envelope.tenant.organizationId;
     const userId = envelope.tenant.userId;

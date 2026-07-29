@@ -48,9 +48,15 @@ describe('computeModalityCost (COST #6 — modality cost integrity)', () => {
   });
 
   it('also flags MISSING for an empty/undefined response (never throws)', () => {
-    expect(computeModalityCost({ response: undefined, model: model(), provider: 'p' }).costSource).toBe('missing');
-    expect(computeModalityCost({ response: null, model: model(), provider: 'p' }).costSource).toBe('missing');
-    expect(computeModalityCost({ response: {}, model: model(), provider: 'p' }).costSource).toBe('missing');
+    expect(
+      computeModalityCost({ response: undefined, model: model(), provider: 'p' }).costSource
+    ).toBe('missing');
+    expect(computeModalityCost({ response: null, model: model(), provider: 'p' }).costSource).toBe(
+      'missing'
+    );
+    expect(computeModalityCost({ response: {}, model: model(), provider: 'p' }).costSource).toBe(
+      'missing'
+    );
   });
 
   it('estimates from DB pricing when cost is 0 but tokens are present (text modalities)', () => {

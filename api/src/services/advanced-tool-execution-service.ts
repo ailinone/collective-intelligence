@@ -288,13 +288,47 @@ export async function executeExtractFunctionTool(
 
     // Filter out common keywords
     const keywords = new Set([
-      'if', 'else', 'for', 'while', 'return', 'const', 'let', 'var',
-      'function', 'class', 'import', 'export', 'true', 'false', 'null',
-      'undefined', 'this', 'new', 'async', 'await', 'try', 'catch',
-      'throw', 'typeof', 'instanceof', 'in', 'of', 'break', 'continue',
-      'def', 'self', 'None', 'True', 'False', 'and', 'or', 'not',
+      'if',
+      'else',
+      'for',
+      'while',
+      'return',
+      'const',
+      'let',
+      'var',
+      'function',
+      'class',
+      'import',
+      'export',
+      'true',
+      'false',
+      'null',
+      'undefined',
+      'this',
+      'new',
+      'async',
+      'await',
+      'try',
+      'catch',
+      'throw',
+      'typeof',
+      'instanceof',
+      'in',
+      'of',
+      'break',
+      'continue',
+      'def',
+      'self',
+      'None',
+      'True',
+      'False',
+      'and',
+      'or',
+      'not',
     ]);
-    const params = Array.from(usedVariables).filter(v => !keywords.has(v)).slice(0, 5);
+    const params = Array.from(usedVariables)
+      .filter((v) => !keywords.has(v))
+      .slice(0, 5);
 
     // Generate new function
     let newFunction: string;
@@ -306,7 +340,7 @@ export async function executeExtractFunctionTool(
       functionCall = `${functionName}(${paramsStr})`;
     } else if (isJavaScriptFamily) {
       // TypeScript gets type annotations, JavaScript doesn't
-      const paramsStr = params.map(p => isTypeScript ? `${p}: unknown` : p).join(', ');
+      const paramsStr = params.map((p) => (isTypeScript ? `${p}: unknown` : p)).join(', ');
       newFunction = `function ${functionName}(${paramsStr}) {\n  ${extractedCode.split('\n').join('\n  ')}\n}\n`;
       functionCall = `${functionName}(${paramsStr})`;
     } else {
@@ -444,8 +478,8 @@ export async function executeRenameSymbolTool(
     }
 
     const output = dryRun
-      ? `[DRY RUN] Would rename ${totalReplacements} occurrence(s) of "${oldName}" to "${newName}":\n${results.map(r => `  ${r.file}: ${r.replacements} occurrence(s)`).join('\n')}`
-      : `Renamed ${totalReplacements} occurrence(s) of "${oldName}" to "${newName}":\n${results.map(r => `  ${r.file}: ${r.replacements} occurrence(s)`).join('\n')}`;
+      ? `[DRY RUN] Would rename ${totalReplacements} occurrence(s) of "${oldName}" to "${newName}":\n${results.map((r) => `  ${r.file}: ${r.replacements} occurrence(s)`).join('\n')}`
+      : `Renamed ${totalReplacements} occurrence(s) of "${oldName}" to "${newName}":\n${results.map((r) => `  ${r.file}: ${r.replacements} occurrence(s)`).join('\n')}`;
 
     log.info({ oldName, newName, totalReplacements }, 'Symbol renamed successfully');
 
@@ -537,7 +571,8 @@ export async function executeExtractVariableTool(
     }
 
     // Replace expression with variable name
-    const newLine = targetLine.substring(0, startColumn) + variableName + targetLine.substring(endColumn);
+    const newLine =
+      targetLine.substring(0, startColumn) + variableName + targetLine.substring(endColumn);
 
     if (dryRun) {
       return {
@@ -644,9 +679,10 @@ export async function executeHealFileTool(
         const eslintResults: unknown = JSON.parse(stdout);
         if (Array.isArray(eslintResults)) {
           for (const result of eslintResults) {
-            const messages = (typeof result === 'object' && result !== null)
-              ? (result as { messages?: unknown }).messages
-              : undefined;
+            const messages =
+              typeof result === 'object' && result !== null
+                ? (result as { messages?: unknown }).messages
+                : undefined;
             if (!Array.isArray(messages)) continue;
             for (const msgRaw of messages) {
               if (typeof msgRaw !== 'object' || msgRaw === null) continue;
@@ -654,7 +690,11 @@ export async function executeHealFileTool(
               const line = typeof msg.line === 'number' ? msg.line : 0;
               const column = typeof msg.column === 'number' ? msg.column : 0;
               const message = typeof msg.message === 'string' ? msg.message : '';
-              issues.push({ type: 'eslint', message: `${line}:${column} ${message}`, fixed: false });
+              issues.push({
+                type: 'eslint',
+                message: `${line}:${column} ${message}`,
+                fixed: false,
+              });
             }
           }
         }
@@ -691,7 +731,9 @@ export async function executeHealFileTool(
       try {
         // SECURITY: shell-free — fullPath is a discrete argv entry (no shell).
         await runTool(NPX_BIN, ['eslint', fullPath, '--fix'], workingDirectory, 30000);
-        issues.forEach(i => { if (i.type === 'eslint') i.fixed = true; });
+        issues.forEach((i) => {
+          if (i.type === 'eslint') i.fixed = true;
+        });
       } catch {
         // ESLint fix not available
       }
@@ -707,14 +749,18 @@ export async function executeHealFileTool(
       }
     }
 
-    const fixedCount = issues.filter(i => i.fixed).length;
-    const output = issues.length === 0
-      ? `No issues found in ${filePath}`
-      : dryRun
-        ? `[DRY RUN] Found ${issues.length} issue(s) in ${filePath}:\n${issues.map(i => `  [${i.type}] ${i.message}`).join('\n')}`
-        : `Healed ${filePath}: ${fixedCount}/${issues.length} issue(s) fixed:\n${issues.map(i => `  [${i.type}] ${i.fixed ? '✅' : '❌'} ${i.message}`).join('\n')}`;
+    const fixedCount = issues.filter((i) => i.fixed).length;
+    const output =
+      issues.length === 0
+        ? `No issues found in ${filePath}`
+        : dryRun
+          ? `[DRY RUN] Found ${issues.length} issue(s) in ${filePath}:\n${issues.map((i) => `  [${i.type}] ${i.message}`).join('\n')}`
+          : `Healed ${filePath}: ${fixedCount}/${issues.length} issue(s) fixed:\n${issues.map((i) => `  [${i.type}] ${i.fixed ? '✅' : '❌'} ${i.message}`).join('\n')}`;
 
-    log.info({ filePath, issuesFound: issues.length, issuesFixed: fixedCount }, 'Heal file completed');
+    log.info(
+      { filePath, issuesFound: issues.length, issuesFixed: fixedCount },
+      'Heal file completed'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -776,7 +822,8 @@ export async function executeGenerateTestsTool(
     const content = await fs.readFile(fullPath, 'utf-8');
 
     // Extract function names from the source file (simple regex-based)
-    const functionPattern = /(?:export\s+)?(?:async\s+)?function\s+(\w+)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(/g;
+    const functionPattern =
+      /(?:export\s+)?(?:async\s+)?function\s+(\w+)|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(/g;
     const functions: string[] = [];
     let match;
     while ((match = functionPattern.exec(content)) !== null) {
@@ -806,14 +853,18 @@ Generated by Ailin Developer Tool
 import pytest
 from ${baseName} import ${functions.join(', ')}
 
-${functions.map(fn => `
+${functions
+  .map(
+    (fn) => `
 class Test${fn.charAt(0).toUpperCase() + fn.slice(1)}:
     """Auto-generated tests for ${fn}"""
 
     def test_${fn}_callable(self):
         """Ensures ${fn} is callable"""
         assert callable(${fn})
-${includeEdgeCases ? `
+${
+  includeEdgeCases
+    ? `
     def test_${fn}_edge_case_empty(self):
         """Edge case: empty input; function must not crash."""
         try:
@@ -827,17 +878,23 @@ ${includeEdgeCases ? `
             ${fn}(None)
         except (TypeError, ValueError):
             pass
-` : ''}
-`).join('\n')}
+`
+    : ''
+}
+`
+  )
+  .join('\n')}
 `;
     } else {
-      const importStatement = framework === 'vitest' || framework === 'jest'
-        ? `import { ${functions.join(', ')} } from '${importPath}';`
-        : `const { ${functions.join(', ')} } = require('${importPath}');`;
+      const importStatement =
+        framework === 'vitest' || framework === 'jest'
+          ? `import { ${functions.join(', ')} } from '${importPath}';`
+          : `const { ${functions.join(', ')} } = require('${importPath}');`;
 
-      const describeBlock = framework === 'vitest' || framework === 'jest'
-        ? `import { describe, it, expect } from '${framework}';`
-        : `const { describe, it } = require('mocha');\nconst { expect } = require('chai');`;
+      const describeBlock =
+        framework === 'vitest' || framework === 'jest'
+          ? `import { describe, it, expect } from '${framework}';`
+          : `const { describe, it } = require('mocha');\nconst { expect } = require('chai');`;
 
       testContent = `/**
  * Unit tests for ${baseName}
@@ -847,12 +904,16 @@ ${includeEdgeCases ? `
 ${describeBlock}
 ${importStatement}
 
-${functions.map(fn => `
+${functions
+  .map(
+    (fn) => `
 describe('${fn}', () => {
   it('should be exported as a function', () => {
     expect(typeof ${fn}).toBe('function');
   });
-${includeEdgeCases ? `
+${
+  includeEdgeCases
+    ? `
   it('should handle empty input', () => {
     expect(typeof ${fn}).toBe('function');
     try { ${fn}(''); } catch (_) { /* function may throw on empty */ }
@@ -863,20 +924,28 @@ ${includeEdgeCases ? `
     try { ${fn}(null); } catch (_) { /* function may throw */ }
     try { ${fn}(undefined); } catch (_) { /* function may throw */ }
   });
-` : ''}
+`
+    : ''
+}
 });
-`).join('\n')}
+`
+  )
+  .join('\n')}
 `;
     }
 
     // Determine test file path
-    const ext = framework === 'pytest' ? '.py' : language === 'typescript' ? '.test.ts' : '.test.js';
+    const ext =
+      framework === 'pytest' ? '.py' : language === 'typescript' ? '.test.ts' : '.test.js';
     const testFileName = `${baseName}${ext}`;
     const testFilePath = path.join(path.dirname(fullPath), testFileName);
 
     if (writeFile) {
       await fs.writeFile(testFilePath, testContent, 'utf-8');
-      log.info({ filePath, testFilePath, functionCount: functions.length }, 'Tests generated successfully');
+      log.info(
+        { filePath, testFilePath, functionCount: functions.length },
+        'Tests generated successfully'
+      );
 
       return {
         tool_call_id: toolCallId,
@@ -963,13 +1032,14 @@ export async function executeTodoWriteTool(
     if (merge) {
       // Merge with existing todos
       for (const todo of todos) {
-        const existingIndex = todoList.items.findIndex(i => i.id === todo.id);
+        const existingIndex = todoList.items.findIndex((i) => i.id === todo.id);
         if (existingIndex >= 0) {
           todoList.items[existingIndex] = {
             ...todoList.items[existingIndex],
             ...todo,
             updatedAt: now,
-            completedAt: todo.status === 'completed' ? now : todoList.items[existingIndex].completedAt,
+            completedAt:
+              todo.status === 'completed' ? now : todoList.items[existingIndex].completedAt,
           };
         } else {
           todoList.items.push({
@@ -982,7 +1052,7 @@ export async function executeTodoWriteTool(
       }
     } else {
       // Replace all todos
-      todoList.items = todos.map(todo => ({
+      todoList.items = todos.map((todo) => ({
         ...todo,
         createdAt: now,
         updatedAt: now,
@@ -995,11 +1065,14 @@ export async function executeTodoWriteTool(
     // Save todos
     await fs.writeFile(todoFilePath, JSON.stringify(todoList, null, 2), 'utf-8');
 
-    const pending = todoList.items.filter(i => i.status === 'pending').length;
-    const inProgress = todoList.items.filter(i => i.status === 'in_progress').length;
-    const completed = todoList.items.filter(i => i.status === 'completed').length;
+    const pending = todoList.items.filter((i) => i.status === 'pending').length;
+    const inProgress = todoList.items.filter((i) => i.status === 'in_progress').length;
+    const completed = todoList.items.filter((i) => i.status === 'completed').length;
 
-    log.info({ todoCount: todoList.items.length, pending, inProgress, completed }, 'Task list updated');
+    log.info(
+      { todoCount: todoList.items.length, pending, inProgress, completed },
+      'Task list updated'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -1082,7 +1155,7 @@ export async function executeRefactorCodeTool(
         // Modernize: Update to modern syntax
         content = content.replace(/var\s+/g, 'const ');
         changes.push('Converted var to const');
-        
+
         content = content.replace(/function\s+(\w+)\s*\((.*?)\)\s*{/g, 'const $1 = ($2) => {');
         changes.push('Converted functions to arrow functions');
         break;
@@ -1091,7 +1164,7 @@ export async function executeRefactorCodeTool(
         // Clean: Remove dead code, unused imports
         content = content.replace(/\/\/\s*TODO:.*\n/g, '');
         changes.push('Removed TODO comments');
-        
+
         content = content.replace(/console\.log\(.*?\);?\n?/g, '');
         changes.push('Removed console.log statements');
         break;
@@ -1111,8 +1184,8 @@ export async function executeRefactorCodeTool(
     }
 
     const output = dryRun
-      ? `[DRY RUN] Would apply ${changes.length} ${refactorType} change(s) to ${filePath}:\n${changes.map(c => `  - ${c}`).join('\n')}`
-      : `Applied ${changes.length} ${refactorType} change(s) to ${filePath}:\n${changes.map(c => `  - ${c}`).join('\n')}`;
+      ? `[DRY RUN] Would apply ${changes.length} ${refactorType} change(s) to ${filePath}:\n${changes.map((c) => `  - ${c}`).join('\n')}`
+      : `Applied ${changes.length} ${refactorType} change(s) to ${filePath}:\n${changes.map((c) => `  - ${c}`).join('\n')}`;
 
     log.info({ filePath, refactorType, changesApplied: changes.length }, 'Refactor completed');
 
@@ -1264,7 +1337,8 @@ export async function executeAnalyzeImageTool(
       return {
         tool_call_id: toolCallId,
         success: false,
-        error: 'No models with vision capability available. Please configure a provider with vision support (OpenAI, Anthropic, Google, OpenRouter, etc.)',
+        error:
+          'No models with vision capability available. Please configure a provider with vision support (OpenAI, Anthropic, Google, OpenRouter, etc.)',
       };
     }
 
@@ -1360,8 +1434,12 @@ export async function executeCompareImagesTool(
   context: ToolExecutionContext
 ): Promise<ToolResult> {
   const {
-    image1_path, image1_url, image1_base64,
-    image2_path, image2_url, image2_base64,
+    image1_path,
+    image1_url,
+    image1_base64,
+    image2_path,
+    image2_url,
+    image2_base64,
     comparison_type = 'visual',
   } = args;
   const { workingDirectory, log } = context;
@@ -1374,7 +1452,7 @@ export async function executeCompareImagesTool(
       base64?: string
     ): Promise<{ data: string; source: string } | null> => {
       if (base64) return { data: base64, source: 'base64' };
-      
+
       if (url) {
         try {
           // SECURITY: SSRF guard — resolves the hostname and rejects
@@ -1402,9 +1480,9 @@ export async function executeCompareImagesTool(
           return null;
         }
       }
-      
+
       return null;
-    }
+    };
 
     const img1 = await getImageData(image1_path, image1_url, image1_base64);
     const img2 = await getImageData(image2_path, image2_url, image2_base64);
@@ -1427,12 +1505,14 @@ export async function executeCompareImagesTool(
       return {
         tool_call_id: toolCallId,
         success: false,
-        error: 'No models with vision capability available. Please configure a provider with vision support (OpenAI, Anthropic, Google, OpenRouter, etc.)',
+        error:
+          'No models with vision capability available. Please configure a provider with vision support (OpenAI, Anthropic, Google, OpenRouter, etc.)',
       };
     }
 
     const comparisonPrompts: Record<string, string> = {
-      visual: 'Compare these two images in detail. Describe all visual differences and similarities you can identify, including colors, shapes, positions, and any text or objects present.',
+      visual:
+        'Compare these two images in detail. Describe all visual differences and similarities you can identify, including colors, shapes, positions, and any text or objects present.',
       code: 'Compare the code shown in these two images. Identify what lines changed, what was added, what was removed. Be specific about the differences.',
       ui: 'Compare these two UI designs thoroughly. Describe all layout differences, component changes, styling updates, spacing changes, and any text differences.',
       diff: 'Analyze the differences between these two images systematically. Create a detailed list of every change you can identify, from major structural changes to subtle details.',
@@ -1447,7 +1527,10 @@ export async function executeCompareImagesTool(
       {
         role: 'user' as const,
         content: [
-          { type: 'text' as const, text: comparisonPrompts[comparison_type] || comparisonPrompts.visual },
+          {
+            type: 'text' as const,
+            text: comparisonPrompts[comparison_type] || comparisonPrompts.visual,
+          },
           {
             type: 'image_url' as const,
             image_url: { url: `data:image/jpeg;base64,${img1.data}` },
@@ -1478,7 +1561,8 @@ export async function executeCompareImagesTool(
       };
     }
 
-    const comparisonText = result.response?.choices?.[0]?.message?.content || 'No comparison returned';
+    const comparisonText =
+      result.response?.choices?.[0]?.message?.content || 'No comparison returned';
 
     log.info(
       {
@@ -1531,7 +1615,7 @@ export async function executeExtractCodeFromScreenshotTool(
   context: ToolExecutionContext
 ): Promise<ToolResult> {
   const { language_hint } = args;
-  
+
   // Use analyze_image with code extraction prompt
   const analysisResult = await executeAnalyzeImageTool(
     {
@@ -1549,7 +1633,7 @@ export async function executeExtractCodeFromScreenshotTool(
 
   // Post-process to extract just the code
   let extractedCode = analysisResult.output || '';
-  
+
   // Remove common prefixes from analysis
   extractedCode = extractedCode
     .replace(/^Image Analysis \(code\):\n\n/i, '')
@@ -1562,7 +1646,7 @@ export async function executeExtractCodeFromScreenshotTool(
     success: true,
     output: extractedCode,
     metadata: {
-      ...analysisResult.metadata as Record<string, unknown>,
+      ...(analysisResult.metadata as Record<string, unknown>),
       language_hint,
       extracted: true,
     },
@@ -1606,7 +1690,10 @@ export async function executeInlineFunctionTool(
     // SECURITY: functionName is escaped before embedding in these regexes so
     // a caller cannot inject regex syntax (js/regex-injection / ReDoS).
     const safeFunctionName = escapeRegExp(functionName);
-    const declarationRegex = new RegExp(`\\bfunction\\s+${safeFunctionName}\\s*\\([^)]*\\)\\s*\\{`, 'm');
+    const declarationRegex = new RegExp(
+      `\\bfunction\\s+${safeFunctionName}\\s*\\([^)]*\\)\\s*\\{`,
+      'm'
+    );
     const arrowBlockRegex = new RegExp(
       `\\b(?:const|let|var)\\s+${safeFunctionName}\\s*=\\s*(?:async\\s+)?\\([^)]*\\)\\s*=>\\s*\\{`,
       'm'
@@ -1740,7 +1827,13 @@ export async function executeFileSearchTool(
   toolCallId: string,
   context: ToolExecutionContext
 ): Promise<ToolResult> {
-  const { pattern, path: searchPath = '.', type = 'name', max_results = 50, include_hidden = false } = args;
+  const {
+    pattern,
+    path: searchPath = '.',
+    type = 'name',
+    max_results = 50,
+    include_hidden = false,
+  } = args;
   const { workingDirectory, log } = context;
 
   try {
@@ -1775,7 +1868,9 @@ export async function executeFileSearchTool(
           if (!include_hidden && entry.name.startsWith('.')) continue;
 
           // Skip common ignore patterns
-          if (['node_modules', 'dist', 'build', '.git', '__pycache__', '.next'].includes(entry.name)) {
+          if (
+            ['node_modules', 'dist', 'build', '.git', '__pycache__', '.next'].includes(entry.name)
+          ) {
             continue;
           }
 
@@ -1798,8 +1893,34 @@ export async function executeFileSearchTool(
             if ((type === 'content' || type === 'both') && results.length < max_results) {
               // Only search text files
               const ext = path.extname(entry.name).toLowerCase();
-              const textExtensions = ['.ts', '.js', '.tsx', '.jsx', '.json', '.md', '.txt', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.toml', '.ini', '.env', '.sh', '.bash'];
-              
+              const textExtensions = [
+                '.ts',
+                '.js',
+                '.tsx',
+                '.jsx',
+                '.json',
+                '.md',
+                '.txt',
+                '.py',
+                '.go',
+                '.rs',
+                '.java',
+                '.c',
+                '.cpp',
+                '.h',
+                '.css',
+                '.scss',
+                '.html',
+                '.xml',
+                '.yaml',
+                '.yml',
+                '.toml',
+                '.ini',
+                '.env',
+                '.sh',
+                '.bash',
+              ];
+
               if (textExtensions.includes(ext) || !ext) {
                 try {
                   const content = await fs.readFile(entryPath, 'utf-8');
@@ -1809,7 +1930,11 @@ export async function executeFileSearchTool(
                     const start = Math.max(0, match.index - 30);
                     const end = Math.min(content.length, match.index + match[0].length + 30);
                     const context = content.substring(start, end).replace(/\n/g, ' ');
-                    results.push({ path: relativePath, type: 'content', match: `...${context}...` });
+                    results.push({
+                      path: relativePath,
+                      type: 'content',
+                      match: `...${context}...`,
+                    });
                   }
                 } catch {
                   // Skip unreadable files
@@ -1821,7 +1946,7 @@ export async function executeFileSearchTool(
       } catch {
         // Skip unreadable directories
       }
-    }
+    };
 
     await searchDirectory(fullPath);
 
@@ -1835,7 +1960,7 @@ export async function executeFileSearchTool(
     }
 
     let output = `Found ${results.length} result(s) for "${pattern}":\n\n`;
-    
+
     for (const result of results) {
       if (result.type === 'name') {
         output += `📄 ${result.path}\n`;
@@ -1960,7 +2085,7 @@ export async function executeDetectErrorsTool(
         if (execError && typeof execError === 'object' && execError !== null) {
           const stderrDescriptor = Object.getOwnPropertyDescriptor(execError, 'stderr');
           const stdoutDescriptor = Object.getOwnPropertyDescriptor(execError, 'stdout');
-          
+
           if (stderrDescriptor && typeof stderrDescriptor.value === 'string') {
             output = stderrDescriptor.value;
           } else if (stdoutDescriptor && typeof stdoutDescriptor.value === 'string') {
@@ -2054,9 +2179,7 @@ export async function executeDetectErrorsTool(
     });
 
     // Filter based on includeWarnings
-    const filteredErrors = includeWarnings
-      ? errors
-      : errors.filter(e => e.severity === 'error');
+    const filteredErrors = includeWarnings ? errors : errors.filter((e) => e.severity === 'error');
 
     if (filteredErrors.length === 0) {
       return {
@@ -2103,9 +2226,7 @@ export async function executeDetectErrorsTool(
       output,
       metadata: {
         errorCount: filteredErrors.length,
-        byType: Object.fromEntries(
-          Array.from(byType.entries()).map(([k, v]) => [k, v.length])
-        ),
+        byType: Object.fromEntries(Array.from(byType.entries()).map(([k, v]) => [k, v.length])),
         errors: filteredErrors,
       },
     };
@@ -2146,13 +2267,7 @@ export async function executeValidateCodeTool(
   toolCallId: string,
   context: ToolExecutionContext
 ): Promise<ToolResult> {
-  const {
-    filePaths,
-    language,
-    skipTypeCheck = false,
-    skipLint = false,
-    autoFix = false,
-  } = args;
+  const { filePaths, language, skipTypeCheck = false, skipLint = false, autoFix = false } = args;
   const { workingDirectory, log } = context;
 
   if (!filePaths || filePaths.length === 0) {
@@ -2178,7 +2293,14 @@ export async function executeValidateCodeTool(
       if (!fullPath.startsWith(workingDirectory)) {
         results.set(filePath, {
           valid: false,
-          errors: [{ line: 0, message: 'Access denied: file is outside working directory', type: 'syntax', severity: 'error' }],
+          errors: [
+            {
+              line: 0,
+              message: 'Access denied: file is outside working directory',
+              type: 'syntax',
+              severity: 'error',
+            },
+          ],
           warnings: [],
         });
         failedFiles.push(filePath);
@@ -2200,7 +2322,8 @@ export async function executeValidateCodeTool(
       }
 
       const ext = path.extname(filePath).toLowerCase();
-      const detectedLang = language || (ext === '.ts' || ext === '.tsx' ? 'typescript' : 'javascript');
+      const detectedLang =
+        language || (ext === '.ts' || ext === '.tsx' ? 'typescript' : 'javascript');
 
       // Type checking for TypeScript
       if (!skipTypeCheck && (detectedLang === 'typescript' || detectedLang === 'tsx')) {
@@ -2214,7 +2337,7 @@ export async function executeValidateCodeTool(
           if (execError && typeof execError === 'object' && execError !== null) {
             const stderrDescriptor = Object.getOwnPropertyDescriptor(execError, 'stderr');
             const stdoutDescriptor = Object.getOwnPropertyDescriptor(execError, 'stdout');
-            
+
             if (stderrDescriptor && typeof stderrDescriptor.value === 'string') {
               output = stderrDescriptor.value;
             } else if (stdoutDescriptor && typeof stdoutDescriptor.value === 'string') {
@@ -2276,7 +2399,9 @@ export async function executeValidateCodeTool(
       if (!result.valid) {
         output += `❌ ${file}:\n`;
         for (const error of result.errors) {
-          const location = error.line ? `  Line ${error.line}${error.column ? `:${error.column}` : ''}` : '';
+          const location = error.line
+            ? `  Line ${error.line}${error.column ? `:${error.column}` : ''}`
+            : '';
           const rule = error.code ? ` [${error.code}]` : '';
           output += `${location}: ${error.message}${rule}\n`;
         }
@@ -2307,7 +2432,10 @@ export async function executeValidateCodeTool(
 
     const success = failedFiles.length === 0;
 
-    log.info({ filesValidated: filePaths.length, failed: failedFiles.length }, 'Code validation completed');
+    log.info(
+      { filesValidated: filePaths.length, failed: failedFiles.length },
+      'Code validation completed'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -2396,9 +2524,12 @@ export async function executeGitResolveConflictTool(
       // Parse and resolve conflicts
       const conflictRegex = /<<<<<<< .*?\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> .*?/g;
 
-      resolvedContent = content.replace(conflictRegex, (_match: string, ours: string, theirs: string) => {
-        return resolution === 'ours' ? ours : theirs;
-      });
+      resolvedContent = content.replace(
+        conflictRegex,
+        (_match: string, ours: string, theirs: string) => {
+          return resolution === 'ours' ? ours : theirs;
+        }
+      );
     }
 
     // Write resolved content
@@ -2565,49 +2696,120 @@ async function executeWorkflowStepTool(
   // Route to appropriate tool based on name
   switch (toolName) {
     case 'extract_function':
-      return executeExtractFunctionTool(validateParams<ExtractFunctionArgs>(resolvedParams, ['filePath', 'startLine', 'endLine', 'functionName']), toolCallId, context);
+      return executeExtractFunctionTool(
+        validateParams<ExtractFunctionArgs>(resolvedParams, [
+          'filePath',
+          'startLine',
+          'endLine',
+          'functionName',
+        ]),
+        toolCallId,
+        context
+      );
 
     case 'rename_symbol':
-      return executeRenameSymbolTool(validateParams<RenameSymbolArgs>(resolvedParams, ['oldName', 'newName', 'files']), toolCallId, context);
+      return executeRenameSymbolTool(
+        validateParams<RenameSymbolArgs>(resolvedParams, ['oldName', 'newName', 'files']),
+        toolCallId,
+        context
+      );
 
     case 'extract_variable':
-      return executeExtractVariableTool(validateParams<ExtractVariableArgs>(resolvedParams, ['filePath', 'line', 'startColumn', 'endColumn', 'variableName']), toolCallId, context);
+      return executeExtractVariableTool(
+        validateParams<ExtractVariableArgs>(resolvedParams, [
+          'filePath',
+          'line',
+          'startColumn',
+          'endColumn',
+          'variableName',
+        ]),
+        toolCallId,
+        context
+      );
 
     case 'inline_function':
-      return executeInlineFunctionTool(validateParams<InlineFunctionArgs>(resolvedParams, ['filePath', 'functionName']), toolCallId, context);
+      return executeInlineFunctionTool(
+        validateParams<InlineFunctionArgs>(resolvedParams, ['filePath', 'functionName']),
+        toolCallId,
+        context
+      );
 
     case 'heal_file':
-      return executeHealFileTool(validateParams<HealFileArgs>(resolvedParams, ['filePath']), toolCallId, context);
+      return executeHealFileTool(
+        validateParams<HealFileArgs>(resolvedParams, ['filePath']),
+        toolCallId,
+        context
+      );
 
     case 'detect_errors':
-      return executeDetectErrorsTool(validateParams<DetectErrorsArgs>(resolvedParams, ['filePath']), toolCallId, context);
+      return executeDetectErrorsTool(
+        validateParams<DetectErrorsArgs>(resolvedParams, ['filePath']),
+        toolCallId,
+        context
+      );
 
     case 'validate_code':
-      return executeValidateCodeTool(validateParams<ValidateCodeArgs>(resolvedParams, ['filePaths']), toolCallId, context);
+      return executeValidateCodeTool(
+        validateParams<ValidateCodeArgs>(resolvedParams, ['filePaths']),
+        toolCallId,
+        context
+      );
 
     case 'generate_tests':
-      return executeGenerateTestsTool(validateParams<GenerateTestsArgs>(resolvedParams, ['filePath']), toolCallId, context);
+      return executeGenerateTestsTool(
+        validateParams<GenerateTestsArgs>(resolvedParams, ['filePath']),
+        toolCallId,
+        context
+      );
 
     case 'analyze_image':
-      return executeAnalyzeImageTool(validateParams<AnalyzeImageArgs>(resolvedParams, ['image_path']), toolCallId, context);
+      return executeAnalyzeImageTool(
+        validateParams<AnalyzeImageArgs>(resolvedParams, ['image_path']),
+        toolCallId,
+        context
+      );
 
     case 'compare_images':
-      return executeCompareImagesTool(validateParams<CompareImagesArgs>(resolvedParams, ['image1_path', 'image2_path']), toolCallId, context);
+      return executeCompareImagesTool(
+        validateParams<CompareImagesArgs>(resolvedParams, ['image1_path', 'image2_path']),
+        toolCallId,
+        context
+      );
 
     case 'extract_code_from_screenshot':
-      return executeExtractCodeFromScreenshotTool(validateParams<ExtractCodeFromScreenshotArgs>(resolvedParams, ['image_path']), toolCallId, context);
+      return executeExtractCodeFromScreenshotTool(
+        validateParams<ExtractCodeFromScreenshotArgs>(resolvedParams, ['image_path']),
+        toolCallId,
+        context
+      );
 
     case 'file_search':
-      return executeFileSearchTool(validateParams<FileSearchArgs>(resolvedParams, ['pattern']), toolCallId, context);
+      return executeFileSearchTool(
+        validateParams<FileSearchArgs>(resolvedParams, ['pattern']),
+        toolCallId,
+        context
+      );
 
     case 'git_resolve_conflict':
-      return executeGitResolveConflictTool(validateParams<GitResolveConflictArgs>(resolvedParams, ['filePath']), toolCallId, context);
+      return executeGitResolveConflictTool(
+        validateParams<GitResolveConflictArgs>(resolvedParams, ['filePath']),
+        toolCallId,
+        context
+      );
 
     case 'delete_file':
-      return executeDeleteFileTool(validateParams<DeleteFileArgs>(resolvedParams, ['filePath']), toolCallId, context);
+      return executeDeleteFileTool(
+        validateParams<DeleteFileArgs>(resolvedParams, ['filePath']),
+        toolCallId,
+        context
+      );
 
     case 'explore_codebase':
-      return executeExploreCodebaseTool(validateParams<Record<string, unknown>>(resolvedParams, []), toolCallId, context);
+      return executeExploreCodebaseTool(
+        validateParams<Record<string, unknown>>(resolvedParams, []),
+        toolCallId,
+        context
+      );
 
     default:
       // For tools from tool-execution-service, import and execute
@@ -2616,34 +2818,73 @@ async function executeWorkflowStepTool(
 
         // Check common tools from tool-execution-service
         if (toolName === 'search_replace' && toolService.executeSearchReplaceTool) {
-          return toolService.executeSearchReplaceTool(validateParams<{ file_path: string; search: string; replace: string }>(resolvedParams, ['file_path', 'search', 'replace']), toolCallId, context);
+          return toolService.executeSearchReplaceTool(
+            validateParams<{ file_path: string; search: string; replace: string }>(resolvedParams, [
+              'file_path',
+              'search',
+              'replace',
+            ]),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'grep_search' && toolService.executeGrepSearchTool) {
-          return toolService.executeGrepSearchTool(validateParams<{ pattern: string }>(resolvedParams, ['pattern']), toolCallId, context);
+          return toolService.executeGrepSearchTool(
+            validateParams<{ pattern: string }>(resolvedParams, ['pattern']),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'git_status' && toolService.executeGitStatusTool) {
           return toolService.executeGitStatusTool(toolCallId, context);
         }
         if (toolName === 'git_commit' && toolService.executeGitCommitTool) {
-          return toolService.executeGitCommitTool(validateParams<{ message: string }>(resolvedParams, ['message']), toolCallId, context);
+          return toolService.executeGitCommitTool(
+            validateParams<{ message: string }>(resolvedParams, ['message']),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'git_diff' && toolService.executeGitDiffTool) {
-          return toolService.executeGitDiffTool(validateParams<Record<string, unknown>>(resolvedParams, []), toolCallId, context);
+          return toolService.executeGitDiffTool(
+            validateParams<Record<string, unknown>>(resolvedParams, []),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'list_directory' && toolService.executeListDirectoryTool) {
-          return toolService.executeListDirectoryTool(validateParams<{ path?: string }>(resolvedParams, []), toolCallId, context);
+          return toolService.executeListDirectoryTool(
+            validateParams<{ path?: string }>(resolvedParams, []),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'create_todo' && toolService.executeCreateTodoTool) {
-          return toolService.executeCreateTodoTool(validateParams<{ description: string }>(resolvedParams, ['description']), toolCallId, context);
+          return toolService.executeCreateTodoTool(
+            validateParams<{ description: string }>(resolvedParams, ['description']),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'web_search' && toolService.executeWebSearchTool) {
-          return toolService.executeWebSearchTool(validateParams<{ query: string }>(resolvedParams, ['query']), toolCallId, context);
+          return toolService.executeWebSearchTool(
+            validateParams<{ query: string }>(resolvedParams, ['query']),
+            toolCallId,
+            context
+          );
         }
         if (toolName === 'codebase_search' && toolService.executeCodebaseSearchTool) {
-          return toolService.executeCodebaseSearchTool(validateParams<{ query: string }>(resolvedParams, ['query']), toolCallId, context);
+          return toolService.executeCodebaseSearchTool(
+            validateParams<{ query: string }>(resolvedParams, ['query']),
+            toolCallId,
+            context
+          );
         }
       } catch (importError) {
-        log.warn({ toolName, error: importError }, 'Failed to import tool from tool-execution-service');
+        log.warn(
+          { toolName, error: importError },
+          'Failed to import tool from tool-execution-service'
+        );
       }
 
       return {
@@ -2768,18 +3009,19 @@ export async function executeExecuteWorkflowTool(
               output: stdout || stderr || 'Command completed successfully',
             };
           } catch (cmdError: unknown) {
-            const errorMessage = cmdError instanceof Error 
-              ? cmdError.message 
-              : (() => {
-                  // Safely extract stderr without type assertions
-                  if (typeof cmdError === 'object' && cmdError !== null && 'stderr' in cmdError) {
-                    const stderrDescriptor = Object.getOwnPropertyDescriptor(cmdError, 'stderr');
-                    if (stderrDescriptor) {
-                      return String(stderrDescriptor.value || 'Command failed');
+            const errorMessage =
+              cmdError instanceof Error
+                ? cmdError.message
+                : (() => {
+                    // Safely extract stderr without type assertions
+                    if (typeof cmdError === 'object' && cmdError !== null && 'stderr' in cmdError) {
+                      const stderrDescriptor = Object.getOwnPropertyDescriptor(cmdError, 'stderr');
+                      if (stderrDescriptor) {
+                        return String(stderrDescriptor.value || 'Command failed');
+                      }
                     }
-                  }
-                  return 'Command failed';
-                })();
+                    return 'Command failed';
+                  })();
             stepResult = {
               success: false,
               error: errorMessage,
@@ -2905,7 +3147,10 @@ export async function executeListWorkflowsTool(
       tool_call_id: toolCallId,
       success: true,
       output,
-      metadata: { count: workflows.length, workflows: workflows.map(w => ({ id: w.id, name: w.name, steps: w.steps.length })) },
+      metadata: {
+        count: workflows.length,
+        workflows: workflows.map((w) => ({ id: w.id, name: w.name, steps: w.steps.length })),
+      },
     };
   } catch (error) {
     log.error({ error }, 'List workflows failed');
@@ -3032,7 +3277,11 @@ export async function executeExploreCodebaseTool(
 
         for (const entry of entries) {
           // Skip common ignore patterns
-          if (['.git', 'node_modules', 'dist', 'build', '.next', '__pycache__', '.cache'].includes(entry.name)) {
+          if (
+            ['.git', 'node_modules', 'dist', 'build', '.next', '__pycache__', '.cache'].includes(
+              entry.name
+            )
+          ) {
             continue;
           }
 
@@ -3077,7 +3326,7 @@ export async function executeExploreCodebaseTool(
       });
 
       return nodes;
-    }
+    };
 
     const tree = await buildTree(fullPath, 0);
 
@@ -3098,7 +3347,7 @@ export async function executeExploreCodebaseTool(
         }
       }
       return output;
-    }
+    };
 
     let output = `🔍 Codebase Explorer: ${targetPath}\n\n`;
     output += renderTree(tree);
@@ -3121,7 +3370,10 @@ export async function executeExploreCodebaseTool(
       }
     }
 
-    log.info({ path: targetPath, files: stats.totalFiles, dirs: stats.totalDirs }, 'Explore codebase completed');
+    log.info(
+      { path: targetPath, files: stats.totalFiles, dirs: stats.totalDirs },
+      'Explore codebase completed'
+    );
 
     return {
       tool_call_id: toolCallId,

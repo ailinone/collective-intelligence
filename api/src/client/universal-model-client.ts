@@ -44,7 +44,9 @@ export interface UniversalModelClient {
   toolChat(req: ToolChatRequest): Promise<ToolChatResponse>;
 
   // JSON estruturado (json_mode, data_extraction, etc.)
-  structuredJson<T = unknown>(req: TextRequest & { schema?: Record<string, unknown> }): Promise<{ json: T; raw: unknown }>;
+  structuredJson<T = unknown>(
+    req: TextRequest & { schema?: Record<string, unknown> }
+  ): Promise<{ json: T; raw: unknown }>;
 
   // Embeddings
   embeddings(req: EmbeddingsRequest): Promise<EmbeddingsResponse>;

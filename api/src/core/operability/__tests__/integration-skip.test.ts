@@ -24,11 +24,7 @@ import {
   resetProviderHealthRegistryForTesting,
 } from '../provider-health-registry';
 import { shouldSkipNearZero, recordDeadProviderHttpAttempt } from '../skip-near-zero';
-import {
-  resetMetricCountersForTesting,
-  getCounterValueForTesting,
-  METRIC_NAMES,
-} from '../metrics';
+import { resetMetricCountersForTesting, getCounterValueForTesting, METRIC_NAMES } from '../metrics';
 
 describe('integration: near-zero skip flow', () => {
   beforeEach(() => {
@@ -89,7 +85,9 @@ describe('integration: near-zero skip flow', () => {
     // Model A is skipped
     expect(shouldSkipNearZero({ providerId: 'aihubmix', modelId: 'gpt-4o-mini' }).skip).toBe(true);
     // Model B on same provider is allowed
-    expect(shouldSkipNearZero({ providerId: 'aihubmix', modelId: 'claude-haiku-4-5' }).skip).toBe(false);
+    expect(shouldSkipNearZero({ providerId: 'aihubmix', modelId: 'claude-haiku-4-5' }).skip).toBe(
+      false
+    );
   });
 
   it('successful execution flips degraded → healthy after 3 successes', () => {

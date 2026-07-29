@@ -66,9 +66,15 @@ describe('go-no-go per-scenario slice — paired, not pooled (2026-07-16)', () =
     // (+0.30) spurious "collective win" for this scenario. Paired, the only
     // shared task (501) has a tiny +0.05 delta with n=1 — not enough to judge.
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 501, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.90 }),
-      row({ taskIndex: 502, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.40 }),
-      row({ taskIndex: 501, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.95 }),
+      row({ taskIndex: 501, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.9 }),
+      row({ taskIndex: 502, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.4 }),
+      row({
+        taskIndex: 501,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.95,
+      }),
       // no collective row for task 502 — the arm never ran it.
     ];
 
@@ -79,19 +85,37 @@ describe('go-no-go per-scenario slice — paired, not pooled (2026-07-16)', () =
     // Sanity: prove the trap is real — the pooled means WOULD have crossed the
     // win threshold, so this is genuinely testing the pooled-vs-paired fix and
     // not a vacuous assertion.
-    const pooledSingle = (0.90 + 0.40) / 2;
+    const pooledSingle = (0.9 + 0.4) / 2;
     const pooledCollective = 0.95;
     expect(pooledCollective - pooledSingle).toBeGreaterThan(0.07); // DEFAULT_THRESHOLDS.minQualityGainForCollective
   });
 
   it('DOES classify a scenario as a collective win with a genuine, consistent, multi-task paired advantage', () => {
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 601, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.70 }),
+      row({ taskIndex: 601, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.7 }),
       row({ taskIndex: 602, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.68 }),
       row({ taskIndex: 603, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.72 }),
-      row({ taskIndex: 601, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.85 }),
-      row({ taskIndex: 602, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.83 }),
-      row({ taskIndex: 603, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.87 }),
+      row({
+        taskIndex: 601,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.85,
+      }),
+      row({
+        taskIndex: 602,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.83,
+      }),
+      row({
+        taskIndex: 603,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.87,
+      }),
     ];
 
     const report = generateGoNoGoReport('exp-scenario-slice', results);
@@ -102,8 +126,14 @@ describe('go-no-go per-scenario slice — paired, not pooled (2026-07-16)', () =
 
   it('omits a scenario from BOTH buckets when fewer than 2 tasks are shared (no meaningful paired signal)', () => {
     const results: ExperimentExecutionResult[] = [
-      row({ taskIndex: 701, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.50 }),
-      row({ taskIndex: 701, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.95 }),
+      row({ taskIndex: 701, executionMode: 'single-model', model: 'gpt-5.4', qualityScore: 0.5 }),
+      row({
+        taskIndex: 701,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0.95,
+      }),
     ];
 
     const report = generateGoNoGoReport('exp-scenario-slice', results);

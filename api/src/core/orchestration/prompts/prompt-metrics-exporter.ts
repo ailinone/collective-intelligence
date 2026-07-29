@@ -80,8 +80,7 @@ const EXTRA_METRIC_HELP: Record<string, string> = {
     'Total provider selections, labelled by provider, providerKind, strategy, taskType.',
   ailin_runtime_model_execution_failed_total:
     'Total model execution failures, labelled by cause (provider-auth|balance|timeout|...).',
-  ailin_runtime_provider_registry_state_total:
-    'Provider registry state events, labelled by state.',
+  ailin_runtime_provider_registry_state_total: 'Provider registry state events, labelled by state.',
   ailin_benchmark_judge_path_failure_total:
     'Total judge-path failures during benchmark runs, labelled by cause.',
   // Lote 6 — slot/variant/augmentation metrics
@@ -190,10 +189,7 @@ function formatPromLabels(canonicalLabelKey: string): string {
       if (eqIdx < 0) return '';
       const k = pair.slice(0, eqIdx);
       const v = pair.slice(eqIdx + 1);
-      const escaped = v
-        .replace(/\\/g, '\\\\')
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, '\\n');
+      const escaped = v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
       return `${k}="${escaped}"`;
     })
     .filter((s) => s.length > 0)

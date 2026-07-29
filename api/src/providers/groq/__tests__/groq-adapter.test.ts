@@ -42,7 +42,7 @@ function makeAdapter(): GroqAdapter {
 function invokeHook(
   adapter: GroqAdapter,
   model: string,
-  request: ChatRequest,
+  request: ChatRequest
 ): Record<string, unknown> {
   return (
     adapter as unknown as {

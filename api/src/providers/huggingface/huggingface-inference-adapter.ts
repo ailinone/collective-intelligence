@@ -93,7 +93,7 @@ export class HuggingFaceInferenceAdapter extends OpenAICompatibleHubAdapter {
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
     const pinned = await this.pinFastestLiveProvider(request.model);
     return super.chatCompletion(
-      pinned && pinned !== request.model ? { ...request, model: pinned } : request,
+      pinned && pinned !== request.model ? { ...request, model: pinned } : request
     );
   }
 
@@ -117,7 +117,10 @@ export class HuggingFaceInferenceAdapter extends OpenAICompatibleHubAdapter {
         .slice()
         .sort((a, b) => (b.tokensPerSecond ?? 0) - (a.tokensPerSecond ?? 0))[0];
       if (!best?.provider) return modelId;
-      this.hfLog.debug({ modelId, provider: best.provider, tps: best.tokensPerSecond }, 'HF always-hot route pinned');
+      this.hfLog.debug(
+        { modelId, provider: best.provider, tps: best.tokensPerSecond },
+        'HF always-hot route pinned'
+      );
       return `${modelId}:${best.provider}`;
     } catch (err) {
       this.hfLog.debug({ modelId, err }, 'HF provider pin skipped (non-fatal)');

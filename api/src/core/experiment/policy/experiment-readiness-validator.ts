@@ -32,10 +32,7 @@
 import { logger } from '@/utils/logger';
 import { getCreditMonitorService } from '@/services/credit-monitor-service';
 import { getProviderRegistry } from '@/providers/provider-registry';
-import {
-  type ResolvedExperimentArm,
-  type ArmEvaluationPolicy,
-} from './arm-evaluation-policy';
+import { type ResolvedExperimentArm, type ArmEvaluationPolicy } from './arm-evaluation-policy';
 import { resolveProviderFamily, classifyModelById } from './model-classification';
 
 const log = logger.child({ component: 'experiment-readiness-validator' });
@@ -44,13 +41,13 @@ const log = logger.child({ component: 'experiment-readiness-validator' });
 
 /** Goal of the experiment run. Drives readiness decisions. */
 export type ExperimentGoal =
-  | 'top_tier_comparison'        // foco em strict baselines frontier
-  | 'family_comparison'          // foco em famílias semânticas
-  | 'dynamic_routing_eval'       // foco em router
-  | 'resilience_eval'            // foco em recuperação (degradação esperada)
-  | 'ollama_local_eval'          // foco em local
-  | 'mixed_full_comparison'      // C3 main: todos os grupos
-  | 'ci_smoke';                  // regressão barata
+  | 'top_tier_comparison' // foco em strict baselines frontier
+  | 'family_comparison' // foco em famílias semânticas
+  | 'dynamic_routing_eval' // foco em router
+  | 'resilience_eval' // foco em recuperação (degradação esperada)
+  | 'ollama_local_eval' // foco em local
+  | 'mixed_full_comparison' // C3 main: todos os grupos
+  | 'ci_smoke'; // regressão barata
 
 /** Decision an arm receives from the readiness validator. */
 export type ArmReadinessDecision =
@@ -63,10 +60,7 @@ export type ArmReadinessDecision =
 
 /** Decision the entire experiment receives. */
 export type ExperimentReadinessDecision =
-  | 'proceed'
-  | 'proceed_with_skips'
-  | 'proceed_degraded'
-  | 'abort';
+  'proceed' | 'proceed_with_skips' | 'proceed_degraded' | 'abort';
 
 /** Per-provider health snapshot in the readiness window. */
 export interface ProviderHealthSnapshot {
@@ -165,7 +159,7 @@ export class DefaultExperimentReadinessValidator implements ExperimentReadinessV
 
     // 3. Per-arm decision
     const armReadiness: ArmReadinessReport[] = await Promise.all(
-      input.arms.map((arm) => decidePerArm(arm, providerHealth)),
+      input.arms.map((arm) => decidePerArm(arm, providerHealth))
     );
 
     // 4. Family coverage (semantic)
@@ -185,14 +179,24 @@ export class DefaultExperimentReadinessValidator implements ExperimentReadinessV
     // 6. Summary
     const summary = {
       totalArms: armReadiness.length,
-      readyArms: armReadiness.filter((a) => a.decision === 'ready' || a.decision === 'proceed_with_health_filtered_pool' || a.decision === 'reroute_within_family').length,
+      readyArms: armReadiness.filter(
+        (a) =>
+          a.decision === 'ready' ||
+          a.decision === 'proceed_with_health_filtered_pool' ||
+          a.decision === 'reroute_within_family'
+      ).length,
       skippedArms: armReadiness.filter((a) => a.decision === 'skip_unavailable').length,
-      degradedArms: armReadiness.filter((a) => a.decision === 'degrade_strategy' || a.decision === 'proceed_with_observed_degradation').length,
-      readyRatio: armReadiness.length === 0
-        ? 0
-        : armReadiness.filter((a) => a.decision !== 'skip_unavailable').length / armReadiness.length,
+      degradedArms: armReadiness.filter(
+        (a) =>
+          a.decision === 'degrade_strategy' || a.decision === 'proceed_with_observed_degradation'
+      ).length,
+      readyRatio:
+        armReadiness.length === 0
+          ? 0
+          : armReadiness.filter((a) => a.decision !== 'skip_unavailable').length /
+            armReadiness.length,
       distinctHealthyProviders: new Set(
-        providerHealth.filter((p) => p.state === 'healthy').map((p) => p.providerId),
+        providerHealth.filter((p) => p.state === 'healthy').map((p) => p.providerId)
       ).size,
       coverageGaps: familyCoverage
         .filter((f) => f.healthyProviderIds.length === 0)
@@ -226,7 +230,7 @@ export class DefaultExperimentReadinessValidator implements ExperimentReadinessV
         skippedArms: summary.skippedArms,
         durationMs: matrix.durationMs,
       },
-      `Readiness validation complete: ${decision}`,
+      `Readiness validation complete: ${decision}`
     );
 
     return matrix;
@@ -251,7 +255,10 @@ function collectDistinctProviders(arms: ReadonlyArray<ResolvedExperimentArm>): s
     const registry = getProviderRegistry();
     registered = registry.getProviderNames();
   } catch (err) {
-    log.warn({ error: err instanceof Error ? err.message : String(err) }, 'Provider registry unavailable');
+    log.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'Provider registry unavailable'
+    );
   }
 
   const all = new Set<string>([...declared, ...registered]);
@@ -261,7 +268,7 @@ function collectDistinctProviders(arms: ReadonlyArray<ResolvedExperimentArm>): s
 // ─── Probing ───────────────────────────────────────────────────────────────
 
 async function probeProvidersHealth(
-  providerIds: ReadonlyArray<string>,
+  providerIds: ReadonlyArray<string>
 ): Promise<ProviderHealthSnapshot[]> {
   type Registry = ReturnType<typeof getProviderRegistry>;
   type Monitor = ReturnType<typeof getCreditMonitorService>;
@@ -312,7 +319,7 @@ async function probeProvidersHealth(
         adapterRegistered,
         reason,
       };
-    }),
+    })
   );
 
   return snapshots;
@@ -322,7 +329,7 @@ async function probeProvidersHealth(
 
 async function decidePerArm(
   arm: ResolvedExperimentArm,
-  providerHealth: ReadonlyArray<ProviderHealthSnapshot>,
+  providerHealth: ReadonlyArray<ProviderHealthSnapshot>
 ): Promise<ArmReadinessReport> {
   const policy = arm.policy;
   const candidatePoolBefore = providerHealth.length;
@@ -332,7 +339,11 @@ async function decidePerArm(
   if (policy.kind === 'strict_baseline_identity') {
     if (arm.declaredProviderId !== null) {
       const declared = providerHealth.find((p) => p.providerId === arm.declaredProviderId);
-      if (declared === undefined || declared.state === 'unhealthy' || declared.state === 'unknown') {
+      if (
+        declared === undefined ||
+        declared.state === 'unhealthy' ||
+        declared.state === 'unknown'
+      ) {
         return {
           armId: arm.armId,
           role: arm.role,
@@ -435,7 +446,7 @@ async function decidePerArm(
   if (policy.kind === 'dynamic_router') {
     const healthyPool = providerHealth.filter((p) => p.state === 'healthy');
     const ollamaUp = providerHealth.some(
-      (p) => p.providerId.startsWith('ollama') && p.state === 'healthy',
+      (p) => p.providerId.startsWith('ollama') && p.state === 'healthy'
     );
 
     if (healthyPool.length === 0 && !ollamaUp) {
@@ -481,7 +492,11 @@ async function decidePerArm(
           reason: `insufficient_roles: ${healthyPool.length}/${requiredRoleCount}`,
         };
       }
-      return makeSkipReport(arm, candidatePoolBefore, `insufficient_roles_${healthyPool.length}_of_${requiredRoleCount}`);
+      return makeSkipReport(
+        arm,
+        candidatePoolBefore,
+        `insufficient_roles_${healthyPool.length}_of_${requiredRoleCount}`
+      );
     }
 
     return {
@@ -519,7 +534,7 @@ async function decidePerArm(
 function makeSkipReport(
   arm: ResolvedExperimentArm,
   candidatePoolBefore: number,
-  reason: string,
+  reason: string
 ): ArmReadinessReport {
   return {
     armId: arm.armId,
@@ -538,9 +553,12 @@ function makeSkipReport(
 // ─── Family coverage ───────────────────────────────────────────────────────
 
 function computeFamilyCoverage(
-  providerHealth: ReadonlyArray<ProviderHealthSnapshot>,
+  providerHealth: ReadonlyArray<ProviderHealthSnapshot>
 ): FamilyCoverage[] {
-  const byFamily = new Map<string, { healthy: string[]; degraded: string[]; unhealthy: string[] }>();
+  const byFamily = new Map<
+    string,
+    { healthy: string[]; degraded: string[]; unhealthy: string[] }
+  >();
 
   for (const ph of providerHealth) {
     const family = resolveProviderFamily(ph.providerId);
@@ -566,7 +584,7 @@ function computeFamilyCoverage(
 function decideExperimentReadiness(
   global: ReadinessMatrix['global'],
   summary: ReadinessMatrix['summary'],
-  goal: ExperimentGoal,
+  goal: ExperimentGoal
 ): ExperimentReadinessDecision {
   switch (goal) {
     case 'top_tier_comparison':
@@ -618,7 +636,7 @@ function decideExperimentReadiness(
 function renderRationale(
   decision: ExperimentReadinessDecision,
   goal: ExperimentGoal,
-  summary: ReadinessMatrix['summary'],
+  summary: ReadinessMatrix['summary']
 ): string {
   return `goal=${goal} decision=${decision} ready=${summary.readyArms}/${summary.totalArms} skipped=${summary.skippedArms} healthyProviders=${summary.distinctHealthyProviders} coverageGaps=${summary.coverageGaps.length}`;
 }

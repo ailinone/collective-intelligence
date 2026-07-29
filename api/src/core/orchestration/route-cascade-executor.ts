@@ -42,10 +42,7 @@ import type {
   ProviderRouteAttemptArtifact,
   ProviderRouteAttemptRole,
 } from './provider-route-attempt-artifact';
-import type {
-  ApprovedRouteCandidate,
-  RouteSelectionPolicy,
-} from './route-candidates';
+import type { ApprovedRouteCandidate, RouteSelectionPolicy } from './route-candidates';
 
 /**
  * Per-attempt artifact recorded by the cascade. One entry per route the
@@ -104,7 +101,7 @@ export interface RouteCallResult<TResp> {
  */
 export type RouteCallFn<TResp> = (
   candidate: ApprovedRouteCandidate,
-  attempt: number,
+  attempt: number
 ) => Promise<RouteCallResult<TResp>>;
 
 /**
@@ -159,7 +156,7 @@ export interface CascadeRunInput<TResp> {
  * (`maxRetriesPerProvider`) is enforced inside the adapter — not here.
  */
 export async function runRouteCascade<TResp>(
-  input: CascadeRunInput<TResp>,
+  input: CascadeRunInput<TResp>
 ): Promise<RoleExecutionOutcome<TResp>> {
   const attempts: ProviderRouteAttempt[] = [];
 
@@ -207,7 +204,7 @@ export async function runRouteCascade<TResp>(
       role: input.role as ProviderRouteAttemptRole,
       routeId: candidate.routeId,
       providerId: candidate.providerId,
-      modelId: candidate.apiModelId,  // shared artifact uses `modelId` for the wire-level id
+      modelId: candidate.apiModelId, // shared artifact uses `modelId` for the wire-level id
       attempt,
       maxAttempts: cap,
       ok: result.ok,
@@ -253,9 +250,8 @@ export async function runRouteCascade<TResp>(
     success: false,
     attempts,
     firstErrorKind,
-    aggregateFailure: attempts.length < input.approvedRoutes.length
-      ? 'attempt_cap_exhausted'
-      : 'all_routes_failed',
+    aggregateFailure:
+      attempts.length < input.approvedRoutes.length ? 'attempt_cap_exhausted' : 'all_routes_failed',
   };
 }
 
@@ -267,7 +263,7 @@ export interface CascadeRunSummary {
   readonly totalRoles: number;
   readonly succeededRoles: number;
   readonly totalAttempts: number;
-  readonly fallbackUsedCount: number;  // attempts where wasRouteFallback=true
+  readonly fallbackUsedCount: number; // attempts where wasRouteFallback=true
   readonly totalCostUsd: number;
   readonly perRole: ReadonlyArray<{
     readonly role: string;
@@ -279,7 +275,7 @@ export interface CascadeRunSummary {
 }
 
 export function summarizeCascadeRuns<TResp>(
-  outcomes: readonly (RoleExecutionOutcome<TResp> & { role: string })[],
+  outcomes: readonly (RoleExecutionOutcome<TResp> & { role: string })[]
 ): CascadeRunSummary {
   let totalAttempts = 0;
   let fallbackUsedCount = 0;

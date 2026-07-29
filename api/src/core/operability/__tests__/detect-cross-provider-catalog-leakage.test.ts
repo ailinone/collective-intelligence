@@ -89,13 +89,13 @@ describe('detectModelLeakage — single-model audit', () => {
 describe('detectCrossProviderCatalogLeakage — full-catalog audit', () => {
   it('aggregates findings by severity', () => {
     const catalog: CatalogModelLike[] = [
-      { id: 'openai/gpt-5.5', provider: 'perplexity' },           // leakage
-      { id: 'minimax/m2.7', provider: 'sambanova' },              // leakage
-      { id: 'llama-3.1-sonar', provider: 'perplexity' },          // ok
-      { id: 'anthropic/claude-3.5', provider: 'openrouter' },     // ok (hub)
-      { id: 'mistralai/mistral-7b', provider: 'replicate' },      // ok (hub)
-      { id: 'openai/openai-gpt-5.1-mini', provider: 'openai' },   // suspicious (double-prefix)
-      { id: 'custom/model-x', provider: 'cohere' },               // suspicious (unknown namespace)
+      { id: 'openai/gpt-5.5', provider: 'perplexity' }, // leakage
+      { id: 'minimax/m2.7', provider: 'sambanova' }, // leakage
+      { id: 'llama-3.1-sonar', provider: 'perplexity' }, // ok
+      { id: 'anthropic/claude-3.5', provider: 'openrouter' }, // ok (hub)
+      { id: 'mistralai/mistral-7b', provider: 'replicate' }, // ok (hub)
+      { id: 'openai/openai-gpt-5.1-mini', provider: 'openai' }, // suspicious (double-prefix)
+      { id: 'custom/model-x', provider: 'cohere' }, // suspicious (unknown namespace)
     ];
     const report = detectCrossProviderCatalogLeakage(catalog);
     expect(report.total).toBe(7);

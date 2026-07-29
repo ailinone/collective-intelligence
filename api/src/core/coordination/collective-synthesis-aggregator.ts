@@ -121,11 +121,14 @@ export interface CollectiveSynthesisOptions {
  * the aggregator translates it into `SensitivityAggregationResult`.
  */
 interface SynthesisResponse {
-  updatedVariables: Record<string, {
-    value: unknown;
-    confidence: number;
-    rationale?: string;
-  }>;
+  updatedVariables: Record<
+    string,
+    {
+      value: unknown;
+      confidence: number;
+      rationale?: string;
+    }
+  >;
   convergenceScore: number;
   disagreementScore: number;
   stabilityScore: number;
@@ -155,7 +158,7 @@ interface SynthesisResponse {
  */
 export function selectCoordinatorModel(
   participants: ReadonlyArray<Model>,
-  pool: ReadonlyArray<Model>,
+  pool: ReadonlyArray<Model>
 ): Model | null {
   if (pool.length === 0) return null;
 
@@ -193,8 +196,12 @@ export function selectCoordinatorModel(
  */
 function formatSignalForSynthesis(signal: CoordinationSignal, idx: number): string {
   const lines: string[] = [];
-  lines.push(`Agent #${idx + 1} [${sanitizeVariableName(signal.agentId)}] (model=${sanitizeVariableName(signal.modelId)}):`);
-  lines.push(`  Decision: type=${sanitizeForPromptContext(signal.decision.type, 60)}, confidence=${signal.decision.confidence.toFixed(2)}`);
+  lines.push(
+    `Agent #${idx + 1} [${sanitizeVariableName(signal.agentId)}] (model=${sanitizeVariableName(signal.modelId)}):`
+  );
+  lines.push(
+    `  Decision: type=${sanitizeForPromptContext(signal.decision.type, 60)}, confidence=${signal.decision.confidence.toFixed(2)}`
+  );
   if (signal.decision.rationale) {
     lines.push(`  Rationale: ${sanitizeForPromptContext(signal.decision.rationale, 240)}`);
   }
@@ -211,10 +218,13 @@ function formatSignalForSynthesis(signal: CoordinationSignal, idx: number): stri
       // 16-char cap never truncates real data.
       const direction = sanitizeForPromptContext(s.direction, 16);
       const risk = s.risk ? sanitizeRiskSeverity(s.risk) : 'low';
-      const delta = typeof s.expectedDelta === 'number' && Number.isFinite(s.expectedDelta)
-        ? `, expectedDelta=${s.expectedDelta}`
-        : '';
-      lines.push(`    - var=${variable}, dir=${direction}${delta}, risk=${risk}, conf=${s.confidence.toFixed(2)}`);
+      const delta =
+        typeof s.expectedDelta === 'number' && Number.isFinite(s.expectedDelta)
+          ? `, expectedDelta=${s.expectedDelta}`
+          : '';
+      lines.push(
+        `    - var=${variable}, dir=${direction}${delta}, risk=${risk}, conf=${s.confidence.toFixed(2)}`
+      );
       lines.push(`      trigger="${trigger}"`);
       lines.push(`      rationale="${rationale}"`);
     }
@@ -236,7 +246,7 @@ function formatStateForSynthesis(state: CoordinationState): string {
     parts.push('Existing variables:');
     for (const [name, varState] of Object.entries(state.variables)) {
       parts.push(
-        `  - ${sanitizeVariableName(name)}: ${sanitizeVariableValue(varState.value)} (confidence ${varState.confidence.toFixed(2)})`,
+        `  - ${sanitizeVariableName(name)}: ${sanitizeVariableValue(varState.value)} (confidence ${varState.confidence.toFixed(2)})`
       );
     }
   }
@@ -244,7 +254,9 @@ function formatStateForSynthesis(state: CoordinationState): string {
   if (state.risks.length > 0) {
     parts.push('Active risks:');
     for (const risk of state.risks.slice(0, 5)) {
-      parts.push(`  - [${sanitizeRiskSeverity(risk.severity)}] ${sanitizeRiskDescription(risk.description)}`);
+      parts.push(
+        `  - [${sanitizeRiskSeverity(risk.severity)}] ${sanitizeRiskDescription(risk.description)}`
+      );
     }
   }
 
@@ -264,7 +276,7 @@ function formatStateForSynthesis(state: CoordinationState): string {
  */
 export function buildSynthesisPrompt(
   signals: CoordinationSignal[],
-  state: CoordinationState,
+  state: CoordinationState
 ): { system: string; user: string } {
   const stateContext = formatStateForSynthesis(state);
   const signalsBlock = signals.map((s, i) => formatSignalForSynthesis(s, i)).join('\n');
@@ -272,12 +284,12 @@ export function buildSynthesisPrompt(
   const system = [
     'You are a sensitivity-aggregation coordinator in a multi-agent collective intelligence system.',
     '',
-    'Your task is to fuse N agents\' decision+sensitivity signals into an updated coordination state.',
+    "Your task is to fuse N agents' decision+sensitivity signals into an updated coordination state.",
     '',
     'Strict rules:',
     '  1. Do NOT add facts that are not present in the supplied signals.',
     '  2. Down-weight signals whose sensitivities all point in the same direction with extreme confidence (>=0.99) — that is a herding signature.',
-    '  3. When agents disagree on a variable\'s direction, mark it conflicting; do not silently pick one side.',
+    "  3. When agents disagree on a variable's direction, mark it conflicting; do not silently pick one side.",
     '  4. Identify variables that block convergence (critical risks, persistent dissent).',
     '  5. Respond with VALID JSON ONLY, matching the schema below. No prose, no markdown.',
     '',
@@ -408,7 +420,7 @@ export function parseSynthesisResponse(rawText: string): SynthesisResponse | nul
  */
 function computeDecisionFlipRate(
   signals: CoordinationSignal[],
-  previousState: CoordinationState,
+  previousState: CoordinationState
 ): number {
   if (previousState.round === 0) return 0;
   const previousRoundSignals = previousState.history.filter((s) => s.round === previousState.round);
@@ -426,7 +438,7 @@ function buildVariableStateFromSynthesis(
   name: string,
   entry: SynthesisResponse['updatedVariables'][string],
   previous: VariableState | undefined,
-  contributors: string[],
+  contributors: string[]
 ): VariableState {
   const stability = previous
     ? Math.max(0, 1 - Math.abs(entry.confidence - previous.confidence))
@@ -451,7 +463,7 @@ function applySynthesisToState(
   previousState: CoordinationState,
   synthesis: SynthesisResponse,
   synthesisCostUsd: number,
-  synthesisLatencyMs: number,
+  synthesisLatencyMs: number
 ): SensitivityAggregationResult {
   const contributorIds = signals.map((s) => s.agentId);
   const newVariables: Record<string, VariableState> = { ...previousState.variables };
@@ -461,18 +473,23 @@ function applySynthesisToState(
       name,
       entry,
       previousState.variables[name],
-      contributorIds,
+      contributorIds
     );
   }
 
-  const stableVariables = synthesis.dominantVariables.filter((n) => Object.prototype.hasOwnProperty.call(newVariables, n));
-  const unstableVariables = synthesis.conflictingVariables.filter((n) => Object.prototype.hasOwnProperty.call(newVariables, n));
+  const stableVariables = synthesis.dominantVariables.filter((n) =>
+    Object.prototype.hasOwnProperty.call(newVariables, n)
+  );
+  const unstableVariables = synthesis.conflictingVariables.filter((n) =>
+    Object.prototype.hasOwnProperty.call(newVariables, n)
+  );
 
   const decisionFlipRate = computeDecisionFlipRate(signals, previousState);
 
-  const confidenceAvg = signals.length > 0
-    ? signals.reduce((acc, s) => acc + s.decision.confidence, 0) / signals.length
-    : 0;
+  const confidenceAvg =
+    signals.length > 0
+      ? signals.reduce((acc, s) => acc + s.decision.confidence, 0) / signals.length
+      : 0;
 
   const convergence: ConvergenceMetrics = {
     score: synthesis.convergenceScore,
@@ -501,17 +518,11 @@ function applySynthesisToState(
     }
   }
 
-  const totalSignalCost = signals.reduce(
-    (acc, s) => acc + (s.metrics?.estimatedCost ?? 0),
-    0,
-  );
-  const maxSignalLatency = signals.reduce(
-    (acc, s) => Math.max(acc, s.metrics?.latencyMs ?? 0),
-    0,
-  );
+  const totalSignalCost = signals.reduce((acc, s) => acc + (s.metrics?.estimatedCost ?? 0), 0);
+  const maxSignalLatency = signals.reduce((acc, s) => Math.max(acc, s.metrics?.latencyMs ?? 0), 0);
   const totalTokens = signals.reduce(
     (acc, s) => acc + (s.metrics?.inputTokens ?? 0) + (s.metrics?.outputTokens ?? 0),
-    0,
+    0
   );
 
   const nextState: CoordinationState = {
@@ -571,12 +582,12 @@ export async function synthesizeViaCoordinator(
   signals: CoordinationSignal[],
   state: CoordinationState,
   executor: CoordinatorExecutor,
-  opts: CollectiveSynthesisOptions,
+  opts: CollectiveSynthesisOptions
 ): Promise<SensitivityAggregationResult> {
   if (signals.length === 0) {
     log.warn(
       { coordinatorModelId: opts.coordinatorModelId, runId: state.runId },
-      'Synthesis received no signals — delegating to numeric aggregator',
+      'Synthesis received no signals — delegating to numeric aggregator'
     );
     return aggregateSignals(signals, state, opts.fallbackMethod);
   }
@@ -602,15 +613,19 @@ export async function synthesizeViaCoordinator(
         runId: state.runId,
         error: err instanceof Error ? err.message : String(err),
       },
-      'Synthesis executor threw — falling back to numeric aggregator',
+      'Synthesis executor threw — falling back to numeric aggregator'
     );
     return aggregateSignals(signals, state, opts.fallbackMethod);
   }
 
   if (execution === null) {
     log.warn(
-      { coordinatorModelId: opts.coordinatorModelId, runId: state.runId, timeoutMs: opts.timeoutMs },
-      'Synthesis call timed out — falling back to numeric aggregator',
+      {
+        coordinatorModelId: opts.coordinatorModelId,
+        runId: state.runId,
+        timeoutMs: opts.timeoutMs,
+      },
+      'Synthesis call timed out — falling back to numeric aggregator'
     );
     return aggregateSignals(signals, state, opts.fallbackMethod);
   }
@@ -623,7 +638,7 @@ export async function synthesizeViaCoordinator(
         actualCostUsd: execution.cost,
         capUsd: opts.maxSynthesisCostUsd,
       },
-      'Synthesis cost exceeded cap — discarding result and falling back',
+      'Synthesis cost exceeded cap — discarding result and falling back'
     );
     return aggregateSignals(signals, state, opts.fallbackMethod);
   }
@@ -637,7 +652,7 @@ export async function synthesizeViaCoordinator(
         runId: state.runId,
         responsePreview: text.slice(0, 200),
       },
-      'Synthesis response was not parseable — falling back to numeric aggregator',
+      'Synthesis response was not parseable — falling back to numeric aggregator'
     );
     return aggregateSignals(signals, state, opts.fallbackMethod);
   }
@@ -652,7 +667,7 @@ export async function synthesizeViaCoordinator(
       updatedVariables: Object.keys(parsed.updatedVariables).length,
       convergenceScore: parsed.convergenceScore,
     },
-    'Synthesis completed successfully',
+    'Synthesis completed successfully'
   );
 
   return applySynthesisToState(signals, state, parsed, execution.cost, execution.durationMs);

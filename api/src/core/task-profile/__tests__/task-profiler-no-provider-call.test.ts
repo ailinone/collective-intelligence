@@ -23,12 +23,10 @@ let fetchCalls = 0;
 beforeEach(() => {
   fetchCalls = 0;
   originalFetch = globalThis.fetch;
-  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(
-    () => {
-      fetchCalls += 1;
-      throw new Error('profileTask MUST NOT call fetch');
-    },
-  ) as unknown as typeof globalThis.fetch;
+  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(() => {
+    fetchCalls += 1;
+    throw new Error('profileTask MUST NOT call fetch');
+  }) as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
@@ -49,10 +47,7 @@ describe('profileTask — no fetch in any path', () => {
       requestId: 'r-1',
       text: 'analyze this legal contract step by step in JSON',
       approximateInputTokens: 50_000,
-      attachments: [
-        { kind: 'document', approximateTokens: 10_000 },
-        { kind: 'image' },
-      ],
+      attachments: [{ kind: 'document', approximateTokens: 10_000 }, { kind: 'image' }],
       explicitPrivacyMode: 'local_required',
       explicitOutputFormat: 'json',
       explicitToolUse: 'required',

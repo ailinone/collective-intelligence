@@ -37,12 +37,10 @@ let fetchCalls = 0;
 beforeEach(() => {
   fetchCalls = 0;
   originalFetch = globalThis.fetch;
-  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(
-    () => {
-      fetchCalls += 1;
-      throw new Error('document builder MUST NOT call fetch');
-    },
-  ) as unknown as typeof globalThis.fetch;
+  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(() => {
+    fetchCalls += 1;
+    throw new Error('document builder MUST NOT call fetch');
+  }) as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
@@ -57,15 +55,13 @@ afterEach(() => {
 function findInputs(
   registry: ReturnType<typeof buildFixtureRegistry>,
   providerId: string,
-  modelId: string,
+  modelId: string
 ): {
   canonical: CanonicalModel;
   offerings: readonly ModelProviderOffering[];
   routes: readonly ProviderModelRoute[];
 } {
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   const oid = snap?.uid ?? `${providerId}:${modelId}`;
   const offering = registry.lookupOffering(oid);
   if (!offering) throw new Error('offering missing');

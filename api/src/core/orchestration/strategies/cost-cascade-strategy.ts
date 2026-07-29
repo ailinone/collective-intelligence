@@ -96,7 +96,7 @@ export class CostCascadeStrategy extends BaseStrategy {
           requestedModel: preference.requestedId,
           poolSize: models.length,
         },
-        'Cost cascade: requested model not in operational pool — falling back to cost-sort cascade',
+        'Cost cascade: requested model not in operational pool — falling back to cost-sort cascade'
       );
     }
     // Cap cascade depth at the strategy's declared maxModels (2026-07-04,
@@ -109,14 +109,18 @@ export class CostCascadeStrategy extends BaseStrategy {
     const sortedModels = assembleExecutors(
       preference,
       maxRungs,
-      (a, b) => this.effectiveCost(a) - this.effectiveCost(b),
+      (a, b) => this.effectiveCost(a) - this.effectiveCost(b)
     );
 
     // 2. Determine quality threshold
     const qualityThreshold = context.qualityTarget || this.QUALITY_THRESHOLD_BASE;
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', models: sortedModels.slice(0, 3).map(m => m.name || m.id), summary: `Cost cascade: trying cheapest first, escalating if needed.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: sortedModels.slice(0, 3).map((m) => m.name || m.id),
+      summary: `Cost cascade: trying cheapest first, escalating if needed.`,
+    });
 
     // 3. Cascade through models until quality met
     interface ExecutionAttempt {
@@ -274,8 +278,18 @@ export class CostCascadeStrategy extends BaseStrategy {
           cost: exec.cost,
           success: exec.success,
         })),
-        ...(this.isReasoningEnabled(request) && allExecutions.some(e => e.reasoning)
-          ? { reasoning_traces: allExecutions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && allExecutions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: allExecutions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -373,7 +387,7 @@ export class CostCascadeStrategy extends BaseStrategy {
               ? this.executeModelWithReasoning(adapter, model, request, 'primary')
               : this.executeModel(adapter, model, request, 'primary'),
         { adapter, model, request, role: 'primary' },
-        this.collectiveModelTimeoutMs(),
+        this.collectiveModelTimeoutMs()
       );
       const response = exec.response;
       const execEnd = Date.now();
@@ -453,8 +467,7 @@ export class CostCascadeStrategy extends BaseStrategy {
   private estimateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Math.max(0, Number(model.inputCostPer1k) || 0);
     const outputRate = Math.max(0, Number(model.outputCostPer1k) || 0);
-    const cost = (inputTokens / 1000) * inputRate
-               + (outputTokens / 1000) * outputRate;
+    const cost = (inputTokens / 1000) * inputRate + (outputTokens / 1000) * outputRate;
     return Math.max(0, cost);
   }
 

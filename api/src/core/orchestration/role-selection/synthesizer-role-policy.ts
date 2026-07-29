@@ -97,7 +97,7 @@ export type SynthesizerScoredCandidate = {
 };
 
 export interface SynthesizerRolePolicyWeights {
-  readonly qualityFloor: number;        // HARD gate; below this → rejected
+  readonly qualityFloor: number; // HARD gate; below this → rejected
   readonly weights: {
     readonly quality: number;
     readonly reliability: number;
@@ -115,14 +115,14 @@ export interface SynthesizerRolePolicyWeights {
   };
   readonly penalties: {
     readonly singleProviderThreshold: number; // providers ≤ this → singleProviderPenalty
-    readonly singleProviderPenalty: number;   // negative
+    readonly singleProviderPenalty: number; // negative
     readonly stalenessThresholdDays: number;
     readonly stalenessPenalty: number;
     readonly unresolvedAliasPenalty: number;
     readonly creditAuthRiskPenalty: number;
-    readonly lowCoverageThreshold: number;    // providers ≤ this → lowCoveragePenalty
+    readonly lowCoverageThreshold: number; // providers ≤ this → lowCoveragePenalty
     readonly lowCoveragePenalty: number;
-    readonly unknownQualityPenalty: number;   // when quality === 0 (no metadata)
+    readonly unknownQualityPenalty: number; // when quality === 0 (no metadata)
   };
   /** Coverage scaling: log-normalized to this max provider count. */
   readonly coverageMaxProviders: number;
@@ -172,14 +172,14 @@ export interface SynthesizerRolePolicyWeights {
  * to enable.
  */
 export const DEFAULT_HYBRID_SYNTHESIZER_POLICY: SynthesizerRolePolicyWeights = {
-  qualityFloor: 0.6,  // anything below 0.6 quality → rejected outright
+  qualityFloor: 0.6, // anything below 0.6 quality → rejected outright
   weights: {
-    quality: 0.40,
+    quality: 0.4,
     reliability: 0.05,
     cost: 0.15,
-    freshness: 0.10,
-    multiProviderCoverage: 0.20,
-    liveReadyRoute: 0.10,
+    freshness: 0.1,
+    multiProviderCoverage: 0.2,
+    liveReadyRoute: 0.1,
     aliasConfidence: 0.05,
     /**
      * Per-match weight. 3 preferred caps × 0.03 = 0.09 max boost — small
@@ -196,12 +196,12 @@ export const DEFAULT_HYBRID_SYNTHESIZER_POLICY: SynthesizerRolePolicyWeights = {
     singleProviderThreshold: 2,
     singleProviderPenalty: 0,
     stalenessThresholdDays: 90,
-    stalenessPenalty: -0.10,
+    stalenessPenalty: -0.1,
     unresolvedAliasPenalty: -0.15,
-    creditAuthRiskPenalty: -0.10,
+    creditAuthRiskPenalty: -0.1,
     lowCoverageThreshold: 5,
     lowCoveragePenalty: 0,
-    unknownQualityPenalty: -0.20,
+    unknownQualityPenalty: -0.2,
   },
   coverageMaxProviders: 20,
 };
@@ -212,7 +212,7 @@ export const DEFAULT_HYBRID_SYNTHESIZER_POLICY: SynthesizerRolePolicyWeights = {
  */
 export function scoreSynthesizerCandidate(
   metrics: SynthesizerCandidateMetrics,
-  policy: SynthesizerRolePolicyWeights = DEFAULT_HYBRID_SYNTHESIZER_POLICY,
+  policy: SynthesizerRolePolicyWeights = DEFAULT_HYBRID_SYNTHESIZER_POLICY
 ): SynthesizerScoredCandidate {
   const w = policy.weights;
   const p = policy.penalties;
@@ -239,14 +239,15 @@ export function scoreSynthesizerCandidate(
   // Coverage: log-normalized to coverageMaxProviders
   const coverageNormalized = Math.min(
     1,
-    Math.log(metrics.providerCoverageCount + 1) / Math.log(policy.coverageMaxProviders + 1),
+    Math.log(metrics.providerCoverageCount + 1) / Math.log(policy.coverageMaxProviders + 1)
   );
   const multiProviderCoverageScore = coverageNormalized * w.multiProviderCoverage;
   // Live-ready: log-normalized count
   const liveReadyNormalized = Math.min(1, Math.log(metrics.liveReadyRouteCount + 1) / Math.log(10));
   const liveReadyRouteScore = liveReadyNormalized * w.liveReadyRoute;
   // Alias confidence
-  const aliasConfidenceScore = aliasConfidenceNormalized(metrics.aliasConfidence) * w.aliasConfidence;
+  const aliasConfidenceScore =
+    aliasConfidenceNormalized(metrics.aliasConfidence) * w.aliasConfidence;
   // 01C.1B-J1G-R0 — preferred capability match boost (small tie-breaker)
   const preferredCapabilityMatchScore =
     (metrics.preferredCapabilityMatchCount ?? 0) * w.preferredCapabilityMatch;
@@ -255,32 +256,51 @@ export function scoreSynthesizerCandidate(
   const singleProviderPenalty =
     metrics.providerCoverageCount <= p.singleProviderThreshold ? p.singleProviderPenalty : 0;
   const stalenessPenalty =
-    metrics.daysSinceCatalogUpdate !== undefined && metrics.daysSinceCatalogUpdate > p.stalenessThresholdDays
+    metrics.daysSinceCatalogUpdate !== undefined &&
+    metrics.daysSinceCatalogUpdate > p.stalenessThresholdDays
       ? p.stalenessPenalty
       : 0;
   const unresolvedAliasPenalty =
     metrics.aliasConfidence === 'unresolved' ? p.unresolvedAliasPenalty : 0;
   const creditAuthRiskPenalty =
-    (metrics.providerCreditRisk || metrics.providerAuthRisk) ? p.creditAuthRiskPenalty : 0;
+    metrics.providerCreditRisk || metrics.providerAuthRisk ? p.creditAuthRiskPenalty : 0;
   const lowCoveragePenalty =
     metrics.providerCoverageCount <= p.lowCoverageThreshold ? p.lowCoveragePenalty : 0;
   const unknownQualityPenalty = metrics.quality === 0 ? p.unknownQualityPenalty : 0;
 
   const finalScore =
-    qualityScore + reliabilityScore + costScore + freshnessScore +
-    multiProviderCoverageScore + liveReadyRouteScore + aliasConfidenceScore +
+    qualityScore +
+    reliabilityScore +
+    costScore +
+    freshnessScore +
+    multiProviderCoverageScore +
+    liveReadyRouteScore +
+    aliasConfidenceScore +
     preferredCapabilityMatchScore +
-    singleProviderPenalty + stalenessPenalty + unresolvedAliasPenalty +
-    creditAuthRiskPenalty + lowCoveragePenalty + unknownQualityPenalty;
+    singleProviderPenalty +
+    stalenessPenalty +
+    unresolvedAliasPenalty +
+    creditAuthRiskPenalty +
+    lowCoveragePenalty +
+    unknownQualityPenalty;
 
   return {
     metrics,
     breakdown: {
-      qualityScore, reliabilityScore, costScore, freshnessScore,
-      multiProviderCoverageScore, liveReadyRouteScore, aliasConfidenceScore,
+      qualityScore,
+      reliabilityScore,
+      costScore,
+      freshnessScore,
+      multiProviderCoverageScore,
+      liveReadyRouteScore,
+      aliasConfidenceScore,
       preferredCapabilityMatchScore,
-      singleProviderPenalty, stalenessPenalty, unresolvedAliasPenalty,
-      creditAuthRiskPenalty, lowCoveragePenalty, unknownQualityPenalty,
+      singleProviderPenalty,
+      stalenessPenalty,
+      unresolvedAliasPenalty,
+      creditAuthRiskPenalty,
+      lowCoveragePenalty,
+      unknownQualityPenalty,
       finalScore,
     },
     qualityFloorPassed: true,
@@ -299,21 +319,35 @@ function freshnessNormalizedScore(days?: number): number {
 
 function aliasConfidenceNormalized(c: SynthesizerCandidateMetrics['aliasConfidence']): number {
   switch (c) {
-    case 'exact': return 1.0;
-    case 'high': return 0.85;
-    case 'medium': return 0.6;
-    case 'low': return 0.3;
-    case 'unresolved': return 0;
+    case 'exact':
+      return 1.0;
+    case 'high':
+      return 0.85;
+    case 'medium':
+      return 0.6;
+    case 'low':
+      return 0.3;
+    case 'unresolved':
+      return 0;
   }
 }
 
 function zeroBreakdown(): SynthesizerScoreBreakdown {
   return {
-    qualityScore: 0, reliabilityScore: 0, costScore: 0, freshnessScore: 0,
-    multiProviderCoverageScore: 0, liveReadyRouteScore: 0, aliasConfidenceScore: 0,
+    qualityScore: 0,
+    reliabilityScore: 0,
+    costScore: 0,
+    freshnessScore: 0,
+    multiProviderCoverageScore: 0,
+    liveReadyRouteScore: 0,
+    aliasConfidenceScore: 0,
     preferredCapabilityMatchScore: 0,
-    singleProviderPenalty: 0, stalenessPenalty: 0, unresolvedAliasPenalty: 0,
-    creditAuthRiskPenalty: 0, lowCoveragePenalty: 0, unknownQualityPenalty: 0,
+    singleProviderPenalty: 0,
+    stalenessPenalty: 0,
+    unresolvedAliasPenalty: 0,
+    creditAuthRiskPenalty: 0,
+    lowCoveragePenalty: 0,
+    unknownQualityPenalty: 0,
     finalScore: 0,
   };
 }
@@ -324,7 +358,7 @@ function zeroBreakdown(): SynthesizerScoreBreakdown {
  */
 export function rankAndSelectSynthesizer(
   candidates: readonly SynthesizerCandidateMetrics[],
-  policy: SynthesizerRolePolicyWeights = DEFAULT_HYBRID_SYNTHESIZER_POLICY,
+  policy: SynthesizerRolePolicyWeights = DEFAULT_HYBRID_SYNTHESIZER_POLICY
 ): {
   readonly selected: SynthesizerScoredCandidate | undefined;
   readonly ranked: readonly SynthesizerScoredCandidate[];
@@ -379,14 +413,15 @@ export interface CollectiveCostBenefitEstimate {
 }
 
 export function estimateCollectiveCostBenefit(
-  input: CollectiveCostBenefitInput,
+  input: CollectiveCostBenefitInput
 ): CollectiveCostBenefitEstimate {
   const sum =
     input.synthesizerCost +
     input.participantCosts.reduce((a, c) => a + c, 0) +
     input.judgeCost +
     (input.fallbackCost ?? 0);
-  const ratio = input.baselineSingleModelCostUsd > 0 ? sum / input.baselineSingleModelCostUsd : Infinity;
+  const ratio =
+    input.baselineSingleModelCostUsd > 0 ? sum / input.baselineSingleModelCostUsd : Infinity;
   const gain = input.expectedQualityGainScore ?? 1.0; // 1.0 = no advantage
   const pass = ratio <= 1.0 || gain >= 1.2;
   return {

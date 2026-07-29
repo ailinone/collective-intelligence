@@ -23,10 +23,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { classifyProviderError } from '../../orchestration/failures/provider-error-classifier';
 import { applyG2Reclassification, type GAuditRecordLike } from '../apply-g2-reclassification';
-import {
-  BUCKET_DESCRIPTIONS,
-  type ProviderReadinessBucket,
-} from '../provider-readiness-buckets';
+import { BUCKET_DESCRIPTIONS, type ProviderReadinessBucket } from '../provider-readiness-buckets';
 
 interface AuditJson {
   summary?: unknown;
@@ -127,8 +124,14 @@ function main(): void {
     gAudit: reclassified,
     catalogIdMismatched: ['perplexity', 'sambanova'],
     requiresDeployment: [
-      'azure-openai', 'aws-bedrock', 'vertex-ai', 'sap-ai-core',
-      'aws-sagemaker', 'databricks', 'snowflake', 'watsonx',
+      'azure-openai',
+      'aws-bedrock',
+      'vertex-ai',
+      'sap-ai-core',
+      'aws-sagemaker',
+      'databricks',
+      'snowflake',
+      'watsonx',
     ],
   });
 
@@ -142,7 +145,9 @@ function main(): void {
   if (reclassDiff.length > 0) {
     console.log('\n── Classifier-level reclassifications (G3 patch effect) ──────────');
     for (const d of reclassDiff) {
-      console.log(`  ${d.providerId.padEnd(20)}  errorKind: ${d.fromKind ?? '-'} → ${d.toKind ?? '-'}`);
+      console.log(
+        `  ${d.providerId.padEnd(20)}  errorKind: ${d.fromKind ?? '-'} → ${d.toKind ?? '-'}`
+      );
       console.log(`  ${''.padEnd(20)}  bucket:    ${d.fromBucket ?? '-'} → ${d.toBucket ?? '-'}`);
     }
   }
@@ -187,8 +192,12 @@ function main(): void {
   console.log('\n╔═══════════════════════════════════════════════════════════════════╗');
   console.log('║                       GATE STATUS                                 ║');
   console.log('╠═══════════════════════════════════════════════════════════════════╣');
-  console.log(`║  Chat-ready (A + K):              ${String(a + k).padStart(3)} / ${String(records.length).padEnd(3)}                          ║`);
-  console.log(`║  V_unknown_unclassified:          ${String(v).padStart(3)} (${vPercent.toFixed(1)}%)                          ║`);
+  console.log(
+    `║  Chat-ready (A + K):              ${String(a + k).padStart(3)} / ${String(records.length).padEnd(3)}                          ║`
+  );
+  console.log(
+    `║  V_unknown_unclassified:          ${String(v).padStart(3)} (${vPercent.toFixed(1)}%)                          ║`
+  );
   console.log(`║  openai bucket:                   ${openaiBucket.padEnd(35)}║`);
   console.log(`║  replicate bucket:                ${replicateBucket.padEnd(35)}║`);
   console.log(`║  perplexity bucket:               ${perplexityBucket.padEnd(35)}║`);
@@ -198,7 +207,10 @@ function main(): void {
   // Pass/fail per G3 spec §20.
   const gates = [
     { name: 'openai NOT in V_unknown', pass: openaiBucket !== 'V_unknown_unclassified' },
-    { name: 'replicate NOT in P (now C)', pass: replicateBucket !== 'P_provider_id_catalog_mismatch' },
+    {
+      name: 'replicate NOT in P (now C)',
+      pass: replicateBucket !== 'P_provider_id_catalog_mismatch',
+    },
     { name: 'perplexity in P (real)', pass: perplexityBucket === 'P_provider_id_catalog_mismatch' },
     { name: 'sambanova in P (real)', pass: sambanovaBucket === 'P_provider_id_catalog_mismatch' },
     { name: 'V_unknown < 5% of total', pass: vPercent < 5 },
@@ -209,10 +221,17 @@ function main(): void {
   }
 
   if (outPath) {
-    writeFileSync(outPath, JSON.stringify({
-      ...g3,
-      reclassDiff,
-    }, null, 2));
+    writeFileSync(
+      outPath,
+      JSON.stringify(
+        {
+          ...g3,
+          reclassDiff,
+        },
+        null,
+        2
+      )
+    );
     console.log(`\n✓ Wrote G3 to ${outPath}`);
   }
 }

@@ -72,11 +72,7 @@ import {
   resolveTaskProfilerPolicy,
   type TaskProfilerPolicy,
 } from './task-profiler-policy';
-import {
-  containsAnyWord,
-  estimateTotalInputTokens,
-  sortedUnique,
-} from './task-profile-normalizer';
+import { containsAnyWord, estimateTotalInputTokens, sortedUnique } from './task-profile-normalizer';
 
 // ─── Signal extraction ─────────────────────────────────────────────────
 
@@ -162,7 +158,7 @@ interface AttachmentSignals {
 }
 
 function extractAttachmentSignals(
-  attachments: readonly { kind: string }[] | undefined,
+  attachments: readonly { kind: string }[] | undefined
 ): AttachmentSignals {
   if (!attachments) {
     return {
@@ -206,7 +202,7 @@ function deriveTaskType(
   text: TextSignals,
   att: AttachmentSignals,
   explicitOutput?: OutputFormat,
-  explicitToolUse?: ToolUseRequirement,
+  explicitToolUse?: ToolUseRequirement
 ): TaskType {
   // Modality-bound types win first.
   if (att.hasImage) return 'vision';
@@ -218,12 +214,7 @@ function deriveTaskType(
   if (explicitToolUse === 'required' || text.hasToolUse) {
     return 'tool_use';
   }
-  if (
-    explicitOutput === 'json' ||
-    explicitOutput === 'table' ||
-    text.hasJson ||
-    text.hasTable
-  ) {
+  if (explicitOutput === 'json' || explicitOutput === 'table' || text.hasJson || text.hasTable) {
     return 'structured_generation';
   }
   if (text.hasCode || att.hasCodeAttachment) return 'code';
@@ -243,7 +234,7 @@ function deriveComplexity(
   text: TextSignals,
   att: AttachmentSignals,
   policy: TaskProfilerPolicy,
-  taskType: TaskType,
+  taskType: TaskType
 ): Complexity {
   const t = policy.tokenThresholds;
 
@@ -301,13 +292,7 @@ function deriveRiskLevel(text: TextSignals): RiskLevel {
   ) {
     return 'high';
   }
-  if (
-    text.hasAnalysis ||
-    text.hasMath ||
-    text.hasCode ||
-    text.hasReasoning ||
-    text.hasAgentic
-  ) {
+  if (text.hasAnalysis || text.hasMath || text.hasCode || text.hasReasoning || text.hasAgentic) {
     return 'medium';
   }
   return 'low';
@@ -315,10 +300,7 @@ function deriveRiskLevel(text: TextSignals): RiskLevel {
 
 // ─── Privacy derivation ─────────────────────────────────────────────────
 
-function derivePrivacyMode(
-  input: TaskProfilerInput,
-  text: TextSignals,
-): PrivacyMode {
+function derivePrivacyMode(input: TaskProfilerInput, text: TextSignals): PrivacyMode {
   if (input.explicitPrivacyMode) return input.explicitPrivacyMode;
   if (text.hasPrivacyPreferred) return 'local_preferred';
   return 'standard';
@@ -339,7 +321,7 @@ function deriveCapabilities(
   totalTokens: number,
   policy: TaskProfilerPolicy,
   explicitOutput?: OutputFormat,
-  explicitToolUse?: ToolUseRequirement,
+  explicitToolUse?: ToolUseRequirement
 ): { required: readonly string[]; desired: readonly string[] } {
   const required = new Set<string>();
   const desired = new Set<string>();
@@ -384,7 +366,7 @@ function deriveStrategyHints(
   complexity: Complexity,
   riskLevel: RiskLevel,
   privacyMode: PrivacyMode,
-  costSensitivity: Sensitivity,
+  costSensitivity: Sensitivity
 ): readonly StrategyHint[] {
   const set = new Set<StrategyHint>();
 
@@ -425,7 +407,7 @@ function deriveStrategyHints(
 
 function deriveOutputFormat(
   text: TextSignals,
-  explicit?: OutputFormat,
+  explicit?: OutputFormat
 ): readonly OutputFormat[] | undefined {
   if (explicit) return Object.freeze([explicit]);
   const out: OutputFormat[] = [];
@@ -443,7 +425,7 @@ function deriveFreshness(text: TextSignals): TaskProfile['freshnessRequirement']
 
 function deriveToolUseRequirement(
   text: TextSignals,
-  explicit?: ToolUseRequirement,
+  explicit?: ToolUseRequirement
 ): ToolUseRequirement | undefined {
   if (explicit) return explicit;
   if (text.hasToolUse) return 'optional';
@@ -452,10 +434,7 @@ function deriveToolUseRequirement(
 
 // ─── Confidence derivation ──────────────────────────────────────────────
 
-function deriveConfidenceNeeded(
-  riskLevel: RiskLevel,
-  complexity: Complexity,
-): number {
+function deriveConfidenceNeeded(riskLevel: RiskLevel, complexity: Complexity): number {
   // Higher risk → higher confidence required.
   if (riskLevel === 'high') return 0.95;
   if (riskLevel === 'medium' && complexity === 'high') return 0.85;
@@ -475,7 +454,7 @@ export interface TaskProfilerResult {
 
 export function profileTask(
   input: TaskProfilerInput,
-  policyOverride?: Partial<TaskProfilerPolicy>,
+  policyOverride?: Partial<TaskProfilerPolicy>
 ): TaskProfilerResult {
   const policy = resolveTaskProfilerPolicy(policyOverride);
   const text = input.text ?? '';
@@ -494,7 +473,7 @@ export function profileTask(
     textSignals,
     attSignals,
     input.explicitOutputFormat,
-    input.explicitToolUse,
+    input.explicitToolUse
   );
   reasons.push(`task_type:${taskType}`);
 
@@ -525,7 +504,7 @@ export function profileTask(
     totalTokens,
     policy,
     input.explicitOutputFormat,
-    input.explicitToolUse,
+    input.explicitToolUse
   );
   const modalities = deriveModalities(attSignals);
 
@@ -535,7 +514,7 @@ export function profileTask(
     complexity,
     riskLevel,
     privacyMode,
-    costSensitivity,
+    costSensitivity
   );
 
   // 10. Outputs.

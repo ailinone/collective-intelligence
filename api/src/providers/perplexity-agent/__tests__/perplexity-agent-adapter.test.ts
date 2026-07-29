@@ -85,7 +85,7 @@ describe('PerplexityAgentAdapter — real SSE streaming', () => {
     const send = vi
       .spyOn(
         adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
-        'sendJsonRequestWithRetry',
+        'sendJsonRequestWithRetry'
       )
       .mockResolvedValue(sseResponse(LIVE_SSE_FIXTURE));
 
@@ -120,11 +120,11 @@ describe('PerplexityAgentAdapter — real SSE streaming', () => {
     const truncated = LIVE_SSE_FIXTURE.split('event: response.completed')[0]!;
     vi.spyOn(
       adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
-      'sendJsonRequestWithRetry',
+      'sendJsonRequestWithRetry'
     ).mockResolvedValue(sseResponse(truncated));
 
     await expect(collect(adapter.chatCompletionStream(CHAT_REQUEST))).rejects.toThrow(
-      /ended without a response\.completed/,
+      /ended without a response\.completed/
     );
   });
 });
@@ -137,7 +137,7 @@ describe('PerplexityAgentAdapter — tool calling', () => {
     const send = vi
       .spyOn(
         adapter as unknown as { sendJsonRequestWithRetry: (o: unknown) => Promise<Response> },
-        'sendJsonRequestWithRetry',
+        'sendJsonRequestWithRetry'
       )
       .mockResolvedValue(
         new Response(
@@ -158,8 +158,8 @@ describe('PerplexityAgentAdapter — tool calling', () => {
             ],
             usage: { input_tokens: 50, output_tokens: 20, total_tokens: 70 },
           }),
-          { status: 200 },
-        ),
+          { status: 200 }
+        )
       );
 
     const result = await adapter.chatCompletion({

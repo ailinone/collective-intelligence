@@ -46,9 +46,7 @@ export const DEFAULT_CALIBRATION_POLICY: CalibrationPolicy = Object.freeze({
   minTrainSamplesPerTaskType: 30,
 });
 
-export function resolveCalibrationPolicy(
-  override?: Partial<CalibrationPolicy>,
-): CalibrationPolicy {
+export function resolveCalibrationPolicy(override?: Partial<CalibrationPolicy>): CalibrationPolicy {
   if (!override) return DEFAULT_CALIBRATION_POLICY;
   return Object.freeze({ ...DEFAULT_CALIBRATION_POLICY, ...override });
 }

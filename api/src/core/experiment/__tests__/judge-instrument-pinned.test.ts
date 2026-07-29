@@ -47,7 +47,10 @@ describe('assertJudgeInstrumentPinned', () => {
   });
 
   it('passes when pinned to a concrete model id', async () => {
-    const mod = await importUnderEnv({ JUDGE_MODE: undefined, EXPERIMENT_JUDGE_MODEL: 'openai/gpt-5.4-mini' });
+    const mod = await importUnderEnv({
+      JUDGE_MODE: undefined,
+      EXPERIMENT_JUDGE_MODEL: 'openai/gpt-5.4-mini',
+    });
     expect(() => mod.assertJudgeInstrumentPinned()).not.toThrow();
   });
 

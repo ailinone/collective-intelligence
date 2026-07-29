@@ -77,7 +77,7 @@ export interface ResolveCanonicalProbeModelInput {
  * available evidence; the resolver picks.
  */
 export function resolveCanonicalProbeModel(
-  input: ResolveCanonicalProbeModelInput,
+  input: ResolveCanonicalProbeModelInput
 ): CanonicalProbeModel | null {
   const providerId = input.providerId;
 

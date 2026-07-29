@@ -38,10 +38,7 @@
  * Output: per-row `HistoricalRowQualityDecision`.
  */
 
-import type {
-  HistoricalRowQualityDecision,
-  NormalisedRow,
-} from './historical-results-schema';
+import type { HistoricalRowQualityDecision, NormalisedRow } from './historical-results-schema';
 
 export function classifyRow(row: NormalisedRow): HistoricalRowQualityDecision {
   const reasons: string[] = [];
@@ -113,7 +110,7 @@ export function classifyRow(row: NormalisedRow): HistoricalRowQualityDecision {
 function decision(
   row: NormalisedRow,
   usage: HistoricalRowQualityDecision['usage'],
-  reasons: string[],
+  reasons: string[]
 ): HistoricalRowQualityDecision {
   return Object.freeze({
     executionId: row.executionId,

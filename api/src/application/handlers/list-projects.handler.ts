@@ -43,10 +43,7 @@ export class ListProjectsHandler {
           limit: query.limit,
           offset: query.offset,
         }),
-        this.projectRepository.countByOrganization(
-          query.organizationId,
-          query.status
-        ),
+        this.projectRepository.countByOrganization(query.organizationId, query.status),
       ]);
 
       return {

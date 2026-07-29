@@ -82,7 +82,9 @@ export function parseHarnessOutput(
 ): SandboxTestResult {
   let parsed: { results?: Array<{ ok: boolean; received?: unknown; error?: string }> };
   try {
-    parsed = JSON.parse(stdout) as { results?: Array<{ ok: boolean; received?: unknown; error?: string }> };
+    parsed = JSON.parse(stdout) as {
+      results?: Array<{ ok: boolean; received?: unknown; error?: string }>;
+    };
   } catch (error) {
     return {
       passed: false,

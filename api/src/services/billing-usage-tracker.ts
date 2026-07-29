@@ -44,7 +44,9 @@ export async function trackChatUsage(options: TrackChatUsageOptions): Promise<vo
     const models = options.modelsOverride ?? summarizeModels(options.result);
     const tokenUsage = aggregateTokenUsage(models);
     const totalTokens = normalizeTokens(options.totalTokensOverride ?? tokenUsage.totalTokens);
-    const providerCost = sanitizeCostValue(options.totalCostOverride ?? options.result?.totalCost ?? 0);
+    const providerCost = sanitizeCostValue(
+      options.totalCostOverride ?? options.result?.totalCost ?? 0
+    );
     const billedCost = sanitizeCostValue(
       applyBillingProfile(providerCost, tokenUsage, options.request.ailin_billing)
     );
@@ -132,13 +134,20 @@ interface AggregatedTokenUsage {
 }
 
 function aggregateTokenUsage(models: ModelUsageSummary[]): AggregatedTokenUsage {
-  const promptTokens = models.reduce((total, entry) => total + normalizeTokens(entry.promptTokens ?? 0), 0);
+  const promptTokens = models.reduce(
+    (total, entry) => total + normalizeTokens(entry.promptTokens ?? 0),
+    0
+  );
   const completionTokens = models.reduce(
     (total, entry) => total + normalizeTokens(entry.completionTokens ?? 0),
     0
   );
-  const fallbackTotalTokens = models.reduce((total, entry) => total + normalizeTokens(entry.tokens ?? 0), 0);
-  const totalTokens = promptTokens + completionTokens > 0 ? promptTokens + completionTokens : fallbackTotalTokens;
+  const fallbackTotalTokens = models.reduce(
+    (total, entry) => total + normalizeTokens(entry.tokens ?? 0),
+    0
+  );
+  const totalTokens =
+    promptTokens + completionTokens > 0 ? promptTokens + completionTokens : fallbackTotalTokens;
   return {
     promptTokens,
     completionTokens,
@@ -165,10 +174,7 @@ function applyBillingProfile(
   const inputMarkup = sanitizeMultiplier(billing.inputMarkupMultiplier);
   const outputMarkup = sanitizeMultiplier(billing.outputMarkupMultiplier);
 
-  const minInputCost = sanitizeFloorPer1k(
-    billing.minInputCostPer1kUsd,
-    tokenUsage.promptTokens
-  );
+  const minInputCost = sanitizeFloorPer1k(billing.minInputCostPer1kUsd, tokenUsage.promptTokens);
   const minOutputCost = sanitizeFloorPer1k(
     billing.minOutputCostPer1kUsd,
     tokenUsage.completionTokens

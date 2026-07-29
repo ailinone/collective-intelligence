@@ -68,7 +68,7 @@ export interface CandidateRetrieverDeps {
  */
 export function retrieveCandidates(
   request: CandidateRetrievalRequest,
-  deps: CandidateRetrieverDeps,
+  deps: CandidateRetrieverDeps
 ): CandidateRetrievalResult {
   const allRoutes = collectAllRoutes(deps.registry);
   const rejectedByStage: CandidateRejection[] = [];
@@ -155,10 +155,7 @@ export function retrieveCandidates(
  * Filters are applied in priority order. Each returns a verdict; the
  * first non-passing verdict short-circuits.
  */
-function applyFilters(
-  c: FilterCandidate,
-  req: CandidateRetrievalRequest,
-): FilterVerdict {
+function applyFilters(c: FilterCandidate, req: CandidateRetrievalRequest): FilterVerdict {
   const pin = filterByExplicitPin(c, req.explicitModelPin);
   if (!pin.pass) return pin;
 
@@ -188,9 +185,7 @@ function applyFilters(
  * mirrors the dry-run handler's iterator from MVP 3 and avoids modifying
  * the MVP 1 registry to add a public `allRoutes()` API.
  */
-function collectAllRoutes(
-  registry: RuntimeModelRegistry,
-): ReadonlyArray<ProviderModelRoute> {
+function collectAllRoutes(registry: RuntimeModelRegistry): ReadonlyArray<ProviderModelRoute> {
   const out: ProviderModelRoute[] = [];
   const seen = new Set<string>();
   for (const snap of registry.getModelSnapshots()) {
@@ -212,14 +207,12 @@ function collectAllRoutes(
  */
 function buildFilterCandidate(
   registry: RuntimeModelRegistry,
-  route: ProviderModelRoute,
+  route: ProviderModelRoute
 ): FilterCandidate | null {
   const canonical: CanonicalModel | undefined = registry.lookupCanonicalModel(
-    route.canonicalModelId,
+    route.canonicalModelId
   );
-  const offering: ModelProviderOffering | undefined = registry.lookupOffering(
-    route.offeringId,
-  );
+  const offering: ModelProviderOffering | undefined = registry.lookupOffering(route.offeringId);
   if (!canonical || !offering) return null;
   return { canonical, offering, route };
 }

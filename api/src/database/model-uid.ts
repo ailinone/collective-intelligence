@@ -25,8 +25,5 @@ import { createHash } from 'crypto';
  * Must match the DB formula: SUBSTRING(MD5(provider_id || ':' || id), 1, 25)
  */
 export function computeModelUid(providerId: string, modelId: string): string {
-  return createHash('md5')
-    .update(`${providerId}:${modelId}`)
-    .digest('hex')
-    .substring(0, 25);
+  return createHash('md5').update(`${providerId}:${modelId}`).digest('hex').substring(0, 25);
 }

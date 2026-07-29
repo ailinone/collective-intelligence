@@ -66,7 +66,7 @@ describe('ProviderProbeRegistry', () => {
         endpointType: 'models',
         billableRisk: 'unknown',
         probe: async () => ({ liveOperabilityState: 'healthy', observedAt: 0, latencyMs: 0 }),
-      }),
+      })
     ).toThrow(/Refusing to register/);
   });
 
@@ -267,7 +267,9 @@ describe('ProviderCreditAuditService — non_billable_probe mode', () => {
   });
 
   it('zero fetch even in non_billable_probe mode (registered probe is the only call path)', async () => {
-    const fetchSpy = vi.fn(async () => { throw new Error('fetch must not be called from audit'); });
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('fetch must not be called from audit');
+    });
     const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchSpy as unknown as typeof globalThis.fetch;
     try {
@@ -304,7 +306,7 @@ describe('ProviderCreditAuditService — non_billable_probe mode', () => {
         includeAggregators: true,
         includeRouters: true,
         includeLocal: true,
-      }),
+      })
     ).rejects.toThrow(/minimal_billable_probe is not implemented/);
   });
 });

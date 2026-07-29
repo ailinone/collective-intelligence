@@ -9,7 +9,7 @@
 
 /**
  * Prisma Error Helpers
- * 
+ *
  * Type-safe utilities for handling Prisma errors without using 'any' or 'unknown as unknown'
  */
 
@@ -18,21 +18,23 @@ import { Prisma } from '@/generated/prisma/index.js';
 /**
  * Type guard to check if an error is a Prisma known request error
  */
-export function isPrismaKnownRequestError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+export function isPrismaKnownRequestError(
+  error: unknown
+): error is Prisma.PrismaClientKnownRequestError {
   if (typeof error !== 'object' || error === null) {
     return false;
   }
-  
+
   if (!('code' in error)) {
     return false;
   }
-  
+
   // Use Object.getOwnPropertyDescriptor to safely access code property
   const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
   if (!codeDescriptor || typeof codeDescriptor.value !== 'string') {
     return false;
   }
-  
+
   // Check for Prisma-specific properties
   return 'meta' in error && 'clientVersion' in error;
 }
@@ -40,7 +42,9 @@ export function isPrismaKnownRequestError(error: unknown): error is Prisma.Prism
 /**
  * Type guard to check if an error is a Prisma validation error
  */
-export function isPrismaValidationError(error: unknown): error is Prisma.PrismaClientValidationError {
+export function isPrismaValidationError(
+  error: unknown
+): error is Prisma.PrismaClientValidationError {
   return (
     typeof error === 'object' &&
     error !== null &&
@@ -52,7 +56,9 @@ export function isPrismaValidationError(error: unknown): error is Prisma.PrismaC
 /**
  * Type guard to check if an error is a Prisma client initialization error
  */
-export function isPrismaInitializationError(error: unknown): error is Prisma.PrismaClientInitializationError {
+export function isPrismaInitializationError(
+  error: unknown
+): error is Prisma.PrismaClientInitializationError {
   return (
     typeof error === 'object' &&
     error !== null &&
@@ -81,7 +87,7 @@ export function getUniqueConstraintFields(error: unknown): string[] | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  
+
   const metaDescriptor = Object.getOwnPropertyDescriptor(error, 'meta');
   if (!metaDescriptor) {
     return null;
@@ -151,4 +157,3 @@ export function getPrismaErrorCode(error: unknown): string | null {
   }
   return null;
 }
-

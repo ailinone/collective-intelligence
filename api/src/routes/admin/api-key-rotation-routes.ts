@@ -68,7 +68,11 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
   }>(
     '/v1/admin/api-keys/rotate/:keyId',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('apikeys:manage')],
+      preHandler: [
+        authenticate,
+        requireRole('admin', 'owner'),
+        requirePermission('apikeys:manage'),
+      ],
       schema: {
         tags: ['Admin - API Keys'],
         summary: 'Manually rotate an API key',
@@ -139,11 +143,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
         // Extract userId from authenticated user
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
-        const performedBy = 
-          user && 
-          typeof user === 'object' && 
-          'userId' in user && 
-          typeof user.userId === 'string'
+        const performedBy =
+          user && typeof user === 'object' && 'userId' in user && typeof user.userId === 'string'
             ? user.userId
             : undefined;
 
@@ -189,7 +190,7 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   // ==========================================
@@ -200,7 +201,11 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/admin/api-keys/rotation-status',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('apikeys:manage')],
+      preHandler: [
+        authenticate,
+        requireRole('admin', 'owner'),
+        requirePermission('apikeys:manage'),
+      ],
       schema: {
         tags: ['Admin - API Keys'],
         summary: 'Get rotation status for all API keys',
@@ -274,7 +279,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           organizationId?: string;
         } = {};
         if (status && typeof status === 'string') where.status = status;
-        if (organizationId && typeof organizationId === 'string') where.organizationId = organizationId;
+        if (organizationId && typeof organizationId === 'string')
+          where.organizationId = organizationId;
 
         const keys = await prisma.apiKey.findMany({
           where,
@@ -325,7 +331,7 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           message: 'Failed to retrieve rotation status',
         });
       }
-    },
+    }
   );
 
   // ==========================================
@@ -338,7 +344,11 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
   }>(
     '/v1/admin/api-keys/auto-rotate/enable',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('apikeys:manage')],
+      preHandler: [
+        authenticate,
+        requireRole('admin', 'owner'),
+        requirePermission('apikeys:manage'),
+      ],
       schema: {
         tags: ['Admin - API Keys'],
         summary: 'Enable auto-rotation for an API key',
@@ -425,7 +435,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           },
         });
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to enable auto-rotation';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to enable auto-rotation';
         logger.error({ error: errorMessage, body: request.body }, 'Failed to enable auto-rotation');
         return reply.status(400).send({
           success: false,
@@ -433,7 +444,7 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -443,7 +454,11 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/admin/api-keys/rotation-logs',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('apikeys:manage')],
+      preHandler: [
+        authenticate,
+        requireRole('admin', 'owner'),
+        requirePermission('apikeys:manage'),
+      ],
       schema: {
         tags: ['Admin', 'API Keys'],
         description: 'Get audit trail of API key rotations',
@@ -511,7 +526,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           },
         });
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve rotation logs';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to retrieve rotation logs';
         logger.error({ error: errorMessage }, 'Failed to get rotation logs');
         return reply.code(500).send({
           success: false,
@@ -519,7 +535,7 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   logger.info('API Key Rotation admin routes registered');

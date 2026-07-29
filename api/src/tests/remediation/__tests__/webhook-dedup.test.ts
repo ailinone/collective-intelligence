@@ -18,14 +18,18 @@ describe('webhook idempotency contract', () => {
     // Simulate the dedup flow from billing-webhooks.ts
     const processedEvents = new Map<string, { eventType: string; processedAt: Date }>();
 
-    const findUnique = vi.fn().mockImplementation(async ({ where }: { where: { eventId: string } }) => {
-      return processedEvents.get(where.eventId) ?? null;
-    });
+    const findUnique = vi
+      .fn()
+      .mockImplementation(async ({ where }: { where: { eventId: string } }) => {
+        return processedEvents.get(where.eventId) ?? null;
+      });
 
-    const create = vi.fn().mockImplementation(async ({ data }: { data: { eventId: string; eventType: string } }) => {
-      processedEvents.set(data.eventId, { eventType: data.eventType, processedAt: new Date() });
-      return data;
-    });
+    const create = vi
+      .fn()
+      .mockImplementation(async ({ data }: { data: { eventId: string; eventType: string } }) => {
+        processedEvents.set(data.eventId, { eventType: data.eventType, processedAt: new Date() });
+        return data;
+      });
 
     const eventId = 'evt_test_123';
     const eventType = 'invoice.paid';
@@ -69,8 +73,8 @@ describe('webhook idempotency contract', () => {
       Array.from({ length: 10 }, () => checkAndProcess('evt_stripe_456'))
     );
 
-    const processed = results.filter(r => r.processed);
-    const duplicates = results.filter(r => r.duplicate);
+    const processed = results.filter((r) => r.processed);
+    const duplicates = results.filter((r) => r.duplicate);
 
     expect(processed).toHaveLength(1);
     expect(duplicates).toHaveLength(9);

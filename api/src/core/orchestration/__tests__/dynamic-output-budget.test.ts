@@ -9,15 +9,16 @@
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, it, expect } from 'vitest';
-import {
-  deriveModelMaxOutputTokens,
-  resolveDynamicMaxTokens,
-} from '../dynamic-output-budget';
+import { deriveModelMaxOutputTokens, resolveDynamicMaxTokens } from '../dynamic-output-budget';
 
 describe('deriveModelMaxOutputTokens', () => {
-  it('returns the model\'s declared maxOutputTokens (frontier: full length)', () => {
-    expect(deriveModelMaxOutputTokens({ maxOutputTokens: 256000, contextWindow: 1_000_000 })).toBe(256000);
-    expect(deriveModelMaxOutputTokens({ maxOutputTokens: 16384, contextWindow: 128000 })).toBe(16384);
+  it("returns the model's declared maxOutputTokens (frontier: full length)", () => {
+    expect(deriveModelMaxOutputTokens({ maxOutputTokens: 256000, contextWindow: 1_000_000 })).toBe(
+      256000
+    );
+    expect(deriveModelMaxOutputTokens({ maxOutputTokens: 16384, contextWindow: 128000 })).toBe(
+      16384
+    );
   });
 
   it('falls back to half the context window when maxOutputTokens is unpopulated (0)', () => {
@@ -52,6 +53,8 @@ describe('resolveDynamicMaxTokens', () => {
   });
 
   it('returns undefined when neither client nor model provides a ceiling', () => {
-    expect(resolveDynamicMaxTokens(undefined, { maxOutputTokens: 0, contextWindow: 0 })).toBeUndefined();
+    expect(
+      resolveDynamicMaxTokens(undefined, { maxOutputTokens: 0, contextWindow: 0 })
+    ).toBeUndefined();
   });
 });

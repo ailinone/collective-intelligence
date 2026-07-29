@@ -71,7 +71,7 @@ export function isRbacEnforced(): boolean {
 function extractRoles(user: unknown): string[] {
   if (user && typeof user === 'object') {
     if ('roles' in user && Array.isArray((user as { roles?: unknown }).roles)) {
-      return ((user as { roles: unknown[] }).roles).filter(
+      return (user as { roles: unknown[] }).roles.filter(
         (role): role is string => typeof role === 'string'
       );
     }

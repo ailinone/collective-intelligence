@@ -53,7 +53,7 @@ export class DoubleDiamondStrategy extends BaseStrategy {
       minModels: 3,
       maxModels: 7,
       estimatedCostMultiplier: 10.0,
-      estimatedQualityBoost: 0.40,
+      estimatedQualityBoost: 0.4,
       estimatedDurationMultiplier: 6.0,
       suitableFor: ['analysis', 'creative', 'documentation', 'general'],
     };
@@ -63,11 +63,20 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     const startTime = Date.now();
     return Promise.race([
       this.executeCore(request, context, startTime),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Double Diamond timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Double Diamond timeout after ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS
+        )
+      ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Double Diamond requires at least 3 models');
 
@@ -78,17 +87,24 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Double Diamond: requested model not in operational pool — falling back to quality-sorted leader',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Double Diamond: requested model not in operational pool — falling back to quality-sorted leader'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const executions: ModelExecution[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
     const reasoningEnabled = this.isReasoningEnabled(request);
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
@@ -121,7 +137,11 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     // ═══ DIAMOND 1: Problem Space ═══
 
     // Phase 1: DISCOVER (diverge) — research from multiple angles
-    this.emitObserverEvent(context, { type: 'phase_start', models: sorted.slice(1, 4).map(m => m.name || m.id), summary: 'Diamond 1 — Discover: researching the problem space from multiple angles.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: sorted.slice(1, 4).map((m) => m.name || m.id),
+      summary: 'Diamond 1 — Discover: researching the problem space from multiple angles.',
+    });
 
     const discoverers = sorted.slice(1, Math.min(4, sorted.length));
     const discoveries: string[] = [];
@@ -131,7 +151,13 @@ export class DoubleDiamondStrategy extends BaseStrategy {
       if (!adapter) return null;
       const discoverReq: ChatRequest = {
         ...request,
-        messages: [{ role: 'system', content: this.withReasoningPrompt(PROMPTS.doubleDiamondDiscoverer, request, model) }, ...request.messages],
+        messages: [
+          {
+            role: 'system',
+            content: this.withReasoningPrompt(PROMPTS.doubleDiamondDiscoverer, request, model),
+          },
+          ...request.messages,
+        ],
       };
       let exec = reasoningEnabled
         ? await this.executeModelWithReasoning(adapter, model, discoverReq, 'discoverer')
@@ -146,40 +172,68 @@ export class DoubleDiamondStrategy extends BaseStrategy {
 
     const discoverResults = await Promise.allSettled(discoverPromises);
     for (const r of discoverResults) {
-      if (r.status === 'fulfilled' && typeof r.value === 'string' && r.value.trim()) discoveries.push(r.value);
+      if (r.status === 'fulfilled' && typeof r.value === 'string' && r.value.trim())
+        discoveries.push(r.value);
     }
 
     if (discoveries.length === 0) throw new Error('Discovery phase failed');
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: `Discover: ${discoveries.length} perspectives gathered.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: `Discover: ${discoveries.length} perspectives gathered.`,
+    });
 
     // Phase 2: DEFINE (converge) — synthesize discoveries into problem statement
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Diamond 1 — Define: converging on problem definition.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Diamond 1 — Define: converging on problem definition.',
+    });
 
     // definer/definerAdapter resolved up front (shared with Deliver).
 
-    const discoveriesText = discoveries.map((d, i) => `### Discovery ${i + 1}:\n${d}`).join('\n\n---\n\n');
+    const discoveriesText = discoveries
+      .map((d, i) => `### Discovery ${i + 1}:\n${d}`)
+      .join('\n\n---\n\n');
     const defineReq: ChatRequest = {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.doubleDiamondDefiner },
-        { role: 'user', content: `ORIGINAL REQUEST:\n${originalQ}\n\nDISCOVERIES:\n${discoveriesText}\n\nDefine the CORE problem.` },
+        {
+          role: 'user',
+          content: `ORIGINAL REQUEST:\n${originalQ}\n\nDISCOVERIES:\n${discoveriesText}\n\nDefine the CORE problem.`,
+        },
       ],
     };
     // executeModelWithRetry handles cross-provider failover when the
     // define call fails. If it fails entirely, the strategy can't
     // proceed (no problem statement to develop solutions for) — but
     // at least it tries the pool first.
-    const defineExec = await this.executeModelWithRetry(definerAdapter, definer, defineReq, 'definer', context);
+    const defineExec = await this.executeModelWithRetry(
+      definerAdapter,
+      definer,
+      defineReq,
+      'definer',
+      context
+    );
     executions.push(defineExec);
     const problemDefinition = defineExec.response?.choices?.[0]?.message?.content ?? '';
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: 'Define: problem statement established.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 4,
+      summary: 'Define: problem statement established.',
+    });
 
     // ═══ DIAMOND 2: Solution Space ═══
 
     // Phase 3: DEVELOP (diverge) — generate diverse solutions
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Diamond 2 — Develop: generating diverse solutions.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Diamond 2 — Develop: generating diverse solutions.',
+    });
 
     const ideators = sorted.slice(1, Math.min(4, sorted.length));
     const solutions: string[] = [];
@@ -190,8 +244,14 @@ export class DoubleDiamondStrategy extends BaseStrategy {
       const developReq: ChatRequest = {
         ...request,
         messages: [
-          { role: 'system', content: this.withReasoningPrompt(PROMPTS.doubleDiamondIdeator, request, model) },
-          { role: 'user', content: `PROBLEM DEFINITION:\n${problemDefinition}\n\nORIGINAL CONTEXT:\n${originalQ}\n\nPropose 3-5 distinct solutions.` },
+          {
+            role: 'system',
+            content: this.withReasoningPrompt(PROMPTS.doubleDiamondIdeator, request, model),
+          },
+          {
+            role: 'user',
+            content: `PROBLEM DEFINITION:\n${problemDefinition}\n\nORIGINAL CONTEXT:\n${originalQ}\n\nPropose 3-5 distinct solutions.`,
+          },
         ],
       };
       // Parity with Discover phase (line ~107): default branch uses
@@ -207,15 +267,26 @@ export class DoubleDiamondStrategy extends BaseStrategy {
 
     const developResults = await Promise.allSettled(developPromises);
     for (const r of developResults) {
-      if (r.status === 'fulfilled' && typeof r.value === 'string' && r.value.trim()) solutions.push(r.value);
+      if (r.status === 'fulfilled' && typeof r.value === 'string' && r.value.trim())
+        solutions.push(r.value);
     }
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 3, totalRounds: 4, summary: `Develop: ${solutions.length} solution sets generated.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 3,
+      totalRounds: 4,
+      summary: `Develop: ${solutions.length} solution sets generated.`,
+    });
 
     // Phase 4: DELIVER (converge) — synthesize best solution
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Diamond 2 — Deliver: converging on best solution.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Diamond 2 — Deliver: converging on best solution.',
+    });
 
-    const solutionsText = solutions.map((s, i) => `### Solution Set ${i + 1}:\n${s}`).join('\n\n---\n\n');
+    const solutionsText = solutions
+      .map((s, i) => `### Solution Set ${i + 1}:\n${s}`)
+      .join('\n\n---\n\n');
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
 
     // R3: synthesizer prompt migrated to the SOTA catalog.
@@ -223,20 +294,40 @@ export class DoubleDiamondStrategy extends BaseStrategy {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.doubleDiamondSynthesizer },
-        { role: 'user', content: `PROBLEM DEFINITION:\n${problemDefinition}\n\nSOLUTION PROPOSALS:\n${solutionsText}${reasoningTraces}\n\nProduce the definitive response.` },
+        {
+          role: 'user',
+          content: `PROBLEM DEFINITION:\n${problemDefinition}\n\nSOLUTION PROPOSALS:\n${solutionsText}${reasoningTraces}\n\nProduce the definitive response.`,
+        },
       ],
     };
     // executeModelWithRetry: cross-provider failover for the final
     // synthesis call. The deliver phase is the response — failure here
     // would produce a strategy result with no finalResponse, so this
     // failover is critical.
-    const deliverExec = await this.executeModelWithRetry(definerAdapter, definer, deliverReq, 'synthesizer', context);
+    const deliverExec = await this.executeModelWithRetry(
+      definerAdapter,
+      definer,
+      deliverReq,
+      'synthesizer',
+      context
+    );
     executions.push(deliverExec);
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Double Diamond complete: problem defined, solution synthesized.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Double Diamond complete: problem defined, solution synthesized.',
+    });
 
     const reasoningTracesMeta = reasoningEnabled
-      ? executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens }))
+      ? executions
+          .filter((e) => e.reasoning)
+          .map((e) => ({
+            model_id: e.modelId,
+            model_name: e.modelName,
+            role: e.role,
+            reasoning: e.reasoning,
+            reasoning_tokens: e.reasoningTokens,
+          }))
       : undefined;
 
     return {
@@ -256,18 +347,26 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Double Diamond requires at least 3 models');
     const preference = resolvePreferredExecutor(models, context, []);
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
     const reasoningEnabled = this.isReasoningEnabled(request);
     const executions: ModelExecution[] = [];
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
@@ -295,61 +394,122 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     if (!definerAdapter) throw new Error('No operational definer in candidate pool');
 
     // D1.1: Discover
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Diamond 1 — Discover: exploring problem space.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Diamond 1 — Discover: exploring problem space.',
+    });
     yield this.progressChunk('Diamond 1: Discovering problem space...', 0, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const discoverers = sorted.slice(1, Math.min(4, sorted.length));
     const discoveries: string[] = [];
-    await Promise.allSettled(discoverers.map(async (model) => {
-      const adapter = await this.getAdapterForModel!(model, context);
-      if (!adapter) return;
-      const req: ChatRequest = { ...request, messages: [{ role: 'system', content: this.withReasoningPrompt(PROMPTS.doubleDiamondDiscoverer, request, model) }, ...request.messages] };
-      // Parity with execute(): default branch uses retry for cross-
-      // provider failover on transient discover-call failures.
-      const exec = reasoningEnabled
-        ? await this.executeModelWithReasoning(adapter, model, req, 'discoverer')
-        : await this.executeModelWithRetry(adapter, model, req, 'discoverer', context);
-      executions.push(exec);
-      const content = exec.response?.choices?.[0]?.message?.content;
-      if (typeof content === 'string' && content.trim()) discoveries.push(content);
-    }));
+    await Promise.allSettled(
+      discoverers.map(async (model) => {
+        const adapter = await this.getAdapterForModel!(model, context);
+        if (!adapter) return;
+        const req: ChatRequest = {
+          ...request,
+          messages: [
+            {
+              role: 'system',
+              content: this.withReasoningPrompt(PROMPTS.doubleDiamondDiscoverer, request, model),
+            },
+            ...request.messages,
+          ],
+        };
+        // Parity with execute(): default branch uses retry for cross-
+        // provider failover on transient discover-call failures.
+        const exec = reasoningEnabled
+          ? await this.executeModelWithReasoning(adapter, model, req, 'discoverer')
+          : await this.executeModelWithRetry(adapter, model, req, 'discoverer', context);
+        executions.push(exec);
+        const content = exec.response?.choices?.[0]?.message?.content;
+        if (typeof content === 'string' && content.trim()) discoveries.push(content);
+      })
+    );
     if (discoveries.length === 0) throw new Error('Discovery failed');
 
     // D1.2: Define
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: `${discoveries.length} discoveries. Defining problem.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: `${discoveries.length} discoveries. Defining problem.`,
+    });
     yield this.progressChunk('Diamond 1: Defining core problem...', 1, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // definer/definerAdapter resolved up front (shared with Deliver).
     const discText = discoveries.map((d, i) => `### ${i + 1}:\n${d}`).join('\n\n---\n\n');
     // executeModelWithRetry: failover on transient define-call failures.
-    const defineExec = await this.executeModelWithRetry(definerAdapter, definer, { ...request, messages: [{ role: 'system', content: PROMPTS.doubleDiamondDefiner }, { role: 'user', content: `REQUEST:\n${originalQ}\n\nDISCOVERIES:\n${discText}\n\nDefine the core problem.` }] }, 'definer', context);
+    const defineExec = await this.executeModelWithRetry(
+      definerAdapter,
+      definer,
+      {
+        ...request,
+        messages: [
+          { role: 'system', content: PROMPTS.doubleDiamondDefiner },
+          {
+            role: 'user',
+            content: `REQUEST:\n${originalQ}\n\nDISCOVERIES:\n${discText}\n\nDefine the core problem.`,
+          },
+        ],
+      },
+      'definer',
+      context
+    );
     executions.push(defineExec);
     const problemDef = defineExec.response?.choices?.[0]?.message?.content ?? '';
 
     // D2.1: Develop
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: 'Problem defined. Generating solutions.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 4,
+      summary: 'Problem defined. Generating solutions.',
+    });
     yield this.progressChunk('Diamond 2: Generating solutions...', 2, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const solutions: string[] = [];
-    await Promise.allSettled(discoverers.map(async (model) => {
-      const adapter = await this.getAdapterForModel!(model, context);
-      if (!adapter) return;
-      const req: ChatRequest = { ...request, messages: [{ role: 'system', content: this.withReasoningPrompt(PROMPTS.doubleDiamondIdeator, request, model) }, { role: 'user', content: `PROBLEM:\n${problemDef}\n\nCONTEXT:\n${originalQ}\n\nPropose solutions.` }] };
-      // Parity with execute() Develop phase: retry on default branch.
-      const exec = reasoningEnabled
-        ? await this.executeModelWithReasoning(adapter, model, req, 'ideator')
-        : await this.executeModelWithRetry(adapter, model, req, 'ideator', context);
-      executions.push(exec);
-      const content = exec.response?.choices?.[0]?.message?.content;
-      if (typeof content === 'string' && content.trim()) solutions.push(content);
-    }));
+    await Promise.allSettled(
+      discoverers.map(async (model) => {
+        const adapter = await this.getAdapterForModel!(model, context);
+        if (!adapter) return;
+        const req: ChatRequest = {
+          ...request,
+          messages: [
+            {
+              role: 'system',
+              content: this.withReasoningPrompt(PROMPTS.doubleDiamondIdeator, request, model),
+            },
+            {
+              role: 'user',
+              content: `PROBLEM:\n${problemDef}\n\nCONTEXT:\n${originalQ}\n\nPropose solutions.`,
+            },
+          ],
+        };
+        // Parity with execute() Develop phase: retry on default branch.
+        const exec = reasoningEnabled
+          ? await this.executeModelWithReasoning(adapter, model, req, 'ideator')
+          : await this.executeModelWithRetry(adapter, model, req, 'ideator', context);
+        executions.push(exec);
+        const content = exec.response?.choices?.[0]?.message?.content;
+        if (typeof content === 'string' && content.trim()) solutions.push(content);
+      })
+    );
 
     // D2.2: Deliver (stream)
-    this.emitObserverEvent(context, { type: 'round_complete', round: 3, totalRounds: 4, summary: `${solutions.length} solution sets. Synthesizing.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Diamond 2 — Delivering final synthesis.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 3,
+      totalRounds: 4,
+      summary: `${solutions.length} solution sets. Synthesizing.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Diamond 2 — Delivering final synthesis.',
+    });
     yield this.progressChunk('Diamond 2: Synthesizing final answer...', 3, 4);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -359,7 +519,16 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     // PROMPTS.doubleDiamondSynthesizer used by execute()'s non-streaming
     // deliver phase (which already carries ADAPTIVE_DEPTH_DIRECTIVE). Aligning
     // the two paths also picks up the depth directive here for free.
-    const deliverReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.doubleDiamondSynthesizer }, { role: 'user', content: `PROBLEM:\n${problemDef}\n\nSOLUTIONS:\n${solText}${traces}\n\nDefinitive answer.` }] };
+    const deliverReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.doubleDiamondSynthesizer },
+        {
+          role: 'user',
+          content: `PROBLEM:\n${problemDef}\n\nSOLUTIONS:\n${solText}${traces}\n\nDefinitive answer.`,
+        },
+      ],
+    };
 
     // RESILIENT streaming: bare for-await had NO first-token deadline. Route
     // through the fallback-chain helper (first-chunk + idle deadlines, graceful
@@ -367,10 +536,13 @@ export class DoubleDiamondStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       deliverReq,
       [{ adapter: definerAdapter, model: definer }],
-      () => solText.slice(0, 4000),
+      () => solText.slice(0, 4000)
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Double Diamond complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Double Diamond complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 }

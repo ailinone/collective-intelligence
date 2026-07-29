@@ -9,7 +9,7 @@
 
 /**
  * API Key Authentication Middleware (Enterprise-Grade)
- * 
+ *
  * Security Features:
  * - Real user lookup from database (no hardcoded credentials)
  * - API key validation with bcrypt
@@ -19,13 +19,13 @@
  * - Key status validation (active, rotating)
  * - Request tracking and rate limiting preparation
  * - Audit logging for security events
- * 
+ *
  * Performance:
  * - Quick hash lookup before expensive bcrypt verification
  * - Database connection pooling (Prisma)
  * - Minimal queries (single join)
  * - Cached user roles and permissions
- * 
+ *
  * Scale Support:
  * - Handles 100K+ organizations
  * - Supports millions of API keys
@@ -141,7 +141,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
 function isPublicRoute(url: string): boolean {
   // Remove query string
   const path = url.split('?')[0];
-  
+
   return PUBLIC_ROUTES.some((route) => {
     if (route.endsWith('/')) {
       return path.startsWith(route);
@@ -152,7 +152,9 @@ function isPublicRoute(url: string): boolean {
 
 function isProtectedRoute(url: string): boolean {
   const path = url.split('?')[0];
-  return PROTECTED_ROUTE_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  return PROTECTED_ROUTE_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  );
 }
 
 /**
@@ -274,7 +276,13 @@ function extractJwtToken(request: FastifyRequest): string | null {
  */
 async function validateJwtAndGetUser(
   token: string
-): Promise<AuthenticatedRequest['user'] & { apiKey?: AuthenticatedRequest['apiKey']; tenantContext: AuthenticatedRequest['tenantContext'] } | null> {
+): Promise<
+  | (AuthenticatedRequest['user'] & {
+      apiKey?: AuthenticatedRequest['apiKey'];
+      tenantContext: AuthenticatedRequest['tenantContext'];
+    })
+  | null
+> {
   try {
     // WHY: Keep JWT validation centralized in AuthService so local and federated
     // tokens (issuer/audience/claims rules) are enforced consistently.
@@ -326,7 +334,11 @@ async function validateJwtAndGetUser(
       ...payload.roles,
     ];
     const roles = Array.from(
-      new Set(roleCandidates.filter((value): value is string => typeof value === 'string' && value.length > 0))
+      new Set(
+        roleCandidates.filter(
+          (value): value is string => typeof value === 'string' && value.length > 0
+        )
+      )
     );
 
     return {
@@ -385,10 +397,7 @@ async function resolveApiKeyContext(
     // Step 1: Quick hash lookup (indexed query)
     const apiKeyRecord = await prisma.apiKey.findFirst({
       where: {
-        OR: [
-          { quickHash },
-          { keyPrefix },
-        ],
+        OR: [{ quickHash }, { keyPrefix }],
       },
       include: {
         user: {
@@ -425,7 +434,10 @@ async function resolveApiKeyContext(
 
     // Step 3: Check expiration date
     if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
-      logger.warn({ keyId: apiKeyRecord.id, expiresAt: apiKeyRecord.expiresAt }, 'API key expired (date)');
+      logger.warn(
+        { keyId: apiKeyRecord.id, expiresAt: apiKeyRecord.expiresAt },
+        'API key expired (date)'
+      );
 
       // Auto-expire the key
       await prisma.apiKey.update({
@@ -459,7 +471,10 @@ async function resolveApiKeyContext(
     // Step 7: Check organization status
     if (apiKeyRecord.user.organization.status !== 'active') {
       logger.warn(
-        { organizationId: apiKeyRecord.organizationId, status: apiKeyRecord.user.organization.status },
+        {
+          organizationId: apiKeyRecord.organizationId,
+          status: apiKeyRecord.user.organization.status,
+        },
         'Organization not active'
       );
       return null;
@@ -526,7 +541,10 @@ function trackApiKeyUsage(apiKeyId: string, clientIp: string): void {
     .catch((error: unknown) => {
       // Non-critical: Log but don't fail request
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error({ error: errorMessage, keyId: apiKeyId }, 'Failed to update API key usage tracking');
+      logger.error(
+        { error: errorMessage, keyId: apiKeyId },
+        'Failed to update API key usage tracking'
+      );
     });
 }
 
@@ -538,7 +556,13 @@ function trackApiKeyUsage(apiKeyId: string, clientIp: string): void {
 async function validateApiKeyAndGetUser(
   apiKey: string,
   clientIp: string
-): Promise<AuthenticatedRequest['user'] & { apiKey: AuthenticatedRequest['apiKey']; tenantContext: AuthenticatedRequest['tenantContext'] } | null> {
+): Promise<
+  | (AuthenticatedRequest['user'] & {
+      apiKey: AuthenticatedRequest['apiKey'];
+      tenantContext: AuthenticatedRequest['tenantContext'];
+    })
+  | null
+> {
   const context = await resolveApiKeyContext(apiKey);
   if (!context) return null;
 
@@ -554,10 +578,10 @@ async function validateApiKeyAndGetUser(
 
 /**
  * API Key Authentication Middleware
- * 
+ *
  * Enterprise-grade authentication with real database lookups,
  * security validations, and audit logging.
- * 
+ *
  * Usage:
  *   server.addHook('preHandler', apiKeyAuthMiddleware);
  */
@@ -622,7 +646,11 @@ export async function apiKeyAuthMiddleware(
       authenticatedRequest.userContext = createOrchestrationContext(request);
 
       request.log.info(
-        { userId: identity.userId, organizationId: identity.organizationId, authMethod: 'realtime_session' },
+        {
+          userId: identity.userId,
+          organizationId: identity.organizationId,
+          authMethod: 'realtime_session',
+        },
         'Realtime session token authentication successful'
       );
       return;
@@ -646,15 +674,15 @@ export async function apiKeyAuthMiddleware(
 
   // Extract API key from headers
   const apiKey = extractApiKey(request);
-  
+
   // Try JWT if no API key found
   if (!apiKey) {
     const jwtToken = extractJwtToken(request);
-    
+
     if (jwtToken) {
       // Validate JWT and get user context
       const jwtContext = await validateJwtAndGetUser(jwtToken);
-      
+
       if (jwtContext) {
         // Attach authenticated user context to request
         const authenticatedRequest = request as AuthenticatedRequest & ExtendedFastifyRequest;
@@ -670,7 +698,7 @@ export async function apiKeyAuthMiddleware(
         authenticatedRequest.userId = jwtContext.userId;
         authenticatedRequest.organizationTier = jwtContext.tenantContext.tier;
         authenticatedRequest.userContext = createOrchestrationContext(request);
-        
+
         request.log.info(
           {
             userId: jwtContext.userId,
@@ -682,12 +710,9 @@ export async function apiKeyAuthMiddleware(
         );
         return;
       }
-      
+
       // JWT validation failed
-      request.log.warn(
-        { url, method: request.method },
-        'JWT authentication failed'
-      );
+      request.log.warn({ url, method: request.method }, 'JWT authentication failed');
 
       // CRITICAL: `return reply.send(...)` (NOT `reply.send(...); return;`).
       // In Fastify, returning the reply tells the framework "response handled,
@@ -712,7 +737,7 @@ export async function apiKeyAuthMiddleware(
         headers: {
           hasAuth: !!request.headers.authorization,
           hasApiKey: !!request.headers['x-api-key'],
-        }
+        },
       },
       'Authentication required - no API key or JWT provided'
     );
@@ -720,7 +745,8 @@ export async function apiKeyAuthMiddleware(
     return reply.status(401).send({
       error: {
         code: 'unauthorized',
-        message: 'API key or JWT required. Provide via x-api-key header or Authorization: Bearer <key>',
+        message:
+          'API key or JWT required. Provide via x-api-key header or Authorization: Bearer <key>',
         type: 'authentication_error',
       },
     });
@@ -729,7 +755,7 @@ export async function apiKeyAuthMiddleware(
   // Get client IP (respecting X-Forwarded-For for proxies/load balancers)
   const forwarded = getHeaderString(request.headers, 'x-forwarded-for');
   const clientIp =
-    (forwarded?.split(',')[0]?.trim()) ||
+    forwarded?.split(',')[0]?.trim() ||
     getHeaderString(request.headers, 'x-real-ip') ||
     request.ip ||
     'unknown';

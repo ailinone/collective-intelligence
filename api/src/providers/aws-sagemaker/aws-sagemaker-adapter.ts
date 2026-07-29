@@ -48,10 +48,7 @@ import {
   type InvokeEndpointCommandOutput,
 } from '@aws-sdk/client-sagemaker-runtime';
 
-import {
-  SageMakerClient,
-  ListEndpointsCommand,
-} from '@aws-sdk/client-sagemaker';
+import { SageMakerClient, ListEndpointsCommand } from '@aws-sdk/client-sagemaker';
 
 import { ProviderAdapter, type HealthCheckResult } from '../base/provider-adapter';
 import type {
@@ -153,46 +150,37 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
   private providerLog;
 
   constructor(config: AWSSageMakerAdapterConfig) {
-    const providerName =
-      config.providerNameOverride?.trim() || 'aws-sagemaker';
-    const displayName =
-      config.displayNameOverride?.trim() || 'AWS SageMaker';
+    const providerName = config.providerNameOverride?.trim() || 'aws-sagemaker';
+    const displayName = config.displayNameOverride?.trim() || 'AWS SageMaker';
     super(providerName, displayName, config);
     this.resolvedProviderName = providerName;
     this.resolvedDisplayName = displayName;
     this.providerLog = logger.child({ provider: providerName });
 
-    const accessKeyId =
-      config.accessKeyId || process.env.AWS_ACCESS_KEY_ID || config.apiKey;
-    const secretAccessKey =
-      config.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+    const accessKeyId = config.accessKeyId || process.env.AWS_ACCESS_KEY_ID || config.apiKey;
+    const secretAccessKey = config.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
     const sessionToken = config.sessionToken || process.env.AWS_SESSION_TOKEN;
     this.region =
-      config.region ||
-      process.env.AWS_SAGEMAKER_REGION ||
-      process.env.AWS_REGION ||
-      DEFAULT_REGION;
-    this.endpointName =
-      config.endpointName || process.env.AWS_SAGEMAKER_ENDPOINT_NAME;
+      config.region || process.env.AWS_SAGEMAKER_REGION || process.env.AWS_REGION || DEFAULT_REGION;
+    this.endpointName = config.endpointName || process.env.AWS_SAGEMAKER_ENDPOINT_NAME;
     this.payloadSchema =
       config.payloadSchema ||
       (process.env.AWS_SAGEMAKER_PAYLOAD_SCHEMA as SageMakerPayloadSchema) ||
       DEFAULT_SCHEMA;
-    this.customAttributes =
-      config.customAttributes || process.env.AWS_SAGEMAKER_CUSTOM_ATTRIBUTES;
+    this.customAttributes = config.customAttributes || process.env.AWS_SAGEMAKER_CUSTOM_ATTRIBUTES;
     this.contentType = config.contentType || DEFAULT_CONTENT_TYPE;
     this.accept = config.accept || DEFAULT_ACCEPT;
 
     if (!accessKeyId) {
       throw new Error(
         'AWSSageMakerAdapter requires accessKeyId (set AWS_ACCESS_KEY_ID env var, ' +
-          'config.accessKeyId, or config.apiKey)',
+          'config.accessKeyId, or config.apiKey)'
       );
     }
     if (!secretAccessKey) {
       throw new Error(
         'AWSSageMakerAdapter requires secretAccessKey (set AWS_SECRET_ACCESS_KEY env ' +
-          'var or config.secretAccessKey)',
+          'var or config.secretAccessKey)'
       );
     }
 
@@ -213,7 +201,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
         hasDefaultEndpoint: Boolean(this.endpointName),
         payloadSchema: this.payloadSchema,
       },
-      'AWSSageMakerAdapter initialized',
+      'AWSSageMakerAdapter initialized'
     );
   }
 
@@ -290,7 +278,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       this.providerLog.warn(
         { error: error instanceof Error ? error.message : String(error) },
-        'ListEndpoints failed — returning empty list (likely IAM permission missing)',
+        'ListEndpoints failed — returning empty list (likely IAM permission missing)'
       );
       return [];
     }
@@ -331,7 +319,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
 
       this.providerLog.debug(
         { endpointName, schema: this.payloadSchema, messageCount: request.messages.length },
-        'InvokeEndpoint request',
+        'InvokeEndpoint request'
       );
 
       const response = await this.runtimeClient.send(new InvokeEndpointCommand(invokeInput));
@@ -349,9 +337,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
    * imports `InvokeEndpointWithResponseStreamCommand` and parses the event
    * payload stream.
    */
-  async *chatCompletionStream(
-    request: ChatRequest,
-  ): AsyncGenerator<ChatResponse, void, unknown> {
+  async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const full = await this.chatCompletion(request);
     const content = full.choices?.[0]?.message?.content ?? '';
     const contentText = typeof content === 'string' ? content : '';
@@ -396,7 +382,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
   async generateEmbeddings(_request: EmbeddingRequest): Promise<EmbeddingResponse> {
     throw new Error(
       'aws-sagemaker: generateEmbeddings not yet implemented. ' +
-        'Deploy a dedicated embedding endpoint and invoke via a follow-up embeddings pack.',
+        'Deploy a dedicated embedding endpoint and invoke via a follow-up embeddings pack.'
     );
   }
 
@@ -408,7 +394,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
 
   async imageVariation(
     _model: Model,
-    _request: ImageVariationRequest,
+    _request: ImageVariationRequest
   ): Promise<ImageVariationResponse> {
     throw new Error('aws-sagemaker: imageVariation not supported (endpoint-dependent)');
   }
@@ -416,7 +402,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
   async moderate(_model: Model, _request: ModerationRequest): Promise<ModerationResponse> {
     throw new Error(
       'aws-sagemaker: native moderate() not supported. Deploy a moderation endpoint ' +
-        'and route via a specialised endpoint adapter instance.',
+        'and route via a specialised endpoint adapter instance.'
     );
   }
 
@@ -469,7 +455,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
     if (this.endpointName) return this.endpointName;
     throw new Error(
       'aws-sagemaker: no endpoint to invoke. Either pass `model: "aws-sagemaker/{endpoint-name}"` ' +
-        'in the request or configure `endpointName` on the adapter.',
+        'in the request or configure `endpointName` on the adapter.'
     );
   }
 }
@@ -481,10 +467,7 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
  * Each schema emits a distinct JSON shape that matches what the container
  * behind the endpoint expects.
  */
-export function buildRequestBody(
-  request: ChatRequest,
-  schema: SageMakerPayloadSchema,
-): unknown {
+export function buildRequestBody(request: ChatRequest, schema: SageMakerPayloadSchema): unknown {
   switch (schema) {
     case 'openai':
       return buildOpenAIStyleBody(request);
@@ -586,14 +569,17 @@ export function buildHfTgiBody(request: ChatRequest): Record<string, unknown> {
 export function flattenMessagesToPrompt(messages: ChatMessage[]): string {
   const parts: string[] = [];
   for (const m of messages) {
-    const text = typeof m.content === 'string'
-      ? m.content
-      : Array.isArray(m.content)
+    const text =
+      typeof m.content === 'string'
         ? m.content
-            .map((p) => (p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''))
-            .filter((s): s is string => typeof s === 'string' && s.length > 0)
-            .join('\n')
-        : String(m.content ?? '');
+        : Array.isArray(m.content)
+          ? m.content
+              .map((p) =>
+                p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''
+              )
+              .filter((s): s is string => typeof s === 'string' && s.length > 0)
+              .join('\n')
+          : String(m.content ?? '');
     if (!text) continue;
     switch (m.role) {
       case 'system':
@@ -623,7 +609,7 @@ export function flattenMessagesToPrompt(messages: ChatMessage[]): string {
 export function parseEndpointResponse(
   response: InvokeEndpointCommandOutput,
   modelName: string,
-  schema: SageMakerPayloadSchema,
+  schema: SageMakerPayloadSchema
 ): ChatResponse {
   const bytes = response.Body;
   const bodyText = bytes ? new TextDecoder('utf-8').decode(bytes as Uint8Array) : '';
@@ -660,7 +646,7 @@ export function parseEndpointResponse(
 /** Schema-specific shape extractor. */
 export function extractTextByScheme(
   parsed: unknown,
-  schema: SageMakerPayloadSchema,
+  schema: SageMakerPayloadSchema
 ): {
   text: string;
   finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null;
@@ -696,7 +682,9 @@ function extractOpenAIShape(parsed: unknown): {
       ? raw
       : Array.isArray(raw)
         ? raw
-            .map((p) => (p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''))
+            .map((p) =>
+              p && typeof p === 'object' && 'text' in p ? (p as { text: string }).text : ''
+            )
             .filter((s): s is string => typeof s === 'string' && s.length > 0)
             .join('')
         : '';
@@ -750,7 +738,7 @@ function extractGeneratedText(parsed: unknown): {
 }
 
 export function mapOpenAIFinishReason(
-  reason: string | undefined,
+  reason: string | undefined
 ): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
   switch (reason) {
     case 'stop':
@@ -770,7 +758,7 @@ export function mapOpenAIFinishReason(
 }
 
 export function mapTgiFinishReason(
-  reason: string | undefined,
+  reason: string | undefined
 ): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
   switch (reason) {
     case 'eos_token':

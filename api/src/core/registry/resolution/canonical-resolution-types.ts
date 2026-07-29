@@ -59,15 +59,16 @@ export interface CanonicalResolutionConfidence {
  * win; heuristic + equivalence service are advisory and require ≥0.7
  * confidence to auto-merge; fallback is a last resort.
  */
-export const CANONICAL_SOURCE_AUTHORITY: Readonly<Record<CanonicalResolutionSource, number>> = Object.freeze({
-  manual_override: 100,
-  declared_alias: 90,
-  provider_metadata: 80,
-  exact_normalized_name: 70,
-  heuristic_family_version: 50,
-  model_equivalence_service: 40,
-  fallback_provider_model_id: 0,
-});
+export const CANONICAL_SOURCE_AUTHORITY: Readonly<Record<CanonicalResolutionSource, number>> =
+  Object.freeze({
+    manual_override: 100,
+    declared_alias: 90,
+    provider_metadata: 80,
+    exact_normalized_name: 70,
+    heuristic_family_version: 50,
+    model_equivalence_service: 40,
+    fallback_provider_model_id: 0,
+  });
 
 // ─── Thresholds ─────────────────────────────────────────────────────────
 

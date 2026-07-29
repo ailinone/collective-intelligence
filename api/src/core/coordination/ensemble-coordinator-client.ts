@@ -50,10 +50,13 @@ const log = logger.child({ component: 'ensemble-coordinator-client' });
  * has been trained and shadow-validated. Operators flip
  * CI_ENSEMBLE_COORDINATOR_ENABLED=true to activate.
  */
-export function loadEnsembleClientConfig(env: NodeJS.ProcessEnv = process.env): EnsembleClientConfig {
+export function loadEnsembleClientConfig(
+  env: NodeJS.ProcessEnv = process.env
+): EnsembleClientConfig {
   return {
     enabled: env.CI_ENSEMBLE_COORDINATOR_ENABLED === 'true',
-    endpoint: env.CI_ENSEMBLE_COORDINATOR_URL ?? 'http://model-stack-aggregation:8090/v1/ensemble/decide',
+    endpoint:
+      env.CI_ENSEMBLE_COORDINATOR_URL ?? 'http://model-stack-aggregation:8090/v1/ensemble/decide',
     authToken: env.CI_ENSEMBLE_COORDINATOR_TOKEN,
     timeoutMs: Number(env.CI_ENSEMBLE_COORDINATOR_TIMEOUT_MS ?? 5000),
     shadowMode: env.CI_ENSEMBLE_COORDINATOR_SHADOW_MODE === 'true',
@@ -82,7 +85,7 @@ export type EnsembleDecisionResult =
  */
 export async function callEnsembleCoordinator(
   request: EnsembleDecisionRequest,
-  config: EnsembleClientConfig = loadEnsembleClientConfig(),
+  config: EnsembleClientConfig = loadEnsembleClientConfig()
 ): Promise<EnsembleDecisionResult> {
   if (!config.enabled) {
     return { kind: 'disabled' };
@@ -118,7 +121,7 @@ export async function callEnsembleCoordinator(
           latencyMs,
           bodyPreview: text.slice(0, 300),
         },
-        'Ensemble coordinator returned non-2xx',
+        'Ensemble coordinator returned non-2xx'
       );
       return {
         kind: 'error',
@@ -155,7 +158,7 @@ export async function callEnsembleCoordinator(
 
     log.warn(
       { error: serializeError(err), latencyMs, endpoint: config.endpoint },
-      'Ensemble coordinator call failed',
+      'Ensemble coordinator call failed'
     );
     return {
       kind: 'error',
@@ -190,7 +193,7 @@ class EnsembleCallFailure extends Error {
         ? 'unexpected — successful results should not be wrapped'
         : result.kind === 'timeout'
           ? `ensemble timeout after ${result.latencyMs}ms`
-          : result.message,
+          : result.message
     );
     this.name = 'EnsembleCallFailure';
   }
@@ -229,7 +232,7 @@ const ensembleCircuitBreaker = new CircuitBreaker({
  */
 export async function callEnsembleCoordinatorBreakered(
   request: EnsembleDecisionRequest,
-  config: EnsembleClientConfig = loadEnsembleClientConfig(),
+  config: EnsembleClientConfig = loadEnsembleClientConfig()
 ): Promise<EnsembleDecisionResult> {
   if (!config.enabled) {
     return { kind: 'disabled' };
@@ -263,7 +266,7 @@ export async function callEnsembleCoordinatorBreakered(
     // Shouldn't happen — callEnsembleCoordinator never throws by contract.
     log.warn(
       { error: serializeError(err), strategy: request.strategy },
-      'unexpected throw in breakered ensemble call',
+      'unexpected throw in breakered ensemble call'
     );
     return {
       kind: 'error',
@@ -283,9 +286,7 @@ export async function callEnsembleCoordinatorBreakered(
  * `ensembleMetadata` field so the F4.1 substrate's JSONB column
  * captures vote distribution + tier results without remap.
  */
-export function liftEnsembleDecisionToAuditShape(
-  decision: AggregatedEnsembleDecision,
-): {
+export function liftEnsembleDecisionToAuditShape(decision: AggregatedEnsembleDecision): {
   role: string;
   scheduler: string;
   reason: string;
@@ -314,7 +315,7 @@ export function buildEnsembleRequest<T extends Record<string, unknown>>(
   strategy: EnsembleDecisionRequest['strategy'],
   decisionType: EnsembleDecisionRequest['decisionType'],
   context: T,
-  overrides?: EnsembleDecisionRequest['overrides'],
+  overrides?: EnsembleDecisionRequest['overrides']
 ): EnsembleDecisionRequest {
   return {
     strategy,

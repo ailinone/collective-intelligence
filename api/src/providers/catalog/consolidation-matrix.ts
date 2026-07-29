@@ -281,6 +281,54 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // through the named upstream vendor, same pattern already seen for
     // apertis/concentrate.
     'fastrouter',
+    // LOTE U+1 (2026-07-29) — sakana-ai. Catalog row landed same-day (PR
+    // #234) in 'upstream-suspended': GET /v1/models was already 200 (real
+    // 5-model list) but the account had no active subscription, so every
+    // POST /v1/chat/completions 429'd usage_limit_reached. The operator
+    // activated pay-as-you-go billing on the account later the same day
+    // and re-ran a full end-to-end verification directly against the live
+    // API with the same GCP secret (ailin-sakana-ai-key): chat (fugu, plain
+    // text), streaming (SSE chunks terminating in [DONE], content
+    // assembled correctly), tool calls (correct function + arguments
+    // extracted for a weather-lookup prompt), JSON mode
+    // (response_format:{type:'json_object'} returned valid JSON), and
+    // vision (a multimodal request with an inline image correctly
+    // identified its content, with prompt_tokens jumping sharply versus
+    // text-only calls — proof the image was actually processed) all
+    // returned real HTTP 200 responses with correct, sensible content.
+    // Promoted from upstream-suspended to live-validation; no other field
+    // changed (auth, endpoint, and integration shape were already correct
+    // at PR #234 merge — the only blocker was account-level billing).
+    'sakana-ai',
+    // LOTE V (2026-07-29) — arcee, chutes. Both landed in upstream-suspended
+    // on 2026-04-24 (Sublote D1) on real 402 "insufficient credits/quota"
+    // responses. The operator topped up both accounts with a small balance
+    // and a full live re-verification was run directly against each API:
+    //   arcee — GET /api/v1/models 200 (6 live models: trinity-large-
+    //     thinking, zai-org/glm-5.2, deepseek-ai/deepseek-v4-pro,
+    //     minimaxai/minimax-m3, moonshotai/kimi-k2.7-code,
+    //     moonshotai/kimi-k2.6; note the originally-tested 'trinity-mini'
+    //     is gone from discovery — the Trinity family was reorganized to
+    //     trinity-large-thinking). POST /v1/chat/completions with
+    //     trinity-large-thinking 200 (real content + usage, the prior 402
+    //     is gone) and stream:true 200 (proper SSE, delta.reasoning_content
+    //     chunks, terminating [DONE]). Reasoning content is exposed at
+    //     `message.reasoning_content` (streaming: `delta.reasoning_content`)
+    //     — NOT `message.reasoning` as the pre-existing catalog notes
+    //     claimed; that path was never actually live-verified until now.
+    //   chutes — GET /v1/models 200 (15 confidential-compute "-TEE" models;
+    //     this key's account is TEE-only by provisioning, not a plain-vs-
+    //     TEE choice). POST /v1/chat/completions 200 for BOTH
+    //     Qwen/Qwen3-32B-TEE (the originally-tested model, still valid) and
+    //     unsloth/Mistral-Nemo-Instruct-2407-TEE (a second model, clean
+    //     "PONG" completion) — zero 402s, zero balance errors on any call.
+    //     No integration/adapter changes were needed: baseUrl, bearer auth,
+    //     and the generic OAI-compat bridge all already matched.
+    // Promoted from upstream-suspended to live-validation for both; no
+    // adapter or catalog-shape changes required — the only blocker in
+    // both cases was account-level billing, now resolved.
+    'arcee',
+    'chutes',
   ],
 
   // ── 1 canonical provider with adapter+catalog/switch but no probe ────
@@ -589,10 +637,28 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // azure-openai moved to credentials-missing (placeholder secrets)
   ],
 
-  // ── 6 upstream suspended (auth valid, credit exhausted / service gated) ─
+  // ── 3 upstream suspended (auth valid, credit exhausted / service gated) ─
   //    jina classified as 'live-validation' because /v1/models returned
   //    200; the /v1/embeddings 403 "Insufficient balance" is a per-surface
   //    state, not a whole-provider classification.
+  //
+  //    2026-07-29: −sakana-ai, promoted to live-validation. It landed here
+  //    on 2026-07-29 (LOTE U, same day as catalog onboarding in PR #234)
+  //    because the account had no active subscription and every
+  //    chat/completions call 429'd usage_limit_reached. Later the same day
+  //    the operator activated pay-as-you-go billing and re-verified
+  //    end-to-end directly against the live API: chat, streaming, tool
+  //    calls, JSON mode, and vision all returned real HTTP 200 responses
+  //    with correct content. See the 'live-validation' bucket entry below
+  //    for the full writeup.
+  //
+  //    2026-07-29: −arcee, −chutes, promoted to live-validation (LOTE V).
+  //    Both landed here 2026-04-24 (Sublote D1) on real 402 zero-balance
+  //    responses. The operator topped up both accounts with a small
+  //    balance and a fresh live re-verification confirmed genuine, error-
+  //    free chat completions (and streaming, for arcee) on both. See the
+  //    'live-validation' bucket entry below for the full per-provider
+  //    writeup.
   //
   //    2026-04-23 final pass: +palabraai. The ClientId/ClientSecret header
   //    pair (GCP secrets ailin-palabraai-id + ailin-palabraai-key) was
@@ -629,10 +695,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'ai302', // 401 on /v1/models — prior session recorded "Insufficient account balance"; endpoint alive, tier-gated
     'palabraai', // switch — /session-storage/session POST returned 403 "Insufficient balance" (code 100050). Auth accepted.
     'anyscale', // D1 2026-04-24 — endpoint returns HTML shutdown notice "Effective August 1, 2024 Anyscale Endpoints API is available exclusively through the fully Hosted Anyscale Platform. Multi-tenant access to LLM models has been removed." ailin-anyscale-api-key provisioned (236B, aph0_C…) but cannot be exercised.
-    'arcee', // D1 2026-04-24 — /v1/chat with trinity-mini returned 402 {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}. Auth accepted.
-    'chutes', // D1 2026-04-24 — /v1/chat with Qwen/Qwen3-32B-TEE returned 402 {"detail":{"message":"Quota exceeded and account balance is $0.0, please pay with fiat or send tao to..."}}. Auth accepted.
     'hyperbolic', // D1 2026-04-24 — /v1/chat returned 402 {"detail":"Insufficient funds, please see https://docs.hyperbolic.xyz/docs/hyperbolic-pricing"}. Auth accepted.
-    'sakana-ai', // LOTE U 2026-07-29 — GET /v1/models 200 (real 5-model list, proves auth accepted) but POST /v1/chat/completions for BOTH fugu and fugu-ultra returned 429 {"error":{"type":"usage_limit_reached","message":"No active subscription. Subscribe at https://console.sakana.ai/billing"}}. Same operational shape as ai302/arcee/chutes/hyperbolic: authentication complete, billing/credit blocked, execution unavailable. Promotion path: operator activates a subscription or PAYG billing on the Sakana account → re-probe → live-validation.
   ],
 
   // ── 0 credentials in cache invalidated ───────────────────────────────
@@ -644,11 +707,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   'defunct-unreachable': [],
 
   // ── 3 catalog-only inventory (intentional non-execution) ─────────────
-  'catalog-only-inventory': [
-    'sap',
-    'snowflake',
-    'topaz',
-  ],
+  'catalog-only-inventory': ['sap', 'snowflake', 'topaz'],
 
   // ── 0 additional switch-only-legitimate ──────────────────────────────
   //    NOTE: first-party natives (openai, anthropic, …) and specialty
@@ -745,7 +804,7 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
   //     ailin-heliconeai-key (11B literal "PLACEHOLDER" that caused the
   //     prior mis-classification). Gateway routes to OpenAI with a real
   //     HTTP 200 completion body.)
-  'placeholder': [
+  placeholder: [
     'azure-openai', // ailin-azure-openai-api-key + -endpoint + -deployment all "PLACEHOLDER"
   ],
   // Local runtime expected; no reachable endpoint from probe environment (13)
@@ -1348,7 +1407,7 @@ export function isDiscoveryCompliant(providerId: string): boolean {
  * (or undefined if the providerId is not in the canonical set).
  */
 export function getDiscoveryComplianceClass(
-  providerId: string,
+  providerId: string
 ): DiscoveryComplianceClass | undefined {
   for (const bucket of DISCOVERY_COMPLIANCE_BUCKETS) {
     if (DISCOVERY_COMPLIANCE_REGISTRY[bucket].includes(providerId)) return bucket;
@@ -1409,7 +1468,8 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
   {
     claim: '29 providers live-validated',
     superseded_at: '2026-04-23',
-    reason: 'The 29 figure belonged to a prior probe session. Pre-Lot-B this consolidation recorded 28 canonical live-validated providers; post-Lot-B (writer/upstage/rekaai promoted from orphan to canonical in the same turn) the figure is 31.',
+    reason:
+      'The 29 figure belonged to a prior probe session. Pre-Lot-B this consolidation recorded 28 canonical live-validated providers; post-Lot-B (writer/upstage/rekaai promoted from orphan to canonical in the same turn) the figure is 31.',
   },
   {
     claim: '32 providers live-validated',
@@ -1532,7 +1592,8 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
       'Sublote B 2026-04-23 applied the same probe method that promoted venice (Sublote A) to the 12 LOTE M providers still in credentials-missing/secret-absent (11 providers + 1 auth-incomplete qianfan). Method: for each provider, probe canonical adapter baseUrl across 8 paths ({/models, /v1/models, /health, /ping, /status, /info, /v1/info, /}) × 2 auth modes (no Authorization header vs invalid Bearer) = 16 probes × 12 providers = 192 probes total. Result: 4 PROMOTIONS from credentials-missing → partial on confirmed HTTP 200 public /models, 7 CONFIRMED-blocked (discovery credential-gated, no public surface), 1 catalog-only inventory (no OAI discovery surface at all, POST-only execution endpoint). Evidence per provider: (a) PROMOTED — atlascloud: api.atlascloud.ai/v1/models HTTP 200 59503 bytes (107 models, custom {code:200,msg:"succeed",data:[...]} wrapper; other 7 paths asymmetric: noauth 401 vs badauth 404, revealing server differentiates absent-header vs invalid-header). avian: api.avian.io/v1/models HTTP 200 1782 bytes (6 models, pure OAI shape; other 7 paths uniform 404). mancer: neuro.mancer.tech/oai/v1/models HTTP 200 2379 bytes no-header (9 LLaMA fiction/RP models) but HTTP 401 80 bytes with invalid Bearer — asymmetric VALIDATION where server accepts enumeration when no credential is CLAIMED but rejects claimed-invalid credentials. phala: api.redpill.ai/v1/models HTTP 200 72119 bytes (76 models via Phala SGX TEE confidential-compute routing, same body with and without invalid Bearer; other paths uniform 400 "Internal server error"). (b) CONFIRMED-BLOCKED — arcee: /models 401 both modes (other paths 404). gmi: /models 401 both modes (other paths 405 Method Not Allowed — endpoints exist but POST-only, not queryable unauth). infermatic: /models 401 both modes (other paths 404). relace: ALL 8 paths return 401 uniformly (catch-all auth middleware — no public discovery). siliconflow: /models 401 with 15-byte body (bare JSON string "Invalid token" confirming oai-compat-quirks class; other paths 404). stepfun: /models 401 with 75-byte OAI-shape error {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} (other paths 404, 0-byte bodies). qianfan (v2 surface qianfan.baidubce.com/v2): /models 401 with 120-byte BCE-shape error (other paths 404). (c) CATALOG-ONLY CONFIRMED — inflection: /models 404 on inference.ai.inflection.ai across ALL 8 paths (root / returns 307 redirect). The correct execution surface is /external/api/inference (POST-only, no discovery sidecar); inflection is a catalog-only-inventory-candidate operationally but retains secret-absent subclass because INFLECTION_API_KEY is still the expected unblock vector. Net bucket delta: partial 2→6 (+4), credentials-missing 58→54 (−4). Secret-absent subclass 40→36 (−4: atlascloud/avian/mancer/phala removed; 7 LOTE M rows remain: arcee/gmi/infermatic/inflection/relace/siliconflow/stepfun). No other buckets touched. Invariants I1–I6 hold: |catalog ∪ switch| unchanged at 103, every canonical id still in exactly one bucket, credentials-missing subclass partition preserved. The probe evidence is replicable from /tmp/subb/{provider}.out (12 files × 16 probes each) and model payloads /tmp/subb/payloads/{atlascloud,avian,mancer,phala}.json.',
   },
   {
-    claim: 'LOTE M remainder (6 providers in Sublote C1 scope) can be unblocked by provisioning alone',
+    claim:
+      'LOTE M remainder (6 providers in Sublote C1 scope) can be unblocked by provisioning alone',
     superseded_at: '2026-04-23',
     reason:
       'Sublote C1 2026-04-23 attempted credential resolution + per-surface live probes for arcee/gmi/infermatic/siliconflow/stepfun/qianfan. (1) GCP Secret Manager exhaustively re-scanned: 82 secrets × 27 alias patterns (arcee, conductor, gmi, gmicloud, gmi-cloud, gmi-serving, gmiserv, infermatic, totalgpt, total-gpt, siliconflow, silicon-flow, siliconcloud, silicon-cloud, stepfun, step, step-ai, stepai, qianfan, baidu, ernie, baidu-qianfan, wenxin, wenxinworkshop, bce, ai21, api-ernie) — zero matches except the known 3 ailin-baidu-{key,secret,base-url}, all confirmed this session as literal "PLACEHOLDER" (11 bytes). Environment variables checked at runtime: zero set. .env/.env.production/.env.test on disk: zero mentions. (2) Per-surface live probes executed with invalid bearer against canonical adapter baseUrls. Key doc-vs-impl discoveries: (a) INFERMATIC — api.totalgpt.ai badauth response echoes \'LiteLLM Virtual Key expected. Received=INVALID_TEST_KEY_12345, expected to start with sk-\'. Confirmed: infermatic is a LiteLLM proxy in front of the vLLM backend, not direct vLLM. API keys must be sk-prefixed LiteLLM Virtual Keys (generated via LiteLLM Admin UI or /key/generate). Notes updated. (b) GMI — api.gmi-serving.com/v1/chat and /v1/embeddings return HTTP 404 "No matching target server found for model X" BEFORE auth validation (pre-auth routing layer). This means a 404 on gmi chat does NOT imply bad credentials — it implies the model ID is not registered. Notes updated. (c) QIANFAN v1 — aip.baidubce.com/oauth/2.0/token with client_id=PLACEHOLDER returned 401 invalid_client/unknown client id (confirms upstream does not recognize), but the v1 chat endpoint aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-4.0-8k with access_token=PLACEHOLDER returned HTTP 200 with body-encoded {error_code:3,"Unsupported openapi method"} — Baidu\'s API uses 200+error_code pattern, and the v1 endpoint IS reachable and would route a real token if provisioned. (d) SILICONFLOW — 6 surfaces (models.cn, models.com, chat, embed, rerank, audio) all uniform 401 bare-JSON-string "Invalid token" (15 bytes) — confirms integrationClass oai-compat-quirks across every surface. Both .cn and .com hosts equivalent. (e) STEPFUN — 5 surfaces (models.com, models.ai, chat, embed, audio/speech) all uniform 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} (75 bytes) — confirms integrationClass oai-compat-pure. Both .com and .ai hosts equivalent. (f) ARCEE — /api/v1/models and /api/v1/chat both 401 with Arcee-specific {"detail":"Missing or invalid Authorization header. Expected: Bearer <api_key>"} (80 bytes noauth) / {"detail":"Invalid or expired API key"} (39 bytes badauth). Root / returns 200 "OK" (health check, not discovery). Net bucket delta: ZERO. All 6 providers remain in same bucket as pre-Sublote-C1 because no credential became available during this session. However, Sublote C1 produced: (i) 2 catalog notes updates (infermatic LiteLLM proxy, gmi pre-auth routing), (ii) 1 new historical claim (this entry), (iii) definitive proof that unblocking all 6 is PURE credential-provisioning work (no adapter changes, no endpoint changes, no structural refactoring required). Probe evidence in /tmp/subc1/clean.out and /tmp/subc1/bodies/*.body.',
@@ -1586,6 +1647,6 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
 export function totalCanonicalInMatrix(): number {
   return CONSOLIDATION_BUCKETS.reduce(
     (sum, bucket) => sum + CONSOLIDATION_MATRIX[bucket].length,
-    0,
+    0
   );
 }

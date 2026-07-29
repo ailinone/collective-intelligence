@@ -23,24 +23,99 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const LIB_SOURCES: Record<string, string> = {
-  'harvest/historical-results-schema.ts': resolve(__dirname, '..', 'harvest', 'historical-results-schema.ts'),
-  'harvest/historical-results-sanitizer.ts': resolve(__dirname, '..', 'harvest', 'historical-results-sanitizer.ts'),
-  'harvest/historical-results-normalizer.ts': resolve(__dirname, '..', 'harvest', 'historical-results-normalizer.ts'),
-  'harvest/historical-results-deduper.ts': resolve(__dirname, '..', 'harvest', 'historical-results-deduper.ts'),
-  'harvest/historical-results-quality-gate.ts': resolve(__dirname, '..', 'harvest', 'historical-results-quality-gate.ts'),
-  'harvest/historical-results-harvester.ts': resolve(__dirname, '..', 'harvest', 'historical-results-harvester.ts'),
-  'calibration/calibration-policy.ts': resolve(__dirname, '..', 'calibration', 'calibration-policy.ts'),
-  'calibration/expected-judge-calibrator.ts': resolve(__dirname, '..', 'calibration', 'expected-judge-calibrator.ts'),
-  'calibration/calibrated-expected-judge-estimator.ts': resolve(__dirname, '..', 'calibration', 'calibrated-expected-judge-estimator.ts'),
-  'calibration/tasktype-calibration.ts': resolve(__dirname, '..', 'calibration', 'tasktype-calibration.ts'),
-  'calibration/calibration-metrics.ts': resolve(__dirname, '..', 'calibration', 'calibration-metrics.ts'),
-  'calibration/calibration-report.ts': resolve(__dirname, '..', 'calibration', 'calibration-report.ts'),
+  'harvest/historical-results-schema.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-schema.ts'
+  ),
+  'harvest/historical-results-sanitizer.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-sanitizer.ts'
+  ),
+  'harvest/historical-results-normalizer.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-normalizer.ts'
+  ),
+  'harvest/historical-results-deduper.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-deduper.ts'
+  ),
+  'harvest/historical-results-quality-gate.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-quality-gate.ts'
+  ),
+  'harvest/historical-results-harvester.ts': resolve(
+    __dirname,
+    '..',
+    'harvest',
+    'historical-results-harvester.ts'
+  ),
+  'calibration/calibration-policy.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'calibration-policy.ts'
+  ),
+  'calibration/expected-judge-calibrator.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'expected-judge-calibrator.ts'
+  ),
+  'calibration/calibrated-expected-judge-estimator.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'calibrated-expected-judge-estimator.ts'
+  ),
+  'calibration/tasktype-calibration.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'tasktype-calibration.ts'
+  ),
+  'calibration/calibration-metrics.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'calibration-metrics.ts'
+  ),
+  'calibration/calibration-report.ts': resolve(
+    __dirname,
+    '..',
+    'calibration',
+    'calibration-report.ts'
+  ),
 };
 
 const SCRIPT_SOURCES: Record<string, string> = {
-  'export-all-c3-history-readonly.ts': resolve(__dirname, '..', 'scripts', 'export-all-c3-history-readonly.ts'),
-  'run-calibrated-historical-replay.ts': resolve(__dirname, '..', 'scripts', 'run-calibrated-historical-replay.ts'),
-  'run-expected-judge-calibration.ts': resolve(__dirname, '..', 'scripts', 'run-expected-judge-calibration.ts'),
+  'export-all-c3-history-readonly.ts': resolve(
+    __dirname,
+    '..',
+    'scripts',
+    'export-all-c3-history-readonly.ts'
+  ),
+  'run-calibrated-historical-replay.ts': resolve(
+    __dirname,
+    '..',
+    'scripts',
+    'run-calibrated-historical-replay.ts'
+  ),
+  'run-expected-judge-calibration.ts': resolve(
+    __dirname,
+    '..',
+    'scripts',
+    'run-expected-judge-calibration.ts'
+  ),
 };
 
 const libContent: Record<string, string> = {};

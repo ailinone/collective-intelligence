@@ -125,9 +125,7 @@ describe('shouldSkipNearZero', () => {
     reg.recordExecution({
       key: { providerId: 'openai' },
       success: false,
-      classification: classifyProviderError(
-        new Error('context_length_exceeded'),
-      ),
+      classification: classifyProviderError(new Error('context_length_exceeded')),
     });
     const decision = shouldSkipNearZero({ providerId: 'openai' });
     expect(decision.skip).toBe(false);

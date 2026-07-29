@@ -70,14 +70,22 @@ export function resolveCurrencyCode(raw: unknown): string | null {
 /** Resolve a free-text SKU argument to a known key ('qx-9', ' "QX-9" ' → 'QX-9'). */
 export function resolveSku(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const cleaned = raw.trim().replace(/^["']|["']$/g, '').toUpperCase();
+  const cleaned = raw
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .toUpperCase();
   if (INVENTORY[cleaned] !== undefined) return cleaned;
   const compact = cleaned.replace(/\s+/g, '');
   return INVENTORY[compact] !== undefined ? compact : null;
 }
 
 function ok(toolCallId: string, output: Record<string, unknown>): ToolResult {
-  return { tool_call_id: toolCallId, success: true, output: JSON.stringify(output), metadata: output };
+  return {
+    tool_call_id: toolCallId,
+    success: true,
+    output: JSON.stringify(output),
+    metadata: output,
+  };
 }
 function err(toolCallId: string, message: string): ToolResult {
   return { tool_call_id: toolCallId, success: false, error: message };
@@ -88,8 +96,16 @@ function err(toolCallId: string, message: string): ToolResult {
 const getExchangeRateHandler: ToolHandler = async (args, toolCallId): Promise<ToolResult> => {
   const from = resolveCurrencyCode(args.from);
   const to = resolveCurrencyCode(args.to);
-  if (!from) return err(toolCallId, `Unknown currency: ${JSON.stringify(args.from)}. Known: ZRG, BLP, QBT, USD.`);
-  if (!to) return err(toolCallId, `Unknown currency: ${JSON.stringify(args.to)}. Known: ZRG, BLP, QBT, USD.`);
+  if (!from)
+    return err(
+      toolCallId,
+      `Unknown currency: ${JSON.stringify(args.from)}. Known: ZRG, BLP, QBT, USD.`
+    );
+  if (!to)
+    return err(
+      toolCallId,
+      `Unknown currency: ${JSON.stringify(args.to)}. Known: ZRG, BLP, QBT, USD.`
+    );
   // Rate = how many units of `to` per 1 unit of `from`.
   const rate = CURRENCIES[from].usd / CURRENCIES[to].usd;
   return ok(toolCallId, { from, to, rate });
@@ -97,7 +113,8 @@ const getExchangeRateHandler: ToolHandler = async (args, toolCallId): Promise<To
 
 const lookupInventoryHandler: ToolHandler = async (args, toolCallId): Promise<ToolResult> => {
   const sku = resolveSku(args.sku);
-  if (!sku) return err(toolCallId, `Unknown SKU: ${JSON.stringify(args.sku)}. Known: QX-9, ZP-7, MK-3.`);
+  if (!sku)
+    return err(toolCallId, `Unknown SKU: ${JSON.stringify(args.sku)}. Known: QX-9, ZP-7, MK-3.`);
   return ok(toolCallId, { sku, in_stock: INVENTORY[sku] });
 };
 
@@ -105,7 +122,10 @@ const multiplyHandler: ToolHandler = async (args, toolCallId): Promise<ToolResul
   const a = Number(args.a);
   const b = Number(args.b);
   if (!Number.isFinite(a) || !Number.isFinite(b)) {
-    return err(toolCallId, `multiply requires numeric a and b; got a=${JSON.stringify(args.a)}, b=${JSON.stringify(args.b)}.`);
+    return err(
+      toolCallId,
+      `multiply requires numeric a and b; got a=${JSON.stringify(args.a)}, b=${JSON.stringify(args.b)}.`
+    );
   }
   return ok(toolCallId, { product: a * b });
 };
@@ -116,7 +136,8 @@ const multiplyHandler: ToolHandler = async (args, toolCallId): Promise<ToolResul
 export const EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   {
     name: 'getExchangeRate',
-    description: 'Return the exchange rate (units of `to` per 1 unit of `from`) between two currencies.',
+    description:
+      'Return the exchange rate (units of `to` per 1 unit of `from`) between two currencies.',
     category: 'general',
     safeForStrategies: true,
     handler: getExchangeRateHandler,
@@ -182,17 +203,20 @@ function toolSpecs(...names: string[]): TaskTool[] {
   return names.map((name) => {
     const r = EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS.find((t) => t.name === name);
     if (!r) throw new Error(`experiment-tool-catalog: unknown benchmark tool "${name}"`);
-    return { type: 'function', function: { name: r.name, description: r.description, parameters: r.parameters } };
+    return {
+      type: 'function',
+      function: { name: r.name, description: r.description, parameters: r.parameters },
+    };
   });
 }
 
 // ─── Expected answers (derived from the tables — single source of truth) ─────
 
 export const TOOL_TASK_EXPECTED: Record<number, number> = {
-  166: 100 * CURRENCIES.ZRG.usd,           // 375  — 100 ZRG at 3.75 USD/ZRG
-  167: INVENTORY['QX-9'],                   // 4321 — stock lookup
-  168: 8 * 12 * CURRENCIES.QBT.usd,         // 1200 — 96 QBT at 12.5 USD/QBT
-  169: INVENTORY['ZP-7'] * 3,               // 4740 — 1580 units × 3 kg
+  166: 100 * CURRENCIES.ZRG.usd, // 375  — 100 ZRG at 3.75 USD/ZRG
+  167: INVENTORY['QX-9'], // 4321 — stock lookup
+  168: 8 * 12 * CURRENCIES.QBT.usd, // 1200 — 96 QBT at 12.5 USD/QBT
+  169: INVENTORY['ZP-7'] * 3, // 4740 — 1580 units × 3 kg
 };
 
 // ─── The tool-calling benchmark tasks (indices 166-169) ──────────────────────
@@ -229,7 +253,7 @@ export const EXPERIMENT_TOOL_CALLING_TASKS: ExperimentTask[] = [
       'This is private inventory data you cannot know — you MUST call the lookupInventory tool. ' +
       'End with exactly one line: `FINAL: <number>` (the unit count, digits only).',
     judgeRubric:
-      "CHECKLIST: [1] Calls lookupInventory(sku=QX-9) [2] Reports the returned count 4321 [3] FINAL: 4321. Score = fraction met.",
+      'CHECKLIST: [1] Calls lookupInventory(sku=QX-9) [2] Reports the returned count 4321 [3] FINAL: 4321. Score = fraction met.',
     expectedDifficulty: 0.3,
     tools: toolSpecs('lookupInventory'),
     toolChoice: 'auto',
@@ -263,7 +287,7 @@ export const EXPERIMENT_TOOL_CALLING_TASKS: ExperimentTask[] = [
       'The stock count is private data — call the lookupInventory tool to get it (the multiply tool is available). ' +
       'End with exactly one line: `FINAL: <number>` (total kg, digits only).',
     judgeRubric:
-      "CHECKLIST: [1] Calls lookupInventory(sku=ZP-7) [2] Count 1580 [3] 1580×3=4740 [4] FINAL: 4740. Score = fraction met.",
+      'CHECKLIST: [1] Calls lookupInventory(sku=ZP-7) [2] Count 1580 [3] 1580×3=4740 [4] FINAL: 4740. Score = fraction met.',
     expectedDifficulty: 0.5,
     tools: toolSpecs('lookupInventory', 'multiply'),
     toolChoice: 'auto',

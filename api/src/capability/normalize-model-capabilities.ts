@@ -62,11 +62,7 @@ export interface ModelLike {
   capabilities?: unknown;
 }
 
-export type CapabilitySource =
-  | 'capability_uris'
-  | 'legacy_capabilities'
-  | 'inferred'
-  | 'none';
+export type CapabilitySource = 'capability_uris' | 'legacy_capabilities' | 'inferred' | 'none';
 
 export interface NormalizedModelCapabilities {
   /** Lower-cased, de-duplicated capability tokens. */
@@ -100,29 +96,44 @@ const CHAT_ALIASES = new Set([
 ]);
 
 const VISION_ALIASES = new Set([
-  'vision', 'image-input', 'image_input', 'multimodal-vision', 'multimodal_vision',
+  'vision',
+  'image-input',
+  'image_input',
+  'multimodal-vision',
+  'multimodal_vision',
 ]);
 
 const TOOL_ALIASES = new Set([
-  'tools', 'function_calling', 'function-calling', 'tool_use', 'tool-use',
+  'tools',
+  'function_calling',
+  'function-calling',
+  'tool_use',
+  'tool-use',
 ]);
 
-const JSON_ALIASES = new Set([
-  'json_mode', 'json-mode', 'structured_output', 'structured-output',
-]);
+const JSON_ALIASES = new Set(['json_mode', 'json-mode', 'structured_output', 'structured-output']);
 
 const STREAMING_ALIASES = new Set(['streaming', 'stream']);
 
 const EMBEDDING_ALIASES = new Set(['embedding', 'embeddings', 'vector']);
 
 const IMAGE_GEN_ALIASES = new Set([
-  'image_generation', 'image-generation', 'image_editing', 'image-editing',
+  'image_generation',
+  'image-generation',
+  'image_editing',
+  'image-editing',
 ]);
 
 const AUDIO_ALIASES = new Set([
-  'audio', 'audio_generation', 'audio-generation',
-  'text_to_speech', 'text-to-speech', 'tts',
-  'speech_to_text', 'speech-to-text', 'stt',
+  'audio',
+  'audio_generation',
+  'audio-generation',
+  'text_to_speech',
+  'text-to-speech',
+  'tts',
+  'speech_to_text',
+  'speech-to-text',
+  'stt',
 ]);
 
 /**
@@ -192,17 +203,25 @@ function deriveFlags(tokens: readonly string[]) {
  *   const cap = resolveModelCapabilities(row);
  *   if (cap.hasChat) { ... }
  */
-export function resolveModelCapabilities(model: ModelLike | null | undefined): NormalizedModelCapabilities {
+export function resolveModelCapabilities(
+  model: ModelLike | null | undefined
+): NormalizedModelCapabilities {
   const empty = (): NormalizedModelCapabilities => ({
     raw: [],
     source: 'none',
-    hasChat: false, hasVision: false, hasTools: false, hasJson: false,
-    hasStreaming: false, hasEmbedding: false, hasImageGeneration: false, hasAudio: false,
+    hasChat: false,
+    hasVision: false,
+    hasTools: false,
+    hasJson: false,
+    hasStreaming: false,
+    hasEmbedding: false,
+    hasImageGeneration: false,
+    hasAudio: false,
   });
   if (!model) return empty();
 
   const canonical = normalizeUris(
-    (model.capabilityUris ?? model.capability_uris) as readonly string[] | null | undefined,
+    (model.capabilityUris ?? model.capability_uris) as readonly string[] | null | undefined
   );
   if (canonical.length > 0) {
     return {
@@ -239,9 +258,7 @@ export function isChatCapable(model: ModelLike | null | undefined): boolean {
  * is doing more work than expected (signals a capability_uris
  * regression).
  */
-export function summariseSources(
-  models: readonly ModelLike[],
-): Record<CapabilitySource, number> {
+export function summariseSources(models: readonly ModelLike[]): Record<CapabilitySource, number> {
   const out: Record<CapabilitySource, number> = {
     capability_uris: 0,
     legacy_capabilities: 0,

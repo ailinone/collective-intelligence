@@ -43,7 +43,7 @@ type FakeState = {
 };
 
 function mkCandidate(
-  overrides: Partial<FakeCandidate> & Pick<FakeCandidate, 'id' | 'providerId'>,
+  overrides: Partial<FakeCandidate> & Pick<FakeCandidate, 'id' | 'providerId'>
 ): FakeCandidate {
   return {
     apiModelId: overrides.id,
@@ -71,9 +71,7 @@ const projectStateKey = (s: FakeState, role: string) =>
     routeId: s.routeId,
   });
 
-const attachInjectionMetadata = (
-  c: FakeCandidate,
-): FakeCandidate => ({
+const attachInjectionMetadata = (c: FakeCandidate): FakeCandidate => ({
   ...c,
   injectedByLiveReadyStore: true,
   liveReadyEvidenceSource: 'live_operability_store',
@@ -97,21 +95,33 @@ const candidateSupportsRole = (c: FakeCandidate) => c.caps.includes('chat');
 
 describe('isStateCurrentlyEligible', () => {
   it('rejects when chatReady=false', () => {
-    expect(isStateCurrentlyEligible({ chatReady: false, eligibleForCriticalRole: true })).toBe(false);
+    expect(isStateCurrentlyEligible({ chatReady: false, eligibleForCriticalRole: true })).toBe(
+      false
+    );
   });
   it('rejects when eligibleForCriticalRole=false', () => {
-    expect(isStateCurrentlyEligible({ chatReady: true, eligibleForCriticalRole: false })).toBe(false);
+    expect(isStateCurrentlyEligible({ chatReady: true, eligibleForCriticalRole: false })).toBe(
+      false
+    );
   });
   it('rejects when cooldownUntil is in the future', () => {
     const future = new Date(Date.now() + 60_000).toISOString();
     expect(
-      isStateCurrentlyEligible({ chatReady: true, eligibleForCriticalRole: true, cooldownUntil: future }),
+      isStateCurrentlyEligible({
+        chatReady: true,
+        eligibleForCriticalRole: true,
+        cooldownUntil: future,
+      })
     ).toBe(false);
   });
   it('accepts when cooldownUntil has expired', () => {
     const past = new Date(Date.now() - 60_000).toISOString();
     expect(
-      isStateCurrentlyEligible({ chatReady: true, eligibleForCriticalRole: true, cooldownUntil: past }),
+      isStateCurrentlyEligible({
+        chatReady: true,
+        eligibleForCriticalRole: true,
+        cooldownUntil: past,
+      })
     ).toBe(true);
   });
   it('accepts when no cooldown set', () => {
@@ -136,20 +146,24 @@ describe('buildLiveReadyCandidateDedupeKey', () => {
     expect(buildLiveReadyCandidateDedupeKey({ ...base, role: 'judge' })).not.toBe(baseKey);
   });
   it('changes when providerId changes', () => {
-    expect(buildLiveReadyCandidateDedupeKey({ ...base, providerId: 'huggingface' })).not.toBe(baseKey);
+    expect(buildLiveReadyCandidateDedupeKey({ ...base, providerId: 'huggingface' })).not.toBe(
+      baseKey
+    );
   });
   it('changes when apiModelId changes', () => {
-    expect(buildLiveReadyCandidateDedupeKey({ ...base, apiModelId: 'openai/gpt-oss-120b-Turbo' })).not.toBe(
-      baseKey,
-    );
+    expect(
+      buildLiveReadyCandidateDedupeKey({ ...base, apiModelId: 'openai/gpt-oss-120b-Turbo' })
+    ).not.toBe(baseKey);
   });
   it('changes when routeId changes', () => {
-    expect(buildLiveReadyCandidateDedupeKey({ ...base, routeId: 'something-else' })).not.toBe(baseKey);
+    expect(buildLiveReadyCandidateDedupeKey({ ...base, routeId: 'something-else' })).not.toBe(
+      baseKey
+    );
   });
   it('changes when adapterKind changes', () => {
-    expect(buildLiveReadyCandidateDedupeKey({ ...base, adapterKind: 'openai-compatible-hub' })).not.toBe(
-      baseKey,
-    );
+    expect(
+      buildLiveReadyCandidateDedupeKey({ ...base, adapterKind: 'openai-compatible-hub' })
+    ).not.toBe(baseKey);
   });
   it('normalizes case + whitespace', () => {
     expect(buildLiveReadyCandidateDedupeKey({ ...base, providerId: ' DeepInfra ' })).toBe(baseKey);
@@ -158,19 +172,28 @@ describe('buildLiveReadyCandidateDedupeKey', () => {
 
 // ─── injectLiveReadyCandidatesIntoRolePool ───────────────────────────────
 
-function baseInjectionArgs(overrides: Partial<{
-  role: string;
-  base: FakeCandidate[];
-  states: FakeState[];
-  resolver: (s: FakeState) => FakeCandidate | FakeCandidate[] | undefined;
-  policy?: LiveReadyCandidateInjectionPolicy;
-}> = {}) {
+function baseInjectionArgs(
+  overrides: Partial<{
+    role: string;
+    base: FakeCandidate[];
+    states: FakeState[];
+    resolver: (s: FakeState) => FakeCandidate | FakeCandidate[] | undefined;
+    policy?: LiveReadyCandidateInjectionPolicy;
+  }> = {}
+) {
   return {
     role: overrides.role ?? 'synthesizer',
     baseCandidates: (overrides.base ?? []) as readonly FakeCandidate[],
     liveReadyStates: (overrides.states ?? []) as readonly FakeState[],
-    resolveCatalogCandidate: overrides.resolver ?? ((s: FakeState) =>
-      mkCandidate({ id: s.modelId, providerId: s.providerId, routeId: s.routeId, caps: ['chat'] })),
+    resolveCatalogCandidate:
+      overrides.resolver ??
+      ((s: FakeState) =>
+        mkCandidate({
+          id: s.modelId,
+          providerId: s.providerId,
+          routeId: s.routeId,
+          caps: ['chat'],
+        })),
     candidateSupportsRole,
     projectCandidateKey,
     projectStateKey,
@@ -198,7 +221,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
           },
         ],
         policy: { ...DEFAULT_LIVE_READY_INJECTION_POLICY, enabled: false },
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.rejected).toEqual([]);
@@ -217,7 +240,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
             eligibleForCriticalRole: true,
           },
         ],
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.rejected.map((x) => x.reason)).toEqual(['not_live_ready']);
@@ -235,7 +258,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
             eligibleForCriticalRole: true,
           },
         ],
-      }),
+      })
     );
     expect(r.injectedCandidates.length).toBe(1);
     expect(r.injectedCandidates[0].injectedByLiveReadyStore).toBe(true);
@@ -256,7 +279,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
           },
         ],
         resolver: () => undefined,
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.rejected.map((x) => x.reason)).toEqual(['live_ready_state_not_in_catalog']);
@@ -275,10 +298,22 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
           },
         ],
         resolver: () => [
-          mkCandidate({ id: 'm', providerId: 'deepinfra', apiModelId: 'm', routeId: 'r1', caps: ['chat'] }),
-          mkCandidate({ id: 'm', providerId: 'deepinfra', apiModelId: 'm', routeId: 'r2', caps: ['chat'] }),
+          mkCandidate({
+            id: 'm',
+            providerId: 'deepinfra',
+            apiModelId: 'm',
+            routeId: 'r1',
+            caps: ['chat'],
+          }),
+          mkCandidate({
+            id: 'm',
+            providerId: 'deepinfra',
+            apiModelId: 'm',
+            routeId: 'r2',
+            caps: ['chat'],
+          }),
         ],
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.rejected.map((x) => x.reason)).toEqual(['ambiguous_catalog_match']);
@@ -305,7 +340,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
           },
         ],
         resolver: () => existing,
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.dedupedExistingCandidates.length).toBe(1);
@@ -343,7 +378,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
             eligibleForCriticalRole: true,
           },
         ],
-      }),
+      })
     );
     expect(r.metadata.injectedByLiveReadyStore).toBe(true);
     for (const c of r.injectedCandidates) {
@@ -366,7 +401,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
           },
         ],
         policy: { ...DEFAULT_LIVE_READY_INJECTION_POLICY, allowCrossRoleByCapabilities: false },
-      }),
+      })
     );
     expect(r.injectedCandidates).toEqual([]);
     expect(r.rejected.map((x) => x.reason)).toEqual(['role_mismatch']);
@@ -386,7 +421,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
             logicalRole: 'synthesizer',
           },
         ],
-      }),
+      })
     );
     expect(r.injectedCandidates.length).toBe(1);
   });
@@ -403,7 +438,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
             eligibleForCriticalRole: true,
           },
         ],
-      }),
+      })
     );
     expect(r.rejected.map((x) => x.reason)).toEqual(['missing_provider_or_model']);
   });
@@ -420,7 +455,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
       baseInjectionArgs({
         states,
         policy: { ...DEFAULT_LIVE_READY_INJECTION_POLICY, maxInjectedPerRole: 2 },
-      }),
+      })
     );
     expect(r.injectedCandidates.length).toBe(2);
   });
@@ -481,7 +516,7 @@ describe('injectLiveReadyCandidatesIntoRolePool', () => {
                 routeId: s.routeId,
                 caps: ['chat'],
               }),
-      }),
+      })
     );
     expect(r.trace.length).toBe(2); // one for dedupe match + one for new injection
     expect(r.injectedCandidates.length).toBe(1);

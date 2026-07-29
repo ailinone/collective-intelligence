@@ -86,7 +86,7 @@ function single(
   model: string,
   judge: number,
   cost: number,
-  opts: Partial<HistoricalExecution> = {},
+  opts: Partial<HistoricalExecution> = {}
 ): HistoricalExecution {
   const strategy = opts.strategyId ?? 'single';
   return Object.freeze({
@@ -100,7 +100,7 @@ function single(
     modelsUsed: [model],
     judgeScore: judge,
     costUsd: cost,
-    success: opts.success ?? (judge > 0),
+    success: opts.success ?? judge > 0,
     degraded: opts.degraded,
     degradationReason: opts.degradationReason,
     failureMode: opts.failureMode,
@@ -114,7 +114,7 @@ function ensemble(
   models: readonly string[],
   judge: number,
   cost: number,
-  opts: Partial<HistoricalExecution> = {},
+  opts: Partial<HistoricalExecution> = {}
 ): HistoricalExecution {
   return Object.freeze({
     executionId: eid(),
@@ -127,7 +127,7 @@ function ensemble(
     modelsUsed: models,
     judgeScore: judge,
     costUsd: cost,
-    success: opts.success ?? (judge > 0),
+    success: opts.success ?? judge > 0,
     degraded: opts.degraded,
     degradationReason: opts.degradationReason,
     failureMode: opts.failureMode,
@@ -155,7 +155,7 @@ for (let i = 0; i < 6; i += 1)
     single(TEXT_FAST, 0.5 + i * 0.01, 0.004, {
       taskType: TASK,
       strategyId: 'single_budget',
-    }),
+    })
   );
 
 // Cheap-good model — moderate judge, very cheap
@@ -167,13 +167,12 @@ for (let i = 0; i < 8; i += 1)
     single(CHEAP_HARMFUL, 0.05, 0.0012, {
       degraded: true,
       degradationReason: 'truncated_response',
-    }),
+    })
   );
 
 // Multi-mini singletons — consistently very low quality
 for (const m of [MINI_A, MINI_B, MINI_C]) {
-  for (let i = 0; i < 6; i += 1)
-    records.push(single(m, 0.05, 0.0008));
+  for (let i = 0; i < 6; i += 1) records.push(single(m, 0.05, 0.0008));
 }
 
 // Vision-good model on vision tasks
@@ -182,7 +181,7 @@ for (let i = 0; i < 8; i += 1)
     single(VISION_GOOD, 0.78, 0.012, {
       taskType: 'image-understanding',
       modality: 'image',
-    }),
+    })
   );
 
 // Audio TTS model — appears in TEXT tasks by accident → modality mismatch
@@ -192,7 +191,7 @@ for (let i = 0; i < 5; i += 1)
       modality: 'audio',
       success: false,
       failureMode: 'modality_mismatch',
-    }),
+    })
   );
 
 // Image generation model — appears in TEXT tasks by accident → mismatch
@@ -202,7 +201,7 @@ for (let i = 0; i < 5; i += 1)
       modality: 'image',
       success: false,
       failureMode: 'modality_mismatch',
-    }),
+    })
   );
 
 // Expensive but OK on quality (not Pareto-efficient — cheaper options match)
@@ -214,63 +213,35 @@ for (let i = 0; i < 5; i += 1) records.push(single(EXPENSIVE_BAD, 0.32, 0.22));
 // Pair-winner combo (the validated parallel tier)
 for (let i = 0; i < 10; i += 1)
   records.push(
-    ensemble(
-      'parallel',
-      [PAIR_WINNER_X, PAIR_WINNER_Y],
-      0.95 - i * 0.005,
-      0.0028 + i * 0.0001,
-    ),
+    ensemble('parallel', [PAIR_WINNER_X, PAIR_WINNER_Y], 0.95 - i * 0.005, 0.0028 + i * 0.0001)
   );
 
 // Anchor + pair-winner combo — also strong
 for (let i = 0; i < 6; i += 1)
-  records.push(
-    ensemble(
-      'parallel',
-      [ANCHOR_A, PAIR_WINNER_Y],
-      0.86,
-      0.024,
-    ),
-  );
+  records.push(ensemble('parallel', [ANCHOR_A, PAIR_WINNER_Y], 0.86, 0.024));
 
 // Multi-mini pool — judge 0
 for (let i = 0; i < 6; i += 1)
   records.push(
-    ensemble(
-      'parallel',
-      [MINI_A, MINI_B, MINI_C],
-      0.02,
-      0.003,
-      { degraded: true, degradationReason: 'all_outputs_blank' },
-    ),
+    ensemble('parallel', [MINI_A, MINI_B, MINI_C], 0.02, 0.003, {
+      degraded: true,
+      degradationReason: 'all_outputs_blank',
+    })
   );
 
 // Pool with modality mismatch — audio/image in code task
 for (let i = 0; i < 5; i += 1)
   records.push(
-    ensemble(
-      'parallel',
-      [AUDIO_TTS, IMAGE_GEN, ANCHOR_A],
-      0.1,
-      0.026,
-      {
-        modality: 'mixed',
-        degraded: true,
-        degradationReason: 'modality_partial_mismatch',
-      },
-    ),
+    ensemble('parallel', [AUDIO_TTS, IMAGE_GEN, ANCHOR_A], 0.1, 0.026, {
+      modality: 'mixed',
+      degraded: true,
+      degradationReason: 'modality_partial_mismatch',
+    })
   );
 
 // Pair-loser combo — both contributors poor
 for (let i = 0; i < 6; i += 1)
-  records.push(
-    ensemble(
-      'parallel',
-      [PAIR_LOSER_P, PAIR_LOSER_Q],
-      0.18,
-      0.012,
-    ),
-  );
+  records.push(ensemble('parallel', [PAIR_LOSER_P, PAIR_LOSER_Q], 0.18, 0.012));
 
 // Singletons for pair-loser members
 for (let i = 0; i < 5; i += 1) records.push(single(PAIR_LOSER_P, 0.22, 0.005));
@@ -278,58 +249,23 @@ for (let i = 0; i < 5; i += 1) records.push(single(PAIR_LOSER_Q, 0.25, 0.007));
 
 // Consensus with high judge but ~6x baseline cost
 for (let i = 0; i < 6; i += 1)
-  records.push(
-    ensemble(
-      'consensus',
-      [ANCHOR_A, ANCHOR_B, PAIR_WINNER_X],
-      0.84,
-      0.14,
-    ),
-  );
+  records.push(ensemble('consensus', [ANCHOR_A, ANCHOR_B, PAIR_WINNER_X], 0.84, 0.14));
 
 // Critique-repair with high judge but ~7x baseline cost
 for (let i = 0; i < 6; i += 1)
-  records.push(
-    ensemble(
-      'critique-repair',
-      [ANCHOR_A, ANCHOR_B],
-      0.82,
-      0.16,
-    ),
-  );
+  records.push(ensemble('critique-repair', [ANCHOR_A, ANCHOR_B], 0.82, 0.16));
 
 // Expert-panel low quality
 for (let i = 0; i < 5; i += 1)
-  records.push(
-    ensemble(
-      'expert-panel',
-      [ANCHOR_A, ANCHOR_B, MINI_A, MINI_B],
-      0.4,
-      0.05,
-    ),
-  );
+  records.push(ensemble('expert-panel', [ANCHOR_A, ANCHOR_B, MINI_A, MINI_B], 0.4, 0.05));
 
 // Tri-role-collective low quality
 for (let i = 0; i < 4; i += 1)
-  records.push(
-    ensemble(
-      'tri-role-collective',
-      [ANCHOR_A, ANCHOR_B, EXPENSIVE_OK],
-      0.45,
-      0.21,
-    ),
-  );
+  records.push(ensemble('tri-role-collective', [ANCHOR_A, ANCHOR_B, EXPENSIVE_OK], 0.45, 0.21));
 
 // Debate low quality
 for (let i = 0; i < 4; i += 1)
-  records.push(
-    ensemble(
-      'debate',
-      [ANCHOR_A, EXPENSIVE_OK],
-      0.42,
-      0.19,
-    ),
-  );
+  records.push(ensemble('debate', [ANCHOR_A, EXPENSIVE_OK], 0.42, 0.19));
 
 export const HISTORICAL_EXECUTIONS_FIXTURE: ReadonlyArray<HistoricalExecution> =
   Object.freeze(records);

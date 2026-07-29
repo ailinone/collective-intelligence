@@ -129,7 +129,9 @@ class ThreadRunQueueService {
       // C3 fix: DLQ routing (ADR-003)
       import('@/queue/dlq-manager.js')
         .then(({ setupDLQ }) => setupDLQ(this.queue!))
-        .catch((err) => this.log.warn({ err: serializeError(err) }, 'Failed to setup DLQ for thread-runs queue'));
+        .catch((err) =>
+          this.log.warn({ err: serializeError(err) }, 'Failed to setup DLQ for thread-runs queue')
+        );
     } catch (error) {
       this.queue = null;
       if (this.queueConnection) {
@@ -324,4 +326,3 @@ class ThreadRunQueueService {
 
 // Singleton instance
 export const threadRunQueueService = new ThreadRunQueueService();
-

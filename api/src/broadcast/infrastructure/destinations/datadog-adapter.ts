@@ -33,11 +33,7 @@
  *   Body: [ { ...event... } ]
  */
 
-import type {
-  DeliveryContext,
-  DeliveryOutcome,
-  DestinationAdapter,
-} from './destination-adapter';
+import type { DeliveryContext, DeliveryOutcome, DestinationAdapter } from './destination-adapter';
 import { EgressBlockedError, safeFetch } from './safe-http';
 
 // ─── Config ─────────────────────────────────────────────────────────────
@@ -63,17 +59,14 @@ function parseConfig(raw: Record<string, unknown>): DatadogConfig | { error: str
   if (typeof raw.apiKey !== 'string' || raw.apiKey.length === 0) {
     return { error: 'missing or invalid "apiKey"' };
   }
-  const site =
-    typeof raw.site === 'string' && raw.site.length > 0 ? raw.site : 'datadoghq.com';
+  const site = typeof raw.site === 'string' && raw.site.length > 0 ? raw.site : 'datadoghq.com';
   // Allowlist prevents a malicious tenant from pointing us at an attacker
   // domain that happens to match `*.datadoghq.com` lookalikes.
   if (!ALLOWED_SITES.has(site)) {
     return { error: `site "${site}" is not in the allowlist` };
   }
   const service =
-    typeof raw.service === 'string' && raw.service.length > 0
-      ? raw.service
-      : 'ailin-broadcast';
+    typeof raw.service === 'string' && raw.service.length > 0 ? raw.service : 'ailin-broadcast';
   const env = typeof raw.env === 'string' ? raw.env : undefined;
   const tags = Array.isArray(raw.tags)
     ? raw.tags.filter((t): t is string => typeof t === 'string').slice(0, 32)
@@ -85,7 +78,7 @@ function parseConfig(raw: Record<string, unknown>): DatadogConfig | { error: str
 
 export function buildDatadogEvents(
   ctx: DeliveryContext,
-  cfg: DatadogConfig,
+  cfg: DatadogConfig
 ): Array<Record<string, unknown>> {
   const env = ctx.envelope;
   const envLabel = cfg.env ?? env.resource.deploymentEnvironment;

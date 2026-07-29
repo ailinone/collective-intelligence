@@ -12,10 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  calibratePeerLift,
-  lookupPeerLift,
-} from '../peer-lift-calibrator';
+import { calibratePeerLift, lookupPeerLift } from '../peer-lift-calibrator';
 import type { EnsembleCalibrationExample } from '../ensemble-calibration-types';
 
 function example(
@@ -24,7 +21,7 @@ function example(
     observedJudge: number;
     taskType?: string;
     strategy?: string;
-  },
+  }
 ): EnsembleCalibrationExample {
   return Object.freeze({
     executionId: `e-${Math.random().toString(36).slice(2)}`,
@@ -51,11 +48,17 @@ describe('calibratePeerLift', () => {
   it('returns 0 lift when ensemble judge matches best member judge', () => {
     const data = [
       example({
-        members: [{ modelId: 'a', judgeMean: 0.7 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.7 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.7,
       }),
       example({
-        members: [{ modelId: 'a', judgeMean: 0.7 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.7 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.7,
       }),
     ];
@@ -68,11 +71,17 @@ describe('calibratePeerLift', () => {
   it('returns positive lift when ensemble judge exceeds best individual', () => {
     const data = [
       example({
-        members: [{ modelId: 'a', judgeMean: 0.7 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.7 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.9,
       }),
       example({
-        members: [{ modelId: 'a', judgeMean: 0.7 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.7 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.85,
       }),
     ];
@@ -88,18 +97,24 @@ describe('calibratePeerLift', () => {
       data.push(
         example({
           taskType: 'code',
-          members: [{ modelId: 'a', judgeMean: 0.5 }, { modelId: 'b', judgeMean: 0.5 }],
+          members: [
+            { modelId: 'a', judgeMean: 0.5 },
+            { modelId: 'b', judgeMean: 0.5 },
+          ],
           observedJudge: 0.6,
-        }),
+        })
       );
     }
     // 1 example of 'analysis' with extreme lift = 0.4 (outlier)
     data.push(
       example({
         taskType: 'analysis',
-        members: [{ modelId: 'a', judgeMean: 0.5 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.5 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.9,
-      }),
+      })
     );
     const r = calibratePeerLift({ trainExamples: data, shrinkageK: 8 });
     // analysis should be shrunk toward global mean (0.1ish), not 0.4.
@@ -113,9 +128,12 @@ describe('calibratePeerLift', () => {
     for (let i = 0; i < 5; i += 1) {
       data.push(
         example({
-          members: [{ modelId: 'a', judgeMean: 0.5 }, { modelId: 'b', judgeMean: 0.5 }],
+          members: [
+            { modelId: 'a', judgeMean: 0.5 },
+            { modelId: 'b', judgeMean: 0.5 },
+          ],
           observedJudge: 0.7,
-        }),
+        })
       );
     }
     const r = calibratePeerLift({ trainExamples: data });
@@ -126,7 +144,10 @@ describe('calibratePeerLift', () => {
     const cal = calibratePeerLift({
       trainExamples: [
         example({
-          members: [{ modelId: 'a', judgeMean: 0.5 }, { modelId: 'b', judgeMean: 0.5 }],
+          members: [
+            { modelId: 'a', judgeMean: 0.5 },
+            { modelId: 'b', judgeMean: 0.5 },
+          ],
           observedJudge: 0.7,
         }),
       ],
@@ -140,7 +161,10 @@ describe('calibratePeerLift', () => {
       trainExamples: [
         example({
           taskType: 'code',
-          members: [{ modelId: 'a', judgeMean: 0.5 }, { modelId: 'b', judgeMean: 0.5 }],
+          members: [
+            { modelId: 'a', judgeMean: 0.5 },
+            { modelId: 'b', judgeMean: 0.5 },
+          ],
           observedJudge: 0.7,
         }),
       ],
@@ -158,7 +182,10 @@ describe('calibratePeerLift', () => {
   it('peer_lift can be zero or negative', () => {
     const data = [
       example({
-        members: [{ modelId: 'a', judgeMean: 0.7 }, { modelId: 'b', judgeMean: 0.5 }],
+        members: [
+          { modelId: 'a', judgeMean: 0.7 },
+          { modelId: 'b', judgeMean: 0.5 },
+        ],
         observedJudge: 0.5, // lower than best member!
       }),
     ];

@@ -32,7 +32,11 @@ function capabilitiesFor(modelId: string): string[] {
 
 describe('xai-model-fetcher capability tagging', () => {
   it('does NOT tag Grok Imagine image/video models as chat', () => {
-    for (const id of ['grok-imagine-image', 'grok-imagine-video', 'grok-imagine-video-1.5-preview']) {
+    for (const id of [
+      'grok-imagine-image',
+      'grok-imagine-video',
+      'grok-imagine-video-1.5-preview',
+    ]) {
       const caps = capabilitiesFor(id);
       expect(caps, id).not.toContain('chat');
       expect(caps, id).not.toContain('streaming');
@@ -56,7 +60,14 @@ describe('xai-model-fetcher capability tagging', () => {
 
   it('still tags real Grok chat models as chat, with reasoning + vision where applicable', () => {
     expect(capabilitiesFor('grok-4-fast')).toEqual(
-      expect.arrayContaining(['chat', 'streaming', 'function_calling', 'json_mode', 'reasoning', 'thinking_mode']),
+      expect.arrayContaining([
+        'chat',
+        'streaming',
+        'function_calling',
+        'json_mode',
+        'reasoning',
+        'thinking_mode',
+      ])
     );
     const grok2 = capabilitiesFor('grok-2-1212');
     expect(grok2).toContain('chat');

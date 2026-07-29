@@ -47,8 +47,20 @@ export function computeDescriptiveStats(values: number[]): DescriptiveStats {
   const n = values.length;
   if (n === 0) {
     return {
-      n: 0, mean: 0, median: 0, stddev: 0, variance: 0,
-      min: 0, max: 0, p10: 0, p25: 0, p50: 0, p75: 0, p90: 0, p99: 0, iqr: 0,
+      n: 0,
+      mean: 0,
+      median: 0,
+      stddev: 0,
+      variance: 0,
+      min: 0,
+      max: 0,
+      p10: 0,
+      p25: 0,
+      p50: 0,
+      p75: 0,
+      p90: 0,
+      p99: 0,
+      iqr: 0,
     };
   }
 
@@ -56,9 +68,7 @@ export function computeDescriptiveStats(values: number[]): DescriptiveStats {
   const mean = values.reduce((s, v) => s + v, 0) / n;
 
   // Variance (Bessel's correction for sample variance)
-  const variance = n > 1
-    ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)
-    : 0;
+  const variance = n > 1 ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1) : 0;
   const stddev = Math.sqrt(variance);
 
   return {
@@ -69,11 +79,11 @@ export function computeDescriptiveStats(values: number[]): DescriptiveStats {
     variance,
     min: sorted[0],
     max: sorted[n - 1],
-    p10: percentile(sorted, 0.10),
+    p10: percentile(sorted, 0.1),
     p25: percentile(sorted, 0.25),
-    p50: percentile(sorted, 0.50),
+    p50: percentile(sorted, 0.5),
     p75: percentile(sorted, 0.75),
-    p90: percentile(sorted, 0.90),
+    p90: percentile(sorted, 0.9),
     p99: percentile(sorted, 0.99),
     iqr: percentile(sorted, 0.75) - percentile(sorted, 0.25),
   };
@@ -100,7 +110,7 @@ function percentile(sorted: number[], p: number): number {
  */
 export function computeConfidenceInterval(
   values: number[],
-  confidence: number = 0.95,
+  confidence: number = 0.95
 ): ConfidenceInterval {
   const n = values.length;
   if (n === 0) {
@@ -112,9 +122,7 @@ export function computeConfidenceInterval(
 
   // Critical value: z for large samples, t-approximation for small
   const alpha = 1 - confidence;
-  const critical = n >= 30
-    ? zInv(1 - alpha / 2)
-    : tInv(1 - alpha / 2, n - 1);
+  const critical = n >= 30 ? zInv(1 - alpha / 2) : tInv(1 - alpha / 2, n - 1);
 
   const marginOfError = critical * se;
 
@@ -138,7 +146,7 @@ export function computeConfidenceInterval(
 export function welchTTest(
   group1: number[],
   group2: number[],
-  confidenceLevel: number = 0.95,
+  confidenceLevel: number = 0.95
 ): TTestResult {
   const n1 = group1.length;
   const n2 = group2.length;
@@ -158,7 +166,13 @@ export function welchTTest(
   const seDiff = Math.sqrt(se1 + se2);
 
   if (seDiff === 0) {
-    return { tStatistic: 0, degreesOfFreedom: n1 + n2 - 2, pValue: 1, significant: false, confidenceLevel };
+    return {
+      tStatistic: 0,
+      degreesOfFreedom: n1 + n2 - 2,
+      pValue: 1,
+      significant: false,
+      confidenceLevel,
+    };
   }
 
   const t = (mean1 - mean2) / seDiff;
@@ -229,10 +243,12 @@ export function effectSize(group1: number[], group2: number[]): EffectSizeResult
 export function computeWinRate(
   groupA: number[],
   groupB: number[],
-  tieThreshold: number = 0.02,
+  tieThreshold: number = 0.02
 ): WinRateComparison {
   const total = Math.min(groupA.length, groupB.length);
-  let aWins = 0, bWins = 0, ties = 0;
+  let aWins = 0,
+    bWins = 0,
+    ties = 0;
 
   for (let i = 0; i < total; i++) {
     const diff = groupA[i] - groupB[i];
@@ -305,7 +321,10 @@ export function meanDelta(deltas: number[]): number {
  * join). Exists so a report can show its audit trail (which tasks a paired
  * verdict is based on), not just the resulting numbers.
  */
-export function sharedTaskIndices(groupA: readonly TaskScore[], groupB: readonly TaskScore[]): number[] {
+export function sharedTaskIndices(
+  groupA: readonly TaskScore[],
+  groupB: readonly TaskScore[]
+): number[] {
   const aIdx = new Set(groupA.map((r) => r.taskIndex));
   const bIdx = new Set(groupB.map((r) => r.taskIndex));
   const shared: number[] = [];
@@ -329,7 +348,9 @@ export function sharedTaskIndices(groupA: readonly TaskScore[], groupB: readonly
  * nulls are excluded from the family size m and returned as null, positionally
  * aligned with the input.
  */
-export function benjaminiHochbergQValues(pValues: ReadonlyArray<number | null>): Array<number | null> {
+export function benjaminiHochbergQValues(
+  pValues: ReadonlyArray<number | null>
+): Array<number | null> {
   const indexed = pValues
     .map((p, i) => ({ p, i }))
     .filter((x): x is { p: number; i: number } => x.p != null && Number.isFinite(x.p));
@@ -369,7 +390,13 @@ export function pairedTTest(deltas: number[], confidenceLevel: number = 0.95): T
     const nonZero = Math.abs(mean) > 1e-12;
     if (!nonZero) {
       // Every task moved by exactly 0 → no effect.
-      return { tStatistic: 0, degreesOfFreedom: n - 1, pValue: 1, significant: false, confidenceLevel };
+      return {
+        tStatistic: 0,
+        degreesOfFreedom: n - 1,
+        pValue: 1,
+        significant: false,
+        confidenceLevel,
+      };
     }
     // Zero WITHIN-sample variance: the t-statistic is undefined (se = 0). The old
     // code fabricated pValue = 0 — "infinite confidence" from as few as n = 2
@@ -430,7 +457,7 @@ export function pairedCohensD(deltas: number[]): EffectSizeResult {
  */
 export function computeRegret(
   chosenScore: number,
-  alternativeScores: number[],
+  alternativeScores: number[]
 ): { avgRegret: number; maxRegret: number; bestAlternative: number } {
   if (alternativeScores.length === 0) {
     return { avgRegret: 0, maxRegret: 0, bestAlternative: chosenScore };
@@ -441,7 +468,7 @@ export function computeRegret(
 
   const totalRegret = alternativeScores.reduce(
     (sum, alt) => sum + Math.max(0, alt - chosenScore),
-    0,
+    0
   );
   const avgRegret = totalRegret / alternativeScores.length;
 
@@ -500,23 +527,33 @@ export function computeQualityPerSecond(quality: number, latencyMs: number): num
 export function computeCompositeRegret(
   chosen: { quality: number; cost: number; latency: number },
   alternatives: Array<{ quality: number; cost: number; latency: number }>,
-  weights: { quality: number; cost: number; latency: number } = { quality: 0.5, cost: 0.3, latency: 0.2 },
+  weights: { quality: number; cost: number; latency: number } = {
+    quality: 0.5,
+    cost: 0.3,
+    latency: 0.2,
+  }
 ): CompositeRegret {
   if (alternatives.length === 0) {
     return { qualityRegret: 0, costRegret: 0, latencyRegret: 0, compositeRegret: 0, weights };
   }
 
-  const bestQuality = Math.max(chosen.quality, ...alternatives.map(a => a.quality));
-  const bestCost = Math.min(chosen.cost, ...alternatives.map(a => a.cost));
-  const bestLatency = Math.min(chosen.latency, ...alternatives.map(a => a.latency));
+  const bestQuality = Math.max(chosen.quality, ...alternatives.map((a) => a.quality));
+  const bestCost = Math.min(chosen.cost, ...alternatives.map((a) => a.cost));
+  const bestLatency = Math.min(chosen.latency, ...alternatives.map((a) => a.latency));
 
-  const qualityRegret = bestQuality > 0 ? Math.max(0, bestQuality - chosen.quality) / bestQuality : 0;
-  const costRegret = Math.max(chosen.cost, bestCost) > 0
-    ? Math.max(0, chosen.cost - bestCost) / Math.max(chosen.cost, bestCost) : 0;
-  const latencyRegret = Math.max(chosen.latency, bestLatency) > 0
-    ? Math.max(0, chosen.latency - bestLatency) / Math.max(chosen.latency, bestLatency) : 0;
+  const qualityRegret =
+    bestQuality > 0 ? Math.max(0, bestQuality - chosen.quality) / bestQuality : 0;
+  const costRegret =
+    Math.max(chosen.cost, bestCost) > 0
+      ? Math.max(0, chosen.cost - bestCost) / Math.max(chosen.cost, bestCost)
+      : 0;
+  const latencyRegret =
+    Math.max(chosen.latency, bestLatency) > 0
+      ? Math.max(0, chosen.latency - bestLatency) / Math.max(chosen.latency, bestLatency)
+      : 0;
 
-  const compositeRegret = weights.quality * qualityRegret + weights.cost * costRegret + weights.latency * latencyRegret;
+  const compositeRegret =
+    weights.quality * qualityRegret + weights.cost * costRegret + weights.latency * latencyRegret;
 
   return { qualityRegret, costRegret, latencyRegret, compositeRegret, weights };
 }
@@ -532,7 +569,11 @@ export function computeCompositeEfficiency(
   quality: number,
   cost: number,
   latencyMs: number,
-  weights: { quality: number; cost: number; latency: number } = { quality: 1.0, cost: 0.5, latency: 0.3 },
+  weights: { quality: number; cost: number; latency: number } = {
+    quality: 1.0,
+    cost: 0.5,
+    latency: 0.3,
+  }
 ): CompositeEfficiency {
   const latencySec = latencyMs / 1000;
   const qualityPerDollar = computeCostEfficiency(quality, cost);
@@ -541,7 +582,8 @@ export function computeCompositeEfficiency(
   const costTerm = Math.max(cost, 0.0001);
   const latencyTerm = Math.max(latencySec, 0.001);
 
-  const compositeScore = Math.pow(quality, weights.quality) /
+  const compositeScore =
+    Math.pow(quality, weights.quality) /
     (Math.pow(costTerm, weights.cost) * Math.pow(latencyTerm, weights.latency));
 
   return { qualityPerDollar, qualityPerSecond, compositeScore, weights };
@@ -591,7 +633,10 @@ function dominates(a: ParetoPoint, b: ParetoPoint): boolean {
 
   const allBetterOrEqual = betterQuality && betterCost && betterLatency && betterSuccess;
   const strictlyBetterInOne =
-    a.quality > b.quality || a.cost < b.cost || a.latency < b.latency || a.successRate > b.successRate;
+    a.quality > b.quality ||
+    a.cost < b.cost ||
+    a.latency < b.latency ||
+    a.successRate > b.successRate;
 
   return allBetterOrEqual && strictlyBetterInOne;
 }
@@ -678,9 +723,7 @@ function tCDF(x: number, df: number): number {
   // Use regularized incomplete beta function
   const ibeta = regularizedIncompleteBeta(betaX, df / 2, 0.5);
 
-  return x >= 0
-    ? 1 - 0.5 * ibeta
-    : 0.5 * ibeta;
+  return x >= 0 ? 1 - 0.5 * ibeta : 0.5 * ibeta;
 }
 
 /**
@@ -702,14 +745,14 @@ function regularizedIncompleteBeta(x: number, a: number, b: number): number {
   // Continued fraction (modified Lentz)
   let f = 1;
   let c = 1;
-  let d = 1 - (a + b) * x / (a + 1);
+  let d = 1 - ((a + b) * x) / (a + 1);
   if (Math.abs(d) < 1e-30) d = 1e-30;
   d = 1 / d;
   f = d;
 
   for (let m = 1; m <= 200; m++) {
     // Even step
-    let numerator = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+    let numerator = (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m));
     d = 1 + numerator * d;
     if (Math.abs(d) < 1e-30) d = 1e-30;
     c = 1 + numerator / c;
@@ -718,7 +761,7 @@ function regularizedIncompleteBeta(x: number, a: number, b: number): number {
     f *= c * d;
 
     // Odd step
-    numerator = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+    numerator = (-(a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1));
     d = 1 + numerator * d;
     if (Math.abs(d) < 1e-30) d = 1e-30;
     c = 1 + numerator / c;
@@ -741,14 +784,8 @@ function lnGamma(z: number): number {
 
   // Lanczos approximation (g=7)
   const coefficients = [
-    0.99999999999980993,
-    676.5203681218851,
-    -1259.1392167224028,
-    771.32342877765313,
-    -176.61502916214059,
-    12.507343278686905,
-    -0.13857109526572012,
-    9.9843695780195716e-6,
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
     1.5056327351493116e-7,
   ];
 

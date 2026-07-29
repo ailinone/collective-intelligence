@@ -52,8 +52,16 @@ describe('runProviderDiscovery', () => {
     process.env.TEST_PROVIDER_B_KEY = 'sk-bbb';
 
     const providers: ConfiguredProvider[] = [
-      { providerId: 'providerA', integrationClass: 'oai-compat-pure', apiKeyEnvVar: 'TEST_PROVIDER_A_KEY' },
-      { providerId: 'providerB', integrationClass: 'oai-compat-pure', apiKeyEnvVar: 'TEST_PROVIDER_B_KEY' },
+      {
+        providerId: 'providerA',
+        integrationClass: 'oai-compat-pure',
+        apiKeyEnvVar: 'TEST_PROVIDER_A_KEY',
+      },
+      {
+        providerId: 'providerB',
+        integrationClass: 'oai-compat-pure',
+        apiKeyEnvVar: 'TEST_PROVIDER_B_KEY',
+      },
     ];
 
     const snapshot = await runProviderDiscovery(providers);
@@ -142,13 +150,23 @@ describe('runProviderDiscovery', () => {
 
     const probeCallbacks: Record<string, ProviderProbeCallbacks> = {
       hubX: {
-        probeCredit: async () => ({ status: 'exhausted', balanceUsd: 0, reason: 'balance is $0.00' }),
+        probeCredit: async () => ({
+          status: 'exhausted',
+          balanceUsd: 0,
+          reason: 'balance is $0.00',
+        }),
       },
     };
 
     const snapshot = await runProviderDiscovery(
-      [{ providerId: 'hubX', integrationClass: 'aggregator-with-billing', apiKeyEnvVar: 'CREDIT_KEY' }],
-      { probeCallbacks },
+      [
+        {
+          providerId: 'hubX',
+          integrationClass: 'aggregator-with-billing',
+          apiKeyEnvVar: 'CREDIT_KEY',
+        },
+      ],
+      { probeCallbacks }
     );
 
     const result = snapshot.results.get('hubX');
@@ -171,7 +189,7 @@ describe('runProviderDiscovery', () => {
 
     const snapshot = await runProviderDiscovery(
       [{ providerId: 'lister', integrationClass: 'oai-compat-pure', apiKeyEnvVar: 'LM_KEY' }],
-      { probeCallbacks },
+      { probeCallbacks }
     );
 
     expect(snapshot.results.get('lister')?.models).toHaveLength(2);
@@ -202,8 +220,14 @@ describe('runProviderDiscovery', () => {
     };
 
     const snapshot = await runProviderDiscovery(
-      [{ providerId: 'full', integrationClass: 'aggregator-with-billing', apiKeyEnvVar: 'FULL_KEY' }],
-      { probeCallbacks },
+      [
+        {
+          providerId: 'full',
+          integrationClass: 'aggregator-with-billing',
+          apiKeyEnvVar: 'FULL_KEY',
+        },
+      ],
+      { probeCallbacks }
     );
 
     const result = snapshot.results.get('full');
@@ -217,16 +241,17 @@ describe('runProviderDiscovery', () => {
 
     const probeCallbacks: Record<string, ProviderProbeCallbacks> = {
       slow: {
-        listModels: () => new Promise((resolve) => {
-          // Never resolves — will time out
-          setTimeout(() => resolve([{ modelId: 'never' }]), 10_000);
-        }),
+        listModels: () =>
+          new Promise((resolve) => {
+            // Never resolves — will time out
+            setTimeout(() => resolve([{ modelId: 'never' }]), 10_000);
+          }),
       },
     };
 
     const snapshot = await runProviderDiscovery(
       [{ providerId: 'slow', integrationClass: 'oai-compat-pure', apiKeyEnvVar: 'SLOW_KEY' }],
-      { probeCallbacks, perProviderTimeoutMs: 50 },
+      { probeCallbacks, perProviderTimeoutMs: 50 }
     );
 
     const result = snapshot.results.get('slow');
@@ -245,8 +270,12 @@ describe('runProviderDiscovery', () => {
       { providerId: 'b', integrationClass: 'oai-compat-pure', apiKeyEnvVar: 'B' },
     ]);
 
-    expect(getCounterValueForTesting(METRIC_NAMES.PROVIDER_CONFIGURED_TOTAL, { providerId: 'a' })).toBe(1);
-    expect(getCounterValueForTesting(METRIC_NAMES.PROVIDER_CONFIGURED_TOTAL, { providerId: 'b' })).toBe(1);
+    expect(
+      getCounterValueForTesting(METRIC_NAMES.PROVIDER_CONFIGURED_TOTAL, { providerId: 'a' })
+    ).toBe(1);
+    expect(
+      getCounterValueForTesting(METRIC_NAMES.PROVIDER_CONFIGURED_TOTAL, { providerId: 'b' })
+    ).toBe(1);
   });
 
   it('emits provider_configured_but_not_discovered_total for unavailable providers', async () => {
@@ -258,7 +287,7 @@ describe('runProviderDiscovery', () => {
 
     const value = getCounterValueForTesting(
       METRIC_NAMES.PROVIDER_CONFIGURED_BUT_NOT_DISCOVERED_TOTAL,
-      { providerId: 'missing', reason: 'missing env var: MISSING' },
+      { providerId: 'missing', reason: 'missing env var: MISSING' }
     );
     expect(value).toBeGreaterThanOrEqual(1);
   });

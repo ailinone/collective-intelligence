@@ -47,9 +47,7 @@ export interface StructuredAdapterError {
   readonly message?: string;
 }
 
-export function buildProviderFailureFromStructured(
-  err: StructuredAdapterError,
-): ProviderFailure {
+export function buildProviderFailureFromStructured(err: StructuredAdapterError): ProviderFailure {
   return {
     code: err.code,
     source: 'structured_provider_error',
@@ -84,8 +82,7 @@ export function buildProviderFailureFromString(input: {
   }
   // Retryable: rate_limited and timeout are typically retryable; auth_failed
   // and no_credits typically aren't (operator action required).
-  const retryable =
-    code === 'rate_limited' || code === 'timeout' || code === 'provider_error';
+  const retryable = code === 'rate_limited' || code === 'timeout' || code === 'provider_error';
   return {
     code,
     source,

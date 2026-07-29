@@ -101,7 +101,7 @@ export interface BalanceStore {
     organizationId: string,
     amountUsd: number,
     idempotencyKey: string,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<DebitResult>;
   /**
    * Atomically reserve `amountUsd` against the SPENDABLE balance and persist a hold.
@@ -112,7 +112,7 @@ export interface BalanceStore {
     organizationId: string,
     holdId: string,
     amountUsd: number,
-    opts?: ReserveOptions,
+    opts?: ReserveOptions
   ): Promise<ReserveResult>;
   /**
    * Settle a hold: apply `actualChargeUsd` to the balance (idempotent — keyed by the
@@ -123,7 +123,7 @@ export interface BalanceStore {
     organizationId: string,
     holdId: string,
     actualChargeUsd: number,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<DebitResult>;
   /** Release a hold with NO charge (e.g. the request failed before spending). Idempotent. */
   releaseHold(organizationId: string, holdId: string): Promise<void>;
@@ -143,13 +143,18 @@ export interface SpendGateOptions {
 
 export type SpendGateDecision =
   | { allowed: true; balanceUsd: number; estimatedMaxChargeUsd: number }
-  | { allowed: false; reason: 'insufficient_funds'; balanceUsd: number; estimatedMaxChargeUsd: number };
+  | {
+      allowed: false;
+      reason: 'insufficient_funds';
+      balanceUsd: number;
+      estimatedMaxChargeUsd: number;
+    };
 
 /** Decide whether a request may start, given the (spendable) balance and the worst-case charge. */
 export function evaluateSpendGate(
   balanceUsd: number,
   estimatedMaxChargeUsd: number,
-  opts: SpendGateOptions = {},
+  opts: SpendGateOptions = {}
 ): SpendGateDecision {
   const floor = opts.minBalanceUsd ?? 0;
   if (balanceUsd - estimatedMaxChargeUsd < floor) {
@@ -167,11 +172,11 @@ export function estimateMaxChargeUsd(
   tierInputPer1MUsd: number,
   tierOutputPer1MUsd: number,
   promptTokens: number,
-  maxCompletionTokens: number,
+  maxCompletionTokens: number
 ): number {
   return roundUsd(
     (Math.max(0, promptTokens) / 1_000_000) * tierInputPer1MUsd +
-      (Math.max(0, maxCompletionTokens) / 1_000_000) * tierOutputPer1MUsd,
+      (Math.max(0, maxCompletionTokens) / 1_000_000) * tierOutputPer1MUsd
   );
 }
 
@@ -195,7 +200,7 @@ export class PrepaidWallet {
   async checkGate(
     organizationId: string,
     estimatedMaxChargeUsd: number,
-    opts?: SpendGateOptions,
+    opts?: SpendGateOptions
   ): Promise<SpendGateDecision> {
     const available = await this.store.getAvailableUsd(organizationId);
     return evaluateSpendGate(available, estimatedMaxChargeUsd, opts);
@@ -210,7 +215,7 @@ export class PrepaidWallet {
     organizationId: string,
     holdId: string,
     estimatedMaxChargeUsd: number,
-    opts?: SpendGateOptions & { ttlMs?: number },
+    opts?: SpendGateOptions & { ttlMs?: number }
   ): Promise<SpendGateDecision> {
     const hold = roundUsd(Math.max(0, estimatedMaxChargeUsd));
     const res = await this.store.reserveHold(organizationId, holdId, hold, {
@@ -237,7 +242,7 @@ export class PrepaidWallet {
     organizationId: string,
     holdId: string,
     actualChargeUsd: number,
-    requestId?: string,
+    requestId?: string
   ): Promise<number> {
     const charge = roundUsd(Math.max(0, actualChargeUsd));
     const res = await this.store.settleHold(organizationId, holdId, charge, {
@@ -273,7 +278,7 @@ export class PrepaidWallet {
     organizationId: string,
     chargeUsd: number,
     requestId?: string,
-    idempotencyKey?: string,
+    idempotencyKey?: string
   ): Promise<number> {
     const debit = roundUsd(Math.max(0, chargeUsd));
     if (debit === 0) return this.store.getBalanceUsd(organizationId);
@@ -342,7 +347,11 @@ export class InMemoryBalanceStore implements BalanceStore {
     return roundUsd(this.bal(organizationId) - this.reservedUsd(organizationId, Date.now()));
   }
 
-  async adjustBalanceUsd(organizationId: string, deltaUsd: number, _memo: CreditMemo): Promise<number> {
+  async adjustBalanceUsd(
+    organizationId: string,
+    deltaUsd: number,
+    _memo: CreditMemo
+  ): Promise<number> {
     const next = roundUsd(this.bal(organizationId) + deltaUsd);
     this.balances.set(organizationId, next);
     return next;
@@ -352,7 +361,7 @@ export class InMemoryBalanceStore implements BalanceStore {
     organizationId: string,
     amountUsd: number,
     idempotencyKey: string,
-    _memo: CreditMemo,
+    _memo: CreditMemo
   ): Promise<DebitResult> {
     const prior = this.appliedKeys.get(idempotencyKey);
     if (prior !== undefined) return { balanceUsd: prior, applied: false };
@@ -366,14 +375,18 @@ export class InMemoryBalanceStore implements BalanceStore {
     organizationId: string,
     holdId: string,
     amountUsd: number,
-    opts?: ReserveOptions,
+    opts?: ReserveOptions
   ): Promise<ReserveResult> {
     const now = Date.now();
     const existing = this.holds.get(holdId);
     if (existing) {
       // Idempotent: re-reserving the same id is a no-op that reports current state.
       const available = await this.getAvailableUsd(organizationId);
-      return { ok: existing.status === 'active', availableUsd: available, balanceUsd: this.bal(organizationId) };
+      return {
+        ok: existing.status === 'active',
+        availableUsd: available,
+        balanceUsd: this.bal(organizationId),
+      };
     }
     const floor = opts?.minBalanceUsd ?? 0;
     const ttl = opts?.ttlMs ?? DEFAULT_HOLD_TTL_MS;
@@ -387,14 +400,18 @@ export class InMemoryBalanceStore implements BalanceStore {
       status: 'active',
       expiresAtMs: now + ttl,
     });
-    return { ok: true, availableUsd: roundUsd(available - amountUsd), balanceUsd: this.bal(organizationId) };
+    return {
+      ok: true,
+      availableUsd: roundUsd(available - amountUsd),
+      balanceUsd: this.bal(organizationId),
+    };
   }
 
   async settleHold(
     organizationId: string,
     holdId: string,
     actualChargeUsd: number,
-    memo: CreditMemo,
+    memo: CreditMemo
   ): Promise<DebitResult> {
     const key = memo.idempotencyKey ?? holdId;
     const hold = this.holds.get(holdId);

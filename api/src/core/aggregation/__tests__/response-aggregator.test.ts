@@ -13,7 +13,11 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ResponseAggregator, type ModelResponse, type AggregationContext } from '../response-aggregator';
+import {
+  ResponseAggregator,
+  type ModelResponse,
+  type AggregationContext,
+} from '../response-aggregator';
 
 describe('ResponseAggregator', () => {
   let aggregator: ResponseAggregator;
@@ -178,4 +182,3 @@ describe('ResponseAggregator', () => {
     });
   });
 });
-

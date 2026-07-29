@@ -56,7 +56,7 @@ const log = logger.child({ component: 'ensemble-coordinator-shadow' });
  */
 export async function runEnsembleInShadow(
   request: EnsembleDecisionRequest,
-  options: ShadowRunOptions = {},
+  options: ShadowRunOptions = {}
 ): Promise<EnsembleDecisionResult | null> {
   const config = options.config ?? loadEnsembleClientConfig();
 
@@ -72,7 +72,7 @@ export async function runEnsembleInShadow(
     // surfaces in observability.
     log.warn(
       { strategy: request.strategy, decisionType: request.decisionType },
-      'runEnsembleInShadow called with shadowMode=false; results will be discarded',
+      'runEnsembleInShadow called with shadowMode=false; results will be discarded'
     );
   }
 
@@ -98,20 +98,17 @@ export async function runEnsembleInShadow(
           divergence: detectDivergence(result.decision, options.heuristicDecisionForComparison),
           elapsedMs,
         },
-        'Ensemble shadow decision recorded',
+        'Ensemble shadow decision recorded'
       );
     } else if (result.kind === 'disabled') {
       // Shouldn't happen given the early return above, but be defensive.
       log.debug({ strategy: request.strategy, elapsedMs }, 'Shadow call hit disabled state');
     } else if (result.kind === 'timeout') {
-      log.warn(
-        { strategy: request.strategy, elapsedMs },
-        'Ensemble shadow call timed out',
-      );
+      log.warn({ strategy: request.strategy, elapsedMs }, 'Ensemble shadow call timed out');
     } else {
       log.warn(
         { strategy: request.strategy, message: result.message, elapsedMs },
-        'Ensemble shadow call errored',
+        'Ensemble shadow call errored'
       );
     }
 
@@ -125,7 +122,7 @@ export async function runEnsembleInShadow(
     } catch (metricsErr) {
       log.warn(
         { strategy: request.strategy, error: serializeError(metricsErr) },
-        'recordShadowMetrics threw — ignoring',
+        'recordShadowMetrics threw — ignoring'
       );
     }
 
@@ -136,7 +133,7 @@ export async function runEnsembleInShadow(
         // A buggy hook must not poison the request path.
         log.warn(
           { strategy: request.strategy, error: serializeError(hookErr) },
-          'onShadowResult hook threw — ignoring',
+          'onShadowResult hook threw — ignoring'
         );
       }
     }
@@ -148,7 +145,7 @@ export async function runEnsembleInShadow(
     const elapsedMs = Date.now() - start;
     log.warn(
       { strategy: request.strategy, error: serializeError(err), elapsedMs },
-      'Shadow runner caught unexpected error',
+      'Shadow runner caught unexpected error'
     );
     return null;
   }
@@ -234,7 +231,7 @@ export interface ShadowEnsembleSnapshot {
  */
 export function liftToSnapshot(
   result: EnsembleDecisionResult,
-  heuristic: { role: string; scheduler: string; reason: string } | undefined,
+  heuristic: { role: string; scheduler: string; reason: string } | undefined
 ): ShadowEnsembleSnapshot {
   if (result.kind === 'success') {
     return {
@@ -275,7 +272,7 @@ export function liftToSnapshot(
  */
 export function detectDivergence(
   shadow: AggregatedEnsembleDecision,
-  heuristic: { role: string; scheduler: string; reason: string } | undefined,
+  heuristic: { role: string; scheduler: string; reason: string } | undefined
 ): DivergenceReport | null {
   if (!heuristic) return null;
   return {

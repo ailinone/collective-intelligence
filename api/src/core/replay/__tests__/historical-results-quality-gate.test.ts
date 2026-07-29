@@ -69,7 +69,7 @@ describe('classifyRow — exclusions', () => {
         judgeScaleDetected: 'unknown',
         judgeComparable: false,
         costUsd: null,
-      }),
+      })
     );
     expect(d.usage).toBe('excluded');
     expect(d.reasons).toContain('no_usable_signal');
@@ -85,7 +85,7 @@ describe('classifyRow — partial usability', () => {
         judgeScaleDetected: 'unknown',
         judgeComparable: false,
         costUsd: 0.05,
-      }),
+      })
     );
     expect(d.usage).toBe('usable_for_cost_only');
   });
@@ -99,7 +99,7 @@ describe('classifyRow — partial usability', () => {
         judgeComparable: false,
         costUsd: null,
         failureMode: 'provider_timeout',
-      }),
+      })
     );
     expect(d.usage).toBe('usable_for_failure_analysis_only');
   });

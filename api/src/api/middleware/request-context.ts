@@ -131,17 +131,15 @@ function shouldSuppressRoutineRequestLogs(
   return ROUTINE_LOG_SUPPRESSED_PATHS.has(normalizePath(request.url));
 }
 
-function logRequestCompleted(
-  payload: {
-    requestId: string;
-    correlationId?: string;
-    method: string;
-    url: string;
-    statusCode: number;
-    duration: number;
-    metadata: Record<string, unknown> | undefined;
-  }
-): void {
+function logRequestCompleted(payload: {
+  requestId: string;
+  correlationId?: string;
+  method: string;
+  url: string;
+  statusCode: number;
+  duration: number;
+  metadata: Record<string, unknown> | undefined;
+}): void {
   if (payload.statusCode >= 500) {
     log.error(payload, 'Request completed');
     return;
@@ -305,9 +303,7 @@ const requestContextMiddleware: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('onResponse', async (request, reply) => {
     const context = getRequestContext();
     const duration = context ? Date.now() - context.startTime : 0;
-    const suppressRoutineLogs = shouldSuppressRoutineRequestLogs(
-      request as ExtendedFastifyRequest
-    );
+    const suppressRoutineLogs = shouldSuppressRoutineRequestLogs(request as ExtendedFastifyRequest);
 
     if (suppressRoutineLogs && reply.statusCode < 400) {
       return;

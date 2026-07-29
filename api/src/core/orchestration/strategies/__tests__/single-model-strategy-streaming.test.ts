@@ -36,7 +36,9 @@ function chunk(content: string): ChatResponse {
     object: 'chat.completion.chunk',
     created: 0,
     model: 'm',
-    choices: [{ index: 0, delta: { role: 'assistant', content }, finish_reason: null, logprobs: null }],
+    choices: [
+      { index: 0, delta: { role: 'assistant', content }, finish_reason: null, logprobs: null },
+    ],
   } as ChatResponse;
 }
 
@@ -45,14 +47,16 @@ function mockAdapter(name: string, behavior: Behavior): ProviderAdapter {
     getName: () => name,
     async *chatCompletionStream(): AsyncGenerator<ChatResponse> {
       if (behavior === 'fail-before') throw new Error(`${name} HTTP 403 insufficient_user_quota`);
-      if (behavior === 'hang') { await new Promise(() => {}); }
+      if (behavior === 'hang') {
+        await new Promise(() => {});
+      }
       yield chunk(`[${name}]hello`);
       yield chunk(' world');
     },
   } as unknown as ProviderAdapter;
 }
 
-const model = (id: string): Model => ({ id, name: id } as Model);
+const model = (id: string): Model => ({ id, name: id }) as Model;
 const req = { messages: [{ role: 'user', content: 'x' }] } as ChatRequest;
 const context = { requestId: 'r1', models: [] } as unknown as OrchestrationContext;
 
@@ -85,7 +89,9 @@ describe('SingleModelStrategy: supportsStreaming', () => {
 
 describe('SingleModelStrategy.executeStream', () => {
   it('streams real chunks from the selected model (not one buffered final chunk)', async () => {
-    const s = new ScriptedSingleModelStrategy([{ adapter: mockAdapter('A', 'ok'), model: model('a') }]);
+    const s = new ScriptedSingleModelStrategy([
+      { adapter: mockAdapter('A', 'ok'), model: model('a') },
+    ]);
     const chunks: ChatResponse[] = [];
     for await (const c of s.executeStream(req, context)) chunks.push(c);
     // Genuine streaming means MULTIPLE chunks, not the whole answer in one.
@@ -102,7 +108,7 @@ describe('SingleModelStrategy.executeStream', () => {
     expect(out).toBe('[B]hello world');
   });
 
-  it('throws (does not silently succeed) when every candidate fails — matches execute()\'s error contract', async () => {
+  it("throws (does not silently succeed) when every candidate fails — matches execute()'s error contract", async () => {
     const s = new ScriptedSingleModelStrategy([
       { adapter: mockAdapter('A', 'fail-before'), model: model('a') },
       { adapter: mockAdapter('B', 'fail-before'), model: model('b') },
@@ -112,7 +118,9 @@ describe('SingleModelStrategy.executeStream', () => {
 
   it('throws when selectBestModel finds no candidate at all', async () => {
     const s = new ScriptedSingleModelStrategy([]);
-    await expect(collect(s.executeStream(req, context))).rejects.toThrow(/No suitable model available/);
+    await expect(collect(s.executeStream(req, context))).rejects.toThrow(
+      /No suitable model available/
+    );
   });
 
   it('does not cap max_tokens on a plain single-model request (skipSynthesisCap)', async () => {
@@ -125,7 +133,9 @@ describe('SingleModelStrategy.executeStream', () => {
       },
     } as unknown as ProviderAdapter;
     const s = new ScriptedSingleModelStrategy([{ adapter, model: model('a') }]);
-    await collect(s.executeStream({ messages: [{ role: 'user', content: 'x' }] } as ChatRequest, context));
+    await collect(
+      s.executeStream({ messages: [{ role: 'user', content: 'x' }] } as ChatRequest, context)
+    );
     expect(seenMaxTokens).toBeUndefined();
   });
 });

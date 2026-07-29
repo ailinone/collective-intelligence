@@ -40,13 +40,21 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
       id: 'devil-advocate-consensus',
       name: 'devil-advocate-consensus',
       displayName: "Devil's Advocate Consensus",
-      description: 'N-1 models propose, 1 critiques, synthesizer incorporates valid criticisms. Anti-groupthink by design.',
+      description:
+        'N-1 models propose, 1 critiques, synthesizer incorporates valid criticisms. Anti-groupthink by design.',
       minModels: 3,
       maxModels: 5,
       estimatedCostMultiplier: 4.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 3.0,
-      suitableFor: ['analysis', 'code-review', 'debugging', 'refactoring', 'reasoning', 'documentation'],
+      suitableFor: [
+        'analysis',
+        'code-review',
+        'debugging',
+        'refactoring',
+        'reasoning',
+        'documentation',
+      ],
     };
   }
 
@@ -55,12 +63,19 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     return Promise.race([
       this.executeCore(request, context, startTime),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Devil advocate timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error(`Devil advocate timeout after ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS
+        )
       ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Devil advocate requires at least 3 models');
 
@@ -71,14 +86,18 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        "Devil's-advocate consensus: requested model not in operational pool — falling back to quality-sorted synthesizer",
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        "Devil's-advocate consensus: requested model not in operational pool — falling back to quality-sorted synthesizer"
       );
     }
     const sorted = assembleExecutors(
       preference,
       Math.min(5, models.length),
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const synthesizer = sorted[0];
     const devilsAdvocate = sorted[1];
@@ -86,19 +105,31 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
 
     const executions: ModelExecution[] = [];
 
-    log.info({ synthesizer: synthesizer.id, devil: devilsAdvocate.id, proposers: proposers.map(p => p.id) }, 'Devil advocate: starting');
+    log.info(
+      {
+        synthesizer: synthesizer.id,
+        devil: devilsAdvocate.id,
+        proposers: proposers.map((p) => p.id),
+      },
+      'Devil advocate: starting'
+    );
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: proposers.map(p => p.name || p.id), summary: `Devil's advocate: ${proposers.length} proposers + 1 critic + 1 synthesizer.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: proposers.map((p) => p.name || p.id),
+      summary: `Devil's advocate: ${proposers.length} proposers + 1 critic + 1 synthesizer.`,
+    });
 
     // Phase 1: Proposers respond in parallel (blind) — via executeModel (bulkhead + retry + metrics)
     const reasoningEnabled = this.isReasoningEnabled(request);
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
     // F3-EXPAND: resolve slots + variant for proposer (same pattern as consensus)
-    const promptSlots = process.env.ENABLE_PROMPT_SLOTS === 'true'
-      ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
-      : undefined;
+    const promptSlots =
+      process.env.ENABLE_PROMPT_SLOTS === 'true'
+        ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
+        : undefined;
     const selectedVariant = this.selectPromptVariant('consensusVoter', context);
     const activeVariantId = selectedVariant?.id;
 
@@ -109,7 +140,13 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
       const basePrompt = selectedVariant
         ? selectedVariant.content
         : PROMPTS.consensusVoter(promptSlots);
-      const proposalReq: ChatRequest = { ...request, messages: [{ role: 'system', content: this.withReasoningPrompt(basePrompt, request, model) }, ...request.messages] };
+      const proposalReq: ChatRequest = {
+        ...request,
+        messages: [
+          { role: 'system', content: this.withReasoningPrompt(basePrompt, request, model) },
+          ...request.messages,
+        ],
+      };
       const exec = hasTools
         ? await this.executeModelWithTools(adapter, model, proposalReq, 'proposer')
         : reasoningEnabled
@@ -140,31 +177,71 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
 
     if (proposals.length === 0) return this.emptyResult(startTime, executions);
 
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const proposalsText = proposals.map((p, i) => `### Proposal ${i + 1} (${p.name}):\n${p.content}`).join('\n\n---\n\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const proposalsText = proposals
+      .map((p, i) => `### Proposal ${i + 1} (${p.name}):\n${p.content}`)
+      .join('\n\n---\n\n');
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 3, summary: `${proposals.length} proposals received. Devil's advocate critiquing.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 3,
+      summary: `${proposals.length} proposals received. Devil's advocate critiquing.`,
+    });
 
     // Phase 2: Devil's advocate critiques — via executeModel
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
     const devilAdapter = await this.getAdapterForModel(devilsAdvocate, context);
     let critique = '';
     if (devilAdapter) {
-      const critiqueReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.devilsAdvocate }, { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS TO CRITIQUE:\n${proposalsText}` }] };
-      const critiqueExec = await this.executeModel(devilAdapter, devilsAdvocate, critiqueReq, 'critic');
+      const critiqueReq: ChatRequest = {
+        ...request,
+        messages: [
+          { role: 'system', content: PROMPTS.devilsAdvocate },
+          {
+            role: 'user',
+            content: `ORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS TO CRITIQUE:\n${proposalsText}`,
+          },
+        ],
+      };
+      const critiqueExec = await this.executeModel(
+        devilAdapter,
+        devilsAdvocate,
+        critiqueReq,
+        'critic'
+      );
       executions.push(critiqueExec);
       const rawCritique = critiqueExec.response?.choices?.[0]?.message?.content;
       critique = typeof rawCritique === 'string' ? rawCritique : '';
     }
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 3, summary: 'Critique complete. Synthesizer producing final answer.' });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizer merging proposals with critique.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 3,
+      summary: 'Critique complete. Synthesizer producing final answer.',
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizer merging proposals with critique.',
+    });
 
     // Phase 3: Synthesizer — via executeWithLeader
     const synthAdapter = await this.getAdapterForModel(synthesizer, context);
     if (!synthAdapter) throw new Error(`No adapter for synthesizer ${synthesizer.id}`);
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
-    const synthReq: ChatRequest = { ...request, messages: [{ role: 'user', content: `Synthesize the BEST answer.\n\nORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS:\n${proposalsText}\n\nCRITIC'S REVIEW:\n${critique || '(none)'}${reasoningTraces}\n\nProduce the definitive answer.\n${ADAPTIVE_DEPTH_DIRECTIVE}` }] };
+    const synthReq: ChatRequest = {
+      ...request,
+      messages: [
+        {
+          role: 'user',
+          content: `Synthesize the BEST answer.\n\nORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS:\n${proposalsText}\n\nCRITIC'S REVIEW:\n${critique || '(none)'}${reasoningTraces}\n\nProduce the definitive answer.\n${ADAPTIVE_DEPTH_DIRECTIVE}`,
+        },
+      ],
+    };
     const synthExec = await this.executeModel(synthAdapter, synthesizer, synthReq, 'synthesizer');
     executions.push(synthExec);
 
@@ -175,22 +252,43 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
       metadata: {
-        strategy: 'devil-advocate-consensus', proposers: proposers.length, proposals: proposals.length, devilsAdvocate: devilsAdvocate.id, synthesizer: synthesizer.id,
-        ...(reasoningEnabled ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) } : {}),
+        strategy: 'devil-advocate-consensus',
+        proposers: proposers.length,
+        proposals: proposals.length,
+        devilsAdvocate: devilsAdvocate.id,
+        synthesizer: synthesizer.id,
+        ...(reasoningEnabled
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
+          : {}),
       },
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Devil advocate requires at least 3 models');
     const preference = resolvePreferredExecutor(models, context, []);
     const sorted = assembleExecutors(
       preference,
       Math.min(5, models.length),
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const synthesizer = sorted[0];
     const devilsAdvocate = sorted[1];
@@ -199,23 +297,32 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     const proposerSystemPrompt = this.withReasoningPrompt(PROMPTS.consensusVoter(), request);
 
     // Phase 1: proposers
-    this.emitObserverEvent(context, { type: 'phase_start', models: proposers.map(p => p.name || p.id), summary: `Devil's advocate: ${proposers.length} proposers + 1 critic + 1 synthesizer.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: proposers.map((p) => p.name || p.id),
+      summary: `Devil's advocate: ${proposers.length} proposers + 1 critic + 1 synthesizer.`,
+    });
     yield this.progressChunk(`${proposers.length} proposers responding...`, 0, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const executions: ModelExecution[] = [];
     const proposals: Array<{ name: string; content: string }> = [];
-    const proposalResults = await Promise.allSettled(proposers.map(async (model) => {
-      if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
-      const adapter = await this.getAdapterForModel(model, context);
-      if (!adapter) throw new Error(`No adapter for ${model.id}`);
-      const proposalReq: ChatRequest = { ...request, messages: [{ role: 'system', content: proposerSystemPrompt }, ...request.messages] };
-      const exec = reasoningEnabled
-        ? await this.executeModelWithReasoning(adapter, model, proposalReq, 'proposer')
-        : await this.executeModel(adapter, model, proposalReq, 'proposer');
-      const rawContent = exec.response?.choices?.[0]?.message?.content;
-      return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
-    }));
+    const proposalResults = await Promise.allSettled(
+      proposers.map(async (model) => {
+        if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
+        const adapter = await this.getAdapterForModel(model, context);
+        if (!adapter) throw new Error(`No adapter for ${model.id}`);
+        const proposalReq: ChatRequest = {
+          ...request,
+          messages: [{ role: 'system', content: proposerSystemPrompt }, ...request.messages],
+        };
+        const exec = reasoningEnabled
+          ? await this.executeModelWithReasoning(adapter, model, proposalReq, 'proposer')
+          : await this.executeModel(adapter, model, proposalReq, 'proposer');
+        const rawContent = exec.response?.choices?.[0]?.message?.content;
+        return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
+      })
+    );
     for (const r of proposalResults) {
       if (r.status === 'fulfilled') {
         executions.push(r.value.exec);
@@ -226,32 +333,74 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     if (proposals.length === 0) throw new Error('All proposers failed');
 
     // Phase 2: critique
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 3, summary: `${proposals.length} proposals received. Devil's advocate critiquing.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 3,
+      summary: `${proposals.length} proposals received. Devil's advocate critiquing.`,
+    });
     yield this.progressChunk(`Critique in progress...`, 1, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const proposalsText = proposals.map((p, i) => `### Proposal ${i + 1} (${p.name}):\n${p.content}`).join('\n\n---\n\n');
-    const critiqueReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.devilsAdvocate }, { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS TO CRITIQUE:\n${proposalsText}` }] };
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const proposalsText = proposals
+      .map((p, i) => `### Proposal ${i + 1} (${p.name}):\n${p.content}`)
+      .join('\n\n---\n\n');
+    const critiqueReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.devilsAdvocate },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS TO CRITIQUE:\n${proposalsText}`,
+        },
+      ],
+    };
     let critique = '';
     try {
       if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
       const devilAdapter = await this.getAdapterForModel(devilsAdvocate, context);
       if (!devilAdapter) throw new Error(`No adapter for devil`);
-      const critiqueExec = await this.executeModel(devilAdapter, devilsAdvocate, critiqueReq, 'critic');
+      const critiqueExec = await this.executeModel(
+        devilAdapter,
+        devilsAdvocate,
+        critiqueReq,
+        'critic'
+      );
       executions.push(critiqueExec);
       const rawCritique = critiqueExec.response?.choices?.[0]?.message?.content;
       critique = typeof rawCritique === 'string' ? rawCritique : '';
-    } catch { /* critique failure is non-fatal */ }
+    } catch {
+      /* critique failure is non-fatal */
+    }
 
     // Phase 3: stream synthesis
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 3, summary: 'Critique complete. Synthesizer producing final answer.' });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizer merging proposals with critique.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 3,
+      summary: 'Critique complete. Synthesizer producing final answer.',
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizer merging proposals with critique.',
+    });
     yield this.progressChunk(`Synthesizing final answer...`, 2, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
-    const synthReq: ChatRequest = { ...request, messages: [{ role: 'user', content: `Synthesize the BEST answer.\n\nORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS:\n${proposalsText}\n\nCRITIC'S REVIEW:\n${critique || '(none)'}${reasoningTraces}\n\nProduce the definitive answer.\n${ADAPTIVE_DEPTH_DIRECTIVE}` }] };
+    const synthReq: ChatRequest = {
+      ...request,
+      messages: [
+        {
+          role: 'user',
+          content: `Synthesize the BEST answer.\n\nORIGINAL QUESTION:\n${originalQ}\n\nPROPOSALS:\n${proposalsText}\n\nCRITIC'S REVIEW:\n${critique || '(none)'}${reasoningTraces}\n\nProduce the definitive answer.\n${ADAPTIVE_DEPTH_DIRECTIVE}`,
+        },
+      ],
+    };
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
     const synthAdapter = await this.getAdapterForModel(synthesizer, context);
@@ -264,18 +413,41 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       synthReq,
       [{ adapter: synthAdapter, model: synthesizer }],
-      () => proposalsText.slice(0, 4000),
+      () => proposalsText.slice(0, 4000)
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Devil advocate synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Devil advocate synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
   private errorResponse(model: Model): ChatResponse {
-    return { id: `error-${Date.now()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model.name, choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop', logprobs: null }] };
+    return {
+      id: `error-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: model.name,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: '' },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+    };
   }
 
   private emptyResult(startTime: number, executions: ModelExecution[]): OrchestrationResult {
-    return { finalResponse: this.errorResponse({ id: 'unknown', name: 'unknown' } as Model), strategyUsed: 'devil-advocate-consensus', modelsUsed: executions, totalDuration: Date.now() - startTime, totalCost: 0, metadata: { strategy: 'devil-advocate-consensus', error: 'all-failed' } };
+    return {
+      finalResponse: this.errorResponse({ id: 'unknown', name: 'unknown' } as Model),
+      strategyUsed: 'devil-advocate-consensus',
+      modelsUsed: executions,
+      totalDuration: Date.now() - startTime,
+      totalCost: 0,
+      metadata: { strategy: 'devil-advocate-consensus', error: 'all-failed' },
+    };
   }
 }

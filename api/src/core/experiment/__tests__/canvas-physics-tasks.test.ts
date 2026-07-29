@@ -15,7 +15,10 @@ import {
   getVerifiableTaskIndices,
   CANVAS_PHYSICS_TASK_TYPE,
 } from '../experiment-suite';
-import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
+import {
+  resolveAnswerChecker,
+  type AnswerCheckSpec,
+} from '@/core/orchestration/verification/answer-check-resolver';
 
 const canvasTasks = EXPERIMENT_SUITE.filter((t) => t.taskType === CANVAS_PHYSICS_TASK_TYPE);
 
@@ -27,7 +30,7 @@ describe('canvas-physics task block (136-145)', () => {
       expect(t.answerCheck?.kind).toBe('contains_all');
       expect(t.answerCheckScope).toBe('full');
       // never clip the code output
-      expect((t.maxTokens ?? 0)).toBeGreaterThanOrEqual(16000);
+      expect(t.maxTokens ?? 0).toBeGreaterThanOrEqual(16000);
       // asks for a single self-contained file, not a FINAL: line
       expect(t.prompt).toMatch(/self-contained/i);
       expect(t.prompt).not.toMatch(/FINAL:/);

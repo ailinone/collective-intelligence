@@ -20,12 +20,7 @@
  */
 
 export type ModelRole =
-  | 'anchor'
-  | 'support'
-  | 'critic'
-  | 'budget_support'
-  | 'avoid'
-  | 'insufficient_data';
+  'anchor' | 'support' | 'critic' | 'budget_support' | 'avoid' | 'insufficient_data';
 
 export interface ModelTaskPerformanceProfile {
   readonly modelId: string;

@@ -161,7 +161,7 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
   if (!CONFIG.hashPepper) {
     throw new Error(
       'FEEDBACK_HASH_PEPPER is not set — refusing to export training data. ' +
-        'Trace-ID hashes would be reversible with a known/default pepper; set the env var to enable the export.',
+        'Trace-ID hashes would be reversible with a known/default pepper; set the env var to enable the export.'
     );
   }
   const now = new Date();
@@ -174,8 +174,10 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
     mkdirSync(CONFIG.outputDir, { recursive: true });
   }
 
-  log.info({ extractionId, cutoff: cutoff.toISOString(), outputDir: CONFIG.outputDir },
-    'Starting training data export');
+  log.info(
+    { extractionId, cutoff: cutoff.toISOString(), outputDir: CONFIG.outputDir },
+    'Starting training data export'
+  );
 
   // ── Extract outcomes ────────────────────────────────────────────────
   const outcomesFile = join(CONFIG.outputDir, `feedback-outcomes-${dateStr}.jsonl`);
@@ -207,7 +209,10 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
 
   // ── Extract collective coordination runs + signals (F3.3) ───────────
   const collectiveRunsFile = join(CONFIG.outputDir, `feedback-collective-runs-${dateStr}.jsonl`);
-  const collectiveSignalsFile = join(CONFIG.outputDir, `feedback-collective-signals-${dateStr}.jsonl`);
+  const collectiveSignalsFile = join(
+    CONFIG.outputDir,
+    `feedback-collective-signals-${dateStr}.jsonl`
+  );
   const collectiveTimer = trainingDataExportDuration.startTimer({ stream: 'collective' });
   let collectiveResult;
   try {
@@ -215,10 +220,13 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
       extractionId,
       cutoff,
       collectiveRunsFile,
-      collectiveSignalsFile,
+      collectiveSignalsFile
     );
     trainingDataExportRowsTotal.inc({ stream: 'collective_runs' }, collectiveResult.runRowCount);
-    trainingDataExportRowsTotal.inc({ stream: 'collective_signals' }, collectiveResult.signalRowCount);
+    trainingDataExportRowsTotal.inc(
+      { stream: 'collective_signals' },
+      collectiveResult.signalRowCount
+    );
   } catch (err) {
     trainingDataExportErrors.inc({ stream: 'collective', stage: 'fetch' });
     throw err;
@@ -271,14 +279,17 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
   const manifestFile = join(CONFIG.outputDir, `extraction-manifest-${dateStr}.json`);
   writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
 
-  log.info({
-    extractionId,
-    outcomesCount: outcomesResult.rowCount,
-    shadowCount: shadowResult.rowCount,
-    collectiveRunsCount: collectiveResult.runRowCount,
-    collectiveSignalsCount: collectiveResult.signalRowCount,
-    outputDir: CONFIG.outputDir,
-  }, 'Training data export completed');
+  log.info(
+    {
+      extractionId,
+      outcomesCount: outcomesResult.rowCount,
+      shadowCount: shadowResult.rowCount,
+      collectiveRunsCount: collectiveResult.runRowCount,
+      collectiveSignalsCount: collectiveResult.signalRowCount,
+      outputDir: CONFIG.outputDir,
+    },
+    'Training data export completed'
+  );
 
   return manifest;
 }
@@ -288,7 +299,7 @@ export async function runTrainingDataExport(): Promise<ExtractionManifest> {
 async function extractOutcomes(
   extractionId: string,
   cutoff: Date,
-  outputFile: string,
+  outputFile: string
 ): Promise<{ rowCount: number; sha256: string; watermarkStart: Date; watermarkEnd: Date }> {
   // Get current watermark
   const state = await prisma.$queryRaw<Array<{ last_watermark: Date }>>`
@@ -296,23 +307,25 @@ async function extractOutcomes(
   `;
   const watermarkStart = state[0]?.last_watermark ?? new Date('1970-01-01');
 
-  const rows = await prisma.$queryRaw<Array<{
-    decision_trace_id: string;
-    strategy: string;
-    task_type: string | null;
-    complexity: string | null;
-    quality_score: number | null;
-    quality_dimensions: unknown;
-    latency_ms: number;
-    cost_usd: number;
-    total_tokens: number;
-    success: boolean;
-    feedback_iterations: number;
-    models_used: string[];
-    decision_source: string | null;
-    input_hash: string | null;
-    created_at: Date;
-  }>>`
+  const rows = await prisma.$queryRaw<
+    Array<{
+      decision_trace_id: string;
+      strategy: string;
+      task_type: string | null;
+      complexity: string | null;
+      quality_score: number | null;
+      quality_dimensions: unknown;
+      latency_ms: number;
+      cost_usd: number;
+      total_tokens: number;
+      success: boolean;
+      feedback_iterations: number;
+      models_used: string[];
+      decision_source: string | null;
+      input_hash: string | null;
+      created_at: Date;
+    }>
+  >`
     SELECT
       eo.decision_trace_id,
       eo.strategy,
@@ -397,25 +410,27 @@ async function extractOutcomes(
 async function extractShadowEvals(
   extractionId: string,
   cutoff: Date,
-  outputFile: string,
+  outputFile: string
 ): Promise<{ rowCount: number; sha256: string; watermarkStart: Date; watermarkEnd: Date }> {
   const state = await prisma.$queryRaw<Array<{ last_watermark: Date }>>`
     SELECT last_watermark FROM feedback_extraction_state WHERE extraction_type = 'shadow'
   `;
   const watermarkStart = state[0]?.last_watermark ?? new Date('1970-01-01');
 
-  const rows = await prisma.$queryRaw<Array<{
-    decision_trace_id: string;
-    task_type: string;
-    complexity: string;
-    chosen_strategy: string;
-    chosen_quality: number;
-    shadow_strategy: string;
-    shadow_quality: number;
-    quality_regret: number;
-    winner_strategy: string;
-    created_at: Date;
-  }>>`
+  const rows = await prisma.$queryRaw<
+    Array<{
+      decision_trace_id: string;
+      task_type: string;
+      complexity: string;
+      chosen_strategy: string;
+      chosen_quality: number;
+      shadow_strategy: string;
+      shadow_quality: number;
+      quality_regret: number;
+      winner_strategy: string;
+      created_at: Date;
+    }>
+  >`
     SELECT
       decision_trace_id, task_type, complexity,
       chosen_strategy, chosen_quality, shadow_strategy, shadow_quality,
@@ -498,7 +513,7 @@ async function extractCollective(
   extractionId: string,
   cutoff: Date,
   runsOutputFile: string,
-  signalsOutputFile: string,
+  signalsOutputFile: string
 ): Promise<{
   runRowCount: number;
   runSha256: string;
@@ -512,24 +527,26 @@ async function extractCollective(
   `;
   const watermarkStart = state[0]?.last_watermark ?? new Date('1970-01-01');
 
-  const runRows = await prisma.$queryRaw<Array<{
-    id: string;
-    request_id: string | null;
-    strategy: string;
-    rounds: number;
-    stop_reason: string;
-    convergence_score: number;
-    decision_flip_rate: number;
-    dissent: number;
-    total_cost_usd: number;
-    total_latency_ms: number;
-    total_tokens: number;
-    final_decision_type: string | null;
-    final_confidence: number | null;
-    config: unknown;
-    metadata: unknown;
-    created_at: Date;
-  }>>`
+  const runRows = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      request_id: string | null;
+      strategy: string;
+      rounds: number;
+      stop_reason: string;
+      convergence_score: number;
+      decision_flip_rate: number;
+      dissent: number;
+      total_cost_usd: number;
+      total_latency_ms: number;
+      total_tokens: number;
+      final_decision_type: string | null;
+      final_confidence: number | null;
+      config: unknown;
+      metadata: unknown;
+      created_at: Date;
+    }>
+  >`
     SELECT
       id,
       request_id,
@@ -598,24 +615,26 @@ async function extractCollective(
   const capturedSignalRecords: CollectiveSignalExportRecord[] = [];
   if (runRows.length > 0) {
     const runIds = runRows.map((r) => r.id);
-    const signalRows = await prisma.$queryRaw<Array<{
-      run_id: string;
-      round: number;
-      agent_id: string;
-      model_id: string;
-      provider_id: string;
-      role: string | null;
-      decision_type: string;
-      decision_value: unknown;
-      decision_confidence: number;
-      decision_rationale: string | null;
-      sensitivities: unknown;
-      latency_ms: number | null;
-      input_tokens: number | null;
-      output_tokens: number | null;
-      cost_usd: number | null;
-      created_at: Date;
-    }>>`
+    const signalRows = await prisma.$queryRaw<
+      Array<{
+        run_id: string;
+        round: number;
+        agent_id: string;
+        model_id: string;
+        provider_id: string;
+        role: string | null;
+        decision_type: string;
+        decision_value: unknown;
+        decision_confidence: number;
+        decision_rationale: string | null;
+        sensitivities: unknown;
+        latency_ms: number | null;
+        input_tokens: number | null;
+        output_tokens: number | null;
+        cost_usd: number | null;
+        created_at: Date;
+      }>
+    >`
       SELECT
         run_id,
         round,
@@ -722,7 +741,10 @@ function hashTraceId(traceId: string): string {
   if (!CONFIG.hashPepper) {
     throw new Error('FEEDBACK_HASH_PEPPER is not set — cannot hash trace IDs');
   }
-  return createHash('sha256').update(traceId + CONFIG.hashPepper).digest('hex').slice(0, 16);
+  return createHash('sha256')
+    .update(traceId + CONFIG.hashPepper)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function computeSha256(content: string): string {
@@ -740,7 +762,7 @@ export function startTrainingDataExportJob(): void {
   if (!CONFIG.hashPepper) {
     log.error(
       'FEEDBACK_HASH_PEPPER is not set — training data export disabled (fail-closed). ' +
-        'Set the env var to a strong secret to enable the export.',
+        'Set the env var to a strong secret to enable the export.'
     );
     return;
   }
@@ -759,7 +781,7 @@ export function startTrainingDataExportJob(): void {
         log.error({ error: String(err) }, 'Training data export job failed');
       }
     },
-    { timezone: 'UTC' },
+    { timezone: 'UTC' }
   );
 
   log.info({ schedule: CONFIG.cronSchedule }, 'Training data export job scheduled');

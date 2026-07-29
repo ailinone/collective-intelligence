@@ -34,10 +34,7 @@ import type {
   AttemptRoleInStrategy,
   ModelAttemptRecord,
 } from './arm-evaluation-policy';
-import {
-  isOllamaProviderId,
-  isSubstitutionLevelAllowed,
-} from './arm-evaluation-policy';
+import { isOllamaProviderId, isSubstitutionLevelAllowed } from './arm-evaluation-policy';
 import type { ClassifiedModel, CapabilityTier } from './model-classification';
 
 // ─── Verdicts ──────────────────────────────────────────────────────────────
@@ -104,7 +101,7 @@ export function computeSubstitutionLevel(
     readonly modelFamily: string | null;
     readonly capabilityTier: CapabilityTier | null;
   },
-  candidate: ClassifiedModel,
+  candidate: ClassifiedModel
 ): SubstitutionLevel {
   // Special case: when nothing is declared (all null), the arm has not
   // committed to any identity. Any candidate trivially satisfies the
@@ -135,18 +132,12 @@ export function computeSubstitutionLevel(
   }
 
   // Level 2: same family, different provider
-  if (
-    declared.modelFamily !== null &&
-    candidate.modelFamily === declared.modelFamily
-  ) {
+  if (declared.modelFamily !== null && candidate.modelFamily === declared.modelFamily) {
     return 'same_family_different_provider';
   }
 
   // Level 3: same capability tier (cross-family within tier)
-  if (
-    declared.capabilityTier !== null &&
-    candidate.capabilityTier === declared.capabilityTier
-  ) {
+  if (declared.capabilityTier !== null && candidate.capabilityTier === declared.capabilityTier) {
     return 'same_capability_tier';
   }
 
@@ -172,7 +163,7 @@ export interface ExperimentPolicyEngine {
   isCandidateAllowed(
     arm: ResolvedExperimentArm,
     candidate: ClassifiedModel,
-    ctx: SelectionContext,
+    ctx: SelectionContext
   ): CandidateVerdict;
 
   /**
@@ -183,7 +174,7 @@ export interface ExperimentPolicyEngine {
     arm: ResolvedExperimentArm,
     from: ClassifiedModel,
     to: ClassifiedModel,
-    ctx: FallbackContext,
+    ctx: FallbackContext
   ): FallbackVerdict;
 
   /**
@@ -192,7 +183,7 @@ export interface ExperimentPolicyEngine {
    */
   isParallelAttemptAllowed(
     arm: ResolvedExperimentArm,
-    attempts: ReadonlyArray<ClassifiedModel>,
+    attempts: ReadonlyArray<ClassifiedModel>
   ): ParallelVerdict;
 
   /**
@@ -202,7 +193,7 @@ export interface ExperimentPolicyEngine {
   classifyAttempt(
     arm: ResolvedExperimentArm,
     attempt: ModelAttemptRecord,
-    classified: ClassifiedModel,
+    classified: ClassifiedModel
   ): AttemptClassification;
 }
 
@@ -216,7 +207,7 @@ export class DefaultExperimentPolicyEngine implements ExperimentPolicyEngine {
   isCandidateAllowed(
     arm: ResolvedExperimentArm,
     candidate: ClassifiedModel,
-    ctx: SelectionContext,
+    ctx: SelectionContext
   ): CandidateVerdict {
     const policy = arm.policy;
 
@@ -306,7 +297,7 @@ export class DefaultExperimentPolicyEngine implements ExperimentPolicyEngine {
     arm: ResolvedExperimentArm,
     from: ClassifiedModel,
     to: ClassifiedModel,
-    ctx: FallbackContext,
+    ctx: FallbackContext
   ): FallbackVerdict {
     const policy = arm.policy;
 
@@ -395,7 +386,7 @@ export class DefaultExperimentPolicyEngine implements ExperimentPolicyEngine {
 
   isParallelAttemptAllowed(
     arm: ResolvedExperimentArm,
-    attempts: ReadonlyArray<ClassifiedModel>,
+    attempts: ReadonlyArray<ClassifiedModel>
   ): ParallelVerdict {
     const policy = arm.policy;
 
@@ -428,7 +419,7 @@ export class DefaultExperimentPolicyEngine implements ExperimentPolicyEngine {
   classifyAttempt(
     arm: ResolvedExperimentArm,
     attempt: ModelAttemptRecord,
-    classified: ClassifiedModel,
+    classified: ClassifiedModel
   ): AttemptClassification {
     const policy = arm.policy;
 
@@ -457,11 +448,7 @@ export class DefaultExperimentPolicyEngine implements ExperimentPolicyEngine {
     }
 
     // Role-specific validation
-    if (
-      attempt.roleInStrategy === 'primary' &&
-      classified.isLocal &&
-      !policy.allowOllamaPrimary
-    ) {
+    if (attempt.roleInStrategy === 'primary' && classified.isLocal && !policy.allowOllamaPrimary) {
       return {
         substitutionLevel: level,
         allowedByPolicy: false,

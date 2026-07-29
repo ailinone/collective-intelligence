@@ -114,7 +114,10 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
       return keys.map((k) => this.toDomain(k));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, organizationId }, 'Failed to find API keys by organization');
+      this.log.error(
+        { error: errorMessage, organizationId },
+        'Failed to find API keys by organization'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -228,7 +231,7 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
           rotationIntervalDays: data.rotationIntervalDays,
           gracePeriodDays: data.gracePeriodDays,
           ipWhitelist: data.ipWhitelist,
-          permissions: data.permissions 
+          permissions: data.permissions
             ? (data.permissions as Prisma.InputJsonValue)
             : Prisma.JsonNull,
         },
@@ -301,7 +304,7 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
               rotationIntervalDays: data.rotationIntervalDays,
               gracePeriodDays: data.gracePeriodDays,
               ipWhitelist: data.ipWhitelist,
-              permissions: data.permissions 
+              permissions: data.permissions
                 ? (data.permissions as Prisma.InputJsonValue)
                 : Prisma.JsonNull,
             } satisfies Prisma.ApiKeyCreateInput,

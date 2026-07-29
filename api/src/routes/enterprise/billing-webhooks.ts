@@ -75,12 +75,18 @@ export async function registerBillingWebhookRoutes(server: FastifyInstance): Pro
         const errCode = (insertErr as { code?: string })?.code;
         const errMsg = insertErr instanceof Error ? insertErr.message : String(insertErr);
         if (errCode === 'P2002' || errMsg.includes('unique') || errMsg.includes('duplicate')) {
-          log.debug({ eventId: event.id, eventType: event.type }, 'Duplicate Stripe webhook — already claimed, skipping');
+          log.debug(
+            { eventId: event.id, eventType: event.type },
+            'Duplicate Stripe webhook — already claimed, skipping'
+          );
           return reply.status(200).send({ received: true, duplicate: true });
         }
         // Non-unique error (DB brownout, connection failure) — fail-open with warning
         // Trade-off: availability > exactly-once under DB outage. Documented per ADR-007.
-        log.warn({ err: insertErr, eventId: event.id }, 'Webhook dedup INSERT failed — proceeding without dedup (fail-open)');
+        log.warn(
+          { err: insertErr, eventId: event.id },
+          'Webhook dedup INSERT failed — proceeding without dedup (fail-open)'
+        );
       }
 
       try {
@@ -106,7 +112,10 @@ export async function registerBillingWebhookRoutes(server: FastifyInstance): Pro
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        log.error({ error: errorMessage, eventType: event.type }, 'Failed to process Stripe webhook');
+        log.error(
+          { error: errorMessage, eventType: event.type },
+          'Failed to process Stripe webhook'
+        );
         // Release the idempotency claim BEFORE returning 500. Without this,
         // Stripe's retry hits the unique-violation path above, is treated as a
         // duplicate, and the event is acknowledged WITHOUT ever being processed

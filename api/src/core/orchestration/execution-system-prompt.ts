@@ -26,7 +26,11 @@
  */
 
 import type { ChatRequest, OrchestrationContext, ModelCapability } from '@/types';
-import { renderSlotAugmentation, hashSlotValues, validatePromptSlots } from './prompts/prompt-slots';
+import {
+  renderSlotAugmentation,
+  hashSlotValues,
+  validatePromptSlots,
+} from './prompts/prompt-slots';
 import { incrementPromptMetric } from './prompts/prompt-metrics';
 import { LANGUAGE_MIRROR_DIRECTIVE } from './prompts/language-directive';
 import { logger } from '@/utils/logger';
@@ -39,10 +43,10 @@ const log = logger.child({ component: 'execution-system-prompt' });
  */
 export function buildExecutionSystemPrompt(
   request: ChatRequest,
-  context: OrchestrationContext,
+  context: OrchestrationContext
 ): string | null {
   // Don't override existing system messages
-  const hasSystemMessage = request.messages.some(m => m.role === 'system');
+  const hasSystemMessage = request.messages.some((m) => m.role === 'system');
   if (hasSystemMessage) return null;
 
   const taskType = context.taskType || 'general';
@@ -53,7 +57,7 @@ export function buildExecutionSystemPrompt(
   // Core identity — what the platform is
   sections.push(
     'You are an AI assistant powered by a collective intelligence orchestration platform. ' +
-    'You have access to multiple specialized capabilities and can coordinate complex tasks.'
+      'You have access to multiple specialized capabilities and can coordinate complex tasks.'
   );
 
   // Capability awareness — what the model can do within the system
@@ -75,8 +79,8 @@ export function buildExecutionSystemPrompt(
   if (context.isCollectiveStrategy) {
     sections.push(
       'You are participating in a collective intelligence strategy where multiple AI models ' +
-      'collaborate to produce the best possible answer. Focus on your specific strengths ' +
-      'and provide your most rigorous, well-reasoned contribution.'
+        'collaborate to produce the best possible answer. Focus on your specific strengths ' +
+        'and provide your most rigorous, well-reasoned contribution.'
     );
   }
 
@@ -126,7 +130,7 @@ function resolveTaskContext(context: OrchestrationContext): string | undefined {
       if (rendered) {
         log.debug(
           { requestId: context.requestId, slotHash: hashSlotValues(slots) },
-          'Task context resolved from typed prompt slots',
+          'Task context resolved from typed prompt slots'
         );
         return rendered;
       }
@@ -166,7 +170,7 @@ function resolveTaskContext(context: OrchestrationContext): string | undefined {
         });
         log.debug(
           { triageConfidence, threshold },
-          'Augmentation present but triage confidence above threshold — ignoring',
+          'Augmentation present but triage confidence above threshold — ignoring'
         );
       }
     }
@@ -191,10 +195,22 @@ function resolveTaskContext(context: OrchestrationContext): string | undefined {
  * capabilities known to the catalog; empty or unknown lists skip the section.
  */
 const KNOWN_CAPABILITY_TAGS: ReadonlySet<string> = new Set([
-  'image_generation', 'vision', 'multimodal', 'tool_use', 'function_calling',
-  'web_search', 'deep_research', 'code_generation', 'code_execution', 'reasoning',
-  'audio_generation', 'text_to_speech', 'video_generation', 'computer_use',
-  'mcp', 'pdf_understanding',
+  'image_generation',
+  'vision',
+  'multimodal',
+  'tool_use',
+  'function_calling',
+  'web_search',
+  'deep_research',
+  'code_generation',
+  'code_execution',
+  'reasoning',
+  'audio_generation',
+  'text_to_speech',
+  'video_generation',
+  'computer_use',
+  'mcp',
+  'pdf_understanding',
 ]);
 
 function buildCapabilitySection(capabilities: (string | ModelCapability)[]): string | null {
@@ -211,14 +227,19 @@ function buildCapabilitySection(capabilities: (string | ModelCapability)[]): str
 
 function buildTaskGuidance(taskType: string): string | null {
   const guidance: Record<string, string> = {
-    'code-generation': 'Focus on producing correct, well-typed, production-quality code with proper error handling.',
-    'code-review': 'Analyze code for bugs, security issues, performance problems, and suggest concrete improvements.',
-    'analysis': 'Provide structured, evidence-based analysis with clear reasoning and actionable conclusions.',
-    'debugging': 'Identify root causes systematically. Explain the mechanism of the bug and provide tested fixes.',
-    'creative': 'Be creative, original, and engaging while staying true to the request constraints.',
-    'documentation': 'Write clear, comprehensive documentation suitable for the target audience.',
-    'refactoring': 'Improve code structure while preserving behavior. Explain each refactoring decision.',
-    'reasoning': 'Think step-by-step. Show your reasoning process explicitly.',
+    'code-generation':
+      'Focus on producing correct, well-typed, production-quality code with proper error handling.',
+    'code-review':
+      'Analyze code for bugs, security issues, performance problems, and suggest concrete improvements.',
+    analysis:
+      'Provide structured, evidence-based analysis with clear reasoning and actionable conclusions.',
+    debugging:
+      'Identify root causes systematically. Explain the mechanism of the bug and provide tested fixes.',
+    creative: 'Be creative, original, and engaging while staying true to the request constraints.',
+    documentation: 'Write clear, comprehensive documentation suitable for the target audience.',
+    refactoring:
+      'Improve code structure while preserving behavior. Explain each refactoring decision.',
+    reasoning: 'Think step-by-step. Show your reasoning process explicitly.',
   };
 
   return guidance[taskType] ?? null;
@@ -237,15 +258,12 @@ function buildTaskGuidance(taskType: string): string | null {
  */
 export function injectExecutionSystemPrompt(
   request: ChatRequest,
-  context: OrchestrationContext,
+  context: OrchestrationContext
 ): boolean {
   const prompt = buildExecutionSystemPrompt(request, context);
   if (!prompt) return false;
 
-  request.messages = [
-    { role: 'system', content: prompt },
-    ...request.messages,
-  ];
+  request.messages = [{ role: 'system', content: prompt }, ...request.messages];
 
   return true;
 }

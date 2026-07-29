@@ -108,7 +108,7 @@ function defaultProfile(): TaskProfileSummary {
  */
 export async function dryRunRouting(
   input: RoutingDryRunInput,
-  deps: RoutingDryRunDeps,
+  deps: RoutingDryRunDeps
 ): Promise<RoutingDryRunResult> {
   const traceIdProvider = deps.traceIdProvider ?? defaultTraceIdProvider;
   const metrics = deps.metrics ?? noopRoutingTraceMetrics;

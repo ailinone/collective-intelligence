@@ -85,9 +85,7 @@ type Bucket =
   | 'catalog-only-inventory'
   | 'switch-only-legitimate';
 
-function classifyCatalogEntry(
-  entry: (typeof PROVIDER_CATALOG)[number],
-): Bucket {
+function classifyCatalogEntry(entry: (typeof PROVIDER_CATALOG)[number]): Bucket {
   if (UPSTREAM_SUSPENDED.has(entry.providerId)) return 'upstream-suspended';
   if (entry.integrationMode === 'catalog-only') return 'catalog-only-inventory';
   if (entry.enabledByDefault === false) return 'credentials-missing';
@@ -128,10 +126,7 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
   it('bucket totals sum to |catalog| + |switch| (closure invariant)', () => {
     const catalogCount = PROVIDER_CATALOG.length;
     const switchCount = switchIds.length;
-    const total = Object.values(buckets).reduce(
-      (acc, ids) => acc + ids.length,
-      0,
-    );
+    const total = Object.values(buckets).reduce((acc, ids) => acc + ids.length, 0);
 
     // If this fires, some provider was lost in classification. The union
     // of all buckets MUST equal the canonical registration-path total.
@@ -139,9 +134,7 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
   });
 
   it('catalog-only bucket matches integrationMode===catalog-only exactly', () => {
-    const expected = PROVIDER_CATALOG.filter(
-      (e) => e.integrationMode === 'catalog-only',
-    )
+    const expected = PROVIDER_CATALOG.filter((e) => e.integrationMode === 'catalog-only')
       .map((e) => e.providerId)
       .sort();
     expect([...buckets['catalog-only-inventory']].sort()).toEqual(expected);
@@ -152,9 +145,7 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // that names the deprecation date and vendor. If this list diverges from
     // UPSTREAM_SUSPENDED, we've either missed documenting a new suspension
     // or orphaned a stale entry in the set.
-    expect([...buckets['upstream-suspended']].sort()).toEqual(
-      [...UPSTREAM_SUSPENDED].sort(),
-    );
+    expect([...buckets['upstream-suspended']].sort()).toEqual([...UPSTREAM_SUSPENDED].sort());
   });
 
   it('Option B is enforced: no `integrado-com-live-validation` bucket exists at runtime', () => {

@@ -100,18 +100,45 @@ describe('alibaba-model-fetcher pricing estimates', () => {
   });
 
   it('pins named tiers to the official Model Studio international price list', () => {
-    expect(specsFor('qwen-max').pricing).toMatchObject({ inputCostPer1M: 1.6, outputCostPer1M: 6.4 });
-    expect(specsFor('qwen-plus').pricing).toMatchObject({ inputCostPer1M: 0.4, outputCostPer1M: 1.2 });
-    expect(specsFor('qwen-turbo').pricing).toMatchObject({ inputCostPer1M: 0.05, outputCostPer1M: 0.2 });
-    expect(specsFor('qwen-flash').pricing).toMatchObject({ inputCostPer1M: 0.05, outputCostPer1M: 0.4 });
-    expect(specsFor('qwen-vl-max').pricing).toMatchObject({ inputCostPer1M: 0.8, outputCostPer1M: 3.2 });
-    expect(specsFor('qwen-vl-plus').pricing).toMatchObject({ inputCostPer1M: 0.21, outputCostPer1M: 0.63 });
-    expect(specsFor('qwen3-coder-plus').pricing).toMatchObject({ inputCostPer1M: 1.0, outputCostPer1M: 5.0 });
-    expect(specsFor('qwen3-coder-flash').pricing).toMatchObject({ inputCostPer1M: 0.3, outputCostPer1M: 1.5 });
+    expect(specsFor('qwen-max').pricing).toMatchObject({
+      inputCostPer1M: 1.6,
+      outputCostPer1M: 6.4,
+    });
+    expect(specsFor('qwen-plus').pricing).toMatchObject({
+      inputCostPer1M: 0.4,
+      outputCostPer1M: 1.2,
+    });
+    expect(specsFor('qwen-turbo').pricing).toMatchObject({
+      inputCostPer1M: 0.05,
+      outputCostPer1M: 0.2,
+    });
+    expect(specsFor('qwen-flash').pricing).toMatchObject({
+      inputCostPer1M: 0.05,
+      outputCostPer1M: 0.4,
+    });
+    expect(specsFor('qwen-vl-max').pricing).toMatchObject({
+      inputCostPer1M: 0.8,
+      outputCostPer1M: 3.2,
+    });
+    expect(specsFor('qwen-vl-plus').pricing).toMatchObject({
+      inputCostPer1M: 0.21,
+      outputCostPer1M: 0.63,
+    });
+    expect(specsFor('qwen3-coder-plus').pricing).toMatchObject({
+      inputCostPer1M: 1.0,
+      outputCostPer1M: 5.0,
+    });
+    expect(specsFor('qwen3-coder-flash').pricing).toMatchObject({
+      inputCostPer1M: 0.3,
+      outputCostPer1M: 1.5,
+    });
   });
 
   it('routes hyphenated flagship variants to the max tier, not VL or default', () => {
-    expect(specsFor('qwen3-max').pricing).toMatchObject({ inputCostPer1M: 1.6, outputCostPer1M: 6.4 });
+    expect(specsFor('qwen3-max').pricing).toMatchObject({
+      inputCostPer1M: 1.6,
+      outputCostPer1M: 6.4,
+    });
     // VL max must NOT be priced as text flagship
     expect(specsFor('qwen-vl-max').pricing.inputCostPer1M).toBe(0.8);
   });

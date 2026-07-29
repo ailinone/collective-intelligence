@@ -44,11 +44,13 @@ export const C3_MODEL_PROBES_EXECUTED = 0 as const;
 export const C3_PROVIDER_PROBES_EXECUTED = 0 as const;
 export const C3_TOTAL_COST_USD = 0 as const;
 
-export type C3DryrunRuntimeGateMode = 'local_adapter_only' | 'local_http_plan_only' | 'hybrid_local';
+export type C3DryrunRuntimeGateMode =
+  'local_adapter_only' | 'local_http_plan_only' | 'hybrid_local';
 
 export const C3_DRYRUN_RUNTIME_GATE_COMPLETE_DECISION =
   'CONSENSUS_01C_1B_C3_DRYRUN_RUNTIME_GATE_COMPLETE_READY_FOR_C3_DRYRUN_CONTROLLED_RUNTIME_SMOKE' as const;
-export const C3_DRYRUN_RUNTIME_GATE_NEXT_STEP = '01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE' as const;
+export const C3_DRYRUN_RUNTIME_GATE_NEXT_STEP =
+  '01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE' as const;
 
 /** True iff a runtime response carries no execution: dry-run/plan-only, all locks/counters zero. */
 export function isC3RuntimeExecutionLocked(response: {
@@ -135,7 +137,7 @@ export interface C3RuntimeGateResponse {
 export function evaluateC3RuntimeGate(
   req: C3RuntimeGateRequest,
   allowedCandidateIds: ReadonlySet<string>,
-  allowedProviderIds: ReadonlySet<string>,
+  allowedProviderIds: ReadonlySet<string>
 ): C3RuntimeGateResponse {
   const reasons: string[] = [];
 

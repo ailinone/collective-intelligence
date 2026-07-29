@@ -25,9 +25,12 @@ import { createGenericListModelsProbe } from '../provider-probes/generic-list-mo
 import { ProviderProbeRegistry } from '../provider-probe-registry';
 import { registerDefaultProbes } from '../provider-probes/register-default-probes';
 
-function fakeFetch(handler: (url: string, init?: RequestInit) => Promise<Response> | Response): typeof fetch {
+function fakeFetch(
+  handler: (url: string, init?: RequestInit) => Promise<Response> | Response
+): typeof fetch {
   return ((url: RequestInfo | URL, init?: RequestInit) => {
-    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : (url as Request).url;
+    const u =
+      typeof url === 'string' ? url : url instanceof URL ? url.toString() : (url as Request).url;
     return Promise.resolve(handler(u, init));
   }) as typeof fetch;
 }
@@ -42,7 +45,9 @@ describe('OllamaProbe', () => {
   it('maps 200 + models to healthy + has_credits', async () => {
     const probe = createOllamaProbe({
       baseUrl: 'http://localhost:11434',
-      fetchImpl: fakeFetch(() => new Response(JSON.stringify({ models: [{ name: 'qwen' }] }), { status: 200 })),
+      fetchImpl: fakeFetch(
+        () => new Response(JSON.stringify({ models: [{ name: 'qwen' }] }), { status: 200 })
+      ),
     });
     const r = await probe.probe({ providerId: 'ollama', timeoutMs: 1000 });
     expect(r.liveOperabilityState).toBe('healthy');
@@ -82,10 +87,12 @@ describe('OpenRouterProbe', () => {
   it('200 + credits > usage → has_credits', async () => {
     const probe = createOpenRouterProbe({
       apiKey: 'sk-test',
-      fetchImpl: fakeFetch(() => new Response(
-        JSON.stringify({ data: { total_credits: 10, total_usage: 3 } }),
-        { status: 200 },
-      )),
+      fetchImpl: fakeFetch(
+        () =>
+          new Response(JSON.stringify({ data: { total_credits: 10, total_usage: 3 } }), {
+            status: 200,
+          })
+      ),
     });
     const r = await probe.probe({ providerId: 'openrouter', timeoutMs: 1000 });
     expect(r.liveBalanceStatus).toBe('has_credits');
@@ -95,10 +102,12 @@ describe('OpenRouterProbe', () => {
   it('200 + usage >= credits → no_credits', async () => {
     const probe = createOpenRouterProbe({
       apiKey: 'sk-test',
-      fetchImpl: fakeFetch(() => new Response(
-        JSON.stringify({ data: { total_credits: 10, total_usage: 10 } }),
-        { status: 200 },
-      )),
+      fetchImpl: fakeFetch(
+        () =>
+          new Response(JSON.stringify({ data: { total_credits: 10, total_usage: 10 } }), {
+            status: 200,
+          })
+      ),
     });
     const r = await probe.probe({ providerId: 'openrouter', timeoutMs: 1000 });
     expect(r.liveBalanceStatus).toBe('no_credits');
@@ -139,7 +148,9 @@ describe('OpenRouterProbe', () => {
       apiKey: 'sk-test',
       fetchImpl: fakeFetch((url) => {
         seen.push(url);
-        return new Response(JSON.stringify({ data: { total_credits: 1, total_usage: 0 } }), { status: 200 });
+        return new Response(JSON.stringify({ data: { total_credits: 1, total_usage: 0 } }), {
+          status: 200,
+        });
       }),
     });
     await probe.probe({ providerId: 'openrouter', timeoutMs: 1000 });
@@ -154,7 +165,9 @@ describe('GenericListModelsProbe', () => {
       providerId: 'someprov',
       baseUrl: 'https://api.example.com',
       apiKey: 'sk-test',
-      fetchImpl: fakeFetch(() => new Response(JSON.stringify({ data: [{ id: 'a' }] }), { status: 200 })),
+      fetchImpl: fakeFetch(
+        () => new Response(JSON.stringify({ data: [{ id: 'a' }] }), { status: 200 })
+      ),
     });
     const r = await probe.probe({ providerId: 'someprov', timeoutMs: 1000 });
     expect(r.liveBalanceStatus).toBe('has_credits');
@@ -196,7 +209,7 @@ describe('GenericListModelsProbe', () => {
         endpointType: 'models',
         billableRisk: 'unknown' as 'none',
         probe: async () => ({ liveOperabilityState: 'unknown', observedAt: 0, latencyMs: 0 }),
-      }),
+      })
     ).toThrow(/Refusing to register/);
   });
 });

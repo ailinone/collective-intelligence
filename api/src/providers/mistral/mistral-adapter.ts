@@ -69,7 +69,7 @@ export class MistralAdapter extends ProviderAdapter {
     }
 
     // Remove provider prefix from model IDs to return normalized names
-    return models.map(model => ({
+    return models.map((model) => ({
       ...model,
       id: model.name, // Use 'name' which is the normalized ID without prefix
     }));
@@ -94,9 +94,10 @@ export class MistralAdapter extends ProviderAdapter {
     }
 
     // Filter available models
-    const availableModels = models.filter(m =>
-      m.status === 'active' &&
-      (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+    const availableModels = models.filter(
+      (m) =>
+        m.status === 'active' &&
+        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
     );
 
     if (availableModels.length === 0) {
@@ -105,7 +106,7 @@ export class MistralAdapter extends ProviderAdapter {
 
     // Selection strategy: cheapest model with streaming capability
     const sortedByCost = availableModels
-      .filter(m => {
+      .filter((m) => {
         const hasStreaming = m.capabilities?.includes('streaming') ?? true;
         const hasChat = m.capabilities?.includes('chat') ?? true;
         return hasStreaming && hasChat && m.inputCostPer1k > 0;
@@ -184,7 +185,7 @@ export class MistralAdapter extends ProviderAdapter {
   }
 
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
-    const modelToUse = request.model || await this.getDefaultModel();
+    const modelToUse = request.model || (await this.getDefaultModel());
     if (!modelToUse) {
       throw new Error('Model is required for chat completion');
     }
@@ -266,7 +267,7 @@ export class MistralAdapter extends ProviderAdapter {
   }
 
   async generateEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
-    const model = request.model || await this.getDefaultModel();
+    const model = request.model || (await this.getDefaultModel());
     return this.executeThroughBulkhead(async () => {
       const response = await fetch(`${this.baseURL}/embeddings`, {
         method: 'POST',
@@ -281,7 +282,11 @@ export class MistralAdapter extends ProviderAdapter {
       });
 
       if (!response.ok) {
-        const error = (await response.json().catch(() => ({ error: response.statusText }))) as { error?: string; message?: string; [key: string]: unknown };
+        const error = (await response.json().catch(() => ({ error: response.statusText }))) as {
+          error?: string;
+          message?: string;
+          [key: string]: unknown;
+        };
         throw new Error(`Mistral API error: ${JSON.stringify(error)}`);
       }
 
@@ -323,8 +328,9 @@ export class MistralAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -338,7 +344,7 @@ export class MistralAdapter extends ProviderAdapter {
     }
 
     const models = await this.getModels();
-    const modelMap = new Map(models.map(m => [m.id.toLowerCase(), m.id]));
+    const modelMap = new Map(models.map((m) => [m.id.toLowerCase(), m.id]));
 
     // Try exact match first
     if (modelMap.has(modelId.toLowerCase())) {
@@ -356,7 +362,7 @@ export class MistralAdapter extends ProviderAdapter {
     // Try partial match (e.g., "mistral" matches "mistral-large-latest")
     // Prefer longer/more specific matches
     const partialMatches: Array<{ key: string; value: string; specificity: number }> = [];
-    
+
     for (const [key, value] of modelMap.entries()) {
       const keyNormalized = key.replace(/[-_.]/g, '');
       const inputNormalized = normalized;
@@ -367,7 +373,7 @@ export class MistralAdapter extends ProviderAdapter {
         partialMatches.push({ key, value, specificity });
       }
     }
-    
+
     // Sort by specificity (descending) and return the best match
     if (partialMatches.length > 0) {
       partialMatches.sort((a, b) => b.specificity - a.specificity);
@@ -375,7 +381,10 @@ export class MistralAdapter extends ProviderAdapter {
     }
 
     // Return as-is if no match (let provider handle it or fail gracefully)
-    log.warn({ modelId, availableModels: Array.from(modelMap.keys()) }, 'Model not found in available models');
+    log.warn(
+      { modelId, availableModels: Array.from(modelMap.keys()) },
+      'Model not found in available models'
+    );
     return modelId;
   }
 
@@ -386,9 +395,27 @@ export class MistralAdapter extends ProviderAdapter {
     // Narrow the wire-format chunk to the shape we consume. Any field that
     // doesn't match falls back to a safe default — bad JSON yields an empty
     // chunk, never a crash.
-    const chunk: { id?: string; created?: number; choices?: Array<{ index?: number; delta?: { role?: string; content?: string; tool_calls?: unknown }; finish_reason?: string }>; usage?: unknown } =
+    const chunk: {
+      id?: string;
+      created?: number;
+      choices?: Array<{
+        index?: number;
+        delta?: { role?: string; content?: string; tool_calls?: unknown };
+        finish_reason?: string;
+      }>;
+      usage?: unknown;
+    } =
       typeof rawChunk === 'object' && rawChunk !== null
-        ? (rawChunk as { id?: string; created?: number; choices?: Array<{ index?: number; delta?: { role?: string; content?: string; tool_calls?: unknown }; finish_reason?: string }>; usage?: unknown })
+        ? (rawChunk as {
+            id?: string;
+            created?: number;
+            choices?: Array<{
+              index?: number;
+              delta?: { role?: string; content?: string; tool_calls?: unknown };
+              finish_reason?: string;
+            }>;
+            usage?: unknown;
+          })
         : {};
     // Type guard for role
     function normalizeRole(role: string | undefined): 'user' | 'assistant' | 'system' {
@@ -399,8 +426,15 @@ export class MistralAdapter extends ProviderAdapter {
     }
 
     // Type guard for finish_reason
-    function normalizeFinishReason(reason: string | undefined): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
-      if (reason === 'stop' || reason === 'length' || reason === 'tool_calls' || reason === 'content_filter') {
+    function normalizeFinishReason(
+      reason: string | undefined
+    ): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
+      if (
+        reason === 'stop' ||
+        reason === 'length' ||
+        reason === 'tool_calls' ||
+        reason === 'content_filter'
+      ) {
         return reason;
       }
       return null;
@@ -420,7 +454,14 @@ export class MistralAdapter extends ProviderAdapter {
               if (typeof item === 'string') {
                 return item;
               }
-              if (item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
+              if (
+                item &&
+                typeof item === 'object' &&
+                'type' in item &&
+                item.type === 'text' &&
+                'text' in item &&
+                typeof (item as { text: unknown }).text === 'string'
+              ) {
                 return (item as { text: string }).text;
               }
               return '';
@@ -434,8 +475,12 @@ export class MistralAdapter extends ProviderAdapter {
       // typed `tc` inside the loop (vs the previous inline-cast chain that
       // left `tc` as `any` and cascaded 12 unsafe-* errors).
       const isToolCallShape = (
-        value: unknown,
-      ): value is { id: string; type: 'function'; function: { name: string; arguments?: unknown } } => {
+        value: unknown
+      ): value is {
+        id: string;
+        type: 'function';
+        function: { name: string; arguments?: unknown };
+      } => {
         if (typeof value !== 'object' || value === null) return false;
         const v = value as { id?: unknown; type?: unknown; function?: unknown };
         if (typeof v.id !== 'string') return false;
@@ -446,7 +491,11 @@ export class MistralAdapter extends ProviderAdapter {
       };
 
       let toolCalls: ToolCall[] | undefined = undefined;
-      if (choice.delta?.tool_calls !== undefined && choice.delta.tool_calls !== null && Array.isArray(choice.delta.tool_calls)) {
+      if (
+        choice.delta?.tool_calls !== undefined &&
+        choice.delta.tool_calls !== null &&
+        Array.isArray(choice.delta.tool_calls)
+      ) {
         const validToolCalls: ToolCall[] = [];
         for (const tc of choice.delta.tool_calls) {
           if (!isToolCallShape(tc)) continue;
@@ -478,13 +527,30 @@ export class MistralAdapter extends ProviderAdapter {
     });
 
     // Type guard for usage
-    let usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined = undefined;
+    let usage:
+      { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined =
+      undefined;
     if (chunk.usage && typeof chunk.usage === 'object') {
       const usageObj = chunk.usage as Record<string, unknown>;
-      const promptTokens = typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : (typeof usageObj.promptTokens === 'number' ? usageObj.promptTokens : 0);
-      const completionTokens = typeof usageObj.completion_tokens === 'number' ? usageObj.completion_tokens : (typeof usageObj.completionTokens === 'number' ? usageObj.completionTokens : 0);
-      const totalTokens = typeof usageObj.total_tokens === 'number' ? usageObj.total_tokens : (typeof usageObj.totalTokens === 'number' ? usageObj.totalTokens : promptTokens + completionTokens);
-      
+      const promptTokens =
+        typeof usageObj.prompt_tokens === 'number'
+          ? usageObj.prompt_tokens
+          : typeof usageObj.promptTokens === 'number'
+            ? usageObj.promptTokens
+            : 0;
+      const completionTokens =
+        typeof usageObj.completion_tokens === 'number'
+          ? usageObj.completion_tokens
+          : typeof usageObj.completionTokens === 'number'
+            ? usageObj.completionTokens
+            : 0;
+      const totalTokens =
+        typeof usageObj.total_tokens === 'number'
+          ? usageObj.total_tokens
+          : typeof usageObj.totalTokens === 'number'
+            ? usageObj.totalTokens
+            : promptTokens + completionTokens;
+
       if (promptTokens > 0 || completionTokens > 0 || totalTokens > 0) {
         usage = {
           prompt_tokens: promptTokens,
@@ -509,7 +575,9 @@ export class MistralAdapter extends ProviderAdapter {
    * Mistral AI does not have a dedicated moderation API
    */
   async moderate(_model: Model, _request: ModerationRequest): Promise<ModerationResponse> {
-    throw new Error('Mistral AI moderation is not yet implemented. Mistral AI does not provide a dedicated moderation endpoint. Use OpenAI moderation or implement content filtering via chat API.');
+    throw new Error(
+      'Mistral AI moderation is not yet implemented. Mistral AI does not provide a dedicated moderation endpoint. Use OpenAI moderation or implement content filtering via chat API.'
+    );
   }
 
   /**
@@ -517,14 +585,21 @@ export class MistralAdapter extends ProviderAdapter {
    * Mistral AI does not have image editing capability
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Mistral AI image editing is not yet implemented. Mistral AI does not provide image editing capabilities. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'Mistral AI image editing is not yet implemented. Mistral AI does not provide image editing capabilities. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * Mistral AI does not have image variation capability
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Mistral AI image variation is not yet implemented. Mistral AI does not provide image variation capabilities. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Mistral AI image variation is not yet implemented. Mistral AI does not provide image variation capabilities. Use OpenAI DALL-E for image variations.'
+    );
   }
 }

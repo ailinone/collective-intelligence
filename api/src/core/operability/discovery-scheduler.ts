@@ -30,19 +30,14 @@
  */
 
 import { logger } from '@/utils/logger';
-import {
-  buildProbeCallbacksMap,
-  type BuildProbeCallbacksInput,
-} from './adapter-probe-callbacks';
+import { buildProbeCallbacksMap, type BuildProbeCallbacksInput } from './adapter-probe-callbacks';
 import {
   runProviderDiscovery,
   type ConfiguredProvider,
   type DiscoveryConfig,
 } from './discovery-service';
 import type { ProviderDiscoverySnapshot } from './types';
-import {
-  getOperationalCandidatePool,
-} from './operational-candidate-pool';
+import { getOperationalCandidatePool } from './operational-candidate-pool';
 
 const log = logger.child({ component: 'discovery-scheduler' });
 
@@ -72,7 +67,11 @@ export interface DiscoveryScheduleConfig {
    * Optional fallback model list for providers where discovery doesn't
    * enumerate (e.g., native-anthropic). Map providerId → models.
    */
-  resolveFallbackModels?: () => Record<string, ReadonlyArray<{ modelId: string; family?: string; contextWindow?: number }>> | Promise<Record<string, ReadonlyArray<{ modelId: string; family?: string; contextWindow?: number }>>>;
+  resolveFallbackModels?: () =>
+    | Record<string, ReadonlyArray<{ modelId: string; family?: string; contextWindow?: number }>>
+    | Promise<
+        Record<string, ReadonlyArray<{ modelId: string; family?: string; contextWindow?: number }>>
+      >;
   /**
    * Optional resolver for integration classes per provider, used by the
    * pool's tier classification.
@@ -187,9 +186,7 @@ class DiscoveryScheduler {
         // Rebuild operational candidate pool
         const integrationClasses = config.resolveIntegrationClasses
           ? await config.resolveIntegrationClasses()
-          : Object.fromEntries(
-              providers.map((p) => [p.providerId, p.integrationClass ?? '']),
-            );
+          : Object.fromEntries(providers.map((p) => [p.providerId, p.integrationClass ?? '']));
         const fallbackModels = config.resolveFallbackModels
           ? await config.resolveFallbackModels()
           : {};
@@ -218,7 +215,7 @@ class DiscoveryScheduler {
             durationMs: snapshot.durationMs,
             poolSize: getOperationalCandidatePool().size(),
           },
-          'Discovery tick completed',
+          'Discovery tick completed'
         );
         return snapshot;
       } catch (err) {

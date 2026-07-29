@@ -60,7 +60,7 @@ export class CachedTokenProvider implements TokenProvider {
       headerName?: string;
       /** Scheme prefix. Defaults to 'Bearer'. Pass '' for no scheme. */
       headerScheme?: string;
-    } = {},
+    } = {}
   ) {}
 
   async getToken(): Promise<string> {

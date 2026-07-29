@@ -23,7 +23,11 @@ import {
   isC3ControlledSmokeExecutionLocked,
 } from '@/core/experiment/c3-dryrun-controlled-runtime-smoke-contract';
 
-const req = { model: 'auto', messages: [{ role: 'user' as const, content: '[smoke]' }], dryRun: true as const };
+const req = {
+  model: 'auto',
+  messages: [{ role: 'user' as const, content: '[smoke]' }],
+  dryRun: true as const,
+};
 const ctx = {
   requestId: 'smoke-positive-1',
   taskType: 'code-generation',
@@ -35,7 +39,16 @@ const ctx = {
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — positive cases (real entrypoint)', () => {
   // Real production dry-run path: detect → build plan-only result.
   const detected = detectDryRun(req as any);
-  const realResult = buildPlanOnlyResult('single', 'explicit', 'request.dryRun', req as any, ctx, null, 0.8, { registered: true });
+  const realResult = buildPlanOnlyResult(
+    'single',
+    'explicit',
+    'request.dryRun',
+    req as any,
+    ctx,
+    null,
+    0.8,
+    { registered: true }
+  );
   const env = c3SmokeEnvelopeFromOrchestrationResult(realResult as any);
 
   it('case 14: a dryRun=true request is admitted by the real guard', () => {
@@ -73,7 +86,11 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — positive cases (real ent
     expect(env.provenanceComplete).toBe(true);
   });
 
-  const RT = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-controlled-runtime-smoke-runtime-responses.json');
+  const RT = resolve(
+    process.cwd(),
+    'tmp',
+    '01c1b-c3-dryrun-controlled-runtime-smoke-runtime-responses.json'
+  );
   const rt = existsSync(RT) ? JSON.parse(readFileSync(RT, 'utf8')) : null;
   const maybe = rt ? describe : describe.skip;
   maybe('generated runtime responses (local verification)', () => {

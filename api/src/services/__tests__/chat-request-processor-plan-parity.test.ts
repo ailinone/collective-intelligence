@@ -137,7 +137,12 @@ describe('applyDryRunFailClosedGate — executionPlanId + planFingerprint on dry
       chatRequest: {
         ...baseChatRequest,
         // @ts-expect-error eval is additive
-        eval: { dryRun: true, planOnly: true, maxJudgeCostUsd: 0.10, requireStrictPlanExecution: true },
+        eval: {
+          dryRun: true,
+          planOnly: true,
+          maxJudgeCostUsd: 0.1,
+          requireStrictPlanExecution: true,
+        },
       } as ChatRequest,
       requestId: 'rid-p1',
       log: makeLog(),
@@ -148,7 +153,7 @@ describe('applyDryRunFailClosedGate — executionPlanId + planFingerprint on dry
       expect(typeof meta.executionPlanId).toBe('string');
       expect((meta.executionPlanId as string).length).toBeGreaterThan(10);
       expect(typeof meta.planFingerprint).toBe('string');
-      expect((meta.planFingerprint as string)).toMatch(/^[0-9a-f]{64}$/);
+      expect(meta.planFingerprint as string).toMatch(/^[0-9a-f]{64}$/);
       expect(meta.planSource).toBe('dry_run');
       expect(meta.plannerVersion).toBeDefined();
       expect(meta.registryScope).toBe('full_system_registry');
@@ -234,7 +239,7 @@ describe('applyDryRunFailClosedGate — executionParityCheck', () => {
         } as ChatRequest,
         requestId: 'rid-p3-parity-mismatch',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       statusCode: 409,
       code: 'PLAN_EXECUTION_PARITY_FAILED',
@@ -261,7 +266,7 @@ describe('applyDryRunFailClosedGate — executionParityCheck', () => {
         } as ChatRequest,
         requestId: 'rid-p4-no-approved',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       statusCode: 422,
       billable_execution_blocked: true,

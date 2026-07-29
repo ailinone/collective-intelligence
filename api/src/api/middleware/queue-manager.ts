@@ -146,7 +146,7 @@ export async function enqueueIfNeeded(
 
   // Enqueue request
   const tenantContext = extendedRequest.tenantContext;
-  
+
   if (!tenantContext) {
     const err: Error & { code?: string } = new Error('Tenant context required for queueing');
     err.code = 'TENANT_CONTEXT_REQUIRED';

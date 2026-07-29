@@ -31,7 +31,7 @@ describe('retriever — privacy: local_required', () => {
         requiredCapabilities: ['chat'],
         privacyMode: 'local_required',
       },
-      { registry },
+      { registry }
     );
     for (const c of result.candidates) {
       const routeId = c.routeId.toLowerCase();
@@ -41,7 +41,7 @@ describe('retriever — privacy: local_required', () => {
     }
     // External routes are rejected by the privacy filter.
     const externalRejections = result.rejectedByStage.filter(
-      (r) => r.reason === 'privacy_local_required_but_route_is_external',
+      (r) => r.reason === 'privacy_local_required_but_route_is_external'
     );
     expect(externalRejections.length).toBeGreaterThan(0);
   });
@@ -53,7 +53,7 @@ describe('retriever — privacy: local_required', () => {
         requiredCapabilities: ['chat', 'audio_generation'], // Ollama fixtures lack audio
         privacyMode: 'local_required',
       },
-      { registry },
+      { registry }
     );
     expect(result.candidates.length).toBe(0);
   });
@@ -67,7 +67,7 @@ describe('retriever — privacy: local_preferred', () => {
         requiredCapabilities: ['chat'],
         privacyMode: 'local_preferred',
       },
-      { registry },
+      { registry }
     );
     expect(result.candidates.length).toBeGreaterThan(0);
 
@@ -90,7 +90,7 @@ describe('retriever — privacy: local_preferred', () => {
         requiredCapabilities: ['chat'],
         privacyMode: 'local_preferred',
       },
-      { registry },
+      { registry }
     );
     const localCandidates = result.candidates.filter((c) => {
       const id = c.routeId.toLowerCase();
@@ -109,7 +109,7 @@ describe('retriever — privacy: local_preferred', () => {
         requiredCapabilities: ['chat'],
         privacyMode: 'local_preferred',
       },
-      { registry },
+      { registry }
     );
     const externalCandidates = result.candidates.filter((c) => {
       const id = c.routeId.toLowerCase();
@@ -130,7 +130,7 @@ describe('retriever — privacy: standard (default)', () => {
         requiredCapabilities: ['chat'],
         // privacyMode omitted — defaults to standard
       },
-      { registry },
+      { registry }
     );
     for (const c of result.candidates) {
       expect(c.breakdown.localPreference).toBe(0);
@@ -139,10 +139,7 @@ describe('retriever — privacy: standard (default)', () => {
 
   it('returns both local and external candidates', () => {
     const registry = buildFixtureRegistry();
-    const result = retrieveCandidates(
-      { requiredCapabilities: ['chat'] },
-      { registry },
-    );
+    const result = retrieveCandidates({ requiredCapabilities: ['chat'] }, { registry });
     const hasLocal = result.candidates.some((c) => {
       const id = c.routeId.toLowerCase();
       return id.includes('ollama') || id.includes('vllm');

@@ -148,7 +148,7 @@ function asJsonInput(value: unknown): Prisma.InputJsonValue {
  * Pure function — exported for testability of the mapping logic.
  */
 export function buildCollectiveRunCreatePayload(
-  input: PersistCollectiveRunInput,
+  input: PersistCollectiveRunInput
 ): Prisma.CollectiveRunUncheckedCreateInput {
   const { organizationId, requestId, state, result, config } = input;
 
@@ -206,7 +206,7 @@ export function buildCollectiveRunCreatePayload(
  * when there are no signals to persist.
  */
 export function buildCollectiveSignalCreatePayloads(
-  signals: ReadonlyArray<CoordinationSignal>,
+  signals: ReadonlyArray<CoordinationSignal>
 ): ReadonlyArray<Omit<Prisma.CollectiveSignalUncheckedCreateInput, 'runId'>> {
   return signals.map((s) => ({
     round: s.round,
@@ -222,9 +222,10 @@ export function buildCollectiveSignalCreatePayloads(
     latencyMs: s.metrics?.latencyMs ?? null,
     inputTokens: s.metrics?.inputTokens ?? null,
     outputTokens: s.metrics?.outputTokens ?? null,
-    costUsd: s.metrics?.estimatedCost !== undefined
-      ? new Prisma.Decimal(s.metrics.estimatedCost.toFixed(6))
-      : null,
+    costUsd:
+      s.metrics?.estimatedCost !== undefined
+        ? new Prisma.Decimal(s.metrics.estimatedCost.toFixed(6))
+        : null,
   }));
 }
 
@@ -241,7 +242,7 @@ export function buildCollectiveSignalCreatePayloads(
  * forget for the response path; the audit trail is best-effort.
  */
 export async function persistCollectiveRun(
-  input: PersistCollectiveRunInput,
+  input: PersistCollectiveRunInput
 ): Promise<{ runId: string } | null> {
   if (!input.organizationId) {
     log.warn('persistCollectiveRun: missing organizationId — skipping persist');
@@ -251,7 +252,7 @@ export async function persistCollectiveRun(
   try {
     const runPayload = buildCollectiveRunCreatePayload(input);
     const signalPayloads = buildCollectiveSignalCreatePayloads(
-      input.result.auditTrail ?? input.state.history,
+      input.result.auditTrail ?? input.state.history
     );
 
     const result = await prisma.$transaction(async (tx) => {
@@ -275,7 +276,7 @@ export async function persistCollectiveRun(
         signalCount: signalPayloads.length,
         rounds: input.result.roundsExecuted,
       },
-      'CollectiveRun persisted',
+      'CollectiveRun persisted'
     );
 
     return result;
@@ -286,7 +287,7 @@ export async function persistCollectiveRun(
         runId: input.state.runId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'persistCollectiveRun failed — continuing without persistence',
+      'persistCollectiveRun failed — continuing without persistence'
     );
     return null;
   }
@@ -356,7 +357,7 @@ export interface PersistTriRoleRunInput {
  * exported for unit-testability of the mapping logic.
  */
 export function buildTriRoleRunCreatePayload(
-  input: PersistTriRoleRunInput,
+  input: PersistTriRoleRunInput
 ): Prisma.CollectiveRunUncheckedCreateInput {
   // tri-role has no parallel-signal convergence; we encode the
   // accept/no-accept outcome as 1/0 so the decimal column is still
@@ -404,15 +405,12 @@ export function buildTriRoleRunCreatePayload(
  * function — exported for testability.
  */
 export function buildTriRoleSignalCreatePayloads(
-  transcript: ReadonlyArray<TriRoleTurnInput>,
+  transcript: ReadonlyArray<TriRoleTurnInput>
 ): ReadonlyArray<Omit<Prisma.CollectiveSignalUncheckedCreateInput, 'runId'>> {
   return transcript.map((t) => {
     // decisionType encodes role + verdict (when applicable) so the F3.3
     // export can stratify training data without parsing JSON.
-    const decisionType =
-      t.role === 'auditor' && t.verdict
-        ? `verdict-${t.verdict.status}`
-        : t.role;
+    const decisionType = t.role === 'auditor' && t.verdict ? `verdict-${t.verdict.status}` : t.role;
 
     const decisionValue: Record<string, unknown> = {
       responseText: t.responseText,
@@ -449,9 +447,7 @@ export function buildTriRoleSignalCreatePayloads(
       // when the verdict is unambiguous. For inferred (ambiguous)
       // verdicts we lower the confidence to 0.5 so the trainer can
       // weight uncertain signals down.
-      decisionConfidence: new Prisma.Decimal(
-        t.verdict?.inferred ? '0.50' : '1.00',
-      ),
+      decisionConfidence: new Prisma.Decimal(t.verdict?.inferred ? '0.50' : '1.00'),
       decisionRationale: t.verdict?.feedback ?? null,
       sensitivities: asJsonInput([]),
       latencyMs: t.durationMs,
@@ -483,7 +479,7 @@ export function buildTriRoleSignalCreatePayloads(
  * response). Best-effort, fire-and-forget at the strategy level.
  */
 export async function persistTriRoleRun(
-  input: PersistTriRoleRunInput,
+  input: PersistTriRoleRunInput
 ): Promise<{ runId: string } | null> {
   if (!input.organizationId) {
     log.warn('persistTriRoleRun: missing organizationId — skipping persist');
@@ -514,7 +510,7 @@ export async function persistTriRoleRun(
         rounds: input.transcript.length,
         stopReason: input.stopReason,
       },
-      'TriRoleRun persisted',
+      'TriRoleRun persisted'
     );
 
     return result;
@@ -525,7 +521,7 @@ export async function persistTriRoleRun(
         runId: input.runId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'persistTriRoleRun failed — continuing without persistence',
+      'persistTriRoleRun failed — continuing without persistence'
     );
     return null;
   }
@@ -608,7 +604,7 @@ export interface PersistDebateRunInput {
  * exported for unit-testability of the mapping logic.
  */
 export function buildDebateRunCreatePayload(
-  input: PersistDebateRunInput,
+  input: PersistDebateRunInput
 ): Prisma.CollectiveRunUncheckedCreateInput {
   // Convergence semantics for debate: a "successful" run is one whose
   // moderator synthesis ran. Encode as 1.0/0.0 so downstream queries can
@@ -648,7 +644,7 @@ export function buildDebateRunCreatePayload(
 }
 
 export function buildDebateSignalCreatePayloads(
-  signals: ReadonlyArray<DebateSignalInput>,
+  signals: ReadonlyArray<DebateSignalInput>
 ): ReadonlyArray<Omit<Prisma.CollectiveSignalUncheckedCreateInput, 'runId'>> {
   return signals.map((s) => {
     const decisionValue: Record<string, unknown> = {
@@ -690,7 +686,7 @@ export function buildDebateSignalCreatePayloads(
  * logged and returns null without blocking the orchestration response.
  */
 export async function persistDebateRun(
-  input: PersistDebateRunInput,
+  input: PersistDebateRunInput
 ): Promise<{ runId: string } | null> {
   if (!input.organizationId) {
     log.warn('persistDebateRun: missing organizationId — skipping persist');
@@ -718,7 +714,7 @@ export async function persistDebateRun(
         signalCount: signalPayloads.length,
         stopReason: input.stopReason,
       },
-      'DebateRun persisted',
+      'DebateRun persisted'
     );
 
     return result;
@@ -729,7 +725,7 @@ export async function persistDebateRun(
         runId: input.runId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'persistDebateRun failed — continuing without persistence',
+      'persistDebateRun failed — continuing without persistence'
     );
     return null;
   }
@@ -791,7 +787,7 @@ export interface PersistExpertPanelRunInput {
 }
 
 export function buildExpertPanelRunCreatePayload(
-  input: PersistExpertPanelRunInput,
+  input: PersistExpertPanelRunInput
 ): Prisma.CollectiveRunUncheckedCreateInput {
   const convergence = input.stopReason === 'completed' ? 1 : 0;
 
@@ -827,7 +823,7 @@ export function buildExpertPanelRunCreatePayload(
 }
 
 export function buildExpertPanelSignalCreatePayloads(
-  signals: ReadonlyArray<ExpertPanelSignalInput>,
+  signals: ReadonlyArray<ExpertPanelSignalInput>
 ): ReadonlyArray<Omit<Prisma.CollectiveSignalUncheckedCreateInput, 'runId'>> {
   return signals.map((s) => {
     const decisionValue: Record<string, unknown> = {
@@ -859,7 +855,7 @@ export function buildExpertPanelSignalCreatePayloads(
 }
 
 export async function persistExpertPanelRun(
-  input: PersistExpertPanelRunInput,
+  input: PersistExpertPanelRunInput
 ): Promise<{ runId: string } | null> {
   if (!input.organizationId) {
     log.warn('persistExpertPanelRun: missing organizationId — skipping persist');
@@ -887,7 +883,7 @@ export async function persistExpertPanelRun(
         signalCount: signalPayloads.length,
         stopReason: input.stopReason,
       },
-      'ExpertPanelRun persisted',
+      'ExpertPanelRun persisted'
     );
 
     return result;
@@ -898,7 +894,7 @@ export async function persistExpertPanelRun(
         runId: input.runId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'persistExpertPanelRun failed — continuing without persistence',
+      'persistExpertPanelRun failed — continuing without persistence'
     );
     return null;
   }
@@ -912,7 +908,7 @@ export async function persistExpertPanelRun(
  */
 export async function getCollectiveRun(
   runId: string,
-  organizationId: string,
+  organizationId: string
 ): Promise<{ run: CollectiveRunRecord; signals: CollectiveSignalRecord[] } | null> {
   if (!runId || !organizationId) return null;
 
@@ -921,10 +917,7 @@ export async function getCollectiveRun(
       where: { id: runId, organizationId },
       include: {
         signals: {
-          orderBy: [
-            { round: 'asc' },
-            { createdAt: 'asc' },
-          ],
+          orderBy: [{ round: 'asc' }, { createdAt: 'asc' }],
         },
       },
     });
@@ -979,7 +972,7 @@ export async function getCollectiveRun(
         organizationId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'getCollectiveRun failed',
+      'getCollectiveRun failed'
     );
     return null;
   }
@@ -993,7 +986,7 @@ export async function getCollectiveRun(
 export async function listCollectiveRunsByRequestId(
   requestId: string,
   organizationId: string,
-  limit = 10,
+  limit = 10
 ): Promise<CollectiveRunRecord[]> {
   if (!requestId || !organizationId) return [];
 
@@ -1030,7 +1023,7 @@ export async function listCollectiveRunsByRequestId(
         organizationId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'listCollectiveRunsByRequestId failed',
+      'listCollectiveRunsByRequestId failed'
     );
     return [];
   }

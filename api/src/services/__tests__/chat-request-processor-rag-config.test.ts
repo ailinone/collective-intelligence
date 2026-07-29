@@ -61,7 +61,9 @@ function makeHit(overrides: Partial<SearchChunkHit> = {}): SearchChunkHit {
 
 /** A stub service exposing `.search` with the same shape the real service has. */
 function makeService(search: Mock) {
-  return { search } as unknown as import('@/services/vector-store-ingest-service').VectorStoreIngestService;
+  return {
+    search,
+  } as unknown as import('@/services/vector-store-ingest-service').VectorStoreIngestService;
 }
 
 const ORG = 'org_test_123';
@@ -144,7 +146,9 @@ describe('retrieveRagContext — retrieval + injection', () => {
 
     expect(retrieval?.chunk_count).toBe(1);
     expect(retrieval?.chunks[0].content_preview).toContain('high relevance');
-    const injected = request.messages.find((m) => m.role === 'system' && String(m.content).includes('high relevance'));
+    const injected = request.messages.find(
+      (m) => m.role === 'system' && String(m.content).includes('high relevance')
+    );
     expect(injected).toBeDefined();
     expect(String(injected?.content)).not.toContain('low relevance');
   });
@@ -152,8 +156,8 @@ describe('retrieveRagContext — retrieval + injection', () => {
   it('caps injected chunks at max_chunks (highest scores win)', async () => {
     const search = vi.fn(async () => [
       makeHit({ content: 'chunk-a', score: 0.99 }),
-      makeHit({ content: 'chunk-b', score: 0.80 }),
-      makeHit({ content: 'chunk-c', score: 0.60 }),
+      makeHit({ content: 'chunk-b', score: 0.8 }),
+      makeHit({ content: 'chunk-c', score: 0.6 }),
     ]);
 
     const { retrieval } = await retrieveRagContext({

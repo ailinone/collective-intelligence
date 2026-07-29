@@ -195,7 +195,11 @@ export interface CreatePolicyInput {
 
 export type CreatePolicyResult =
   | { ok: true; policy: ModerationPolicyRecord }
-  | { ok: false; code: 'invalid_request' | 'name_conflict' | 'organization_not_found'; message: string };
+  | {
+      ok: false;
+      code: 'invalid_request' | 'name_conflict' | 'organization_not_found';
+      message: string;
+    };
 
 /**
  * Create a policy for an org. Name must be unique per-org (409 name_conflict).
@@ -301,7 +305,11 @@ export function applyPolicyToItem(
   inputText: string
 ): LayeredModerationItem {
   if (!policy.enabled) {
-    return { ...base, categories: { ...base.categories }, category_scores: { ...base.category_scores } };
+    return {
+      ...base,
+      categories: { ...base.categories },
+      category_scores: { ...base.category_scores },
+    };
   }
 
   const categories: Record<string, boolean> = { ...base.categories };
@@ -322,7 +330,7 @@ export function applyPolicyToItem(
   for (const custom of policy.customCategories) {
     const matched = custom.keywords.some((kw) => kw && haystack.includes(kw.toLowerCase()));
     // Surface every custom category in the taxonomy; score 1 on match else 0.
-    categoryScores[custom.name] = matched ? 1 : categoryScores[custom.name] ?? 0;
+    categoryScores[custom.name] = matched ? 1 : (categoryScores[custom.name] ?? 0);
     if (matched) {
       if (!categories[custom.name]) triggered.push(custom.name);
       categories[custom.name] = true;

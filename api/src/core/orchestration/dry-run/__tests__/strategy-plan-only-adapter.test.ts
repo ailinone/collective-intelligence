@@ -43,24 +43,39 @@ function makeRequest(overrides: Partial<ChatRequest & { dryRun?: boolean }> = {}
 describe('buildPlanOnlyResult — cost invariants', () => {
   it('always returns totalCost=0', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest({ dryRun: true }), makeContext(), null, 0.85,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest({ dryRun: true }),
+      makeContext(),
+      null,
+      0.85
     );
     expect(result.totalCost).toBe(0);
   });
 
   it('always returns cost_usd=0 in metadata', () => {
     const result = buildPlanOnlyResult(
-      'consensus', 'cold-start-policy', 'request.dryRun',
-      makeRequest({ dryRun: true }), makeContext(), null, 0.92,
+      'consensus',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest({ dryRun: true }),
+      makeContext(),
+      null,
+      0.92
     );
     expect(result.metadata.cost_usd).toBe(0);
   });
 
   it('always returns modelsUsed=[]', () => {
     const result = buildPlanOnlyResult(
-      'cost-cascade', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.7,
+      'cost-cascade',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.7
     );
     expect(result.modelsUsed).toHaveLength(0);
   });
@@ -69,16 +84,26 @@ describe('buildPlanOnlyResult — cost invariants', () => {
 describe('buildPlanOnlyResult — provider call invariants', () => {
   it('sets provider_call_executed=false', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.8,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.8
     );
     expect(result.metadata.provider_call_executed).toBe(false);
   });
 
   it('sets plan_only=true', () => {
     const result = buildPlanOnlyResult(
-      'debate', 'cold-start-policy', 'eval.dryRun',
-      makeRequest(), makeContext(), null, 0.9,
+      'debate',
+      'cold-start-policy',
+      'eval.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.9
     );
     expect(result.metadata.plan_only).toBe(true);
   });
@@ -87,8 +112,13 @@ describe('buildPlanOnlyResult — provider call invariants', () => {
 describe('buildPlanOnlyResult — response structure', () => {
   it('produces a valid ChatResponse with assistant message', () => {
     const result = buildPlanOnlyResult(
-      'consensus', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.9,
+      'consensus',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.9
     );
     expect(result.finalResponse.object).toBe('chat.completion');
     expect(result.finalResponse.choices).toHaveLength(1);
@@ -99,16 +129,26 @@ describe('buildPlanOnlyResult — response structure', () => {
 
   it('response content mentions the strategy name', () => {
     const result = buildPlanOnlyResult(
-      'cost-cascade', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.7,
+      'cost-cascade',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.7
     );
     expect(result.finalResponse.choices[0].message.content).toContain('cost-cascade');
   });
 
   it('response usage is all zeros', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.85,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.85
     );
     expect(result.finalResponse.usage?.prompt_tokens).toBe(0);
     expect(result.finalResponse.usage?.completion_tokens).toBe(0);
@@ -119,11 +159,18 @@ describe('buildPlanOnlyResult — response structure', () => {
 describe('buildPlanOnlyResult — trace fields', () => {
   it('includes strategy_resolution_trace with correct strategy', () => {
     const result = buildPlanOnlyResult(
-      'consensus', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.9,
+      'consensus',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.9
     );
     const trace = result.metadata.strategy_resolution_trace as {
-      resolvedStrategy: string; selectionSource: string; coldStartPolicyApplied: boolean;
+      resolvedStrategy: string;
+      selectionSource: string;
+      coldStartPolicyApplied: boolean;
     };
     expect(trace.resolvedStrategy).toBe('consensus');
     expect(trace.selectionSource).toBe('cold-start-policy');
@@ -135,15 +182,22 @@ describe('buildPlanOnlyResult — trace fields', () => {
       intent: 'analysis',
       complexity: 'high',
       confidence: 0.3,
-      recommendedStrategy: null,  // discarded
+      recommendedStrategy: null, // discarded
       discarded: true,
     };
     const result = buildPlanOnlyResult(
-      'consensus', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), triageDecision, 0.9,
+      'consensus',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      triageDecision,
+      0.9
     );
     const triageTrace = result.metadata.triage_trace as {
-      invoked: boolean; discarded: boolean; discardReason: string;
+      invoked: boolean;
+      discarded: boolean;
+      discardReason: string;
     };
     expect(triageTrace.invoked).toBe(true);
     expect(triageTrace.discarded).toBe(true);
@@ -152,8 +206,13 @@ describe('buildPlanOnlyResult — trace fields', () => {
 
   it('includes triage_trace with invoked=false when triage was not run', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.8,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.8
     );
     const triageTrace = result.metadata.triage_trace as { invoked: boolean };
     expect(triageTrace.invoked).toBe(false);
@@ -161,11 +220,17 @@ describe('buildPlanOnlyResult — trace fields', () => {
 
   it('includes cost_quality_trace with estimatedPlanCostUsd=0', () => {
     const result = buildPlanOnlyResult(
-      'consensus', 'cold-start-policy', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.9,
+      'consensus',
+      'cold-start-policy',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.9
     );
     const cqTrace = result.metadata.cost_quality_trace as {
-      estimatedPlanCostUsd: number; providerCallExecuted: boolean;
+      estimatedPlanCostUsd: number;
+      providerCallExecuted: boolean;
     };
     expect(cqTrace.estimatedPlanCostUsd).toBe(0);
     expect(cqTrace.providerCallExecuted).toBe(false);
@@ -173,8 +238,13 @@ describe('buildPlanOnlyResult — trace fields', () => {
 
   it('includes route_trace as non-empty array', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.8,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.8
     );
     const routeTrace = result.metadata.route_trace as string[];
     expect(Array.isArray(routeTrace)).toBe(true);
@@ -183,8 +253,13 @@ describe('buildPlanOnlyResult — trace fields', () => {
 
   it('includes dry_run_interception_path', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'eval.planOnly',
-      makeRequest(), makeContext(), null, 0.8,
+      'single',
+      'heuristic',
+      'eval.planOnly',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.8
     );
     expect(result.metadata.dry_run_interception_path).toBe('eval.planOnly');
   });
@@ -192,8 +267,13 @@ describe('buildPlanOnlyResult — trace fields', () => {
   it('resolved_strategy matches the strategy argument', () => {
     for (const strategy of ['single', 'consensus', 'cost-cascade', 'debate']) {
       const result = buildPlanOnlyResult(
-        strategy, 'cold-start-policy', 'request.dryRun',
-        makeRequest(), makeContext(), null, 0.85,
+        strategy,
+        'cold-start-policy',
+        'request.dryRun',
+        makeRequest(),
+        makeContext(),
+        null,
+        0.85
       );
       expect(result.metadata.resolved_strategy).toBe(strategy);
     }
@@ -203,8 +283,13 @@ describe('buildPlanOnlyResult — trace fields', () => {
 describe('buildPlanOnlyResult — totalDuration', () => {
   it('totalDuration is 0 (no execution)', () => {
     const result = buildPlanOnlyResult(
-      'single', 'heuristic', 'request.dryRun',
-      makeRequest(), makeContext(), null, 0.85,
+      'single',
+      'heuristic',
+      'request.dryRun',
+      makeRequest(),
+      makeContext(),
+      null,
+      0.85
     );
     expect(result.totalDuration).toBe(0);
   });

@@ -33,11 +33,11 @@ export type StrategyTier = 'stable' | 'promising' | 'experimental' | 'fragile';
 
 export interface TierConfig {
   tier: StrategyTier;
-  timeoutMultiplier: number;       // applied on top of base strategy timeout
-  maxRetries: number;              // max retry attempts
+  timeoutMultiplier: number; // applied on top of base strategy timeout
+  maxRetries: number; // max retry attempts
   feedbackPolicy: 'always' | 'conditional' | 'never';
-  includeInPilot: boolean;         // whether included in default pilot
-  includeInProduction: boolean;    // whether available in production traffic
+  includeInPilot: boolean; // whether included in default pilot
+  includeInProduction: boolean; // whether available in production traffic
   description: string;
 }
 
@@ -48,35 +48,35 @@ export const TIER_CONFIGS: Record<StrategyTier, TierConfig> = {
     tier: 'stable',
     timeoutMultiplier: 1.0,
     maxRetries: 3,
-    feedbackPolicy: 'conditional',  // skip feedback when quality > 0.8
+    feedbackPolicy: 'conditional', // skip feedback when quality > 0.8
     includeInPilot: true,
     includeInProduction: true,
     description: '>80% success rate, competitive quality, production-ready',
   },
   promising: {
     tier: 'promising',
-    timeoutMultiplier: 1.2,         // 20% more time (these strategies are worth waiting for)
+    timeoutMultiplier: 1.2, // 20% more time (these strategies are worth waiting for)
     maxRetries: 2,
     feedbackPolicy: 'always',
     includeInPilot: true,
-    includeInProduction: true,      // available but not default
+    includeInProduction: true, // available but not default
     description: '40-80% success, competitive quality when working, needs pool stability',
   },
   experimental: {
     tier: 'experimental',
     timeoutMultiplier: 1.0,
-    maxRetries: 1,                  // fail fast — don't waste budget retrying unproven strategies
+    maxRetries: 1, // fail fast — don't waste budget retrying unproven strategies
     feedbackPolicy: 'always',
     includeInPilot: true,
-    includeInProduction: false,     // research only
+    includeInProduction: false, // research only
     description: '28-60% success, mixed results, under investigation',
   },
   fragile: {
     tier: 'fragile',
-    timeoutMultiplier: 0.8,         // shorter timeout — don't let them hog resources
+    timeoutMultiplier: 0.8, // shorter timeout — don't let them hog resources
     maxRetries: 1,
-    feedbackPolicy: 'never',        // no point refining a broken strategy
-    includeInPilot: true,           // keep in pilot for data collection
+    feedbackPolicy: 'never', // no point refining a broken strategy
+    includeInPilot: true, // keep in pilot for data collection
     includeInProduction: false,
     description: '<30% success or 0%, known issues, needs fix before production',
   },
@@ -115,18 +115,18 @@ export const TIER_CONFIGS: Record<StrategyTier, TierConfig> = {
  */
 const STRATEGY_TIERS: Record<string, StrategyTier> = {
   // Stable tier
-  'hybrid': 'stable',
+  hybrid: 'stable',
   'quality-multipass': 'stable',
-  'quality_multipass': 'stable',
-  'sequential': 'stable',
-  'parallel': 'stable',
+  quality_multipass: 'stable',
+  sequential: 'stable',
+  parallel: 'stable',
   'safety-quorum': 'stable',
-  'adaptive': 'stable',
-  'single': 'stable',
+  adaptive: 'stable',
+  single: 'stable',
 
   // Promising tier
-  'collaborative': 'promising',
-  'competitive': 'promising',
+  collaborative: 'promising',
+  competitive: 'promising',
   'expert-panel': 'promising',
   'critique-repair': 'promising',
   'multi-hop-qa': 'promising',
@@ -135,20 +135,20 @@ const STRATEGY_TIERS: Record<string, StrategyTier> = {
   'research-synthesize': 'promising',
 
   // Experimental tier
-  'consensus': 'experimental',
-  'reinforcement': 'experimental',
-  'hierarchical': 'experimental',
-  'cost-cascade': 'experimental',  // was 0% due to bug, now fixed
-  'contextual': 'experimental',
+  consensus: 'experimental',
+  reinforcement: 'experimental',
+  hierarchical: 'experimental',
+  'cost-cascade': 'experimental', // was 0% due to bug, now fixed
+  contextual: 'experimental',
   'massive-parallel': 'experimental',
   'diversity-ensemble': 'experimental',
   'devil-advocate-consensus': 'experimental',
   'war-room': 'experimental',
   'stigmergic-refinement': 'experimental',
-  'agentic': 'experimental',
+  agentic: 'experimental',
 
   // Fragile tier
-  'debate': 'fragile',
+  debate: 'fragile',
   'double-diamond': 'fragile',
   'persona-exploration': 'fragile',
   'swarm-explore': 'fragile',
@@ -200,9 +200,10 @@ export function isStrategyAllowed(strategy: string, allowedTiers?: StrategyTier[
  */
 export function parseAllowedTiers(envValue?: string): StrategyTier[] | undefined {
   if (!envValue) return undefined;
-  return envValue.split(',').map(t => t.trim() as StrategyTier).filter(t =>
-    ['stable', 'promising', 'experimental', 'fragile'].includes(t)
-  );
+  return envValue
+    .split(',')
+    .map((t) => t.trim() as StrategyTier)
+    .filter((t) => ['stable', 'promising', 'experimental', 'fragile'].includes(t));
 }
 
 /**
@@ -227,8 +228,8 @@ const TIER_PROVISIONAL = true;
 
 interface TierRecalculationInput {
   strategyName: string;
-  successRate: number;       // 0-1
-  avgQuality: number;        // 0-1
+  successRate: number; // 0-1
+  avgQuality: number; // 0-1
   sampleCount: number;
   currentTier: StrategyTier;
 }
@@ -288,7 +289,8 @@ export function recalculateTier(input: TierRecalculationInput): TierRecalculatio
   // Provisional guard: cannot auto-promote past 'promising'
   if (TIER_PROVISIONAL && proposedTier === 'stable' && currentTier !== 'stable') {
     proposedTier = 'promising';
-    reason += ' (capped at promising — manual promotion to stable required during provisional period)';
+    reason +=
+      ' (capped at promising — manual promotion to stable required during provisional period)';
   }
 
   return {
@@ -306,7 +308,7 @@ export function recalculateTier(input: TierRecalculationInput): TierRecalculatio
  * Returns only strategies that would change tier.
  */
 export function proposeAllTierChanges(
-  results: Array<{ strategy: string; success: boolean; qualityScore: number }>,
+  results: Array<{ strategy: string; success: boolean; qualityScore: number }>
 ): TierRecalculationResult[] {
   // Group by strategy
   const grouped = new Map<string, { successes: number; total: number; qualitySum: number }>();

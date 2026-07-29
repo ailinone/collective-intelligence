@@ -188,7 +188,11 @@ describe('SemanticCache (pgvector)', () => {
       cache = new SemanticCache({}, pool as never, embedder as never);
       pool.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
 
-      await cache.store({ request: CHAT_REQUEST, response: CHAT_RESPONSE, organizationId: 'org-1' });
+      await cache.store({
+        request: CHAT_REQUEST,
+        response: CHAT_RESPONSE,
+        organizationId: 'org-1',
+      });
 
       const [, params] = pool.query.mock.calls[0]!;
       expect(params[5]).toBeNull(); // embedding
@@ -231,7 +235,15 @@ describe('SemanticCache (pgvector)', () => {
 
     it('returns zeroed stats for an org with no entries, without erroring', async () => {
       pool.query.mockResolvedValueOnce({
-        rows: [{ total_entries: '0', total_hits: null, estimated_cost_saved: null, oldest_entry: null, newest_entry: null }],
+        rows: [
+          {
+            total_entries: '0',
+            total_hits: null,
+            estimated_cost_saved: null,
+            oldest_entry: null,
+            newest_entry: null,
+          },
+        ],
       });
 
       const stats = await cache.getStats('org-empty');
@@ -246,7 +258,7 @@ describe('SemanticCache (pgvector)', () => {
   });
 
   describe('invalidate', () => {
-    it('deletes all of an org\'s entries when no pattern is given', async () => {
+    it("deletes all of an org's entries when no pattern is given", async () => {
       pool.query.mockResolvedValueOnce({ rowCount: 7 });
       const count = await cache.invalidate({ organizationId: 'org-1' });
       expect(count).toBe(7);
@@ -283,7 +295,10 @@ describe('SemanticCache (pgvector)', () => {
       for (let i = 0; i < 3; i++) {
         pool.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
         await cache.store({
-          request: { ...CHAT_REQUEST, messages: [{ role: 'user', content: `q${i}` }] } as ChatRequest,
+          request: {
+            ...CHAT_REQUEST,
+            messages: [{ role: 'user', content: `q${i}` }],
+          } as ChatRequest,
           response: CHAT_RESPONSE,
           organizationId: 'org-1',
         });

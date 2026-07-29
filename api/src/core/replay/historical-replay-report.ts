@@ -34,9 +34,7 @@ export interface BuildReplayReportInput {
   readonly nowIso: string;
 }
 
-export function buildReplayReport(
-  input: BuildReplayReportInput,
-): ReplayReport {
+export function buildReplayReport(input: BuildReplayReportInput): ReplayReport {
   const approval = decideApproval(input);
   return Object.freeze({
     exportMetadata: input.exportMetadata,
@@ -70,9 +68,7 @@ function decideApproval(args: ApprovalArgs): ReplayReport['approval'] {
   // 1. Train/holdout sem vazamento.
   if (args.split.leakageWarnings.length > 0) {
     approved = false;
-    reasons.push(
-      `leakage_detected:${args.split.leakageWarnings.slice(0, 3).join(',')}`,
-    );
+    reasons.push(`leakage_detected:${args.split.leakageWarnings.slice(0, 3).join(',')}`);
   }
 
   // 2. Holdout amostra suficiente.
@@ -89,20 +85,16 @@ function decideApproval(args: ApprovalArgs): ReplayReport['approval'] {
   if (m.quality_and_cost_success_rate < 0.5) {
     approved = false;
     reasons.push(
-      `quality_and_cost_success_rate_below_0_5:${m.quality_and_cost_success_rate.toFixed(3)}`,
+      `quality_and_cost_success_rate_below_0_5:${m.quality_and_cost_success_rate.toFixed(3)}`
     );
   } else {
-    reasons.push(
-      `quality_and_cost_success_rate_ok:${m.quality_and_cost_success_rate.toFixed(3)}`,
-    );
+    reasons.push(`quality_and_cost_success_rate_ok:${m.quality_and_cost_success_rate.toFixed(3)}`);
   }
 
   // 4. Não degrada qualidade no modo strict.
   if (m.quality_ge_single_rate < 0.5) {
     approved = false;
-    reasons.push(
-      `quality_ge_single_rate_below_0_5:${m.quality_ge_single_rate.toFixed(3)}`,
-    );
+    reasons.push(`quality_ge_single_rate_below_0_5:${m.quality_ge_single_rate.toFixed(3)}`);
   }
 
   // 5. Cost <= single na maioria.
@@ -116,16 +108,14 @@ function decideApproval(args: ApprovalArgs): ReplayReport['approval'] {
   if (m.expected_vs_observed_judge_error > 0.3) {
     approved = false;
     reasons.push(
-      `expected_vs_observed_judge_error_high:${m.expected_vs_observed_judge_error.toFixed(3)}`,
+      `expected_vs_observed_judge_error_high:${m.expected_vs_observed_judge_error.toFixed(3)}`
     );
   }
 
   // 7. cost_prediction_error razoável (em USD).
   if (m.cost_prediction_error > 0.1) {
     approved = false;
-    reasons.push(
-      `cost_prediction_error_high:${m.cost_prediction_error.toFixed(4)}`,
-    );
+    reasons.push(`cost_prediction_error_high:${m.cost_prediction_error.toFixed(4)}`);
   }
 
   // 8. coverage_rate. Mín 0.30 — se Pareto não conseguiu rodar em pelo

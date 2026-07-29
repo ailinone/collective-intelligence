@@ -26,7 +26,7 @@ import {
 import type { ModelQualityCalibrationEntry } from '@/core/orchestration/role-selection/model-quality-calibration';
 
 function mkEntry(
-  overrides: Partial<ModelQualityCalibrationEntry> = {},
+  overrides: Partial<ModelQualityCalibrationEntry> = {}
 ): ModelQualityCalibrationEntry {
   return {
     modelId: 'test-x',
@@ -49,7 +49,9 @@ describe('01C.1B-J2-C-R4 §12 — categoryPriorityForTask', () => {
   });
 
   it('maps document-understanding → chat_document first', () => {
-    expect(categoryPriorityForTask({ taskType: 'document-understanding' })[0]).toBe('chat_document');
+    expect(categoryPriorityForTask({ taskType: 'document-understanding' })[0]).toBe(
+      'chat_document'
+    );
   });
 
   it('maps analysis → chat_document first', () => {
@@ -132,7 +134,12 @@ describe('01C.1B-J2-C-R4 §12 — resolveTaskAwareQuality', () => {
     const entry = mkEntry({
       qualityScore: 0.6,
       sourceScores: [
-        { source: 'lmarena', score: 0.7, confidence: 'high', categoryScores: { code_webdev: 0.92 } },
+        {
+          source: 'lmarena',
+          score: 0.7,
+          confidence: 'high',
+          categoryScores: { code_webdev: 0.92 },
+        },
       ],
       qualityScoreSources: ['lmarena'],
     });

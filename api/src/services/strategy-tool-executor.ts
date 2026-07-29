@@ -30,7 +30,7 @@ import { toolRegistry } from '@/core/tools/tool-registry';
 export async function executeToolForStrategy(
   toolCall: ToolCall,
   log: Logger,
-  context?: Partial<ToolExecutionContext>,
+  context?: Partial<ToolExecutionContext>
 ): Promise<ToolResult> {
   const functionName = toolCall.function?.name;
   const argsStr = toolCall.function?.arguments || '{}';
@@ -43,11 +43,19 @@ export async function executeToolForStrategy(
   try {
     const parsed: unknown = JSON.parse(argsStr);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { tool_call_id: toolCall.id, success: false, error: `Tool arguments must be a JSON object: ${argsStr.substring(0, 200)}` };
+      return {
+        tool_call_id: toolCall.id,
+        success: false,
+        error: `Tool arguments must be a JSON object: ${argsStr.substring(0, 200)}`,
+      };
     }
     args = parsed as Record<string, unknown>;
   } catch {
-    return { tool_call_id: toolCall.id, success: false, error: `Invalid JSON arguments: ${argsStr.substring(0, 200)}` };
+    return {
+      tool_call_id: toolCall.id,
+      success: false,
+      error: `Invalid JSON arguments: ${argsStr.substring(0, 200)}`,
+    };
   }
 
   const execContext: ToolExecutionContext = {
@@ -60,7 +68,11 @@ export async function executeToolForStrategy(
 
   if (!toolRegistry.isInitialized()) {
     log.warn('Tool registry not initialized — tool execution unavailable in strategy context');
-    return { tool_call_id: toolCall.id, success: false, error: 'Tool registry not yet initialized.' };
+    return {
+      tool_call_id: toolCall.id,
+      success: false,
+      error: 'Tool registry not yet initialized.',
+    };
   }
 
   return toolRegistry.executeForStrategy(functionName, args, toolCall.id, execContext);

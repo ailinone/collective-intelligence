@@ -40,8 +40,10 @@ function mk(opts: {
       capabilities: ['chat', 'text_generation', 'reasoning', 'instruction_following'] as never,
       status: 'active',
       performance: {
-        latencyMs: 800, throughput: 100,
-        quality: opts.quality ?? 0.8, reliability: 0.9,
+        latencyMs: 800,
+        throughput: 100,
+        quality: opts.quality ?? 0.8,
+        reliability: 0.9,
       },
       metadata: {},
       providerName: opts.providerId,
@@ -91,7 +93,9 @@ describe('01C.1B-J2 §17.1 — quality snapshot integration', () => {
     // specialized-model with snapshot q=0.95 should beat commodity at catalog q=0.8
     expect(result.selected[0]?.model.id).toBe('specialized-model');
     expect(result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.candidatesMatched).toBe(1);
-    expect(result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityScoreSource).toBe('internal_benchmark');
+    expect(
+      result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityScoreSource
+    ).toBe('internal_benchmark');
   });
 
   it('high-quality single-provider in snapshot beats multi-provider with low snapshot quality', async () => {
@@ -185,8 +189,12 @@ describe('01C.1B-J2 §17.1 — quality snapshot integration', () => {
       candidatePool: pool,
       modelQualityCalibrationSnapshot: snapshot,
     });
-    expect(result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityScoreSource).toBe('placeholder');
-    expect(result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityConfidence).toBe('placeholder');
+    expect(
+      result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityScoreSource
+    ).toBe('placeholder');
+    expect(
+      result.synthesizerSelectionSummary?.qualitySnapshotMetadata?.winnerQualityConfidence
+    ).toBe('placeholder');
   });
 
   it('candidates not in snapshot fall back to catalog placeholder + counted separately', async () => {

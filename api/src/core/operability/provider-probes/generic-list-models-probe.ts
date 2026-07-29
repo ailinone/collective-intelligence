@@ -46,9 +46,7 @@ export interface GenericListModelsProbeOptions {
   readonly fetchImpl?: typeof fetch;
 }
 
-export function createGenericListModelsProbe(
-  opts: GenericListModelsProbeOptions,
-): ProviderProbe {
+export function createGenericListModelsProbe(opts: GenericListModelsProbeOptions): ProviderProbe {
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const headerName = opts.authHeaderName ?? 'Authorization';
   const headerValue = opts.authHeaderValue ?? ((k: string) => `Bearer ${k}`);

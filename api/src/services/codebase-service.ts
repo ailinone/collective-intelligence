@@ -160,9 +160,7 @@ function decodeFileContent(
       }
       return { content: decoded, encoding: 'utf-8' };
     } catch (error) {
-      warnings.push(
-        `Failed to decode base64 content for ${file.path}: ${getErrorMessage(error)}`
-      );
+      warnings.push(`Failed to decode base64 content for ${file.path}: ${getErrorMessage(error)}`);
       return { content: '', encoding: 'base64' };
     }
   }

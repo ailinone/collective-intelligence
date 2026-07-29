@@ -30,15 +30,19 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { CentralModelDiscoveryService, type DiscoverySource } from '@/services/central-model-discovery-service';
+import {
+  CentralModelDiscoveryService,
+  type DiscoverySource,
+} from '@/services/central-model-discovery-service';
 
 type ResolveFn = (source: DiscoverySource) => string | undefined;
 
 function getResolver(): ResolveFn {
   const service = new CentralModelDiscoveryService();
   // The method is private; access via a typed bracket cast for regression coverage.
-  const resolver = (service as unknown as { resolveSourceExecutionProvider: ResolveFn })
-    .resolveSourceExecutionProvider.bind(service);
+  const resolver = (
+    service as unknown as { resolveSourceExecutionProvider: ResolveFn }
+  ).resolveSourceExecutionProvider.bind(service);
   return resolver;
 }
 

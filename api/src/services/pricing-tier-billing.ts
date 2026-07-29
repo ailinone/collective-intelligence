@@ -50,14 +50,16 @@ export interface TierContext {
 
 /** Pull the tier context off a resolved alias (null unless it was a composite cell). */
 export function extractTierContext(
-  resolved: { tier?: TierId; tierRate?: TierRate } | null | undefined,
+  resolved: { tier?: TierId; tierRate?: TierRate } | null | undefined
 ): TierContext | null {
   if (!resolved?.tier || !resolved.tierRate) return null;
   return { tier: resolved.tier, rate: resolved.tierRate };
 }
 
 /** Rough prompt-token estimate (chars/4) for the worst-case hold — exact tokens aren't known pre-exec. */
-export function estimatePromptTokens(messages: ReadonlyArray<{ content?: unknown }> | undefined): number {
+export function estimatePromptTokens(
+  messages: ReadonlyArray<{ content?: unknown }> | undefined
+): number {
   let chars = 0;
   for (const m of messages ?? []) {
     const c = m?.content;
@@ -73,9 +75,7 @@ export function estimatePromptTokens(messages: ReadonlyArray<{ content?: unknown
   return Math.ceil(chars / 4);
 }
 
-export type GateOutcome =
-  | { ok: true }
-  | { ok: false; balanceUsd: number; requiredUsd: number };
+export type GateOutcome = { ok: true } | { ok: false; balanceUsd: number; requiredUsd: number };
 
 /**
  * Worst-case spend gate. Returns `ok` (proceed) when billing is disabled, when the
@@ -87,7 +87,7 @@ export async function gateTierRequest(
   ctx: TierContext,
   promptTokens: number,
   maxCompletionTokens: number,
-  opts?: SpendGateOptions,
+  opts?: SpendGateOptions
 ): Promise<GateOutcome> {
   if (!isTierBillingEnabled()) return { ok: true };
   try {
@@ -95,7 +95,7 @@ export async function gateTierRequest(
       ctx.rate.inputPer1MUsd,
       ctx.rate.outputPer1MUsd,
       promptTokens,
-      maxCompletionTokens,
+      maxCompletionTokens
     );
     const decision = await wallet().checkGate(organizationId, hold, opts);
     if (decision.allowed) return { ok: true };
@@ -112,7 +112,7 @@ export async function debitTierRequest(
   ctx: TierContext,
   promptTokens: number,
   completionTokens: number,
-  requestId?: string,
+  requestId?: string
 ): Promise<void> {
   if (!isTierBillingEnabled()) return;
   try {
@@ -122,6 +122,9 @@ export async function debitTierRequest(
     if (charge <= 0) return;
     await wallet().debit(organizationId, charge, requestId);
   } catch (err) {
-    logger.warn({ err, organizationId, tier: ctx.tier, requestId }, 'tier debit failed (revenue not captured)');
+    logger.warn(
+      { err, organizationId, tier: ctx.tier, requestId },
+      'tier debit failed (revenue not captured)'
+    );
   }
 }

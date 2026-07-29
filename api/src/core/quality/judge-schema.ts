@@ -123,7 +123,7 @@ export const JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS =
  */
 export function normalizeJudgeOutput(
   raw: unknown,
-  context: { where: string; candidateCount?: number },
+  context: { where: string; candidateCount?: number }
 ): JudgeVerdict | undefined {
   incrementPromptMetric(PROMPT_METRIC_NAMES.JUDGE_NORMALIZATIONS, { where: context.where });
 
@@ -156,7 +156,10 @@ export function normalizeJudgeOutput(
 
   // Case 5: `BEST: N\nREASON: ...` freeform text (competitive-strategy legacy).
   if (typeof raw === 'string') {
-    const fromText = normalizeBestReasonText(raw, context.candidateCount ?? Number.MAX_SAFE_INTEGER);
+    const fromText = normalizeBestReasonText(
+      raw,
+      context.candidateCount ?? Number.MAX_SAFE_INTEGER
+    );
     if (fromText) return fromText;
   }
 
@@ -172,7 +175,7 @@ export function normalizeJudgeOutput(
     if (salvaged) {
       log.debug(
         { where: context.where, score: salvaged.score },
-        'normalizeJudgeOutput: recovered score via regex salvage (unparseable JSON)',
+        'normalizeJudgeOutput: recovered score via regex salvage (unparseable JSON)'
       );
       return salvaged;
     }
@@ -241,7 +244,7 @@ function coerceObject(raw: unknown): Record<string, unknown> | undefined {
 function normalizeArbitrationScores(
   payload: Record<string, unknown>,
   scoresRaw: number[],
-  context: { where: string },
+  context: { where: string }
 ): JudgeVerdict {
   const scores = scoresRaw.map((s) => clamp01(s / 100));
   const bestIdx = scores.reduce((best, s, i) => (s > scores[best] ? i : best), 0);
@@ -271,7 +274,7 @@ function normalizeArbitrationScores(
     confidence: clamp01(
       typeof (payload as { confidence?: unknown }).confidence === 'number'
         ? (payload as { confidence: number }).confidence
-        : 0.75,
+        : 0.75
     ),
     summary:
       typeof (payload as { recommendation?: unknown }).recommendation === 'string'
@@ -293,7 +296,10 @@ function normalizeDimensionalVerdict(payload: Record<string, unknown>): JudgeVer
   }
   const reasoning = (payload as { reasoning?: unknown }).reasoning;
   const summary = Array.isArray(reasoning)
-    ? reasoning.filter((r) => typeof r === 'string').join('; ').slice(0, 400)
+    ? reasoning
+        .filter((r) => typeof r === 'string')
+        .join('; ')
+        .slice(0, 400)
     : undefined;
   return {
     score: overall,
@@ -335,9 +341,18 @@ function tolerantVerdict(payload: Record<string, unknown>): JudgeVerdict | undef
   if (score === undefined) return undefined; // nothing usable — let caller fail
 
   const SEVERITY_ALIASES: Record<string, IssueSeverity> = {
-    critical: 'critical', blocker: 'critical', severe: 'critical',
-    major: 'major', high: 'major', medium: 'major', moderate: 'major',
-    minor: 'minor', low: 'minor', warning: 'minor', info: 'minor', trivial: 'minor',
+    critical: 'critical',
+    blocker: 'critical',
+    severe: 'critical',
+    major: 'major',
+    high: 'major',
+    medium: 'major',
+    moderate: 'major',
+    minor: 'minor',
+    low: 'minor',
+    warning: 'minor',
+    info: 'minor',
+    trivial: 'minor',
   };
   const issues: JudgeIssue[] = [];
   const rawIssues = payload.issues;
@@ -346,13 +361,17 @@ function tolerantVerdict(payload: Record<string, unknown>): JudgeVerdict | undef
       if (typeof entry !== 'object' || entry === null) continue;
       const o = entry as Record<string, unknown>;
       const description =
-        typeof o.description === 'string' && o.description.length > 0 ? o.description :
-        typeof o.issue === 'string' && o.issue.length > 0 ? o.issue : undefined;
+        typeof o.description === 'string' && o.description.length > 0
+          ? o.description
+          : typeof o.issue === 'string' && o.issue.length > 0
+            ? o.issue
+            : undefined;
       if (!description) continue;
       const sevKey = typeof o.severity === 'string' ? o.severity.toLowerCase() : 'minor';
       const issue: JudgeIssue = {
         severity: SEVERITY_ALIASES[sevKey] ?? 'minor',
-        location: typeof o.location === 'string' && o.location.length > 0 ? o.location : 'unspecified',
+        location:
+          typeof o.location === 'string' && o.location.length > 0 ? o.location : 'unspecified',
         description,
       };
       if (typeof o.suggestedFix === 'string') issue.suggestedFix = o.suggestedFix;
@@ -363,12 +382,18 @@ function tolerantVerdict(payload: Record<string, unknown>): JudgeVerdict | undef
   const confidence = toScore(payload.confidence);
   const summarySource = payload.summary ?? payload.justification ?? payload.reasoning;
   const summary =
-    typeof summarySource === 'string' ? summarySource.slice(0, 400) :
-    Array.isArray(summarySource)
-      ? summarySource.filter((s): s is string => typeof s === 'string').join('; ').slice(0, 400)
-      : undefined;
+    typeof summarySource === 'string'
+      ? summarySource.slice(0, 400)
+      : Array.isArray(summarySource)
+        ? summarySource
+            .filter((s): s is string => typeof s === 'string')
+            .join('; ')
+            .slice(0, 400)
+        : undefined;
   const winnerIndex =
-    typeof payload.winnerIndex === 'number' && Number.isInteger(payload.winnerIndex) && payload.winnerIndex >= 0
+    typeof payload.winnerIndex === 'number' &&
+    Number.isInteger(payload.winnerIndex) &&
+    payload.winnerIndex >= 0
       ? payload.winnerIndex
       : undefined;
 

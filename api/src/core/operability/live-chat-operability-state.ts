@@ -34,13 +34,13 @@
  *   4. `unknown` — initial state, no data yet
  */
 import { promises as fs, readFileSync, existsSync } from 'node:fs';
-import type { ProviderErrorClassification, ProviderErrorKind } from '../orchestration/failures/provider-error-classifier';
+import type {
+  ProviderErrorClassification,
+  ProviderErrorKind,
+} from '../orchestration/failures/provider-error-classifier';
 
 export type LiveChatOperabilitySource =
-  | 'direct_chat_probe'
-  | 'execution_feedback'
-  | 'manual_override'
-  | 'unknown';
+  'direct_chat_probe' | 'execution_feedback' | 'manual_override' | 'unknown';
 
 export interface LiveChatOperabilityState {
   readonly providerId: string;
@@ -176,9 +176,7 @@ export class LiveChatOperabilityStore {
       lastChatFailureAt: input.ok ? prev?.lastChatFailureAt : now,
       lastErrorKind,
       lastHttpStatus: input.ok ? prev?.lastHttpStatus : input.httpStatus,
-      lastSanitizedMessage: input.ok
-        ? prev?.lastSanitizedMessage
-        : cls?.sanitizedMessage,
+      lastSanitizedMessage: input.ok ? prev?.lastSanitizedMessage : cls?.sanitizedMessage,
       cooldownUntil,
       successCountRecent,
       failureCountRecent,
@@ -192,7 +190,11 @@ export class LiveChatOperabilityStore {
   }
 
   /** Lookup live state for a route. Returns undefined when unseen. */
-  get(input: { providerId: string; routeId: string; modelId: string }): LiveChatOperabilityState | undefined {
+  get(input: {
+    providerId: string;
+    routeId: string;
+    modelId: string;
+  }): LiveChatOperabilityState | undefined {
     return this.states.get(buildLiveStateKey(input));
   }
 
@@ -211,7 +213,11 @@ export class LiveChatOperabilityStore {
    *  right now? Returns false when chatReady is false OR cooldown is
    *  still active. Returns true when chatReady AND (no cooldown OR
    *  cooldown expired). */
-  isEligibleForCriticalRole(input: { providerId: string; routeId: string; modelId: string }): boolean {
+  isEligibleForCriticalRole(input: {
+    providerId: string;
+    routeId: string;
+    modelId: string;
+  }): boolean {
     const s = this.get(input);
     if (!s) return false;
     if (!s.eligibleForCriticalRole) return false;
@@ -235,7 +241,7 @@ export class LiveChatOperabilityStore {
         states: this.snapshot(),
       },
       null,
-      2,
+      2
     );
     await fs.writeFile(path, body, 'utf-8');
   }
@@ -297,8 +303,7 @@ let hydrationAttempted = false;
  *  `LIVE_CHAT_OPERABILITY_SNAPSHOT_PATH`. */
 function snapshotPath(): string {
   return (
-    process.env.LIVE_CHAT_OPERABILITY_SNAPSHOT_PATH ??
-    '/tmp/ci-live-chat-operability-snapshot.json'
+    process.env.LIVE_CHAT_OPERABILITY_SNAPSHOT_PATH ?? '/tmp/ci-live-chat-operability-snapshot.json'
   );
 }
 

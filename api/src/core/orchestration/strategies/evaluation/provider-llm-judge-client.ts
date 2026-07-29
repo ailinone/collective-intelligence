@@ -43,16 +43,8 @@ import { logger } from '@/utils/logger';
 import type { ProviderRegistry } from '@/providers/provider-registry';
 import type { ChatRequest, ChatResponse } from '@/types';
 import { normalizeJudgeOutput } from '@/core/quality/judge-schema';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  observeHistogram,
-} from '@/core/operability/metrics';
-import type {
-  LLMJudgeClient,
-  LLMJudgeInput,
-  LLMJudgeRawResult,
-} from './llm-judge-evaluator.types';
+import { METRIC_NAMES, incrementCounter, observeHistogram } from '@/core/operability/metrics';
+import type { LLMJudgeClient, LLMJudgeInput, LLMJudgeRawResult } from './llm-judge-evaluator.types';
 
 const log = logger.child({ component: 'provider-llm-judge-client' });
 
@@ -72,12 +64,7 @@ const JUDGE_NORMALIZE_WHERE = 'provider-llm-judge-client';
  *   - `model_not_found` — the judge model id did not resolve in the registry.
  */
 type JudgeParseClass =
-  | 'ok'
-  | 'salvaged'
-  | 'empty'
-  | 'unrecoverable'
-  | 'provider_error'
-  | 'model_not_found';
+  'ok' | 'salvaged' | 'empty' | 'unrecoverable' | 'provider_error' | 'model_not_found';
 
 const RUBRIC_PREFIX =
   'You are an impartial code/output judge. Score the candidate output on a strict rubric. ' +
@@ -125,7 +112,11 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
     try {
       response = await resolved.adapter.chatCompletion(judgeRequest);
     } catch (err) {
-      recordJudgeMetric({ parseClass: 'provider_error', verdict: 'none', latencyMs: Date.now() - t0 });
+      recordJudgeMetric({
+        parseClass: 'provider_error',
+        verdict: 'none',
+        latencyMs: Date.now() - t0,
+      });
       log.warn(
         {
           judgeModelId: input.judgeModelId,
@@ -133,7 +124,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
           latencyMs: Date.now() - t0,
           error: errorMessage(err),
         },
-        'judge provider call failed',
+        'judge provider call failed'
       );
       throw err;
     }
@@ -144,7 +135,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
       recordJudgeMetric({ parseClass: 'empty', verdict: 'none', latencyMs });
       log.warn(
         { judgeModelId: input.judgeModelId, rubricVersion: input.rubricVersion, latencyMs },
-        'judge returned no parseable content',
+        'judge returned no parseable content'
       );
       throw new Error('judge_response_empty');
     }
@@ -162,7 +153,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
       recordJudgeMetric({ parseClass: 'unrecoverable', verdict: 'none', latencyMs });
       log.warn(
         { judgeModelId: input.judgeModelId, rubricVersion: input.rubricVersion, latencyMs },
-        'judge output unrecoverable after tolerant salvage',
+        'judge output unrecoverable after tolerant salvage'
       );
       throw err;
     }
@@ -176,11 +167,15 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
     let costUsd = 0;
     try {
       const usage = response.usage;
-      costUsd = Math.max(0, resolved.adapter.calculateCost(
-        resolved.model,
-        usage?.prompt_tokens || 0,
-        usage?.completion_tokens || 0,
-      )) || 0;
+      costUsd =
+        Math.max(
+          0,
+          resolved.adapter.calculateCost(
+            resolved.model,
+            usage?.prompt_tokens || 0,
+            usage?.completion_tokens || 0
+          )
+        ) || 0;
     } catch {
       costUsd = 0;
     }
@@ -203,7 +198,7 @@ export class ProviderLLMJudgeClient implements LLMJudgeClient {
         parseClass,
         costUsd,
       },
-      'judge completed',
+      'judge completed'
     );
     return resultWithCost;
   }
@@ -277,7 +272,7 @@ export function coerceRawResult(parsed: unknown): LLMJudgeRawResult {
   if (!explicitVerdict) {
     log.debug(
       { score: normalized.score },
-      'judge verdict missing/invalid — defaulting to uncertain',
+      'judge verdict missing/invalid — defaulting to uncertain'
     );
   }
 

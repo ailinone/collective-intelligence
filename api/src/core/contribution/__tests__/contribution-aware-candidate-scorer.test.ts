@@ -28,7 +28,7 @@ import {
 import type { ModelTaskPerformanceProfile } from '../model-task-performance-profile';
 
 function profile(
-  overrides: Partial<ModelTaskPerformanceProfile> & { modelId: string },
+  overrides: Partial<ModelTaskPerformanceProfile> & { modelId: string }
 ): ModelTaskPerformanceProfile {
   return Object.freeze({
     modelId: overrides.modelId,
@@ -53,7 +53,7 @@ function profile(
 }
 
 function candidate(
-  overrides: Partial<ContributionAwareCandidate> & { modelId: string; routeId: string },
+  overrides: Partial<ContributionAwareCandidate> & { modelId: string; routeId: string }
 ): ContributionAwareCandidate {
   return {
     routeId: overrides.routeId,

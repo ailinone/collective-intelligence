@@ -49,8 +49,7 @@ export const PROMPT_METRIC_NAMES = {
   JUDGE_NORMALIZATION_FAILURES: 'ailin_judge_normalization_failures_total',
 } as const;
 
-export type PromptMetricName =
-  (typeof PROMPT_METRIC_NAMES)[keyof typeof PROMPT_METRIC_NAMES];
+export type PromptMetricName = (typeof PROMPT_METRIC_NAMES)[keyof typeof PROMPT_METRIC_NAMES];
 
 /**
  * Two-level counter store (Lote 5 — O1):
@@ -76,9 +75,7 @@ export type PromptMetricAttributes = Record<string, string | number | boolean | 
  * (Prometheus has no null concept). The keys `count` and `value` are NEVER
  * promoted to labels — they are reserved for the counter value itself.
  */
-function attributesToLabelMap(
-  attributes: PromptMetricAttributes,
-): Record<string, string> {
+function attributesToLabelMap(attributes: PromptMetricAttributes): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(attributes)) {
     if (v === undefined) continue;
@@ -111,7 +108,7 @@ function canonicalLabelKey(labels: Record<string, string>): string {
  */
 export function incrementPromptMetric(
   name: PromptMetricName | string,
-  attributes: PromptMetricAttributes = {},
+  attributes: PromptMetricAttributes = {}
 ): void {
   // Unlabelled rollup
   const current = counters.get(name) ?? 0;
@@ -143,9 +140,7 @@ export function getPromptMetric(name: PromptMetricName | string): number {
  * the canonical label key (`"reason=off,where=x"`). Used by the Prometheus
  * exporter to emit one series per label combination.
  */
-export function getLabelledSeries(
-  name: PromptMetricName | string,
-): ReadonlyMap<string, number> {
+export function getLabelledSeries(name: PromptMetricName | string): ReadonlyMap<string, number> {
   return labelledCounters.get(name) ?? new Map();
 }
 

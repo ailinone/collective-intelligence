@@ -57,10 +57,10 @@ export interface DryRunGuardResult {
 
 /** Where the dry-run signal was found in the request. */
 export type DryRunDetectionPath =
-  | 'request.dryRun'            // top-level { dryRun: true }
-  | 'ailin_metadata.dryRun'     // { ailin_metadata: { dryRun: true } }
-  | 'eval.dryRun'               // { eval: { dryRun: true } } (consensus legacy path)
-  | 'eval.planOnly';            // { eval: { planOnly: true } }
+  | 'request.dryRun' // top-level { dryRun: true }
+  | 'ailin_metadata.dryRun' // { ailin_metadata: { dryRun: true } }
+  | 'eval.dryRun' // { eval: { dryRun: true } } (consensus legacy path)
+  | 'eval.planOnly'; // { eval: { planOnly: true } }
 
 /**
  * Canonical dry-run detection.
@@ -79,7 +79,7 @@ export function detectDryRun(
     dryRun?: boolean;
     ailin_metadata?: Record<string, unknown>;
     eval?: { dryRun?: boolean; planOnly?: boolean };
-  },
+  }
 ): { detected: false } | { detected: true; path: DryRunDetectionPath } {
   // 1. Top-level dryRun (universal, any strategy)
   if (request.dryRun === true) {
@@ -113,7 +113,7 @@ export function isDryRunRequested(
     dryRun?: boolean;
     ailin_metadata?: Record<string, unknown>;
     eval?: { dryRun?: boolean; planOnly?: boolean };
-  },
+  }
 ): boolean {
   return detectDryRun(request).detected;
 }
@@ -128,7 +128,7 @@ export function isDryRunRequested(
 export function buildDryRunIntercepted(
   strategyName: string,
   selectionSource: string,
-  detectionPath: DryRunDetectionPath,
+  detectionPath: DryRunDetectionPath
 ): DryRunGuardResult {
   return {
     intercepted: true,

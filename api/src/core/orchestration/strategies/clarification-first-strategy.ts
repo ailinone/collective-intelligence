@@ -55,7 +55,7 @@ export class ClarificationFirstStrategy extends BaseStrategy {
       minModels: 2,
       maxModels: 4,
       estimatedCostMultiplier: 2.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 1.5,
       suitableFor: ['general', 'analysis', 'creative', 'documentation'],
     };
@@ -67,15 +67,31 @@ export class ClarificationFirstStrategy extends BaseStrategy {
 
     // Early exit: prompt is clear enough
     if (!analysis.needsClarification) {
-      log.info({ ambiguityScore: analysis.ambiguityScore }, 'Prompt clear, no clarification needed');
+      log.info(
+        { ambiguityScore: analysis.ambiguityScore },
+        'Prompt clear, no clarification needed'
+      );
 
       const directRequest = this.withPeerReviewPrompt(request);
       const directExec = this.isReasoningEnabled(request)
-        ? await this.executeModelWithReasoning(analysis.analyzerAdapter, analysis.analyzer, directRequest, 'primary')
-        : await this.executeModel(analysis.analyzerAdapter, analysis.analyzer, directRequest, 'primary');
+        ? await this.executeModelWithReasoning(
+            analysis.analyzerAdapter,
+            analysis.analyzer,
+            directRequest,
+            'primary'
+          )
+        : await this.executeModel(
+            analysis.analyzerAdapter,
+            analysis.analyzer,
+            directRequest,
+            'primary'
+          );
       const executions = [...analysis.executions, directExec];
 
-      this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Prompt was clear. Direct response generated.' });
+      this.emitObserverEvent(context, {
+        type: 'synthesis_complete',
+        summary: 'Prompt was clear. Direct response generated.',
+      });
 
       return {
         finalResponse: directExec.response,
@@ -88,8 +104,18 @@ export class ClarificationFirstStrategy extends BaseStrategy {
           ambiguity_score: analysis.ambiguityScore,
           clarification_needed: false,
           early_exit: true,
-          ...(this.isReasoningEnabled(request) && executions.some(e => e.reasoning)
-            ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+          ...(this.isReasoningEnabled(request) && executions.some((e) => e.reasoning)
+            ? {
+                reasoning_traces: executions
+                  .filter((e) => e.reasoning)
+                  .map((e) => ({
+                    model_id: e.modelId,
+                    model_name: e.modelName,
+                    role: e.role,
+                    reasoning: e.reasoning,
+                    reasoning_tokens: e.reasoningTokens,
+                  })),
+              }
             : {}),
         },
       };
@@ -105,7 +131,7 @@ export class ClarificationFirstStrategy extends BaseStrategy {
    */
   private async analyzeAmbiguity(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<{
     analyzer: Model;
     questioners: Model[];
@@ -124,14 +150,18 @@ export class ClarificationFirstStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Clarification-first: requested model not in operational pool — falling back to quality-sorted analyzer',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Clarification-first: requested model not in operational pool — falling back to quality-sorted analyzer'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const analyzer = sorted[0];
     const questioners = sorted.slice(1, 3); // 1-2 questioners
@@ -142,7 +172,7 @@ export class ClarificationFirstStrategy extends BaseStrategy {
     // Observer: start
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: [analyzer, ...questioners].map(m => m.name || m.id),
+      models: [analyzer, ...questioners].map((m) => m.name || m.id),
       summary: 'Clarification-First: analyzing prompt ambiguity.',
     });
 
@@ -153,16 +183,18 @@ export class ClarificationFirstStrategy extends BaseStrategy {
 
     const analyzerRequest: ChatRequest = {
       ...request,
-      messages: [
-        { role: 'system', content: PROMPTS.clarificationAnalyzer },
-        ...request.messages,
-      ],
+      messages: [{ role: 'system', content: PROMPTS.clarificationAnalyzer }, ...request.messages],
       response_format: { type: 'json_object' },
       max_tokens: 300,
       temperature: 0.1,
     };
 
-    const analyzerExec = await this.executeModel(analyzerAdapter, analyzer, analyzerRequest, 'analyzer');
+    const analyzerExec = await this.executeModel(
+      analyzerAdapter,
+      analyzer,
+      analyzerRequest,
+      'analyzer'
+    );
     executions.push(analyzerExec);
 
     // Parse ambiguity assessment
@@ -175,7 +207,8 @@ export class ClarificationFirstStrategy extends BaseStrategy {
         if (typeof parsed === 'object' && parsed !== null) {
           const obj = parsed as { ambiguity_score?: unknown; needs_clarification?: unknown };
           ambiguityScore = typeof obj.ambiguity_score === 'number' ? obj.ambiguity_score : 0;
-          needsClarification = obj.needs_clarification === true || ambiguityScore >= AMBIGUITY_THRESHOLD;
+          needsClarification =
+            obj.needs_clarification === true || ambiguityScore >= AMBIGUITY_THRESHOLD;
         }
       }
     } catch {
@@ -184,11 +217,20 @@ export class ClarificationFirstStrategy extends BaseStrategy {
 
     this.emitObserverEvent(context, {
       type: 'round_complete',
-      round: 1, totalRounds: needsClarification ? 3 : 1,
+      round: 1,
+      totalRounds: needsClarification ? 3 : 1,
       summary: `Ambiguity score: ${ambiguityScore.toFixed(2)}. ${needsClarification ? 'Generating clarification questions.' : 'Prompt is clear, delegating.'}`,
     });
 
-    return { analyzer, questioners, synthesizer, analyzerAdapter, executions, ambiguityScore, needsClarification };
+    return {
+      analyzer,
+      questioners,
+      synthesizer,
+      analyzerAdapter,
+      executions,
+      ambiguityScore,
+      needsClarification,
+    };
   }
 
   /**
@@ -209,13 +251,16 @@ export class ClarificationFirstStrategy extends BaseStrategy {
       analyzerAdapter: import('@/providers/base/provider-adapter').ProviderAdapter;
       executions: ModelExecution[];
       ambiguityScore: number;
-    },
+    }
   ): Promise<OrchestrationResult> {
     const { analyzer, questioners, synthesizer, analyzerAdapter, ambiguityScore } = analysis;
     const executions = analysis.executions;
 
     // Phase 2: Generate clarification questions (parallel blind)
-    log.info({ ambiguityScore, questionerCount: questioners.length }, 'Generating clarification questions');
+    log.info(
+      { ambiguityScore, questionerCount: questioners.length },
+      'Generating clarification questions'
+    );
 
     const questionSets: string[] = [];
     const questionPromises = questioners.map(async (model) => {
@@ -247,12 +292,19 @@ export class ClarificationFirstStrategy extends BaseStrategy {
         modelsUsed: executions,
         totalCost: executions.reduce((s, e) => s + e.cost, 0),
         totalDuration: Date.now() - startTime,
-        metadata: { strategy: 'clarification-first', ambiguity_score: ambiguityScore, clarification_needed: true, questions_generated: false },
+        metadata: {
+          strategy: 'clarification-first',
+          ambiguity_score: ambiguityScore,
+          clarification_needed: true,
+          questions_generated: false,
+        },
       };
     }
 
     this.emitObserverEvent(context, {
-      type: 'round_complete', round: 2, totalRounds: 3,
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 3,
       summary: `${questionSets.length} question sets generated. Synthesizing.`,
     });
 
@@ -262,30 +314,42 @@ export class ClarificationFirstStrategy extends BaseStrategy {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.clarificationSynthesizer(questionSets.length) },
-        { role: 'user', content: `ORIGINAL REQUEST:\n${request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n')}\n\nQUESTION SETS:\n${allQuestions}` },
+        {
+          role: 'user',
+          content: `ORIGINAL REQUEST:\n${request.messages
+            .filter((m) => m.role === 'user')
+            .map((m) => (typeof m.content === 'string' ? m.content : ''))
+            .join('\n')}\n\nQUESTION SETS:\n${allQuestions}`,
+        },
       ],
       max_tokens: 500,
     };
-    const synthExec = await this.executeModel(analyzerAdapter, synthesizer, synthRequest, 'synthesizer');
+    const synthExec = await this.executeModel(
+      analyzerAdapter,
+      synthesizer,
+      synthRequest,
+      'synthesizer'
+    );
     executions.push(synthExec);
 
     // Coerce ChatMessage.content (`string | MessageContent[]`) into a flat
     // string for the clarification metadata, which is typed as `string`.
     // For MessageContent arrays, concatenate any `text`-typed fragments.
     const rawContent = synthExec.response?.choices?.[0]?.message?.content;
-    const finalQuestions: string = typeof rawContent === 'string'
-      ? rawContent
-      : Array.isArray(rawContent)
+    const finalQuestions: string =
+      typeof rawContent === 'string'
         ? rawContent
-            .map((part) =>
-              typeof part === 'string'
-                ? part
-                : isObject(part) && part['type'] === 'text' && typeof part['text'] === 'string'
-                  ? part['text']
-                  : ''
-            )
-            .join('\n')
-        : '';
+        : Array.isArray(rawContent)
+          ? rawContent
+              .map((part) =>
+                typeof part === 'string'
+                  ? part
+                  : isObject(part) && part['type'] === 'text' && typeof part['text'] === 'string'
+                    ? part['text']
+                    : ''
+              )
+              .join('\n')
+          : '';
 
     this.emitObserverEvent(context, {
       type: 'synthesis_complete',
@@ -298,15 +362,17 @@ export class ClarificationFirstStrategy extends BaseStrategy {
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
       model: synthesizer.name || 'clarification-first',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: `I'd like to make sure I give you the best possible answer. Could you help me understand a few things?\n\n${finalQuestions}\n\nOnce you provide these details, I'll be able to give you a much more targeted and useful response.`,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: `I'd like to make sure I give you the best possible answer. Could you help me understand a few things?\n\n${finalQuestions}\n\nOnce you provide these details, I'll be able to give you a much more targeted and useful response.`,
+          },
+          finish_reason: 'stop',
+          logprobs: null,
         },
-        finish_reason: 'stop',
-        logprobs: null,
-      }],
+      ],
       ailin_metadata: {
         type: 'clarification',
         ambiguity_score: ambiguityScore,
@@ -324,19 +390,40 @@ export class ClarificationFirstStrategy extends BaseStrategy {
         strategy: 'clarification-first',
         ambiguity_score: ambiguityScore,
         clarification_needed: true,
-        questions_count: typeof finalQuestions === 'string' ? finalQuestions.split('\n').filter((l: string) => /^\d/.test(l.trim())).length : 0,
-        ...(this.isReasoningEnabled(request) && executions.some(e => e.reasoning)
-          ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        questions_count:
+          typeof finalQuestions === 'string'
+            ? finalQuestions.split('\n').filter((l: string) => /^\d/.test(l.trim())).length
+            : 0,
+        ...(this.isReasoningEnabled(request) && executions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const startTime = Date.now();
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Clarification-First: analyzing ambiguity.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Clarification-First: analyzing ambiguity.',
+    });
     yield this.progressChunk('Analyzing request clarity...', 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -348,13 +435,16 @@ export class ClarificationFirstStrategy extends BaseStrategy {
     if (!analysis.needsClarification) {
       // Prompt is clear: this is a genuine single-answer delegation, safe
       // to stream live — no post-hoc decision discards it.
-      log.info({ ambiguityScore: analysis.ambiguityScore }, 'Prompt clear, no clarification needed (streaming)');
+      log.info(
+        { ambiguityScore: analysis.ambiguityScore },
+        'Prompt clear, no clarification needed (streaming)'
+      );
       const directRequest = this.withPeerReviewPrompt(request);
       yield* this.streamSynthesisWithFallback(
         directRequest,
         [{ adapter: analysis.analyzerAdapter, model: analysis.analyzer }],
         () => '',
-        { throwOnTotalFailure: true, skipSynthesisCap: true },
+        { throwOnTotalFailure: true, skipSynthesisCap: true }
       );
       for (const c of await this.drainObserverChunks(context)) yield c;
       return;

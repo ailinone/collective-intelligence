@@ -9,7 +9,18 @@
 
 import path from 'path';
 import type { Logger } from 'pino';
-import type { ChatRequest, ChatResponse, ChatMessage, ToolCall, TaskType, AilinMetadata, CanonicalStrategyName, OrchestrationContext, RagConfig, RetrievalMetadata } from '@/types';
+import type {
+  ChatRequest,
+  ChatResponse,
+  ChatMessage,
+  ToolCall,
+  TaskType,
+  AilinMetadata,
+  CanonicalStrategyName,
+  OrchestrationContext,
+  RagConfig,
+  RetrievalMetadata,
+} from '@/types';
 import type { ToolResult } from '@/types/tool';
 import {
   VectorStoreIngestService,
@@ -82,7 +93,10 @@ import { getModelRepository } from '@/services/model-repository';
 import { buildConsensusRoleSpecificCandidatePools } from '@/core/orchestration/model-selection/role-specific-candidate-pool-builder';
 import { ConsensusPlanDryRunService } from '@/core/orchestration/strategies/consensus-plan-dry-run-service';
 import type { ConsensusExecutionPlan } from '@/core/orchestration/strategies/consensus-execution-planner';
-import { computePlanFingerprint, type PlanFingerprintResult } from '@/core/orchestration/strategies/consensus-plan-fingerprint';
+import {
+  computePlanFingerprint,
+  type PlanFingerprintResult,
+} from '@/core/orchestration/strategies/consensus-plan-fingerprint';
 import { DryRunGateError } from '@/utils/custom-errors';
 
 export interface ProcessChatRequestParams {
@@ -180,7 +194,7 @@ function shouldUseToolsAutomatically(chatRequest: ChatRequest): boolean {
   ];
 
   // Check high-confidence patterns
-  const hasHighConfidence = highConfidencePatterns.some(pattern => pattern.test(content));
+  const hasHighConfidence = highConfidencePatterns.some((pattern) => pattern.test(content));
 
   // Medium-confidence patterns
   const mediumConfidencePatterns = [
@@ -195,11 +209,12 @@ function shouldUseToolsAutomatically(chatRequest: ChatRequest): boolean {
   ];
 
   // Check medium-confidence patterns (need additional context)
-  const hasMediumConfidence = mediumConfidencePatterns.some(pattern => pattern.test(content));
+  const hasMediumConfidence = mediumConfidencePatterns.some((pattern) => pattern.test(content));
 
   // Additional context checks for medium confidence
-  const hasContext = /\b(html|js|ts|css|json|code|function|class)\b/i.test(content) ||
-                    /\bfile\b.*\b(html|js|ts|css|json)\b/i.test(content);
+  const hasContext =
+    /\b(html|js|ts|css|json|code|function|class)\b/i.test(content) ||
+    /\bfile\b.*\b(html|js|ts|css|json)\b/i.test(content);
 
   return hasHighConfidence || (hasMediumConfidence && hasContext);
 }
@@ -326,14 +341,15 @@ function extractRagConfig(chatRequest: ChatRequest): RagConfig | null {
       idsRaw
         .filter((id): id is string => typeof id === 'string')
         .map((id) => id.trim())
-        .filter((id) => id.length > 0),
-    ),
+        .filter((id) => id.length > 0)
+    )
   );
   if (storeIds.length === 0) return null;
 
   const config: RagConfig = { vector_store_ids: storeIds };
   if (typeof cfg.top_k === 'number' && Number.isFinite(cfg.top_k)) config.top_k = cfg.top_k;
-  if (typeof cfg.max_chunks === 'number' && Number.isFinite(cfg.max_chunks)) config.max_chunks = cfg.max_chunks;
+  if (typeof cfg.max_chunks === 'number' && Number.isFinite(cfg.max_chunks))
+    config.max_chunks = cfg.max_chunks;
   if (typeof cfg.score_threshold === 'number' && Number.isFinite(cfg.score_threshold)) {
     config.score_threshold = cfg.score_threshold;
   }
@@ -344,9 +360,7 @@ function extractRagConfig(chatRequest: ChatRequest): RagConfig | null {
  * Build the grounding context message body from ranked chunks. Each chunk is
  * labelled with a 1-based index so the model can cite "source N".
  */
-function buildRagContextBlock(
-  hits: Array<SearchChunkHit & { vectorStoreId: string }>,
-): string {
+function buildRagContextBlock(hits: Array<SearchChunkHit & { vectorStoreId: string }>): string {
   const lines = hits.map((hit, i) => {
     const header = `[source ${i + 1} | store=${hit.vectorStoreId} | file=${hit.fileId} | score=${hit.score.toFixed(3)}]`;
     return `${header}\n${hit.content.trim()}`;
@@ -400,8 +414,7 @@ export async function retrieveRagContext(params: {
 
   const topK = clampRagLimit(config.top_k, RAG_DEFAULT_TOP_K);
   const maxChunks = clampRagLimit(config.max_chunks, RAG_DEFAULT_MAX_CHUNKS);
-  const threshold =
-    typeof config.score_threshold === 'number' ? config.score_threshold : undefined;
+  const threshold = typeof config.score_threshold === 'number' ? config.score_threshold : undefined;
 
   const service = params.ingestService ?? new VectorStoreIngestService();
 
@@ -411,7 +424,7 @@ export async function retrieveRagContext(params: {
     config.vector_store_ids.map(async (vectorStoreId) => {
       const hits = await service.search({ vectorStoreId, organizationId, query, topK });
       return hits.map((hit) => ({ ...hit, vectorStoreId }));
-    }),
+    })
   );
 
   let aggregated: Array<SearchChunkHit & { vectorStoreId: string }> = [];
@@ -422,7 +435,7 @@ export async function retrieveRagContext(params: {
     } else {
       log.warn(
         { vectorStoreId: config.vector_store_ids[i], error: String(outcome.reason) },
-        'RAG vector-store search failed (skipping this store)',
+        'RAG vector-store search failed (skipping this store)'
       );
     }
   }
@@ -444,7 +457,7 @@ export async function retrieveRagContext(params: {
   if (ranked.length === 0) {
     log.info(
       { stores: config.vector_store_ids.length, threshold },
-      'RAG retrieval: all chunks below score_threshold',
+      'RAG retrieval: all chunks below score_threshold'
     );
     return {
       request: chatRequest,
@@ -483,7 +496,7 @@ export async function retrieveRagContext(params: {
       maxChunks,
       threshold,
     },
-    'Native RAG context injected',
+    'Native RAG context injected'
   );
 
   return { request: { ...chatRequest, messages }, retrieval };
@@ -559,9 +572,12 @@ export function mapSubcallEntries(
     reasoning?: string;
     promptKey?: string;
     promptVariantId?: string;
-    response?: { choices?: Array<{ message?: { content?: unknown } }>; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number } };
+    response?: {
+      choices?: Array<{ message?: { content?: unknown } }>;
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    };
   }>,
-  includeContent: boolean,
+  includeContent: boolean
 ): SubcallEntry[] {
   const maxChars = Number(process.env.SUBCALL_CONTENT_MAX_CHARS ?? 0);
   return modelsUsed.map((m) => {
@@ -574,7 +590,11 @@ export function mapSubcallEntries(
       success: m.success,
       error: m.error ?? null,
       tokens: m.response?.usage
-        ? { prompt_tokens: m.response.usage.prompt_tokens, completion_tokens: m.response.usage.completion_tokens, total_tokens: m.response.usage.total_tokens }
+        ? {
+            prompt_tokens: m.response.usage.prompt_tokens,
+            completion_tokens: m.response.usage.completion_tokens,
+            total_tokens: m.response.usage.total_tokens,
+          }
         : null,
     };
     if (includeContent) {
@@ -612,9 +632,7 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
   const hasGenerationVerb =
     /\b(generate|create|make|render|produce|gerar|criar|produza|fa[çc]a)\b/i.test(lower);
   const hasDevContext =
-    /\b(endpoint|api|route|rota|swagger|openapi|c[oó]digo|code|implementa(?:r|ção))\b/i.test(
-      lower
-    );
+    /\b(endpoint|api|route|rota|swagger|openapi|c[oó]digo|code|implementa(?:r|ção))\b/i.test(lower);
 
   const image = getRequestString(chatRequest, 'image') ?? lastUserContent.image;
   const startImage = getRequestString(chatRequest, 'start_image');
@@ -623,7 +641,8 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
   const video = getRequestString(chatRequest, 'video');
   const hasConditioningMedia = !!(image || startImage || endImage || audio || video);
 
-  const shouldGenerate = hasConditioningMedia || (hasVideoKeyword && hasGenerationVerb && !hasDevContext);
+  const shouldGenerate =
+    hasConditioningMedia || (hasVideoKeyword && hasGenerationVerb && !hasDevContext);
   if (!shouldGenerate) return null;
 
   const responseFormatRaw = getRequestString(chatRequest, 'response_format');
@@ -692,16 +711,18 @@ async function executeToolCallsAutomatically(
   // Create a response with real tool execution results and output snippets.
   const enhancedResponse: ChatResponse = {
     ...response,
-    choices: [{
-      ...response.choices[0],
-      message: {
-        ...response.choices[0].message,
-        content:
-          `Executed ${toolResults.length} tool call(s): ${succeeded.length} succeeded, ${failed.length} failed.\n` +
-          summaryLines.join('\n'),
-        tool_results: toolResults,
+    choices: [
+      {
+        ...response.choices[0],
+        message: {
+          ...response.choices[0].message,
+          content:
+            `Executed ${toolResults.length} tool call(s): ${succeeded.length} succeeded, ${failed.length} failed.\n` +
+            summaryLines.join('\n'),
+          tool_results: toolResults,
+        },
       },
-    }],
+    ],
   };
 
   return enhancedResponse;
@@ -862,164 +883,349 @@ async function executeRealTool(
     // Delegate to Tool Registry if available (enables shared execution with strategies)
     const { toolRegistry } = await import('@/core/tools/tool-registry');
     if (toolRegistry.isInitialized() && toolRegistry.has(name)) {
-      return await toolRegistry.execute(name, narrowAs<Record<string, unknown>>(parsedArgs), toolCall.id, context);
+      return await toolRegistry.execute(
+        name,
+        narrowAs<Record<string, unknown>>(parsedArgs),
+        toolCall.id,
+        context
+      );
     }
 
     // Fallback: direct switch (used before registry is initialized at boot)
     switch (name) {
       case 'write_file':
-        return await executeWriteFileTool(parsedArgs as Parameters<typeof executeWriteFileTool>[0], toolCall.id, context);
+        return await executeWriteFileTool(
+          parsedArgs as Parameters<typeof executeWriteFileTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'run_command':
-        return await executeRunCommandTool(parsedArgs as Parameters<typeof executeRunCommandTool>[0], toolCall.id, context);
+        return await executeRunCommandTool(
+          parsedArgs as Parameters<typeof executeRunCommandTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'read_file':
-        return await executeReadFileTool(parsedArgs as Parameters<typeof executeReadFileTool>[0], toolCall.id, context);
+        return await executeReadFileTool(
+          parsedArgs as Parameters<typeof executeReadFileTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'list_directory':
-        return await executeListDirectoryTool(parsedArgs as Parameters<typeof executeListDirectoryTool>[0], toolCall.id, context);
+        return await executeListDirectoryTool(
+          parsedArgs as Parameters<typeof executeListDirectoryTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'grep_tool':
       case 'grep':
       case 'grep_search':
-        return await executeGrepSearchTool(parsedArgs as Parameters<typeof executeGrepSearchTool>[0], toolCall.id, context);
+        return await executeGrepSearchTool(
+          parsedArgs as Parameters<typeof executeGrepSearchTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'search_replace':
-        return await executeSearchReplaceTool(parsedArgs as Parameters<typeof executeSearchReplaceTool>[0], toolCall.id, context);
+        return await executeSearchReplaceTool(
+          parsedArgs as Parameters<typeof executeSearchReplaceTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'codebase_search':
-        return await executeCodebaseSearchTool(parsedArgs as Parameters<typeof executeCodebaseSearchTool>[0], toolCall.id, context);
+        return await executeCodebaseSearchTool(
+          parsedArgs as Parameters<typeof executeCodebaseSearchTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'apply_multi_file_changes':
-        return await executeApplyMultiFileChangesTool(parsedArgs as Parameters<typeof executeApplyMultiFileChangesTool>[0], toolCall.id, context);
+        return await executeApplyMultiFileChangesTool(
+          parsedArgs as Parameters<typeof executeApplyMultiFileChangesTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'batch_search_replace':
-        return await executeBatchSearchReplaceTool(parsedArgs as Parameters<typeof executeBatchSearchReplaceTool>[0], toolCall.id, context);
+        return await executeBatchSearchReplaceTool(
+          parsedArgs as Parameters<typeof executeBatchSearchReplaceTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_status':
         return await executeGitStatusTool(toolCall.id, context);
 
       case 'git_commit':
-        return await executeGitCommitTool(parsedArgs as Parameters<typeof executeGitCommitTool>[0], toolCall.id, context);
+        return await executeGitCommitTool(
+          parsedArgs as Parameters<typeof executeGitCommitTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_diff':
-        return await executeGitDiffTool(parsedArgs as Parameters<typeof executeGitDiffTool>[0], toolCall.id, context);
+        return await executeGitDiffTool(
+          parsedArgs as Parameters<typeof executeGitDiffTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_push':
-        return await executeGitPushTool(parsedArgs as Parameters<typeof executeGitPushTool>[0], toolCall.id, context);
+        return await executeGitPushTool(
+          parsedArgs as Parameters<typeof executeGitPushTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_pull':
-        return await executeGitPullTool(parsedArgs as Parameters<typeof executeGitPullTool>[0], toolCall.id, context);
+        return await executeGitPullTool(
+          parsedArgs as Parameters<typeof executeGitPullTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_create_branch':
-        return await executeGitCreateBranchTool(parsedArgs as Parameters<typeof executeGitCreateBranchTool>[0], toolCall.id, context);
+        return await executeGitCreateBranchTool(
+          parsedArgs as Parameters<typeof executeGitCreateBranchTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_merge':
-        return await executeGitMergeTool(parsedArgs as Parameters<typeof executeGitMergeTool>[0], toolCall.id, context);
+        return await executeGitMergeTool(
+          parsedArgs as Parameters<typeof executeGitMergeTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_rebase':
-        return await executeGitRebaseTool(parsedArgs as Parameters<typeof executeGitRebaseTool>[0], toolCall.id, context);
+        return await executeGitRebaseTool(
+          parsedArgs as Parameters<typeof executeGitRebaseTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'git_resolve_conflict':
-        return await executeGitResolveConflictTool(parsedArgs as Parameters<typeof executeGitResolveConflictTool>[0], toolCall.id, context);
+        return await executeGitResolveConflictTool(
+          parsedArgs as Parameters<typeof executeGitResolveConflictTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Advanced refactoring tools
       case 'extract_function':
-        return await executeExtractFunctionTool(parsedArgs as Parameters<typeof executeExtractFunctionTool>[0], toolCall.id, context);
+        return await executeExtractFunctionTool(
+          parsedArgs as Parameters<typeof executeExtractFunctionTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'rename_symbol':
-        return await executeRenameSymbolTool(parsedArgs as Parameters<typeof executeRenameSymbolTool>[0], toolCall.id, context);
+        return await executeRenameSymbolTool(
+          parsedArgs as Parameters<typeof executeRenameSymbolTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'extract_variable':
-        return await executeExtractVariableTool(parsedArgs as Parameters<typeof executeExtractVariableTool>[0], toolCall.id, context);
+        return await executeExtractVariableTool(
+          parsedArgs as Parameters<typeof executeExtractVariableTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'inline_function':
-        return await executeInlineFunctionTool(parsedArgs as Parameters<typeof executeInlineFunctionTool>[0], toolCall.id, context);
+        return await executeInlineFunctionTool(
+          parsedArgs as Parameters<typeof executeInlineFunctionTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Auto-healing tools
       case 'heal_file':
-        return await executeHealFileTool(parsedArgs as Parameters<typeof executeHealFileTool>[0], toolCall.id, context);
+        return await executeHealFileTool(
+          parsedArgs as Parameters<typeof executeHealFileTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Test generation tools
       case 'generate_tests':
-        return await executeGenerateTestsTool(parsedArgs as Parameters<typeof executeGenerateTestsTool>[0], toolCall.id, context);
+        return await executeGenerateTestsTool(
+          parsedArgs as Parameters<typeof executeGenerateTestsTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'detect_errors':
-        return await executeDetectErrorsTool(parsedArgs as Parameters<typeof executeDetectErrorsTool>[0], toolCall.id, context);
+        return await executeDetectErrorsTool(
+          parsedArgs as Parameters<typeof executeDetectErrorsTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'validate_code':
-        return await executeValidateCodeTool(parsedArgs as Parameters<typeof executeValidateCodeTool>[0], toolCall.id, context);
+        return await executeValidateCodeTool(
+          parsedArgs as Parameters<typeof executeValidateCodeTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Task management tools
       case 'todo_write':
-        return await executeTodoWriteTool(parsedArgs as Parameters<typeof executeTodoWriteTool>[0], toolCall.id, context);
+        return await executeTodoWriteTool(
+          parsedArgs as Parameters<typeof executeTodoWriteTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'create_todo':
-        return await executeCreateTodoTool(parsedArgs as Parameters<typeof executeCreateTodoTool>[0], toolCall.id, context);
+        return await executeCreateTodoTool(
+          parsedArgs as Parameters<typeof executeCreateTodoTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'update_todo':
-        return await executeUpdateTodoTool(parsedArgs as Parameters<typeof executeUpdateTodoTool>[0], toolCall.id, context);
+        return await executeUpdateTodoTool(
+          parsedArgs as Parameters<typeof executeUpdateTodoTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'check_todo':
-        return await executeCheckTodoTool(parsedArgs as Parameters<typeof executeCheckTodoTool>[0], toolCall.id, context);
+        return await executeCheckTodoTool(
+          parsedArgs as Parameters<typeof executeCheckTodoTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'list_todos':
-        return await executeListTodosTool(parsedArgs as Parameters<typeof executeListTodosTool>[0], toolCall.id, context);
+        return await executeListTodosTool(
+          parsedArgs as Parameters<typeof executeListTodosTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Code refactoring tools
       case 'refactor_code':
-        return await executeRefactorCodeTool(parsedArgs as Parameters<typeof executeRefactorCodeTool>[0], toolCall.id, context);
+        return await executeRefactorCodeTool(
+          parsedArgs as Parameters<typeof executeRefactorCodeTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Web search
       case 'web_search':
       case 'explore_web':
-        return await executeWebSearchTool(parsedArgs as Parameters<typeof executeWebSearchTool>[0], toolCall.id, context);
+        return await executeWebSearchTool(
+          parsedArgs as Parameters<typeof executeWebSearchTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Multimodal image analysis - requires OrchestrationEngine
       case 'analyze_image':
-        return await executeAnalyzeImageTool(parsedArgs as Parameters<typeof executeAnalyzeImageTool>[0], toolCall.id, context);
+        return await executeAnalyzeImageTool(
+          parsedArgs as Parameters<typeof executeAnalyzeImageTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'compare_images':
-        return await executeCompareImagesTool(parsedArgs as Parameters<typeof executeCompareImagesTool>[0], toolCall.id, context);
+        return await executeCompareImagesTool(
+          parsedArgs as Parameters<typeof executeCompareImagesTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'extract_code_from_screenshot':
-        return await executeExtractCodeFromScreenshotTool(parsedArgs as Parameters<typeof executeExtractCodeFromScreenshotTool>[0], toolCall.id, context);
+        return await executeExtractCodeFromScreenshotTool(
+          parsedArgs as Parameters<typeof executeExtractCodeFromScreenshotTool>[0],
+          toolCall.id,
+          context
+        );
 
       // File search
       case 'file_search':
-        return await executeFileSearchTool(parsedArgs as Parameters<typeof executeFileSearchTool>[0], toolCall.id, context);
+        return await executeFileSearchTool(
+          parsedArgs as Parameters<typeof executeFileSearchTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'delete_file':
-        return await executeDeleteFileTool(parsedArgs as Parameters<typeof executeDeleteFileTool>[0], toolCall.id, context);
+        return await executeDeleteFileTool(
+          parsedArgs as Parameters<typeof executeDeleteFileTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Semantic code analysis tools
       case 'find_symbol_references':
       case 'find_references':
-        return await executeFindSymbolReferencesTool(parsedArgs as Parameters<typeof executeFindSymbolReferencesTool>[0], toolCall.id, context);
+        return await executeFindSymbolReferencesTool(
+          parsedArgs as Parameters<typeof executeFindSymbolReferencesTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'analyze_codebase':
-        return await executeAnalyzeCodebaseTool(parsedArgs as Parameters<typeof executeAnalyzeCodebaseTool>[0], toolCall.id, context);
+        return await executeAnalyzeCodebaseTool(
+          parsedArgs as Parameters<typeof executeAnalyzeCodebaseTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'get_dependency_graph':
       case 'dependency_graph':
-        return await executeGetDependencyGraphTool(parsedArgs as Parameters<typeof executeGetDependencyGraphTool>[0], toolCall.id, context);
+        return await executeGetDependencyGraphTool(
+          parsedArgs as Parameters<typeof executeGetDependencyGraphTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'semantic_search':
-        return await executeSemanticSearchTool(parsedArgs as Parameters<typeof executeSemanticSearchTool>[0], toolCall.id, context);
+        return await executeSemanticSearchTool(
+          parsedArgs as Parameters<typeof executeSemanticSearchTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Workflow tools
       case 'execute_workflow':
-        return await executeExecuteWorkflowTool(parsedArgs as Parameters<typeof executeExecuteWorkflowTool>[0], toolCall.id, context);
+        return await executeExecuteWorkflowTool(
+          parsedArgs as Parameters<typeof executeExecuteWorkflowTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'list_workflows':
-        return await executeListWorkflowsTool(parsedArgs as Parameters<typeof executeListWorkflowsTool>[0], toolCall.id, context);
+        return await executeListWorkflowsTool(
+          parsedArgs as Parameters<typeof executeListWorkflowsTool>[0],
+          toolCall.id,
+          context
+        );
 
       case 'register_workflow':
-        return await executeRegisterWorkflowTool(parsedArgs as Parameters<typeof executeRegisterWorkflowTool>[0], toolCall.id, context);
+        return await executeRegisterWorkflowTool(
+          parsedArgs as Parameters<typeof executeRegisterWorkflowTool>[0],
+          toolCall.id,
+          context
+        );
 
       // Codebase exploration
       case 'explore_codebase':
-        return await executeExploreCodebaseTool(parsedArgs as Parameters<typeof executeExploreCodebaseTool>[0], toolCall.id, context);
+        return await executeExploreCodebaseTool(
+          parsedArgs as Parameters<typeof executeExploreCodebaseTool>[0],
+          toolCall.id,
+          context
+        );
 
       default:
         log.error({ toolName: name }, 'Tool not implemented');
@@ -1058,7 +1264,10 @@ async function executeWriteFileTool(
     await fs.writeFile(fullPath, content, 'utf-8');
     const relativePath = path.relative(normalizedWorkspace, fullPath) || fullPath;
 
-    log.info({ file_path: relativePath, contentLength: content.length }, 'File written successfully');
+    log.info(
+      { file_path: relativePath, contentLength: content.length },
+      'File written successfully'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -1193,7 +1402,7 @@ function getDryRunEvalBag(chatRequest: ChatRequest): DryRunEvalBag | undefined {
 
 function resolveEffectiveStrategy(
   chatRequest: ChatRequest,
-  evalBag: DryRunEvalBag | undefined,
+  evalBag: DryRunEvalBag | undefined
 ): string | undefined {
   if (typeof chatRequest.strategy === 'string' && chatRequest.strategy.trim().length > 0) {
     return chatRequest.strategy;
@@ -1224,13 +1433,14 @@ async function computeConsensusPlanAndFingerprint(params: {
   // ModelRepository.searchModels declares a mutable `capabilities?: ModelCapability[]`;
   // ModelRepositoryLike declares `readonly ModelCapability[]` — adapt rather than widen
   // either real type.
-  const repo: import('@/core/orchestration/model-selection/role-specific-candidate-pool-builder').ModelRepositoryLike = {
-    searchModels: (criteria) =>
-      modelRepo.searchModels({
-        ...criteria,
-        capabilities: criteria.capabilities ? [...criteria.capabilities] : undefined,
-      }),
-  };
+  const repo: import('@/core/orchestration/model-selection/role-specific-candidate-pool-builder').ModelRepositoryLike =
+    {
+      searchModels: (criteria) =>
+        modelRepo.searchModels({
+          ...criteria,
+          capabilities: criteria.capabilities ? [...criteria.capabilities] : undefined,
+        }),
+    };
   const pools = await buildConsensusRoleSpecificCandidatePools({
     repo,
     maxCostPer1kJudge: evalBag?.maxJudgeCostUsd,
@@ -1255,7 +1465,7 @@ async function computeConsensusPlanAndFingerprint(params: {
       strict: evalBag?.requireStrictPlanExecution === true,
       roleSpecificRetrieval: true,
     },
-    { planSource },
+    { planSource }
   );
 
   return { plan, fingerprint };
@@ -1264,7 +1474,7 @@ async function computeConsensusPlanAndFingerprint(params: {
 function buildDryRunShortCircuitResponse(
   requestId: string,
   plan: ConsensusExecutionPlan,
-  fingerprint: PlanFingerprintResult,
+  fingerprint: PlanFingerprintResult
 ): ChatResponse {
   return {
     id: `chatcmpl-dryrun-${fingerprint.executionPlanId}`,
@@ -1306,7 +1516,7 @@ function buildParityShortCircuitResponse(
   requestId: string,
   plan: ConsensusExecutionPlan,
   fingerprint: PlanFingerprintResult,
-  approvedPlanFingerprint: string,
+  approvedPlanFingerprint: string
 ): ChatResponse {
   const judgeModelId = plan.judge?.model.id ?? null;
   const synthesizerModelId = plan.synthesizer?.model.id ?? null;
@@ -1387,21 +1597,21 @@ export async function applyDryRunFailClosedGate(params: {
     throw new DryRunGateError(
       'dry-run request requires a strategy (top-level `strategy` or `eval.strategy`)',
       422,
-      'DRY_RUN_STRATEGY_REQUIRED',
+      'DRY_RUN_STRATEGY_REQUIRED'
     );
   }
   if (effectiveStrategy !== 'consensus') {
     throw new DryRunGateError(
       `dry-run is only supported for strategy=consensus (got "${effectiveStrategy}")`,
       422,
-      'DRY_RUN_UNSUPPORTED_FOR_REQUEST_SHAPE',
+      'DRY_RUN_UNSUPPORTED_FOR_REQUEST_SHAPE'
     );
   }
   if (process.env.ENABLE_CONSENSUS_PLAN_DRY_RUN !== 'true') {
     throw new DryRunGateError(
       'consensus dry-run is not enabled in this runtime (ENABLE_CONSENSUS_PLAN_DRY_RUN must be the literal string "true")',
       409,
-      'DRY_RUN_NOT_ENABLED_IN_RUNTIME',
+      'DRY_RUN_NOT_ENABLED_IN_RUNTIME'
     );
   }
 
@@ -1420,14 +1630,14 @@ export async function applyDryRunFailClosedGate(params: {
         throw new DryRunGateError(
           'executionParityCheck with requirePlanFingerprintMatch=true requires eval.approvedPlanFingerprint',
           422,
-          'APPROVED_PLAN_REQUIRED',
+          'APPROVED_PLAN_REQUIRED'
         );
       }
       if (approvedPlanFingerprint !== fingerprint.planFingerprint) {
         throw new DryRunGateError(
           'approved plan fingerprint does not match the recomputed plan',
           409,
-          'PLAN_EXECUTION_PARITY_FAILED',
+          'PLAN_EXECUTION_PARITY_FAILED'
         );
       }
     }
@@ -1436,7 +1646,7 @@ export async function applyDryRunFailClosedGate(params: {
       requestId,
       plan,
       fingerprint,
-      approvedPlanFingerprint ?? fingerprint.planFingerprint,
+      approvedPlanFingerprint ?? fingerprint.planFingerprint
     );
     return { kind: 'short_circuit', response, strategySource };
   }
@@ -1467,7 +1677,8 @@ async function applyRealBranchApprovedPlanGate(params: {
   if (effectiveStrategy !== 'consensus') return;
 
   const mustHaveApprovedPlan =
-    process.env.EVAL_REQUIRE_APPROVED_PLAN === 'true' || evalBag.requirePlanFingerprintMatch === true;
+    process.env.EVAL_REQUIRE_APPROVED_PLAN === 'true' ||
+    evalBag.requirePlanFingerprintMatch === true;
   if (!mustHaveApprovedPlan) return;
 
   const approvedPlanFingerprint = evalBag.approvedPlanFingerprint;
@@ -1475,7 +1686,7 @@ async function applyRealBranchApprovedPlanGate(params: {
     throw new DryRunGateError(
       'consensus dynamic-plan execution requires eval.approvedPlanFingerprint from a prior dry-run',
       422,
-      'APPROVED_PLAN_REQUIRED',
+      'APPROVED_PLAN_REQUIRED'
     );
   }
 
@@ -1489,7 +1700,7 @@ async function applyRealBranchApprovedPlanGate(params: {
     throw new DryRunGateError(
       'approved plan fingerprint does not match the plan that would execute now',
       409,
-      'PLAN_EXECUTION_PARITY_FAILED',
+      'PLAN_EXECUTION_PARITY_FAILED'
     );
   }
 }
@@ -1506,7 +1717,7 @@ async function applyRealBranchApprovedPlanGate(params: {
  * `BROADCAST_FEATURE_ENABLED` is set, so the default build pays nothing.
  */
 export async function processChatRequest(
-  params: ProcessChatRequestParams,
+  params: ProcessChatRequestParams
 ): Promise<ProcessChatResult> {
   const startedAt = new Date();
   const result = await processChatRequestImpl(params);
@@ -1696,8 +1907,7 @@ async function processChatRequestImpl({
     // Cached responses only carry the rich `AilinMetadata` shape (chunk-type
     // variants are SSE-only and never cached). Narrow via type discriminator:
     // chunk variants have `.type`, AilinMetadata does not.
-    const existingMetadata =
-      rawMetadata && !('type' in rawMetadata) ? rawMetadata : undefined;
+    const existingMetadata = rawMetadata && !('type' in rawMetadata) ? rawMetadata : undefined;
     const requestedCanonicalStrategy = resolveCanonicalStrategyValue(
       typeof enhancedRequest.strategy === 'string' ? enhancedRequest.strategy : undefined
     );
@@ -1709,7 +1919,7 @@ async function processChatRequestImpl({
     let cachedResponse: ChatResponse = {
       ...cacheResult.data,
       ailin_metadata: existingMetadata
-        ? {
+        ? ({
             ...existingMetadata,
             resolved_strategy: resolveCanonicalStrategyValue(
               typeof existingMetadata.resolved_strategy === 'string'
@@ -1755,7 +1965,7 @@ async function processChatRequestImpl({
               cache_layer: cacheResult.layer,
               cache_latency: cacheResult.latency,
             },
-          } satisfies AilinMetadata
+          } satisfies AilinMetadata)
         : {
             // If no existing metadata, create minimal required fields
             strategy_used: 'cache',
@@ -1866,15 +2076,24 @@ async function processChatRequestImpl({
       quality_score: result.qualityScore,
       cache_hit: result.metadata?.cacheHit === true,
       degraded: result.metadata?.degraded === true,
-      degraded_reason: typeof result.metadata?.degraded_reason === 'string' ? result.metadata.degraded_reason : undefined,
+      degraded_reason:
+        typeof result.metadata?.degraded_reason === 'string'
+          ? result.metadata.degraded_reason
+          : undefined,
       // ── Per-subcall decomposition for benchmark auditability ──────
       // Each entry = one model execution within the strategy pipeline.
       // Enables: cost decomposition, latency decomposition, role tracking,
       // routing auditability, and composition analysis. With
       // include_subcall_content, also the full intra-collective transcript
       // (each voter/coordinator's actual output + extracted reasoning).
-      subcalls: mapSubcallEntries(result.modelsUsed, enhancedRequest.include_subcall_content === true),
-      decision_source: typeof result.metadata?.decision_source === 'string' ? result.metadata.decision_source : null,
+      subcalls: mapSubcallEntries(
+        result.modelsUsed,
+        enhancedRequest.include_subcall_content === true
+      ),
+      decision_source:
+        typeof result.metadata?.decision_source === 'string'
+          ? result.metadata.decision_source
+          : null,
       // ── Best-of-N observability (#2, H-A adjudication) ──────
       // Surface HOW the collective picked its final answer (synthesis /
       // best_individual_fallback / verified_individual / agreement_individual)
@@ -1886,7 +2105,16 @@ async function processChatRequestImpl({
           : undefined,
       verification: (() => {
         const artifacts = result.metadata?.consensusArtifacts as
-          | { verification?: { decision: string; method: string; confidence: number; verifiedCount: number; totalCount: number; verifiedModelId?: string } }
+          | {
+              verification?: {
+                decision: string;
+                method: string;
+                confidence: number;
+                verifiedCount: number;
+                totalCount: number;
+                verifiedModelId?: string;
+              };
+            }
           | undefined;
         const v = artifacts?.verification;
         return v
@@ -1908,10 +2136,12 @@ async function processChatRequestImpl({
       // accounted and reproduce the C3 quality-vs-cost comparison. Internal
       // accounting (result.totalCost) is what the experiment-runner reads;
       // this just makes the same numbers falsifiable from the HTTP response.
-      ...(typeof result.metadata?.cost_breakdown === 'object' && result.metadata?.cost_breakdown !== null
+      ...(typeof result.metadata?.cost_breakdown === 'object' &&
+      result.metadata?.cost_breakdown !== null
         ? { cost_breakdown: result.metadata.cost_breakdown }
         : {}),
-      ...(Array.isArray(result.metadata?.reasoning_traces) && result.metadata.reasoning_traces.length > 0
+      ...(Array.isArray(result.metadata?.reasoning_traces) &&
+      result.metadata.reasoning_traces.length > 0
         ? { reasoning_traces: result.metadata.reasoning_traces }
         : {}),
       // ── Native RAG (P5) retrieval provenance ──────────────────────
@@ -1962,7 +2192,8 @@ async function processChatRequestImpl({
           success: boolean;
         } = {
           modelId: modelExecution.modelName,
-          responseTime: modelExecution.durationMs || result.totalDuration / result.modelsUsed.length,
+          responseTime:
+            modelExecution.durationMs || result.totalDuration / result.modelsUsed.length,
           cost: modelExecution.cost,
           qualityScore: result.qualityScore || 0.7,
           success: modelExecution.success !== false, // Default to success unless explicitly failed
@@ -1988,7 +2219,10 @@ async function processChatRequestImpl({
     ).then((settled) => {
       const failed = settled.filter((s) => s.status === 'rejected').length;
       if (failed > 0) {
-        log.warn({ failed, total: settled.length }, 'Some performance-tracker writes failed (non-blocking)');
+        log.warn(
+          { failed, total: settled.length },
+          'Some performance-tracker writes failed (non-blocking)'
+        );
       }
     });
 
@@ -2036,20 +2270,20 @@ async function processChatRequestImpl({
       log.error({ error }, 'Failed to log request to database');
     });
 
-    // Telemetry/quota counting, not billing (see debitTierRequest for the
-    // financial ledger, which stays synchronous). Same fire-and-forget pattern
-    // as cacheService.set/requestLogger.logOrchestration right above — nothing
-    // reads this Promise's result, so it shouldn't block the response.
-    trackChatUsage({
-      organizationId,
-      userId,
-      requestId,
-      request: enhancedRequest,
-      result,
-      cacheHit: false,
-    }).catch((error: unknown) => {
-      log.error({ error }, 'Failed to track chat usage');
-    });
+  // Telemetry/quota counting, not billing (see debitTierRequest for the
+  // financial ledger, which stays synchronous). Same fire-and-forget pattern
+  // as cacheService.set/requestLogger.logOrchestration right above — nothing
+  // reads this Promise's result, so it shouldn't block the response.
+  trackChatUsage({
+    organizationId,
+    userId,
+    requestId,
+    request: enhancedRequest,
+    result,
+    cacheHit: false,
+  }).catch((error: unknown) => {
+    log.error({ error }, 'Failed to track chat usage');
+  });
 
   return {
     response,
@@ -2064,145 +2298,262 @@ async function processChatRequestImpl({
  */
 export function registerToolsInRegistry(): void {
   // Dynamic import to avoid circular dependency at module load time
-  import('@/core/tools/tool-registry').then(({ toolRegistry }) => {
-    if (toolRegistry.isInitialized()) return; // Already registered
+  import('@/core/tools/tool-registry')
+    .then(({ toolRegistry }) => {
+      if (toolRegistry.isInitialized()) return; // Already registered
 
-    // Cast handlers to the generic ToolHandler signature (args as Record<string, unknown>).
-    // The original functions have typed args, but the registry uses generic args since
-    // the model provides JSON that needs runtime validation, not compile-time.
-    type GenericHandler = import('@/core/tools/tool-registry').ToolHandler;
+      // Cast handlers to the generic ToolHandler signature (args as Record<string, unknown>).
+      // The original functions have typed args, but the registry uses generic args since
+      // the model provides JSON that needs runtime validation, not compile-time.
+      type GenericHandler = import('@/core/tools/tool-registry').ToolHandler;
 
-    const reg = (
-      name: string,
-      description: string,
-      category: 'file' | 'git' | 'search' | 'code' | 'refactoring' | 'testing' | 'task' | 'analysis' | 'workflow' | 'web' | 'image' | 'video' | 'audio' | 'general',
-      safeForStrategies: boolean,
-      // `(...a: never[]) => Promise<unknown>` accepts EVERY concrete executor
-      // signature via parameter contravariance — no `any` laundering needed.
-      // The registry-facing shape is restored with the sanctioned narrowAs
-      // (each executor's real args are parsed/validated by the tool layer).
-      handler: (...a: never[]) => Promise<unknown>,
-      aliases?: string[],
-    ) => {
-      toolRegistry.register({ name, description, category, safeForStrategies, handler: narrowAs<GenericHandler>(handler), aliases });
-    };
-
-    // ── File Operations ────────────────────────────
-    reg('write_file', 'Create or overwrite a file', 'file', true, executeWriteFileTool);
-    reg('read_file', 'Read file contents', 'file', true, executeReadFileTool);
-    reg('list_directory', 'List directory contents', 'file', true, executeListDirectoryTool);
-    reg('delete_file', 'Delete a file', 'file', false, executeDeleteFileTool);
-    reg('file_search', 'Search for files by name', 'file', true, executeFileSearchTool);
-
-    // ── Search ─────────────────────────────────────
-    reg('grep_search', 'Search file contents with regex', 'search', true, executeGrepSearchTool, ['grep_tool', 'grep']);
-    reg('codebase_search', 'Semantic codebase search', 'search', true, executeCodebaseSearchTool);
-    reg('semantic_search', 'Semantic similarity search', 'search', true, executeSemanticSearchTool);
-    reg('web_search', 'Search the web', 'web', true, executeWebSearchTool, ['explore_web']);
-
-    // ── Modality generation (option B, tool→modality bridge) ──────
-    // safeForStrategies=false: video generation is billable + slow; do NOT let
-    // every collective voter fire a generation. Routes through the
-    // ToolExecutionContext.invoker (CapabilityInvoker → VideoOrchestrationService).
-    reg('generate_video', 'Generate a video from a text prompt', 'video', false, async (
-      args: Record<string, unknown>,
-      toolCallId: string,
-      ctx: ToolExecutionContext,
-    ): Promise<ToolResult> => {
-      if (!ctx.invoker) {
-        return { tool_call_id: toolCallId, success: false, error: 'Video generation capability not available in this context' };
-      }
-      const result = await ctx.invoker.generateVideo({
-        prompt: typeof args.prompt === 'string' ? args.prompt : '',
-        model: typeof args.model === 'string' ? args.model : undefined,
-        duration: typeof args.duration === 'number' ? args.duration : undefined,
-        aspectRatio: typeof args.aspectRatio === 'string' ? args.aspectRatio : undefined,
-        size: typeof args.size === 'string' ? args.size : undefined,
-        responseFormat: 'url',
-      });
-      return {
-        tool_call_id: toolCallId,
-        success: true,
-        output: JSON.stringify({ videos: result.videos, model: result.model, provider: result.provider }),
-      };
-    });
-
-    // ── Code ───────────────────────────────────────
-    reg('search_replace', 'Search and replace in file', 'code', true, executeSearchReplaceTool);
-    reg('apply_multi_file_changes', 'Apply multi-file changes', 'code', false, executeApplyMultiFileChangesTool);
-    reg('batch_search_replace', 'Batch search-replace', 'code', false, executeBatchSearchReplaceTool);
-    reg('run_command', 'Execute shell command', 'general', false, executeRunCommandTool);
-
-    // ── Git ────────────────────────────────────────
-    reg('git_status', 'Show git status', 'git', true, executeGitStatusTool);
-    reg('git_diff', 'Show git diff', 'git', true, executeGitDiffTool);
-    reg('git_commit', 'Create commit', 'git', false, executeGitCommitTool);
-    reg('git_push', 'Push to remote', 'git', false, executeGitPushTool);
-    reg('git_pull', 'Pull from remote', 'git', false, executeGitPullTool);
-    reg('git_create_branch', 'Create branch', 'git', false, executeGitCreateBranchTool);
-    reg('git_merge', 'Merge branches', 'git', false, executeGitMergeTool);
-    reg('git_rebase', 'Rebase branch', 'git', false, executeGitRebaseTool);
-    reg('git_resolve_conflict', 'Resolve conflict', 'git', false, executeGitResolveConflictTool);
-
-    // ── Refactoring ────────────────────────────────
-    reg('extract_function', 'Extract code into function', 'refactoring', true, executeExtractFunctionTool);
-    reg('rename_symbol', 'Rename symbol', 'refactoring', true, executeRenameSymbolTool);
-    reg('extract_variable', 'Extract into variable', 'refactoring', true, executeExtractVariableTool);
-    reg('inline_function', 'Inline function', 'refactoring', true, executeInlineFunctionTool);
-    reg('refactor_code', 'General refactoring', 'refactoring', true, executeRefactorCodeTool);
-
-    // ── Code Execution (Sandbox) ─────────────────
-    reg('code_execute', 'Execute code in sandbox', 'code', true, async (args: Record<string, unknown>, toolCallId: string, ctx: ToolExecutionContext & { projectId?: string }) => {
-      const code = typeof args.code === 'string' ? args.code : '';
-      const language = typeof args.language === 'string' ? args.language : 'javascript';
-      try {
-        const { CodeExecutionService } = await import('@/services/code-execution-service');
-        const service = new CodeExecutionService();
-        const result = await service.executeCode({
-          code,
-          language: language as import('@/runtime/code-sandbox').SupportedLanguage,
-          timeoutMs: 30000,
-          userContext: { requestId: toolCallId, organizationId: ctx.organizationId || '', models: [], taskType: 'code-generation', contextSize: 0 },
-          requestId: toolCallId,
+      const reg = (
+        name: string,
+        description: string,
+        category:
+          | 'file'
+          | 'git'
+          | 'search'
+          | 'code'
+          | 'refactoring'
+          | 'testing'
+          | 'task'
+          | 'analysis'
+          | 'workflow'
+          | 'web'
+          | 'image'
+          | 'video'
+          | 'audio'
+          | 'general',
+        safeForStrategies: boolean,
+        // `(...a: never[]) => Promise<unknown>` accepts EVERY concrete executor
+        // signature via parameter contravariance — no `any` laundering needed.
+        // The registry-facing shape is restored with the sanctioned narrowAs
+        // (each executor's real args are parsed/validated by the tool layer).
+        handler: (...a: never[]) => Promise<unknown>,
+        aliases?: string[]
+      ) => {
+        toolRegistry.register({
+          name,
+          description,
+          category,
+          safeForStrategies,
+          handler: narrowAs<GenericHandler>(handler),
+          aliases,
         });
-        return { tool_call_id: toolCallId, success: result.success, output: result.stdout || JSON.stringify(result.result ?? ''), error: result.error || result.stderr, metadata: { sandbox: result.sandboxBackend } };
-      } catch (err) {
-        return { tool_call_id: toolCallId, success: false, error: `Code execution failed: ${err instanceof Error ? err.message : String(err)}` };
-      }
-    }, ['execute_code']);
+      };
 
-    // ── Code Quality ───────────────────────────────
-    reg('heal_file', 'Auto-fix file errors', 'code', true, executeHealFileTool);
-    reg('generate_tests', 'Generate tests', 'testing', true, executeGenerateTestsTool);
-    reg('detect_errors', 'Detect code errors', 'testing', true, executeDetectErrorsTool);
-    reg('validate_code', 'Validate code', 'testing', true, executeValidateCodeTool);
+      // ── File Operations ────────────────────────────
+      reg('write_file', 'Create or overwrite a file', 'file', true, executeWriteFileTool);
+      reg('read_file', 'Read file contents', 'file', true, executeReadFileTool);
+      reg('list_directory', 'List directory contents', 'file', true, executeListDirectoryTool);
+      reg('delete_file', 'Delete a file', 'file', false, executeDeleteFileTool);
+      reg('file_search', 'Search for files by name', 'file', true, executeFileSearchTool);
 
-    // ── Tasks ──────────────────────────────────────
-    reg('todo_write', 'Write todos', 'task', false, executeTodoWriteTool);
-    reg('create_todo', 'Create todo', 'task', false, executeCreateTodoTool);
-    reg('update_todo', 'Update todo', 'task', false, executeUpdateTodoTool);
-    reg('check_todo', 'Check todo status', 'task', true, executeCheckTodoTool);
-    reg('list_todos', 'List todos', 'task', true, executeListTodosTool);
+      // ── Search ─────────────────────────────────────
+      reg('grep_search', 'Search file contents with regex', 'search', true, executeGrepSearchTool, [
+        'grep_tool',
+        'grep',
+      ]);
+      reg('codebase_search', 'Semantic codebase search', 'search', true, executeCodebaseSearchTool);
+      reg(
+        'semantic_search',
+        'Semantic similarity search',
+        'search',
+        true,
+        executeSemanticSearchTool
+      );
+      reg('web_search', 'Search the web', 'web', true, executeWebSearchTool, ['explore_web']);
 
-    // ── Analysis ───────────────────────────────────
-    reg('find_symbol_references', 'Find references', 'analysis', true, executeFindSymbolReferencesTool, ['find_references']);
-    reg('analyze_codebase', 'Analyze codebase', 'analysis', true, executeAnalyzeCodebaseTool);
-    reg('get_dependency_graph', 'Dependency graph', 'analysis', true, executeGetDependencyGraphTool, ['dependency_graph']);
-    reg('explore_codebase', 'Explore codebase', 'analysis', true, executeExploreCodebaseTool);
+      // ── Modality generation (option B, tool→modality bridge) ──────
+      // safeForStrategies=false: video generation is billable + slow; do NOT let
+      // every collective voter fire a generation. Routes through the
+      // ToolExecutionContext.invoker (CapabilityInvoker → VideoOrchestrationService).
+      reg(
+        'generate_video',
+        'Generate a video from a text prompt',
+        'video',
+        false,
+        async (
+          args: Record<string, unknown>,
+          toolCallId: string,
+          ctx: ToolExecutionContext
+        ): Promise<ToolResult> => {
+          if (!ctx.invoker) {
+            return {
+              tool_call_id: toolCallId,
+              success: false,
+              error: 'Video generation capability not available in this context',
+            };
+          }
+          const result = await ctx.invoker.generateVideo({
+            prompt: typeof args.prompt === 'string' ? args.prompt : '',
+            model: typeof args.model === 'string' ? args.model : undefined,
+            duration: typeof args.duration === 'number' ? args.duration : undefined,
+            aspectRatio: typeof args.aspectRatio === 'string' ? args.aspectRatio : undefined,
+            size: typeof args.size === 'string' ? args.size : undefined,
+            responseFormat: 'url',
+          });
+          return {
+            tool_call_id: toolCallId,
+            success: true,
+            output: JSON.stringify({
+              videos: result.videos,
+              model: result.model,
+              provider: result.provider,
+            }),
+          };
+        }
+      );
 
-    // ── Image ──────────────────────────────────────
-    reg('analyze_image', 'Analyze image', 'image', true, executeAnalyzeImageTool);
-    reg('compare_images', 'Compare images', 'image', true, executeCompareImagesTool);
-    reg('extract_code_from_screenshot', 'Extract code from screenshot', 'image', true, executeExtractCodeFromScreenshotTool);
+      // ── Code ───────────────────────────────────────
+      reg('search_replace', 'Search and replace in file', 'code', true, executeSearchReplaceTool);
+      reg(
+        'apply_multi_file_changes',
+        'Apply multi-file changes',
+        'code',
+        false,
+        executeApplyMultiFileChangesTool
+      );
+      reg(
+        'batch_search_replace',
+        'Batch search-replace',
+        'code',
+        false,
+        executeBatchSearchReplaceTool
+      );
+      reg('run_command', 'Execute shell command', 'general', false, executeRunCommandTool);
 
-    // ── Workflow ────────────────────────────────────
-    reg('execute_workflow', 'Execute workflow', 'workflow', false, executeExecuteWorkflowTool);
-    reg('list_workflows', 'List workflows', 'workflow', true, executeListWorkflowsTool);
-    reg('register_workflow', 'Register workflow', 'workflow', false, executeRegisterWorkflowTool);
+      // ── Git ────────────────────────────────────────
+      reg('git_status', 'Show git status', 'git', true, executeGitStatusTool);
+      reg('git_diff', 'Show git diff', 'git', true, executeGitDiffTool);
+      reg('git_commit', 'Create commit', 'git', false, executeGitCommitTool);
+      reg('git_push', 'Push to remote', 'git', false, executeGitPushTool);
+      reg('git_pull', 'Pull from remote', 'git', false, executeGitPullTool);
+      reg('git_create_branch', 'Create branch', 'git', false, executeGitCreateBranchTool);
+      reg('git_merge', 'Merge branches', 'git', false, executeGitMergeTool);
+      reg('git_rebase', 'Rebase branch', 'git', false, executeGitRebaseTool);
+      reg('git_resolve_conflict', 'Resolve conflict', 'git', false, executeGitResolveConflictTool);
 
-    toolRegistry.markInitialized();
-  }).catch((err) => {
-    // Non-fatal: tools work via fallback switch in executeRealTool
-    console.warn('Failed to register tools in registry:', err);
-  });
+      // ── Refactoring ────────────────────────────────
+      reg(
+        'extract_function',
+        'Extract code into function',
+        'refactoring',
+        true,
+        executeExtractFunctionTool
+      );
+      reg('rename_symbol', 'Rename symbol', 'refactoring', true, executeRenameSymbolTool);
+      reg(
+        'extract_variable',
+        'Extract into variable',
+        'refactoring',
+        true,
+        executeExtractVariableTool
+      );
+      reg('inline_function', 'Inline function', 'refactoring', true, executeInlineFunctionTool);
+      reg('refactor_code', 'General refactoring', 'refactoring', true, executeRefactorCodeTool);
+
+      // ── Code Execution (Sandbox) ─────────────────
+      reg(
+        'code_execute',
+        'Execute code in sandbox',
+        'code',
+        true,
+        async (
+          args: Record<string, unknown>,
+          toolCallId: string,
+          ctx: ToolExecutionContext & { projectId?: string }
+        ) => {
+          const code = typeof args.code === 'string' ? args.code : '';
+          const language = typeof args.language === 'string' ? args.language : 'javascript';
+          try {
+            const { CodeExecutionService } = await import('@/services/code-execution-service');
+            const service = new CodeExecutionService();
+            const result = await service.executeCode({
+              code,
+              language: language as import('@/runtime/code-sandbox').SupportedLanguage,
+              timeoutMs: 30000,
+              userContext: {
+                requestId: toolCallId,
+                organizationId: ctx.organizationId || '',
+                models: [],
+                taskType: 'code-generation',
+                contextSize: 0,
+              },
+              requestId: toolCallId,
+            });
+            return {
+              tool_call_id: toolCallId,
+              success: result.success,
+              output: result.stdout || JSON.stringify(result.result ?? ''),
+              error: result.error || result.stderr,
+              metadata: { sandbox: result.sandboxBackend },
+            };
+          } catch (err) {
+            return {
+              tool_call_id: toolCallId,
+              success: false,
+              error: `Code execution failed: ${err instanceof Error ? err.message : String(err)}`,
+            };
+          }
+        },
+        ['execute_code']
+      );
+
+      // ── Code Quality ───────────────────────────────
+      reg('heal_file', 'Auto-fix file errors', 'code', true, executeHealFileTool);
+      reg('generate_tests', 'Generate tests', 'testing', true, executeGenerateTestsTool);
+      reg('detect_errors', 'Detect code errors', 'testing', true, executeDetectErrorsTool);
+      reg('validate_code', 'Validate code', 'testing', true, executeValidateCodeTool);
+
+      // ── Tasks ──────────────────────────────────────
+      reg('todo_write', 'Write todos', 'task', false, executeTodoWriteTool);
+      reg('create_todo', 'Create todo', 'task', false, executeCreateTodoTool);
+      reg('update_todo', 'Update todo', 'task', false, executeUpdateTodoTool);
+      reg('check_todo', 'Check todo status', 'task', true, executeCheckTodoTool);
+      reg('list_todos', 'List todos', 'task', true, executeListTodosTool);
+
+      // ── Analysis ───────────────────────────────────
+      reg(
+        'find_symbol_references',
+        'Find references',
+        'analysis',
+        true,
+        executeFindSymbolReferencesTool,
+        ['find_references']
+      );
+      reg('analyze_codebase', 'Analyze codebase', 'analysis', true, executeAnalyzeCodebaseTool);
+      reg(
+        'get_dependency_graph',
+        'Dependency graph',
+        'analysis',
+        true,
+        executeGetDependencyGraphTool,
+        ['dependency_graph']
+      );
+      reg('explore_codebase', 'Explore codebase', 'analysis', true, executeExploreCodebaseTool);
+
+      // ── Image ──────────────────────────────────────
+      reg('analyze_image', 'Analyze image', 'image', true, executeAnalyzeImageTool);
+      reg('compare_images', 'Compare images', 'image', true, executeCompareImagesTool);
+      reg(
+        'extract_code_from_screenshot',
+        'Extract code from screenshot',
+        'image',
+        true,
+        executeExtractCodeFromScreenshotTool
+      );
+
+      // ── Workflow ────────────────────────────────────
+      reg('execute_workflow', 'Execute workflow', 'workflow', false, executeExecuteWorkflowTool);
+      reg('list_workflows', 'List workflows', 'workflow', true, executeListWorkflowsTool);
+      reg('register_workflow', 'Register workflow', 'workflow', false, executeRegisterWorkflowTool);
+
+      toolRegistry.markInitialized();
+    })
+    .catch((err) => {
+      // Non-fatal: tools work via fallback switch in executeRealTool
+      console.warn('Failed to register tools in registry:', err);
+    });
 }

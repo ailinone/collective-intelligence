@@ -71,7 +71,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-DESIGN-R3 §2 — model eligibility contract', () => {
-
   describe('eligibility policy: 3 gates (R3 replaces fixed model list)', () => {
     it('gate 1 is provider_passes_chat_ready_probe', () => {
       expect(C3_ELIGIBILITY_GATE_1).toBe('provider_passes_chat_ready_probe');
@@ -286,17 +285,19 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §2 — model eligibility contract', () => {
     });
 
     it('high + mid + low equals AA coverage (472 models with intelligenceIndex)', () => {
-      const aaIndexed = C3_QUALITY_TIER_HIGH_KNOWN_COUNT
-        + C3_QUALITY_TIER_MID_KNOWN_COUNT
-        + C3_QUALITY_TIER_LOW_KNOWN_COUNT;
+      const aaIndexed =
+        C3_QUALITY_TIER_HIGH_KNOWN_COUNT +
+        C3_QUALITY_TIER_MID_KNOWN_COUNT +
+        C3_QUALITY_TIER_LOW_KNOWN_COUNT;
       expect(aaIndexed).toBe(472);
     });
 
     it('all tiers total to candidate pool size', () => {
-      const allTiers = C3_QUALITY_TIER_HIGH_KNOWN_COUNT
-        + C3_QUALITY_TIER_MID_KNOWN_COUNT
-        + C3_QUALITY_TIER_LOW_KNOWN_COUNT
-        + C3_QUALITY_TIER_UNKNOWN_KNOWN_COUNT;
+      const allTiers =
+        C3_QUALITY_TIER_HIGH_KNOWN_COUNT +
+        C3_QUALITY_TIER_MID_KNOWN_COUNT +
+        C3_QUALITY_TIER_LOW_KNOWN_COUNT +
+        C3_QUALITY_TIER_UNKNOWN_KNOWN_COUNT;
       expect(allTiers).toBe(C3_KNOWN_CANDIDATE_COUNT);
     });
   });
@@ -337,9 +338,8 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §2 — model eligibility contract', () => {
     });
 
     it('total consensus tier sample sums to 5', () => {
-      const total = C3_CONSENSUS_TIER_SAMPLE.high
-        + C3_CONSENSUS_TIER_SAMPLE.mid
-        + C3_CONSENSUS_TIER_SAMPLE.low;
+      const total =
+        C3_CONSENSUS_TIER_SAMPLE.high + C3_CONSENSUS_TIER_SAMPLE.mid + C3_CONSENSUS_TIER_SAMPLE.low;
       expect(total).toBe(5);
     });
 

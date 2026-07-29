@@ -56,13 +56,19 @@ describe('01C.1B-J1E §14.1 — provider-api-model-id-resolver', () => {
 
   describe('strip-duplicate-prefix', () => {
     it('strips hyphen form', () => {
-      expect(stripDuplicateProviderPrefix('anthropic', 'anthropic-claude-3.7-sonnet')).toBe('claude-3.7-sonnet');
+      expect(stripDuplicateProviderPrefix('anthropic', 'anthropic-claude-3.7-sonnet')).toBe(
+        'claude-3.7-sonnet'
+      );
     });
     it('strips slash form', () => {
-      expect(stripDuplicateProviderPrefix('anthropic', 'anthropic/claude-3.7-sonnet')).toBe('claude-3.7-sonnet');
+      expect(stripDuplicateProviderPrefix('anthropic', 'anthropic/claude-3.7-sonnet')).toBe(
+        'claude-3.7-sonnet'
+      );
     });
     it('preserves clean id', () => {
-      expect(stripDuplicateProviderPrefix('anthropic', 'claude-3.7-sonnet')).toBe('claude-3.7-sonnet');
+      expect(stripDuplicateProviderPrefix('anthropic', 'claude-3.7-sonnet')).toBe(
+        'claude-3.7-sonnet'
+      );
     });
   });
 
@@ -247,7 +253,23 @@ describe('01C.1B-J1E §14.1 — provider-api-model-id-resolver', () => {
 
   describe('anti-regression: no naive concat for duplicate-prefix cases', () => {
     it('never returns anthropic/anthropic-claude-3.7-sonnet', () => {
-      const routers = ['openrouter', 'aiml', 'routeway', 'vercel-ai-gateway', 'cometapi', 'aihubmix', 'ai302', 'nanogpt', 'requesty', 'poe', 'orqai', 'edenai', 'heliconeai', 'synthetic', 'newrouter-not-in-alias-map'];
+      const routers = [
+        'openrouter',
+        'aiml',
+        'routeway',
+        'vercel-ai-gateway',
+        'cometapi',
+        'aihubmix',
+        'ai302',
+        'nanogpt',
+        'requesty',
+        'poe',
+        'orqai',
+        'edenai',
+        'heliconeai',
+        'synthetic',
+        'newrouter-not-in-alias-map',
+      ];
       for (const router of routers) {
         const r = resolveApiModelId({
           providerId: router,

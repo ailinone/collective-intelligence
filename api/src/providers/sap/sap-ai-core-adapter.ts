@@ -141,8 +141,7 @@ export class SapAiCoreAdapter extends ProviderAdapter {
 
     if (!configError) {
       try {
-        const factory =
-          config.tokenProviderFactory ?? createOAuth2ClientCredentialsProvider;
+        const factory = config.tokenProviderFactory ?? createOAuth2ClientCredentialsProvider;
         tokenProvider = factory({
           authUrl,
           clientId,
@@ -185,17 +184,16 @@ export class SapAiCoreAdapter extends ProviderAdapter {
    */
   async getModels(): Promise<Model[]> {
     const ids = Object.keys(this.deployments);
-    return ids.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'sap',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: narrowAs<Model['capabilities']>(['chat', 'embeddings']),
-        })),
+    return ids.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'sap',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: narrowAs<Model['capabilities']>(['chat', 'embeddings']),
+      })
     );
   }
 
@@ -207,7 +205,7 @@ export class SapAiCoreAdapter extends ProviderAdapter {
     const deploymentId = this.deployments[model];
     if (!deploymentId) {
       throw new Error(
-        `sap: no deployment_id mapped for model "${model}" — set SAP_AI_CORE_DEPLOYMENTS={"${model}":"<deployment_id>"}`,
+        `sap: no deployment_id mapped for model "${model}" — set SAP_AI_CORE_DEPLOYMENTS={"${model}":"<deployment_id>"}`
       );
     }
 
@@ -362,7 +360,7 @@ export class SapAiCoreAdapter extends ProviderAdapter {
 
   private async fetchJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> },
+    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> }
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
     const timeoutMs = Math.max(1000, this.config.timeout ?? 60_000);

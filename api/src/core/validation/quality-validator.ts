@@ -163,7 +163,10 @@ export class QualityValidator {
     name: string;
     validate: (r: ChatResponse, c: ValidationContext) => Promise<{ issues: ValidationIssue[] }>;
   }> {
-    const validators: Array<{ name: string; validate: (r: ChatResponse, c: ValidationContext) => Promise<{ issues: ValidationIssue[] }> }> = [];
+    const validators: Array<{
+      name: string;
+      validate: (r: ChatResponse, c: ValidationContext) => Promise<{ issues: ValidationIssue[] }>;
+    }> = [];
 
     // Always run basic validation
     validators.push({

@@ -23,7 +23,13 @@
  * DEK changes (e.g., admin rotation).
  */
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 import { LRUCache } from 'lru-cache';
 
 import { narrowAs } from '@/utils/type-guards';

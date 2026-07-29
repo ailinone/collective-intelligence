@@ -34,12 +34,10 @@ import type { ModelProviderOffering } from '../../registry/model-offering';
 function findCandidate(
   registry: ReturnType<typeof buildFixtureRegistry>,
   providerId: string,
-  modelId: string,
+  modelId: string
 ): ModelScoringCandidate {
   const offeringId = `${providerId}:${modelId}`;
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   // The fixture sometimes provides a `uid` — prefer it.
   const oid = snap?.uid ?? offeringId;
   const offering = registry.lookupOffering(oid);
@@ -59,7 +57,7 @@ function findCandidate(
  */
 function withRouteOverrides(
   candidate: ModelScoringCandidate,
-  overrides: Partial<ProviderModelRoute>,
+  overrides: Partial<ProviderModelRoute>
 ): ModelScoringCandidate {
   return {
     ...candidate,
@@ -69,7 +67,7 @@ function withRouteOverrides(
 
 function withCanonicalOverrides(
   candidate: ModelScoringCandidate,
-  overrides: Partial<CanonicalModel>,
+  overrides: Partial<CanonicalModel>
 ): ModelScoringCandidate {
   return {
     ...candidate,
@@ -79,7 +77,7 @@ function withCanonicalOverrides(
 
 function withOfferingOverrides(
   candidate: ModelScoringCandidate,
-  overrides: Partial<ModelProviderOffering>,
+  overrides: Partial<ModelProviderOffering>
 ): ModelScoringCandidate {
   return {
     ...candidate,
@@ -105,7 +103,7 @@ describe('scoreModelCandidate — happy path', () => {
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -132,7 +130,7 @@ describe('scoreModelCandidate — capabilityFit reflects required caps', () => {
     const raw = findCandidate(registry, 'openai', 'gpt-5.5-pro');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat', 'tools', 'json_mode', 'vision'],
@@ -146,7 +144,7 @@ describe('scoreModelCandidate — capabilityFit reflects required caps', () => {
     const raw = findCandidate(registry, 'mistral', 'mistral-large-2'); // no vision
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat', 'vision'],
@@ -160,7 +158,7 @@ describe('scoreModelCandidate — capabilityFit reflects required caps', () => {
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {});
     expect(result.breakdown.capabilityFit).toBe(1);
@@ -173,7 +171,7 @@ describe('scoreModelCandidate — minContextWindow filter', () => {
     const raw = findCandidate(registry, 'google', 'gemini-2.5-pro'); // 1M ctx
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -188,7 +186,7 @@ describe('scoreModelCandidate — minContextWindow filter', () => {
     const raw = findCandidate(registry, 'ollama', 'mistral-small-3'); // 32k
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -203,10 +201,10 @@ describe('scoreModelCandidate — runtime state', () => {
   it('routeReliability reflects successRateWindow', () => {
     const registry = buildFixtureRegistry();
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
-    const candidate = withRouteOverrides(
-      withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      { ...HEALTHY_ROUTE_OVERRIDES, successRateWindow: 0.62 },
-    );
+    const candidate = withRouteOverrides(withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES), {
+      ...HEALTHY_ROUTE_OVERRIDES,
+      successRateWindow: 0.62,
+    });
     const result = scoreModelCandidate(candidate, { requiredCapabilities: ['chat'] });
     expect(result.breakdown.routeReliability).toBe(0.62);
   });
@@ -219,14 +217,14 @@ describe('scoreModelCandidate — runtime state', () => {
         ...HEALTHY_ROUTE_OVERRIDES,
         latencyP95Ms: 100,
       }),
-      { requiredCapabilities: ['chat'] },
+      { requiredCapabilities: ['chat'] }
     );
     const slow = scoreModelCandidate(
       withRouteOverrides(withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES), {
         ...HEALTHY_ROUTE_OVERRIDES,
         latencyP95Ms: 4_000,
       }),
-      { requiredCapabilities: ['chat'] },
+      { requiredCapabilities: ['chat'] }
     );
     expect(fast.breakdown.latencyScore).toBeGreaterThan(slow.breakdown.latencyScore);
   });
@@ -234,10 +232,10 @@ describe('scoreModelCandidate — runtime state', () => {
   it('null latency → fallback score of 0.5', () => {
     const registry = buildFixtureRegistry();
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
-    const candidate = withRouteOverrides(
-      withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      { ...HEALTHY_ROUTE_OVERRIDES, latencyP95Ms: null },
-    );
+    const candidate = withRouteOverrides(withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES), {
+      ...HEALTHY_ROUTE_OVERRIDES,
+      latencyP95Ms: null,
+    });
     const result = scoreModelCandidate(candidate, { requiredCapabilities: ['chat'] });
     expect(result.breakdown.latencyScore).toBe(0.5);
   });
@@ -253,7 +251,7 @@ describe('scoreModelCandidate — cost', () => {
         inputCostPer1M: 1,
         outputCostPer1M: 1,
       }),
-      { requiredCapabilities: ['chat'] },
+      { requiredCapabilities: ['chat'] }
     );
     const expensive = scoreModelCandidate(
       withRouteOverrides(withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES), {
@@ -261,7 +259,7 @@ describe('scoreModelCandidate — cost', () => {
         inputCostPer1M: 30,
         outputCostPer1M: 30,
       }),
-      { requiredCapabilities: ['chat'] },
+      { requiredCapabilities: ['chat'] }
     );
     expect(cheap.breakdown.costEfficiency).toBeGreaterThan(expensive.breakdown.costEfficiency);
   });
@@ -273,7 +271,7 @@ describe('scoreModelCandidate — privacy', () => {
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -288,7 +286,7 @@ describe('scoreModelCandidate — privacy', () => {
     const raw = findCandidate(registry, 'ollama', 'llama-3.3-70b');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -303,7 +301,7 @@ describe('scoreModelCandidate — privacy', () => {
     const raw = findCandidate(registry, 'ollama', 'llama-3.3-70b');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -319,7 +317,7 @@ describe('scoreModelCandidate — risk penalty', () => {
     const raw = findCandidate(registry, 'openai', 'o3-mini-preview');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, { lifecycle: 'preview' }),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['chat'],
@@ -350,7 +348,7 @@ describe('scoreModelCandidate — risk penalty', () => {
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, { requiredCapabilities: ['chat'] });
     expect(result.breakdown.riskPenalty).toBe(0);
@@ -363,7 +361,7 @@ describe('scoreModelCandidate — rejected candidates have zero total', () => {
     const raw = findCandidate(registry, 'mistral', 'mistral-large-2');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['vision'],
@@ -377,7 +375,7 @@ describe('scoreModelCandidate — rejected candidates have zero total', () => {
     const raw = findCandidate(registry, 'mistral', 'mistral-large-2');
     const candidate = withRouteOverrides(
       withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
-      HEALTHY_ROUTE_OVERRIDES,
+      HEALTHY_ROUTE_OVERRIDES
     );
     const result = scoreModelCandidate(candidate, {
       requiredCapabilities: ['vision'],
@@ -393,8 +391,11 @@ describe('scoreModelCandidate — does not mutate input', () => {
     const registry = buildFixtureRegistry();
     const raw = findCandidate(registry, 'anthropic', 'claude-opus-4-7');
     const candidate = withOfferingOverrides(
-      withRouteOverrides(withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES), HEALTHY_ROUTE_OVERRIDES),
-      {},
+      withRouteOverrides(
+        withCanonicalOverrides(raw, HEALTHY_CANONICAL_OVERRIDES),
+        HEALTHY_ROUTE_OVERRIDES
+      ),
+      {}
     );
     const before = JSON.stringify({
       c: candidate.canonicalModel.canonicalModelId,

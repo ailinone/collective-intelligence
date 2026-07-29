@@ -36,18 +36,19 @@ function projectRouteLevelMetrics(approvedForExecution: ReadonlyArray<ApprovedRo
     if (!providerChatReadyMap.has(p)) providerChatReadyMap.set(p, false);
     if (c.liveReady) providerChatReadyMap.set(p, true);
   }
-  const providerReadyRouteUnauditedCount = approvedForExecution.filter((c) =>
-    !c.liveReady && providerChatReadyMap.get(c.providerId.toLowerCase()) === true,
+  const providerReadyRouteUnauditedCount = approvedForExecution.filter(
+    (c) => !c.liveReady && providerChatReadyMap.get(c.providerId.toLowerCase()) === true
   ).length;
   // J1D §9 — "not audited for logical model" = neither liveReady, nor has
   // a recorded failure (truly never probed), nor has provider-level success.
-  const routeNotAuditedForLogicalModelCount = approvedForExecution.filter((c) =>
-    !c.liveReady
-    && c.lastFailureKind === undefined
-    && providerChatReadyMap.get(c.providerId.toLowerCase()) !== true,
+  const routeNotAuditedForLogicalModelCount = approvedForExecution.filter(
+    (c) =>
+      !c.liveReady &&
+      c.lastFailureKind === undefined &&
+      providerChatReadyMap.get(c.providerId.toLowerCase()) !== true
   ).length;
-  const auditedApprovedRoutesCount = approvedForExecution.filter((c) =>
-    c.liveReady || c.lastFailureKind !== undefined,
+  const auditedApprovedRoutesCount = approvedForExecution.filter(
+    (c) => c.liveReady || c.lastFailureKind !== undefined
   ).length;
   return {
     approvedRoutesCount: approvedForExecution.length,
@@ -61,7 +62,23 @@ function projectRouteLevelMetrics(approvedForExecution: ReadonlyArray<ApprovedRo
 describe('01C.1B-J1D §11.4 — route-level readiness explainability', () => {
   it('all 15 synthesizer routes unaudited → all in routeNotAuditedForLogicalModelCount', () => {
     const approvedRoutes: ApprovedRoute[] = Array.from({ length: 15 }, (_, i) => ({
-      providerId: ['anthropic', 'ai302', 'aihubmix', 'aiml', 'cometapi', 'edenai', 'heliconeai', 'nanogpt', 'openrouter', 'orqai', 'poe', 'requesty', 'routeway', 'synthetic', 'vercel-ai-gateway'][i],
+      providerId: [
+        'anthropic',
+        'ai302',
+        'aihubmix',
+        'aiml',
+        'cometapi',
+        'edenai',
+        'heliconeai',
+        'nanogpt',
+        'openrouter',
+        'orqai',
+        'poe',
+        'requesty',
+        'routeway',
+        'synthetic',
+        'vercel-ai-gateway',
+      ][i],
       liveReady: false,
     }));
     const m = projectRouteLevelMetrics(approvedRoutes);
@@ -75,7 +92,22 @@ describe('01C.1B-J1D §11.4 — route-level readiness explainability', () => {
     const approvedRoutes: ApprovedRoute[] = [
       { providerId: 'anthropic', liveReady: false, lastFailureKind: 'insufficient_credits' },
       ...Array.from({ length: 14 }, (_, i) => ({
-        providerId: ['ai302', 'aihubmix', 'aiml', 'cometapi', 'edenai', 'heliconeai', 'nanogpt', 'openrouter', 'orqai', 'poe', 'requesty', 'routeway', 'synthetic', 'vercel-ai-gateway'][i],
+        providerId: [
+          'ai302',
+          'aihubmix',
+          'aiml',
+          'cometapi',
+          'edenai',
+          'heliconeai',
+          'nanogpt',
+          'openrouter',
+          'orqai',
+          'poe',
+          'requesty',
+          'routeway',
+          'synthetic',
+          'vercel-ai-gateway',
+        ][i],
         liveReady: false,
       })),
     ];
@@ -93,7 +125,7 @@ describe('01C.1B-J1D §11.4 — route-level readiness explainability', () => {
     const approvedRoutes: ApprovedRoute[] = [
       // openrouter has a chat-ready route elsewhere → mark this provider as ready in the map
       { providerId: 'openrouter', liveReady: false }, // claude route unaudited
-      { providerId: 'openrouter', liveReady: true },  // gemma route (judge) — provider ready
+      { providerId: 'openrouter', liveReady: true }, // gemma route (judge) — provider ready
     ];
     const m = projectRouteLevelMetrics(approvedRoutes);
     expect(m.liveReadyApprovedRoutesCount).toBe(1);
@@ -103,9 +135,9 @@ describe('01C.1B-J1D §11.4 — route-level readiness explainability', () => {
 
   it('mix: 3 routes — 1 live, 1 provider-ready-but-route-unaudited, 1 unaudited', () => {
     const approvedRoutes: ApprovedRoute[] = [
-      { providerId: 'openrouter', liveReady: true },  // route live
+      { providerId: 'openrouter', liveReady: true }, // route live
       { providerId: 'openrouter', liveReady: false }, // provider has SOME success, this route unaudited
-      { providerId: 'cometapi', liveReady: false },   // no provider evidence
+      { providerId: 'cometapi', liveReady: false }, // no provider evidence
     ];
     const m = projectRouteLevelMetrics(approvedRoutes);
     expect(m.liveReadyApprovedRoutesCount).toBe(1);
@@ -114,9 +146,7 @@ describe('01C.1B-J1D §11.4 — route-level readiness explainability', () => {
   });
 
   it('explainability fields never contain raw prompt or secrets', () => {
-    const m = projectRouteLevelMetrics([
-      { providerId: 'p1', liveReady: true },
-    ]);
+    const m = projectRouteLevelMetrics([{ providerId: 'p1', liveReady: true }]);
     const json = JSON.stringify(m);
     expect(json).not.toMatch(/parseMoneyBR/);
     expect(json).not.toMatch(/sk-[A-Za-z0-9_-]{20,}/);

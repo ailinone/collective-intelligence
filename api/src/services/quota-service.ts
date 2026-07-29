@@ -63,19 +63,17 @@ export async function listQuotas(organizationId: string): Promise<QuotaConfig[]>
     orderBy: { periodStart: 'desc' },
   });
 
-  return records.map(
-    (record: (typeof records)[number]): QuotaConfig => ({
-      organizationId,
-      limits: {
-        period: record.period as QuotaLimit['period'],
-        maxRequests: record.requestLimit === INT_MAX ? undefined : record.requestLimit,
-        maxTokens: record.tokenLimit ? Number(record.tokenLimit) : undefined,
-        maxCost: record.costLimitUsd ? Number(record.costLimitUsd) : undefined,
-        maxFiles: record.fileLimit ?? undefined,
-        maxFileSize: undefined,
-      },
-    })
-  );
+  return records.map((record: (typeof records)[number]): QuotaConfig => ({
+    organizationId,
+    limits: {
+      period: record.period as QuotaLimit['period'],
+      maxRequests: record.requestLimit === INT_MAX ? undefined : record.requestLimit,
+      maxTokens: record.tokenLimit ? Number(record.tokenLimit) : undefined,
+      maxCost: record.costLimitUsd ? Number(record.costLimitUsd) : undefined,
+      maxFiles: record.fileLimit ?? undefined,
+      maxFileSize: undefined,
+    },
+  }));
 }
 
 export async function checkQuota(

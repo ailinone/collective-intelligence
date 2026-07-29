@@ -40,21 +40,25 @@ const REQ = {
 };
 
 function meta(strategyId: string, registered: boolean) {
-  const result = buildPlanOnlyResult(
-    strategyId, 'explicit', 'request-flag',
-    REQ, CTX, null, 0.8,
-    {
-      registered,
-      blockers: registered ? [] : [`BLOCKED_BY_MISSING_STRATEGY_REGISTRY:${strategyId}`],
-      missingCapabilities: registered ? [] : [`strategy:${strategyId}`],
-    },
-  );
+  const result = buildPlanOnlyResult(strategyId, 'explicit', 'request-flag', REQ, CTX, null, 0.8, {
+    registered,
+    blockers: registered ? [] : [`BLOCKED_BY_MISSING_STRATEGY_REGISTRY:${strategyId}`],
+    missingCapabilities: registered ? [] : [`strategy:${strategyId}`],
+  });
   return result.metadata as Record<string, unknown>;
 }
 
 describe('01C.1B-SM-R3 §12b — strategy matrix classification', () => {
   describe('registered strategy contract', () => {
-    const strategies = ['single', 'cost-cascade', 'consensus', 'debate', 'quality-multipass', 'expert-panel', 'critique-repair'];
+    const strategies = [
+      'single',
+      'cost-cascade',
+      'consensus',
+      'debate',
+      'quality-multipass',
+      'expert-panel',
+      'critique-repair',
+    ];
 
     for (const s of strategies) {
       it(`[${s}] executable=true`, () => {
@@ -90,7 +94,12 @@ describe('01C.1B-SM-R3 §12b — strategy matrix classification', () => {
   });
 
   describe('unregistered strategy contract', () => {
-    const unregisteredStrategies = ['sensitivity-consensus', 'tri-role-collective', 'fast', 'compositor'];
+    const unregisteredStrategies = [
+      'sensitivity-consensus',
+      'tri-role-collective',
+      'fast',
+      'compositor',
+    ];
 
     for (const s of unregisteredStrategies) {
       it(`[${s}] executable=false`, () => {
@@ -106,7 +115,7 @@ describe('01C.1B-SM-R3 §12b — strategy matrix classification', () => {
       it(`[${s}] missingCapabilities includes the strategy name`, () => {
         const caps = meta(s, false)['missingCapabilities'] as string[];
         expect(Array.isArray(caps)).toBe(true);
-        expect(caps.some(c => c.includes(s))).toBe(true);
+        expect(caps.some((c) => c.includes(s))).toBe(true);
       });
 
       it(`[${s}] plan_only still true (blocked plan is still a plan)`, () => {
@@ -125,8 +134,16 @@ describe('01C.1B-SM-R3 §12b — strategy matrix classification', () => {
 
   describe('SMR3 gate invariants', () => {
     it('at least 3 registered strategies are executable (G2)', () => {
-      const registered = ['single', 'cost-cascade', 'consensus', 'debate', 'quality-multipass', 'expert-panel', 'critique-repair'];
-      const executableCount = registered.filter(s => meta(s, true)['executable'] === true).length;
+      const registered = [
+        'single',
+        'cost-cascade',
+        'consensus',
+        'debate',
+        'quality-multipass',
+        'expert-panel',
+        'critique-repair',
+      ];
+      const executableCount = registered.filter((s) => meta(s, true)['executable'] === true).length;
       expect(executableCount).toBeGreaterThanOrEqual(3);
     });
 
@@ -153,10 +170,21 @@ describe('01C.1B-SM-R3 §12b — strategy matrix classification', () => {
     it('all strategies return totalCost=0 from OrchestrationResult', () => {
       const strategies = ['single', 'cost-cascade', 'consensus', 'sensitivity-consensus'];
       for (const s of strategies.slice(0, 3)) {
-        const result = buildPlanOnlyResult(s, 'explicit', 'request-flag', REQ, CTX, null, 0.8, { registered: true });
+        const result = buildPlanOnlyResult(s, 'explicit', 'request-flag', REQ, CTX, null, 0.8, {
+          registered: true,
+        });
         expect(result.totalCost).toBe(0);
       }
-      const unrResult = buildPlanOnlyResult('sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.8, { registered: false });
+      const unrResult = buildPlanOnlyResult(
+        'sensitivity-consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.8,
+        { registered: false }
+      );
       expect(unrResult.totalCost).toBe(0);
     });
   });

@@ -106,7 +106,7 @@ describe('withIdempotency + a real FastifyReply — sendResponse must end the st
       Promise.race([
         app.inject({ method: 'POST', url: '/test' }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500)),
-      ]),
+      ])
     ).rejects.toThrow('TIMEOUT');
     await app.close();
   });
@@ -164,7 +164,11 @@ describe('setupSSEHeaders + withIdempotency — queued Fastify headers must not 
     });
     await app.ready();
 
-    await app.inject({ method: 'POST', url: '/test', headers: { 'idempotency-key': 'k-header-order' } });
+    await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'idempotency-key': 'k-header-order' },
+    });
     const replay = await app.inject({
       method: 'POST',
       url: '/test',
@@ -197,7 +201,11 @@ describe('setupSSEHeaders + withIdempotency — queued Fastify headers must not 
     });
     await app.ready();
 
-    await app.inject({ method: 'POST', url: '/test', headers: { 'idempotency-key': 'k-header-order-broken' } });
+    await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'idempotency-key': 'k-header-order-broken' },
+    });
     const replay = await app.inject({
       method: 'POST',
       url: '/test',
@@ -288,7 +296,7 @@ describe('the outer catch must not re-commit headers sendResponse already sent',
       Promise.race([
         app.inject({ method: 'POST', url: '/test' }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 1500)),
-      ]),
+      ])
     ).rejects.toThrow();
     await app.close();
   });

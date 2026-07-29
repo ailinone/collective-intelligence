@@ -114,8 +114,13 @@ function wireStrategy(models: Model[]): ConsensusStrategy {
   const anyStrat = strategy as unknown as Record<string, unknown>;
 
   const silentLogger = {
-    info: () => {}, warn: () => {}, error: () => {}, debug: () => {},
-    trace: () => {}, fatal: () => {}, child: () => silentLogger,
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    trace: () => {},
+    fatal: () => {},
+    child: () => silentLogger,
   };
   anyStrat.log = silentLogger;
   anyStrat.emitObserverEvent = () => {};
@@ -138,7 +143,7 @@ function wireStrategy(models: Model[]): ConsensusStrategy {
     _adapter: unknown,
     model: Model,
     request: ChatRequest,
-    role: string,
+    role: string
   ): Promise<ModelExecution> => ({
     modelId: model.id,
     modelName: model.name,
@@ -146,7 +151,7 @@ function wireStrategy(models: Model[]): ConsensusStrategy {
     request,
     response: makeChatResponse(
       `${model.name} votes with a sufficiently long rationale to pass any filters.`,
-      model.name,
+      model.name
     ),
     cost: VOTER_COST,
     durationMs: 100,
@@ -178,7 +183,11 @@ describe('Cost-accounting invariant (COST #3) — consensus', () => {
       cost: SYNTHESIZER_COST,
       usage: { prompt_tokens: 800, completion_tokens: 400, total_tokens: 1200 },
       coordinator: { id: 'coordinator-x', name: 'Coordinator X' },
-      metadata: { sourcesUsed: ['voter-a', 'voter-b', 'voter-c'], totalSources: 3, aggregationTime: 5 },
+      metadata: {
+        sourcesUsed: ['voter-a', 'voter-b', 'voter-c'],
+        totalSources: 3,
+        aggregationTime: 5,
+      },
     };
     aggregateMock.mockResolvedValue(aggregated);
 
@@ -216,7 +225,11 @@ describe('Cost-accounting invariant (COST #3) — consensus', () => {
       method: 'synthesis',
       confidence: 0.7,
       cost: 0,
-      metadata: { sourcesUsed: ['voter-a', 'voter-b', 'voter-c'], totalSources: 3, aggregationTime: 1 },
+      metadata: {
+        sourcesUsed: ['voter-a', 'voter-b', 'voter-c'],
+        totalSources: 3,
+        aggregationTime: 1,
+      },
     };
     aggregateMock.mockResolvedValue(aggregated);
 

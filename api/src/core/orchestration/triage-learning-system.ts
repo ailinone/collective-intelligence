@@ -9,12 +9,12 @@
 
 /**
  * Triage Learning System
- * 
+ *
  * Learns from triage decisions and execution results to improve:
  * - Strategy selection (speed/cost/quality/balanced/adaptive)
  * - Model selection for triage
  * - Automatic strategy detection from user prompts
- * 
+ *
  * Architecture:
  * - Records triage decisions and their outcomes
  * - Learns which strategies work best for different request patterns
@@ -35,7 +35,7 @@ export interface TriageDecisionOutcome {
   triageStrategy: TriageStrategy;
   triageModelId: string;
   triageModelName: string;
-  
+
   // Request characteristics
   taskType: TaskType | string;
   complexity: 'low' | 'medium' | 'high';
@@ -47,18 +47,18 @@ export interface TriageDecisionOutcome {
     messageCount: number;
     hasTools: boolean;
   };
-  
+
   // Triage decision
   intent: string;
   confidence: number;
-  
+
   // Execution outcome
   executionStrategy: string;
   executionSuccess: boolean;
   executionQuality: number; // 0-1
   executionCost: number;
   executionLatency: number; // ms
-  
+
   // Timestamp
   timestamp: number;
 }
@@ -87,7 +87,7 @@ class TriageLearningSystem {
   private BUFFER_SIZE = 50;
   private FLUSH_INTERVAL = 30000; // Flush every 30 seconds
   private static readonly DECIMAL_10_6_MAX = 9999.999999;
-  
+
   // Cache for strategy recommendations (updated periodically)
   private strategyRecommendationCache: Map<string, StrategyPerformanceMetrics[]> = new Map();
   private cacheValidUntil: number = 0;
@@ -133,28 +133,28 @@ class TriageLearningSystem {
     reasoning: string;
   } {
     const lower = prompt.toLowerCase();
-    
+
     // Urgency indicators (speed strategy)
     const urgencyIndicators = [
       /\burgent|asap|immediately|quick|fast|hurry|deadline|rush/gi,
       /\btime.*critical|need.*now|cant.*wait/gi,
     ];
-    const isUrgent = urgencyIndicators.some(pattern => pattern.test(lower));
-    
+    const isUrgent = urgencyIndicators.some((pattern) => pattern.test(lower));
+
     // Cost-sensitive indicators (cost strategy)
     const costIndicators = [
       /\bbudget|cheap|cost.*effective|low.*cost|affordable|minimize.*cost/gi,
       /\boptimize.*cost|reduce.*spend|save.*money/gi,
     ];
-    const isCostSensitive = costIndicators.some(pattern => pattern.test(lower));
-    
+    const isCostSensitive = costIndicators.some((pattern) => pattern.test(lower));
+
     // Quality-critical indicators (quality strategy)
     const qualityIndicators = [
       /\bquality|accurate|precise|best.*result|high.*quality|excellent/gi,
       /\bperfect|polish|refine|production.*ready|critical.*accuracy/gi,
     ];
-    const isQualityCritical = qualityIndicators.some(pattern => pattern.test(lower));
-    
+    const isQualityCritical = qualityIndicators.some((pattern) => pattern.test(lower));
+
     // Complexity indicators (adaptive strategy)
     const complexityIndicators = [
       /\bcomplex|complicated|sophisticated|enterprise|architect/gi,
@@ -162,10 +162,10 @@ class TriageLearningSystem {
       context.contextSize > 5000,
       context.hasTools,
     ];
-    const isComplex = complexityIndicators.some(indicator => 
+    const isComplex = complexityIndicators.some((indicator) =>
       typeof indicator === 'boolean' ? indicator : indicator.test(lower)
     );
-    
+
     // Decision logic
     if (isUrgent && !isQualityCritical) {
       return {
@@ -174,15 +174,15 @@ class TriageLearningSystem {
         reasoning: 'Prompt indicates urgency - speed strategy recommended',
       };
     }
-    
+
     if (isCostSensitive && !isQualityCritical && !isUrgent) {
       return {
         recommendedStrategy: 'cost',
-        confidence: 0.80,
+        confidence: 0.8,
         reasoning: 'Prompt indicates cost sensitivity - cost strategy recommended',
       };
     }
-    
+
     if (isQualityCritical && !isUrgent) {
       return {
         recommendedStrategy: 'quality',
@@ -190,7 +190,7 @@ class TriageLearningSystem {
         reasoning: 'Prompt indicates quality criticality - quality strategy recommended',
       };
     }
-    
+
     if (isComplex) {
       return {
         recommendedStrategy: 'adaptive',
@@ -198,11 +198,11 @@ class TriageLearningSystem {
         reasoning: 'Request appears complex - adaptive strategy recommended',
       };
     }
-    
+
     // Default to balanced
     return {
       recommendedStrategy: 'balanced',
-      confidence: 0.60,
+      confidence: 0.6,
       reasoning: 'No specific indicators found - balanced strategy recommended',
     };
   }
@@ -227,7 +227,7 @@ class TriageLearningSystem {
     // Check cache first
     const cacheKey = `${taskType}:${complexity}`;
     const now = Date.now();
-    
+
     if (now < this.cacheValidUntil && this.strategyRecommendationCache.has(cacheKey)) {
       const cached = this.strategyRecommendationCache.get(cacheKey);
       if (cached && cached.length > 0) {
@@ -241,34 +241,34 @@ class TriageLearningSystem {
         };
       }
     }
-    
+
     // Query database for learned performance
     try {
       const metrics = await this.getStrategyPerformanceMetrics(taskType, complexity);
-      
+
       if (metrics.length > 0) {
         // Update cache
         this.strategyRecommendationCache.set(cacheKey, metrics);
         this.cacheValidUntil = now + this.CACHE_TTL;
-        
+
         // Filter by prompt characteristics if provided
         let filteredMetrics = metrics;
         if (promptCharacteristics) {
           if (promptCharacteristics.urgency) {
-            filteredMetrics = metrics.filter(m => m.strategy === 'speed' || m.avgLatency < 1000);
+            filteredMetrics = metrics.filter((m) => m.strategy === 'speed' || m.avgLatency < 1000);
           }
           if (promptCharacteristics.costSensitive) {
-            filteredMetrics = metrics.filter(m => m.strategy === 'cost' || m.avgCost < 0.001);
+            filteredMetrics = metrics.filter((m) => m.strategy === 'cost' || m.avgCost < 0.001);
           }
           if (promptCharacteristics.qualityCritical) {
-            filteredMetrics = metrics.filter(m => m.strategy === 'quality' || m.avgQuality > 0.8);
+            filteredMetrics = metrics.filter((m) => m.strategy === 'quality' || m.avgQuality > 0.8);
           }
         }
-        
+
         if (filteredMetrics.length === 0) {
           filteredMetrics = metrics; // Fallback to all metrics
         }
-        
+
         // Select best performing strategy
         const best = filteredMetrics[0];
         return {
@@ -279,9 +279,12 @@ class TriageLearningSystem {
         };
       }
     } catch (error) {
-      this.log.warn({ error, taskType, complexity }, 'Failed to get learned strategy recommendation');
+      this.log.warn(
+        { error, taskType, complexity },
+        'Failed to get learned strategy recommendation'
+      );
     }
-    
+
     // Fallback: use prompt analysis if no learned data
     if (promptCharacteristics) {
       const detected = this.detectStrategyFromPrompt('', {
@@ -294,7 +297,7 @@ class TriageLearningSystem {
         basedOnLearning: false,
       };
     }
-    
+
     // Default fallback
     return {
       recommendedStrategy: 'balanced',
@@ -318,11 +321,7 @@ class TriageLearningSystem {
           complexity,
           sampleCount: { gte: 5 },
         },
-        orderBy: [
-          { successRate: 'desc' },
-          { avgQuality: 'desc' },
-          { avgCostEfficiency: 'desc' },
-        ],
+        orderBy: [{ successRate: 'desc' }, { avgQuality: 'desc' }, { avgCostEfficiency: 'desc' }],
         take: 10,
       });
 
@@ -340,12 +339,7 @@ class TriageLearningSystem {
         const normalizedCostEfficiency = Math.min(avgCostEfficiency / 500, 1);
         const recommendationScore = Math.max(
           0,
-          Math.min(
-            1,
-            successRate * 0.45 +
-              avgQuality * 0.4 +
-              normalizedCostEfficiency * 0.15
-          )
+          Math.min(1, successRate * 0.45 + avgQuality * 0.4 + normalizedCostEfficiency * 0.15)
         );
 
         return {
@@ -361,7 +355,10 @@ class TriageLearningSystem {
         };
       });
     } catch (error) {
-      this.log.error({ error, taskType, complexity }, 'Failed to query strategy performance metrics');
+      this.log.error(
+        { error, taskType, complexity },
+        'Failed to query strategy performance metrics'
+      );
       return [];
     }
   }
@@ -459,9 +456,7 @@ class TriageLearningSystem {
         const existing = await prisma.learningData.findUnique({ where });
         const averageQuality = aggregate.qualitySum / Math.max(aggregate.count, 1);
         const averageCost = aggregate.costSum / Math.max(aggregate.count, 1);
-        const averageLatency = Math.round(
-          aggregate.latencySum / Math.max(aggregate.count, 1)
-        );
+        const averageLatency = Math.round(aggregate.latencySum / Math.max(aggregate.count, 1));
 
         if (!existing) {
           await prisma.learningData.create({
@@ -526,9 +521,7 @@ class TriageLearningSystem {
         const existing = await prisma.strategyWeight.findUnique({ where });
 
         const localSample = Math.max(aggregate.count, 1);
-        const localSuccessRate = this.clampUnitInterval(
-          aggregate.successCount / localSample
-        );
+        const localSuccessRate = this.clampUnitInterval(aggregate.successCount / localSample);
         const localAvgQuality = this.clampUnitInterval(aggregate.qualitySum / localSample);
         const localAvgCost = this.clampNonNegative(aggregate.costSum / localSample);
         const localCostEfficiency = this.clampCostEfficiency(
@@ -571,8 +564,7 @@ class TriageLearningSystem {
             Math.max(mergedSample, 1)
         );
         const mergedAvgCostEfficiency = this.clampCostEfficiency(
-          (existingAvgCostEfficiency * existingSample +
-            localCostEfficiency * localSample) /
+          (existingAvgCostEfficiency * existingSample + localCostEfficiency * localSample) /
             Math.max(mergedSample, 1)
         );
         const mergedWeight = this.calculateAdaptiveWeight(
@@ -671,8 +663,7 @@ class TriageLearningSystem {
     const boundedSuccess = Math.max(0, Math.min(1, successRate));
     const boundedQuality = Math.max(0, Math.min(1, avgQuality));
     const normalizedCostEfficiency = Math.max(0, Math.min(1, avgCostEfficiency / 500));
-    const score =
-      boundedSuccess * 0.55 + boundedQuality * 0.35 + normalizedCostEfficiency * 0.1;
+    const score = boundedSuccess * 0.55 + boundedQuality * 0.35 + normalizedCostEfficiency * 0.1;
     return Math.max(0.1, Math.min(3, score * 2));
   }
 

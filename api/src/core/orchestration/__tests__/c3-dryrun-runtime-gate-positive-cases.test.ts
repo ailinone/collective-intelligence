@@ -33,7 +33,12 @@ function validRequest(): C3RuntimeGateRequest {
     cost_usd: 0,
     usage: { total_tokens: 0 },
     selectedCandidates: [
-      { candidateId: 'cand_a', providerId: 'prov_a', modelId: 'Qwen/Qwen2.5-7B-Instruct', selectedExecutableModel: false },
+      {
+        candidateId: 'cand_a',
+        providerId: 'prov_a',
+        modelId: 'Qwen/Qwen2.5-7B-Instruct',
+        selectedExecutableModel: false,
+      },
     ],
     hiddenFallbackDetected: false,
     fanout: 1,
@@ -78,7 +83,11 @@ describe('01C.1B-C3-DRYRUN-RUNTIME-GATE — positive cases', () => {
     expect(res.promptFingerprint).toBe('fp_prompt');
   });
 
-  const ARTIFACT = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-runtime-gate-runtime-responses.json');
+  const ARTIFACT = resolve(
+    process.cwd(),
+    'tmp',
+    '01c1b-c3-dryrun-runtime-gate-runtime-responses.json'
+  );
   const artifact = existsSync(ARTIFACT) ? JSON.parse(readFileSync(ARTIFACT, 'utf8')) : null;
   const maybe = artifact ? describe : describe.skip;
   maybe('generated runtime responses (local verification)', () => {

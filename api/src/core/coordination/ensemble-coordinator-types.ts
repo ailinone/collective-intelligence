@@ -35,13 +35,25 @@
  */
 export type EnsembleTier = 1 | 2 | 3 | 4 | 5 | 6;
 
-export const ENSEMBLE_TIERS: ReadonlyArray<{ id: EnsembleTier; name: string; description: string }> = [
+export const ENSEMBLE_TIERS: ReadonlyArray<{
+  id: EnsembleTier;
+  name: string;
+  description: string;
+}> = [
   { id: 1, name: 'encoder', description: 'Encoders ≤200M, latency <10ms, hot' },
   { id: 2, name: 'dense_tiny', description: 'Dense ≤1B, latency ~50ms, hot' },
   { id: 3, name: 'dense_small', description: 'Dense 1-3B, latency ~150ms, hot' },
-  { id: 4, name: 'dense_anchor', description: 'Dense 3-9B, latency ~400ms, warm — ensemble anchor' },
+  {
+    id: 4,
+    name: 'dense_anchor',
+    description: 'Dense 3-9B, latency ~400ms, warm — ensemble anchor',
+  },
   { id: 5, name: 'moe_light', description: 'MoE active ≤3B, latency ~600ms, warm' },
-  { id: 6, name: 'moe_heavy', description: 'MoE active ≥6B, latency ~1500ms, cold — ambiguity floor' },
+  {
+    id: 6,
+    name: 'moe_heavy',
+    description: 'MoE active ≥6B, latency ~1500ms, cold — ambiguity floor',
+  },
 ] as const;
 
 /**
@@ -142,12 +154,12 @@ export interface EnsembleDecisionRequest {
     | 'sensitivity-consensus';
   /** What kind of decision is needed (matches the F4.1 audit substrate) */
   decisionType:
-    | 'role-for-turn'              // tri-role: planner / solver / auditor
-    | 'moderator-selection'        // debate: which model moderates
-    | 'panel-composition'          // expert-panel: which experts + coordinator
-    | 'synthesis-coordinator'      // consensus: which model synthesizes
-    | 'race-candidates'            // parallel-race: which models race
-    | 'aggregation-method';        // sensitivity-consensus: numeric vs llm-synthesis
+    | 'role-for-turn' // tri-role: planner / solver / auditor
+    | 'moderator-selection' // debate: which model moderates
+    | 'panel-composition' // expert-panel: which experts + coordinator
+    | 'synthesis-coordinator' // consensus: which model synthesizes
+    | 'race-candidates' // parallel-race: which models race
+    | 'aggregation-method'; // sensitivity-consensus: numeric vs llm-synthesis
   /** Strategy-specific context (turn number, prior decisions, etc.) */
   context: Record<string, unknown>;
   /**

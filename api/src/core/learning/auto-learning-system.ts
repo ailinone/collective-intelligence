@@ -193,7 +193,10 @@ export class AutoLearningSystem {
    *
    * Size: ~200 bytes (vs ~5KB raw execution data)
    */
-  private extractInsight(result: OrchestrationResult, taskAnalysis: { type: string; complexity: string; contextSize: number }): ExecutionInsight {
+  private extractInsight(
+    result: OrchestrationResult,
+    taskAnalysis: { type: string; complexity: string; contextSize: number }
+  ): ExecutionInsight {
     return {
       taskType: taskAnalysis.type,
       complexity: taskAnalysis.complexity,
@@ -322,13 +325,27 @@ export class AutoLearningSystem {
       // ON CONFLICT cannot update the same row twice in one statement.
       const byModel = new Map<
         string,
-        { name: string; execs: number; ok: number; err: number; durTotal: number; costTotal: number; tokens: number }
+        {
+          name: string;
+          execs: number;
+          ok: number;
+          err: number;
+          durTotal: number;
+          costTotal: number;
+          tokens: number;
+        }
       >();
       for (const e of result.modelsUsed ?? []) {
         if (!e?.modelId) continue;
-        const agg =
-          byModel.get(e.modelId) ??
-          { name: e.modelName || e.modelId, execs: 0, ok: 0, err: 0, durTotal: 0, costTotal: 0, tokens: 0 };
+        const agg = byModel.get(e.modelId) ?? {
+          name: e.modelName || e.modelId,
+          execs: 0,
+          ok: 0,
+          err: 0,
+          durTotal: 0,
+          costTotal: 0,
+          tokens: 0,
+        };
         agg.execs += 1;
         if (e.success) agg.ok += 1;
         else agg.err += 1;
@@ -343,9 +360,7 @@ export class AutoLearningSystem {
       // The overall (judged) quality is attributed to each participating model —
       // per-model quality is not tracked per execution; this is the best
       // available signal and is explicitly an approximation.
-      const quality = Number.isFinite(qualityScore)
-        ? Math.min(Math.max(qualityScore, 0), 1)
-        : null;
+      const quality = Number.isFinite(qualityScore) ? Math.min(Math.max(qualityScore, 0), 1) : null;
 
       const rows = entries.map(
         ([modelId, a]) => Prisma.sql`(
@@ -535,7 +550,10 @@ export class AutoLearningSystem {
 
       // Confidence based on sample size (max at 100 samples)
       // sample_count is already a number, no need to parse
-      const sampleCount = typeof best.sample_count === 'number' ? best.sample_count : parseInt(String(best.sample_count), 10);
+      const sampleCount =
+        typeof best.sample_count === 'number'
+          ? best.sample_count
+          : parseInt(String(best.sample_count), 10);
       const confidence = Math.min(sampleCount / 100, 1.0);
 
       return {
@@ -732,11 +750,26 @@ export class AutoLearningSystem {
         FROM strategy_weights
       `;
 
-      const totalInsights = typeof stats[0]?.total_insights === 'string' ? parseInt(stats[0].total_insights) : (stats[0]?.total_insights || 0);
-      const bucketCount = typeof stats[0]?.bucket_count === 'string' ? parseInt(stats[0].bucket_count) : (stats[0]?.bucket_count || 0);
-      const strategiesCountValue = typeof strategiesCount[0]?.count === 'string' ? parseInt(strategiesCount[0].count) : parseInt(String(strategiesCount[0]?.count || 0));
-      const overallQuality = typeof stats[0]?.overall_quality === 'string' ? parseFloat(stats[0].overall_quality) : (stats[0]?.overall_quality || 0);
-      const overallCost = typeof stats[0]?.overall_cost === 'string' ? parseFloat(stats[0].overall_cost) : (stats[0]?.overall_cost || 0);
+      const totalInsights =
+        typeof stats[0]?.total_insights === 'string'
+          ? parseInt(stats[0].total_insights)
+          : stats[0]?.total_insights || 0;
+      const bucketCount =
+        typeof stats[0]?.bucket_count === 'string'
+          ? parseInt(stats[0].bucket_count)
+          : stats[0]?.bucket_count || 0;
+      const strategiesCountValue =
+        typeof strategiesCount[0]?.count === 'string'
+          ? parseInt(strategiesCount[0].count)
+          : parseInt(String(strategiesCount[0]?.count || 0));
+      const overallQuality =
+        typeof stats[0]?.overall_quality === 'string'
+          ? parseFloat(stats[0].overall_quality)
+          : stats[0]?.overall_quality || 0;
+      const overallCost =
+        typeof stats[0]?.overall_cost === 'string'
+          ? parseFloat(stats[0].overall_cost)
+          : stats[0]?.overall_cost || 0;
 
       return {
         totalInsights,

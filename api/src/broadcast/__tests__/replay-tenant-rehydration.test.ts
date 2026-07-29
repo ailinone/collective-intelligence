@@ -44,7 +44,7 @@ describe('rehydrateReplayTenant', () => {
         apiKeyId: API_KEY_ID,
         resolutionScope: 'organization',
       },
-      orgDestination,
+      orgDestination
     );
     expect(tenant).toEqual({
       organizationId: ORG_ID,
@@ -62,7 +62,7 @@ describe('rehydrateReplayTenant', () => {
         apiKeyId: '[REDACTED]',
         resolutionScope: 'organization',
       },
-      orgDestination,
+      orgDestination
     );
     // The org id comes back from the destination's plaintext resolution key;
     // the user/api-key ids stay null (nothing plaintext to restore them from).
@@ -80,7 +80,7 @@ describe('rehydrateReplayTenant', () => {
         apiKeyId: null,
         resolutionScope: 'user',
       },
-      userDestination,
+      userDestination
     );
     expect(tenant.userId).toBe(DEST_TENANT_ID);
     expect(tenant.organizationId).toBeNull();
@@ -95,7 +95,7 @@ describe('rehydrateReplayTenant', () => {
         userId: '[REDACTED]',
         resolutionScope: 'organization',
       },
-      orgDestination,
+      orgDestination
     );
     expect(tenant.organizationId).toBe(ORG_ID); // snapshot wins
     expect(tenant.userId).toBeNull(); // org destination cannot restore a user id
@@ -104,7 +104,7 @@ describe('rehydrateReplayTenant', () => {
   it('derives resolutionScope from the destination when the snapshot value is invalid', () => {
     const fromOrg = rehydrateReplayTenant(
       { organizationId: '[REDACTED]', resolutionScope: '[REDACTED]' },
-      orgDestination,
+      orgDestination
     );
     expect(fromOrg.resolutionScope).toBe('organization');
 
@@ -115,7 +115,7 @@ describe('rehydrateReplayTenant', () => {
   it('preserves a valid chatroom resolutionScope', () => {
     const tenant = rehydrateReplayTenant(
       { organizationId: ORG_ID, resolutionScope: 'chatroom' },
-      orgDestination,
+      orgDestination
     );
     expect(tenant.resolutionScope).toBe('chatroom');
   });
@@ -128,7 +128,7 @@ describe('rehydrateReplayTenant', () => {
         apiKeyId: { nested: true },
         resolutionScope: 7,
       },
-      orgDestination,
+      orgDestination
     );
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     for (const v of [tenant.organizationId, tenant.userId, tenant.apiKeyId]) {

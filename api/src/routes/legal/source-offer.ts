@@ -37,7 +37,8 @@ const sourceOfferRoutes: FastifyPluginAsync = async (fastify) => {
    * GET /source — AGPL §13 Corresponding Source offer (JSON).
    */
   fastify.get('/source', async (_request, reply) => {
-    const modified = !!process.env.AGPL_SOURCE_URL && process.env.AGPL_SOURCE_URL !== CANONICAL_SOURCE;
+    const modified =
+      !!process.env.AGPL_SOURCE_URL && process.env.AGPL_SOURCE_URL !== CANONICAL_SOURCE;
     return reply.status(200).send({
       program: 'Collective Intelligence Engine (ci)',
       copyright: '(C) 2026 Ailin One, Inc.',

@@ -51,7 +51,7 @@ export const DEFAULT_TASK_PROFILER_POLICY: TaskProfilerPolicy = Object.freeze({
 });
 
 export function resolveTaskProfilerPolicy(
-  override?: Partial<TaskProfilerPolicy>,
+  override?: Partial<TaskProfilerPolicy>
 ): TaskProfilerPolicy {
   if (!override) return DEFAULT_TASK_PROFILER_POLICY;
   return {
@@ -245,9 +245,7 @@ export const TABLE_OUTPUT_TERMS: readonly string[] = Object.freeze([
   'markdown-table',
 ]);
 
-export const MARKDOWN_OUTPUT_TERMS: readonly string[] = Object.freeze([
-  'markdown',
-]);
+export const MARKDOWN_OUTPUT_TERMS: readonly string[] = Object.freeze(['markdown']);
 
 export const FRESHNESS_TERMS: readonly string[] = Object.freeze([
   'latest',

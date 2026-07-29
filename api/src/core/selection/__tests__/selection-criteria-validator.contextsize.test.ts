@@ -41,8 +41,6 @@ describe('validateSelectionCriteria — contextSize (10M window)', () => {
 
   it('still rejects negative/NaN', () => {
     expect(validateSelectionCriteria({ ...base, contextSize: -1 }).valid).toBe(false);
-    expect(
-      validateSelectionCriteria({ ...base, contextSize: Number('x') }).valid,
-    ).toBe(false);
+    expect(validateSelectionCriteria({ ...base, contextSize: Number('x') }).valid).toBe(false);
   });
 });

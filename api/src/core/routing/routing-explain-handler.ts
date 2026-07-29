@@ -60,7 +60,7 @@ export interface RoutingExplainResult {
  */
 export async function explainRouting(
   input: RoutingExplainInput,
-  deps: RoutingExplainDeps,
+  deps: RoutingExplainDeps
 ): Promise<RoutingExplainResult> {
   const metrics = deps.metrics ?? noopRoutingTraceMetrics;
   let result: RoutingExplainResult;
@@ -124,10 +124,7 @@ export async function explainRouting(
   return result;
 }
 
-function notFound(
-  kind: 'canonical' | 'offering' | 'route',
-  id: string,
-): RoutingExplainResult {
+function notFound(kind: 'canonical' | 'offering' | 'route', id: string): RoutingExplainResult {
   return {
     resolvedKind: 'not_found',
     canonical: null,

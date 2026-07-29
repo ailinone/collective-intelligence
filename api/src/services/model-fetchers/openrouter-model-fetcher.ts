@@ -94,7 +94,9 @@ export class OpenRouterModelFetcher extends BaseProviderModelFetcher {
     // Derive uses_max_completion_tokens from supported_parameters or capabilities
     const usesMaxCompletionTokens =
       supportedParams.includes('max_completion_tokens') ||
-      capabilities.some((c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research');
+      capabilities.some(
+        (c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research'
+      );
 
     const metadata: Record<string, unknown> = {
       architecture: orModel.architecture,

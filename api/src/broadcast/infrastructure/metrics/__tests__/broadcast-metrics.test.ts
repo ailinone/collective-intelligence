@@ -49,7 +49,7 @@ import { TRACE_ENVELOPE_SCHEMA_VERSION } from '@/broadcast/domain/trace-envelope
  */
 async function readCounterTotal(
   name: string,
-  labels: Record<string, string> = {},
+  labels: Record<string, string> = {}
 ): Promise<number> {
   const metric = promClient.register.getSingleMetric(name);
   if (!metric) return 0;
@@ -57,30 +57,29 @@ async function readCounterTotal(
   let sum = 0;
   for (const v of snap.values) {
     // Histogram _count samples end in `_count`; counters have plain names.
-    if ((v as { metricName?: string }).metricName &&
-        !(v as { metricName: string }).metricName.endsWith('_count') &&
-        !(v as { metricName: string }).metricName.endsWith('_sum')) {
+    if (
+      (v as { metricName?: string }).metricName &&
+      !(v as { metricName: string }).metricName.endsWith('_count') &&
+      !(v as { metricName: string }).metricName.endsWith('_sum')
+    ) {
       continue;
     }
     const matches = Object.entries(labels).every(
-      ([k, want]) => (v.labels as Record<string, string>)[k] === want,
+      ([k, want]) => (v.labels as Record<string, string>)[k] === want
     );
     if (matches) sum += v.value;
   }
   return sum;
 }
 
-async function readSimpleTotal(
-  name: string,
-  labels: Record<string, string> = {},
-): Promise<number> {
+async function readSimpleTotal(name: string, labels: Record<string, string> = {}): Promise<number> {
   const metric = promClient.register.getSingleMetric(name);
   if (!metric) return 0;
   const snap = await metric.get();
   let sum = 0;
   for (const v of snap.values) {
     const matches = Object.entries(labels).every(
-      ([k, want]) => (v.labels as Record<string, string>)[k] === want,
+      ([k, want]) => (v.labels as Record<string, string>)[k] === want
     );
     if (matches) sum += v.value;
   }
@@ -89,7 +88,7 @@ async function readSimpleTotal(
 
 async function readHistogramCount(
   name: string,
-  labels: Record<string, string> = {},
+  labels: Record<string, string> = {}
 ): Promise<number> {
   const metric = promClient.register.getSingleMetric(name);
   if (!metric) return 0;
@@ -108,7 +107,10 @@ async function readHistogramCount(
 // ─── Fixtures (trimmed from delivery-executor.test) ─────────────────────
 
 function makeMockDb(): DeliveryPrismaRunner {
-  const rows = new Map<string, { envelopeId: string; destinationId: string; status: string; attempts: number }>();
+  const rows = new Map<
+    string,
+    { envelopeId: string; destinationId: string; status: string; attempts: number }
+  >();
   const key = (e: string, d: string) => `${e}|${d}`;
   return {
     broadcastDelivery: {
@@ -154,7 +156,9 @@ function makeMockDb(): DeliveryPrismaRunner {
   } as unknown as DeliveryPrismaRunner;
 }
 
-function makeCipher(config: Record<string, unknown> = { url: 'https://example.com/hook' }): DestinationConfigCipher {
+function makeCipher(
+  config: Record<string, unknown> = { url: 'https://example.com/hook' }
+): DestinationConfigCipher {
   return {
     encrypt: vi.fn(),
     decrypt: vi.fn(async () => config),
@@ -202,8 +206,17 @@ function makeEnvelope(): TraceEnvelope {
       timing: { startedAt: now, endedAt: now, latencyMs: 10 },
       streaming: false,
     },
-    routing: { selectedProvider: 'openai', reason: 'primary', candidatesConsidered: [], retryAttempts: 0 },
-    content: { messages: [{ role: 'user', content: 'hi' }], choices: [], multimodalStripped: false },
+    routing: {
+      selectedProvider: 'openai',
+      reason: 'primary',
+      candidatesConsidered: [],
+      retryAttempts: 0,
+    },
+    content: {
+      messages: [{ role: 'user', content: 'hi' }],
+      choices: [],
+      multimodalStripped: false,
+    },
     custom: {},
     status: { code: 'ok' },
   } as TraceEnvelope;
@@ -409,7 +422,7 @@ describe('broadcast-metrics — label cardinality guardrails', () => {
       (v) =>
         v.labels.destination_type === 'webhook' &&
         v.labels.outcome === 'success' &&
-        v.labels.error_class === 'none',
+        v.labels.error_class === 'none'
     );
     expect(sample).toBeDefined();
     const keys = Object.keys(sample!.labels).sort();

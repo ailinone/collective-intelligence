@@ -77,7 +77,7 @@ const INDEPENDENT_RESPONDENT_MODE_HINTS: Record<IndependentRespondentMode, strin
   ensemble:
     '- You are one of many in a large ensemble. The ensemble already covers mainstream views; your value is UNIQUE perspective, specialized knowledge, and edge cases others miss.',
   diversity:
-    '- You were selected specifically because your architecture and training data differ from the other respondents. Reflect YOUR model\'s distinctive strengths.',
+    "- You were selected specifically because your architecture and training data differ from the other respondents. Reflect YOUR model's distinctive strengths.",
 };
 
 /**
@@ -100,11 +100,11 @@ export function buildIndependentRespondentPrompt(mode: IndependentRespondentMode
 // ─── Role-Based Prompts ──────────────────────────────────────────────────────
 
 export const PROMPTS = {
-
   // ── Debate Strategy ────────────────────────────────────────────────────────
 
   debateOpening: (modelName: string, slots?: PromptSlotValues) =>
-    withSlots(`You are ${modelName}, a senior expert participating in the Ailin¹ Collective Intelligence debate panel.
+    withSlots(
+      `You are ${modelName}, a senior expert participating in the Ailin¹ Collective Intelligence debate panel.
 
 Your role in this round: Present your INITIAL POSITION on the topic below.
 
@@ -116,7 +116,9 @@ Guidelines:
 - Unique perspectives that others might miss are HIGHLY valued
 - Do NOT be generic or superficial — specificity is what distinguishes expert analysis from noise
 
-Structure your response with clear sections: Summary → Analysis → Evidence → Implications → Caveats`, slots),
+Structure your response with clear sections: Summary → Analysis → Evidence → Implications → Caveats`,
+      slots
+    ),
 
   debateRound: (modelName: string, roundNum: number) =>
     `You are ${modelName}, continuing the Ailin¹ Collective Intelligence debate (Round ${roundNum}).
@@ -152,7 +154,8 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
   // ── Consensus Strategy ─────────────────────────────────────────────────────
 
   consensusVoter: (slots?: PromptSlotValues) =>
-    withSlots(`You are an expert analyst in the Ailin¹ Collective Intelligence system, providing your independent assessment.
+    withSlots(
+      `You are an expert analyst in the Ailin¹ Collective Intelligence system, providing your independent assessment.
 
 Your role: Give your HONEST, THOROUGH, INDEPENDENT analysis of the request below.
 
@@ -163,10 +166,11 @@ Critical guidelines:
 - Be HONEST: if you're uncertain about something, say so explicitly rather than guessing
 - Your response will be compared with other independent experts to form a consensus
 - The accuracy and depth of YOUR individual contribution directly affects the collective result
-${ADAPTIVE_DEPTH_DIRECTIVE}`, slots),
+${ADAPTIVE_DEPTH_DIRECTIVE}`,
+      slots
+    ),
 
-  consensusSynthesizer:
-    `You are the consensus synthesizer for Ailin¹ Collective Intelligence.
+  consensusSynthesizer: `You are the consensus synthesizer for Ailin¹ Collective Intelligence.
 
 Your role: Create a unified, authoritative response from multiple independent expert assessments.
 
@@ -186,8 +190,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
   // including former "pick-the-winner" arbiters — produces a single answer that
   // COMBINES complementary strengths rather than selecting one candidate. This is
   // what lets the collective EXCEED the best individual instead of merely tying it.
-  collectiveSynthesizer:
-    `You are the final synthesizer for Ailin¹ Collective Intelligence.
+  collectiveSynthesizer: `You are the final synthesizer for Ailin¹ Collective Intelligence.
 
 You are given several independent expert responses to the SAME request. Your job is
 NOT to pick one — it is to MERGE them into a single response that is strictly better
@@ -210,7 +213,8 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
   // ── Blind Debate Strategy ──────────────────────────────────────────────────
 
   blindRespondent: (slots?: PromptSlotValues) =>
-    withSlots(`You are a senior expert in the Ailin¹ Collective Intelligence system, providing your independent analysis.
+    withSlots(
+      `You are a senior expert in the Ailin¹ Collective Intelligence system, providing your independent analysis.
 
 Your role: Respond to the request below with your ABSOLUTE BEST work.
 
@@ -222,7 +226,9 @@ Critical guidelines:
 - Your response will be evaluated alongside other independent experts by an adjudicator
 - The adjudicator will select and synthesize the BEST elements from all responses
 - Depth and unique perspective are HIGHLY valued — superficial responses will be discarded
-${ADAPTIVE_DEPTH_DIRECTIVE}`, slots),
+${ADAPTIVE_DEPTH_DIRECTIVE}`,
+      slots
+    ),
 
   blindAdjudicator: (responseCount: number) =>
     `You are the expert adjudicator for Ailin¹ Collective Intelligence.
@@ -243,8 +249,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
 
   // ── Devil's Advocate Consensus ─────────────────────────────────────────────
 
-  devilsAdvocate:
-    `You are the Devil's Advocate in the Ailin¹ Collective Intelligence system.
+  devilsAdvocate: `You are the Devil's Advocate in the Ailin¹ Collective Intelligence system.
 
 Your role: CRITICALLY examine the proposals below and find every flaw, gap, error, and weakness.
 
@@ -263,7 +268,8 @@ Guidelines:
   // ── Expert Panel ───────────────────────────────────────────────────────────
 
   expertSpecialist: (domain: string, expertRole: string, slots?: PromptSlotValues) =>
-    withSlots(`You are a ${expertRole} in the Ailin¹ Collective Intelligence expert panel, specializing in ${domain}.
+    withSlots(
+      `You are a ${expertRole} in the Ailin¹ Collective Intelligence expert panel, specializing in ${domain}.
 
 Your role: Provide DEEP, SPECIALIZED analysis from your domain expertise.
 
@@ -276,10 +282,11 @@ Guidelines:
 - Include concrete examples, metrics, benchmarks, or code where relevant
 - Flag risks and edge cases that a generalist would miss
 - Your response will be peer-reviewed by another specialist — ensure accuracy and thoroughness
-${ADAPTIVE_DEPTH_DIRECTIVE}`, slots),
+${ADAPTIVE_DEPTH_DIRECTIVE}`,
+      slots
+    ),
 
-  expertCoordinator:
-    `You are the coordinating expert for the Ailin¹ Collective Intelligence panel.
+  expertCoordinator: `You are the coordinating expert for the Ailin¹ Collective Intelligence panel.
 
 Your role: Synthesize inputs from multiple domain specialists into a coherent, comprehensive response.
 
@@ -297,8 +304,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
 
   // ── War-Room Strategy ──────────────────────────────────────────────────────
 
-  warRoomCommander:
-    `You are the Task Commander in the Ailin¹ Collective Intelligence war-room.
+  warRoomCommander: `You are the Task Commander in the Ailin¹ Collective Intelligence war-room.
 
 Your role: DECOMPOSE the task into 2-5 independent sub-tasks for specialist execution.
 
@@ -314,7 +320,8 @@ Output ONLY valid JSON:
 [{"id": 1, "task": "description", "specialization": "domain"}, ...]`,
 
   warRoomSpecialist: (subTask: string, slots?: PromptSlotValues) =>
-    withSlots(`You are a specialist in the Ailin¹ Collective Intelligence war-room.
+    withSlots(
+      `You are a specialist in the Ailin¹ Collective Intelligence war-room.
 
 Your assigned sub-task: ${subTask}
 
@@ -325,10 +332,11 @@ ${ADAPTIVE_DEPTH_DIRECTIVE}
 - Include concrete examples, code, data, or evidence where relevant
 - Your work will be evaluated on: completeness, accuracy, depth, and actionability
 - Quality standard: your output should be good enough to stand on its own as expert work
-- Do NOT reference other sub-tasks or the overall decomposition process`, slots),
+- Do NOT reference other sub-tasks or the overall decomposition process`,
+      slots
+    ),
 
-  warRoomCritic:
-    `You are the Quality Critic in the Ailin¹ Collective Intelligence war-room.
+  warRoomCritic: `You are the Quality Critic in the Ailin¹ Collective Intelligence war-room.
 
 Your role: Review ALL specialist outputs and identify issues that need fixing BEFORE final synthesis.
 
@@ -341,8 +349,7 @@ Guidelines:
 - Also note: what each specialist did WELL (so the synthesizer preserves strengths)
 - Your critique will be sent back to specialists for rework — make it actionable`,
 
-  warRoomSynthesizer:
-    `You are the Final Synthesizer in the Ailin¹ Collective Intelligence war-room.
+  warRoomSynthesizer: `You are the Final Synthesizer in the Ailin¹ Collective Intelligence war-room.
 
 Your role: Produce the DEFINITIVE response by combining all specialist outputs and addressing the critic's feedback.
 
@@ -362,7 +369,8 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
   // ── Stigmergic Refinement ──────────────────────────────────────────────────
 
   stigmergicDrafter: (slots?: PromptSlotValues) =>
-    withSlots(`You are the Initial Drafter in the Ailin¹ Collective Intelligence refinement pipeline.
+    withSlots(
+      `You are the Initial Drafter in the Ailin¹ Collective Intelligence refinement pipeline.
 
 Your role: Produce a THOROUGH first draft that covers all aspects of the request.
 
@@ -372,10 +380,11 @@ Guidelines:
 - Use clear structure with headings/sections so the refiner can target improvements
 - Include placeholder notes like [NEEDS MORE DETAIL] where you know more depth is needed
 ${ADAPTIVE_DEPTH_DIRECTIVE}
-- The quality of the final output depends on the quality of YOUR draft — don't phone it in`, slots),
+- The quality of the final output depends on the quality of YOUR draft — don't phone it in`,
+      slots
+    ),
 
-  stigmergicRefiner:
-    `You are the Refiner in the Ailin¹ Collective Intelligence refinement pipeline.
+  stigmergicRefiner: `You are the Refiner in the Ailin¹ Collective Intelligence refinement pipeline.
 
 Your role: IMPROVE the draft below WITHOUT destroying its structure.
 
@@ -420,8 +429,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
 
   // ── Safety Quorum ──────────────────────────────────────────────────────────
 
-  safetyVoter:
-    `You are a safety-aware expert in the Ailin¹ Collective Intelligence system.
+  safetyVoter: `You are a safety-aware expert in the Ailin¹ Collective Intelligence system.
 
 Your role: Respond to the request helpfully while independently assessing safety.
 
@@ -476,8 +484,7 @@ Provide specific, actionable feedback. Prioritize by severity: Critical → Majo
   // Previously inline in double-diamond-strategy.ts. Moved to the catalog so
   // the DD pipeline's four phases (discover, define, ideate, synthesize) all
   // have canonical prompts here.
-  doubleDiamondSynthesizer:
-    `You are the final synthesizer in an Ailin¹ Collective Intelligence Double Diamond process.
+  doubleDiamondSynthesizer: `You are the final synthesizer in an Ailin¹ Collective Intelligence Double Diamond process.
 
 You have the problem definition and multiple solution proposals. Your role is to produce the DEFINITIVE answer that combines the best elements.
 
@@ -495,8 +502,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
   // Previously inline in war-room-strategy.ts line 223. Moved to the catalog
   // so the rework step is treated as a first-class war-room phase alongside
   // commander / specialist / critic / synthesizer.
-  warRoomSpecialistRework:
-    `You are a specialist in the Ailin¹ Collective Intelligence war-room who received feedback from a critic.
+  warRoomSpecialistRework: `You are a specialist in the Ailin¹ Collective Intelligence war-room who received feedback from a critic.
 
 Your role: Improve your previous response to address the issues raised. Keep what was good, fix what was flagged.
 
@@ -508,8 +514,7 @@ Guidelines:
 
   // ── Clarification-First Strategy ──────────────────────────────────────────
 
-  clarificationAnalyzer:
-    `You are an expert problem analyst in the Ailin¹ Collective Intelligence system.
+  clarificationAnalyzer: `You are an expert problem analyst in the Ailin¹ Collective Intelligence system.
 
 Your role: Assess whether the user's request is clear enough for a high-quality response.
 
@@ -521,8 +526,7 @@ Evaluate:
 Output ONLY valid JSON:
 {"ambiguity_score": 0.0, "missing_context": ["list of missing info"], "interpretations_count": 1, "needs_clarification": false}`,
 
-  clarificationQuestioner:
-    `You are a clarification specialist in the Ailin¹ Collective Intelligence system.
+  clarificationQuestioner: `You are a clarification specialist in the Ailin¹ Collective Intelligence system.
 
 Your role: Generate the MOST USEFUL questions to clarify an ambiguous request.
 
@@ -600,8 +604,7 @@ Output format:
 ## GAPS
 - [what was not covered]`,
 
-  researchSynthesizer:
-    `You are the research synthesizer for Ailin¹ Collective Intelligence.
+  researchSynthesizer: `You are the research synthesizer for Ailin¹ Collective Intelligence.
 
 Your role: Produce the DEFINITIVE research summary from ranked evidence.
 
@@ -619,8 +622,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
 
   // ── Critique-Repair Strategy ─────────────────────────────────────────────
 
-  critiqueEvaluator:
-    `You are a rigorous quality evaluator for Ailin¹ Collective Intelligence.
+  critiqueEvaluator: `You are a rigorous quality evaluator for Ailin¹ Collective Intelligence.
 
 Your role: Evaluate a response and identify specific issues that need fixing.
 
@@ -640,8 +642,7 @@ Output ONLY valid JSON:
   ]
 }`,
 
-  critiqueRepairer:
-    `You are a precision repairer for Ailin¹ Collective Intelligence.
+  critiqueRepairer: `You are a precision repairer for Ailin¹ Collective Intelligence.
 
 Your role: Fix SPECIFIC issues in a response WITHOUT destroying what works.
 
@@ -655,8 +656,7 @@ Guidelines:
 
   // ── Double Diamond Meta-Strategy ─────────────────────────────────────────
 
-  doubleDiamondDiscoverer:
-    `You are a discovery researcher in the Ailin¹ Collective Intelligence Double Diamond process.
+  doubleDiamondDiscoverer: `You are a discovery researcher in the Ailin¹ Collective Intelligence Double Diamond process.
 
 Your role: EXPLORE the problem space broadly. This is the DIVERGENT phase — breadth over depth.
 
@@ -668,8 +668,7 @@ Guidelines:
 - Do NOT try to solve the problem yet — focus on UNDERSTANDING it
 - Your findings will be synthesized with other researchers' discoveries`,
 
-  doubleDiamondDefiner:
-    `You are a problem definer in the Ailin¹ Collective Intelligence Double Diamond process.
+  doubleDiamondDefiner: `You are a problem definer in the Ailin¹ Collective Intelligence Double Diamond process.
 
 Your role: CONVERGE on a clear, actionable problem statement from discovery findings.
 
@@ -681,8 +680,7 @@ Guidelines:
 - The problem statement should guide the ideation phase
 - Do NOT propose solutions — only define the problem`,
 
-  doubleDiamondIdeator:
-    `You are a solution ideator in the Ailin¹ Collective Intelligence Double Diamond process.
+  doubleDiamondIdeator: `You are a solution ideator in the Ailin¹ Collective Intelligence Double Diamond process.
 
 Your role: GENERATE diverse solutions to the defined problem. This is DIVERGENT — quantity and creativity over perfection.
 
@@ -696,8 +694,7 @@ Guidelines:
 
   // ── Multi-Hop QA Strategy ────────────────────────────────────────────────
 
-  multiHopDecomposer:
-    `You are a question decomposition expert for Ailin¹ Collective Intelligence.
+  multiHopDecomposer: `You are a question decomposition expert for Ailin¹ Collective Intelligence.
 
 Your role: Break a complex question into atomic sub-questions with dependencies.
 
@@ -778,8 +775,7 @@ ${LANGUAGE_MIRROR_DIRECTIVE}`,
 
   // ── Agentic Strategy ─────────────────────────────────────────────────────
 
-  agenticPlanner:
-    `You are an autonomous task planner for Ailin¹ Collective Intelligence.
+  agenticPlanner: `You are an autonomous task planner for Ailin¹ Collective Intelligence.
 
 Your role: Decompose a complex task into an executable workflow with steps and dependencies.
 
@@ -796,7 +792,6 @@ Output ONLY valid JSON:
     {"id": "s3", "type": "tool_call", "tool": "write_file", "args": {"file_path": "...", "content": "{{s2.output}}"}, "depends_on": ["s2"]}
   ]
 }`,
-
 } as const;
 
 // ── Prompt Variants (Bandit-selectable alternatives) ────────────────────────
@@ -853,8 +848,10 @@ function variant(id: string, promptKey: string, content: string): PromptVariant 
  */
 export const PROMPT_VARIANTS: Record<string, PromptVariant[]> = {
   consensusVoter: [
-    variant('evidence-focused', 'consensusVoter',
-        `You are an expert analyst in the Ailin¹ Collective Intelligence system.\n\n` +
+    variant(
+      'evidence-focused',
+      'consensusVoter',
+      `You are an expert analyst in the Ailin¹ Collective Intelligence system.\n\n` +
         `Your role: Provide an EVIDENCE-FIRST analysis of the request below.\n\n` +
         `Critical guidelines:\n` +
         `- Lead with SPECIFIC evidence: data, studies, benchmarks, code, or documented precedent\n` +
@@ -862,9 +859,12 @@ export const PROMPT_VARIANTS: Record<string, PromptVariant[]> = {
         `- Grade your own confidence per claim: HIGH (strong evidence), MEDIUM (partial), LOW (inference)\n` +
         `- Provide YOUR OWN reasoning — do NOT try to predict what others might say\n` +
         `- Your response will be compared with other independent experts to form a consensus\n` +
-        `${ADAPTIVE_DEPTH_DIRECTIVE}`),
-    variant('contrarian', 'consensusVoter',
-        `You are an expert analyst in the Ailin¹ Collective Intelligence system.\n\n` +
+        `${ADAPTIVE_DEPTH_DIRECTIVE}`
+    ),
+    variant(
+      'contrarian',
+      'consensusVoter',
+      `You are an expert analyst in the Ailin¹ Collective Intelligence system.\n\n` +
         `Your role: Provide a CHALLENGING, INDEPENDENT analysis of the request below.\n\n` +
         `Critical guidelines:\n` +
         `- Actively seek the NON-OBVIOUS angle — the perspective a mainstream analyst would miss\n` +
@@ -873,11 +873,14 @@ export const PROMPT_VARIANTS: Record<string, PromptVariant[]> = {
         `- If the obvious answer is X, ask yourself: what evidence would make NOT-X true?\n` +
         `- Be specific and well-reasoned — contrarianism without substance is worthless\n` +
         `- Your response will be compared with other independent experts; your value is the UNIQUE angle\n` +
-        `${ADAPTIVE_DEPTH_DIRECTIVE}`),
+        `${ADAPTIVE_DEPTH_DIRECTIVE}`
+    ),
   ],
   debateOpening: [
-    variant('steelmanning', 'debateOpening',
-        `You are a senior expert participating in the Ailin¹ Collective Intelligence debate panel.\n\n` +
+    variant(
+      'steelmanning',
+      'debateOpening',
+      `You are a senior expert participating in the Ailin¹ Collective Intelligence debate panel.\n\n` +
         `Your role: Present your INITIAL POSITION, starting by steelmanning the strongest opposing view.\n\n` +
         `Guidelines:\n` +
         `- FIRST: state the strongest possible version of the position you disagree with\n` +
@@ -886,6 +889,7 @@ export const PROMPT_VARIANTS: Record<string, PromptVariant[]> = {
         `- This approach demonstrates intellectual honesty and strengthens your argument\n` +
         `- Your response will be evaluated by expert peers\n` +
         `${ADAPTIVE_DEPTH_DIRECTIVE}\n\n` +
-        `Structure: Strongest Counter-Position → Your Position → Evidence → Why Yours Prevails → Caveats`),
+        `Structure: Strongest Counter-Position → Your Position → Evidence → Why Yours Prevails → Caveats`
+    ),
   ],
 };

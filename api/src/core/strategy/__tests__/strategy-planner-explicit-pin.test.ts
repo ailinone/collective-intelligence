@@ -46,10 +46,7 @@ describe('planStrategy — explicit pin by routeId', () => {
 
   it('non-matching pin → no_viable_strategy', () => {
     const result = planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-1' }),
-        makeResult({ routeId: 'r-2' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-1' }), makeResult({ routeId: 'r-2' })],
       context: {
         ...STANDARD_CONTEXT,
         explicitModelPin: {
@@ -129,10 +126,7 @@ describe('planStrategy — pin overrides high-risk collective strategy', () => {
 describe('planStrategy — allowFallbackForExplicitPin true does NOT substitute', () => {
   it('policy allows fallback BUT MVP 5B planner records intent without substituting', () => {
     const result = planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-pinned' }),
-        makeResult({ routeId: 'r-alt-healthy' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-pinned' }), makeResult({ routeId: 'r-alt-healthy' })],
       context: {
         ...STANDARD_CONTEXT,
         explicitModelPin: {
@@ -147,8 +141,6 @@ describe('planStrategy — allowFallbackForExplicitPin true does NOT substitute'
     expect(result.plan.strategy).toBe('single_best');
     expect(result.plan.selectedRouteIds).toEqual(['r-pinned']);
     // The reason captures the future-policy hint without actually substituting.
-    expect(result.plan.reasons).toContain(
-      'policy_allows_fallback_but_mvp_5b_does_not_substitute',
-    );
+    expect(result.plan.reasons).toContain('policy_allows_fallback_but_mvp_5b_does_not_substitute');
   });
 });

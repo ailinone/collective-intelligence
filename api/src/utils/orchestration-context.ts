@@ -41,12 +41,7 @@
  */
 
 import type { FastifyRequest } from 'fastify';
-import type {
-  OrchestrationContext,
-  TaskType,
-  Model,
-  ChatMessage,
-} from '@/types';
+import type { OrchestrationContext, TaskType, Model, ChatMessage } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
 /**
@@ -76,7 +71,7 @@ export const SEMANTIC_QUERY_MAX_CHARS = 200;
  */
 export function extractSemanticQueryFromMessages(
   messages: ReadonlyArray<ChatMessage> | undefined,
-  maxChars: number = SEMANTIC_QUERY_MAX_CHARS,
+  maxChars: number = SEMANTIC_QUERY_MAX_CHARS
 ): string | undefined {
   if (!messages || messages.length === 0) return undefined;
 
@@ -101,7 +96,7 @@ export function extractSemanticQueryFromMessages(
             'type' in p &&
             (p as { type?: unknown }).type === 'text' &&
             'text' in p &&
-            typeof (p as { text?: unknown }).text === 'string',
+            typeof (p as { text?: unknown }).text === 'string'
         )
         .map((p) => p.text)
         .join(' ');
@@ -123,9 +118,7 @@ export function extractSemanticQueryFromMessages(
  * `chat-request-extended.ts`: virtual aliases are profile selectors,
  * not model pins, so they should never end up in `preferredModelIds`.
  */
-export function normalizePreferredModel(
-  model: unknown,
-): string[] | undefined {
+export function normalizePreferredModel(model: unknown): string[] | undefined {
   if (typeof model !== 'string') return undefined;
   const trimmed = model.trim();
   if (!trimmed) return undefined;
@@ -165,15 +158,22 @@ export function createOrchestrationContext(
 ): OrchestrationContext {
   const extendedRequest = request as ExtendedFastifyRequest;
   const user = extendedRequest.user;
-  const userObj = user && typeof user === 'object' && !Buffer.isBuffer(user) && 'organizationId' in user
-    ? user as { userId: string; organizationId: string; roles: string[]; email: string; name: string }
-    : undefined;
+  const userObj =
+    user && typeof user === 'object' && !Buffer.isBuffer(user) && 'organizationId' in user
+      ? (user as {
+          userId: string;
+          organizationId: string;
+          roles: string[];
+          email: string;
+          name: string;
+        })
+      : undefined;
   const organizationId = extendedRequest.organizationId || userObj?.organizationId || '';
   const userId = extendedRequest.userId || userObj?.userId || '';
 
   const trimmedSemanticQuery = options?.semanticQuery?.trim();
   const filteredPreferredIds = options?.preferredModelIds?.filter(
-    (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    (id): id is string => typeof id === 'string' && id.trim().length > 0
   );
 
   return {
@@ -207,17 +207,15 @@ export function enrichContextWithIntent(
   intent: {
     semanticQuery?: string;
     preferredModelIds?: string[];
-  },
+  }
 ): OrchestrationContext {
   const trimmedSemanticQuery = intent.semanticQuery?.trim();
   const filteredPreferredIds = intent.preferredModelIds?.filter(
-    (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    (id): id is string => typeof id === 'string' && id.trim().length > 0
   );
 
-  const hasNewSemantic =
-    trimmedSemanticQuery !== undefined && trimmedSemanticQuery.length > 0;
-  const hasNewPreferred =
-    filteredPreferredIds !== undefined && filteredPreferredIds.length > 0;
+  const hasNewSemantic = trimmedSemanticQuery !== undefined && trimmedSemanticQuery.length > 0;
+  const hasNewPreferred = filteredPreferredIds !== undefined && filteredPreferredIds.length > 0;
 
   if (!hasNewSemantic && !hasNewPreferred) return context;
 

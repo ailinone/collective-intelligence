@@ -32,7 +32,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-R4 — HuggingFace classification', () => {
-
   describe('provider validation status', () => {
     it('HF_PROVIDER_STATUS is provider_probe_validated', () => {
       expect(HF_PROVIDER_STATUS).toBe('provider_probe_validated');

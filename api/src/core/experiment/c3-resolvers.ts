@@ -48,16 +48,43 @@ const log = logger.child({ component: 'c3-resolvers' });
  */
 export const CANONICAL_MODEL_OWNERS = new Set<string>([
   // Closed frontier
-  'openai', 'anthropic', 'google', 'x-ai', 'xai',
+  'openai',
+  'anthropic',
+  'google',
+  'x-ai',
+  'xai',
   // Open-weight frontier
-  'meta', 'meta-llama', 'mistral', 'mistralai', 'qwen', 'qwen-team',
-  'deepseek', 'deepseek-ai', 'cohere',
-  'moonshotai', 'moonshot', 'kimi-team',
-  'microsoft', 'ibm', 'ibm-granite',
-  '01-ai', 'baichuan', 'internlm', 'allenai', 'ai21',
-  'databricks', 'snowflake', 'nvidia', 'reka',
-  'sambanova', 'upstage', 'minimax', 'perplexity',
-  'jamba', 'gemma', 'google-deepmind',
+  'meta',
+  'meta-llama',
+  'mistral',
+  'mistralai',
+  'qwen',
+  'qwen-team',
+  'deepseek',
+  'deepseek-ai',
+  'cohere',
+  'moonshotai',
+  'moonshot',
+  'kimi-team',
+  'microsoft',
+  'ibm',
+  'ibm-granite',
+  '01-ai',
+  'baichuan',
+  'internlm',
+  'allenai',
+  'ai21',
+  'databricks',
+  'snowflake',
+  'nvidia',
+  'reka',
+  'sambanova',
+  'upstage',
+  'minimax',
+  'perplexity',
+  'jamba',
+  'gemma',
+  'google-deepmind',
   // Hub providers expose models under their own namespace too — allow the
   // namespace but the resolver still filters by canonical model name inside.
   'huggingface',
@@ -69,7 +96,12 @@ export const CANONICAL_MODEL_OWNERS = new Set<string>([
  * reproducibility because the underlying model changes per request.
  */
 const ROUTING_ALIAS_NAMES = new Set<string>([
-  'auto', 'default', 'router', 'dynamic', 'optimized', 'optimised',
+  'auto',
+  'default',
+  'router',
+  'dynamic',
+  'optimized',
+  'optimised',
 ]);
 
 /**
@@ -78,9 +110,23 @@ const ROUTING_ALIAS_NAMES = new Set<string>([
  * across the codebase (no second source of truth).
  */
 const KNOWN_AGGREGATORS = new Set<string>([
-  'aihubmix', 'cometapi', 'openrouter', 'aiml', 'nanogpt', 'edenai',
-  'novita', 'routeway', 'requesty', 'helicone', 'heliconeai', 'poe',
-  'ai302', '302ai', 'imagerouter', 'vercel-ai-gateway', 'orqai',
+  'aihubmix',
+  'cometapi',
+  'openrouter',
+  'aiml',
+  'nanogpt',
+  'edenai',
+  'novita',
+  'routeway',
+  'requesty',
+  'helicone',
+  'heliconeai',
+  'poe',
+  'ai302',
+  '302ai',
+  'imagerouter',
+  'vercel-ai-gateway',
+  'orqai',
   // huggingface hosts community models under arbitrary user namespaces.
   // Classifying as 'aggregator' forces the budget resolver to require a
   // canonical owner — otherwise random user-namespaced finetunes like
@@ -128,9 +174,20 @@ export type TopTierClass =
 
 const FRONTIER_CLOSED_FAMILIES = ['gpt-', 'claude', 'gemini', 'grok', 'o1', 'o3', 'o4'];
 const OPEN_WEIGHT_FRONTIER_FAMILIES = [
-  'llama-3', 'llama3', 'qwen3', 'qwen-2.5', 'qwen2.5',
-  'deepseek-v3', 'deepseek-r1', 'mistral-large', 'magistral',
-  'kimi', 'k2-', 'command-a', 'command-r', 'jamba',
+  'llama-3',
+  'llama3',
+  'qwen3',
+  'qwen-2.5',
+  'qwen2.5',
+  'deepseek-v3',
+  'deepseek-r1',
+  'mistral-large',
+  'magistral',
+  'kimi',
+  'k2-',
+  'command-a',
+  'command-r',
+  'jamba',
 ];
 const REASONING_HINTS = ['reasoning', 'thinking_mode', 'deep_research'];
 
@@ -148,8 +205,10 @@ function classifyTopTier(args: {
   if (args.providerTier === 'local') return 'local_top';
 
   // Reasoning-premium: model has reasoning capability OR name matches
-  if (caps.some((c) => REASONING_HINTS.includes(c)) ||
-      /\b(o1|o3|o4|deepseek-r1|reasoner|thinking)\b/.test(id)) {
+  if (
+    caps.some((c) => REASONING_HINTS.includes(c)) ||
+    /\b(o1|o3|o4|deepseek-r1|reasoner|thinking)\b/.test(id)
+  ) {
     return 'reasoning_premium';
   }
 
@@ -177,7 +236,7 @@ function classifyTopTier(args: {
 // ─── Common types ────────────────────────────────────────────────────────
 
 export interface TopTierCandidate {
-  providerId: string;       // provider.name
+  providerId: string; // provider.name
   modelId: string;
   modelFamily?: string;
   canonicalModelId?: string;
@@ -233,7 +292,8 @@ export interface BudgetCandidate {
  *   per-provider cap, model owner allowlist, capability filter). The
  *   "scientific" exclusion path.
  */
-export type PolicySource = 'debugPolicy' | 'operationalReadinessPolicy' | 'experimentSelectionPolicy';
+export type PolicySource =
+  'debugPolicy' | 'operationalReadinessPolicy' | 'experimentSelectionPolicy';
 
 export interface BlockedCandidate {
   providerId: string;
@@ -279,7 +339,10 @@ export interface ResolverOutput<T> {
 
 const RESOLVER_CACHE_TTL_MS = Number(process.env.C3_RESOLVER_CACHE_TTL_MS ?? 30_000);
 
-interface CachedEntry<T> { value: T; expiresAt: number; }
+interface CachedEntry<T> {
+  value: T;
+  expiresAt: number;
+}
 
 /**
  * Per-options cache. Critical because the canary builder calls with
@@ -298,7 +361,9 @@ class KeyedTTLCache<T> {
     return value;
   }
 
-  invalidate(): void { this.map.clear(); }
+  invalidate(): void {
+    this.map.clear();
+  }
 }
 
 const topTierCache = new KeyedTTLCache<ResolverOutput<TopTierCandidate>>();
@@ -325,10 +390,10 @@ async function doResolveTopTier(opts?: {
   maxProviders?: number;
   perProvider?: number;
 }): Promise<ResolverOutput<TopTierCandidate>> {
-  const maxProviders = opts?.maxProviders
-    ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? 30);
-  const perProvider = opts?.perProvider
-    ?? Number(process.env.EXPERIMENT_TOP_TIER_PER_PROVIDER ?? 1);
+  const maxProviders =
+    opts?.maxProviders ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? 30);
+  const perProvider =
+    opts?.perProvider ?? Number(process.env.EXPERIMENT_TOP_TIER_PER_PROVIDER ?? 1);
   const minContext = Number(process.env.EXPERIMENT_TOP_TIER_MIN_CONTEXT ?? 4096);
   const includeLocal = (process.env.EXPERIMENT_TOP_TIER_INCLUDE_LOCAL ?? 'true') === 'true';
 
@@ -353,14 +418,13 @@ async function doResolveTopTier(opts?: {
         contextWindow: { gte: minContext },
         // Prisma JSON filter: capabilities array contains "chat"
         capabilities: { array_contains: ['chat'] },
-        ...(includeLocal ? {} : {
-          provider: { name: { not: { startsWith: 'ollama' } } },
-        }),
+        ...(includeLocal
+          ? {}
+          : {
+              provider: { name: { not: { startsWith: 'ollama' } } },
+            }),
       },
-      orderBy: [
-        { contextWindow: 'desc' },
-        { inputCostPer1k: 'asc' },
-      ],
+      orderBy: [{ contextWindow: 'desc' }, { inputCostPer1k: 'asc' }],
       include: { provider: true },
       // Wide window: we'll dedupe-by-provider in JS and pick the top per group.
       take: 5000,
@@ -371,7 +435,17 @@ async function doResolveTopTier(opts?: {
     return {
       candidates: [],
       blocked: [],
-      funnel: { stages: [{ name: 'db_query', input: 0, output: 0, removed: 0, mainRemovalReasons: { db_error: 1 } }] },
+      funnel: {
+        stages: [
+          {
+            name: 'db_query',
+            input: 0,
+            output: 0,
+            removed: 0,
+            mainRemovalReasons: { db_error: 1 },
+          },
+        ],
+      },
       warnings: [`db_query_failed: ${msg}`],
       reasonIfZero: 'db_query_failed',
     };
@@ -423,7 +497,11 @@ async function doResolveTopTier(opts?: {
   // operator-excluded for a dev workaround.
   const operationallyUnhealthy = new Set<string>();
   if (hubSummary) {
-    for (const p of [...(hubSummary.auth_failed ?? []), ...(hubSummary.no_credits ?? []), ...(hubSummary.temporarily_unavailable ?? [])]) {
+    for (const p of [
+      ...(hubSummary.auth_failed ?? []),
+      ...(hubSummary.no_credits ?? []),
+      ...(hubSummary.temporarily_unavailable ?? []),
+    ]) {
       const baseId = p.includes(':') ? p.split(':')[0]! : p;
       operationallyUnhealthy.add(baseId.toLowerCase());
     }
@@ -432,7 +510,9 @@ async function doResolveTopTier(opts?: {
   // Explicit blocklist (operator override). Comma-separated provider IDs.
   const debugBlocklist = new Set<string>(
     (process.env.EXPERIMENT_BLOCKED_PROVIDERS ?? '')
-      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
   );
   // 2026-05-12 (ramp-final): some providers have tiered billing —
   // their high-context premium models are 402 while their cheaper
@@ -440,7 +520,9 @@ async function doResolveTopTier(opts?: {
   // them at top-tier only, leaving budget intact.
   const debugTopTierBlocklist = new Set<string>(
     (process.env.EXPERIMENT_TOP_TIER_BLOCKED_PROVIDERS ?? '')
-      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
   );
 
   // Combined set used by the picker (any exclusion fires). Source is
@@ -451,19 +533,28 @@ async function doResolveTopTier(opts?: {
     ...debugTopTierBlocklist,
   ]);
   if (unhealthyProviders.size > 0) {
-    log.info({
-      operational: [...operationallyUnhealthy],
-      debugEnv: [...debugBlocklist],
-      debugTopTierEnv: [...debugTopTierBlocklist],
-    }, 'Top-tier resolver: skipping providers (split by policy source)');
+    log.info(
+      {
+        operational: [...operationallyUnhealthy],
+        debugEnv: [...debugBlocklist],
+        debugTopTierEnv: [...debugTopTierBlocklist],
+      },
+      'Top-tier resolver: skipping providers (split by policy source)'
+    );
   }
 
   // Helper for the picker loop to classify which policy fired.
   function classifyBlockPolicy(providerId: string): { source: PolicySource; reason: string } {
     const p = providerId.toLowerCase();
-    if (operationallyUnhealthy.has(p)) return { source: 'operationalReadinessPolicy', reason: 'hub_state_unhealthy' };
-    if (debugBlocklist.has(p)) return { source: 'debugPolicy', reason: 'env_blocklist:EXPERIMENT_BLOCKED_PROVIDERS' };
-    if (debugTopTierBlocklist.has(p)) return { source: 'debugPolicy', reason: 'env_blocklist:EXPERIMENT_TOP_TIER_BLOCKED_PROVIDERS' };
+    if (operationallyUnhealthy.has(p))
+      return { source: 'operationalReadinessPolicy', reason: 'hub_state_unhealthy' };
+    if (debugBlocklist.has(p))
+      return { source: 'debugPolicy', reason: 'env_blocklist:EXPERIMENT_BLOCKED_PROVIDERS' };
+    if (debugTopTierBlocklist.has(p))
+      return {
+        source: 'debugPolicy',
+        reason: 'env_blocklist:EXPERIMENT_TOP_TIER_BLOCKED_PROVIDERS',
+      };
     return { source: 'operationalReadinessPolicy', reason: 'unknown' };
   }
 
@@ -501,12 +592,14 @@ async function doResolveTopTier(opts?: {
     if (cmp !== 0) return cmp;
 
     // Final tiebreaker: cost asc.
-    const costA = typeof a.inputCostPer1k === 'object' && a.inputCostPer1k !== null
-      ? a.inputCostPer1k.toNumber()
-      : ((a.inputCostPer1k as number | null) ?? Number.POSITIVE_INFINITY);
-    const costB = typeof b.inputCostPer1k === 'object' && b.inputCostPer1k !== null
-      ? b.inputCostPer1k.toNumber()
-      : ((b.inputCostPer1k as number | null) ?? Number.POSITIVE_INFINITY);
+    const costA =
+      typeof a.inputCostPer1k === 'object' && a.inputCostPer1k !== null
+        ? a.inputCostPer1k.toNumber()
+        : ((a.inputCostPer1k as number | null) ?? Number.POSITIVE_INFINITY);
+    const costB =
+      typeof b.inputCostPer1k === 'object' && b.inputCostPer1k !== null
+        ? b.inputCostPer1k.toNumber()
+        : ((b.inputCostPer1k as number | null) ?? Number.POSITIVE_INFINITY);
     return costA - costB;
   });
 
@@ -520,15 +613,20 @@ async function doResolveTopTier(opts?: {
   // "XiaomiMiMo/MiMo-V2.5").
   const blockedModels = new Set<string>(
     (process.env.EXPERIMENT_BLOCKED_MODELS ?? '')
-      .split(',').map((s) => s.trim()).filter(Boolean)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
       .map((tuple) => {
         const idx = tuple.indexOf(':');
         if (idx < 0) return tuple.toLowerCase(); // bare provider — treat as provider-level
         return `${tuple.slice(0, idx).toLowerCase()}:${tuple.slice(idx + 1)}`;
-      }),
+      })
   );
   if (blockedModels.size > 0) {
-    log.info({ blockedModels: [...blockedModels] }, 'Top-tier resolver: model-level blocklist active');
+    log.info(
+      { blockedModels: [...blockedModels] },
+      'Top-tier resolver: model-level blocklist active'
+    );
   }
 
   // Group by provider, pick top-K per provider
@@ -536,8 +634,7 @@ async function doResolveTopTier(opts?: {
   let kept = 0;
 
   for (const row of rows) {
-    if (perProviderPicks.size >= maxProviders &&
-        !perProviderPicks.has(row.provider.name)) {
+    if (perProviderPicks.size >= maxProviders && !perProviderPicks.has(row.provider.name)) {
       blocked.push({
         providerId: row.provider.name,
         modelId: row.id,
@@ -547,7 +644,8 @@ async function doResolveTopTier(opts?: {
         policySource: 'experimentSelectionPolicy',
       });
       reasonCounts['per_provider_cap'] = reasonCounts['per_provider_cap'] ?? {};
-      reasonCounts['per_provider_cap']['max_providers_reached'] = (reasonCounts['per_provider_cap']['max_providers_reached'] ?? 0) + 1;
+      reasonCounts['per_provider_cap']['max_providers_reached'] =
+        (reasonCounts['per_provider_cap']['max_providers_reached'] ?? 0) + 1;
       continue;
     }
 
@@ -597,7 +695,8 @@ async function doResolveTopTier(opts?: {
         debugOnly: true,
       });
       reasonCounts['model_blocklist'] = reasonCounts['model_blocklist'] ?? {};
-      reasonCounts['model_blocklist']['blocked_model'] = (reasonCounts['model_blocklist']['blocked_model'] ?? 0) + 1;
+      reasonCounts['model_blocklist']['blocked_model'] =
+        (reasonCounts['model_blocklist']['blocked_model'] ?? 0) + 1;
       continue;
     }
 
@@ -612,7 +711,8 @@ async function doResolveTopTier(opts?: {
         policySource: 'operationalReadinessPolicy',
       });
       reasonCounts['credit_filter'] = reasonCounts['credit_filter'] ?? {};
-      reasonCounts['credit_filter']['no_credits'] = (reasonCounts['credit_filter']['no_credits'] ?? 0) + 1;
+      reasonCounts['credit_filter']['no_credits'] =
+        (reasonCounts['credit_filter']['no_credits'] ?? 0) + 1;
       continue;
     }
 
@@ -631,12 +731,13 @@ async function doResolveTopTier(opts?: {
           policySource: 'operationalReadinessPolicy',
         });
         reasonCounts['health_filter'] = reasonCounts['health_filter'] ?? {};
-        reasonCounts['health_filter'][`health_${healthState}`] = (reasonCounts['health_filter'][`health_${healthState}`] ?? 0) + 1;
+        reasonCounts['health_filter'][`health_${healthState}`] =
+          (reasonCounts['health_filter'][`health_${healthState}`] ?? 0) + 1;
         continue;
       }
     }
 
-    const caps = Array.isArray(row.capabilities) ? row.capabilities as string[] : [];
+    const caps = Array.isArray(row.capabilities) ? (row.capabilities as string[]) : [];
     const ctx = row.contextWindow ?? undefined;
     const topTierClass = classifyTopTier({
       modelId: row.id,
@@ -656,7 +757,11 @@ async function doResolveTopTier(opts?: {
       providerTier,
       contextWindow: ctx,
       healthState,
-      creditStatus: creditMonitor ? (creditMonitor.hasCredits(row.provider.name) ? 'ok' : 'no_credits') : 'unknown',
+      creditStatus: creditMonitor
+        ? creditMonitor.hasCredits(row.provider.name)
+          ? 'ok'
+          : 'no_credits'
+        : 'unknown',
       reason: `picked_top_${existing.length + 1}_for_provider`,
       freshnessFamily: fresh.family !== 'unknown' ? fresh.family : undefined,
       freshnessGenerationScore: fresh.generationScore || undefined,
@@ -676,22 +781,60 @@ async function doResolveTopTier(opts?: {
 
   const funnel: ResolverFunnel = {
     stages: [
-      { name: 'db_query (active + ctx>=min + chat)', input: -1, output: stageRawCount, removed: 0, mainRemovalReasons: {} },
-      { name: 'per_provider_cap', input: stageRawCount, output: kept + (blocked.filter(b => b.stage !== 'per_provider_cap').length), removed: (reasonCounts['per_provider_cap'] ? Object.values(reasonCounts['per_provider_cap']).reduce((a, b)=>a + b, 0) : 0), mainRemovalReasons: reasonCounts['per_provider_cap'] ?? {} },
-      { name: 'credit_filter', input: stageRawCount, output: kept + blocked.filter(b => b.stage === 'health_filter').length, removed: (reasonCounts['credit_filter'] ? Object.values(reasonCounts['credit_filter']).reduce((a, b)=>a + b, 0) : 0), mainRemovalReasons: reasonCounts['credit_filter'] ?? {} },
-      { name: 'health_filter', input: kept + blocked.filter(b => b.stage === 'health_filter').length, output: kept, removed: blocked.filter(b => b.stage === 'health_filter').length, mainRemovalReasons: reasonCounts['health_filter'] ?? {} },
-      { name: 'final_pins', input: kept, output: candidates.length, removed: 0, mainRemovalReasons: {} },
+      {
+        name: 'db_query (active + ctx>=min + chat)',
+        input: -1,
+        output: stageRawCount,
+        removed: 0,
+        mainRemovalReasons: {},
+      },
+      {
+        name: 'per_provider_cap',
+        input: stageRawCount,
+        output: kept + blocked.filter((b) => b.stage !== 'per_provider_cap').length,
+        removed: reasonCounts['per_provider_cap']
+          ? Object.values(reasonCounts['per_provider_cap']).reduce((a, b) => a + b, 0)
+          : 0,
+        mainRemovalReasons: reasonCounts['per_provider_cap'] ?? {},
+      },
+      {
+        name: 'credit_filter',
+        input: stageRawCount,
+        output: kept + blocked.filter((b) => b.stage === 'health_filter').length,
+        removed: reasonCounts['credit_filter']
+          ? Object.values(reasonCounts['credit_filter']).reduce((a, b) => a + b, 0)
+          : 0,
+        mainRemovalReasons: reasonCounts['credit_filter'] ?? {},
+      },
+      {
+        name: 'health_filter',
+        input: kept + blocked.filter((b) => b.stage === 'health_filter').length,
+        output: kept,
+        removed: blocked.filter((b) => b.stage === 'health_filter').length,
+        mainRemovalReasons: reasonCounts['health_filter'] ?? {},
+      },
+      {
+        name: 'final_pins',
+        input: kept,
+        output: candidates.length,
+        removed: 0,
+        mainRemovalReasons: {},
+      },
     ],
   };
 
-  log.info({ kept, blocked: blocked.length, providers: perProviderPicks.size }, 'Top-tier resolver: complete (single-query)');
+  log.info(
+    { kept, blocked: blocked.length, providers: perProviderPicks.size },
+    'Top-tier resolver: complete (single-query)'
+  );
 
   return {
     candidates,
     blocked,
     funnel,
     warnings,
-    reasonIfZero: candidates.length === 0 ? 'no_provider_with_chat_capable_min_context_model' : undefined,
+    reasonIfZero:
+      candidates.length === 0 ? 'no_provider_with_chat_capable_min_context_model' : undefined,
   };
 }
 
@@ -707,7 +850,17 @@ async function doResolveOwn(): Promise<ResolverOutput<OwnCandidate>> {
     return {
       candidates: [],
       blocked: [],
-      funnel: { stages: [{ name: 'env_gate', input: 0, output: 0, removed: 1, mainRemovalReasons: { own_model_disabled: 1 } }] },
+      funnel: {
+        stages: [
+          {
+            name: 'env_gate',
+            input: 0,
+            output: 0,
+            removed: 1,
+            mainRemovalReasons: { own_model_disabled: 1 },
+          },
+        ],
+      },
       warnings: ['own_model_disabled_by_env'],
       reasonIfZero: 'OWN_MODEL_ENABLED=false (env gate)',
     };
@@ -732,7 +885,7 @@ async function doResolveOwn(): Promise<ResolverOutput<OwnCandidate>> {
     const candidates: OwnCandidate[] = [];
     const blocked: BlockedCandidate[] = [];
     for (const row of rows) {
-      const caps = Array.isArray(row.capabilities) ? row.capabilities as string[] : [];
+      const caps = Array.isArray(row.capabilities) ? (row.capabilities as string[]) : [];
       if (!caps.includes('chat')) {
         blocked.push({
           providerId: row.provider.name,
@@ -758,8 +911,20 @@ async function doResolveOwn(): Promise<ResolverOutput<OwnCandidate>> {
       blocked,
       funnel: {
         stages: [
-          { name: 'db_query (own-model rows)', input: -1, output: rows.length, removed: 0, mainRemovalReasons: {} },
-          { name: 'capability_filter', input: rows.length, output: candidates.length, removed: blocked.length, mainRemovalReasons: blocked.length > 0 ? { not_chat_capable: blocked.length } : {} },
+          {
+            name: 'db_query (own-model rows)',
+            input: -1,
+            output: rows.length,
+            removed: 0,
+            mainRemovalReasons: {},
+          },
+          {
+            name: 'capability_filter',
+            input: rows.length,
+            output: candidates.length,
+            removed: blocked.length,
+            mainRemovalReasons: blocked.length > 0 ? { not_chat_capable: blocked.length } : {},
+          },
         ],
       },
       warnings: candidates.length === 0 ? ['own_models_unavailable_no_chat_capable_own_row'] : [],
@@ -769,7 +934,17 @@ async function doResolveOwn(): Promise<ResolverOutput<OwnCandidate>> {
     return {
       candidates: [],
       blocked: [],
-      funnel: { stages: [{ name: 'db_query', input: 0, output: 0, removed: 0, mainRemovalReasons: { db_error: 1 } }] },
+      funnel: {
+        stages: [
+          {
+            name: 'db_query',
+            input: 0,
+            output: 0,
+            removed: 0,
+            mainRemovalReasons: { db_error: 1 },
+          },
+        ],
+      },
       warnings: [`db_query_failed: ${err instanceof Error ? err.message : String(err)}`],
       reasonIfZero: 'db_query_failed',
     };
@@ -778,12 +953,16 @@ async function doResolveOwn(): Promise<ResolverOutput<OwnCandidate>> {
 
 // ─── Budget resolver ────────────────────────────────────────────────────
 
-export async function resolveBudgetStructured(opts?: { maxPicks?: number }): Promise<ResolverOutput<BudgetCandidate>> {
+export async function resolveBudgetStructured(opts?: {
+  maxPicks?: number;
+}): Promise<ResolverOutput<BudgetCandidate>> {
   const key = `picks=${opts?.maxPicks ?? 'default'}`;
   return budgetCache.get(key, () => doResolveBudget(opts));
 }
 
-async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOutput<BudgetCandidate>> {
+async function doResolveBudget(opts?: {
+  maxPicks?: number;
+}): Promise<ResolverOutput<BudgetCandidate>> {
   const maxPicks = opts?.maxPicks ?? 2;
   const minContext = Number(process.env.EXPERIMENT_BUDGET_MIN_CONTEXT ?? 8192);
   const minCost = Number(process.env.EXPERIMENT_BUDGET_MIN_COST_PER_1K ?? 0.00001); // 1e-5 USD/1k tokens
@@ -808,10 +987,7 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
         capabilities: { array_contains: ['chat'] },
         inputCostPer1k: { gte: minCost },
       },
-      orderBy: [
-        { inputCostPer1k: 'asc' },
-        { contextWindow: 'desc' },
-      ],
+      orderBy: [{ inputCostPer1k: 'asc' }, { contextWindow: 'desc' }],
       include: { provider: true },
       take: 500,
     });
@@ -819,7 +995,17 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
     return {
       candidates: [],
       blocked: [],
-      funnel: { stages: [{ name: 'db_query', input: 0, output: 0, removed: 0, mainRemovalReasons: { db_error: 1 } }] },
+      funnel: {
+        stages: [
+          {
+            name: 'db_query',
+            input: 0,
+            output: 0,
+            removed: 0,
+            mainRemovalReasons: { db_error: 1 },
+          },
+        ],
+      },
       warnings: [`db_query_failed: ${err instanceof Error ? err.message : String(err)}`],
       reasonIfZero: 'db_query_failed',
     };
@@ -838,13 +1024,21 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
   try {
     const mod = await import('@/core/provider-operability-hub');
     const summary = mod.getProviderOperabilityHub().getSummary() as Record<string, string[]>;
-    for (const p of [...(summary.auth_failed ?? []), ...(summary.no_credits ?? []), ...(summary.temporarily_unavailable ?? [])]) {
+    for (const p of [
+      ...(summary.auth_failed ?? []),
+      ...(summary.no_credits ?? []),
+      ...(summary.temporarily_unavailable ?? []),
+    ]) {
       const baseId = p.includes(':') ? p.split(':')[0]! : p;
       unhealthyProviders.add(baseId.toLowerCase());
     }
-  } catch { /* hub unavailable — fall through optimistically */ }
+  } catch {
+    /* hub unavailable — fall through optimistically */
+  }
   const blocklist = (process.env.EXPERIMENT_BLOCKED_PROVIDERS ?? '')
-    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   for (const id of blocklist) unhealthyProviders.add(id);
 
   // 2026-05-12 (ramp-final): model-level blocklist — see top-tier resolver
@@ -852,12 +1046,14 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
   // case-insensitive on provider, exact on modelId.
   const blockedModels = new Set<string>(
     (process.env.EXPERIMENT_BLOCKED_MODELS ?? '')
-      .split(',').map((s) => s.trim()).filter(Boolean)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
       .map((tuple) => {
         const idx = tuple.indexOf(':');
         if (idx < 0) return tuple.toLowerCase();
         return `${tuple.slice(0, idx).toLowerCase()}:${tuple.slice(idx + 1)}`;
-      }),
+      })
   );
 
   for (const row of rows) {
@@ -865,14 +1061,26 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
 
     // Stage 0: hub/blocklist
     if (unhealthyProviders.has(row.provider.name.toLowerCase())) {
-      blocked.push({ providerId: row.provider.name, modelId: row.id, role: 'budget', blockedReason: 'hub_unhealthy_or_blocklisted', stage: 'hub_filter' });
+      blocked.push({
+        providerId: row.provider.name,
+        modelId: row.id,
+        role: 'budget',
+        blockedReason: 'hub_unhealthy_or_blocklisted',
+        stage: 'hub_filter',
+      });
       reasonCounts['hub_unhealthy'] = (reasonCounts['hub_unhealthy'] ?? 0) + 1;
       continue;
     }
 
     // Stage 0.5: model-level blocklist
     if (blockedModels.has(`${row.provider.name.toLowerCase()}:${row.id}`)) {
-      blocked.push({ providerId: row.provider.name, modelId: row.id, role: 'budget', blockedReason: 'model_blocklisted', stage: 'model_blocklist' });
+      blocked.push({
+        providerId: row.provider.name,
+        modelId: row.id,
+        role: 'budget',
+        blockedReason: 'model_blocklisted',
+        stage: 'model_blocklist',
+      });
       reasonCounts['model_blocklisted'] = (reasonCounts['model_blocklisted'] ?? 0) + 1;
       continue;
     }
@@ -880,7 +1088,13 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
     // Stage A: reject routing aliases by name
     const lastSegment = row.id.includes('/') ? row.id.split('/').slice(-1)[0] : row.id;
     if (ROUTING_ALIAS_NAMES.has(lastSegment.toLowerCase())) {
-      blocked.push({ providerId: row.provider.name, modelId: row.id, role: 'budget', blockedReason: 'routing_alias_not_concrete_model', stage: 'alias_filter' });
+      blocked.push({
+        providerId: row.provider.name,
+        modelId: row.id,
+        role: 'budget',
+        blockedReason: 'routing_alias_not_concrete_model',
+        stage: 'alias_filter',
+      });
       reasonCounts['routing_alias'] = (reasonCounts['routing_alias'] ?? 0) + 1;
       continue;
     }
@@ -908,11 +1122,17 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
     const slashedId = row.id.includes('/');
 
     const isCanonical = slashedId
-      ? (CANONICAL_MODEL_OWNERS.has(owner) || owner === providerName)
-      : (providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerName));
+      ? CANONICAL_MODEL_OWNERS.has(owner) || owner === providerName
+      : providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerName);
 
     if (!isCanonical) {
-      blocked.push({ providerId: row.provider.name, modelId: row.id, role: 'budget', blockedReason: `non_canonical_owner:${owner}`, stage: 'owner_allowlist' });
+      blocked.push({
+        providerId: row.provider.name,
+        modelId: row.id,
+        role: 'budget',
+        blockedReason: `non_canonical_owner:${owner}`,
+        stage: 'owner_allowlist',
+      });
       reasonCounts['non_canonical_owner'] = (reasonCounts['non_canonical_owner'] ?? 0) + 1;
       continue;
     }
@@ -920,17 +1140,25 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
 
     // Stage C: one pick per provider
     if (seenProviders.has(row.provider.name)) {
-      blocked.push({ providerId: row.provider.name, modelId: row.id, role: 'budget', blockedReason: 'provider_already_picked', stage: 'provider_dedup' });
+      blocked.push({
+        providerId: row.provider.name,
+        modelId: row.id,
+        role: 'budget',
+        blockedReason: 'provider_already_picked',
+        stage: 'provider_dedup',
+      });
       continue;
     }
     seenProviders.add(row.provider.name);
 
-    const inCost = typeof row.inputCostPer1k === 'object' && row.inputCostPer1k !== null
-      ? row.inputCostPer1k.toNumber()
-      : (row.inputCostPer1k as number | null) ?? undefined;
-    const outCost = typeof row.outputCostPer1k === 'object' && row.outputCostPer1k !== null
-      ? row.outputCostPer1k.toNumber()
-      : (row.outputCostPer1k as number | null) ?? undefined;
+    const inCost =
+      typeof row.inputCostPer1k === 'object' && row.inputCostPer1k !== null
+        ? row.inputCostPer1k.toNumber()
+        : ((row.inputCostPer1k as number | null) ?? undefined);
+    const outCost =
+      typeof row.outputCostPer1k === 'object' && row.outputCostPer1k !== null
+        ? row.outputCostPer1k.toNumber()
+        : ((row.outputCostPer1k as number | null) ?? undefined);
 
     candidates.push({
       providerId: row.provider.name,
@@ -946,17 +1174,48 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
 
   if (candidates.length === 0) warnings.push('budget_pins_unavailable_after_filters');
 
-  log.info({ kept: candidates.length, blocked: blocked.length, rawCount }, 'Budget resolver: complete');
+  log.info(
+    { kept: candidates.length, blocked: blocked.length, rawCount },
+    'Budget resolver: complete'
+  );
 
   return {
     candidates,
     blocked,
     funnel: {
       stages: [
-        { name: 'db_query (active + ctx>=min + chat + cost>=min)', input: -1, output: rawCount, removed: 0, mainRemovalReasons: {} },
-        { name: 'alias_filter', input: rawCount, output: afterAlias, removed: reasonCounts['routing_alias'] ?? 0, mainRemovalReasons: reasonCounts['routing_alias'] ? { routing_alias: reasonCounts['routing_alias'] } : {} },
-        { name: 'owner_allowlist', input: afterAlias, output: afterOwner, removed: reasonCounts['non_canonical_owner'] ?? 0, mainRemovalReasons: reasonCounts['non_canonical_owner'] ? { non_canonical_owner: reasonCounts['non_canonical_owner'] } : {} },
-        { name: 'final_pins (per-provider dedup)', input: afterOwner, output: candidates.length, removed: 0, mainRemovalReasons: {} },
+        {
+          name: 'db_query (active + ctx>=min + chat + cost>=min)',
+          input: -1,
+          output: rawCount,
+          removed: 0,
+          mainRemovalReasons: {},
+        },
+        {
+          name: 'alias_filter',
+          input: rawCount,
+          output: afterAlias,
+          removed: reasonCounts['routing_alias'] ?? 0,
+          mainRemovalReasons: reasonCounts['routing_alias']
+            ? { routing_alias: reasonCounts['routing_alias'] }
+            : {},
+        },
+        {
+          name: 'owner_allowlist',
+          input: afterAlias,
+          output: afterOwner,
+          removed: reasonCounts['non_canonical_owner'] ?? 0,
+          mainRemovalReasons: reasonCounts['non_canonical_owner']
+            ? { non_canonical_owner: reasonCounts['non_canonical_owner'] }
+            : {},
+        },
+        {
+          name: 'final_pins (per-provider dedup)',
+          input: afterOwner,
+          output: candidates.length,
+          removed: 0,
+          mainRemovalReasons: {},
+        },
       ],
     },
     warnings,
@@ -969,9 +1228,15 @@ async function doResolveBudget(opts?: { maxPicks?: number }): Promise<ResolverOu
 // used by the existing config builders. The builders can keep working
 // unchanged while the structured output is captured by the audit endpoint.
 
-export async function resolveTopTierLegacy(): Promise<Array<{ id: string; displayName: string; provider: string }>> {
+export async function resolveTopTierLegacy(): Promise<
+  Array<{ id: string; displayName: string; provider: string }>
+> {
   const out = await resolveTopTierStructured();
-  return out.candidates.map((c) => ({ id: c.modelId, displayName: c.modelId, provider: c.providerId }));
+  return out.candidates.map((c) => ({
+    id: c.modelId,
+    displayName: c.modelId,
+    provider: c.providerId,
+  }));
 }
 
 export async function resolveOwnLegacy(): Promise<Array<{ id: string; displayName: string }>> {

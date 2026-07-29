@@ -289,7 +289,13 @@ export class VertexAIAdapter extends ProviderAdapter {
   /**
    * Convert message parts for Vertex AI format
    */
-  private convertMessageParts(message: ChatMessage): Array<{ text?: string; inlineData?: { mimeType: string; data: string }; fileData?: { fileUri: string; mimeType: string } }> {
+  private convertMessageParts(
+    message: ChatMessage
+  ): Array<{
+    text?: string;
+    inlineData?: { mimeType: string; data: string };
+    fileData?: { fileUri: string; mimeType: string };
+  }> {
     if (typeof message.content === 'string') {
       return [{ text: message.content }];
     }
@@ -327,7 +333,10 @@ export class VertexAIAdapter extends ProviderAdapter {
   /**
    * Make Vertex AI API request
    */
-  private async makeVertexAIRequest(modelId: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async makeVertexAIRequest(
+    modelId: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     const location = this.config.location || 'global';
     const publisher = 'google';
     const model = this.mapModelId(modelId);
@@ -404,7 +413,10 @@ export class VertexAIAdapter extends ProviderAdapter {
   /**
    * Parse Vertex AI response
    */
-  private parseVertexAIResponse(response: Record<string, unknown>, request: ChatRequest): ChatResponse {
+  private parseVertexAIResponse(
+    response: Record<string, unknown>,
+    request: ChatRequest
+  ): ChatResponse {
     // Handle streaming response (simplified for now)
     const candidates = Array.isArray(response.candidates) ? response.candidates : [];
     const candidate = candidates[0] as Record<string, unknown> | undefined;
@@ -423,24 +435,40 @@ export class VertexAIAdapter extends ProviderAdapter {
 
     // Type guard for finishReason
     const finishReasonValue = candidate.finishReason;
-    const validFinishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = 
-      finishReasonValue === 'STOP' || finishReasonValue === 'stop' ? 'stop' :
-      finishReasonValue === 'MAX_TOKENS' || finishReasonValue === 'length' ? 'length' :
-      finishReasonValue === 'SAFETY' || finishReasonValue === 'content_filter' ? 'content_filter' :
-      finishReasonValue === 'RECITATION' || finishReasonValue === 'tool_calls' ? 'tool_calls' :
-      'stop';
+    const validFinishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null =
+      finishReasonValue === 'STOP' || finishReasonValue === 'stop'
+        ? 'stop'
+        : finishReasonValue === 'MAX_TOKENS' || finishReasonValue === 'length'
+          ? 'length'
+          : finishReasonValue === 'SAFETY' || finishReasonValue === 'content_filter'
+            ? 'content_filter'
+            : finishReasonValue === 'RECITATION' || finishReasonValue === 'tool_calls'
+              ? 'tool_calls'
+              : 'stop';
 
     // Type guard for usageMetadata
     const usageMetadata = response.usageMetadata;
-    const promptTokens = (usageMetadata && typeof usageMetadata === 'object' && 'promptTokenCount' in usageMetadata && typeof usageMetadata.promptTokenCount === 'number') 
-      ? usageMetadata.promptTokenCount 
-      : 0;
-    const completionTokens = (usageMetadata && typeof usageMetadata === 'object' && 'candidatesTokenCount' in usageMetadata && typeof usageMetadata.candidatesTokenCount === 'number') 
-      ? usageMetadata.candidatesTokenCount 
-      : 0;
-    const totalTokens = (usageMetadata && typeof usageMetadata === 'object' && 'totalTokenCount' in usageMetadata && typeof usageMetadata.totalTokenCount === 'number') 
-      ? usageMetadata.totalTokenCount 
-      : 0;
+    const promptTokens =
+      usageMetadata &&
+      typeof usageMetadata === 'object' &&
+      'promptTokenCount' in usageMetadata &&
+      typeof usageMetadata.promptTokenCount === 'number'
+        ? usageMetadata.promptTokenCount
+        : 0;
+    const completionTokens =
+      usageMetadata &&
+      typeof usageMetadata === 'object' &&
+      'candidatesTokenCount' in usageMetadata &&
+      typeof usageMetadata.candidatesTokenCount === 'number'
+        ? usageMetadata.candidatesTokenCount
+        : 0;
+    const totalTokens =
+      usageMetadata &&
+      typeof usageMetadata === 'object' &&
+      'totalTokenCount' in usageMetadata &&
+      typeof usageMetadata.totalTokenCount === 'number'
+        ? usageMetadata.totalTokenCount
+        : 0;
 
     return {
       id: `vertex-ai-${Date.now()}`,
@@ -480,10 +508,10 @@ export class VertexAIAdapter extends ProviderAdapter {
       // Fallback pricing for Vertex AI models (conservative estimates)
       const inputCostPer1K = 0.001;
       const outputCostPer1K = 0.004;
-      
+
       const inputCost = (promptTokens / 1000) * inputCostPer1K;
       const outputCost = (completionTokens / 1000) * outputCostPer1K;
-      
+
       return inputCost + outputCost;
     }
 
@@ -491,8 +519,8 @@ export class VertexAIAdapter extends ProviderAdapter {
     const inputCostPer1K = Math.max(0, Number(model.inputCostPer1k) || 0);
     const outputCostPer1K = Math.max(0, Number(model.outputCostPer1k) || 0);
 
-    const cost = (promptTokens / 1000) * inputCostPer1K
-               + (completionTokens / 1000) * outputCostPer1K;
+    const cost =
+      (promptTokens / 1000) * inputCostPer1K + (completionTokens / 1000) * outputCostPer1K;
 
     return Math.max(0, cost);
   }
@@ -552,7 +580,7 @@ export class VertexAIAdapter extends ProviderAdapter {
         const errorText = await response.text();
         throw new Error(`Vertex AI API error ${response.status}: ${errorText}`);
       }
-      
+
       // `isStreaming` previously declared and unused — content-type detection
       // is now logged once below for diagnostics, then drained via the SSE
       // reader regardless of declared content-type (Vertex AI sometimes
@@ -585,7 +613,7 @@ export class VertexAIAdapter extends ProviderAdapter {
 
           // Decode chunk
           buffer += decoder.decode(value, { stream: true });
-          
+
           // Process complete SSE messages (lines ending with \n\n)
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; // Keep incomplete line in buffer
@@ -596,7 +624,7 @@ export class VertexAIAdapter extends ProviderAdapter {
             // Parse SSE format: "data: {...}"
             if (line.startsWith('data: ')) {
               const dataStr = line.slice(6).trim();
-              
+
               if (dataStr === '[DONE]') {
                 // End of stream
                 finishReason = 'stop';
@@ -605,7 +633,7 @@ export class VertexAIAdapter extends ProviderAdapter {
 
               try {
                 const data = JSON.parse(dataStr) as Record<string, unknown>;
-                
+
                 // Extract candidate from Vertex AI response
                 const candidates = Array.isArray(data.candidates) ? data.candidates : [];
                 const candidate = candidates[0] as Record<string, unknown> | undefined;
@@ -613,12 +641,12 @@ export class VertexAIAdapter extends ProviderAdapter {
                 if (candidate) {
                   const content = candidate.content as Record<string, unknown> | undefined;
                   const parts = Array.isArray(content?.parts) ? content.parts : [];
-                  
+
                   for (const part of parts) {
                     const text = (part as Record<string, unknown>).text;
                     if (typeof text === 'string' && text) {
                       accumulatedContent += text;
-                      
+
                       if (firstChunk) {
                         const duration = Date.now() - startTime;
                         this.providerLog.debug({ duration }, 'First chunk received');
@@ -626,22 +654,22 @@ export class VertexAIAdapter extends ProviderAdapter {
                       }
 
                       // Yield chunk
-        yield {
+                      yield {
                         id: chunkId,
-          object: 'chat.completion.chunk',
+                        object: 'chat.completion.chunk',
                         created: Math.floor(Date.now() / 1000),
                         model: modelId,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                role: 'assistant',
+                        choices: [
+                          {
+                            index: 0,
+                            delta: {
+                              role: 'assistant',
                               content: text,
-              },
+                            },
                             finish_reason: null,
-              logprobs: null,
-            },
-          ],
+                            logprobs: null,
+                          },
+                        ],
                         usage: undefined,
                       };
                     }
@@ -660,14 +688,26 @@ export class VertexAIAdapter extends ProviderAdapter {
                   // Extract usage if available
                   const usageMetadata = data.usageMetadata as Record<string, unknown> | undefined;
                   if (usageMetadata) {
-                    const promptTokens = typeof usageMetadata.promptTokenCount === 'number' ? usageMetadata.promptTokenCount : 0;
-                    const completionTokens = typeof usageMetadata.candidatesTokenCount === 'number' ? usageMetadata.candidatesTokenCount : 0;
+                    const promptTokens =
+                      typeof usageMetadata.promptTokenCount === 'number'
+                        ? usageMetadata.promptTokenCount
+                        : 0;
+                    const completionTokens =
+                      typeof usageMetadata.candidatesTokenCount === 'number'
+                        ? usageMetadata.candidatesTokenCount
+                        : 0;
                     totalTokens = promptTokens + completionTokens;
                   }
                 }
               } catch (parseError) {
                 // Skip invalid JSON chunks
-                this.providerLog.warn({ error: parseError instanceof Error ? parseError.message : String(parseError), line }, 'Failed to parse SSE data chunk');
+                this.providerLog.warn(
+                  {
+                    error: parseError instanceof Error ? parseError.message : String(parseError),
+                    line,
+                  },
+                  'Failed to parse SSE data chunk'
+                );
               }
             }
           }
@@ -688,16 +728,22 @@ export class VertexAIAdapter extends ProviderAdapter {
                 logprobs: null,
               },
             ],
-            usage: totalTokens > 0 ? {
-              prompt_tokens: 0, // Will be calculated from request
-              completion_tokens: Math.floor(totalTokens * 0.8), // Estimate
-              total_tokens: totalTokens,
-            } : undefined,
+            usage:
+              totalTokens > 0
+                ? {
+                    prompt_tokens: 0, // Will be calculated from request
+                    completion_tokens: Math.floor(totalTokens * 0.8), // Estimate
+                    total_tokens: totalTokens,
+                  }
+                : undefined,
           };
-      }
-      
-      const totalDuration = Date.now() - startTime;
-        this.providerLog.debug({ duration: totalDuration, contentLength: accumulatedContent.length }, 'Streaming completed');
+        }
+
+        const totalDuration = Date.now() - startTime;
+        this.providerLog.debug(
+          { duration: totalDuration, contentLength: accumulatedContent.length },
+          'Streaming completed'
+        );
       } finally {
         reader.releaseLock();
       }
@@ -755,7 +801,8 @@ export class VertexAIAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -773,8 +820,10 @@ export class VertexAIAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -786,8 +835,10 @@ export class VertexAIAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -795,8 +846,11 @@ export class VertexAIAdapter extends ProviderAdapter {
     } catch (error) {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.providerLog.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+      this.providerLog.warn(
+        { error: errorMessage },
+        'Moderation analysis failed, returning safe defaults'
+      );
+
       return {
         flagged: false,
         categories: {
@@ -835,14 +889,21 @@ export class VertexAIAdapter extends ProviderAdapter {
    * Vertex AI/Imagen does not have image editing via API
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Vertex AI image editing is not yet implemented. Vertex AI/Imagen does not provide image editing via API. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'Vertex AI image editing is not yet implemented. Vertex AI/Imagen does not provide image editing via API. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * Vertex AI/Imagen does not have image variation via API
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Vertex AI image variation is not yet implemented. Vertex AI/Imagen does not provide image variation via API. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Vertex AI image variation is not yet implemented. Vertex AI/Imagen does not provide image variation via API. Use OpenAI DALL-E for image variations.'
+    );
   }
 }

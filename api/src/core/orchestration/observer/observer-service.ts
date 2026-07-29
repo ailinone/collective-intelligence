@@ -135,7 +135,10 @@ export function __resetObserverBackendCacheForTests(): void {
 /** Probe the sidecar AND discover its loaded model in one round-trip. */
 async function probeOllamaModel(baseUrl: string): Promise<string | null> {
   try {
-    const response = await fetch(`${baseUrl}/models`, { method: 'GET', signal: AbortSignal.timeout(3000) });
+    const response = await fetch(`${baseUrl}/models`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3000),
+    });
     if (!response.ok) return null;
     const body = (await response.json()) as { data?: Array<{ id?: string }> };
     const id = body.data?.find((m) => typeof m.id === 'string' && m.id.length > 0)?.id;
@@ -154,8 +157,13 @@ async function doResolveObserverBackend(config: ObserverConfig): Promise<Narrati
       const envOverride = (process.env.OBSERVER_MODEL || '').trim() || undefined;
       const modelId = envOverride || config.modelId || discovered;
       log.info(
-        { model: modelId, discovered, override: envOverride ?? config.modelId ?? null, baseUrl: ollamaUrl },
-        'Observer backend resolved (local Ollama, model resolved dynamically)',
+        {
+          model: modelId,
+          discovered,
+          override: envOverride ?? config.modelId ?? null,
+          baseUrl: ollamaUrl,
+        },
+        'Observer backend resolved (local Ollama, model resolved dynamically)'
       );
       return { type: 'ollama', baseUrl: ollamaUrl, modelId };
     }
@@ -180,7 +188,7 @@ async function doResolveObserverBackend(config: ObserverConfig): Promise<Narrati
         if (found) {
           log.info(
             { model: candidateId, provider: found.adapter.getName() },
-            'Observer backend resolved (cloud fallback)',
+            'Observer backend resolved (cloud fallback)'
           );
           return { type: 'cloud', adapter: found.adapter, modelId: candidateId };
         }
@@ -191,7 +199,7 @@ async function doResolveObserverBackend(config: ObserverConfig): Promise<Narrati
   } catch (err) {
     log.debug(
       { error: err instanceof Error ? err.message : String(err) },
-      'ProviderRegistry not available for observer cloud fallback',
+      'ProviderRegistry not available for observer cloud fallback'
     );
   }
   return null;
@@ -206,12 +214,13 @@ async function doResolveObserverBackend(config: ObserverConfig): Promise<Narrati
 function refreshObserverBackend(
   config: ObserverConfig,
   key: string,
-  trustNull = false,
+  trustNull = false
 ): Promise<NarrationBackend | null> {
   if (_obsBackendInflight) return _obsBackendInflight;
   _obsBackendInflight = doResolveObserverBackend(config)
     .then((resolved) => {
-      const prevGood = _obsBackendCache && _obsBackendCache.key === key ? _obsBackendCache.backend : null;
+      const prevGood =
+        _obsBackendCache && _obsBackendCache.key === key ? _obsBackendCache.backend : null;
       const backend = trustNull ? resolved : (resolved ?? prevGood);
       _obsBackendCache = { backend, key, resolvedAt: Date.now() };
       return backend;
@@ -224,7 +233,9 @@ function refreshObserverBackend(
 }
 
 /** Serve the shared backend: fresh cache instantly; stale → serve + refresh in bg. */
-async function resolveObserverBackendShared(config: ObserverConfig): Promise<NarrationBackend | null> {
+async function resolveObserverBackendShared(
+  config: ObserverConfig
+): Promise<NarrationBackend | null> {
   const key = observerBackendKey(config);
   const cache = _obsBackendCache;
   if (cache && cache.key === key) {
@@ -256,10 +267,7 @@ export class ObserverService implements ObserverFeed {
   // fast opening model (see OBSERVER_FAST_MODEL in generateNarration).
   private firstNarrationClaimed = false;
 
-  constructor(
-    config: ObserverConfig,
-    strategyName: string,
-  ) {
+  constructor(config: ObserverConfig, strategyName: string) {
     this.config = config;
     this.strategyName = strategyName;
     this.language = config.language || '';
@@ -291,7 +299,7 @@ export class ObserverService implements ObserverFeed {
     if (!backend) {
       log.warn(
         { strategy: this.strategyName },
-        'Observer enabled but no backend available — degrading to no-op',
+        'Observer enabled but no backend available — degrading to no-op'
       );
     }
   }
@@ -343,7 +351,7 @@ export class ObserverService implements ObserverFeed {
 
     await Promise.race([
       Promise.allSettled(this.pendingPromises),
-      new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
+      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
     ]);
     this.pendingPromises = [];
   }
@@ -366,10 +374,10 @@ export class ObserverService implements ObserverFeed {
         this.narrationQueue.push(result);
         this.allNarrations.push(result);
       }
-    })().catch(err => {
+    })().catch((err) => {
       log.warn(
         { event: event.type, error: err instanceof Error ? err.message : String(err) },
-        'Observer narration failed (non-critical)',
+        'Observer narration failed (non-critical)'
       );
     });
 
@@ -403,7 +411,7 @@ export class ObserverService implements ObserverFeed {
           reasoning: event.reasoning,
         },
         this.language,
-        isFirst, // brief opening line — appears faster, still complete
+        isFirst // brief opening line — appears faster, still complete
       );
 
       const maxTokens = this.config.maxNarrationTokens || 200;
@@ -427,7 +435,13 @@ export class ObserverService implements ObserverFeed {
 
       let content: string;
       if (this.backend.type === 'ollama') {
-        content = await this.callOllama(this.backend, systemPrompt, userPrompt, effMaxTokens, fastModelId);
+        content = await this.callOllama(
+          this.backend,
+          systemPrompt,
+          userPrompt,
+          effMaxTokens,
+          fastModelId
+        );
       } else {
         content = await this.callCloudAdapter(this.backend, systemPrompt, userPrompt, effMaxTokens);
       }
@@ -459,14 +473,18 @@ export class ObserverService implements ObserverFeed {
           durationMs: result.durationMs,
           narrationLength: narration.length,
         },
-        'Observer narration generated',
+        'Observer narration generated'
       );
 
       return result;
     } catch (err) {
       log.debug(
-        { event: event.type, backend: this.backend.type, error: err instanceof Error ? err.message : String(err) },
-        'Observer narration generation failed',
+        {
+          event: event.type,
+          backend: this.backend.type,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'Observer narration generation failed'
       );
       // Self-heal: nudge a background re-probe of the shared backend. The probe is
       // a lightweight GET /models, so a merely-slow model (call timed out) re-probes
@@ -485,7 +503,7 @@ export class ObserverService implements ObserverFeed {
     systemPrompt: string,
     userPrompt: string,
     maxTokens: number,
-    modelIdOverride?: string,
+    modelIdOverride?: string
   ): Promise<string> {
     const response = await fetch(`${backend.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -508,7 +526,7 @@ export class ObserverService implements ObserverFeed {
       return '';
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     return data.choices?.[0]?.message?.content || '';
@@ -522,7 +540,7 @@ export class ObserverService implements ObserverFeed {
     backend: Extract<NarrationBackend, { type: 'cloud' }>,
     systemPrompt: string,
     userPrompt: string,
-    maxTokens: number,
+    maxTokens: number
   ): Promise<string> {
     const request: ChatRequest = {
       model: backend.modelId,
@@ -537,13 +555,10 @@ export class ObserverService implements ObserverFeed {
 
     // Wrap in a timeout — cloud calls should not delay the main response
     const timeoutPromise = new Promise<ChatResponse>((_, reject) =>
-      setTimeout(() => reject(new Error('Observer cloud call timed out')), 15000),
+      setTimeout(() => reject(new Error('Observer cloud call timed out')), 15000)
     );
 
-    const response = await Promise.race([
-      backend.adapter.chatCompletion(request),
-      timeoutPromise,
-    ]);
+    const response = await Promise.race([backend.adapter.chatCompletion(request), timeoutPromise]);
 
     const content = response.choices?.[0]?.message?.content;
     return typeof content === 'string' ? content : '';
@@ -571,11 +586,12 @@ export class ObserverService implements ObserverFeed {
       if (Array.isArray(m.content)) {
         const text = (m.content as Array<unknown>)
           .map((p) =>
-            p && typeof p === 'object' &&
+            p &&
+            typeof p === 'object' &&
             (p as { type?: unknown }).type === 'text' &&
             typeof (p as { text?: unknown }).text === 'string'
               ? (p as { text: string }).text
-              : '',
+              : ''
           )
           .join(' ')
           .trim();

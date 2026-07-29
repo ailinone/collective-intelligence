@@ -35,7 +35,7 @@ export interface EvaluatorFactoryDeps {
 
 export function createStrategyOutputEvaluator(
   config: EvaluatorConfig,
-  deps: EvaluatorFactoryDeps = {},
+  deps: EvaluatorFactoryDeps = {}
 ): StrategyOutputEvaluator {
   switch (config.mode) {
     case 'unavailable':
@@ -56,7 +56,7 @@ export function createStrategyOutputEvaluator(
           timeoutMs: config.timeoutMs,
           rubricVersion: config.rubricVersion,
         },
-        deps.llmClient,
+        deps.llmClient
       );
 
     case 'composite':
@@ -74,7 +74,7 @@ export function createStrategyOutputEvaluator(
                 timeoutMs: config.timeoutMs,
                 rubricVersion: config.rubricVersion,
               },
-              deps.llmClient,
+              deps.llmClient
             )
           : undefined,
       });

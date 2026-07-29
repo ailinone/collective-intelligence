@@ -72,7 +72,7 @@ export interface RankableCandidate {
 export function rankRetryCandidates<T extends RankableCandidate>(
   candidates: T[],
   banditScoreByProvider: ReadonlyMap<string, number>,
-  operabilityRankByProvider?: ReadonlyMap<string, number>,
+  operabilityRankByProvider?: ReadonlyMap<string, number>
 ): T[] {
   return candidates.sort((a, b) => {
     // 0. OPERABILITY/HOT first (determinism, 2026-06-29): proven-bad sinks to the
@@ -117,7 +117,7 @@ export interface OperabilityHubLike {
 export function computeOperabilityRanks(
   candidates: ReadonlyArray<RankableCandidate>,
   modelId: string,
-  hub: OperabilityHubLike,
+  hub: OperabilityHubLike
 ): Map<string, number> {
   const ranks = new Map<string, number>();
   for (const c of candidates) {

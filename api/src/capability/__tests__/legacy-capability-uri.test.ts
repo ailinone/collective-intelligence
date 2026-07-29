@@ -129,7 +129,7 @@ describe('legacy-capability-uri', () => {
     it('emits URIs prefixed with the canonical CAPABILITY_URI_PREFIX', () => {
       for (const legacy of ALL_LEGACY_CAPABILITIES) {
         expect(legacyToUri(legacy)).toMatch(
-          new RegExp(`^${CAPABILITY_URI_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+          new RegExp(`^${CAPABILITY_URI_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
         );
       }
     });
@@ -146,11 +146,7 @@ describe('legacy-capability-uri', () => {
     it('preserves order and length', () => {
       const input: readonly ModelCapability[] = ['chat', 'vision', 'tool_use'];
       const out = legacyArrayToUriArray(input);
-      expect(out).toEqual([
-        legacyToUri('chat'),
-        legacyToUri('vision'),
-        legacyToUri('tool_use'),
-      ]);
+      expect(out).toEqual([legacyToUri('chat'), legacyToUri('vision'), legacyToUri('tool_use')]);
     });
 
     it('handles empty input', () => {
@@ -180,7 +176,7 @@ describe('legacy-capability-uri', () => {
         legacyToUri('chat'),
         `${CAPABILITY_URI_PREFIX}quantum_reasoning`, // unknown
         legacyToUri('vision'),
-        'malformed',                                  // malformed
+        'malformed', // malformed
       ];
       expect(uriArrayToLegacyArray(uris, LEGACY_SET)).toEqual(['chat', 'vision']);
     });

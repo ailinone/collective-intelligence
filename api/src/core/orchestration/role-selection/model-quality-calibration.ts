@@ -78,11 +78,7 @@ export type ModelQualityDimension =
  *                            Lowest priority; cannot override external.
  */
 export type ExternalBenchmarkSource =
-  | 'benchlm'
-  | 'lmarena'
-  | 'artificial_analysis'
-  | 'internal'
-  | 'manual';
+  'benchlm' | 'lmarena' | 'artificial_analysis' | 'internal' | 'manual';
 
 /**
  * 01C.1B-J2-C-R4 §7 — Task-aligned quality categories. The synthesizer
@@ -237,7 +233,8 @@ export interface ModelQualityCalibrationSnapshot {
 
 // ─── Validation ──────────────────────────────────────────────────────────
 
-const SECRET_PATTERN = /sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{20,}|BEGIN PRIVATE KEY|password=|token=|secret=/i;
+const SECRET_PATTERN =
+  /sk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{20,}|BEGIN PRIVATE KEY|password=|token=|secret=/i;
 
 export interface ValidationResult {
   readonly valid: boolean;
@@ -273,13 +270,16 @@ export function validateEntry(entry: ModelQualityCalibrationEntry): ValidationRe
   if (entry.qualityScoreSource === 'placeholder' && entry.qualityConfidence !== 'placeholder') {
     errors.push(
       `qualityConfidence: ${entry.qualityConfidence} inconsistent with source=placeholder ` +
-      `(placeholder source REQUIRES placeholder confidence)`,
+        `(placeholder source REQUIRES placeholder confidence)`
     );
   }
 
-  if (entry.qualityScoreSource === 'unknown' && (entry.qualityConfidence === 'high' || entry.qualityConfidence === 'medium')) {
+  if (
+    entry.qualityScoreSource === 'unknown' &&
+    (entry.qualityConfidence === 'high' || entry.qualityConfidence === 'medium')
+  ) {
     errors.push(
-      `qualityConfidence: source=unknown cannot have confidence=${entry.qualityConfidence}`,
+      `qualityConfidence: source=unknown cannot have confidence=${entry.qualityConfidence}`
     );
   }
 
@@ -341,9 +341,7 @@ export function validateEntry(entry: ModelQualityCalibrationEntry): ValidationRe
       const declared = new Set(entry.qualityScoreSources);
       for (const s of entry.sourceScores) {
         if (!declared.has(s.source)) {
-          errors.push(
-            `qualityScoreSources: missing '${s.source}' which appears in sourceScores`,
-          );
+          errors.push(`qualityScoreSources: missing '${s.source}' which appears in sourceScores`);
         }
       }
     }
@@ -388,16 +386,21 @@ export function validateEntry(entry: ModelQualityCalibrationEntry): ValidationRe
  * Output is rounded to 4 decimals to match `normalizeBenchLmScore`.
  */
 export function aggregateQualityFromSources(
-  sources: readonly SourceSpecificQualityScore[],
+  sources: readonly SourceSpecificQualityScore[]
 ): number | undefined {
   if (!sources.length) return undefined;
   const weightOf = (c: ModelQualityConfidence): number => {
     switch (c) {
-      case 'high': return 1.0;
-      case 'medium': return 0.6;
-      case 'low': return 0.3;
-      case 'placeholder': return 0.1;
-      default: return 0.1;
+      case 'high':
+        return 1.0;
+      case 'medium':
+        return 0.6;
+      case 'low':
+        return 0.3;
+      case 'placeholder':
+        return 0.1;
+      default:
+        return 0.1;
     }
   };
   let totalW = 0;
@@ -429,7 +432,7 @@ export function aggregateQualityFromSources(
  */
 export function resolveQualityForTask(
   entry: ModelQualityCalibrationEntry | undefined,
-  category: QualityCategory,
+  category: QualityCategory
 ): {
   readonly score: number | undefined;
   readonly resolutionPath: 'task_category' | 'source_category_avg' | 'aggregate' | 'unavailable';
@@ -444,7 +447,7 @@ export function resolveQualityForTask(
   // 2. Per-source categoryScores aggregation
   if (entry.sourceScores) {
     const contributingSources = entry.sourceScores.filter(
-      (s) => s.categoryScores && s.categoryScores[category] !== undefined,
+      (s) => s.categoryScores && s.categoryScores[category] !== undefined
     );
     if (contributingSources.length > 0) {
       // Build a synthetic SourceSpecificQualityScore array with the
@@ -518,7 +521,9 @@ function projectEntryForHash(entry: ModelQualityCalibrationEntry): Record<string
     qualityScoreSource: entry.qualityScoreSource,
     qualityConfidence: entry.qualityConfidence,
     dimensionScores: entry.dimensionScores ? sortedObject(entry.dimensionScores) : undefined,
-    taskCategoryScores: entry.taskCategoryScores ? sortedObject(entry.taskCategoryScores) : undefined,
+    taskCategoryScores: entry.taskCategoryScores
+      ? sortedObject(entry.taskCategoryScores)
+      : undefined,
     sourceScores: sortedSourceScores,
     qualityScoreSources: sortedSources,
     benchmarkRunId: entry.benchmarkRunId,
@@ -583,13 +588,13 @@ export function computeSnapshotHash(snapshot: ModelQualityCalibrationSnapshot): 
 export function findEntry(
   snapshot: ModelQualityCalibrationSnapshot,
   modelId: string,
-  canonicalModelId?: string,
+  canonicalModelId?: string
 ): ModelQualityCalibrationEntry | undefined {
   return snapshot.entries.find(
     (e) =>
       e.modelId === modelId ||
       (canonicalModelId && e.canonicalModelId === canonicalModelId) ||
-      (canonicalModelId && e.modelId === canonicalModelId),
+      (canonicalModelId && e.modelId === canonicalModelId)
   );
 }
 
@@ -604,13 +609,13 @@ export function buildSnapshot(opts: {
   createdAt?: string;
 }): ModelQualityCalibrationSnapshot {
   const placeholderEntries = opts.entries.filter(
-    (e) => e.qualityScoreSource === 'placeholder' || e.qualityConfidence === 'placeholder',
+    (e) => e.qualityScoreSource === 'placeholder' || e.qualityConfidence === 'placeholder'
   ).length;
   const benchmarkedEntries = opts.entries.filter(
     (e) =>
       e.qualityScoreSource === 'internal_benchmark' ||
       e.qualityScoreSource === 'external_benchmark' ||
-      e.qualityScoreSource === 'live_probe',
+      e.qualityScoreSource === 'live_probe'
   ).length;
   const highConfidenceEntries = opts.entries.filter((e) => e.qualityConfidence === 'high').length;
   const totalBenchmarkCostUsd = opts.entries.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);

@@ -52,10 +52,7 @@ export function containsWord(text: string, term: string): boolean {
 /**
  * Returns true if ANY term in `terms` is present in `text` as a word.
  */
-export function containsAnyWord(
-  text: string,
-  terms: readonly string[],
-): boolean {
+export function containsAnyWord(text: string, terms: readonly string[]): boolean {
   for (const t of terms) {
     if (containsWord(text, t)) return true;
   }

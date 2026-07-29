@@ -257,8 +257,12 @@ export interface SynthesizerSelectionSummary {
     readonly snapshotEntryCount: number;
     readonly candidatesMatched: number;
     readonly candidatesFallbackToPlaceholder: number;
-    readonly winnerQualityScoreSource: import('../role-selection/model-quality-calibration').ModelQualityScoreSource | 'catalog_fallback';
-    readonly winnerQualityConfidence: import('../role-selection/model-quality-calibration').ModelQualityConfidence | 'catalog_fallback';
+    readonly winnerQualityScoreSource:
+      | import('../role-selection/model-quality-calibration').ModelQualityScoreSource
+      | 'catalog_fallback';
+    readonly winnerQualityConfidence:
+      | import('../role-selection/model-quality-calibration').ModelQualityConfidence
+      | 'catalog_fallback';
   };
 }
 
@@ -282,11 +286,7 @@ export interface ModelRoleSelectionTrace {
   readonly stageCounts: Readonly<Record<FilterStage, number>>;
   readonly finalSelectedCount: number;
   readonly selectionSource: 'dynamic' | 'explicit_override' | 'fallback';
-  readonly semanticSearchStatus:
-    | 'used'
-    | 'disabled'
-    | 'source_unavailable'
-    | 'not_applicable';
+  readonly semanticSearchStatus: 'used' | 'disabled' | 'source_unavailable' | 'not_applicable';
   readonly registrySourceStatus: 'pool_provided' | 'catalog' | 'source_unavailable';
   readonly providerHealthStatus: 'available' | 'source_unavailable';
   readonly pricingStatus: 'available' | 'source_unavailable';

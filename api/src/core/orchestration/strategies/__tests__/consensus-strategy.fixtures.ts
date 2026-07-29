@@ -85,13 +85,12 @@ export function makeModel(overrides: Partial<Model> & { id: string }): Model {
     capabilities: overrides.capabilities ?? ['chat', 'text_generation'],
     capabilityUris: overrides.capabilityUris,
     capabilityConfidence: overrides.capabilityConfidence,
-    performance:
-      overrides.performance ?? {
-        latencyMs: 1000,
-        throughput: 100,
-        quality: 0.9,
-        reliability: 0.95,
-      },
+    performance: overrides.performance ?? {
+      latencyMs: 1000,
+      throughput: 100,
+      quality: 0.9,
+      reliability: 0.95,
+    },
     status: overrides.status ?? 'active',
     balanceStatus: overrides.balanceStatus ?? 'has-credits',
     inventoryRole: overrides.inventoryRole,
@@ -112,14 +111,14 @@ export function makeRequest(content = 'Test prompt for consensus'): ChatRequest 
 
 export function makeContext(
   models: Model[],
-  overrides: Partial<OrchestrationContext> = {},
+  overrides: Partial<OrchestrationContext> = {}
 ): OrchestrationContext {
   return {
     organizationId: 'org-test',
     userId: 'user-test',
     requestId: `req-${Math.random().toString(36).slice(2, 9)}`,
     models,
-    taskType: ('analysis' as TaskType),
+    taskType: 'analysis' as TaskType,
     contextSize: 1000,
     qualityTarget: 0.7,
     preferSpeed: false,
@@ -197,7 +196,7 @@ export function wireStrategy(opts: {
       _adapter: unknown,
       model: Model,
       request: ChatRequest,
-      role: string,
+      role: string
     ): Promise<ModelExecution> => {
       const preset = opts.responses[model.id];
       const success = preset?.success ?? true;
@@ -213,7 +212,7 @@ export function wireStrategy(opts: {
         success,
         error: success ? undefined : (preset?.error ?? 'execution_failed'),
       };
-    },
+    }
   );
   anyStrat.executeModel = executeModelSpy;
   anyStrat.executeModelWithReasoning = executeModelSpy;
@@ -224,7 +223,7 @@ export function wireStrategy(opts: {
   //  - null → leave unset so strategy picks UnavailableEvaluator
   if (opts.evaluator === undefined) {
     strategy.setEvaluatorForTesting(
-      new MockStrategyOutputEvaluator({ fallback: 0.5, synthesis: 0.7 }),
+      new MockStrategyOutputEvaluator({ fallback: 0.5, synthesis: 0.7 })
     );
   } else if (opts.evaluator !== null) {
     strategy.setEvaluatorForTesting(opts.evaluator);

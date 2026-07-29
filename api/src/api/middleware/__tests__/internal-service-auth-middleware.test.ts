@@ -29,10 +29,7 @@ vi.mock('@/services/service-token-verifier', () => {
   return { verifyServiceToken: vi.fn(), ServiceTokenError };
 });
 
-import {
-  verifyServiceToken,
-  ServiceTokenError,
-} from '@/services/service-token-verifier';
+import { verifyServiceToken, ServiceTokenError } from '@/services/service-token-verifier';
 import { requireServiceAuth } from '@/api/middleware/internal-service-auth-middleware';
 
 const verifyMock = vi.mocked(verifyServiceToken);

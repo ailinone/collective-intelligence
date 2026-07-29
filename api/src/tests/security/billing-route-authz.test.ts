@@ -45,8 +45,7 @@ vi.mock('@/middleware/require-permission-middleware', () => ({
 
 // Tag the internal service-token guard likewise (its own deny-by-default authz).
 vi.mock('@/api/middleware/internal-service-auth-middleware', () => ({
-  requireServiceAuth: (scope: string) =>
-    Object.assign(async () => {}, { __serviceGuard: scope }),
+  requireServiceAuth: (scope: string) => Object.assign(async () => {}, { __serviceGuard: scope }),
 }));
 
 // Lightweight stubs so importing the real route modules stays hermetic (no DB).
@@ -115,10 +114,11 @@ const hasRbacGuard = (route: CapturedRoute): boolean => rbacPermissions(route).l
 
 const hasServiceGuard = (route: CapturedRoute): boolean =>
   route.preHandlers.some(
-    (h) => typeof h.__serviceGuard === 'string' || h.name === 'requireTopupSecret',
+    (h) => typeof h.__serviceGuard === 'string' || h.name === 'requireTopupSecret'
   );
 
-const hasAnyGuard = (route: CapturedRoute): boolean => hasRbacGuard(route) || hasServiceGuard(route);
+const hasAnyGuard = (route: CapturedRoute): boolean =>
+  hasRbacGuard(route) || hasServiceGuard(route);
 
 const routes: CapturedRoute[] = [];
 
@@ -164,11 +164,11 @@ describe('SEC-01 billing/wallet route authorization coverage', () => {
     expect(billingMutations.length).toBeGreaterThanOrEqual(8);
     for (const route of billingMutations) {
       expect(hasRbacGuard(route), `${route.method} ${route.url} missing requirePermission`).toBe(
-        true,
+        true
       );
       expect(
         rbacPermissions(route),
-        `${route.method} ${route.url} should require billing:update`,
+        `${route.method} ${route.url} should require billing:update`
       ).toContain('billing:update');
     }
   });
@@ -197,13 +197,13 @@ describe('SEC-01 billing/wallet route authorization coverage', () => {
     for (const route of internalMutations) {
       expect(
         hasServiceGuard(route),
-        `${route.method} ${route.url} missing service-token/secret guard`,
+        `${route.method} ${route.url} missing service-token/secret guard`
       ).toBe(true);
       // These routes carry no JWT principal, so the JWT-based requirePermission
       // must NOT be applied (it would 401 the legitimate M2M caller).
       expect(
         hasRbacGuard(route),
-        `${route.method} ${route.url} must not use JWT requirePermission`,
+        `${route.method} ${route.url} must not use JWT requirePermission`
       ).toBe(false);
     }
   });

@@ -24,7 +24,11 @@ describe('01C.1B-J1F §12.2 — resolver discovery snapshot integration', () => 
       nativeProviderId: 'anthropic',
       discoverySnapshotLookup: ({ providerId, logicalModelId }) => {
         if (providerId === 'openrouter' && logicalModelId === 'anthropic-claude-3.7-sonnet') {
-          return { apiModelId: 'anthropic/claude-3.7-sonnet:beta', confidence: 'exact', matchKind: 'exact_canonical' };
+          return {
+            apiModelId: 'anthropic/claude-3.7-sonnet:beta',
+            confidence: 'exact',
+            matchKind: 'exact_canonical',
+          };
         }
         return undefined;
       },
@@ -42,7 +46,11 @@ describe('01C.1B-J1F §12.2 — resolver discovery snapshot integration', () => 
       nativeProviderId: 'anthropic',
       discoverySnapshotLookup: ({ providerId }) => {
         if (providerId === 'unmapped-router') {
-          return { apiModelId: 'anthropic/claude-3.7-sonnet:discovered', confidence: 'exact', matchKind: 'exact_canonical' };
+          return {
+            apiModelId: 'anthropic/claude-3.7-sonnet:discovered',
+            confidence: 'exact',
+            matchKind: 'exact_canonical',
+          };
         }
         return undefined;
       },
@@ -67,7 +75,11 @@ describe('01C.1B-J1F §12.2 — resolver discovery snapshot integration', () => 
       providerId: 'p',
       logicalModelId: 'm',
       nativeProviderId: 'p',
-      discoverySnapshotLookup: () => ({ apiModelId: 'x', confidence: 'high', matchKind: 'native_family_match' }),
+      discoverySnapshotLookup: () => ({
+        apiModelId: 'x',
+        confidence: 'high',
+        matchKind: 'native_family_match',
+      }),
     });
     expect(r.confidence).toBe('discovery');
   });
@@ -77,7 +89,11 @@ describe('01C.1B-J1F §12.2 — resolver discovery snapshot integration', () => 
       providerId: 'p',
       logicalModelId: 'm',
       nativeProviderId: 'p',
-      discoverySnapshotLookup: () => ({ apiModelId: 'x', confidence: 'high', matchKind: 'native_family_match' }),
+      discoverySnapshotLookup: () => ({
+        apiModelId: 'x',
+        confidence: 'high',
+        matchKind: 'native_family_match',
+      }),
     });
     expect(r.aliasReason).toContain('native_family_match');
     expect(r.aliasReason).toContain('high');

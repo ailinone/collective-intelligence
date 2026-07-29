@@ -40,7 +40,7 @@ describe('detectVideoGenerationIntent', () => {
 
   it('returns null when disable_media_generation is set (scoring/judge opt-out)', () => {
     expect(
-      detectVideoGenerationIntent(req(VIDEO_TRIGGER, { disable_media_generation: true })),
+      detectVideoGenerationIntent(req(VIDEO_TRIGGER, { disable_media_generation: true }))
     ).toBeNull();
   });
 
@@ -48,7 +48,7 @@ describe('detectVideoGenerationIntent', () => {
     const withImage = req(VIDEO_TRIGGER, {
       disable_media_generation: true,
       // an image field would normally set hasConditioningMedia = true
-      ...(({ image: 'https://example.com/frame.png' } as unknown) as Partial<ChatRequest>),
+      ...({ image: 'https://example.com/frame.png' } as unknown as Partial<ChatRequest>),
     });
     expect(detectVideoGenerationIntent(withImage)).toBeNull();
   });

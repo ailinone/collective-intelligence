@@ -12,11 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  CollectiveTrace,
-  tracedSpan,
-  generateSpanId,
-} from '../collective-trace';
+import { CollectiveTrace, tracedSpan, generateSpanId } from '../collective-trace';
 
 describe('CollectiveTrace.startSpan / endSpan', () => {
   it('records a span with start/end timestamps and duration', async () => {
@@ -209,7 +205,7 @@ describe('tracedSpan helper', () => {
     await expect(
       tracedSpan(trace, 'aggregate', async () => {
         throw new Error('boom');
-      }),
+      })
     ).rejects.toThrow('boom');
 
     const spans = trace.getSpans();

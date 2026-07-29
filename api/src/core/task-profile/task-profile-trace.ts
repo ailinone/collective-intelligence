@@ -45,7 +45,7 @@ export interface TaskProfileTrace {
 export function buildTaskProfileTrace(
   input: TaskProfilerInput,
   profile: TaskProfile,
-  reasons: readonly string[],
+  reasons: readonly string[]
 ): TaskProfileTrace {
   return {
     requestId: input.requestId,

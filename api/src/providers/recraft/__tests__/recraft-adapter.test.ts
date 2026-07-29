@@ -93,7 +93,12 @@ describe('RecraftAdapter — getModels (no bulk /models)', () => {
     const original = globalThis.fetch;
     globalThis.fetch = ((..._args: unknown[]) => {
       sentinel.count++;
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}), text: async () => '' } as Response);
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+        text: async () => '',
+      } as Response);
     }) as unknown as typeof fetch;
     try {
       const adapter = makeAdapter();
@@ -111,7 +116,7 @@ describe('RecraftAdapter — imageGenerate wire shape', () => {
     // Route both the generations call and the follow-up download.
     const original = globalThis.fetch;
     const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    globalThis.fetch = (vi.fn(async (url: string | URL | Request, fetchInit?: RequestInit) => {
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, fetchInit?: RequestInit) => {
       calls.push({ url: String(url), init: fetchInit ?? {} });
       if (String(url).endsWith('/images/generations')) {
         return {
@@ -133,7 +138,7 @@ describe('RecraftAdapter — imageGenerate wire shape', () => {
         text: async () => '',
         arrayBuffer: async () => fakePng.buffer as ArrayBuffer,
       } as Response;
-    }) as unknown) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       const adapter = makeAdapter();
       const res = await adapter.imageGenerate(mockModel('recraftv3'), {
@@ -163,7 +168,7 @@ describe('RecraftAdapter — imageGenerate wire shape', () => {
       adapter.imageGenerate(mockModel('recraftv2'), {
         prompt: 'x',
         options: { style: 'vector_illustration' },
-      }),
+      })
     ).rejects.toThrow(/not valid for recraftv2/);
   });
 
@@ -173,7 +178,7 @@ describe('RecraftAdapter — imageGenerate wire shape', () => {
       adapter.imageGenerate(mockModel('recraftv3'), {
         prompt: 'x',
         size: '9999x9999',
-      }),
+      })
     ).rejects.toThrow(/invalid size/);
   });
 
@@ -210,9 +215,9 @@ describe('RecraftAdapter — imageGenerate wire shape', () => {
 
   it('rejects unknown model id', async () => {
     const adapter = makeAdapter();
-    await expect(
-      adapter.imageGenerate(mockModel('recraft-v99'), { prompt: 'x' }),
-    ).rejects.toThrow(/unknown model/);
+    await expect(adapter.imageGenerate(mockModel('recraft-v99'), { prompt: 'x' })).rejects.toThrow(
+      /unknown model/
+    );
   });
 });
 
@@ -220,14 +225,14 @@ describe('RecraftAdapter — chat/embeddings are unsupported', () => {
   it('chatCompletion throws', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'hi' }] }),
+      adapter.chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'hi' }] })
     ).rejects.toThrow(/image-only/);
   });
 
   it('generateEmbeddings throws', async () => {
     const adapter = makeAdapter();
     await expect(adapter.generateEmbeddings({ model: 'x', input: 'y' })).rejects.toThrow(
-      /image-only/,
+      /image-only/
     );
   });
 });

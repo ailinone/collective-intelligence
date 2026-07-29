@@ -52,11 +52,18 @@ async function runDiscovery(trigger: DiscoveryTrigger): Promise<void> {
       const eqService = getModelEquivalenceService();
       const indexResult = await eqService.buildIndex();
       logger.info(
-        { groups: indexResult.groups, models: indexResult.models, durationMs: indexResult.durationMs },
+        {
+          groups: indexResult.groups,
+          models: indexResult.models,
+          durationMs: indexResult.durationMs,
+        },
         'Model equivalence index rebuilt after discovery'
       );
     } catch (eqError) {
-      logger.warn({ error: String(eqError) }, 'Failed to rebuild model equivalence index (non-critical)');
+      logger.warn(
+        { error: String(eqError) },
+        'Failed to rebuild model equivalence index (non-critical)'
+      );
     }
   } catch (error) {
     logger.error({ trigger, error }, 'Dynamic model discovery failed');
@@ -82,7 +89,10 @@ export async function startModelDiscoveryRunner(): Promise<void> {
     // (and its O(n*G) equivalence rebuild) saturates the event loop. Discovery
     // failures are already logged inside runDiscovery() and treated as non-fatal.
     runDiscovery('startup').catch((error) => {
-      logger.error({ error: serializeError(error) }, 'Startup model discovery failed (non-blocking)');
+      logger.error(
+        { error: serializeError(error) },
+        'Startup model discovery failed (non-blocking)'
+      );
     });
 
     // L1 Self-Healing: Schedule retry for failed sources 30s after startup.
@@ -93,11 +103,11 @@ export async function startModelDiscoveryRunner(): Promise<void> {
       try {
         const service = await getCentralModelDiscoveryService();
         const health = service.getDiscoveryHealth();
-        const retriableSources = health.sources.filter(s => s.retriable);
+        const retriableSources = health.sources.filter((s) => s.retriable);
         if (retriableSources.length > 0 || health.criticalMissing.length > 0) {
           logger.info(
             {
-              retriableSources: retriableSources.map(s => s.sourceName),
+              retriableSources: retriableSources.map((s) => s.sourceName),
               criticalMissing: health.criticalMissing,
             },
             'Self-healing: retrying failed discovery sources'
@@ -105,7 +115,10 @@ export async function startModelDiscoveryRunner(): Promise<void> {
           const results = await service.retryFailedSources();
           const totalRecovered = results.reduce((sum, r) => sum + r.modelsDiscovered, 0);
           if (totalRecovered > 0) {
-            logger.info({ totalRecovered, sources: results.map(r => r.source) }, 'Self-healing: recovered models from retry');
+            logger.info(
+              { totalRecovered, sources: results.map((r) => r.source) },
+              'Self-healing: recovered models from retry'
+            );
           }
         }
       } catch (err) {
@@ -139,4 +152,3 @@ export function stopModelDiscoveryRunner(): void {
 export async function triggerManualModelDiscovery(): Promise<void> {
   await runDiscovery('manual');
 }
-

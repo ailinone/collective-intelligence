@@ -143,11 +143,14 @@ export class ModelDiscoveryScheduler {
 
     this.timers.set(schedule.id, timer);
 
-    logger.debug({
-      scheduleId: schedule.id,
-      nextRun: nextRun.toISOString(),
-      delayMs: delay
-    }, 'Próxima execução agendada');
+    logger.debug(
+      {
+        scheduleId: schedule.id,
+        nextRun: nextRun.toISOString(),
+        delayMs: delay,
+      },
+      'Próxima execução agendada'
+    );
   }
 
   /**
@@ -316,11 +319,14 @@ export class ModelDiscoveryScheduler {
     const startTime = Date.now();
     schedule.lastRun = new Date();
 
-    logger.info({
-      scheduleId: schedule.id,
-      scheduleName: schedule.name,
-      priority: schedule.priority
-    }, 'Iniciando execução de schedule');
+    logger.info(
+      {
+        scheduleId: schedule.id,
+        scheduleName: schedule.name,
+        priority: schedule.priority,
+      },
+      'Iniciando execução de schedule'
+    );
 
     try {
       switch (schedule.id) {
@@ -345,18 +351,24 @@ export class ModelDiscoveryScheduler {
       }
 
       const duration = Date.now() - startTime;
-      logger.info({
-        scheduleId: schedule.id,
-        duration,
-        success: true
-      }, 'Schedule executado com sucesso');
+      logger.info(
+        {
+          scheduleId: schedule.id,
+          duration,
+          success: true,
+        },
+        'Schedule executado com sucesso'
+      );
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error({
-        scheduleId: schedule.id,
-        duration,
-        error: error instanceof Error ? error.message : String(error)
-      }, 'Erro na execução do schedule');
+      logger.error(
+        {
+          scheduleId: schedule.id,
+          duration,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Erro na execução do schedule'
+      );
     }
 
     // Reagenda próxima execução
@@ -413,13 +425,19 @@ export class ModelDiscoveryScheduler {
     for (const model of criticalModels) {
       try {
         await this.validationService.validateModelCapabilities(model, [
-          'chat', 'text_generation', 'streaming', 'function_calling'
+          'chat',
+          'text_generation',
+          'streaming',
+          'function_calling',
         ]);
       } catch (error) {
-        logger.error({
-          modelId: model.id,
-          error: error instanceof Error ? error.message : String(error)
-        }, 'Erro na validação de modelo crítico');
+        logger.error(
+          {
+            modelId: model.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'Erro na validação de modelo crítico'
+        );
       }
     }
 
@@ -441,19 +459,22 @@ export class ModelDiscoveryScheduler {
 
     for (const model of sampleModels) {
       try {
-        await this.validationService.validateModelCapabilities(model, [
-          'chat', 'text_generation'
-        ]);
+        await this.validationService.validateModelCapabilities(model, ['chat', 'text_generation']);
       } catch (error) {
-        logger.error({
-          modelId: model.id,
-          error: error instanceof Error ? error.message : String(error)
-        }, 'Erro na validação geral');
+        logger.error(
+          {
+            modelId: model.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'Erro na validação geral'
+        );
       }
     }
 
-    logger.info({ total: allModels.length, validated: sampleModels.length },
-      'Validação geral finalizada');
+    logger.info(
+      { total: allModels.length, validated: sampleModels.length },
+      'Validação geral finalizada'
+    );
   }
 
   /**
@@ -506,7 +527,7 @@ export class ModelDiscoveryScheduler {
    * Retorna status atual do scheduler
    */
   getStatus() {
-    const schedules = Array.from(this.schedules.values()).map(schedule => ({
+    const schedules = Array.from(this.schedules.values()).map((schedule) => ({
       id: schedule.id,
       name: schedule.name,
       enabled: schedule.enabled,
@@ -554,13 +575,19 @@ export class ModelDiscoveryScheduler {
             continue;
           }
           await this.validationService.validateModelCapabilities(model, [
-            'chat', 'text_generation', 'streaming', 'function_calling'
+            'chat',
+            'text_generation',
+            'streaming',
+            'function_calling',
           ]);
         } catch (error) {
-          logger.error({
-            modelId,
-            error: error instanceof Error ? error.message : String(error)
-          }, 'Erro na validação manual');
+          logger.error(
+            {
+              modelId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            'Erro na validação manual'
+          );
         }
       }
     }

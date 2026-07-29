@@ -87,7 +87,7 @@ describe('buildC3AdversarialRobustness', () => {
     }
   });
 
-  it('defaults to the suite\'s adversarial-tagged task indices', async () => {
+  it("defaults to the suite's adversarial-tagged task indices", async () => {
     // The prior default [0,10,20,30,40,50] picked the first 6 generic
     // tasks (5 tech + 1 marketing) which were NOT designed for
     // adversarial probing. Coverage audit (gap 8) flagged this — the

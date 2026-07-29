@@ -48,7 +48,7 @@ class EmbeddingCache {
 
   constructor(
     private readonly maxEntries: number = DEFAULT_MAX_ENTRIES,
-    private readonly tei: TEIClient = getTEIClient(),
+    private readonly tei: TEIClient = getTEIClient()
   ) {}
 
   /**

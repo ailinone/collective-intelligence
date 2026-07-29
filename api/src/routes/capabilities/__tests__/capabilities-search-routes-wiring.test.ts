@@ -50,7 +50,7 @@ const ROUTE_PATH = join(
   'src',
   'routes',
   'capabilities',
-  'capabilities-search-routes.ts',
+  'capabilities-search-routes.ts'
 );
 
 function readSrc(p: string): string {
@@ -67,18 +67,14 @@ describe('Caminho-C Stage 4 wiring invariant', () => {
     const src = readSrc(ROUTE_PATH);
     // The route file MUST import the singleton — otherwise the Stage 4
     // refactor (one source of CapabilitySearchService) is silently undone.
-    expect(src).toMatch(
-      /from\s+['"]@\/capability\/search\/capability-search-singleton['"]/,
-    );
+    expect(src).toMatch(/from\s+['"]@\/capability\/search\/capability-search-singleton['"]/);
   });
 
   it('index.ts imports registerCapabilitySearchRoutes', () => {
     const src = readSrc(INDEX_PATH);
     // The dynamic import string must reference the route module by path.
     expect(src).toMatch(/registerCapabilitySearchRoutes/);
-    expect(src).toMatch(
-      /['"]@\/routes\/capabilities\/capabilities-search-routes\.js['"]/,
-    );
+    expect(src).toMatch(/['"]@\/routes\/capabilities\/capabilities-search-routes\.js['"]/);
   });
 
   it('index.ts invokes registerCapabilitySearchRoutes(server)', () => {

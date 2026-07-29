@@ -58,13 +58,7 @@ export type RoutingFlag =
  *   local        — locally-hosted runtime (Ollama, vLLM, LM Studio) opt-in
  *   self_hosted  — operator-owned non-OpenAI-compat self-hosted runtime
  */
-export type RouteKind =
-  | 'native'
-  | 'aggregator'
-  | 'gateway'
-  | 'edge'
-  | 'local'
-  | 'self_hosted';
+export type RouteKind = 'native' | 'aggregator' | 'gateway' | 'edge' | 'local' | 'self_hosted';
 
 // ─── Operability state (mirrors ProviderOperabilityHub) ─────────────────
 
@@ -101,11 +95,7 @@ export type Currency = 'USD';
 /**
  * Lifecycle of a CanonicalModel — vendor-neutral generation stage.
  */
-export type CanonicalLifecycle =
-  | 'preview'
-  | 'current'
-  | 'deprecated'
-  | 'retired';
+export type CanonicalLifecycle = 'preview' | 'current' | 'deprecated' | 'retired';
 
 /**
  * Lifecycle of a ModelProviderOffering — per-provider serving stage.
@@ -242,11 +232,7 @@ export interface ScorerWeights {
   readonly risk: number;
 }
 
-export type SelfHostedPolicy =
-  | 'never'
-  | 'last_resort'
-  | 'prefer_for_privacy'
-  | 'always_consider';
+export type SelfHostedPolicy = 'never' | 'last_resort' | 'prefer_for_privacy' | 'always_consider';
 
 export interface RoutingPolicy {
   readonly scorerWeights: ScorerWeights;

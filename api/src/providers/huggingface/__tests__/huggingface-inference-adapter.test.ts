@@ -18,10 +18,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  HuggingFaceInferenceAdapter,
-  HF_NO_CACHE_HEADER,
-} from '../huggingface-inference-adapter';
+import { HuggingFaceInferenceAdapter, HF_NO_CACHE_HEADER } from '../huggingface-inference-adapter';
 
 /**
  * Reach the protected `buildRequestHeaders` method to verify header shape.

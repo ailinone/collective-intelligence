@@ -28,7 +28,9 @@ describe('inferEndpoint', () => {
   describe('explicit metadata.endpoint wins', () => {
     it('returns the metadata value when it is a non-empty string', () => {
       expect(inferEndpoint(['chat'], { endpoint: 'custom' })).toBe('custom');
-      expect(inferEndpoint(['image_generation'], { endpoint: 'chat_completions' })).toBe('chat_completions');
+      expect(inferEndpoint(['image_generation'], { endpoint: 'chat_completions' })).toBe(
+        'chat_completions'
+      );
     });
 
     it('falls back to heuristic when metadata.endpoint is empty/whitespace', () => {
@@ -48,25 +50,23 @@ describe('inferEndpoint', () => {
       expect(inferEndpoint(['image_generation', 'function_calling'])).toBe('images');
     });
 
-    it.each([
-      ['video_generation'],
-      ['image_to_video'],
-      ['video_to_video'],
-    ])('%s → videos', (cap) => {
-      expect(inferEndpoint([cap])).toBe('videos');
-    });
+    it.each([['video_generation'], ['image_to_video'], ['video_to_video']])(
+      '%s → videos',
+      (cap) => {
+        expect(inferEndpoint([cap])).toBe('videos');
+      }
+    );
 
     it('text_to_speech → audio_speech', () => {
       expect(inferEndpoint(['text_to_speech'])).toBe('audio_speech');
     });
 
-    it.each([
-      ['speech_to_text'],
-      ['transcription'],
-      ['video_transcription'],
-    ])('%s → audio_transcriptions', (cap) => {
-      expect(inferEndpoint([cap])).toBe('audio_transcriptions');
-    });
+    it.each([['speech_to_text'], ['transcription'], ['video_transcription']])(
+      '%s → audio_transcriptions',
+      (cap) => {
+        expect(inferEndpoint([cap])).toBe('audio_transcriptions');
+      }
+    );
 
     it('realtime → realtime', () => {
       expect(inferEndpoint(['realtime'])).toBe('realtime');

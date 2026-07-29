@@ -24,12 +24,31 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getProviderOperabilityHub } from '../provider-operability-hub';
-import { buildRouteKey, extractModelFamily, createEmptySnapshot, isRouteUsable, getUsableExternalRoutes } from '../operability/operability-snapshot';
+import {
+  buildRouteKey,
+  extractModelFamily,
+  createEmptySnapshot,
+  isRouteUsable,
+  getUsableExternalRoutes,
+} from '../operability/operability-snapshot';
 import { CreditGovernor } from '../budget/credit-governor';
 import { PoolBuilder, buildChatExecutionPool } from '../pool/pool-builder';
-import { isInfraFailure, resolveWithDegradation, resolveRuntimeDegradation } from '../orchestration/strategy-degradation';
-import { evaluateLastResort, buildLastResortMetadata, splitBySelfHosted } from '../resilience/last-resort-policy';
-import { recalculateTier, proposeAllTierChanges, getStrategyTier, getStrategyFeatureFlags } from '../orchestration/strategy-tiers';
+import {
+  isInfraFailure,
+  resolveWithDegradation,
+  resolveRuntimeDegradation,
+} from '../orchestration/strategy-degradation';
+import {
+  evaluateLastResort,
+  buildLastResortMetadata,
+  splitBySelfHosted,
+} from '../resilience/last-resort-policy';
+import {
+  recalculateTier,
+  proposeAllTierChanges,
+  getStrategyTier,
+  getStrategyFeatureFlags,
+} from '../orchestration/strategy-tiers';
 import type { Model } from '@/types';
 
 // ─── Test Helpers ───────────────────────────────────────────────────────
@@ -156,7 +175,7 @@ describe('CreditGovernor', () => {
     });
 
     smallBudget.recordSpend('openai', 'gpt-4o', 0.95);
-    const result = smallBudget.canExecute('openai', 'gpt-4o', 0.10);
+    const result = smallBudget.canExecute('openai', 'gpt-4o', 0.1);
     expect(result.canProceed).toBe(false);
     expect(result.reason).toBe('experiment_budget_exceeded');
   });
@@ -198,22 +217,17 @@ describe('PoolBuilder', () => {
   ];
 
   it('filters non-chat models', () => {
-    const result = new PoolBuilder(models)
-      .filterByModality('chat')
-      .build();
+    const result = new PoolBuilder(models).filterByModality('chat').build();
 
-    expect(result.models.find(m => m.id === 'dall-e-3')).toBeUndefined();
-    expect(result.models.find(m => m.id === 'whisper')).toBeUndefined();
+    expect(result.models.find((m) => m.id === 'dall-e-3')).toBeUndefined();
+    expect(result.models.find((m) => m.id === 'whisper')).toBeUndefined();
     expect(result.stages[0].droppedReasons).toBeDefined();
   });
 
   it('excludes self-hosted models', () => {
-    const result = new PoolBuilder(models)
-      .filterByModality('chat')
-      .excludeSelfHosted()
-      .build();
+    const result = new PoolBuilder(models).filterByModality('chat').excludeSelfHosted().build();
 
-    expect(result.models.find(m => m.id === 'local-llama')).toBeUndefined();
+    expect(result.models.find((m) => m.id === 'local-llama')).toBeUndefined();
     expect(result.selfHostedAvailable).toBe(1);
   });
 
@@ -224,8 +238,8 @@ describe('PoolBuilder', () => {
       .filterByCredits()
       .build();
 
-    expect(result.models.find(m => m.id === 'inactive-model')).toBeUndefined();
-    expect(result.models.find(m => m.id === 'no-credits-model')).toBeUndefined();
+    expect(result.models.find((m) => m.id === 'inactive-model')).toBeUndefined();
+    expect(result.models.find((m) => m.id === 'no-credits-model')).toBeUndefined();
   });
 
   it('tracks all stages with drop reasons', () => {
@@ -261,9 +275,7 @@ describe('LastResortPolicy', () => {
   });
 
   it('activates when external pool is zero and self-hosted available', () => {
-    const models = [
-      mockModel({ id: 'local-llama', provider: 'ollama' }),
-    ];
+    const models = [mockModel({ id: 'local-llama', provider: 'ollama' })];
 
     const decision = evaluateLastResort(0, models);
     expect(decision.activated).toBe(true);
@@ -332,16 +344,40 @@ describe('StrategyDegradation', () => {
 
   it('isInfraFailure correctly classifies infra vs bugs', () => {
     // Infra failures — should trigger degradation
-    expect(isInfraFailure(new Error('Request timeout'))).toEqual({ isInfra: true, failureType: 'timeout' });
-    expect(isInfraFailure(new Error('HTTP 402 insufficient quota'))).toEqual({ isInfra: true, failureType: 'credit_exhaustion' });
-    expect(isInfraFailure(new Error('HTTP 429 rate limit exceeded'))).toEqual({ isInfra: true, failureType: 'rate_limit' });
-    expect(isInfraFailure(new Error('ECONNRESET'))).toEqual({ isInfra: true, failureType: 'connection_error' });
-    expect(isInfraFailure(new Error('requires at least 3 models'))).toEqual({ isInfra: true, failureType: 'pool_contraction' });
+    expect(isInfraFailure(new Error('Request timeout'))).toEqual({
+      isInfra: true,
+      failureType: 'timeout',
+    });
+    expect(isInfraFailure(new Error('HTTP 402 insufficient quota'))).toEqual({
+      isInfra: true,
+      failureType: 'credit_exhaustion',
+    });
+    expect(isInfraFailure(new Error('HTTP 429 rate limit exceeded'))).toEqual({
+      isInfra: true,
+      failureType: 'rate_limit',
+    });
+    expect(isInfraFailure(new Error('ECONNRESET'))).toEqual({
+      isInfra: true,
+      failureType: 'connection_error',
+    });
+    expect(isInfraFailure(new Error('requires at least 3 models'))).toEqual({
+      isInfra: true,
+      failureType: 'pool_contraction',
+    });
 
     // Code bugs — must NOT trigger degradation
-    expect(isInfraFailure(new TypeError('Cannot read properties of undefined'))).toEqual({ isInfra: false, failureType: null });
-    expect(isInfraFailure(new ReferenceError('x is not defined'))).toEqual({ isInfra: false, failureType: null });
-    expect(isInfraFailure(new SyntaxError('Unexpected token'))).toEqual({ isInfra: false, failureType: null });
+    expect(isInfraFailure(new TypeError('Cannot read properties of undefined'))).toEqual({
+      isInfra: false,
+      failureType: null,
+    });
+    expect(isInfraFailure(new ReferenceError('x is not defined'))).toEqual({
+      isInfra: false,
+      failureType: null,
+    });
+    expect(isInfraFailure(new SyntaxError('Unexpected token'))).toEqual({
+      isInfra: false,
+      failureType: null,
+    });
   });
 
   it('resolveRuntimeDegradation uses correct chain', () => {
@@ -418,7 +454,7 @@ describe('StrategyTiering', () => {
 
     const proposals = proposeAllTierChanges(results);
     // debate is currently fragile but 100% success → should propose promotion
-    const debateProposal = proposals.find(p => p.strategyName === 'debate');
+    const debateProposal = proposals.find((p) => p.strategyName === 'debate');
     expect(debateProposal).toBeDefined();
     expect(debateProposal!.changed).toBe(true);
   });

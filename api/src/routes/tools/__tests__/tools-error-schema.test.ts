@@ -26,30 +26,34 @@ describe('tools routes — error response schema', () => {
     const app = Fastify({ logger: false });
 
     // Reproduce the schema in isolation — no DB / DI required.
-    app.post('/v1/tools/grep-test', {
-      schema: {
-        body: {
-          type: 'object',
-          required: ['pattern'],
-          properties: { pattern: { type: 'string' } },
-        },
-        response: {
-          400: {
+    app.post(
+      '/v1/tools/grep-test',
+      {
+        schema: {
+          body: {
             type: 'object',
-            additionalProperties: true,
-            properties: {
-              success: { type: 'boolean' },
-              tool_call_id: { type: 'string' },
-              error: {},
-              metadata: { type: 'object', additionalProperties: true },
-              statusCode: { type: 'number' },
-              code: { type: 'string' },
-              message: { type: 'string' },
+            required: ['pattern'],
+            properties: { pattern: { type: 'string' } },
+          },
+          response: {
+            400: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                success: { type: 'boolean' },
+                tool_call_id: { type: 'string' },
+                error: {},
+                metadata: { type: 'object', additionalProperties: true },
+                statusCode: { type: 'number' },
+                code: { type: 'string' },
+                message: { type: 'string' },
+              },
             },
           },
         },
       },
-    }, async () => ({ ok: true }));
+      async () => ({ ok: true })
+    );
 
     const res = await app.inject({
       method: 'POST',
@@ -72,30 +76,34 @@ describe('tools routes — error response schema', () => {
   it('still serializes handler-shape tool errors correctly', async () => {
     const app = Fastify({ logger: false });
 
-    app.post('/v1/tools/handler-test', {
-      schema: {
-        body: { type: 'object', properties: { x: { type: 'string' } } },
-        response: {
-          400: {
-            type: 'object',
-            additionalProperties: true,
-            properties: {
-              success: { type: 'boolean' },
-              tool_call_id: { type: 'string' },
-              error: {},
-              metadata: { type: 'object', additionalProperties: true },
+    app.post(
+      '/v1/tools/handler-test',
+      {
+        schema: {
+          body: { type: 'object', properties: { x: { type: 'string' } } },
+          response: {
+            400: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                success: { type: 'boolean' },
+                tool_call_id: { type: 'string' },
+                error: {},
+                metadata: { type: 'object', additionalProperties: true },
+              },
             },
           },
         },
       },
-    }, async (_req, reply) => {
-      return reply.status(400).send({
-        success: false,
-        tool_call_id: 'test-id',
-        error: 'simulated tool error',
-        metadata: { tool_name: 'handler-test' },
-      });
-    });
+      async (_req, reply) => {
+        return reply.status(400).send({
+          success: false,
+          tool_call_id: 'test-id',
+          error: 'simulated tool error',
+          metadata: { tool_name: 'handler-test' },
+        });
+      }
+    );
 
     const res = await app.inject({ method: 'POST', url: '/v1/tools/handler-test', payload: {} });
     expect(res.statusCode).toBe(400);

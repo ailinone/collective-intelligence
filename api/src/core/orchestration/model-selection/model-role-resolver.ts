@@ -23,11 +23,7 @@
  */
 import { logger } from '@/utils/logger';
 import type { Model } from '@/types';
-import {
-  augmentPolicyForTask,
-  POLICIES,
-  type RolePolicy,
-} from './model-role-policy';
+import { augmentPolicyForTask, POLICIES, type RolePolicy } from './model-role-policy';
 import { TraceBuilder } from './model-role-selection-trace';
 import type {
   FilterStage,
@@ -54,9 +50,7 @@ import {
   type ModelQualityCalibrationSnapshot,
 } from '../role-selection/model-quality-calibration';
 // 01C.1B-J2-C-R4 §13 — Task-aware quality lookup (replaces monolithic snapshotEntry.qualityScore)
-import {
-  resolveTaskAwareQuality,
-} from '../role-selection/task-aware-quality-resolver';
+import { resolveTaskAwareQuality } from '../role-selection/task-aware-quality-resolver';
 // 01C.1B-J1D-R4C — Effective context metadata + dynamic context budget
 // (replaces magic `policy.contextWindowMin` constants with plan-derived
 // budget, and corrects catalog underestimates via audit-trailed overrides).
@@ -164,10 +158,7 @@ function countPreferredCapabilities(model: Model, caps: readonly string[]): numb
   return n;
 }
 
-function rejection(
-  candidate: ModelCandidate,
-  reason: string,
-): RejectedCandidate {
+function rejection(candidate: ModelCandidate, reason: string): RejectedCandidate {
   return {
     modelId: candidate.model.id,
     providerId: candidate.providerId,
@@ -186,7 +177,7 @@ interface FilterContext {
 function applyFilter(
   ctx: FilterContext,
   stage: FilterStage,
-  predicate: (c: ModelCandidate) => { ok: true } | { ok: false; reason: string },
+  predicate: (c: ModelCandidate) => { ok: true } | { ok: false; reason: string }
 ): readonly ModelCandidate[] {
   const survivors: ModelCandidate[] = [];
   for (const c of ctx.pool) {
@@ -226,7 +217,7 @@ function rankPool(
   maxCostPerCall: number,
   qualitySnapshot?: ModelQualityCalibrationSnapshot,
   taskProfile?: TaskProfile,
-  qualityPolicy?: import('./model-role-types').ModelRoleResolutionInput['qualityPolicy'],
+  qualityPolicy?: import('./model-role-types').ModelRoleResolutionInput['qualityPolicy']
 ): RankingResult {
   // 01C.1B-J1G-R0 — for synthesizer role, delegate to the hybrid policy
   // (quality floor + freshness + multi-provider coverage + liveReady +
@@ -234,7 +225,14 @@ function rankPool(
   // This avoids changing behavior for participant/judge/fallback while
   // the synthesizer-specific decision benefits from the J1G evidence.
   if (policy.role === 'synthesizer') {
-    return rankPoolForSynthesizer(pool, constraints, policy, qualitySnapshot, taskProfile, qualityPolicy);
+    return rankPoolForSynthesizer(
+      pool,
+      constraints,
+      policy,
+      qualitySnapshot,
+      taskProfile,
+      qualityPolicy
+    );
   }
   const ranked = pool
     .map<RankedCandidate>((c) => {
@@ -278,13 +276,14 @@ function rankPoolForSynthesizer(
   policy: RolePolicy,
   qualitySnapshot?: ModelQualityCalibrationSnapshot,
   taskProfile?: TaskProfile,
-  qualityPolicy?: import('./model-role-types').ModelRoleResolutionInput['qualityPolicy'],
+  qualityPolicy?: import('./model-role-types').ModelRoleResolutionInput['qualityPolicy']
 ): RankingResult {
   // Pre-compute preferred capability set for tie-breaker boost.
   const preferredCapSet = new Set(policy.preferredCapabilities);
   const candidatesByFamily = new Map<string, ModelCandidate[]>();
   for (const c of pool) {
-    const fam = c.model.id.toLowerCase()
+    const fam = c.model.id
+      .toLowerCase()
       .replace(/^anthropic[-/]/, '')
       .replace(/^openai[-/]/, '')
       .replace(/^google[-/]/, '');
@@ -295,7 +294,8 @@ function rankPoolForSynthesizer(
   // and the raw SynthesizerScoredCandidate (for the summary artifact).
   const synthScored: SynthesizerScoredCandidate[] = [];
   const ranked: RankedCandidate[] = pool.map((c): RankedCandidate => {
-    const fam = c.model.id.toLowerCase()
+    const fam = c.model.id
+      .toLowerCase()
       .replace(/^anthropic[-/]/, '')
       .replace(/^openai[-/]/, '')
       .replace(/^google[-/]/, '');
@@ -345,7 +345,11 @@ function rankPoolForSynthesizer(
         snapshotEntry = undefined;
       }
     } else if (qualitySnapshot) {
-      snapshotEntry = findEntry(qualitySnapshot, c.model.id, c.model.id.replace(/^[a-z0-9-]+[-/]/i, ''));
+      snapshotEntry = findEntry(
+        qualitySnapshot,
+        c.model.id,
+        c.model.id.replace(/^[a-z0-9-]+[-/]/i, '')
+      );
     } else {
       snapshotEntry = undefined;
     }
@@ -367,7 +371,7 @@ function rankPoolForSynthesizer(
       reliability: c.model.performance?.reliability ?? 0,
       estimatedCostUsd: c.estimatedCostPerCallUsd,
       providerCoverageCount,
-      liveReadyRouteCount: 0,  // live-ready evidence not yet plumbed; future enhancement
+      liveReadyRouteCount: 0, // live-ready evidence not yet plumbed; future enhancement
       aliasConfidence: 'medium', // catalog presence = at least medium confidence
       daysSinceCatalogUpdate: undefined, // last_synced_at is NULL in catalog
       providerCreditRisk: c.hasCredits === false,
@@ -375,7 +379,10 @@ function rankPoolForSynthesizer(
       contextWindow: c.model.contextWindow,
       preferredCapabilityMatchCount,
     };
-    const result: SynthesizerScoredCandidate = scoreSynthesizerCandidate(metrics, DEFAULT_HYBRID_SYNTHESIZER_POLICY);
+    const result: SynthesizerScoredCandidate = scoreSynthesizerCandidate(
+      metrics,
+      DEFAULT_HYBRID_SYNTHESIZER_POLICY
+    );
     synthScored.push(result);
     const score = result.qualityFloorPassed ? result.breakdown.finalScore : -1;
     return {
@@ -399,7 +406,7 @@ function rankPoolForSynthesizer(
 function pickWithDiversity(
   ranked: readonly RankedCandidate[],
   count: number,
-  requireProviderDiversity: boolean,
+  requireProviderDiversity: boolean
 ): RankedCandidate[] {
   if (!requireProviderDiversity) return ranked.slice(0, count);
   const picked: RankedCandidate[] = [];
@@ -446,7 +453,8 @@ export class ModelRoleResolver {
     // resolution block one of pool_provided/catalog/source_unavailable
     // will always have been assigned, but TS can't prove that through
     // the nested ifs.
-    let registrySourceStatus: ModelRoleSelectionTrace['registrySourceStatus'] = 'source_unavailable';
+    let registrySourceStatus: ModelRoleSelectionTrace['registrySourceStatus'] =
+      'source_unavailable';
     let semanticSearchStatus: ModelRoleSelectionTrace['semanticSearchStatus'];
 
     if (inputCandidates) {
@@ -463,7 +471,10 @@ export class ModelRoleResolver {
         registrySourceStatus = 'catalog';
         semanticSearchStatus = 'used';
       } catch (err) {
-        log.warn({ err: String(err) }, 'semantic search failed, falling back to structured catalog');
+        log.warn(
+          { err: String(err) },
+          'semantic search failed, falling back to structured catalog'
+        );
         inputCandidates = null;
         semanticSearchStatus = 'source_unavailable';
       }
@@ -477,7 +488,7 @@ export class ModelRoleResolver {
           new Set([
             ...policy.requiredCapabilities,
             ...(input.constraints.requiredCapabilities ?? []),
-          ]),
+          ])
         );
         inputCandidates = await this.deps.catalog.searchCandidates({
           capabilities: requiredCaps,
@@ -510,33 +521,28 @@ export class ModelRoleResolver {
 
     // 1. Capability — required (policy + caller).
     const requiredCaps = Array.from(
-      new Set([
-        ...policy.requiredCapabilities,
-        ...(input.constraints.requiredCapabilities ?? []),
-      ]),
+      new Set([...policy.requiredCapabilities, ...(input.constraints.requiredCapabilities ?? [])])
     );
     trace.addCriterion(`requiredCapabilities=[${requiredCaps.join(', ')}]`);
     let pool = applyFilter({ ...ctx, pool: inputCandidates }, 'capability', (c) =>
       modelHasAllCapabilities(c.model, requiredCaps)
         ? { ok: true }
-        : { ok: false, reason: 'missing_required_capability' },
+        : { ok: false, reason: 'missing_required_capability' }
     );
 
     // 2. Provider health.
     pool = applyFilter({ ...ctx, pool }, 'health', (c) =>
-      c.providerHealthy
-        ? { ok: true }
-        : { ok: false, reason: 'provider_unhealthy' },
+      c.providerHealthy ? { ok: true } : { ok: false, reason: 'provider_unhealthy' }
     );
 
     // 3. Credits.
     pool = applyFilter({ ...ctx, pool }, 'credits', (c) =>
-      c.hasCredits ? { ok: true } : { ok: false, reason: 'no_credits' },
+      c.hasCredits ? { ok: true } : { ok: false, reason: 'no_credits' }
     );
 
     // 4. Rate limit.
     pool = applyFilter({ ...ctx, pool }, 'rate_limit', (c) =>
-      c.rateLimited ? { ok: false, reason: 'rate_limited' } : { ok: true },
+      c.rateLimited ? { ok: false, reason: 'rate_limited' } : { ok: true }
     );
 
     // 5. Cost — within max per-call budget if specified.
@@ -544,9 +550,7 @@ export class ModelRoleResolver {
       const max = input.constraints.maxCostUsd;
       trace.addCriterion(`maxCostUsd=${max}`);
       pool = applyFilter({ ...ctx, pool }, 'cost', (c) =>
-        c.estimatedCostPerCallUsd <= max
-          ? { ok: true }
-          : { ok: false, reason: 'cost_over_budget' },
+        c.estimatedCostPerCallUsd <= max ? { ok: true } : { ok: false, reason: 'cost_over_budget' }
       );
     } else {
       trace.recordStage('cost', pool.length);
@@ -575,7 +579,11 @@ export class ModelRoleResolver {
       const budgetRole: ConsensusRole =
         r === 'participant'
           ? 'participant'
-          : r === 'synthesizer' || r === 'leader' || r === 'observer' || r === 'critic' || r === 'reviewer'
+          : r === 'synthesizer' ||
+              r === 'leader' ||
+              r === 'observer' ||
+              r === 'critic' ||
+              r === 'reviewer'
             ? 'synthesizer'
             : r === 'judge'
               ? 'judge'
@@ -586,20 +594,16 @@ export class ModelRoleResolver {
       });
     }
 
-    const staticMinCtx = Math.max(
-      policy.contextWindowMin,
-      input.constraints.minContextWindow ?? 0,
-    );
+    const staticMinCtx = Math.max(policy.contextWindowMin, input.constraints.minContextWindow ?? 0);
     const effectiveMinCtx = dynamicBudget?.minContextWindow ?? staticMinCtx;
 
     trace.addCriterion(
       useDynamicContextBudget
         ? `minContextWindow=${effectiveMinCtx} (dynamic; staticWouldHaveBeen=${staticMinCtx})`
-        : `minContextWindow=${effectiveMinCtx}`,
+        : `minContextWindow=${effectiveMinCtx}`
     );
 
-    const overrides: ReadonlyArray<ContextMetadataOverride> =
-      input.contextPolicy?.overrides ?? [];
+    const overrides: ReadonlyArray<ContextMetadataOverride> = input.contextPolicy?.overrides ?? [];
 
     pool = applyFilter({ ...ctx, pool }, 'context_window', (c) => {
       // Resolve effective context metadata (override-aware) when policy
@@ -631,7 +635,9 @@ export class ModelRoleResolver {
           effectiveMaxOutputTokens: effective?.effectiveMaxOutputTokens,
           budget: dynamicBudget,
         });
-        return fit.ok ? { ok: true } : { ok: false, reason: fit.reason ?? 'context_window_too_small' };
+        return fit.ok
+          ? { ok: true }
+          : { ok: false, reason: fit.reason ?? 'context_window_too_small' };
       }
       return availableContextWindow >= effectiveMinCtx
         ? { ok: true }
@@ -642,12 +648,12 @@ export class ModelRoleResolver {
     if (input.constraints.requireLocal) {
       trace.addCriterion('requireLocal=true');
       pool = applyFilter({ ...ctx, pool }, 'locality', (c) =>
-        c.isLocal ? { ok: true } : { ok: false, reason: 'not_local' },
+        c.isLocal ? { ok: true } : { ok: false, reason: 'not_local' }
       );
     } else if (input.constraints.allowLocal === false) {
       trace.addCriterion('allowLocal=false');
       pool = applyFilter({ ...ctx, pool }, 'locality', (c) =>
-        c.isLocal ? { ok: false, reason: 'local_disallowed' } : { ok: true },
+        c.isLocal ? { ok: false, reason: 'local_disallowed' } : { ok: true }
       );
     } else {
       trace.recordStage('locality', pool.length);
@@ -703,7 +709,7 @@ export class ModelRoleResolver {
         // Emit per-candidate trace when caller opts in.
         if (j1dR4dPolicy.includeTrace === true) {
           trace.addCriterion(
-            `judgeStructuredOutput:${c.model.id}=${ev.support}(${ev.evidenceSource})`,
+            `judgeStructuredOutput:${c.model.id}=${ev.support}(${ev.evidenceSource})`
           );
         }
         return ok
@@ -724,7 +730,7 @@ export class ModelRoleResolver {
         modelHasCapability(c.model, 'function_calling') ||
         modelHasCapability(c.model, 'tool_use')
           ? { ok: true }
-          : { ok: false, reason: 'json_output_not_supported' },
+          : { ok: false, reason: 'json_output_not_supported' }
       );
     } else {
       trace.recordStage('role_specific', pool.length);
@@ -741,7 +747,7 @@ export class ModelRoleResolver {
       maxCostPerCall,
       input.modelQualityCalibrationSnapshot,
       input.taskProfile,
-      input.qualityPolicy,
+      input.qualityPolicy
     );
     const picked = pickWithDiversity(ranked, count, policy.requireProviderDiversity);
 
@@ -759,7 +765,7 @@ export class ModelRoleResolver {
       synthesizerSelectionSummary = buildSynthesizerSelectionSummary(
         synthScored,
         picked,
-        input.modelQualityCalibrationSnapshot,
+        input.modelQualityCalibrationSnapshot
       );
     }
 
@@ -787,14 +793,14 @@ export class ModelRoleResolver {
 function buildSynthesizerSelectionSummary(
   synthScored: readonly SynthesizerScoredCandidate[],
   picked: readonly RankedCandidate[],
-  qualitySnapshot?: ModelQualityCalibrationSnapshot,
+  qualitySnapshot?: ModelQualityCalibrationSnapshot
 ): import('./model-role-types').SynthesizerSelectionSummary {
   const winnerCandidate = picked[0]?.candidate;
   const winnerScored = winnerCandidate
     ? synthScored.find(
         (s) =>
           s.metrics.modelId === winnerCandidate.model.id &&
-          s.metrics.providerId === winnerCandidate.providerId,
+          s.metrics.providerId === winnerCandidate.providerId
       )
     : undefined;
 
@@ -810,7 +816,7 @@ function buildSynthesizerSelectionSummary(
 
   // Top alternatives: top 5 accepted EXCLUDING the winner.
   const sortedAccepted = [...accepted].sort(
-    (a, b) => b.breakdown.finalScore - a.breakdown.finalScore,
+    (a, b) => b.breakdown.finalScore - a.breakdown.finalScore
   );
   const topAlternatives = sortedAccepted
     .filter((s) => s !== winnerScored)
@@ -825,9 +831,7 @@ function buildSynthesizerSelectionSummary(
     }));
 
   // Stable pool hash: deterministic over (modelId, providerId) pairs.
-  const poolTuples = synthScored
-    .map((s) => `${s.metrics.modelId}::${s.metrics.providerId}`)
-    .sort();
+  const poolTuples = synthScored.map((s) => `${s.metrics.modelId}::${s.metrics.providerId}`).sort();
   const candidatePoolHash = stableHash(poolTuples.join('|'));
 
   // 01C.1B-J2 §15 — Quality snapshot metadata (when present)

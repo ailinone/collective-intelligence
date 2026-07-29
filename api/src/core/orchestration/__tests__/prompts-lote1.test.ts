@@ -31,10 +31,7 @@ import {
   TriageStageSchema,
   TASK_CONTEXT_MAX_LENGTH,
 } from '../triage-schema';
-import {
-  AILIN_FALLBACK_PROMPT,
-  buildAilinFallbackPrompt,
-} from '../prompts/fallback-prompt';
+import { AILIN_FALLBACK_PROMPT, buildAilinFallbackPrompt } from '../prompts/fallback-prompt';
 import { buildExecutionSystemPrompt } from '../execution-system-prompt';
 import type {
   ChatRequest,
@@ -75,19 +72,23 @@ function planWithTaskContext(taskContext: string): TriageExecutionPlan {
     strategy: 'single',
     modelCount: 1,
     requiresContinuation: false,
-    stages: [{
-      name: 'main',
-      strategy: 'single',
-      modelRoles: [{
-        role: 'primary',
-        count: 1,
-        preferredCapabilities: [],
-        qualityTarget: 0.8,
-      }],
-      requiredCapabilities: [],
-      maxTokens: 2048,
-      taskContext,
-    }],
+    stages: [
+      {
+        name: 'main',
+        strategy: 'single',
+        modelRoles: [
+          {
+            role: 'primary',
+            count: 1,
+            preferredCapabilities: [],
+            qualityTarget: 0.8,
+          },
+        ],
+        requiredCapabilities: [],
+        maxTokens: 2048,
+        taskContext,
+      },
+    ],
   };
 }
 
@@ -110,19 +111,23 @@ describe('R12 — TriageResponseSchema strict validation', () => {
         model_count: 3,
         requires_continuation: false,
         max_deliberation_rounds: 2,
-        stages: [{
-          name: 'review',
-          strategy: 'debate',
-          model_roles: [{
-            role: 'reviewer',
-            count: 3,
-            preferred_capabilities: ['reasoning'],
-            quality_target: 0.9,
-          }],
-          required_capabilities: ['reasoning'],
-          max_tokens: 4096,
-          task_context: 'Focus on concurrency bugs in the new queue worker.',
-        }],
+        stages: [
+          {
+            name: 'review',
+            strategy: 'debate',
+            model_roles: [
+              {
+                role: 'reviewer',
+                count: 3,
+                preferred_capabilities: ['reasoning'],
+                quality_target: 0.9,
+              },
+            ],
+            required_capabilities: ['reasoning'],
+            max_tokens: 4096,
+            task_context: 'Focus on concurrency bugs in the new queue worker.',
+          },
+        ],
       },
     };
 
@@ -203,13 +208,15 @@ describe('R12 — TriageResponseSchema strict validation', () => {
     const parsed = TriageStageSchema.safeParse({
       name: 'main',
       strategy: 'single',
-      model_roles: [{
-        role: 'primary',
-        count: 1,
-        preferred_capabilities: [],
-        quality_target: 0.8,
-        system_prompt: 'You are a legacy prompt that should be ignored downstream.',
-      }],
+      model_roles: [
+        {
+          role: 'primary',
+          count: 1,
+          preferred_capabilities: [],
+          quality_target: 0.8,
+          system_prompt: 'You are a legacy prompt that should be ignored downstream.',
+        },
+      ],
       required_capabilities: [],
       max_tokens: 2048,
     });
@@ -239,14 +246,8 @@ describe('R1 + R11 — buildExecutionSystemPrompt precedence and collective flag
 
   it('emits collective framing iff context.isCollectiveStrategy is true (R11)', () => {
     const req = makeRequest();
-    const collective = buildExecutionSystemPrompt(
-      req,
-      makeContext({ isCollectiveStrategy: true }),
-    );
-    const single = buildExecutionSystemPrompt(
-      req,
-      makeContext({ isCollectiveStrategy: false }),
-    );
+    const collective = buildExecutionSystemPrompt(req, makeContext({ isCollectiveStrategy: true }));
+    const single = buildExecutionSystemPrompt(req, makeContext({ isCollectiveStrategy: false }));
     expect(collective).toContain('collective intelligence strategy');
     expect(single).not.toContain('collective intelligence strategy');
   });
@@ -256,20 +257,14 @@ describe('R1 + R11 — buildExecutionSystemPrompt precedence and collective flag
     // or 'devil-advocate-consensus'. With R11, any strategy whose metadata reports
     // minModels > 1 propagates the flag, so the test only needs the flag set to true.
     const req = makeRequest();
-    const out = buildExecutionSystemPrompt(
-      req,
-      makeContext({ isCollectiveStrategy: true }),
-    );
+    const out = buildExecutionSystemPrompt(req, makeContext({ isCollectiveStrategy: true }));
     expect(out).toContain('collective intelligence strategy');
   });
 
   it('appends task_context from the triage execution plan (R1 single-stage path)', () => {
     const req = makeRequest();
     const plan = planWithTaskContext('Prioritize p95 latency under 150ms.');
-    const out = buildExecutionSystemPrompt(
-      req,
-      makeContext({ executionPlan: plan }),
-    );
+    const out = buildExecutionSystemPrompt(req, makeContext({ executionPlan: plan }));
     expect(out).toContain('Task context: Prioritize p95 latency under 150ms.');
   });
 
@@ -281,10 +276,7 @@ describe('R1 + R11 — buildExecutionSystemPrompt precedence and collective flag
       complexity: 'medium',
       executionPlan: plan,
     };
-    const out = buildExecutionSystemPrompt(
-      req,
-      makeContext({ triage: decision }),
-    );
+    const out = buildExecutionSystemPrompt(req, makeContext({ triage: decision }));
     expect(out).toContain('Focus on the OAuth callback flow.');
   });
 

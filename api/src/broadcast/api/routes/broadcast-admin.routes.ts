@@ -96,8 +96,8 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
       const subject: Subject | null = body.userId
         ? { kind: 'user', userId: body.userId }
         : body.organizationId
-        ? { kind: 'organization', organizationId: body.organizationId }
-        : null;
+          ? { kind: 'organization', organizationId: body.organizationId }
+          : null;
       if (!subject) {
         return reply
           .code(400)
@@ -113,7 +113,7 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
             subject,
             tally,
           },
-          'broadcast right-to-erasure executed via API',
+          'broadcast right-to-erasure executed via API'
         );
         return reply.send({ tally });
       } catch (err) {
@@ -122,7 +122,7 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
           .code(500)
           .send({ error: 'internal_error', message: 'erasure failed; see logs' });
       }
-    },
+    }
   );
 
   // ─── POST /v1/admin/broadcast/dlq/:id/replay ─────────────────────────
@@ -181,8 +181,7 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
         entry.destination.tenantType === 'organization' &&
         entry.destination.tenantId === principal.organizationId;
       const isOwnUser =
-        entry.destination.tenantType === 'user' &&
-        entry.destination.tenantId === principal.userId;
+        entry.destination.tenantType === 'user' && entry.destination.tenantId === principal.userId;
       if (!isOwnOrg && !isOwnUser) {
         return reply
           .code(403)
@@ -201,7 +200,7 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
         });
       }
       return reply.send(outcome);
-    },
+    }
   );
 
   // ─── GET /v1/admin/broadcast/dlq ─────────────────────────────────────
@@ -270,7 +269,7 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
 
       const tenantWhere =
         scope === 'user'
-          ? userFilter ?? { id: '__no_user__' } // forces empty when caller has no userId
+          ? (userFilter ?? { id: '__no_user__' }) // forces empty when caller has no userId
           : scope === 'both'
             ? { OR: userFilter ? [orgFilter, userFilter] : [orgFilter] }
             : orgFilter;
@@ -318,6 +317,6 @@ export async function broadcastAdminRoutes(server: FastifyInstance): Promise<voi
         nextCursor:
           rows.length === limit ? rows[rows.length - 1]!.deadLetteredAt.toISOString() : null,
       });
-    },
+    }
   );
 }

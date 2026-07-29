@@ -50,7 +50,10 @@ import { isNonGenerativeModel } from '@/core/pool/non-generative-filter';
 import type { PoolResult } from '@/core/pool/pool-types';
 import { getExecutionFeedbackCollector } from '@/core/feedback/execution-feedback-collector';
 import { normalizeCost } from '@/services/cost-normalization-service';
-import { getPromptVariantBandit, isPromptVariantBanditEnabled } from '@/core/learning/prompt-variant-bandit';
+import {
+  getPromptVariantBandit,
+  isPromptVariantBanditEnabled,
+} from '@/core/learning/prompt-variant-bandit';
 import { PROMPT_VARIANTS, PROMPTS, type PromptVariant } from './prompts/sota-system-prompts';
 
 // Module-level cache for credit monitor to avoid repeated dynamic imports in
@@ -98,11 +101,18 @@ export interface StrategyMetadata {
  * Models with ONLY these capabilities (and no 'chat' or 'text_generation') are excluded.
  */
 const NON_CHAT_CAPABILITIES = new Set([
-  'image_generation', 'image_editing', 'image_upscaling',
-  'video_generation', 'video_editing',
-  'audio_generation', 'text_to_speech', 'speech_to_text',
-  'embedding', 'reranking',
-  'moderation', 'classification',
+  'image_generation',
+  'image_editing',
+  'image_upscaling',
+  'video_generation',
+  'video_editing',
+  'audio_generation',
+  'text_to_speech',
+  'speech_to_text',
+  'embedding',
+  'reranking',
+  'moderation',
+  'classification',
 ]);
 
 /**
@@ -229,18 +239,21 @@ export abstract class BaseStrategy {
         context.models,
         qualityThreshold,
         maxCost,
-        requiredCaps,
+        requiredCaps
       );
 
       // Log pool reduction for observability
       if (poolResult.stages.length > 0) {
-        this.log.debug({
-          strategy: this.getMetadata().name,
-          summary: poolResult.summary,
-          poolSize: poolResult.poolSize,
-          selfHosted: poolResult.selfHostedAvailable,
-          providers: poolResult.providerDiversity,
-        }, 'Pool built via PoolBuilder');
+        this.log.debug(
+          {
+            strategy: this.getMetadata().name,
+            summary: poolResult.summary,
+            poolSize: poolResult.poolSize,
+            selfHosted: poolResult.selfHostedAvailable,
+            providers: poolResult.providerDiversity,
+          },
+          'Pool built via PoolBuilder'
+        );
       }
 
       return poolResult.models;
@@ -258,16 +271,15 @@ export abstract class BaseStrategy {
     context: OrchestrationContext,
     qualityThreshold: number,
     requiredCaps: string[],
-    maxCost: number | undefined,
+    maxCost: number | undefined
   ): Model[] {
     const eligible = context.models.filter((model) => {
       const caps = model.capabilities ?? [];
       const hasChatCapability = caps.includes('chat') || caps.includes('text_generation');
       if (!hasChatCapability) return false;
 
-      const hasOnlyNonChat = caps.length > 0 && caps.every(
-        (c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming'
-      );
+      const hasOnlyNonChat =
+        caps.length > 0 && caps.every((c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming');
       if (hasOnlyNonChat) return false;
 
       // Robust non-generative exclusion (corrupt capability tags) — keep
@@ -299,7 +311,12 @@ export abstract class BaseStrategy {
       return true;
     });
 
-    const SOURCE_PRIORITY: Record<string, number> = { native_api: 0, cloud_hub: 1, router: 2, aggregator: 3 };
+    const SOURCE_PRIORITY: Record<string, number> = {
+      native_api: 0,
+      cloud_hub: 1,
+      router: 2,
+      aggregator: 3,
+    };
     return eligible.sort((a, b) => {
       const qa = a.performance?.quality ?? 0;
       const qb = b.performance?.quality ?? 0;
@@ -440,7 +457,7 @@ export abstract class BaseStrategy {
        * this streaming helper.
        */
       skipSynthesisCap?: boolean;
-    },
+    }
   ): AsyncGenerator<ChatResponse, void, unknown> {
     request = opts?.skipSynthesisCap ? request : this.capSynthesisRequest(request);
     // A working synthesizer emits its first token within a few seconds; a
@@ -460,18 +477,16 @@ export abstract class BaseStrategy {
       // THIS synthesizer model's own output capability (dynamic, per-model).
       const pinnedSynth = this.withPinnedModel(request, cand.model);
       const synthMaxTokens = resolveDynamicMaxTokens(pinnedSynth.max_tokens, cand.model);
-      const synthRequest = synthMaxTokens !== undefined
-        ? { ...pinnedSynth, max_tokens: synthMaxTokens }
-        : pinnedSynth;
-      const iterator = cand.adapter
-        .chatCompletionStream(synthRequest)[Symbol.asyncIterator]();
+      const synthRequest =
+        synthMaxTokens !== undefined ? { ...pinnedSynth, max_tokens: synthMaxTokens } : pinnedSynth;
+      const iterator = cand.adapter.chatCompletionStream(synthRequest)[Symbol.asyncIterator]();
       try {
         // Race the FIRST chunk against a deadline.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const deadline = new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => reject(new Error(`first-chunk timeout after ${firstChunkTimeoutMs}ms`)),
-            firstChunkTimeoutMs,
+            firstChunkTimeoutMs
           );
         });
         let first: IteratorResult<ChatResponse>;
@@ -493,7 +508,8 @@ export abstract class BaseStrategy {
           // (observed: full answer streamed, then a ~90s hang to the 130s client
           // timeout). If no new chunk arrives within the idle window, treat the
           // stream as complete and close it (the answer is already delivered).
-          const idleTimeoutMs = opts?.idleTimeoutMs ?? Number(process.env.SYNTHESIS_STREAM_IDLE_MS ?? 15000);
+          const idleTimeoutMs =
+            opts?.idleTimeoutMs ?? Number(process.env.SYNTHESIS_STREAM_IDLE_MS ?? 15000);
           while (true) {
             let idleTimer: ReturnType<typeof setTimeout> | undefined;
             let idledOut = false;
@@ -516,15 +532,19 @@ export abstract class BaseStrategy {
             if (idledOut) {
               this.log.warn(
                 { provider: cand.adapter.getName(), model: cand.model.id, idleTimeoutMs },
-                'Synthesis stream idle past deadline — closing straggling provider stream',
+                'Synthesis stream idle past deadline — closing straggling provider stream'
               );
               // Best-effort, NON-blocking close of the stalled upstream stream.
               try {
                 const ret = iterator.return?.(undefined);
                 if (ret && typeof (ret as Promise<unknown>).then === 'function') {
-                  (ret as Promise<unknown>).catch(() => { /* ignore */ });
+                  (ret as Promise<unknown>).catch(() => {
+                    /* ignore */
+                  });
                 }
-              } catch { /* ignore */ }
+              } catch {
+                /* ignore */
+              }
               break;
             }
             if (next.done) break;
@@ -545,19 +565,23 @@ export abstract class BaseStrategy {
         try {
           const ret = iterator.return?.(undefined);
           if (ret && typeof (ret as Promise<unknown>).then === 'function') {
-            (ret as Promise<unknown>).catch(() => { /* ignore */ });
+            (ret as Promise<unknown>).catch(() => {
+              /* ignore */
+            });
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         if (started) {
           this.log.warn(
             { provider: cand.adapter.getName(), model: cand.model.id, error: msg },
-            'Synthesis stream failed AFTER first chunk — keeping partial output',
+            'Synthesis stream failed AFTER first chunk — keeping partial output'
           );
           return;
         }
         this.log.warn(
           { provider: cand.adapter.getName(), model: cand.model.id, error: msg },
-          'Synthesis stream failed/timed out before first chunk — falling back to next synthesizer',
+          'Synthesis stream failed/timed out before first chunk — falling back to next synthesizer'
         );
       }
     }
@@ -571,12 +595,12 @@ export abstract class BaseStrategy {
       // emitting an empty "success" chunk.
       this.log.error(
         { attempts: candidates.length, failures },
-        'All candidates failed — throwing (throwOnTotalFailure)',
+        'All candidates failed — throwing (throwOnTotalFailure)'
       );
       throw new Error(
         failures.length > 0
           ? `All ${candidates.length} candidates failed: ${failures.join('; ')}`
-          : `All ${candidates.length} candidates failed`,
+          : `All ${candidates.length} candidates failed`
       );
     }
 
@@ -589,7 +613,7 @@ export abstract class BaseStrategy {
     }
     this.log.error(
       { attempts: candidates.length, failures },
-      'All synthesizers failed — emitting degraded synthesis (no provider produced output)',
+      'All synthesizers failed — emitting degraded synthesis (no provider produced output)'
     );
     yield {
       id: `synthesis-degraded-${Date.now()}`,
@@ -620,8 +644,8 @@ export abstract class BaseStrategy {
     for (const model of models) {
       const inputRate = Math.max(0, Number(model.inputCostPer1k) || 0);
       const outputRate = Math.max(0, Number(model.outputCostPer1k) || 0);
-      totalCost += (estimatedInputTokens / 1000) * inputRate
-                 + (estimatedOutputTokens / 1000) * outputRate;
+      totalCost +=
+        (estimatedInputTokens / 1000) * inputRate + (estimatedOutputTokens / 1000) * outputRate;
     }
 
     return Math.max(0, totalCost);
@@ -823,759 +847,881 @@ export abstract class BaseStrategy {
     const tracer = trace.getTracer('ci-orchestration');
     return tracer.startActiveSpan(
       `model.execute ${model.name}`,
-      { attributes: { 'model.id': model.id, 'model.provider': model.provider ?? adapter.getName(), 'model.role': role, 'strategy.name': this.getMetadata().name } },
-      async (span) => {
-    const startTime = Date.now();
-    const pinnedBase = this.withPinnedModel(request, model);
-    // Collapse multiple system messages (strategy prompt + peer-review + client
-    // system) into one, so every provider adapter receives the SAME complete
-    // instruction set — Anthropic (first-only) and Google (last-only) otherwise
-    // silently dropped part of it. No-op for 0/1 system messages.
-    const normalizedMessages = normalizeSystemMessages(pinnedBase.messages);
-    const normalizedBase = normalizedMessages === pinnedBase.messages
-      ? pinnedBase
-      : { ...pinnedBase, messages: normalizedMessages };
-    // Frontier-parity output ceiling: when the caller set no max_tokens, request
-    // THIS model's own declared output capability (dynamic, per-model) so a
-    // frontier model emits its full length and is never clipped to a provider's
-    // stingy default — and never over-asks beyond what the model supports. This
-    // is the single chokepoint every voter, single arm, and merge-synthesis
-    // (synthesizeMerged) flows through. No static number.
-    const derivedMaxTokens = Number(normalizedBase.max_tokens) > 0
-      ? undefined
-      : deriveModelMaxOutputTokens(model);
-    const pinnedRequest = derivedMaxTokens
-      ? { ...normalizedBase, max_tokens: derivedMaxTokens }
-      : normalizedBase;
-
-    // Phase 1 control plane: near-zero skip BEFORE any HTTP call.
-    // Prevents the "60s waste against known-bad provider" pattern observed
-    // in production. The decision is O(1) in-memory and adds <1ms p99.
-    const providerName = adapter.getName();
-    try {
-      const { shouldSkipNearZero, emitCandidateTrace } = await import('@/core/operability');
-      const skip = shouldSkipNearZero({ providerId: providerName, modelId: model.id });
-      if (skip.skip) {
-        emitCandidateTrace({
-          providerId: providerName,
-          modelId: model.id,
-          modelFamily: model.provider,
-          stage: 'skipped',
-          included: false,
-          reason: typeof skip.reason === 'string' ? skip.reason : 'health_filtered',
-          healthState: typeof skip.reason === 'string' ? undefined : skip.reason,
-          latencyMs: 0,
-        });
-        const skipDurationMs = Date.now() - startTime;
-        this.log.warn(
-          {
-            provider: providerName,
-            model: model.name,
-            role,
-            reason: skip.reason,
-            nextProbeAfter: skip.nextProbeAfter,
-            durationMs: skipDurationMs,
-          },
-          'Skipping known-bad provider/model (near-zero skip)',
-        );
-        span.setAttribute('model.skipped', true);
-        span.setAttribute('model.skip_reason', String(skip.reason ?? 'unknown'));
-        span.setStatus({ code: SpanStatusCode.OK });
-        span.end();
-        // Build a "skipped" execution record with no cost/no tokens. The
-        // caller's cross-provider retry path will pick the next candidate.
-        return this.createModelExecution(
-          model,
-          adapter,
-          role,
-          pinnedRequest,
-          {
-            id: `skip-${Date.now()}`,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: model.name,
-            choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop', logprobs: null }],
-          } as ChatResponse,
-          0,
-          skipDurationMs,
-          false,
-          `skipped: ${skip.reason ?? 'known-bad'}`,
-        );
-      }
-    } catch {
-      // Operability module unavailable — fall through to normal path.
-    }
-
-    try {
-      this.log.debug(
-        {
-          provider: adapter.getName(),
-          model: model.name,
-          role,
+      {
+        attributes: {
+          'model.id': model.id,
+          'model.provider': model.provider ?? adapter.getName(),
+          'model.role': role,
+          'strategy.name': this.getMetadata().name,
         },
-        'Executing model'
-      );
+      },
+      async (span) => {
+        const startTime = Date.now();
+        const pinnedBase = this.withPinnedModel(request, model);
+        // Collapse multiple system messages (strategy prompt + peer-review + client
+        // system) into one, so every provider adapter receives the SAME complete
+        // instruction set — Anthropic (first-only) and Google (last-only) otherwise
+        // silently dropped part of it. No-op for 0/1 system messages.
+        const normalizedMessages = normalizeSystemMessages(pinnedBase.messages);
+        const normalizedBase =
+          normalizedMessages === pinnedBase.messages
+            ? pinnedBase
+            : { ...pinnedBase, messages: normalizedMessages };
+        // Frontier-parity output ceiling: when the caller set no max_tokens, request
+        // THIS model's own declared output capability (dynamic, per-model) so a
+        // frontier model emits its full length and is never clipped to a provider's
+        // stingy default — and never over-asks beyond what the model supports. This
+        // is the single chokepoint every voter, single arm, and merge-synthesis
+        // (synthesizeMerged) flows through. No static number.
+        const derivedMaxTokens =
+          Number(normalizedBase.max_tokens) > 0 ? undefined : deriveModelMaxOutputTokens(model);
+        const pinnedRequest = derivedMaxTokens
+          ? { ...normalizedBase, max_tokens: derivedMaxTokens }
+          : normalizedBase;
 
-      const response = await adapter.chatCompletion(pinnedRequest);
-      const durationMs = Date.now() - startTime;
-
-      // Calculate actual cost (raw, as reported by the adapter's pricing).
-      const rawCost = adapter.calculateCost(
-        model,
-        response.usage?.prompt_tokens || 0,
-        response.usage?.completion_tokens || 0
-      );
-
-      // TIER 1 (2026-06-11): run the LIVE cost normalizer on the per-execution
-      // path. A $0-reporting hub adapter (e.g. aihubmix) that burns tokens
-      // would otherwise report cost=0, understating C3 collective cost. The
-      // normalizer returns the raw cost when it's already positive (high
-      // confidence), genuinely 0 for self-hosted, and a token×pricing estimate
-      // when a cloud hub reports $0 with tokens>0. We attribute to the EXECUTION
-      // provider (adapter.getName()) — the same attribution rule as the metrics
-      // below — and feed the catalog pricing (Model.inputCostPer1k/outputCostPer1k)
-      // so the estimate prefers DB pricing before family/fallback rates.
-      // Never throws / never NaN: on any failure we fall back to rawCost.
-      let cost = rawCost;
-      let costSource: string | undefined;
-      try {
-        const record = normalizeCost(
-          rawCost,
-          (adapter.getName() || model.provider || '').toLowerCase(),
-          model.id,
-          response.usage?.prompt_tokens,
-          response.usage?.completion_tokens,
-          model.inputCostPer1k,
-          model.outputCostPer1k,
-        );
-        const normalized = record.normalizedCostUsd;
-        // Use the normalized value only when it is a finite number. A `null`
-        // normalized cost means "missing" (no tokens, no pricing) → keep raw.
-        if (typeof normalized === 'number' && Number.isFinite(normalized)) {
-          cost = normalized;
-        }
-        costSource = record.costSource;
-      } catch {
-        // Normalization failed — fall back to the raw provider cost. Never throw.
-        cost = rawCost;
-      }
-
-      const usableResponse = this.hasUsableAssistantResponse(response);
-      if (!usableResponse) {
-        const durationMs = Date.now() - startTime;
-        const error = 'Provider returned empty assistant response';
-        this.log.warn(
-          {
-            provider: adapter.getName(),
-            model: model.name,
-            role,
-            durationMs,
-          },
-          error
-        );
-        // D1 fix (2026-06-11): poison the provider_model health registry for an
-        // empty (HTTP 200, no content) response. Previously this early-return
-        // bypassed ALL failure-bookkeeping (the catch block below), so an
-        // empty-returning gateway was never marked unhealthy and got re-selected
-        // every request. Now it is classified (EMPTY_RESPONSE_KEYWORDS →
-        // provider_model + shouldSkipNearZero) and recorded, exactly like a
-        // thrown failure, so `shouldSkipNearZero` defers it on the next pick.
+        // Phase 1 control plane: near-zero skip BEFORE any HTTP call.
+        // Prevents the "60s waste against known-bad provider" pattern observed
+        // in production. The decision is O(1) in-memory and adds <1ms p99.
+        const providerName = adapter.getName();
         try {
-          const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } =
-            await import('@/core/operability');
-          const classification = classifyProviderError(new Error(error));
-          const failedProvider = (adapter.getName() || model.provider || '').toLowerCase();
-          if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
-            const key = classification.scope === 'provider_model'
-              ? { providerId: failedProvider, modelId: model.id }
-              : { providerId: failedProvider };
-            getProviderHealthRegistry().recordExecution({
-              key,
-              success: false,
-              classification,
+          const { shouldSkipNearZero, emitCandidateTrace } = await import('@/core/operability');
+          const skip = shouldSkipNearZero({ providerId: providerName, modelId: model.id });
+          if (skip.skip) {
+            emitCandidateTrace({
+              providerId: providerName,
+              modelId: model.id,
+              modelFamily: model.provider,
+              stage: 'skipped',
+              included: false,
+              reason: typeof skip.reason === 'string' ? skip.reason : 'health_filtered',
+              healthState: typeof skip.reason === 'string' ? undefined : skip.reason,
+              latencyMs: 0,
+            });
+            const skipDurationMs = Date.now() - startTime;
+            this.log.warn(
+              {
+                provider: providerName,
+                model: model.name,
+                role,
+                reason: skip.reason,
+                nextProbeAfter: skip.nextProbeAfter,
+                durationMs: skipDurationMs,
+              },
+              'Skipping known-bad provider/model (near-zero skip)'
+            );
+            span.setAttribute('model.skipped', true);
+            span.setAttribute('model.skip_reason', String(skip.reason ?? 'unknown'));
+            span.setStatus({ code: SpanStatusCode.OK });
+            span.end();
+            // Build a "skipped" execution record with no cost/no tokens. The
+            // caller's cross-provider retry path will pick the next candidate.
+            return this.createModelExecution(
+              model,
+              adapter,
+              role,
+              pinnedRequest,
+              {
+                id: `skip-${Date.now()}`,
+                object: 'chat.completion',
+                created: Math.floor(Date.now() / 1000),
+                model: model.name,
+                choices: [
+                  {
+                    index: 0,
+                    message: { role: 'assistant', content: '' },
+                    finish_reason: 'stop',
+                    logprobs: null,
+                  },
+                ],
+              } as ChatResponse,
+              0,
+              skipDurationMs,
+              false,
+              `skipped: ${skip.reason ?? 'known-bad'}`
+            );
+          }
+        } catch {
+          // Operability module unavailable — fall through to normal path.
+        }
+
+        try {
+          this.log.debug(
+            {
+              provider: adapter.getName(),
+              model: model.name,
+              role,
+            },
+            'Executing model'
+          );
+
+          const response = await adapter.chatCompletion(pinnedRequest);
+          const durationMs = Date.now() - startTime;
+
+          // Calculate actual cost (raw, as reported by the adapter's pricing).
+          const rawCost = adapter.calculateCost(
+            model,
+            response.usage?.prompt_tokens || 0,
+            response.usage?.completion_tokens || 0
+          );
+
+          // TIER 1 (2026-06-11): run the LIVE cost normalizer on the per-execution
+          // path. A $0-reporting hub adapter (e.g. aihubmix) that burns tokens
+          // would otherwise report cost=0, understating C3 collective cost. The
+          // normalizer returns the raw cost when it's already positive (high
+          // confidence), genuinely 0 for self-hosted, and a token×pricing estimate
+          // when a cloud hub reports $0 with tokens>0. We attribute to the EXECUTION
+          // provider (adapter.getName()) — the same attribution rule as the metrics
+          // below — and feed the catalog pricing (Model.inputCostPer1k/outputCostPer1k)
+          // so the estimate prefers DB pricing before family/fallback rates.
+          // Never throws / never NaN: on any failure we fall back to rawCost.
+          let cost = rawCost;
+          let costSource: string | undefined;
+          try {
+            const record = normalizeCost(
+              rawCost,
+              (adapter.getName() || model.provider || '').toLowerCase(),
+              model.id,
+              response.usage?.prompt_tokens,
+              response.usage?.completion_tokens,
+              model.inputCostPer1k,
+              model.outputCostPer1k
+            );
+            const normalized = record.normalizedCostUsd;
+            // Use the normalized value only when it is a finite number. A `null`
+            // normalized cost means "missing" (no tokens, no pricing) → keep raw.
+            if (typeof normalized === 'number' && Number.isFinite(normalized)) {
+              cost = normalized;
+            }
+            costSource = record.costSource;
+          } catch {
+            // Normalization failed — fall back to the raw provider cost. Never throw.
+            cost = rawCost;
+          }
+
+          const usableResponse = this.hasUsableAssistantResponse(response);
+          if (!usableResponse) {
+            const durationMs = Date.now() - startTime;
+            const error = 'Provider returned empty assistant response';
+            this.log.warn(
+              {
+                provider: adapter.getName(),
+                model: model.name,
+                role,
+                durationMs,
+              },
+              error
+            );
+            // D1 fix (2026-06-11): poison the provider_model health registry for an
+            // empty (HTTP 200, no content) response. Previously this early-return
+            // bypassed ALL failure-bookkeeping (the catch block below), so an
+            // empty-returning gateway was never marked unhealthy and got re-selected
+            // every request. Now it is classified (EMPTY_RESPONSE_KEYWORDS →
+            // provider_model + shouldSkipNearZero) and recorded, exactly like a
+            // thrown failure, so `shouldSkipNearZero` defers it on the next pick.
+            try {
+              const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } =
+                await import('@/core/operability');
+              const classification = classifyProviderError(new Error(error));
+              const failedProvider = (adapter.getName() || model.provider || '').toLowerCase();
+              if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
+                const key =
+                  classification.scope === 'provider_model'
+                    ? { providerId: failedProvider, modelId: model.id }
+                    : { providerId: failedProvider };
+                getProviderHealthRegistry().recordExecution({
+                  key,
+                  success: false,
+                  classification,
+                  latencyMs: durationMs,
+                });
+                emitCandidateTrace({
+                  providerId: failedProvider,
+                  modelId: model.id,
+                  modelFamily: model.provider,
+                  stage: 'failed',
+                  included: false,
+                  reason: classification.errorClass,
+                  healthState: classification.healthState,
+                  latencyMs: durationMs,
+                });
+              }
+            } catch {
+              /* operability module not available */
+            }
+            return this.createModelExecution(
+              model,
+              adapter,
+              role,
+              pinnedRequest,
+              response,
+              cost,
+              durationMs,
+              false,
+              error
+            );
+          }
+
+          this.log.debug(
+            {
+              provider: adapter.getName(),
+              model: model.name,
+              role,
+              durationMs,
+              cost,
+              usage: response.usage,
+            },
+            'Model execution successful'
+          );
+
+          // Record per-model Prometheus metrics + rolling performance tracker
+          recordModelExecution({
+            modelId: model.id,
+            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+            // an openai/gpt-4o model and fails, the failure must be counted against the hub
+            // — not against native openai — otherwise native providers get penalized for
+            // failures they didn't cause, eventually collapsing the candidate pool.
+            provider: adapter.getName(),
+            taskType: 'unknown', // refined by strategies that have context
+            durationMs,
+            costUsd: cost,
+            success: true,
+          });
+          modelPerformanceTracker.record({
+            modelId: model.id,
+            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+            // an openai/gpt-4o model and fails, the failure must be counted against the hub
+            // — not against native openai — otherwise native providers get penalized for
+            // failures they didn't cause, eventually collapsing the candidate pool.
+            provider: adapter.getName(),
+            qualityScore: 0.8, // Refined by quality scorer after execution
+            latencyMs: durationMs,
+            success: true,
+            costUsd: cost,
+          });
+
+          // Record execution success in unified operability hub (route-level precision)
+          try {
+            const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
+            getProviderOperabilityHub().recordRouteExecution(adapter.getName(), model.id, true);
+          } catch {
+            /* non-critical */
+          }
+
+          // Phase 1 control plane: record granular success in the new health
+          // registry. Provider-level + model-level entries are both refreshed
+          // — a successful (aihubmix, claude-haiku-4-5) call refreshes the
+          // model entry, but does NOT refresh (aihubmix, gpt-4o-mini) — that
+          // tuple keeps its own health state.
+          try {
+            const { getProviderHealthRegistry, emitCandidateTrace } =
+              await import('@/core/operability');
+            const registry = getProviderHealthRegistry();
+            registry.recordExecution({
+              key: { providerId: adapter.getName(), modelId: model.id },
+              success: true,
+              latencyMs: durationMs,
+            });
+            registry.recordExecution({
+              key: { providerId: adapter.getName() },
+              success: true,
               latencyMs: durationMs,
             });
             emitCandidateTrace({
-              providerId: failedProvider,
+              providerId: adapter.getName(),
               modelId: model.id,
-              modelFamily: model.provider,
-              stage: 'failed',
-              included: false,
-              reason: classification.errorClass,
-              healthState: classification.healthState,
+              stage: 'succeeded',
+              included: true,
               latencyMs: durationMs,
+              healthState: 'healthy',
             });
+          } catch {
+            /* operability module not available */
           }
-        } catch { /* operability module not available */ }
-        return this.createModelExecution(
-          model,
-          adapter,
-          role,
-          pinnedRequest,
-          response,
-          cost,
-          durationMs,
-          false,
-          error
-        );
-      }
 
-      this.log.debug(
-        {
-          provider: adapter.getName(),
-          model: model.name,
-          role,
-          durationMs,
-          cost,
-          usage: response.usage,
-        },
-        'Model execution successful'
-      );
+          span.setAttribute('model.duration_ms', durationMs);
+          span.setAttribute('model.cost_usd', cost);
+          span.setStatus({ code: SpanStatusCode.OK });
+          span.end();
 
-      // Record per-model Prometheus metrics + rolling performance tracker
-      recordModelExecution({
-        modelId: model.id,
-        // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-      // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-      // an openai/gpt-4o model and fails, the failure must be counted against the hub
-      // — not against native openai — otherwise native providers get penalized for
-      // failures they didn't cause, eventually collapsing the candidate pool.
-      provider: adapter.getName(),
-        taskType: 'unknown', // refined by strategies that have context
-        durationMs,
-        costUsd: cost,
-        success: true,
-      });
-      modelPerformanceTracker.record({
-        modelId: model.id,
-        // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-      // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-      // an openai/gpt-4o model and fails, the failure must be counted against the hub
-      // — not against native openai — otherwise native providers get penalized for
-      // failures they didn't cause, eventually collapsing the candidate pool.
-      provider: adapter.getName(),
-        qualityScore: 0.8, // Refined by quality scorer after execution
-        latencyMs: durationMs,
-        success: true,
-        costUsd: cost,
-      });
+          const execution = this.createModelExecution(
+            model,
+            adapter,
+            role,
+            pinnedRequest,
+            response,
+            cost,
+            durationMs,
+            true
+          );
+          // Preserve the raw provider-reported cost + normalization provenance so the
+          // token×pricing estimate (when cost was normalized up from $0) is auditable.
+          execution.rawCost = rawCost;
+          if (costSource) execution.costSource = costSource;
+          return execution;
+        } catch (error: unknown) {
+          const durationMs = Date.now() - startTime;
+          const errorMessage = getErrorMessage(error);
 
-      // Record execution success in unified operability hub (route-level precision)
-      try {
-        const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
-        getProviderOperabilityHub().recordRouteExecution(adapter.getName(), model.id, true);
-      } catch { /* non-critical */ }
-
-      // Phase 1 control plane: record granular success in the new health
-      // registry. Provider-level + model-level entries are both refreshed
-      // — a successful (aihubmix, claude-haiku-4-5) call refreshes the
-      // model entry, but does NOT refresh (aihubmix, gpt-4o-mini) — that
-      // tuple keeps its own health state.
-      try {
-        const { getProviderHealthRegistry, emitCandidateTrace } = await import('@/core/operability');
-        const registry = getProviderHealthRegistry();
-        registry.recordExecution({
-          key: { providerId: adapter.getName(), modelId: model.id },
-          success: true,
-          latencyMs: durationMs,
-        });
-        registry.recordExecution({
-          key: { providerId: adapter.getName() },
-          success: true,
-          latencyMs: durationMs,
-        });
-        emitCandidateTrace({
-          providerId: adapter.getName(),
-          modelId: model.id,
-          stage: 'succeeded',
-          included: true,
-          latencyMs: durationMs,
-          healthState: 'healthy',
-        });
-      } catch { /* operability module not available */ }
-
-      span.setAttribute('model.duration_ms', durationMs);
-      span.setAttribute('model.cost_usd', cost);
-      span.setStatus({ code: SpanStatusCode.OK });
-      span.end();
-
-      const execution = this.createModelExecution(
-        model,
-        adapter,
-        role,
-        pinnedRequest,
-        response,
-        cost,
-        durationMs,
-        true
-      );
-      // Preserve the raw provider-reported cost + normalization provenance so the
-      // token×pricing estimate (when cost was normalized up from $0) is auditable.
-      execution.rawCost = rawCost;
-      if (costSource) execution.costSource = costSource;
-      return execution;
-    } catch (error: unknown) {
-      const durationMs = Date.now() - startTime;
-      const errorMessage = getErrorMessage(error);
-      
-      // Extract detailed error information for better debugging
-      let errorDetails: Record<string, unknown> = { message: errorMessage };
-      if (isObject(error)) {
-        const statusCode = extractStatusCode(error);
-        if (statusCode !== undefined) {
-          errorDetails.statusCode = statusCode;
-        }
-        
-        const code = extractErrorCodeFromObject(error);
-        if (code !== undefined) {
-          errorDetails.code = code;
-        }
-        
-        if ('provider' in error && typeof error.provider === 'string') {
-          errorDetails.provider = error.provider;
-        }
-        
-        // Try to extract nested error message if available
-        if ('error' in error) {
-          const nestedError = error.error;
-          if (isObject(nestedError) && 'message' in nestedError && typeof nestedError.message === 'string') {
-            errorDetails.nestedMessage = nestedError.message;
-          }
-        }
-      }
-      if (error instanceof Error && error.stack) {
-        errorDetails.stack = error.stack;
-      }
-
-      this.log.error(
-        {
-          provider: adapter.getName(),
-          model: model.name,
-          role,
-          durationMs,
-          error: errorMessage,
-          errorDetails,
-        },
-        'Model execution failed'
-      );
-
-      // Detect payment/auth failures (402/403/404) and mark provider as no-credits
-      // This closes the feedback loop: runtime failures update balance status for future selections
-      const errMsg = errorMessage.toLowerCase();
-      const httpStatusMatch = errorMessage.match(/HTTP\s+(\d{3})/);
-      const detectedStatus = (errorDetails.statusCode as number | undefined)
-        || (httpStatusMatch ? parseInt(httpStatusMatch[1], 10) : undefined);
-      const isPaymentFailure = detectedStatus === 402 || detectedStatus === 403 || detectedStatus === 404;
-      const isBalanceError = isPaymentFailure && (
-        detectedStatus === 402 ||
-        errMsg.includes('insufficient') || errMsg.includes('balance') ||
-        errMsg.includes('quota') || errMsg.includes('subscription') ||
-        errMsg.includes('credit') || errMsg.includes('funds') ||
-        errMsg.includes('model not found')
-      );
-      // D2 fix (2026-06-11): an invalid-key (401) or forbidden (403) gateway must
-      // trigger the SAME cross-provider retry as a balance error (retry the same
-      // model on a DIFFERENT provider) — previously the retry was gated only on
-      // isBalanceError, so 401-gateways gave up without trying anthropic/openai-direct.
-      // It must NOT be mislabeled "no-credits": the markProviderNoCredits/governor
-      // calls below stay gated on isBalanceError; only the retry fires for auth too.
-      const isAuthFailure = detectedStatus === 401 || detectedStatus === 403;
-      // Phase 1 control plane: classify the error + update health registry.
-      // This runs alongside (not replacing) the legacy isBalanceError path
-      // so the existing CreditGovernor + CentralDiscoveryService pipelines
-      // remain wired. The new registry is granular by (providerId, modelId)
-      // and powers shouldSkipNearZero on the next request.
-      const failedProviderForHealth = (adapter.getName() || model.provider || '').toLowerCase();
-      try {
-        const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } = await import('@/core/operability');
-        const classification = classifyProviderError(error);
-        const registry = getProviderHealthRegistry();
-        // Use classification.scope to decide granularity:
-        //   - 'provider_model' → key by (providerId, modelId) — only that
-        //     tuple is poisoned. Other models on the same provider keep
-        //     their health.
-        //   - 'account' or 'provider' → key by (providerId) — all models
-        //     for this provider share the fate.
-        //   - 'request' → don't update registry (request-scoped error).
-        if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
-          const key = classification.scope === 'provider_model'
-            ? { providerId: failedProviderForHealth, modelId: model.id }
-            : { providerId: failedProviderForHealth };
-          registry.recordExecution({
-            key,
-            success: false,
-            classification,
-            latencyMs: durationMs,
-          });
-          emitCandidateTrace({
-            providerId: failedProviderForHealth,
-            modelId: model.id,
-            modelFamily: model.provider,
-            stage: 'failed',
-            included: false,
-            reason: classification.errorClass,
-            healthState: classification.healthState,
-            latencyMs: durationMs,
-          });
-        }
-      } catch { /* operability module not available */ }
-
-      if (isBalanceError || isAuthFailure) {
-        // CRITICAL: attribute the no-credits status to the EXECUTION provider
-        // (the adapter that actually made the HTTP call), NOT the logical
-        // provider from the model catalog.
-        //
-        // Example bug this fixes: aihubmix executing `openai/gpt-4o-mini-search`
-        // fails with HTTP 402 because aihubmix's account is empty. The OLD code
-        // would call markProviderNoCredits("openai") — poisoning the native
-        // openai entry even though native openai has its own credit. The next
-        // call that needs gpt-5.4 would then SKIP native openai in cross-
-        // provider retry and only try hubs (which are the ones actually broken).
-        //
-        // Fix: adapter.getName() is the ACTUAL failed provider. model.provider
-        // is kept only as a last-resort fallback (e.g. when adapter is null).
-        const providerName = (adapter.getName() || model.provider || '').toLowerCase();
-        // D2: only mark no-credits for genuine balance errors — a 401/403 is an
-        // auth failure, not an empty wallet, so we skip the no-credits marking
-        // for it (but still run the cross-provider retry below).
-        if (isBalanceError && providerName) {
-          try {
-            const { getCentralModelDiscoveryService } = await import('@/services/central-model-discovery-service');
-            const discovery = await getCentralModelDiscoveryService();
-            if (discovery && typeof discovery.markProviderNoCredits === 'function') {
-              discovery.markProviderNoCredits(providerName);
-              this.log.warn({ provider: providerName, detectedStatus }, 'Provider marked as no-credits after runtime failure');
+          // Extract detailed error information for better debugging
+          let errorDetails: Record<string, unknown> = { message: errorMessage };
+          if (isObject(error)) {
+            const statusCode = extractStatusCode(error);
+            if (statusCode !== undefined) {
+              errorDetails.statusCode = statusCode;
             }
-          } catch { /* non-critical */ }
 
-          // Also mark route as exhausted in CreditGovernor (route-level precision)
-          try {
-            const { getCreditGovernor } = await import('@/core/budget/credit-governor');
-            getCreditGovernor().markRouteExhausted(providerName, model.id, `HTTP ${detectedStatus}: ${errMsg.substring(0, 200)}`);
-          } catch { /* non-critical — governor may not be initialized yet */ }
-        }
+            const code = extractErrorCodeFromObject(error);
+            if (code !== undefined) {
+              errorDetails.code = code;
+            }
 
-        // AUTO-RETRY: Try same model via alternative provider (cross-provider fallback)
-        // Priority: native_api first, then cloud_hub, then router/aggregator.
-        // Uses metadata.sourceType and sourcePriority — no hardcoded provider lists.
-        try {
-          const { getAllEntriesForModel } = await import('@/services/model-catalog-service');
-          const allEntries = await getAllEntriesForModel(model.id);
-          const failedProviderLower = providerName;
+            if ('provider' in error && typeof error.provider === 'string') {
+              errorDetails.provider = error.provider;
+            }
 
-          // L3+L4: Filter by circuit breaker state + credit status
-          // Then sort: native_api first → cloud_hub → router
-          let creditMonitorNoCredits: ReadonlySet<string> = new Set();
-          try {
-            const mod = await getCreditMonitorModule();
-            if (mod) creditMonitorNoCredits = mod.getCreditMonitorService().getNoCreditsProviders();
-          } catch { /* credit monitor not available */ }
-
-          // L5 Thompson Sampling: rank providers within each source-type tier by
-          // their learned reliability for this model. The bandit's `selectProvider`
-          // returns providers sorted by sampled Beta score; we use that ordering
-          // to break ties WITHIN a tier without overriding the structural
-          // preference (native_api > cloud_hub > router > aggregator).
-          //
-          // Why tier first, bandit second: native APIs have no markup and full
-          // feature parity — that's a structural correctness signal the bandit
-          // doesn't see. We let the bandit choose between *equally-good*
-          // structural options (e.g., two native providers offering the same
-          // model), not between native and aggregator.
-          const filteredCandidates = allEntries.filter(m => {
-            const p = (m.provider || '').toLowerCase();
-            if (p === failedProviderLower) return false;
-            if (m.balanceStatus === 'no-credits') return false;
-            if (creditMonitorNoCredits.has(p)) return false;
-            return true;
-          });
-
-          // Compute bandit ranking once for all candidate providers.
-          const banditRanking = getProviderBandit().selectProvider(
-            model.id, // equivalenceGroup falls back to modelId until L2 is wired
-            filteredCandidates.map(m => (m.provider || '').toLowerCase()),
-            [failedProviderLower],
-          );
-          const banditScoreByProvider = new Map<string, number>();
-          for (const r of banditRanking.rankedProviders) {
-            banditScoreByProvider.set(r.providerId.toLowerCase(), r.sampledScore);
+            // Try to extract nested error message if available
+            if ('error' in error) {
+              const nestedError = error.error;
+              if (
+                isObject(nestedError) &&
+                'message' in nestedError &&
+                typeof nestedError.message === 'string'
+              ) {
+                errorDetails.nestedMessage = nestedError.message;
+              }
+            }
+          }
+          if (error instanceof Error && error.stack) {
+            errorDetails.stack = error.stack;
           }
 
-          // Determinism (2026-06-29): rank proven-bad routes (phala 401 /
-          // aihubmix 403 / cold) to the back and hot routes to the front BEFORE
-          // tier/bandit — so this cross-provider retry stops trying dead variants
-          // first (the gpt-oss-20b→phala→aihubmix case) and prefers warm HF routes.
-          const { getProviderOperabilityHub: getHubForRetryRank } = await import(
-            '@/core/provider-operability-hub'
-          );
-          const operabilityRanks = computeOperabilityRanks(
-            filteredCandidates,
-            model.id,
-            getHubForRetryRank(),
-          );
-          let candidates = rankRetryCandidates(
-            filteredCandidates,
-            banditScoreByProvider,
-            operabilityRanks,
+          this.log.error(
+            {
+              provider: adapter.getName(),
+              model: model.name,
+              role,
+              durationMs,
+              error: errorMessage,
+              errorDetails,
+            },
+            'Model execution failed'
           );
 
-          // Phase 5 (feature-flagged): semantic-aware candidate reordering.
-          // When OPERABILITY_SEMANTIC_RETRY=true AND the SemanticIndex has
-          // been populated by the embedding pipeline, use the operational
-          // pool's semantic resolver to re-rank the cross-provider retry
-          // candidates by similarity to the user query. This produces a
-          // health-aware + semantically-informed order that the legacy
-          // rankRetryCandidates can't because it operates only on
-          // sourceType priority + bandit. Falls back to the legacy order
-          // if the resolver returns empty (pool not populated yet).
-          if (process.env.OPERABILITY_SEMANTIC_RETRY === 'true') {
-            try {
-              const op = await import('@/core/operability');
-              const queryText = extractQueryText(request);
-              if (!queryText) {
-                op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, { reason: 'empty_query' });
-              } else {
-                const ranked = await op.resolveSemanticCandidates({
-                  query: queryText,
-                  k: filteredCandidates.length,
-                  filter: { modelFamily: model.provider, modelId: model.id },
-                });
-                if (ranked.length > 0) {
-                  // Re-order `candidates` to match semantic order.
-                  // Candidates not in the semantic ranking append at the end.
-                  const semanticOrder = new Map<string, number>();
-                  for (let i = 0; i < ranked.length; i++) {
-                    const r = ranked[i];
-                    semanticOrder.set(`${r.candidate.providerId}::${r.candidate.modelId}`, i);
-                  }
-                  candidates = [...candidates].sort((a, b) => {
-                    const ka = `${(a.provider || '').toLowerCase()}::${a.id}`;
-                    const kb = `${(b.provider || '').toLowerCase()}::${b.id}`;
-                    const ia = semanticOrder.get(ka) ?? Number.POSITIVE_INFINITY;
-                    const ib = semanticOrder.get(kb) ?? Number.POSITIVE_INFINITY;
-                    return ia - ib;
-                  });
-                  op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_USED_TOTAL, { result: 'reordered' });
-                  this.log.debug(
-                    { model: model.id, semanticHits: ranked.length, totalCandidates: candidates.length },
-                    'Cross-provider retry: re-ordered by semantic match',
+          // Detect payment/auth failures (402/403/404) and mark provider as no-credits
+          // This closes the feedback loop: runtime failures update balance status for future selections
+          const errMsg = errorMessage.toLowerCase();
+          const httpStatusMatch = errorMessage.match(/HTTP\s+(\d{3})/);
+          const detectedStatus =
+            (errorDetails.statusCode as number | undefined) ||
+            (httpStatusMatch ? parseInt(httpStatusMatch[1], 10) : undefined);
+          const isPaymentFailure =
+            detectedStatus === 402 || detectedStatus === 403 || detectedStatus === 404;
+          const isBalanceError =
+            isPaymentFailure &&
+            (detectedStatus === 402 ||
+              errMsg.includes('insufficient') ||
+              errMsg.includes('balance') ||
+              errMsg.includes('quota') ||
+              errMsg.includes('subscription') ||
+              errMsg.includes('credit') ||
+              errMsg.includes('funds') ||
+              errMsg.includes('model not found'));
+          // D2 fix (2026-06-11): an invalid-key (401) or forbidden (403) gateway must
+          // trigger the SAME cross-provider retry as a balance error (retry the same
+          // model on a DIFFERENT provider) — previously the retry was gated only on
+          // isBalanceError, so 401-gateways gave up without trying anthropic/openai-direct.
+          // It must NOT be mislabeled "no-credits": the markProviderNoCredits/governor
+          // calls below stay gated on isBalanceError; only the retry fires for auth too.
+          const isAuthFailure = detectedStatus === 401 || detectedStatus === 403;
+          // Phase 1 control plane: classify the error + update health registry.
+          // This runs alongside (not replacing) the legacy isBalanceError path
+          // so the existing CreditGovernor + CentralDiscoveryService pipelines
+          // remain wired. The new registry is granular by (providerId, modelId)
+          // and powers shouldSkipNearZero on the next request.
+          const failedProviderForHealth = (adapter.getName() || model.provider || '').toLowerCase();
+          try {
+            const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } =
+              await import('@/core/operability');
+            const classification = classifyProviderError(error);
+            const registry = getProviderHealthRegistry();
+            // Use classification.scope to decide granularity:
+            //   - 'provider_model' → key by (providerId, modelId) — only that
+            //     tuple is poisoned. Other models on the same provider keep
+            //     their health.
+            //   - 'account' or 'provider' → key by (providerId) — all models
+            //     for this provider share the fate.
+            //   - 'request' → don't update registry (request-scoped error).
+            if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
+              const key =
+                classification.scope === 'provider_model'
+                  ? { providerId: failedProviderForHealth, modelId: model.id }
+                  : { providerId: failedProviderForHealth };
+              registry.recordExecution({
+                key,
+                success: false,
+                classification,
+                latencyMs: durationMs,
+              });
+              emitCandidateTrace({
+                providerId: failedProviderForHealth,
+                modelId: model.id,
+                modelFamily: model.provider,
+                stage: 'failed',
+                included: false,
+                reason: classification.errorClass,
+                healthState: classification.healthState,
+                latencyMs: durationMs,
+              });
+            }
+          } catch {
+            /* operability module not available */
+          }
+
+          if (isBalanceError || isAuthFailure) {
+            // CRITICAL: attribute the no-credits status to the EXECUTION provider
+            // (the adapter that actually made the HTTP call), NOT the logical
+            // provider from the model catalog.
+            //
+            // Example bug this fixes: aihubmix executing `openai/gpt-4o-mini-search`
+            // fails with HTTP 402 because aihubmix's account is empty. The OLD code
+            // would call markProviderNoCredits("openai") — poisoning the native
+            // openai entry even though native openai has its own credit. The next
+            // call that needs gpt-5.4 would then SKIP native openai in cross-
+            // provider retry and only try hubs (which are the ones actually broken).
+            //
+            // Fix: adapter.getName() is the ACTUAL failed provider. model.provider
+            // is kept only as a last-resort fallback (e.g. when adapter is null).
+            const providerName = (adapter.getName() || model.provider || '').toLowerCase();
+            // D2: only mark no-credits for genuine balance errors — a 401/403 is an
+            // auth failure, not an empty wallet, so we skip the no-credits marking
+            // for it (but still run the cross-provider retry below).
+            if (isBalanceError && providerName) {
+              try {
+                const { getCentralModelDiscoveryService } =
+                  await import('@/services/central-model-discovery-service');
+                const discovery = await getCentralModelDiscoveryService();
+                if (discovery && typeof discovery.markProviderNoCredits === 'function') {
+                  discovery.markProviderNoCredits(providerName);
+                  this.log.warn(
+                    { provider: providerName, detectedStatus },
+                    'Provider marked as no-credits after runtime failure'
                   );
-                } else {
-                  op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, { reason: 'no_ranked_results' });
+                }
+              } catch {
+                /* non-critical */
+              }
+
+              // Also mark route as exhausted in CreditGovernor (route-level precision)
+              try {
+                const { getCreditGovernor } = await import('@/core/budget/credit-governor');
+                getCreditGovernor().markRouteExhausted(
+                  providerName,
+                  model.id,
+                  `HTTP ${detectedStatus}: ${errMsg.substring(0, 200)}`
+                );
+              } catch {
+                /* non-critical — governor may not be initialized yet */
+              }
+            }
+
+            // AUTO-RETRY: Try same model via alternative provider (cross-provider fallback)
+            // Priority: native_api first, then cloud_hub, then router/aggregator.
+            // Uses metadata.sourceType and sourcePriority — no hardcoded provider lists.
+            try {
+              const { getAllEntriesForModel } = await import('@/services/model-catalog-service');
+              const allEntries = await getAllEntriesForModel(model.id);
+              const failedProviderLower = providerName;
+
+              // L3+L4: Filter by circuit breaker state + credit status
+              // Then sort: native_api first → cloud_hub → router
+              let creditMonitorNoCredits: ReadonlySet<string> = new Set();
+              try {
+                const mod = await getCreditMonitorModule();
+                if (mod)
+                  creditMonitorNoCredits = mod.getCreditMonitorService().getNoCreditsProviders();
+              } catch {
+                /* credit monitor not available */
+              }
+
+              // L5 Thompson Sampling: rank providers within each source-type tier by
+              // their learned reliability for this model. The bandit's `selectProvider`
+              // returns providers sorted by sampled Beta score; we use that ordering
+              // to break ties WITHIN a tier without overriding the structural
+              // preference (native_api > cloud_hub > router > aggregator).
+              //
+              // Why tier first, bandit second: native APIs have no markup and full
+              // feature parity — that's a structural correctness signal the bandit
+              // doesn't see. We let the bandit choose between *equally-good*
+              // structural options (e.g., two native providers offering the same
+              // model), not between native and aggregator.
+              const filteredCandidates = allEntries.filter((m) => {
+                const p = (m.provider || '').toLowerCase();
+                if (p === failedProviderLower) return false;
+                if (m.balanceStatus === 'no-credits') return false;
+                if (creditMonitorNoCredits.has(p)) return false;
+                return true;
+              });
+
+              // Compute bandit ranking once for all candidate providers.
+              const banditRanking = getProviderBandit().selectProvider(
+                model.id, // equivalenceGroup falls back to modelId until L2 is wired
+                filteredCandidates.map((m) => (m.provider || '').toLowerCase()),
+                [failedProviderLower]
+              );
+              const banditScoreByProvider = new Map<string, number>();
+              for (const r of banditRanking.rankedProviders) {
+                banditScoreByProvider.set(r.providerId.toLowerCase(), r.sampledScore);
+              }
+
+              // Determinism (2026-06-29): rank proven-bad routes (phala 401 /
+              // aihubmix 403 / cold) to the back and hot routes to the front BEFORE
+              // tier/bandit — so this cross-provider retry stops trying dead variants
+              // first (the gpt-oss-20b→phala→aihubmix case) and prefers warm HF routes.
+              const { getProviderOperabilityHub: getHubForRetryRank } =
+                await import('@/core/provider-operability-hub');
+              const operabilityRanks = computeOperabilityRanks(
+                filteredCandidates,
+                model.id,
+                getHubForRetryRank()
+              );
+              let candidates = rankRetryCandidates(
+                filteredCandidates,
+                banditScoreByProvider,
+                operabilityRanks
+              );
+
+              // Phase 5 (feature-flagged): semantic-aware candidate reordering.
+              // When OPERABILITY_SEMANTIC_RETRY=true AND the SemanticIndex has
+              // been populated by the embedding pipeline, use the operational
+              // pool's semantic resolver to re-rank the cross-provider retry
+              // candidates by similarity to the user query. This produces a
+              // health-aware + semantically-informed order that the legacy
+              // rankRetryCandidates can't because it operates only on
+              // sourceType priority + bandit. Falls back to the legacy order
+              // if the resolver returns empty (pool not populated yet).
+              if (process.env.OPERABILITY_SEMANTIC_RETRY === 'true') {
+                try {
+                  const op = await import('@/core/operability');
+                  const queryText = extractQueryText(request);
+                  if (!queryText) {
+                    op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, {
+                      reason: 'empty_query',
+                    });
+                  } else {
+                    const ranked = await op.resolveSemanticCandidates({
+                      query: queryText,
+                      k: filteredCandidates.length,
+                      filter: { modelFamily: model.provider, modelId: model.id },
+                    });
+                    if (ranked.length > 0) {
+                      // Re-order `candidates` to match semantic order.
+                      // Candidates not in the semantic ranking append at the end.
+                      const semanticOrder = new Map<string, number>();
+                      for (let i = 0; i < ranked.length; i++) {
+                        const r = ranked[i];
+                        semanticOrder.set(`${r.candidate.providerId}::${r.candidate.modelId}`, i);
+                      }
+                      candidates = [...candidates].sort((a, b) => {
+                        const ka = `${(a.provider || '').toLowerCase()}::${a.id}`;
+                        const kb = `${(b.provider || '').toLowerCase()}::${b.id}`;
+                        const ia = semanticOrder.get(ka) ?? Number.POSITIVE_INFINITY;
+                        const ib = semanticOrder.get(kb) ?? Number.POSITIVE_INFINITY;
+                        return ia - ib;
+                      });
+                      op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_USED_TOTAL, {
+                        result: 'reordered',
+                      });
+                      this.log.debug(
+                        {
+                          model: model.id,
+                          semanticHits: ranked.length,
+                          totalCandidates: candidates.length,
+                        },
+                        'Cross-provider retry: re-ordered by semantic match'
+                      );
+                    } else {
+                      op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, {
+                        reason: 'no_ranked_results',
+                      });
+                    }
+                  }
+                } catch (err) {
+                  try {
+                    const op = await import('@/core/operability');
+                    op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, {
+                      reason: 'resolver_error',
+                    });
+                  } catch {
+                    /* ignore — operability not loaded */
+                  }
+                  this.log.debug(
+                    { err: String(err) },
+                    'Semantic retry re-ordering failed — falling back to legacy ranking'
+                  );
                 }
               }
-            } catch (err) {
+
+              // Lazy-load operability for the cross-provider retry filter.
+              // shouldSkipNearZero is O(1); we call it once per candidate and
+              // skip without HTTP for known-bad. This is the change that
+              // eliminates the 47-60s waste pattern observed in production.
+              let skipNearZeroFn:
+                | undefined
+                | ((k: { providerId: string; modelId?: string }) => {
+                    skip: boolean;
+                    reason?: string | unknown;
+                  }) = undefined;
+              let emitTraceFn: undefined | ((input: unknown) => void) = undefined;
               try {
                 const op = await import('@/core/operability');
-                op.incrementCounter(op.METRIC_NAMES.SEMANTIC_RETRY_FALLBACK_TOTAL, { reason: 'resolver_error' });
-              } catch { /* ignore — operability not loaded */ }
-              this.log.debug(
-                { err: String(err) },
-                'Semantic retry re-ordering failed — falling back to legacy ranking',
-              );
-            }
-          }
+                skipNearZeroFn = (k) => op.shouldSkipNearZero(k);
+                // Cast to satisfy TS; emitCandidateTrace returns CandidateTrace, we discard.
+                emitTraceFn = (input) => {
+                  void op.emitCandidateTrace(input as Parameters<typeof op.emitCandidateTrace>[0]);
+                };
+              } catch {
+                /* operability not loaded yet */
+              }
 
-          // Lazy-load operability for the cross-provider retry filter.
-          // shouldSkipNearZero is O(1); we call it once per candidate and
-          // skip without HTTP for known-bad. This is the change that
-          // eliminates the 47-60s waste pattern observed in production.
-          let skipNearZeroFn: undefined | ((k: { providerId: string; modelId?: string }) => { skip: boolean; reason?: string | unknown }) = undefined;
-          let emitTraceFn: undefined | ((input: unknown) => void) = undefined;
-          try {
-            const op = await import('@/core/operability');
-            skipNearZeroFn = (k) => op.shouldSkipNearZero(k);
-            // Cast to satisfy TS; emitCandidateTrace returns CandidateTrace, we discard.
-            emitTraceFn = (input) => { void op.emitCandidateTrace(input as Parameters<typeof op.emitCandidateTrace>[0]); };
-          } catch { /* operability not loaded yet */ }
+              for (const altModel of candidates) {
+                const altProvider = (altModel.provider || '').toLowerCase();
+                const altSourceType = safeMetadata(altModel.metadata).sourceType ?? 'unknown';
 
-          for (const altModel of candidates) {
-            const altProvider = (altModel.provider || '').toLowerCase();
-            const altSourceType = safeMetadata(altModel.metadata).sourceType ?? 'unknown';
-
-            // Phase 1: skip known-bad alternative providers without HTTP.
-            if (skipNearZeroFn) {
-              const skipDecision = skipNearZeroFn({ providerId: altProvider, modelId: altModel.id });
-              if (skipDecision.skip) {
-                if (emitTraceFn) {
-                  emitTraceFn({
+                // Phase 1: skip known-bad alternative providers without HTTP.
+                if (skipNearZeroFn) {
+                  const skipDecision = skipNearZeroFn({
                     providerId: altProvider,
                     modelId: altModel.id,
-                    stage: 'skipped',
-                    included: false,
-                    reason: typeof skipDecision.reason === 'string' ? skipDecision.reason : 'health_filtered',
                   });
-                }
-                this.log.debug(
-                  { model: model.id, retryProvider: altProvider, reason: skipDecision.reason },
-                  'Cross-provider retry: skipping known-bad candidate (near-zero skip)',
-                );
-                continue;
-              }
-            }
-
-            // Get adapter for alternative provider via provider registry (no context needed)
-            let altAdapter: ProviderAdapter | null = null;
-            try {
-              const { getProviderRegistry } = await import('@/providers/provider-registry');
-              const registry = getProviderRegistry();
-              const resolved = registry.resolveAdapterForModel(altModel);
-              altAdapter = resolved.adapter;
-            } catch {
-              // Try via getAdapterForModel as fallback
-              if (this.getAdapterForModel) {
-                try { altAdapter = await this.getAdapterForModel(altModel, {} as OrchestrationContext); } catch { /* skip */ }
-              }
-            }
-            if (!altAdapter) continue;
-
-            this.log.info(
-              { model: model.id, failedProvider: failedProviderLower, retryProvider: altProvider, sourceType: altSourceType },
-              'Balance error — retrying same model via alternative provider'
-            );
-
-            // Recursive call with the alternative model+adapter (depth=1 to prevent infinite recursion)
-            const retryPinnedRequest = { ...request, model: altModel.id };
-            const retryStart = Date.now();
-            try {
-              const retryResponse = await altAdapter.chatCompletion(retryPinnedRequest);
-              const retryDuration = Date.now() - retryStart;
-              const retryContent = safeResponseContent(retryResponse);
-              if (retryContent.length > 0) {
-                this.log.info(
-                  { model: model.id, provider: altProvider, durationMs: retryDuration },
-                  'Cross-provider retry succeeded'
-                );
-                span.setAttribute('model.retry_provider', altProvider);
-                span.setStatus({ code: SpanStatusCode.OK });
-                span.end();
-                // Estimate cost from response usage if available — narrow
-                // structurally to extract the optional usage block instead of
-                // casting through `any` (which would cascade unsafe-* errors).
-                const retryUsage = isObject(retryResponse)
-                  ? (retryResponse as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage
-                  : undefined;
-                const promptTokens = typeof retryUsage?.prompt_tokens === 'number' ? retryUsage.prompt_tokens : 0;
-                const completionTokens = typeof retryUsage?.completion_tokens === 'number' ? retryUsage.completion_tokens : 0;
-                const retryRawCost = retryUsage
-                  ? (promptTokens * Number(altModel.inputCostPer1k) / 1000 +
-                     completionTokens * Number(altModel.outputCostPer1k) / 1000)
-                  : 0;
-                // TIER 1: normalize the retry cost too (same shared path) so a
-                // $0-reporting alt-provider with tokens>0 still yields cost>0.
-                let retryCost = retryRawCost;
-                let retryCostSource: string | undefined;
-                try {
-                  const retryRecord = normalizeCost(
-                    retryRawCost,
-                    altProvider,
-                    altModel.id,
-                    promptTokens || undefined,
-                    completionTokens || undefined,
-                    altModel.inputCostPer1k,
-                    altModel.outputCostPer1k,
-                  );
-                  if (typeof retryRecord.normalizedCostUsd === 'number' && Number.isFinite(retryRecord.normalizedCostUsd)) {
-                    retryCost = retryRecord.normalizedCostUsd;
+                  if (skipDecision.skip) {
+                    if (emitTraceFn) {
+                      emitTraceFn({
+                        providerId: altProvider,
+                        modelId: altModel.id,
+                        stage: 'skipped',
+                        included: false,
+                        reason:
+                          typeof skipDecision.reason === 'string'
+                            ? skipDecision.reason
+                            : 'health_filtered',
+                      });
+                    }
+                    this.log.debug(
+                      { model: model.id, retryProvider: altProvider, reason: skipDecision.reason },
+                      'Cross-provider retry: skipping known-bad candidate (near-zero skip)'
+                    );
+                    continue;
                   }
-                  retryCostSource = retryRecord.costSource;
-                } catch {
-                  retryCost = retryRawCost;
                 }
-                const retryExecution = this.createModelExecution(altModel, altAdapter, role, retryPinnedRequest, retryResponse, retryCost, retryDuration, true);
-                retryExecution.rawCost = retryRawCost;
-                if (retryCostSource) retryExecution.costSource = retryCostSource;
-                return retryExecution;
+
+                // Get adapter for alternative provider via provider registry (no context needed)
+                let altAdapter: ProviderAdapter | null = null;
+                try {
+                  const { getProviderRegistry } = await import('@/providers/provider-registry');
+                  const registry = getProviderRegistry();
+                  const resolved = registry.resolveAdapterForModel(altModel);
+                  altAdapter = resolved.adapter;
+                } catch {
+                  // Try via getAdapterForModel as fallback
+                  if (this.getAdapterForModel) {
+                    try {
+                      altAdapter = await this.getAdapterForModel(
+                        altModel,
+                        {} as OrchestrationContext
+                      );
+                    } catch {
+                      /* skip */
+                    }
+                  }
+                }
+                if (!altAdapter) continue;
+
+                this.log.info(
+                  {
+                    model: model.id,
+                    failedProvider: failedProviderLower,
+                    retryProvider: altProvider,
+                    sourceType: altSourceType,
+                  },
+                  'Balance error — retrying same model via alternative provider'
+                );
+
+                // Recursive call with the alternative model+adapter (depth=1 to prevent infinite recursion)
+                const retryPinnedRequest = { ...request, model: altModel.id };
+                const retryStart = Date.now();
+                try {
+                  const retryResponse = await altAdapter.chatCompletion(retryPinnedRequest);
+                  const retryDuration = Date.now() - retryStart;
+                  const retryContent = safeResponseContent(retryResponse);
+                  if (retryContent.length > 0) {
+                    this.log.info(
+                      { model: model.id, provider: altProvider, durationMs: retryDuration },
+                      'Cross-provider retry succeeded'
+                    );
+                    span.setAttribute('model.retry_provider', altProvider);
+                    span.setStatus({ code: SpanStatusCode.OK });
+                    span.end();
+                    // Estimate cost from response usage if available — narrow
+                    // structurally to extract the optional usage block instead of
+                    // casting through `any` (which would cascade unsafe-* errors).
+                    const retryUsage = isObject(retryResponse)
+                      ? (
+                          retryResponse as {
+                            usage?: { prompt_tokens?: number; completion_tokens?: number };
+                          }
+                        ).usage
+                      : undefined;
+                    const promptTokens =
+                      typeof retryUsage?.prompt_tokens === 'number' ? retryUsage.prompt_tokens : 0;
+                    const completionTokens =
+                      typeof retryUsage?.completion_tokens === 'number'
+                        ? retryUsage.completion_tokens
+                        : 0;
+                    const retryRawCost = retryUsage
+                      ? (promptTokens * Number(altModel.inputCostPer1k)) / 1000 +
+                        (completionTokens * Number(altModel.outputCostPer1k)) / 1000
+                      : 0;
+                    // TIER 1: normalize the retry cost too (same shared path) so a
+                    // $0-reporting alt-provider with tokens>0 still yields cost>0.
+                    let retryCost = retryRawCost;
+                    let retryCostSource: string | undefined;
+                    try {
+                      const retryRecord = normalizeCost(
+                        retryRawCost,
+                        altProvider,
+                        altModel.id,
+                        promptTokens || undefined,
+                        completionTokens || undefined,
+                        altModel.inputCostPer1k,
+                        altModel.outputCostPer1k
+                      );
+                      if (
+                        typeof retryRecord.normalizedCostUsd === 'number' &&
+                        Number.isFinite(retryRecord.normalizedCostUsd)
+                      ) {
+                        retryCost = retryRecord.normalizedCostUsd;
+                      }
+                      retryCostSource = retryRecord.costSource;
+                    } catch {
+                      retryCost = retryRawCost;
+                    }
+                    const retryExecution = this.createModelExecution(
+                      altModel,
+                      altAdapter,
+                      role,
+                      retryPinnedRequest,
+                      retryResponse,
+                      retryCost,
+                      retryDuration,
+                      true
+                    );
+                    retryExecution.rawCost = retryRawCost;
+                    if (retryCostSource) retryExecution.costSource = retryCostSource;
+                    return retryExecution;
+                  }
+                } catch (retryErr) {
+                  this.log.warn(
+                    { model: model.id, provider: altProvider, error: String(retryErr) },
+                    'Cross-provider retry also failed'
+                  );
+                }
               }
-            } catch (retryErr) {
-              this.log.warn(
-                { model: model.id, provider: altProvider, error: String(retryErr) },
-                'Cross-provider retry also failed'
-              );
+            } catch {
+              /* getAllEntriesForModel not available or failed */
             }
           }
-        } catch { /* getAllEntriesForModel not available or failed */ }
-      }
 
-      // Create error response
-      const errorResponse: ChatResponse = {
-        id: `error-${Date.now()}`,
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model: model.name,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: '',
-            },
-            finish_reason: 'stop',
-            logprobs: null,
-          },
-        ],
-      };
+          // Create error response
+          const errorResponse: ChatResponse = {
+            id: `error-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: model.name,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: '',
+                },
+                finish_reason: 'stop',
+                logprobs: null,
+              },
+            ],
+          };
 
-      // Record failure metric
-      recordModelExecution({
-        modelId: model.id,
-        // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-      // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-      // an openai/gpt-4o model and fails, the failure must be counted against the hub
-      // — not against native openai — otherwise native providers get penalized for
-      // failures they didn't cause, eventually collapsing the candidate pool.
-      provider: adapter.getName(),
-        taskType: 'unknown',
-        durationMs,
-        costUsd: 0,
-        success: false,
-      });
-      modelPerformanceTracker.record({
-        modelId: model.id,
-        // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-      // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-      // an openai/gpt-4o model and fails, the failure must be counted against the hub
-      // — not against native openai — otherwise native providers get penalized for
-      // failures they didn't cause, eventually collapsing the candidate pool.
-      provider: adapter.getName(),
-        qualityScore: 0,
-        latencyMs: durationMs,
-        success: false,
-        costUsd: 0,
-      });
+          // Record failure metric
+          recordModelExecution({
+            modelId: model.id,
+            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+            // an openai/gpt-4o model and fails, the failure must be counted against the hub
+            // — not against native openai — otherwise native providers get penalized for
+            // failures they didn't cause, eventually collapsing the candidate pool.
+            provider: adapter.getName(),
+            taskType: 'unknown',
+            durationMs,
+            costUsd: 0,
+            success: false,
+          });
+          modelPerformanceTracker.record({
+            modelId: model.id,
+            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+            // an openai/gpt-4o model and fails, the failure must be counted against the hub
+            // — not against native openai — otherwise native providers get penalized for
+            // failures they didn't cause, eventually collapsing the candidate pool.
+            provider: adapter.getName(),
+            qualityScore: 0,
+            latencyMs: durationMs,
+            success: false,
+            costUsd: 0,
+          });
 
-      // Record execution failure in unified operability hub (route-level precision)
-      try {
-        const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
-        const httpStatusMatch2 = errorMessage.match(/HTTP\s+(\d{3})/);
-        const httpStatus2 = httpStatusMatch2 ? parseInt(httpStatusMatch2[1], 10) : undefined;
-        getProviderOperabilityHub().recordRouteExecution(adapter.getName(), model.id, false, httpStatus2, errorMessage);
-        // #1 prove-before-admit: a 404 / model_not_found means THIS exact model
-        // is a dead catalog entry — flag it so the selector stops re-picking it
-        // (the hub is keyed per-family and cannot gate a single dead model).
-        const { getDeadModelRegistry, isModelNotFound } = await import('@/core/operability/dead-model-registry.js');
-        if (isModelNotFound(httpStatus2, errorMessage)) {
-          getDeadModelRegistry().markDead(model.id, `status=${httpStatus2 ?? 'msg'}`);
+          // Record execution failure in unified operability hub (route-level precision)
+          try {
+            const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
+            const httpStatusMatch2 = errorMessage.match(/HTTP\s+(\d{3})/);
+            const httpStatus2 = httpStatusMatch2 ? parseInt(httpStatusMatch2[1], 10) : undefined;
+            getProviderOperabilityHub().recordRouteExecution(
+              adapter.getName(),
+              model.id,
+              false,
+              httpStatus2,
+              errorMessage
+            );
+            // #1 prove-before-admit: a 404 / model_not_found means THIS exact model
+            // is a dead catalog entry — flag it so the selector stops re-picking it
+            // (the hub is keyed per-family and cannot gate a single dead model).
+            const { getDeadModelRegistry, isModelNotFound } =
+              await import('@/core/operability/dead-model-registry.js');
+            if (isModelNotFound(httpStatus2, errorMessage)) {
+              getDeadModelRegistry().markDead(model.id, `status=${httpStatus2 ?? 'msg'}`);
+            }
+          } catch {
+            /* non-critical */
+          }
+
+          span.setAttribute('model.duration_ms', durationMs);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+          span.end();
+
+          return this.createModelExecution(
+            model,
+            adapter,
+            role,
+            pinnedRequest,
+            errorResponse,
+            0,
+            durationMs,
+            false,
+            error instanceof Error ? error.message : String(error)
+          );
         }
-      } catch { /* non-critical */ }
-
-      span.setAttribute('model.duration_ms', durationMs);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-      span.end();
-
-      return this.createModelExecution(
-        model,
-        adapter,
-        role,
-        pinnedRequest,
-        errorResponse,
-        0,
-        durationMs,
-        false,
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-    }); // end tracer.startActiveSpan
+      }
+    ); // end tracer.startActiveSpan
   }
 
   /**
@@ -1589,7 +1735,7 @@ export abstract class BaseStrategy {
     request: ChatRequest,
     role: ModelRole,
     context: OrchestrationContext,
-    maxRetries: number = 4,
+    maxRetries: number = 4
   ): Promise<ModelExecution> {
     // In a COLLECTIVE strategy each attempt is bounded so the retry loop
     // (up to maxRetries+1 attempts) cannot ride the adapter's 60s×3 timeout per
@@ -1598,7 +1744,12 @@ export abstract class BaseStrategy {
     const isCollective = (this.getMetadata().minModels ?? 1) > 1;
     const runAttempt = (a: ProviderAdapter, m: Model, r: ModelRole): Promise<ModelExecution> =>
       isCollective
-        ? this.boundModelExecution(() => this.executeModel(a, m, request, r), { adapter: a, model: m, request, role: r })
+        ? this.boundModelExecution(() => this.executeModel(a, m, request, r), {
+            adapter: a,
+            model: m,
+            request,
+            role: r,
+          })
         : this.executeModel(a, m, request, r);
 
     const execution = await runAttempt(adapter, model, role);
@@ -1608,27 +1759,44 @@ export abstract class BaseStrategy {
     // Prefer models from different providers with known credits and good quality.
     const failedProvider = (model.provider || '').toLowerCase();
     const triedIds = new Set([model.id]);
-    const fallbackCandidates = (context.models || []).filter(m => {
-      if (triedIds.has(m.id)) return false;
-      // Skip same provider (likely same failure — 402/403 is provider-wide)
-      if ((m.provider || '').toLowerCase() === failedProvider) return false;
-      // Skip providers already known to have no credits
-      if (m.balanceStatus === 'no-credits') return false;
-      // Only chat-capable models
-      const caps = m.capabilities || [];
-      if (caps.length > 0 && !caps.some((c: string) => c === 'chat' || c === 'chat_completion' || c === 'text-generation' || c === 'text_generation')) return false;
-      // Prefer models with known quality > 0
-      return true;
-    }).sort((a, b) => {
-      // Sort: quality desc → native providers first
-      const qa = a.performance?.quality ?? 0;
-      const qb = b.performance?.quality ?? 0;
-      if (qa !== qb) return qb - qa;
-      const SRC_PRI: Record<string, number> = { native_api: 0, cloud_hub: 1, router: 2, aggregator: 3 };
-      const srcA = SRC_PRI[safeMetadata(a.metadata).sourceType ?? ''] ?? 9;
-      const srcB = SRC_PRI[safeMetadata(b.metadata).sourceType ?? ''] ?? 9;
-      return srcA - srcB;
-    });
+    const fallbackCandidates = (context.models || [])
+      .filter((m) => {
+        if (triedIds.has(m.id)) return false;
+        // Skip same provider (likely same failure — 402/403 is provider-wide)
+        if ((m.provider || '').toLowerCase() === failedProvider) return false;
+        // Skip providers already known to have no credits
+        if (m.balanceStatus === 'no-credits') return false;
+        // Only chat-capable models
+        const caps = m.capabilities || [];
+        if (
+          caps.length > 0 &&
+          !caps.some(
+            (c: string) =>
+              c === 'chat' ||
+              c === 'chat_completion' ||
+              c === 'text-generation' ||
+              c === 'text_generation'
+          )
+        )
+          return false;
+        // Prefer models with known quality > 0
+        return true;
+      })
+      .sort((a, b) => {
+        // Sort: quality desc → native providers first
+        const qa = a.performance?.quality ?? 0;
+        const qb = b.performance?.quality ?? 0;
+        if (qa !== qb) return qb - qa;
+        const SRC_PRI: Record<string, number> = {
+          native_api: 0,
+          cloud_hub: 1,
+          router: 2,
+          aggregator: 3,
+        };
+        const srcA = SRC_PRI[safeMetadata(a.metadata).sourceType ?? ''] ?? 9;
+        const srcB = SRC_PRI[safeMetadata(b.metadata).sourceType ?? ''] ?? 9;
+        return srcA - srcB;
+      });
 
     for (let i = 0; i < Math.min(maxRetries, fallbackCandidates.length); i++) {
       const fallback = fallbackCandidates[i];
@@ -1638,7 +1806,12 @@ export abstract class BaseStrategy {
       if (!fallbackAdapter) continue;
 
       this.log.warn(
-        { failedModel: model.name, fallbackModel: fallback.name, fallbackProvider: fallback.provider, attempt: i + 1 },
+        {
+          failedModel: model.name,
+          fallbackModel: fallback.name,
+          fallbackProvider: fallback.provider,
+          attempt: i + 1,
+        },
         'Primary model failed, trying fallback'
       );
 
@@ -1668,7 +1841,7 @@ export abstract class BaseStrategy {
    */
   protected collectiveModelTimeoutMs(): number {
     return Number(
-      process.env.COLLECTIVE_MODEL_TIMEOUT_MS ?? process.env.PARALLEL_MODEL_TIMEOUT_MS ?? 25000,
+      process.env.COLLECTIVE_MODEL_TIMEOUT_MS ?? process.env.PARALLEL_MODEL_TIMEOUT_MS ?? 25000
     );
   }
 
@@ -1682,7 +1855,7 @@ export abstract class BaseStrategy {
   protected async boundModelExecution(
     fn: () => Promise<ModelExecution>,
     ctx: { adapter: ProviderAdapter; model: Model; request: ChatRequest; role: ModelRole },
-    timeoutMs: number = this.collectiveModelTimeoutMs(),
+    timeoutMs: number = this.collectiveModelTimeoutMs()
   ): Promise<ModelExecution> {
     const startTime = Date.now();
     const failedExecution = (reason: string, prefix: string): ModelExecution =>
@@ -1697,13 +1870,18 @@ export abstract class BaseStrategy {
           created: Math.floor(Date.now() / 1000),
           model: ctx.model.name,
           choices: [
-            { index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop', logprobs: null },
+            {
+              index: 0,
+              message: { role: 'assistant', content: '' },
+              finish_reason: 'stop',
+              logprobs: null,
+            },
           ],
         } as ChatResponse,
         0,
         Date.now() - startTime,
         false,
-        reason,
+        reason
       );
 
     // Guarantee the underlying call never rejects, so a late rejection (after the timeout has
@@ -1715,7 +1893,7 @@ export abstract class BaseStrategy {
       timer = setTimeout(() => {
         this.log.warn(
           { provider: ctx.adapter.getName(), model: ctx.model.name, role: ctx.role, timeoutMs },
-          'Model exceeded per-call timeout — dropping straggler',
+          'Model exceeded per-call timeout — dropping straggler'
         );
         resolve(failedExecution(`per-model timeout (${timeoutMs}ms)`, 'timeout'));
       }, timeoutMs);
@@ -1750,9 +1928,9 @@ export abstract class BaseStrategy {
         this.boundModelExecution(
           () => this.executeModel(adapter, model, request, role),
           { adapter, model, request, role },
-          perModelTimeoutMs,
-        ),
-      ),
+          perModelTimeoutMs
+        )
+      )
     );
   }
 
@@ -1791,11 +1969,11 @@ export abstract class BaseStrategy {
     candidates: ModelExecution[],
     originalRequest: ChatRequest,
     context: OrchestrationContext,
-    synthesizer: Model,
+    synthesizer: Model
   ): Promise<ModelExecution | null> {
     if (!this.getAdapterForModel) return null;
     const usable = candidates.filter(
-      (c) => c.success && this.hasUsableAssistantResponse(c.response),
+      (c) => c.success && this.hasUsableAssistantResponse(c.response)
     );
     if (usable.length === 0) return null;
     // A single usable candidate cannot be "merged" — return it unchanged.
@@ -1803,7 +1981,10 @@ export abstract class BaseStrategy {
 
     const lastUser = originalRequest.messages[originalRequest.messages.length - 1]?.content ?? '';
     const responsesText = usable
-      .map((e, i) => `### Expert response ${i + 1} (from ${e.modelName}):\n${safeResponseContent(e.response)}`)
+      .map(
+        (e, i) =>
+          `### Expert response ${i + 1} (from ${e.modelName}):\n${safeResponseContent(e.response)}`
+      )
       .join('\n\n');
 
     const mergeRequest: ChatRequest = {
@@ -1869,7 +2050,8 @@ export abstract class BaseStrategy {
     if (process.env.DISABLE_FACILITATION_PROMPT === 'true') return request;
     const facilitationMsg: ChatMessage = {
       role: 'system',
-      content: 'Note: Your response will be reviewed and evaluated by expert peers. Provide your most thorough, accurate, and well-reasoned work.',
+      content:
+        'Note: Your response will be reviewed and evaluated by expert peers. Provide your most thorough, accurate, and well-reasoned work.',
     };
     return {
       ...request,
@@ -1889,7 +2071,13 @@ export abstract class BaseStrategy {
     if (responses.length < 2) return 0;
 
     const tokenize = (text: string): Set<string> =>
-      new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+      new Set(
+        text
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .split(/\s+/)
+          .filter((w) => w.length > 2)
+      );
 
     const sets = responses.map(tokenize);
     let totalDistance = 0;
@@ -1897,7 +2085,7 @@ export abstract class BaseStrategy {
 
     for (let i = 0; i < sets.length; i++) {
       for (let j = i + 1; j < sets.length; j++) {
-        const intersection = new Set([...sets[i]].filter(w => sets[j].has(w)));
+        const intersection = new Set([...sets[i]].filter((w) => sets[j].has(w)));
         const union = new Set([...sets[i], ...sets[j]]);
         const jaccard = union.size > 0 ? intersection.size / union.size : 0;
         totalDistance += 1 - jaccard; // Jaccard distance = 1 - similarity
@@ -1920,14 +2108,25 @@ export abstract class BaseStrategy {
     // structural cast (NOT `as unknown as`) is safe here — both sides are
     // object types and the optional field is the only thing we touch.
     const feed = (context as { observerFeed?: ObserverFeed }).observerFeed;
-    return feed ?? { emit: () => {}, getNarrations: () => [], isActive: () => false, drainReadyNarrations: () => [], flushPending: async () => {} };
+    return (
+      feed ?? {
+        emit: () => {},
+        getNarrations: () => [],
+        isActive: () => false,
+        drainReadyNarrations: () => [],
+        flushPending: async () => {},
+      }
+    );
   }
 
   /**
    * Emit an observer event. Non-blocking — fire-and-forget.
    * Safe to call even when observer is disabled (no-op).
    */
-  protected emitObserverEvent(context: OrchestrationContext, event: Omit<ObserverEvent, 'timestamp' | 'strategy'>): void {
+  protected emitObserverEvent(
+    context: OrchestrationContext,
+    event: Omit<ObserverEvent, 'timestamp' | 'strategy'>
+  ): void {
     const feed = this.getObserverFeed(context);
     feed.emit({
       ...event,
@@ -1947,12 +2146,14 @@ export abstract class BaseStrategy {
       object: 'chat.completion.chunk' as const,
       created: Math.floor(Date.now() / 1000),
       model: 'observer',
-      choices: [{
-        index: 0,
-        delta: { role: 'assistant' as const, content: '' },
-        finish_reason: null,
-        logprobs: null,
-      }],
+      choices: [
+        {
+          index: 0,
+          delta: { role: 'assistant' as const, content: '' },
+          finish_reason: null,
+          logprobs: null,
+        },
+      ],
       ailin_metadata: {
         type: 'observer',
         event: narration.event.type,
@@ -1974,7 +2175,7 @@ export abstract class BaseStrategy {
    */
   protected async drainObserverChunks(
     context: OrchestrationContext,
-    waitMs: number = 2000,
+    waitMs: number = 2000
   ): Promise<ChatResponse[]> {
     const feed = this.getObserverFeed(context);
     if (!feed.isActive()) return [];
@@ -1984,7 +2185,7 @@ export abstract class BaseStrategy {
 
     // Drain whatever is ready
     const ready = feed.drainReadyNarrations();
-    return ready.map(n => this.observerChunk(n));
+    return ready.map((n) => this.observerChunk(n));
   }
 
   /**
@@ -2004,7 +2205,7 @@ export abstract class BaseStrategy {
   protected async *drainWhile<T>(
     context: OrchestrationContext,
     work: Promise<T>,
-    pollMs: number = 500,
+    pollMs: number = 500
   ): AsyncGenerator<ChatResponse, T, unknown> {
     const feed = this.getObserverFeed(context);
     if (!feed.isActive()) {
@@ -2024,7 +2225,7 @@ export abstract class BaseStrategy {
       (e) => {
         settled = true;
         failure = { error: e };
-      },
+      }
     );
 
     while (!settled) {
@@ -2098,7 +2299,10 @@ export abstract class BaseStrategy {
    * Supports <reasoning>...</reasoning> and <think>...</think> (DeepSeek-R1/QwQ native format).
    * Returns { reasoning, cleanContent } where cleanContent has reasoning tags stripped.
    */
-  protected extractReasoning(content: string): { reasoning: string | undefined; cleanContent: string } {
+  protected extractReasoning(content: string): {
+    reasoning: string | undefined;
+    cleanContent: string;
+  } {
     // Try <reasoning> tags first (our protocol)
     const reasoningMatch = content.match(/<reasoning>([\s\S]*?)<\/reasoning>/i);
     if (reasoningMatch) {
@@ -2126,7 +2330,7 @@ export abstract class BaseStrategy {
     adapter: ProviderAdapter,
     model: Model,
     request: ChatRequest,
-    role: ModelRole = 'primary',
+    role: ModelRole = 'primary'
   ): Promise<ModelExecution> {
     let reqForExecution = request;
 
@@ -2136,10 +2340,14 @@ export abstract class BaseStrategy {
     } else {
       // Non-native models: inject reasoning prompt into system message
       const messages = [...request.messages];
-      const systemIdx = messages.findIndex(m => m.role === 'system');
+      const systemIdx = messages.findIndex((m) => m.role === 'system');
       if (systemIdx >= 0) {
-        const sysContent = typeof messages[systemIdx].content === 'string' ? messages[systemIdx].content : '';
-        messages[systemIdx] = { ...messages[systemIdx], content: this.withReasoningPrompt(sysContent, request, model) };
+        const sysContent =
+          typeof messages[systemIdx].content === 'string' ? messages[systemIdx].content : '';
+        messages[systemIdx] = {
+          ...messages[systemIdx],
+          content: this.withReasoningPrompt(sysContent, request, model),
+        };
       } else {
         // No system message — prepend the observable Ailin¹ fallback (R4) rather
         // than a generic "helpful assistant" string so the degradation is visible
@@ -2149,7 +2357,7 @@ export abstract class BaseStrategy {
           content: this.withReasoningPrompt(
             buildAilinFallbackPrompt('base-strategy.reasoning-no-system-msg'),
             request,
-            model,
+            model
           ),
         });
       }
@@ -2181,18 +2389,20 @@ export abstract class BaseStrategy {
    * The synthesizer can use this to understand HOW each participant arrived at their answer.
    */
   protected formatReasoningForSynthesizer(executions: ModelExecution[]): string {
-    const traces = executions.filter(e => e.reasoning);
+    const traces = executions.filter((e) => e.reasoning);
     if (traces.length === 0) return '';
 
-    const formatted = traces.map(e =>
-      `### ${e.modelName} (${e.role}) — Reasoning:\n${e.reasoning}`
-    ).join('\n\n');
+    const formatted = traces
+      .map((e) => `### ${e.modelName} (${e.role}) — Reasoning:\n${e.reasoning}`)
+      .join('\n\n');
 
-    return '\n\n## Participant Reasoning Traces\n' +
+    return (
+      '\n\n## Participant Reasoning Traces\n' +
       'The following shows how each participant reasoned before answering. ' +
       'Use this to identify the STRONGEST logical chains, detect flawed reasoning, ' +
       'and synthesize a response that combines the best reasoning from all participants.\n\n' +
-      formatted;
+      formatted
+    );
   }
 
   // ── Tool Execution Loop ──────────────────
@@ -2212,7 +2422,7 @@ export abstract class BaseStrategy {
     model: Model,
     request: ChatRequest,
     role: ModelRole = 'primary',
-    maxToolIterations: number = 5,
+    maxToolIterations: number = 5
   ): Promise<ModelExecution> {
     let currentRequest = request;
     let totalCost = 0;
@@ -2299,7 +2509,7 @@ export abstract class BaseStrategy {
     request: ChatRequest,
     role: ModelRole = 'primary',
     qualityTarget: number = 0.85,
-    maxIterations: number = 3,
+    maxIterations: number = 3
   ): Promise<ModelExecution> {
     // Step 1: Initial generation
     const initialExec = await this.executeModel(adapter, model, request, role);
@@ -2321,15 +2531,25 @@ export abstract class BaseStrategy {
     let bestExec = initialExec;
     let bestScore = 0;
     const scoreHistory: number[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
 
     for (let i = 0; i < maxIterations; i++) {
       // Step 2: Self-evaluate (same model)
       const evalReq: ChatRequest = {
         ...request,
         messages: [
-          { role: 'system', content: 'Review YOUR OWN previous response. Be brutally honest. Rate quality 0.0-1.0. List specific issues.\n\nOutput JSON: {"quality_score": 0.85, "issues": [{"severity": "MAJOR", "description": "..."}]}' },
-          { role: 'user', content: `ORIGINAL REQUEST:\n${originalQ}\n\nYOUR RESPONSE:\n${currentContent}` },
+          {
+            role: 'system',
+            content:
+              'Review YOUR OWN previous response. Be brutally honest. Rate quality 0.0-1.0. List specific issues.\n\nOutput JSON: {"quality_score": 0.85, "issues": [{"severity": "MAJOR", "description": "..."}]}',
+          },
+          {
+            role: 'user',
+            content: `ORIGINAL REQUEST:\n${originalQ}\n\nYOUR RESPONSE:\n${currentContent}`,
+          },
         ],
         response_format: { type: 'json_object' },
         max_tokens: 500,
@@ -2358,28 +2578,48 @@ export abstract class BaseStrategy {
                 (entry): entry is { severity: string; description: string } =>
                   isObject(entry) &&
                   typeof (entry as { severity?: unknown }).severity === 'string' &&
-                  typeof (entry as { description?: unknown }).description === 'string',
+                  typeof (entry as { description?: unknown }).description === 'string'
               );
             }
           }
         }
-      } catch { /* parse failure, keep defaults */ }
+      } catch {
+        /* parse failure, keep defaults */
+      }
 
       scoreHistory.push(score);
-      if (score > bestScore) { bestScore = score; bestExec = currentExec; }
+      if (score > bestScore) {
+        bestScore = score;
+        bestExec = currentExec;
+      }
 
       // Check stopping criteria
       if (score >= qualityTarget) break;
-      if (issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'MAJOR').length === 0) break;
-      if (scoreHistory.length >= 2 && Math.abs(scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]) < 0.05) break;
+      if (issues.filter((i) => i.severity === 'CRITICAL' || i.severity === 'MAJOR').length === 0)
+        break;
+      if (
+        scoreHistory.length >= 2 &&
+        Math.abs(scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]) <
+          0.05
+      )
+        break;
 
       // Step 3: Self-repair (same model)
-      const issuesText = issues.map((iss, idx) => `${idx + 1}. [${iss.severity}] ${iss.description}`).join('\n');
+      const issuesText = issues
+        .map((iss, idx) => `${idx + 1}. [${iss.severity}] ${iss.description}`)
+        .join('\n');
       const repairReq: ChatRequest = {
         ...request,
         messages: [
-          { role: 'system', content: 'Fix these specific issues in YOUR previous response. Keep what works, fix what was flagged. Output the COMPLETE improved version.' },
-          { role: 'user', content: `ORIGINAL REQUEST:\n${originalQ}\n\nYOUR PREVIOUS RESPONSE:\n${currentContent}\n\nISSUES TO FIX:\n${issuesText}` },
+          {
+            role: 'system',
+            content:
+              'Fix these specific issues in YOUR previous response. Keep what works, fix what was flagged. Output the COMPLETE improved version.',
+          },
+          {
+            role: 'user',
+            content: `ORIGINAL REQUEST:\n${originalQ}\n\nYOUR PREVIOUS RESPONSE:\n${currentContent}\n\nISSUES TO FIX:\n${issuesText}`,
+          },
         ],
       };
       const repairExec = await this.executeModel(adapter, model, repairReq, 'self-repairer');
@@ -2396,7 +2636,7 @@ export abstract class BaseStrategy {
     }
 
     // Annotate with self-critique metadata
-    bestExec.reasoning = `Self-critique: ${scoreHistory.length} iterations, scores: [${scoreHistory.map(s => s.toFixed(2)).join(', ')}], final: ${bestScore.toFixed(2)}`;
+    bestExec.reasoning = `Self-critique: ${scoreHistory.length} iterations, scores: [${scoreHistory.map((s) => s.toFixed(2)).join(', ')}], final: ${bestScore.toFixed(2)}`;
     return bestExec;
   }
 
@@ -2409,7 +2649,7 @@ export abstract class BaseStrategy {
    */
   async enrichWithMemories(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<ChatRequest> {
     // LAT-3: the orchestration engine already ran the memory search and
     // prepended the memory block for this request — a second per-strategy
@@ -2418,8 +2658,8 @@ export abstract class BaseStrategy {
     if (context.memoryEnriched) return request;
     try {
       const userContent = request.messages
-        .filter(m => m.role === 'user')
-        .map(m => typeof m.content === 'string' ? m.content : '')
+        .filter((m) => m.role === 'user')
+        .map((m) => (typeof m.content === 'string' ? m.content : ''))
         .join(' ');
 
       if (!userContent || userContent.length < 10) return request;
@@ -2427,9 +2667,7 @@ export abstract class BaseStrategy {
       const memories = await this.searchMemories(context, userContent, 3);
       if (memories.length === 0) return request;
 
-      const memoryContext = memories
-        .map(m => `[${m.type}] ${m.content}`)
-        .join('\n');
+      const memoryContext = memories.map((m) => `[${m.type}] ${m.content}`).join('\n');
 
       // Prepend memories as system context
       return {
@@ -2452,10 +2690,7 @@ export abstract class BaseStrategy {
    * Stores high-quality responses, reasoning traces, and strategy outcomes.
    * Call this at the END of execute() for memory-aware strategies.
    */
-  async recordExecution(
-    context: OrchestrationContext,
-    result: OrchestrationResult,
-  ): Promise<void> {
+  async recordExecution(context: OrchestrationContext, result: OrchestrationResult): Promise<void> {
     try {
       const content = result.finalResponse?.choices?.[0]?.message?.content;
       if (typeof content !== 'string' || content.length < 50) return;
@@ -2465,8 +2700,8 @@ export abstract class BaseStrategy {
       if (quality < 0.7) return;
 
       const userQuery = (result.modelsUsed?.[0]?.request?.messages || [])
-        .filter(m => m.role === 'user')
-        .map(m => typeof m.content === 'string' ? m.content : '')
+        .filter((m) => m.role === 'user')
+        .map((m) => (typeof m.content === 'string' ? m.content : ''))
         .join(' ')
         .substring(0, 200);
 
@@ -2477,16 +2712,16 @@ export abstract class BaseStrategy {
         {
           strategy: result.strategyUsed,
           qualityScore: quality,
-          models: result.modelsUsed?.map(e => e.modelName).slice(0, 5),
+          models: result.modelsUsed?.map((e) => e.modelName).slice(0, 5),
           costUsd: result.totalCost,
-        },
+        }
       );
 
       // Store reasoning traces as procedural memory (HOW to solve)
       const traces = (result.metadata as Record<string, unknown>)?.reasoning_traces;
       if (Array.isArray(traces) && traces.length > 0) {
         const bestTrace = (traces as Array<{ reasoning?: string }>)
-          .filter(t => t.reasoning)
+          .filter((t) => t.reasoning)
           .sort((a, b) => (b.reasoning?.length || 0) - (a.reasoning?.length || 0))[0];
 
         if (bestTrace?.reasoning) {
@@ -2494,7 +2729,7 @@ export abstract class BaseStrategy {
             context,
             `Reasoning approach for: ${userQuery}\n${bestTrace.reasoning.substring(0, 500)}`,
             'procedural',
-            { strategy: result.strategyUsed },
+            { strategy: result.strategyUsed }
           );
         }
       }
@@ -2511,7 +2746,7 @@ export abstract class BaseStrategy {
     context: OrchestrationContext,
     content: string,
     type: 'episodic' | 'semantic' | 'procedural' = 'episodic',
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown>
   ): Promise<void> {
     try {
       const { getSemanticMemoryStore } = await import('@/core/memory/semantic-memory-store');
@@ -2536,7 +2771,7 @@ export abstract class BaseStrategy {
   protected async searchMemories(
     context: OrchestrationContext,
     query: string,
-    limit: number = 5,
+    limit: number = 5
   ): Promise<Array<{ content: string; similarity: number; type: string }>> {
     try {
       const { getSemanticMemoryStore } = await import('@/core/memory/semantic-memory-store');
@@ -2547,7 +2782,7 @@ export abstract class BaseStrategy {
         limit,
         minSimilarity: 0.7,
       });
-      return results.map(r => ({
+      return results.map((r) => ({
         content: r.entry.content,
         similarity: r.similarity,
         type: r.entry.type,
@@ -2557,7 +2792,10 @@ export abstract class BaseStrategy {
     }
   }
 
-  protected getAdapterForModel?(model: Model, context: OrchestrationContext): Promise<ProviderAdapter | null>;
+  protected getAdapterForModel?(
+    model: Model,
+    context: OrchestrationContext
+  ): Promise<ProviderAdapter | null>;
 
   /**
    * Get a sibling strategy by name.
@@ -2574,7 +2812,7 @@ export abstract class BaseStrategy {
    */
   protected selectPromptVariant(
     promptKey: string,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): PromptVariant | null {
     // PROMPT_VARIANTS, getPromptVariantBandit, isPromptVariantBanditEnabled
     // are now imported at module scope. No more `require()` — TypeScript can

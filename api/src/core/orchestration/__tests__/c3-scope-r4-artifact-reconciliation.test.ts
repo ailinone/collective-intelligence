@@ -39,7 +39,6 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-R4 — artifact reconciliation', () => {
-
   describe('policy version R4', () => {
     it('C3_SCOPE_POLICY_VERSION is R4 (post-integrity-lock)', () => {
       expect(C3_SCOPE_POLICY_VERSION).toBe('01C.1B-C3-SCOPE-DESIGN-R4-v1');

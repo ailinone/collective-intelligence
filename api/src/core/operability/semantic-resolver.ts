@@ -43,12 +43,7 @@ import {
   type OperationalCandidate,
   type CandidateFilter,
 } from './operational-candidate-pool';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  observeHistogram,
-  setGauge,
-} from './metrics';
+import { METRIC_NAMES, incrementCounter, observeHistogram, setGauge } from './metrics';
 
 const log = logger.child({ component: 'semantic-resolver' });
 
@@ -78,7 +73,7 @@ export interface ResolveSemanticCandidatesInput {
 // ─── Resolver ─────────────────────────────────────────────────────────────
 
 export async function resolveSemanticCandidates(
-  input: ResolveSemanticCandidatesInput,
+  input: ResolveSemanticCandidatesInput
 ): Promise<readonly RankedCandidate[]> {
   const t0 = performance.now();
   const { query, k } = input;
@@ -104,7 +99,7 @@ export async function resolveSemanticCandidates(
   } catch (err) {
     log.warn(
       { err: String(err) },
-      'Embedding failed — falling back to pool query without semantic ranking',
+      'Embedding failed — falling back to pool query without semantic ranking'
     );
     observeHistogram(METRIC_NAMES.CANDIDATE_RESOLUTION_LATENCY_MS, performance.now() - t0, {
       outcome: 'embedding_failed_fallback',
@@ -118,7 +113,7 @@ export async function resolveSemanticCandidates(
 
   // 3. Health/capability filter (via pool's query-style predicates)
   const operationalIds = new Set(
-    pool.query(input.filter).map((c) => `${c.providerId}::${c.modelId}`),
+    pool.query(input.filter).map((c) => `${c.providerId}::${c.modelId}`)
   );
 
   const ranked: RankedCandidate[] = [];

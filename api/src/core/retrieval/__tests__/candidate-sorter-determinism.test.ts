@@ -149,9 +149,13 @@ describe('sortCandidates — deterministic', () => {
       makeResult({ routeId: 'r-3', totalScore: 0.9 }),
     ];
 
-    const first = sortCandidates(baseline).map((r) => r.routeId).join(',');
+    const first = sortCandidates(baseline)
+      .map((r) => r.routeId)
+      .join(',');
     for (let i = 0; i < 1000; i += 1) {
-      const next = sortCandidates(baseline).map((r) => r.routeId).join(',');
+      const next = sortCandidates(baseline)
+        .map((r) => r.routeId)
+        .join(',');
       if (next !== first) {
         throw new Error(`non-deterministic at iter ${i}`);
       }

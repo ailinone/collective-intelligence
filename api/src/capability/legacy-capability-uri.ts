@@ -41,9 +41,7 @@ import type { ModelCapability } from '@/types';
 /** The canonical capability URI prefix. Update with care — used in DB rows. */
 export const CAPABILITY_URI_PREFIX = 'http://ailin.dev/cap/v1/';
 
-const URI_RE = new RegExp(
-  `^${CAPABILITY_URI_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(.+)$`,
-);
+const URI_RE = new RegExp(`^${CAPABILITY_URI_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(.+)$`);
 
 /**
  * Translate a legacy ModelCapability enum value to its canonical URI.
@@ -87,7 +85,7 @@ export function uriToLegacy(uri: string): string | null {
  */
 export function uriToTypedLegacy(
   uri: string,
-  legacySet: ReadonlySet<ModelCapability>,
+  legacySet: ReadonlySet<ModelCapability>
 ): ModelCapability | null {
   const slug = uriToLegacy(uri);
   if (slug === null) return null;
@@ -102,7 +100,7 @@ export function uriToTypedLegacy(
  */
 export function uriArrayToLegacyArray(
   uris: readonly string[],
-  legacySet: ReadonlySet<ModelCapability>,
+  legacySet: ReadonlySet<ModelCapability>
 ): ModelCapability[] {
   const out: ModelCapability[] = [];
   for (const uri of uris) {

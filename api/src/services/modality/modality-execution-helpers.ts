@@ -94,7 +94,10 @@ export function normalizeStrategy(strategy: string | undefined): ModalityStrateg
  * search itself is unbounded in candidate COUNT (the full ranked pool is
  * offered), bounded only by this wall-clock budget.
  */
-export function resolveFallbackDeadlineMs(strategy: ModalityStrategy, allowFallback: boolean): number {
+export function resolveFallbackDeadlineMs(
+  strategy: ModalityStrategy,
+  allowFallback: boolean
+): number {
   if (!allowFallback) return 0; // 0 = try only the first candidate, no search
   switch (strategy) {
     case 'single':

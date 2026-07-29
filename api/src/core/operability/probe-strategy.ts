@@ -137,31 +137,30 @@ const DEFAULT_BY_INTEGRATION_CLASS: Readonly<
  * reality. Add entries here when telemetry shows persistent false
  * negatives or false positives for a specific provider.
  */
-const PROVIDER_OVERRIDES: Readonly<
-  Record<string, Omit<ProviderProbeStrategy, 'providerId'>>
-> = Object.freeze({
-  // AiHubMix exposes /api/user/self for billing
-  aihubmix: {
-    credentialProbe: 'env_only',
-    creditProbe: 'billing_api',
-    endpointProbe: 'models_api',
-    modelProbe: 'list_models',
-  },
-  // CometAPI exposes /api/user/self for billing
-  cometapi: {
-    credentialProbe: 'env_only',
-    creditProbe: 'billing_api',
-    endpointProbe: 'models_api',
-    modelProbe: 'list_models',
-  },
-  // OpenRouter exposes /api/v1/auth/key for credit info
-  openrouter: {
-    credentialProbe: 'env_only',
-    creditProbe: 'billing_api',
-    endpointProbe: 'models_api',
-    modelProbe: 'list_models',
-  },
-});
+const PROVIDER_OVERRIDES: Readonly<Record<string, Omit<ProviderProbeStrategy, 'providerId'>>> =
+  Object.freeze({
+    // AiHubMix exposes /api/user/self for billing
+    aihubmix: {
+      credentialProbe: 'env_only',
+      creditProbe: 'billing_api',
+      endpointProbe: 'models_api',
+      modelProbe: 'list_models',
+    },
+    // CometAPI exposes /api/user/self for billing
+    cometapi: {
+      credentialProbe: 'env_only',
+      creditProbe: 'billing_api',
+      endpointProbe: 'models_api',
+      modelProbe: 'list_models',
+    },
+    // OpenRouter exposes /api/v1/auth/key for credit info
+    openrouter: {
+      credentialProbe: 'env_only',
+      creditProbe: 'billing_api',
+      endpointProbe: 'models_api',
+      modelProbe: 'list_models',
+    },
+  });
 
 // ─── Public API ────────────────────────────────────────────────────────────
 

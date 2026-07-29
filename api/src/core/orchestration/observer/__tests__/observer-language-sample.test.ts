@@ -44,9 +44,7 @@ describe('ObserverService.extractUserSample', () => {
     const sample = ObserverService.extractUserSample([
       {
         role: 'user',
-        content: [
-          { type: 'text', text: 'Perché il cielo è azzurro?' },
-        ] as unknown,
+        content: [{ type: 'text', text: 'Perché il cielo è azzurro?' }] as unknown,
       },
     ]);
     expect(sample).toBe('Perché il cielo è azzurro?');
@@ -112,7 +110,7 @@ describe('mirrorLanguageFromSample — user-turn language anchor', () => {
 
   it('strips code fences from the sample so English code does not skew the signal', () => {
     const prefix = mirrorLanguageFromSample(
-      'Explique este erro:\n```\nTypeError: undefined is not a function\n```',
+      'Explique este erro:\n```\nTypeError: undefined is not a function\n```'
     );
     expect(prefix).toContain('Explique este erro:');
     expect(prefix).not.toContain('TypeError');

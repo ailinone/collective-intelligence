@@ -74,7 +74,7 @@ describe('model-selection — no hardcoded model names in decision code', () => 
         const hits = codeOnly.match(new RegExp(`\\b${token}\\b`, 'g')) ?? [];
         expect(
           hits.length,
-          `Forbidden token "${token}" appeared ${hits.length} time(s) in code (not strings/comments) of ${relPath}. Production decision logic must be capability-based, not model-name-based.`,
+          `Forbidden token "${token}" appeared ${hits.length} time(s) in code (not strings/comments) of ${relPath}. Production decision logic must be capability-based, not model-name-based.`
         ).toBe(0);
       }
     });

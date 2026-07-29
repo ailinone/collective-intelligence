@@ -18,9 +18,20 @@
  * NO HARDCODED MODELS — model/voice selection by capabilities.
  */
 
-import { ProviderAdapter, type ProviderConfig, type HealthCheckResult, type BalanceCheckResult } from '@/providers/base/provider-adapter';
+import {
+  ProviderAdapter,
+  type ProviderConfig,
+  type HealthCheckResult,
+  type BalanceCheckResult,
+} from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
-import type { AudioTTSRequest, AudioTTSResponse, ModerationResponse, ImageEditResponse, ImageVariationResponse } from '@/types/model-client';
+import type {
+  AudioTTSRequest,
+  AudioTTSResponse,
+  ModerationResponse,
+  ImageEditResponse,
+  ImageVariationResponse,
+} from '@/types/model-client';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ provider: 'elevenlabs' });
@@ -50,7 +61,7 @@ export class ElevenLabsAdapter extends ProviderAdapter {
 
     try {
       // Voice ID: use request.voice as voice_id, or map common names
-      const voiceId = this.resolveVoiceId(request.voice || request.options?.voice as string);
+      const voiceId = this.resolveVoiceId(request.voice || (request.options?.voice as string));
 
       // Map format to ElevenLabs output_format
       const format = request.format || 'mp3';
@@ -98,7 +109,10 @@ export class ElevenLabsAdapter extends ProviderAdapter {
       const audioBuffer = Buffer.from(await response.arrayBuffer());
       const latency = Date.now() - start;
 
-      log.info({ model: modelId, voice: voiceId, latency, bytes: audioBuffer.length }, 'TTS completed');
+      log.info(
+        { model: modelId, voice: voiceId, latency, bytes: audioBuffer.length },
+        'TTS completed'
+      );
 
       return {
         audio: audioBuffer,
@@ -122,12 +136,12 @@ export class ElevenLabsAdapter extends ProviderAdapter {
 
     // Common OpenAI-compatible voice name mappings
     const voiceMap: Record<string, string> = {
-      alloy: '21m00Tcm4TlvDq8ikWAM',    // Rachel
-      echo: 'MF3mGyEYCl7XYWbV9V6O',      // Elli
-      fable: 'TxGEqnHWrfWFTfGW9XjX',     // Josh
-      onyx: 'VR6AewLTigWG4xSOukaG',       // Arnold
-      nova: 'EXAVITQu4vr4xnSDxMaL',       // Bella
-      shimmer: 'XB0fDUnXU5powFXDhCwa',    // Charlotte
+      alloy: '21m00Tcm4TlvDq8ikWAM', // Rachel
+      echo: 'MF3mGyEYCl7XYWbV9V6O', // Elli
+      fable: 'TxGEqnHWrfWFTfGW9XjX', // Josh
+      onyx: 'VR6AewLTigWG4xSOukaG', // Arnold
+      nova: 'EXAVITQu4vr4xnSDxMaL', // Bella
+      shimmer: 'XB0fDUnXU5powFXDhCwa', // Charlotte
     };
 
     if (voiceMap[voice.toLowerCase()]) {
@@ -155,12 +169,21 @@ export class ElevenLabsAdapter extends ProviderAdapter {
 
   async getModels(): Promise<Model[]> {
     // Dynamically discover models from ElevenLabs API
-    const perf: import('@/types').ModelPerformance = { latencyMs: 200, throughput: 0, quality: 0.95, reliability: 0.9 };
+    const perf: import('@/types').ModelPerformance = {
+      latencyMs: 200,
+      throughput: 0,
+      quality: 0.95,
+      reliability: 0.9,
+    };
     const base: Omit<Model, 'id' | 'name' | 'displayName' | 'capabilities'> = {
-      providerId: 'elevenlabs', provider: 'elevenlabs',
-      contextWindow: 0, maxOutputTokens: 0,
-      inputCostPer1k: 0, outputCostPer1k: 0,
-      status: 'active', performance: perf,
+      providerId: 'elevenlabs',
+      provider: 'elevenlabs',
+      contextWindow: 0,
+      maxOutputTokens: 0,
+      inputCostPer1k: 0,
+      outputCostPer1k: 0,
+      status: 'active',
+      performance: perf,
     };
 
     try {
@@ -173,22 +196,35 @@ export class ElevenLabsAdapter extends ProviderAdapter {
         return [];
       }
 
-      const data = await response.json() as Array<{ model_id: string; name?: string; description?: string; can_do_text_to_speech?: boolean; can_do_voice_conversion?: boolean; languages?: Array<{ language_id: string; name: string }> }>;
+      const data = (await response.json()) as Array<{
+        model_id: string;
+        name?: string;
+        description?: string;
+        can_do_text_to_speech?: boolean;
+        can_do_voice_conversion?: boolean;
+        languages?: Array<{ language_id: string; name: string }>;
+      }>;
 
       if (!Array.isArray(data) || data.length === 0) return [];
 
       return data
-        .filter(m => m.can_do_text_to_speech !== false)
-        .map(m => ({
+        .filter((m) => m.can_do_text_to_speech !== false)
+        .map((m) => ({
           ...base,
           id: `elevenlabs/${m.model_id}`,
           name: m.model_id,
           displayName: `ElevenLabs ${m.name || m.model_id}`,
           capabilities: ['text_to_speech', 'streaming'] as import('@/types').ModelCapability[],
-          metadata: { languages: m.languages?.map(l => l.language_id), description: m.description },
+          metadata: {
+            languages: m.languages?.map((l) => l.language_id),
+            description: m.description,
+          },
         }));
     } catch (err) {
-      log.warn({ error: err instanceof Error ? err.message : String(err) }, 'ElevenLabs model discovery failed');
+      log.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        'ElevenLabs model discovery failed'
+      );
       return [];
     }
   }
@@ -205,7 +241,12 @@ export class ElevenLabsAdapter extends ProviderAdapter {
         checkedAt: new Date(),
       };
     } catch (error) {
-      return { healthy: false, latency: 0, error: error instanceof Error ? error.message : 'Unknown', checkedAt: new Date() };
+      return {
+        healthy: false,
+        latency: 0,
+        error: error instanceof Error ? error.message : 'Unknown',
+        checkedAt: new Date(),
+      };
     }
   }
 
@@ -239,13 +280,36 @@ export class ElevenLabsAdapter extends ProviderAdapter {
 
   // ── Not Supported (TTS-only provider) ──────────────────
 
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('ElevenLabs: TTS-only provider'); }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('ElevenLabs: TTS-only provider');
+  }
+
   // eslint-disable-next-line require-yield -- TTS-only provider; this generator never yields.
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse> { throw new Error('ElevenLabs: TTS-only provider'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('Not supported'); }
-  calculateCost(): number { return 0; }
-  normalizeModelName(name: string): string { return name; }
-  async moderate(): Promise<ModerationResponse> { throw new Error('Not supported'); }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('Not supported'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('Not supported'); }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse> {
+    throw new Error('ElevenLabs: TTS-only provider');
+  }
+
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('Not supported');
+  }
+
+  calculateCost(): number {
+    return 0;
+  }
+
+  normalizeModelName(name: string): string {
+    return name;
+  }
+
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('Not supported');
+  }
 }

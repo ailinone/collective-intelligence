@@ -42,12 +42,33 @@ import type { ExperimentExecutionResult } from '../experiment-types';
 
 function row(over: Partial<ExperimentExecutionResult>): ExperimentExecutionResult {
   return {
-    experimentId: 'exp-m', taskIndex: 0, repetition: 1, executionMode: 'single-model',
-    strategy: 'single', model: 'gpt-5.4', taskType: 'reasoning', complexity: 'high', domain: 'tech',
-    prompt: 'p', qualityScore: 0.8, costUsd: 0.01, latencyMs: 1000, totalTokens: 500, success: true,
-    modelsUsed: ['gpt-5.4'], judgeScore: 0.8, judgeRubric: 'r', faithfulnessScore: null,
-    instructionFollowingScore: null, failureMode: null, phase: 'frozen', responseSummary: 'm',
-    ablationDisabled: [], ablationCondition: null, scoringPolicy: 'benchmark', judgeUsed: true,
+    experimentId: 'exp-m',
+    taskIndex: 0,
+    repetition: 1,
+    executionMode: 'single-model',
+    strategy: 'single',
+    model: 'gpt-5.4',
+    taskType: 'reasoning',
+    complexity: 'high',
+    domain: 'tech',
+    prompt: 'p',
+    qualityScore: 0.8,
+    costUsd: 0.01,
+    latencyMs: 1000,
+    totalTokens: 500,
+    success: true,
+    modelsUsed: ['gpt-5.4'],
+    judgeScore: 0.8,
+    judgeRubric: 'r',
+    faithfulnessScore: null,
+    instructionFollowingScore: null,
+    failureMode: null,
+    phase: 'frozen',
+    responseSummary: 'm',
+    ablationDisabled: [],
+    ablationCondition: null,
+    scoringPolicy: 'benchmark',
+    judgeUsed: true,
     heuristicScoreRaw: null,
     ...over,
   };
@@ -57,15 +78,32 @@ function scenarioRows(
   taskIndices: number[],
   singles: Array<{ model: string; score: number }>,
   strategies: Array<{ strategy: string; score: number }>,
-  over: Partial<ExperimentExecutionResult> = {},
+  over: Partial<ExperimentExecutionResult> = {}
 ): ExperimentExecutionResult[] {
   const rows: ExperimentExecutionResult[] = [];
   for (const ti of taskIndices) {
     for (const s of singles) {
-      rows.push(row({ taskIndex: ti, executionMode: 'single-model', model: s.model, qualityScore: s.score, ...over }));
+      rows.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'single-model',
+          model: s.model,
+          qualityScore: s.score,
+          ...over,
+        })
+      );
     }
     for (const c of strategies) {
-      rows.push(row({ taskIndex: ti, executionMode: 'collective', strategy: c.strategy, model: null, qualityScore: c.score, ...over }));
+      rows.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: c.strategy,
+          model: null,
+          qualityScore: c.score,
+          ...over,
+        })
+      );
     }
   }
   return rows;
@@ -95,13 +133,16 @@ describe('generateStrategyScenarioMatrix', () => {
     // 6 tasks: strong single 0.90, weak single 0.30 (mean 0.60); consensus 0.80.
     const results = scenarioRows(
       [146, 147, 148, 149, 150, 151],
-      [{ model: 'frontier', score: 0.90 }, { model: 'weak', score: 0.30 }],
-      [{ strategy: 'consensus', score: 0.80 }],
-      { taskType: HARD_VERIFIABLE_TASK_TYPE },
+      [
+        { model: 'frontier', score: 0.9 },
+        { model: 'weak', score: 0.3 },
+      ],
+      [{ strategy: 'consensus', score: 0.8 }],
+      { taskType: HARD_VERIFIABLE_TASK_TYPE }
     );
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus' && c.scenario === 'ha-hard')!;
-    expect(cell.pairedDeltaMean).toBeCloseTo(-0.10, 5); // 0.80 − best(0.90)
+    expect(cell.pairedDeltaMean).toBeCloseTo(-0.1, 5); // 0.80 − best(0.90)
     expect(cell.verdict).not.toBe('WIN');
     expect(cell.scenarioKind).toBe('confirmatory-regime');
   });
@@ -111,8 +152,25 @@ describe('generateStrategyScenarioMatrix', () => {
     const tasks = [146, 147, 148, 149, 150, 151, 152, 153];
     const results: ExperimentExecutionResult[] = [];
     tasks.forEach((ti, i) => {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50, taskType: HARD_VERIFIABLE_TASK_TYPE }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.80 + (i % 2 ? 0.01 : -0.01), taskType: HARD_VERIFIABLE_TASK_TYPE }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'single-model',
+          model: 'frontier',
+          qualityScore: 0.5,
+          taskType: HARD_VERIFIABLE_TASK_TYPE,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.8 + (i % 2 ? 0.01 : -0.01),
+          taskType: HARD_VERIFIABLE_TASK_TYPE,
+        })
+      );
     });
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
@@ -125,12 +183,12 @@ describe('generateStrategyScenarioMatrix', () => {
   it('a directional delta WITHOUT significance is UNDECIDED, never a WIN (n=2 identical deltas → sign-test p=0.5)', () => {
     const results = scenarioRows(
       [10, 11],
-      [{ model: 'frontier', score: 0.50 }],
-      [{ strategy: 'debate', score: 0.80 }],
+      [{ model: 'frontier', score: 0.5 }],
+      [{ strategy: 'debate', score: 0.8 }]
     );
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'debate')!;
-    expect(cell.pairedDeltaMean).toBeCloseTo(0.30, 5);
+    expect(cell.pairedDeltaMean).toBeCloseTo(0.3, 5);
     expect(cell.verdict).toBe('UNDECIDED');
   });
 
@@ -139,14 +197,14 @@ describe('generateStrategyScenarioMatrix', () => {
     // estimate (sd=0) → provably a tie.
     const tie = scenarioRows(
       [10, 11, 12],
-      [{ model: 'frontier', score: 0.80 }],
-      [{ strategy: 'consensus', score: 0.81 }],
+      [{ model: 'frontier', score: 0.8 }],
+      [{ strategy: 'consensus', score: 0.81 }]
     );
     const single = scenarioRows(
       [20],
-      [{ model: 'frontier', score: 0.50 }],
-      [{ strategy: 'war-room', score: 0.90 }],
-      { complexity: 'medium' },
+      [{ model: 'frontier', score: 0.5 }],
+      [{ strategy: 'war-room', score: 0.9 }],
+      { complexity: 'medium' }
     );
     // Noisy n=2 case: point-estimate delta is tiny (+0.005) but the two
     // per-task deltas are +0.25/-0.24 — a wide CI that does NOT fit inside
@@ -154,10 +212,36 @@ describe('generateStrategyScenarioMatrix', () => {
     // alone; it must now be UNDECIDED (the data are equally consistent with a
     // ±0.25 effect as with a real draw).
     const noisyNearZero = [
-      row({ taskIndex: 30, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50, complexity: 'low' }),
-      row({ taskIndex: 30, executionMode: 'collective', strategy: 'noisy-tie', model: null, qualityScore: 0.75, complexity: 'low' }),
-      row({ taskIndex: 31, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50, complexity: 'low' }),
-      row({ taskIndex: 31, executionMode: 'collective', strategy: 'noisy-tie', model: null, qualityScore: 0.26, complexity: 'low' }),
+      row({
+        taskIndex: 30,
+        executionMode: 'single-model',
+        model: 'frontier',
+        qualityScore: 0.5,
+        complexity: 'low',
+      }),
+      row({
+        taskIndex: 30,
+        executionMode: 'collective',
+        strategy: 'noisy-tie',
+        model: null,
+        qualityScore: 0.75,
+        complexity: 'low',
+      }),
+      row({
+        taskIndex: 31,
+        executionMode: 'single-model',
+        model: 'frontier',
+        qualityScore: 0.5,
+        complexity: 'low',
+      }),
+      row({
+        taskIndex: 31,
+        executionMode: 'collective',
+        strategy: 'noisy-tie',
+        model: null,
+        qualityScore: 0.26,
+        complexity: 'low',
+      }),
     ];
     const m = generateStrategyScenarioMatrix('exp-m', [...tie, ...single, ...noisyNearZero]);
     expect(m.cells.find((c) => c.strategy === 'consensus')!.verdict).toBe('TIE');
@@ -167,7 +251,7 @@ describe('generateStrategyScenarioMatrix', () => {
     expect(noisyCell.verdict).toBe('UNDECIDED');
   });
 
-  it('P1 review fix: a strategy exactly matching the best single MODEL\'s mean is never LOSS, even with noisy repetitions', () => {
+  it("P1 review fix: a strategy exactly matching the best single MODEL's mean is never LOSS, even with noisy repetitions", () => {
     // 10 tasks, 3 repetitions of ONE single model per task with within-task
     // noise (0.65/0.75/0.85, mean 0.75), and a collective strategy scoring a
     // CONSTANT 0.75 on every task — exactly the single model's true mean.
@@ -182,9 +266,25 @@ describe('generateStrategyScenarioMatrix', () => {
     for (const ti of tasks) {
       for (const rep of [1, 2, 3]) {
         const score = rep === 1 ? 0.65 : rep === 2 ? 0.75 : 0.85;
-        results.push(row({ taskIndex: ti, repetition: rep, executionMode: 'single-model', model: 'frontier', qualityScore: score }));
+        results.push(
+          row({
+            taskIndex: ti,
+            repetition: rep,
+            executionMode: 'single-model',
+            model: 'frontier',
+            qualityScore: score,
+          })
+        );
       }
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.75 }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.75,
+        })
+      );
     }
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
@@ -207,10 +307,36 @@ describe('generateStrategyScenarioMatrix', () => {
     const tasks = Array.from({ length: 12 }, (_, i) => 300 + i);
     const results: ExperimentExecutionResult[] = [];
     for (const ti of tasks) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'A', qualityScore: 0.80 }));
-      results.push(row({ taskIndex: ti, repetition: 1, executionMode: 'single-model', model: 'B', qualityScore: 0.60 }));
-      results.push(row({ taskIndex: ti, repetition: 2, executionMode: 'single-model', model: 'B', qualityScore: 0.95 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.80 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'A', qualityScore: 0.8 })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          repetition: 1,
+          executionMode: 'single-model',
+          model: 'B',
+          qualityScore: 0.6,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          repetition: 2,
+          executionMode: 'single-model',
+          model: 'B',
+          qualityScore: 0.95,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.8,
+        })
+      );
     }
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
@@ -222,18 +348,36 @@ describe('generateStrategyScenarioMatrix', () => {
     const tasks = Array.from({ length: 6 }, (_, i) => 30 + i);
     const results: ExperimentExecutionResult[] = [];
     for (const ti of tasks) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.5 })
+      );
     }
     // One strong strategy: large consistent effect.
     tasks.forEach((ti, i) => {
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'strong', model: null, qualityScore: 0.90 + (i % 2 ? 0.01 : -0.01) }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'strong',
+          model: null,
+          qualityScore: 0.9 + (i % 2 ? 0.01 : -0.01),
+        })
+      );
     });
     // Many borderline strategies: small noisy positive deltas (raw p just under
     // 0.05 territory would be luck; here the effect is weak/noisy on purpose).
     for (let s = 0; s < 12; s++) {
       tasks.forEach((ti, i) => {
-        const jitter = (i % 3 === 0 ? 0.10 : i % 3 === 1 ? -0.02 : 0.04);
-        results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: `noisy-${s}`, model: null, qualityScore: 0.50 + jitter }));
+        const jitter = i % 3 === 0 ? 0.1 : i % 3 === 1 ? -0.02 : 0.04;
+        results.push(
+          row({
+            taskIndex: ti,
+            executionMode: 'collective',
+            strategy: `noisy-${s}`,
+            model: null,
+            qualityScore: 0.5 + jitter,
+          })
+        );
       });
     }
     const m = generateStrategyScenarioMatrix('exp-m', results);
@@ -245,29 +389,60 @@ describe('generateStrategyScenarioMatrix', () => {
   it('respects the canonical eligibility filter — failed/warmup rows do not enter any cell delta', () => {
     const clean = scenarioRows(
       [40, 41, 42],
-      [{ model: 'frontier', score: 0.50 }],
-      [{ strategy: 'consensus', score: 0.90 }],
+      [{ model: 'frontier', score: 0.5 }],
+      [{ strategy: 'consensus', score: 0.9 }]
     );
     const contamination = [
-      row({ taskIndex: 40, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0, success: false, failureMode: 'timeout' }),
-      row({ taskIndex: 41, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0, phase: 'warmup' }),
+      row({
+        taskIndex: 40,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0,
+        success: false,
+        failureMode: 'timeout',
+      }),
+      row({
+        taskIndex: 41,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0,
+        phase: 'warmup',
+      }),
     ];
     const m = generateStrategyScenarioMatrix('exp-m', [...clean, ...contamination]);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
-    expect(cell.pairedDeltaMean).toBeCloseTo(0.40, 5); // uncontaminated 0.90−0.50
+    expect(cell.pairedDeltaMean).toBeCloseTo(0.4, 5); // uncontaminated 0.90−0.50
   });
 
   it('review fix: successRate counts ALL attempted executions, not just measured ones — a flaky strategy cannot hide its failures', () => {
     const clean = scenarioRows(
       [40, 41, 42],
-      [{ model: 'frontier', score: 0.50 }],
-      [{ strategy: 'flaky', score: 0.90 }],
+      [{ model: 'frontier', score: 0.5 }],
+      [{ strategy: 'flaky', score: 0.9 }]
     );
     // 2 more attempts that failed outright — excluded from the quality delta
     // (correctly), but must still count in the denominator of successRate.
     const failures = [
-      row({ taskIndex: 43, executionMode: 'collective', strategy: 'flaky', model: null, qualityScore: 0, success: false, failureMode: 'timeout' }),
-      row({ taskIndex: 44, executionMode: 'collective', strategy: 'flaky', model: null, qualityScore: 0, success: false, failureMode: 'timeout' }),
+      row({
+        taskIndex: 43,
+        executionMode: 'collective',
+        strategy: 'flaky',
+        model: null,
+        qualityScore: 0,
+        success: false,
+        failureMode: 'timeout',
+      }),
+      row({
+        taskIndex: 44,
+        executionMode: 'collective',
+        strategy: 'flaky',
+        model: null,
+        qualityScore: 0,
+        success: false,
+        failureMode: 'timeout',
+      }),
     ];
     const m = generateStrategyScenarioMatrix('exp-m', [...clean, ...failures]);
     const cell = m.cells.find((c) => c.strategy === 'flaky')!;
@@ -283,9 +458,34 @@ describe('generateStrategyScenarioMatrix', () => {
     // rows' cost, not an average diluted by the cheap arm.
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [70, 71, 72]) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.90, costUsd: 0.05 }));
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'cheap', qualityScore: 0.20, costUsd: 0.001 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.85, costUsd: 0.30 }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'single-model',
+          model: 'frontier',
+          qualityScore: 0.9,
+          costUsd: 0.05,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'single-model',
+          model: 'cheap',
+          qualityScore: 0.2,
+          costUsd: 0.001,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.85,
+          costUsd: 0.3,
+        })
+      );
     }
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
@@ -297,9 +497,27 @@ describe('generateStrategyScenarioMatrix', () => {
     const tasks = Array.from({ length: 8 }, (_, i) => 50 + i);
     const results: ExperimentExecutionResult[] = [];
     tasks.forEach((ti, i) => {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'winner', model: null, qualityScore: 0.85 + (i % 2 ? 0.01 : -0.01) }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'loser', model: null, qualityScore: 0.15 + (i % 2 ? 0.01 : -0.01) }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.5 })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'winner',
+          model: null,
+          qualityScore: 0.85 + (i % 2 ? 0.01 : -0.01),
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'loser',
+          model: null,
+          qualityScore: 0.15 + (i % 2 ? 0.01 : -0.01),
+        })
+      );
     });
     const m = generateStrategyScenarioMatrix('exp-m', results);
     expect(m.scoreboard[0].strategy).toBe('winner');
@@ -317,14 +535,32 @@ describe('generateStrategyScenarioMatrix', () => {
     const buildIdentical = (name: string): ExperimentExecutionResult[] => {
       const rows: ExperimentExecutionResult[] = [];
       for (const ti of [80, 81, 82]) {
-        rows.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
-        rows.push(row({ taskIndex: ti, executionMode: 'collective', strategy: name, model: null, qualityScore: 0.55 }));
+        rows.push(
+          row({
+            taskIndex: ti,
+            executionMode: 'single-model',
+            model: 'frontier',
+            qualityScore: 0.5,
+          })
+        );
+        rows.push(
+          row({
+            taskIndex: ti,
+            executionMode: 'collective',
+            strategy: name,
+            model: null,
+            qualityScore: 0.55,
+          })
+        );
       }
       return rows;
     };
     // Insert 'zebra' before 'alpha' in the raw input — a naive Map-insertion-
     // order sort would keep zebra first; the fix must place alpha first.
-    const m = generateStrategyScenarioMatrix('exp-m', [...buildIdentical('zebra'), ...buildIdentical('alpha')]);
+    const m = generateStrategyScenarioMatrix('exp-m', [
+      ...buildIdentical('zebra'),
+      ...buildIdentical('alpha'),
+    ]);
     const zebraIdx = m.scoreboard.findIndex((s) => s.strategy === 'zebra');
     const alphaIdx = m.scoreboard.findIndex((s) => s.strategy === 'alpha');
     expect(alphaIdx).toBeLessThan(zebraIdx);
@@ -333,10 +569,36 @@ describe('generateStrategyScenarioMatrix', () => {
   it('tier1 and adaptive arms appear as their own scoreboard rows; single-budget does not', () => {
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [60, 61, 62]) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective-tier1', strategy: 'consensus', model: null, qualityScore: 0.60 }));
-      results.push(row({ taskIndex: ti, executionMode: 'adaptive', strategy: 'auto', model: null, qualityScore: 0.55 }));
-      results.push(row({ taskIndex: ti, executionMode: 'single-budget', strategy: 'single', model: 'cheap', qualityScore: 0.40 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.5 })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective-tier1',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.6,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'adaptive',
+          strategy: 'auto',
+          model: null,
+          qualityScore: 0.55,
+        })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'single-budget',
+          strategy: 'single',
+          model: 'cheap',
+          qualityScore: 0.4,
+        })
+      );
     }
     const m = generateStrategyScenarioMatrix('exp-m', results);
     expect(m.strategies).toContain('consensus (tier1)');
@@ -347,12 +609,37 @@ describe('generateStrategyScenarioMatrix', () => {
   it('a NaN quality score is excluded before pairing, keeping sharedTaskCount consistent with the deltas actually used', () => {
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [90, 91, 92]) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.90 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.5 })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.9,
+        })
+      );
     }
     // A NaN row for a FOURTH task — must not inflate sharedTaskCount/sharedTaskIndices.
-    results.push(row({ taskIndex: 93, executionMode: 'single-model', model: 'frontier', qualityScore: Number.NaN }));
-    results.push(row({ taskIndex: 93, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: Number.NaN }));
+    results.push(
+      row({
+        taskIndex: 93,
+        executionMode: 'single-model',
+        model: 'frontier',
+        qualityScore: Number.NaN,
+      })
+    );
+    results.push(
+      row({
+        taskIndex: 93,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: Number.NaN,
+      })
+    );
     const m = generateStrategyScenarioMatrix('exp-m', results);
     const cell = m.cells.find((c) => c.strategy === 'consensus')!;
     expect(cell.sharedTaskIndices).toEqual([90, 91, 92]);

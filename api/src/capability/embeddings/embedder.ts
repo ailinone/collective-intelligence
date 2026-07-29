@@ -168,7 +168,7 @@ export class OpenAICompatibleEmbedder implements Embedder {
       const err = new Error(`Embedder ${response.status}: ${text.slice(0, 300)}`);
       this.log.warn(
         { url: this.url, status: response.status, sample: text.slice(0, 200) },
-        'Embedder request failed',
+        'Embedder request failed'
       );
       throw err;
     }
@@ -179,7 +179,7 @@ export class OpenAICompatibleEmbedder implements Embedder {
     }
     if (payload.data.length !== inputs.length) {
       throw new Error(
-        `Embedder returned ${payload.data.length} vectors for ${inputs.length} inputs`,
+        `Embedder returned ${payload.data.length} vectors for ${inputs.length} inputs`
       );
     }
 
@@ -192,7 +192,7 @@ export class OpenAICompatibleEmbedder implements Embedder {
       }
       if (vec.length !== this.dimensions) {
         throw new Error(
-          `Embedder returned vector of length ${vec.length} but expected ${this.dimensions}`,
+          `Embedder returned vector of length ${vec.length} but expected ${this.dimensions}`
         );
       }
       return vec;
@@ -201,7 +201,11 @@ export class OpenAICompatibleEmbedder implements Embedder {
 }
 
 async function safeReadBody(response: Response): Promise<string> {
-  try { return await response.text(); } catch { return ''; }
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -221,21 +225,27 @@ export function getEmbedder(): Embedder {
   const url = process.env.HCRA_EMBEDDER_URL;
   if (!url) {
     throw new Error(
-      'HCRA_EMBEDDER_URL is not set. Configure to point at a TEI/OpenAI-compatible /v1/embeddings host.',
+      'HCRA_EMBEDDER_URL is not set. Configure to point at a TEI/OpenAI-compatible /v1/embeddings host.'
     );
   }
   cached = new OpenAICompatibleEmbedder({
     baseUrl: url,
     model: process.env.HCRA_EMBEDDER_MODEL ?? 'BAAI/bge-small-en-v1.5',
     apiKey: process.env.HCRA_EMBEDDER_API_KEY,
-    dimensions: process.env.HCRA_EMBEDDER_DIMS ? Number(process.env.HCRA_EMBEDDER_DIMS) : EMBEDDING_DIMS,
+    dimensions: process.env.HCRA_EMBEDDER_DIMS
+      ? Number(process.env.HCRA_EMBEDDER_DIMS)
+      : EMBEDDING_DIMS,
     batchSize: process.env.HCRA_EMBEDDER_BATCH ? Number(process.env.HCRA_EMBEDDER_BATCH) : 32,
   });
   return cached;
 }
 
 export function tryGetEmbedder(): Embedder | null {
-  try { return getEmbedder(); } catch { return null; }
+  try {
+    return getEmbedder();
+  } catch {
+    return null;
+  }
 }
 
 /** Test hook — clear the singleton between tests or after env updates. */

@@ -183,7 +183,9 @@ function setup(): Fixture {
   // Spy on the pure scorer to prove cache hits skip re-scoring. Prototype spy
   // (calls through to the original by default) so instance calls are observed.
   const evalSpy = vi.spyOn(
-    IntelligentModelSelectionService.prototype as unknown as { evaluateModel: (...a: unknown[]) => unknown },
+    IntelligentModelSelectionService.prototype as unknown as {
+      evaluateModel: (...a: unknown[]) => unknown;
+    },
     'evaluateModel'
   );
 
@@ -228,7 +230,11 @@ describe('IntelligentModelSelectionService — scored-candidate cache', () => {
     expect(byId.m4).toBe(75); // 50 + reasoning10 + ctx5 + quality10
 
     // Second call, identical key -> cache hit: no rescan, identical result.
-    const before = { p1: p1.getModels.mock.calls.length, p2: p2.getModels.mock.calls.length, evals: evalSpy.mock.calls.length };
+    const before = {
+      p1: p1.getModels.mock.calls.length,
+      p2: p2.getModels.mock.calls.length,
+      evals: evalSpy.mock.calls.length,
+    };
     const second = await collect(service, adapters, REQUIRED, PREFERRED, requirements);
 
     expect(p1.getModels.mock.calls.length).toBe(before.p1); // no new getModels
@@ -356,7 +362,13 @@ describe('IntelligentModelSelectionService — scored-candidate cache', () => {
         }),
       ]).adapter,
     ];
-    const directScan = await collect(freshService, freshAdapters, REQUIRED, PREFERRED, requirements);
+    const directScan = await collect(
+      freshService,
+      freshAdapters,
+      REQUIRED,
+      PREFERRED,
+      requirements
+    );
 
     expect(fingerprint(cached)).toEqual(fingerprint(directScan));
   });

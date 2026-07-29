@@ -59,7 +59,9 @@ export async function internalUsageRoutes(server: FastifyInstance): Promise<void
     '/v1/internal/usage',
     { preHandler: [requireServiceAuth(SCOPE_READ)] },
     async (request, reply) => {
-      const user = await resolveOrProvisionActingUser((request as ServiceAuthedRequest).serviceAuth!);
+      const user = await resolveOrProvisionActingUser(
+        (request as ServiceAuthedRequest).serviceAuth!
+      );
       if (!user) {
         return reply.code(409).send({
           error: 'acting_user_not_provisioned',
@@ -73,7 +75,9 @@ export async function internalUsageRoutes(server: FastifyInstance): Promise<void
       const end = q.end ? new Date(q.end) : new Date(now);
       let start = q.start ? new Date(q.start) : new Date(now - DEFAULT_RANGE_DAYS * MS_PER_DAY);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return reply.code(400).send({ error: 'bad_request', message: 'start/end must be valid ISO dates' });
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'start/end must be valid ISO dates' });
       }
       if (start.getTime() > end.getTime()) {
         return reply.code(400).send({ error: 'bad_request', message: 'start must be <= end' });
@@ -107,14 +111,19 @@ export async function internalUsageRoutes(server: FastifyInstance): Promise<void
         outputTokens: logs.reduce((s, l) => s + (l.outputTokens ?? 0), 0),
         totalTokens: logs.reduce((s, l) => s + (l.totalTokens ?? 0), 0),
         costUsd: round6(logs.reduce((s, l) => s + toNum(l.costUsd), 0)),
-        errorRate: logs.length ? logs.filter((l) => l.status !== 'success').length / logs.length : 0,
+        errorRate: logs.length
+          ? logs.filter((l) => l.status !== 'success').length / logs.length
+          : 0,
         avgDurationMs: logs.length
           ? Math.round(logs.reduce((s, l) => s + (l.durationMs ?? 0), 0) / logs.length)
           : 0,
       };
 
       const dayMap = new Map<string, { requests: number; totalTokens: number; costUsd: number }>();
-      const modelMap = new Map<string, { requests: number; totalTokens: number; costUsd: number }>();
+      const modelMap = new Map<
+        string,
+        { requests: number; totalTokens: number; costUsd: number }
+      >();
       for (const l of logs) {
         const day = l.createdAt.toISOString().slice(0, 10);
         const d = dayMap.get(day) ?? { requests: 0, totalTokens: 0, costUsd: 0 };
@@ -134,10 +143,20 @@ export async function internalUsageRoutes(server: FastifyInstance): Promise<void
 
       const byDay = Array.from(dayMap.entries())
         .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-        .map(([date, v]) => ({ date, requests: v.requests, totalTokens: v.totalTokens, costUsd: round6(v.costUsd) }));
+        .map(([date, v]) => ({
+          date,
+          requests: v.requests,
+          totalTokens: v.totalTokens,
+          costUsd: round6(v.costUsd),
+        }));
 
       const byModel = Array.from(modelMap.entries())
-        .map(([model, v]) => ({ model, requests: v.requests, totalTokens: v.totalTokens, costUsd: round6(v.costUsd) }))
+        .map(([model, v]) => ({
+          model,
+          requests: v.requests,
+          totalTokens: v.totalTokens,
+          costUsd: round6(v.costUsd),
+        }))
         .sort((a, b) => b.requests - a.requests)
         .slice(0, 20);
 
@@ -147,6 +166,6 @@ export async function internalUsageRoutes(server: FastifyInstance): Promise<void
         byDay,
         byModel,
       });
-    },
+    }
   );
 }

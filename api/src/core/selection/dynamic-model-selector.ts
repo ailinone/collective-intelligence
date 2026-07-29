@@ -23,7 +23,13 @@
 
 import type { Model, TaskType, OrchestrationContext, ModelCapability } from '@/types';
 import { ensureModelCapabilityArray, ensureModelStatus } from '@/types';
-import { ensureStringArray, getStringFromObject, getArrayFromObject, isObject, getErrorMessage } from '@/utils/type-guards';
+import {
+  ensureStringArray,
+  getStringFromObject,
+  getArrayFromObject,
+  isObject,
+  getErrorMessage,
+} from '@/utils/type-guards';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { logger } from '@/utils/logger';
@@ -91,7 +97,7 @@ async function getVerifiedHubUids(): Promise<string[]> {
   } catch (rawErr) {
     log.warn(
       { error: getErrorMessage(rawErr) },
-      'Unverified-hub exclusion query failed — selecting over the full catalog (fail-open)',
+      'Unverified-hub exclusion query failed — selecting over the full catalog (fail-open)'
     );
     // Brief negative cache so a failing DB is not hammered on every request.
     verifiedHubUidCache = { uids: [], expiresAt: now + 5_000 };
@@ -141,9 +147,9 @@ export interface SelectionCriteria {
  * the final multiplicative boost on the candidate's selection score.
  */
 interface SemanticRerankEntry {
-  rank: number;            // 1-indexed position in the RRF result set
-  rrfRaw: number;          // raw RRF score from CapabilitySearchService
-  rrfNorm: number;         // normalised to [0, 1] (top = 1.0)
+  rank: number; // 1-indexed position in the RRF result set
+  rrfRaw: number; // raw RRF score from CapabilitySearchService
+  rrfNorm: number; // normalised to [0, 1] (top = 1.0)
   matchedBy: ReadonlyArray<'lexical' | 'vector' | 'capability_filter'>;
 }
 
@@ -302,7 +308,7 @@ export class DynamicModelSelector {
    *  absent => no health penalty (safe no-op). Read per-candidate in scoreModel. */
   private operabilitySkip?: (
     key: { providerId: string; modelId: string },
-    opts?: { silent?: boolean },
+    opts?: { silent?: boolean }
   ) => { skip: boolean };
 
   constructor(config?: Partial<DynamicModelSelectorConfig>) {
@@ -777,7 +783,9 @@ export class DynamicModelSelector {
       try {
         const { shouldSkipNearZero } = await import('@/core/operability');
         this.operabilitySkip = shouldSkipNearZero;
-      } catch { /* operability unavailable -> health penalty disabled (safe) */ }
+      } catch {
+        /* operability unavailable -> health penalty disabled (safe) */
+      }
     }
 
     let modelsToUse: Model[];
@@ -815,7 +823,9 @@ export class DynamicModelSelector {
 
     // Filter out models from providers with known health issues (402, 404, etc.)
     try {
-      const healthRecs = await errorLearningSystem.getRecommendations(sanitizedCriteria.taskType ?? 'general');
+      const healthRecs = await errorLearningSystem.getRecommendations(
+        sanitizedCriteria.taskType ?? 'general'
+      );
       if (healthRecs.avoidProviders && healthRecs.avoidProviders.length > 0) {
         const avoidSet = new Set(healthRecs.avoidProviders.map((p: string) => p.toLowerCase()));
         const before = modelsToUse.length;
@@ -823,7 +833,12 @@ export class DynamicModelSelector {
         const removed = before - modelsToUse.length;
         if (removed > 0) {
           log.info(
-            { requestId: context.requestId, avoidProviders: healthRecs.avoidProviders, removed, remaining: modelsToUse.length },
+            {
+              requestId: context.requestId,
+              avoidProviders: healthRecs.avoidProviders,
+              removed,
+              remaining: modelsToUse.length,
+            },
             'Filtered models from unhealthy providers'
           );
         }
@@ -871,7 +886,7 @@ export class DynamicModelSelector {
               poolSize: before,
               threshold: POOL_FAILSAFE_MIN,
             },
-            'FAILSAFE: unreliable-provider filter would collapse pool below minimum — bypassing filter',
+            'FAILSAFE: unreliable-provider filter would collapse pool below minimum — bypassing filter'
           );
           // Keep the original pool. Per-request circuit breakers will still
           // fail fast on actually-broken providers without blocking strategies.
@@ -885,7 +900,7 @@ export class DynamicModelSelector {
                 removed,
                 remaining: modelsToUse.length,
               },
-              'Filtered models from unreliable providers (provider-level performance filter)',
+              'Filtered models from unreliable providers (provider-level performance filter)'
             );
           }
         }
@@ -904,7 +919,8 @@ export class DynamicModelSelector {
     // — a near-empty result means the hub signal is cold/broken, not that the
     // whole world is down. Dynamic by construction — no static allow/deny list.
     try {
-      const { filterModelsByProviderOperability } = await import('@/core/operability/operability-filter.js');
+      const { filterModelsByProviderOperability } =
+        await import('@/core/operability/operability-filter.js');
       const allowUnknown = process.env.OPERABILITY_SELECTOR_ALLOW_UNKNOWN !== 'false';
       // A COLLECTIVE (multi-model) selection additionally excludes PROVEN-FLAKY
       // (`degraded` = <60% recent success) providers from the pool: in an
@@ -933,7 +949,7 @@ export class DynamicModelSelector {
               blocked: blocked.length,
               allowUnknown,
             },
-            'Operability gate applied to candidate pool (Camada 1c)',
+            'Operability gate applied to candidate pool (Camada 1c)'
           );
           modelsToUse = eligible;
         } else {
@@ -944,14 +960,14 @@ export class DynamicModelSelector {
               poolSize: modelsToUse.length,
               threshold: POOL_FAILSAFE_MIN,
             },
-            'FAILSAFE: operability gate would collapse pool below minimum — bypassing gate',
+            'FAILSAFE: operability gate would collapse pool below minimum — bypassing gate'
           );
         }
       }
     } catch (err) {
       log.warn(
         { requestId: context.requestId, error: String(err) },
-        'Operability gate unavailable — proceeding without it',
+        'Operability gate unavailable — proceeding without it'
       );
     }
 
@@ -977,7 +993,7 @@ export class DynamicModelSelector {
                 after: aliveModels.length,
                 removed: deadRemoved,
               },
-              'Dead-model gate applied — dropped models flagged dead by a prior 404 (prove-before-admit)',
+              'Dead-model gate applied — dropped models flagged dead by a prior 404 (prove-before-admit)'
             );
             modelsToUse = aliveModels;
           } else {
@@ -988,14 +1004,14 @@ export class DynamicModelSelector {
                 poolSize: beforeDead,
                 threshold: POOL_FAILSAFE_MIN,
               },
-              'FAILSAFE: dead-model gate would collapse pool below minimum — bypassing gate',
+              'FAILSAFE: dead-model gate would collapse pool below minimum — bypassing gate'
             );
           }
         }
       } catch (err) {
         log.warn(
           { requestId: context.requestId, error: String(err) },
-          'Dead-model gate unavailable — proceeding without it',
+          'Dead-model gate unavailable — proceeding without it'
         );
       }
     }
@@ -1015,7 +1031,7 @@ export class DynamicModelSelector {
         const registry = getProviderRegistry();
         const beforeCred = modelsToUse.length;
         const credEligible = modelsToUse.filter(
-          (m) => registry.resolveAdapterForModel(m).adapter !== null,
+          (m) => registry.resolveAdapterForModel(m).adapter !== null
         );
         const credRemoved = beforeCred - credEligible.length;
         if (credRemoved > 0) {
@@ -1027,7 +1043,7 @@ export class DynamicModelSelector {
                 after: credEligible.length,
                 removed: credRemoved,
               },
-              'Credential gate applied — dropped models whose execution provider has no configured key (prove-before-admit)',
+              'Credential gate applied — dropped models whose execution provider has no configured key (prove-before-admit)'
             );
             modelsToUse = credEligible;
           } else {
@@ -1038,14 +1054,14 @@ export class DynamicModelSelector {
                 poolSize: beforeCred,
                 threshold: POOL_FAILSAFE_MIN,
               },
-              'FAILSAFE: credential gate would collapse pool below minimum — bypassing gate',
+              'FAILSAFE: credential gate would collapse pool below minimum — bypassing gate'
             );
           }
         }
       } catch (err) {
         log.warn(
           { requestId: context.requestId, error: String(err) },
-          'Credential gate unavailable — proceeding without it',
+          'Credential gate unavailable — proceeding without it'
         );
       }
     }
@@ -1102,21 +1118,28 @@ export class DynamicModelSelector {
     // Per-model performance filter: exclude specific models that consistently fail.
     {
       const MIN_ATTEMPTS = 3;
-      const MAX_SUCCESS_RATE = 0.20;
+      const MAX_SUCCESS_RATE = 0.2;
       const excluded: string[] = [];
       modelsToUse = modelsToUse.filter((m) => {
         const dynScore = corePerformanceTracker.getDynamicScore(m.id);
         if (!dynScore || dynScore.sampleCount < MIN_ATTEMPTS) return true;
         const successRate = 1 - dynScore.errorRate;
         if (successRate < MAX_SUCCESS_RATE) {
-          excluded.push(`${m.id}(${m.provider}, ${(successRate * 100).toFixed(0)}% success, n=${dynScore.sampleCount})`);
+          excluded.push(
+            `${m.id}(${m.provider}, ${(successRate * 100).toFixed(0)}% success, n=${dynScore.sampleCount})`
+          );
           return false;
         }
         return true;
       });
       if (excluded.length > 0) {
         log.info(
-          { requestId: context.requestId, excluded, removed: excluded.length, remaining: modelsToUse.length },
+          {
+            requestId: context.requestId,
+            excluded,
+            removed: excluded.length,
+            remaining: modelsToUse.length,
+          },
           'Filtered models with consistently high failure rate (per-model performance filter)'
         );
       }
@@ -1209,7 +1232,11 @@ export class DynamicModelSelector {
                 // Fire-and-forget — `validatedCapabilities` is already applied to THIS
                 // request below; the DB write only benefits FUTURE requests, so it must
                 // not block the per-model scoring Promise.all.
-                void capabilityValidator.updateModelCapabilities(model.id, validatedCapabilities).catch(() => { /* non-critical */ });
+                void capabilityValidator
+                  .updateModelCapabilities(model.id, validatedCapabilities)
+                  .catch(() => {
+                    /* non-critical */
+                  });
 
                 log.warn(
                   {
@@ -1275,22 +1302,20 @@ export class DynamicModelSelector {
     const semanticRerank = await this.applySemanticRerank(
       candidatePool,
       criteria,
-      context.requestId,
+      context.requestId
     );
 
     // ✅ Score ALL  models using real-time metrics and capability validation
     // Caminho-C closure: bound the multiplicative boost so semantic
     // recall reshuffles WITHIN the eligible pool but never overrides
     // health/balance/capability gates above.
-    const SEMANTIC_RERANK_MAX_BOOST = 0.30; // top RRF hit gets +30% on its score
+    const SEMANTIC_RERANK_MAX_BOOST = 0.3; // top RRF hit gets +30% on its score
     const scoredModels = await Promise.all(
       modelsWithHistory.map(async ({ model, history }) => {
         const baseScore = await this.scoreModel(model, history, criteria);
         const rerankKey = this.semanticRerankKey(model);
         const rerankEntry = semanticRerank.get(rerankKey);
-        const semanticBoost = rerankEntry
-          ? SEMANTIC_RERANK_MAX_BOOST * rerankEntry.rrfNorm
-          : 0;
+        const semanticBoost = rerankEntry ? SEMANTIC_RERANK_MAX_BOOST * rerankEntry.rrfNorm : 0;
         const score = baseScore * (1 + semanticBoost);
         const reason = await this.explainScore(model, history, criteria, baseScore);
 
@@ -1300,8 +1325,14 @@ export class DynamicModelSelector {
           : { sampleSize: 0, successRate: 0, avgQualityScore: 0, avgCost: 0, avgLatency: 0 };
 
         // Type guard for realTimeMetrics
-        const hasAvgLatency = 'avgLatency' in realTimeMetrics && typeof realTimeMetrics.avgLatency === 'number';
-        const avgLatency = hasAvgLatency ? realTimeMetrics.avgLatency : ('avgResponseTime' in realTimeMetrics && typeof realTimeMetrics.avgResponseTime === 'number' ? realTimeMetrics.avgResponseTime : 0);
+        const hasAvgLatency =
+          'avgLatency' in realTimeMetrics && typeof realTimeMetrics.avgLatency === 'number';
+        const avgLatency = hasAvgLatency
+          ? realTimeMetrics.avgLatency
+          : 'avgResponseTime' in realTimeMetrics &&
+              typeof realTimeMetrics.avgResponseTime === 'number'
+            ? realTimeMetrics.avgResponseTime
+            : 0;
 
         return {
           model,
@@ -1316,14 +1347,15 @@ export class DynamicModelSelector {
                 sampleSize: history.totalCount,
               }
             : undefined,
-          realTimePerformance: realTimeMetrics.sampleSize > 0
-            ? {
-                latencyMs: avgLatency,
-                throughput: realTimeMetrics.avgCost > 0 ? 1 / realTimeMetrics.avgCost : undefined,
-                quality: realTimeMetrics.avgQualityScore,
-                reliability: realTimeMetrics.successRate,
-              }
-            : undefined,
+          realTimePerformance:
+            realTimeMetrics.sampleSize > 0
+              ? {
+                  latencyMs: avgLatency,
+                  throughput: realTimeMetrics.avgCost > 0 ? 1 / realTimeMetrics.avgCost : undefined,
+                  quality: realTimeMetrics.avgQualityScore,
+                  reliability: realTimeMetrics.successRate,
+                }
+              : undefined,
           validatedCapabilities: {
             capabilities: model.capabilities,
             validationStatus: 'valid' as const,
@@ -1339,9 +1371,8 @@ export class DynamicModelSelector {
         taskType: criteria.taskType,
         topScore: scoredModels[0]?.score,
         topModel: scoredModels[0]?.model.name,
-        modelsWithRealTimeData: scoredModels.filter(
-          (m) => m.realTimePerformance !== undefined
-        ).length,
+        modelsWithRealTimeData: scoredModels.filter((m) => m.realTimePerformance !== undefined)
+          .length,
       },
       '✅ COMPLETED: Intelligent scoring for ALL  models using real-time metrics'
     );
@@ -1354,9 +1385,7 @@ export class DynamicModelSelector {
     const selected = scoredModels.slice(0, selectionLimit);
 
     // Filter out models with score below minimum threshold
-    let filtered = selected.filter(
-      (s) => s.score >= this.config.qualityDefaults.minimumThreshold
-    );
+    let filtered = selected.filter((s) => s.score >= this.config.qualityDefaults.minimumThreshold);
     // NEVER-COLLAPSE FAILSAFE (C3 2026-06-11): if score penalties (the new health
     // penalty + the pre-existing -0.5 no-credits + cold-start penalties) would
     // zero the eligible pool while scored candidates still exist, fall back to the
@@ -1406,9 +1435,7 @@ export class DynamicModelSelector {
       // unsorted score list. Emit one counter per event.
       if (topKind === 'native') {
         const hubSibling = scoredModels.find(
-          (s) =>
-            s.model.id === top.model.id &&
-            classifyProviderKind(s.model.provider) === 'hub',
+          (s) => s.model.id === top.model.id && classifyProviderKind(s.model.provider) === 'hub'
         );
         if (hubSibling) {
           recordNativePreferred({
@@ -1530,7 +1557,9 @@ export class DynamicModelSelector {
 
       // Estimate duration (use longest model latency)
       const stageDuration = Math.max(
-        ...selected.map((m) => m.model.performance?.latencyMs || (this.config.latencyReference?.slowMs ?? 5000))
+        ...selected.map(
+          (m) => m.model.performance?.latencyMs || (this.config.latencyReference?.slowMs ?? 5000)
+        )
       );
       maxDuration += stageDuration;
     }
@@ -1595,7 +1624,7 @@ export class DynamicModelSelector {
   private async applySemanticRerank(
     candidates: Model[],
     criteria: SelectionCriteria,
-    requestId?: string,
+    requestId?: string
   ): Promise<Map<string, SemanticRerankEntry>> {
     const result = new Map<string, SemanticRerankEntry>();
     const query = criteria.semanticQuery?.trim();
@@ -1605,7 +1634,7 @@ export class DynamicModelSelector {
     // Restrict the search universe to providers already in the candidate pool —
     // RRF must not surface models we've just filtered out for being unhealthy.
     const providerIds = Array.from(
-      new Set(candidates.map((m) => m.providerId).filter((p): p is string => Boolean(p))),
+      new Set(candidates.map((m) => m.providerId).filter((p): p is string => Boolean(p)))
     );
 
     const searchLimit = Math.max(20, Math.min(candidates.length, 100));
@@ -1621,7 +1650,7 @@ export class DynamicModelSelector {
     } catch (err) {
       log.warn(
         { err: getErrorMessage(err), requestId, query, providerIds: providerIds.length },
-        'Semantic rerank skipped — CapabilitySearchService unavailable',
+        'Semantic rerank skipped — CapabilitySearchService unavailable'
       );
       return result;
     }
@@ -1657,7 +1686,7 @@ export class DynamicModelSelector {
         topModelId: hits[0]?.modelId,
         topRrfRaw: hits[0]?.score,
       },
-      'Semantic rerank applied to candidate pool',
+      'Semantic rerank applied to candidate pool'
     );
 
     return result;
@@ -1700,7 +1729,7 @@ export class DynamicModelSelector {
     const coreDynScore = corePerformanceTracker.getDynamicScore(model.id);
     if (coreDynScore && coreDynScore.sampleCount >= 1) {
       const coreSuccessRate = 1 - coreDynScore.errorRate;
-      if (coreSuccessRate < 0.20 && coreDynScore.sampleCount >= 3) {
+      if (coreSuccessRate < 0.2 && coreDynScore.sampleCount >= 3) {
         // Consistently broken — should not rank high even if pre-filter missed it
         return 0;
       }
@@ -1735,7 +1764,7 @@ export class DynamicModelSelector {
       const intrinsicQuality =
         model.performance?.quality && model.performance.quality > 0
           ? model.performance.quality
-          : popPrior ?? this.config.qualityDefaults.fallbackScore;
+          : (popPrior ?? this.config.qualityDefaults.fallbackScore);
       score += intrinsicQuality * this.config.scoringWeights.fallback.intrinsicQuality;
 
       // Exploration penalty for low-observability candidates.
@@ -1756,7 +1785,7 @@ export class DynamicModelSelector {
       const intrinsicQuality =
         model.performance?.quality && model.performance.quality > 0
           ? model.performance.quality
-          : popPrior ?? this.config.qualityDefaults.fallbackScore;
+          : (popPrior ?? this.config.qualityDefaults.fallbackScore);
       score += intrinsicQuality * this.config.scoringWeights.fallback.noHistoryQuality;
     }
 
@@ -1839,11 +1868,11 @@ export class DynamicModelSelector {
     // penalize (but don't exclude) models with no credits.
     const balanceStatus = model.balanceStatus || 'unknown';
     if (balanceStatus === 'has-credits' || balanceStatus === 'local') {
-      score += 0.3;  // Strong boost for known-working providers
+      score += 0.3; // Strong boost for known-working providers
     } else if (balanceStatus === 'unknown') {
       score -= 0.1; // proven-first (2026-06-29): unproven credit is a mild risk — slight penalty so known-working models win ties (was neutral)
     } else if (balanceStatus === 'no-credits') {
-      score -= 0.5;  // Heavy penalty but not excluded — last resort
+      score -= 0.5; // Heavy penalty but not excluded — last resort
     }
 
     // Operability health penalty (C3 2026-06-11): down-WEIGHT registry-poisoned
@@ -1861,11 +1890,13 @@ export class DynamicModelSelector {
     // (no prom-client/timing emit on the hot path).
     if (this.operabilitySkip) {
       const execProvider =
-        (typeof model.metadata?.executionProvider === 'string' && model.metadata.executionProvider) ||
-        model.provider || '';
+        (typeof model.metadata?.executionProvider === 'string' &&
+          model.metadata.executionProvider) ||
+        model.provider ||
+        '';
       const decision = this.operabilitySkip(
         { providerId: execProvider.toLowerCase(), modelId: model.id },
-        { silent: true },
+        { silent: true }
       );
       if (decision.skip) {
         const threshold = this.config.qualityDefaults.minimumThreshold;
@@ -1957,10 +1988,13 @@ export class DynamicModelSelector {
       }
 
       // Calculate average quality score for recent period
-      const recentAvgQuality = recentMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / recentMetrics.length;
+      const recentAvgQuality =
+        recentMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / recentMetrics.length;
 
       // Calculate average quality score for historical period
-      const historicalAvgQuality = historicalMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / historicalMetrics.length;
+      const historicalAvgQuality =
+        historicalMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) /
+        historicalMetrics.length;
 
       if (historicalAvgQuality === 0) {
         return 0;
@@ -1980,7 +2014,10 @@ export class DynamicModelSelector {
   /**
    * Calculate metrics from history
    */
-  private async calculateMetrics(history: PerformanceHistory, modelId: string): Promise<ModelMetrics> {
+  private async calculateMetrics(
+    history: PerformanceHistory,
+    modelId: string
+  ): Promise<ModelMetrics> {
     const successRate = history.successCount / history.totalCount;
     const avgQuality = history.avgQuality;
     const avgCost = history.avgCost;
@@ -2072,9 +2109,13 @@ export class DynamicModelSelector {
 
       // Return model IDs sorted by comprehensive preference score (capabilities + performance + cost)
       const sortedIds = availableModels
-        .sort((a, b) => this.calculateModelPreferenceScore(b, normalizedTaskType) - this.calculateModelPreferenceScore(a, normalizedTaskType))
+        .sort(
+          (a, b) =>
+            this.calculateModelPreferenceScore(b, normalizedTaskType) -
+            this.calculateModelPreferenceScore(a, normalizedTaskType)
+        )
         .slice(0, this.config.limits?.maxModelsPerTaskPreference ?? 10)
-        .map(model => model.id);
+        .map((model) => model.id);
       this.taskPreferenceCache.set(taskPrefCacheKey, {
         ids: sortedIds,
         expiresAt: Date.now() + 60_000,
@@ -2082,7 +2123,10 @@ export class DynamicModelSelector {
       return sortedIds;
     } catch (error) {
       log.warn(
-        { taskType: normalizedTaskType, error: error instanceof Error ? error.message : String(error) },
+        {
+          taskType: normalizedTaskType,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'Dynamic model discovery failed, using generic preferences'
       );
       // Fallback to generic preferences (100% dynamic, no hardcoded models)
@@ -2105,9 +2149,7 @@ export class DynamicModelSelector {
     try {
       // Get all available models from database
       const allModels = await getAllCatalogModels();
-      const activeModels = allModels.filter(
-        (m) => m.status === 'active' && !excludeSet.has(m.id)
-      );
+      const activeModels = allModels.filter((m) => m.status === 'active' && !excludeSet.has(m.id));
 
       if (activeModels.length === 0) {
         log.warn('No active models available for generic task preferences');
@@ -2117,13 +2159,16 @@ export class DynamicModelSelector {
       // Filter for general-purpose models (chat + reasoning capabilities)
       const generalPurposeCandidates = activeModels.filter((m) => {
         const caps = new Set(m.capabilities ?? []);
-        const hasChat = caps.has('chat' as ModelCapability) || caps.has('text_generation' as ModelCapability);
-        const hasReasoning = caps.has('reasoning' as ModelCapability) || caps.has('analysis' as ModelCapability);
+        const hasChat =
+          caps.has('chat' as ModelCapability) || caps.has('text_generation' as ModelCapability);
+        const hasReasoning =
+          caps.has('reasoning' as ModelCapability) || caps.has('analysis' as ModelCapability);
         return hasChat && hasReasoning;
       });
 
       // Use general-purpose models if available, otherwise use all active models
-      const candidates = generalPurposeCandidates.length > 0 ? generalPurposeCandidates : activeModels;
+      const candidates =
+        generalPurposeCandidates.length > 0 ? generalPurposeCandidates : activeModels;
 
       // Score all candidates based on general quality metrics (performance + cost efficiency)
       const scoredModels = candidates.map((model) => ({
@@ -2196,7 +2241,7 @@ export class DynamicModelSelector {
     const requiredCaps = this.getRequiredCapabilitiesForTask(normalizedTaskType);
 
     // Calculate fit based on capability matching
-    const matchedCaps = requiredCaps.filter(cap => capabilities.includes(cap));
+    const matchedCaps = requiredCaps.filter((cap) => capabilities.includes(cap));
     const fitRatio = requiredCaps.length > 0 ? matchedCaps.length / requiredCaps.length : 0;
 
     // Base score from capability fit (70% weight)
@@ -2249,7 +2294,7 @@ export class DynamicModelSelector {
     // Component 2: HCRA confidence-aware score (new).
     const confidenceScore = this.calculateCapabilityConfidenceScore(
       model,
-      criteria.requiredCapabilities,
+      criteria.requiredCapabilities
     );
 
     // 50/50 blend. If we want to tune this later, surface as
@@ -2284,7 +2329,7 @@ export class DynamicModelSelector {
    */
   private calculateCapabilityConfidenceScore(
     model: Model,
-    requiredCapabilities: ModelCapability[] | undefined,
+    requiredCapabilities: ModelCapability[] | undefined
   ): number {
     if (!requiredCapabilities || requiredCapabilities.length === 0) {
       return 1.0;
@@ -2644,10 +2689,7 @@ export class DynamicModelSelector {
     context: OrchestrationContext
   ): SelectionCriteria {
     const mergedCapabilities = Array.from(
-      new Set([
-        ...(criteria.requiredCapabilities ?? []),
-        ...(context.requiredCapabilities ?? []),
-      ])
+      new Set([...(criteria.requiredCapabilities ?? []), ...(context.requiredCapabilities ?? [])])
     ) as ModelCapability[];
 
     const mergedTools = Array.from(
@@ -2685,8 +2727,7 @@ export class DynamicModelSelector {
       qualityTarget: criteria.qualityTarget ?? context.qualityTarget,
       maxInputCostPer1k: criteria.maxInputCostPer1k ?? context.maxInputCostPer1k,
       maxOutputCostPer1k: criteria.maxOutputCostPer1k ?? context.maxOutputCostPer1k,
-      maxAverageCostPer1k:
-        criteria.maxAverageCostPer1k ?? context.maxAverageCostPer1k,
+      maxAverageCostPer1k: criteria.maxAverageCostPer1k ?? context.maxAverageCostPer1k,
       // Caminho-C: forward the semantic query from context so the
       // selector's RRF rerank can run when callers populated it on
       // OrchestrationContext (HTTP path) instead of SelectionCriteria.
@@ -2705,10 +2746,17 @@ export class DynamicModelSelector {
     // Skip guard when non-text modalities are required (image gen, audio, video, vision).
     // This allows multimodal models to be selected for requests that need them.
     const nonTextCaps = [
-      'image_generation', 'image_editing', 'video_generation', 'video_editing',
-      'audio_generation', 'text_to_speech', 'vision', 'multimodal', 'computer_use',
+      'image_generation',
+      'image_editing',
+      'video_generation',
+      'video_editing',
+      'audio_generation',
+      'text_to_speech',
+      'vision',
+      'multimodal',
+      'computer_use',
     ];
-    if (criteria.requiredCapabilities?.some(cap => nonTextCaps.includes(cap))) {
+    if (criteria.requiredCapabilities?.some((cap) => nonTextCaps.includes(cap))) {
       return false;
     }
 
@@ -2718,8 +2766,7 @@ export class DynamicModelSelector {
 
   private isChatGenerationCapable(model: Model): boolean {
     const caps = new Set(model.capabilities || []);
-    const hasChatTextCapability =
-      caps.has('chat') || caps.has('text_generation');
+    const hasChatTextCapability = caps.has('chat') || caps.has('text_generation');
     const isCompletionsOnly = caps.has('completions') && !hasChatTextCapability;
     const hasEmbeddingCapability = caps.has('embedding') || caps.has('embeddings');
     const isEmbeddingOnly = hasEmbeddingCapability && !hasChatTextCapability;
@@ -2745,8 +2792,7 @@ export class DynamicModelSelector {
       '_tts',
     ].some((signal) => normalizedName.includes(signal));
     const providerName = (model.provider || '').toLowerCase();
-    const isOpenAIFamily =
-      providerName === 'openai' || normalizedName.includes('openai/');
+    const isOpenAIFamily = providerName === 'openai' || normalizedName.includes('openai/');
     const hasCompletionOnlyNameSignal =
       /-(001|002)\b/.test(normalizedName) ||
       (isOpenAIFamily &&
@@ -2771,19 +2817,19 @@ export class DynamicModelSelector {
   private normalizeTaskType(taskType: TaskType | string): TaskType {
     // Map CLI snake_case to API kebab-case
     const taskTypeMap: Record<string, TaskType> = {
-      'code_generation': 'code-generation',
+      code_generation: 'code-generation',
       'code-generation': 'code-generation',
-      'code_review': 'code-review',
+      code_review: 'code-review',
       'code-review': 'code-review',
-      'git_operation': 'general', // Map git_operation to general
-      'chat': 'general',
-      'general': 'general',
-      'debugging': 'debugging',
-      'refactoring': 'refactoring',
-      'documentation': 'documentation',
-      'testing': 'testing',
-      'analysis': 'analysis',
-      'qa': 'qa',
+      git_operation: 'general', // Map git_operation to general
+      chat: 'general',
+      general: 'general',
+      debugging: 'debugging',
+      refactoring: 'refactoring',
+      documentation: 'documentation',
+      testing: 'testing',
+      analysis: 'analysis',
+      qa: 'qa',
     };
 
     return taskTypeMap[taskType] ?? 'general';
@@ -2796,21 +2842,21 @@ export class DynamicModelSelector {
     const normalizedTaskType = this.normalizeTaskType(taskType);
     const capabilityMap: Record<TaskType, ModelCapability[]> = {
       'code-generation': ['text_generation', 'code_interpreter'],
-      'debugging': ['text_generation', 'reasoning', 'code_interpreter'],
+      debugging: ['text_generation', 'reasoning', 'code_interpreter'],
       'code-review': ['text_generation', 'reasoning', 'analysis'],
-      'refactoring': ['text_generation', 'reasoning', 'code_generation'],
-      'documentation': ['text_generation', 'reasoning', 'code_generation'],
-      'analysis': ['reasoning', 'analysis', 'text_generation'],
-      'qa': ['text_generation', 'reasoning', 'analysis'],
-      'general': ['chat', 'text_generation'],
-      'testing': ['text_generation', 'code_interpreter', 'analysis'],
-      'caching': ['chat', 'text_generation'],
-      'reasoning': ['reasoning', 'thinking_mode', 'text_generation'],
+      refactoring: ['text_generation', 'reasoning', 'code_generation'],
+      documentation: ['text_generation', 'reasoning', 'code_generation'],
+      analysis: ['reasoning', 'analysis', 'text_generation'],
+      qa: ['text_generation', 'reasoning', 'analysis'],
+      general: ['chat', 'text_generation'],
+      testing: ['text_generation', 'code_interpreter', 'analysis'],
+      caching: ['chat', 'text_generation'],
+      reasoning: ['reasoning', 'thinking_mode', 'text_generation'],
       'decision-making': ['reasoning', 'analysis', 'text_generation'],
-      'architecture': ['reasoning', 'analysis', 'text_generation', 'code_generation'],
-      'creative': ['text_generation', 'chat'],
+      architecture: ['reasoning', 'analysis', 'text_generation', 'code_generation'],
+      creative: ['text_generation', 'chat'],
       'factual-qa': ['text_generation', 'reasoning', 'chat'],
-      'adversarial': ['reasoning', 'text_generation', 'chat'],
+      adversarial: ['reasoning', 'text_generation', 'chat'],
       'document-understanding': ['reasoning', 'analysis', 'text_generation'],
     };
 
@@ -2820,7 +2866,9 @@ export class DynamicModelSelector {
   /**
    * Discover models that match required capabilities from all providers
    */
-  private async discoverModelsByCapabilities(requiredCapabilities: ModelCapability[]): Promise<Model[]> {
+  private async discoverModelsByCapabilities(
+    requiredCapabilities: ModelCapability[]
+  ): Promise<Model[]> {
     try {
       // Try to get models from database first
       const dbModels = await this.getModelsFromDatabase(requiredCapabilities);
@@ -2889,7 +2937,7 @@ export class DynamicModelSelector {
     } catch (error: unknown) {
       const { getErrorMessage } = await import('@/utils/type-guards');
       const errorMessage = getErrorMessage(error);
-      
+
       // IMPORTANT: Database errors should NOT be masked
       // Log the error but re-throw to ensure proper error handling upstream
       // This ensures database connectivity issues are properly alerted
@@ -2897,7 +2945,7 @@ export class DynamicModelSelector {
         { error: errorMessage, requiredCapabilities },
         'Database model query failed - this indicates a database connectivity or schema issue that must be resolved'
       );
-      
+
       // Re-throw to ensure proper error propagation
       // Database connectivity is critical and must not be silently ignored
       throw error;
@@ -2907,12 +2955,15 @@ export class DynamicModelSelector {
   /**
    * Discover models from providers in real-time
    */
-  private async discoverModelsFromProviders(_requiredCapabilities: ModelCapability[]): Promise<Model[]> {
+  private async discoverModelsFromProviders(
+    _requiredCapabilities: ModelCapability[]
+  ): Promise<Model[]> {
     const discoveredModels: Model[] = [];
 
     try {
       // Import and use the central discovery service
-      const { getCentralModelDiscoveryService } = await import('../../services/central-model-discovery-service.js');
+      const { getCentralModelDiscoveryService } =
+        await import('../../services/central-model-discovery-service.js');
 
       const discoveryService = await getCentralModelDiscoveryService();
 
@@ -2922,10 +2973,13 @@ export class DynamicModelSelector {
       // After discovery, models are stored in the database
       // Query the database to get the actual discovered models
       const repository = getModelRepository();
-      const discoveredModelsFromDb = await repository.findModelsWithCapabilities(_requiredCapabilities, {
-        anyMatch: false,
-        limit: 100,
-      });
+      const discoveredModelsFromDb = await repository.findModelsWithCapabilities(
+        _requiredCapabilities,
+        {
+          anyMatch: false,
+          limit: 100,
+        }
+      );
 
       log.debug(
         {
@@ -2953,10 +3007,10 @@ export class DynamicModelSelector {
     }
 
     // Check if model has ALL required capabilities
-    return requiredCapabilities.every(requiredCap =>
-      model.capabilities.some((modelCap: ModelCapability) =>
-        modelCap === requiredCap ||
-        this.capabilityMatches(modelCap, requiredCap)
+    return requiredCapabilities.every((requiredCap) =>
+      model.capabilities.some(
+        (modelCap: ModelCapability) =>
+          modelCap === requiredCap || this.capabilityMatches(modelCap, requiredCap)
       )
     );
   }
@@ -2964,32 +3018,35 @@ export class DynamicModelSelector {
   /**
    * Check if capabilities match (with some flexibility)
    */
-  private capabilityMatches(modelCapability: ModelCapability, requiredCapability: ModelCapability): boolean {
+  private capabilityMatches(
+    modelCapability: ModelCapability,
+    requiredCapability: ModelCapability
+  ): boolean {
     // Use Partial to allow not all capabilities to have aliases
     // This is safer than Record<> which requires all capabilities to have aliases
     const capabilityAliases: Partial<Record<ModelCapability, ModelCapability[]>> = {
-      'text_generation': ['chat', 'code_generation'],
-      'chat': ['text_generation'],
-      'reasoning': ['analysis', 'thinking_mode'],
-      'code_interpreter': ['function_calling', 'tool_use'],
-      'coding': ['code_generation', 'code_completion', 'code_review', 'debugging', 'refactoring'],
-      'analysis': ['reasoning', 'qa'],
-      'web_search': ['tool_use', 'function_calling'],
-      'function_calling': ['tool_use', 'code_interpreter'],
-      'tool_use': ['function_calling', 'code_interpreter'],
-      'thinking_mode': ['reasoning'],
-      'qa': ['analysis', 'reasoning'],
-      'code_generation': ['text_generation'],
-      'deep_search': ['deep_research', 'research', 'web_search'],
-      'deep_research': ['deep_search', 'research', 'web_search'],
-      'transcription': ['speech_to_text', 'video_transcription', 'video_to_text'],
-      'listen': ['audio', 'speech_to_text'],
-      'audio_to_audio': ['realtime_audio', 'audio'],
-      'video_to_text': ['video_understanding', 'transcription'],
-      'video_transcription': ['video_to_text', 'transcription'],
-      'image_to_video': ['video_generation'],
-      'video_to_video': ['video_generation'],
-      'health': ['analysis', 'reasoning'],
+      text_generation: ['chat', 'code_generation'],
+      chat: ['text_generation'],
+      reasoning: ['analysis', 'thinking_mode'],
+      code_interpreter: ['function_calling', 'tool_use'],
+      coding: ['code_generation', 'code_completion', 'code_review', 'debugging', 'refactoring'],
+      analysis: ['reasoning', 'qa'],
+      web_search: ['tool_use', 'function_calling'],
+      function_calling: ['tool_use', 'code_interpreter'],
+      tool_use: ['function_calling', 'code_interpreter'],
+      thinking_mode: ['reasoning'],
+      qa: ['analysis', 'reasoning'],
+      code_generation: ['text_generation'],
+      deep_search: ['deep_research', 'research', 'web_search'],
+      deep_research: ['deep_search', 'research', 'web_search'],
+      transcription: ['speech_to_text', 'video_transcription', 'video_to_text'],
+      listen: ['audio', 'speech_to_text'],
+      audio_to_audio: ['realtime_audio', 'audio'],
+      video_to_text: ['video_understanding', 'transcription'],
+      video_transcription: ['video_to_text', 'transcription'],
+      image_to_video: ['video_generation'],
+      video_to_video: ['video_generation'],
+      health: ['analysis', 'reasoning'],
     };
 
     const aliases = capabilityAliases[requiredCapability] || [];
@@ -3007,7 +3064,7 @@ export class DynamicModelSelector {
 
     // Base score from model capabilities match
     const requiredCaps = this.getRequiredCapabilitiesForTask(normalizedTaskType);
-    const matchCount = requiredCaps.filter(cap =>
+    const matchCount = requiredCaps.filter((cap) =>
       model.capabilities?.some((modelCap: ModelCapability) => modelCap === cap)
     ).length;
     score += matchCount * 20; // 20 points per matching capability
@@ -3040,10 +3097,10 @@ export class DynamicModelSelector {
     // Task-specific bonuses based on capabilities, not model names
     // This ensures dynamic selection without hardcoded model preferences
     const requiredCapsForTaskBonus = this.getRequiredCapabilitiesForTask(normalizedTaskType);
-    const hasAllRequiredCaps = requiredCapsForTaskBonus.every(cap => 
+    const hasAllRequiredCaps = requiredCapsForTaskBonus.every((cap) =>
       model.capabilities?.some((modelCap: ModelCapability) => modelCap === cap)
     );
-    
+
     if (hasAllRequiredCaps) {
       // Bonus for models that have all required capabilities for the task
       switch (normalizedTaskType) {

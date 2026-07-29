@@ -184,7 +184,7 @@ export interface BenchmarkOptions {
  * is side-effect free except for env var scoping inside the runner.
  */
 export async function runPeerReviewABBenchmark(
-  options: BenchmarkOptions,
+  options: BenchmarkOptions
 ): Promise<BenchmarkReport> {
   const { runId, tasks, runner, judge } = options;
   const samples: BenchmarkSample[] = [];
@@ -232,13 +232,15 @@ export async function runPeerReviewABBenchmark(
       taskCount: tasks.length,
       decision: report.recommendation.decision,
     },
-    'peer-review A/B benchmark completed',
+    'peer-review A/B benchmark completed'
   );
   return report;
 }
 
 /** Compute per-arm and per-strategy aggregates from the raw samples. */
-export function aggregateReport(samples: readonly BenchmarkSample[]): BenchmarkReport['aggregates'] {
+export function aggregateReport(
+  samples: readonly BenchmarkSample[]
+): BenchmarkReport['aggregates'] {
   const byArm = {
     'A-peer-review-on': aggregateArm('A-peer-review-on', samples),
     'B-peer-review-off': aggregateArm('B-peer-review-off', samples),
@@ -274,7 +276,7 @@ function aggregateArm(arm: BenchmarkArm, samples: readonly BenchmarkSample[]): A
       outTok: acc.outTok + s.outputTokens,
       cost: acc.cost + s.totalCost,
     }),
-    { q: 0, lat: 0, inTok: 0, outTok: 0, cost: 0 },
+    { q: 0, lat: 0, inTok: 0, outTok: 0, cost: 0 }
   );
   return {
     arm,
@@ -301,9 +303,7 @@ function aggregateArm(arm: BenchmarkArm, samples: readonly BenchmarkSample[]): A
  * The thresholds are intentionally conservative — the benchmark's job is to
  * narrow the decision, not replace operator judgment.
  */
-export function buildRecommendation(
-  samples: readonly BenchmarkSample[],
-): BenchmarkRecommendation {
+export function buildRecommendation(samples: readonly BenchmarkSample[]): BenchmarkRecommendation {
   if (samples.length < 4) {
     return { decision: 'inconclusive', reason: 'fewer than 4 samples collected' };
   }
@@ -316,7 +316,7 @@ export function buildRecommendation(
   const KEEP_ON_THRESHOLD = 0.03;
 
   const offDominates = perStrategy.every(
-    (row) => row.b.meanQuality + QUALITY_EPSILON >= row.a.meanQuality,
+    (row) => row.b.meanQuality + QUALITY_EPSILON >= row.a.meanQuality
   );
   const tokenSavedWhenOff = perStrategy.some((row) => row.tokenDelta > 0);
   if (offDominates && tokenSavedWhenOff) {
@@ -327,7 +327,7 @@ export function buildRecommendation(
   }
 
   const onDominates = perStrategy.every(
-    (row) => row.a.meanQuality >= row.b.meanQuality + KEEP_ON_THRESHOLD,
+    (row) => row.a.meanQuality >= row.b.meanQuality + KEEP_ON_THRESHOLD
   );
   if (onDominates) {
     return {
@@ -388,11 +388,11 @@ export function createEngineRunner(execute: EngineExecuteFn): ExecutionRunner {
           latencyMs,
           inputTokens: result.modelsUsed.reduce(
             (s, m) => s + (m.response?.usage?.prompt_tokens ?? 0),
-            0,
+            0
           ),
           outputTokens: result.modelsUsed.reduce(
             (s, m) => s + (m.response?.usage?.completion_tokens ?? 0),
-            0,
+            0
           ),
           totalCost: result.totalCost,
           success: true,
@@ -454,7 +454,10 @@ export const REPRESENTATIVE_TASKS: readonly BenchmarkTask[] = [
     request: {
       model: 'auto',
       messages: [
-        { role: 'user', content: 'List the major differences between HTTP/2 and HTTP/3 that affect API latency.' },
+        {
+          role: 'user',
+          content: 'List the major differences between HTTP/2 and HTTP/3 that affect API latency.',
+        },
       ],
     } as ChatRequest,
   },
@@ -482,7 +485,11 @@ export const REPRESENTATIVE_TASKS: readonly BenchmarkTask[] = [
     request: {
       model: 'auto',
       messages: [
-        { role: 'user', content: 'Explain why a monotonically increasing clock is not enough to order events across nodes.' },
+        {
+          role: 'user',
+          content:
+            'Explain why a monotonically increasing clock is not enough to order events across nodes.',
+        },
       ],
     } as ChatRequest,
   },
@@ -496,7 +503,7 @@ export const REPRESENTATIVE_TASKS: readonly BenchmarkTask[] = [
 export async function runDefaultPeerReviewABBenchmark(
   runId: string,
   execute: EngineExecuteFn,
-  judge: QualityJudge,
+  judge: QualityJudge
 ): Promise<BenchmarkReport> {
   const runner = createEngineRunner(execute);
   return runPeerReviewABBenchmark({

@@ -94,7 +94,7 @@ describe('computeConfidenceInterval', () => {
 
   it('wider interval for higher confidence', () => {
     const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    const ci90 = computeConfidenceInterval(values, 0.90);
+    const ci90 = computeConfidenceInterval(values, 0.9);
     const ci99 = computeConfidenceInterval(values, 0.99);
 
     expect(ci99.marginOfError).toBeGreaterThan(ci90.marginOfError);
@@ -183,17 +183,20 @@ describe('effectSize', () => {
 describe('computeWinRate', () => {
   it('computes correct win rates', () => {
     const groupA = [0.8, 0.7, 0.9, 0.6, 0.85];
-    const groupB = [0.7, 0.8, 0.5, 0.6, 0.80];
+    const groupB = [0.7, 0.8, 0.5, 0.6, 0.8];
     const result = computeWinRate(groupA, groupB);
 
     expect(result.total).toBe(5);
     expect(result.groupAWins + result.groupBWins + result.ties).toBe(5);
-    expect(result.groupAWinRate + result.groupBWinRate + result.ties / result.total).toBeCloseTo(1, 5);
+    expect(result.groupAWinRate + result.groupBWinRate + result.ties / result.total).toBeCloseTo(
+      1,
+      5
+    );
   });
 
   it('handles ties within threshold', () => {
-    const groupA = [0.80, 0.81];
-    const groupB = [0.79, 0.80];
+    const groupA = [0.8, 0.81];
+    const groupB = [0.79, 0.8];
     const result = computeWinRate(groupA, groupB, 0.02);
 
     // Both within ±0.02 → both ties
@@ -234,7 +237,7 @@ describe('computeStabilityIndex', () => {
   });
 
   it('returns lower index for variable values', () => {
-    const stable = computeStabilityIndex([0.8, 0.81, 0.79, 0.80]);
+    const stable = computeStabilityIndex([0.8, 0.81, 0.79, 0.8]);
     const unstable = computeStabilityIndex([0.3, 0.9, 0.1, 0.95]);
 
     expect(stable).toBeGreaterThan(unstable);
@@ -262,17 +265,17 @@ describe('computeCostEfficiency', () => {
 describe('computeParetoDominance', () => {
   it('identifies Pareto frontier correctly', () => {
     const points = [
-      { label: 'A', quality: 0.9, cost: 0.10, latency: 3000, successRate: 0.95 },
-      { label: 'B', quality: 0.7, cost: 0.02, latency: 1000, successRate: 0.90 },
-      { label: 'C', quality: 0.5, cost: 0.15, latency: 5000, successRate: 0.80 },
+      { label: 'A', quality: 0.9, cost: 0.1, latency: 3000, successRate: 0.95 },
+      { label: 'B', quality: 0.7, cost: 0.02, latency: 1000, successRate: 0.9 },
+      { label: 'C', quality: 0.5, cost: 0.15, latency: 5000, successRate: 0.8 },
     ];
 
     const result = computeParetoDominance(points);
 
     // A is best quality, B is best cost+latency, C is dominated by A (worse in all)
     expect(result.frontier.length).toBeGreaterThanOrEqual(2);
-    expect(result.frontier.some(p => p.label === 'A')).toBe(true);
-    expect(result.frontier.some(p => p.label === 'B')).toBe(true);
+    expect(result.frontier.some((p) => p.label === 'A')).toBe(true);
+    expect(result.frontier.some((p) => p.label === 'B')).toBe(true);
   });
 
   it('handles empty input', () => {
@@ -283,7 +286,7 @@ describe('computeParetoDominance', () => {
 
   it('all points on frontier if none dominated', () => {
     const points = [
-      { label: 'A', quality: 0.9, cost: 0.10, latency: 5000, successRate: 0.90 },
+      { label: 'A', quality: 0.9, cost: 0.1, latency: 5000, successRate: 0.9 },
       { label: 'B', quality: 0.7, cost: 0.05, latency: 2000, successRate: 0.95 },
     ];
 

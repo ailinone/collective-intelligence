@@ -47,7 +47,7 @@ const log = logger.child({ component: 'broadcast-destinations-routes' });
 
 function resolveScope(
   request: ExtendedFastifyRequest,
-  query: { scope?: string } | undefined,
+  query: { scope?: string } | undefined
 ): { ok: true; scope: TenantScope } | { ok: false; error: string } {
   const userId = request.userId;
   const organizationId = request.organizationId;
@@ -121,7 +121,10 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       },
     },
     async (request, reply) => {
-      const scope = resolveScope(request as ExtendedFastifyRequest, request.query as { scope?: string });
+      const scope = resolveScope(
+        request as ExtendedFastifyRequest,
+        request.query as { scope?: string }
+      );
       if (!scope.ok) return reply.code(400).send({ error: 'bad_request', message: scope.error });
 
       const body = request.body as {
@@ -156,7 +159,7 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
         });
       }
       return reply.code(201).send({ destination: dtoToResponse(result.destination) });
-    },
+    }
   );
 
   // ─── GET /v1/broadcast/destinations ───────────────────────────────────
@@ -175,11 +178,14 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       },
     },
     async (request, reply) => {
-      const scope = resolveScope(request as ExtendedFastifyRequest, request.query as { scope?: string });
+      const scope = resolveScope(
+        request as ExtendedFastifyRequest,
+        request.query as { scope?: string }
+      );
       if (!scope.ok) return reply.code(400).send({ error: 'bad_request', message: scope.error });
       const destinations = await manager.list(scope.scope);
       return reply.send({ destinations: destinations.map(dtoToResponse) });
-    },
+    }
   );
 
   // ─── GET /v1/broadcast/destinations/:id ───────────────────────────────
@@ -199,14 +205,17 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       },
     },
     async (request, reply) => {
-      const scope = resolveScope(request as ExtendedFastifyRequest, request.query as { scope?: string });
+      const scope = resolveScope(
+        request as ExtendedFastifyRequest,
+        request.query as { scope?: string }
+      );
       if (!scope.ok) return reply.code(400).send({ error: 'bad_request', message: scope.error });
       const result = await manager.getById(scope.scope, request.params.id);
       if (!result.ok) {
         return reply.code(mapErrorStatus(result.error.code)).send({ error: result.error.code });
       }
       return reply.send({ destination: dtoToResponse(result.destination) });
-    },
+    }
   );
 
   // ─── PATCH /v1/broadcast/destinations/:id ─────────────────────────────
@@ -240,12 +249,15 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       },
     },
     async (request, reply) => {
-      const scope = resolveScope(request as ExtendedFastifyRequest, request.query as { scope?: string });
+      const scope = resolveScope(
+        request as ExtendedFastifyRequest,
+        request.query as { scope?: string }
+      );
       if (!scope.ok) return reply.code(400).send({ error: 'bad_request', message: scope.error });
       const result = await manager.update(
         scope.scope,
         request.params.id,
-        request.body as Record<string, unknown>,
+        request.body as Record<string, unknown>
       );
       if (!result.ok) {
         return reply.code(mapErrorStatus(result.error.code)).send({
@@ -254,7 +266,7 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
         });
       }
       return reply.send({ destination: dtoToResponse(result.destination) });
-    },
+    }
   );
 
   // ─── DELETE /v1/broadcast/destinations/:id ────────────────────────────
@@ -274,7 +286,10 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       },
     },
     async (request, reply) => {
-      const scope = resolveScope(request as ExtendedFastifyRequest, request.query as { scope?: string });
+      const scope = resolveScope(
+        request as ExtendedFastifyRequest,
+        request.query as { scope?: string }
+      );
       if (!scope.ok) return reply.code(400).send({ error: 'bad_request', message: scope.error });
       const result = await manager.delete(scope.scope, request.params.id);
       if (!result.ok) {
@@ -282,10 +297,10 @@ export async function broadcastDestinationsRoutes(server: FastifyInstance): Prom
       }
       log.info(
         { destinationId: request.params.id, ...scope.scope },
-        'broadcast destination deleted via API',
+        'broadcast destination deleted via API'
       );
       return reply.code(204).send();
-    },
+    }
   );
 }
 

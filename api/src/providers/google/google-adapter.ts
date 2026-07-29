@@ -77,7 +77,9 @@ export class GoogleAdapter extends ProviderAdapter {
   private estimateTokenCost(request: ChatRequest): number {
     const promptChars = request.messages.reduce((sum, message) => {
       const content =
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content ?? '');
       return sum + content.length;
     }, 0);
     return Math.ceil(promptChars / 4) + (request.max_tokens || 2048);
@@ -131,7 +133,7 @@ export class GoogleAdapter extends ProviderAdapter {
     }
 
     // Remove provider prefix from model IDs to return normalized names
-    return models.map(model => ({
+    return models.map((model) => ({
       ...model,
       id: model.name, // Use 'name' which is the normalized ID without prefix
     }));
@@ -156,9 +158,10 @@ export class GoogleAdapter extends ProviderAdapter {
     }
 
     // Filter available models
-    const availableModels = models.filter(m =>
-      m.status === 'active' &&
-      (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
+    const availableModels = models.filter(
+      (m) =>
+        m.status === 'active' &&
+        (m.capabilities?.includes('chat') || m.capabilities?.includes('text_generation'))
     );
 
     if (availableModels.length === 0) {
@@ -167,7 +170,7 @@ export class GoogleAdapter extends ProviderAdapter {
 
     // Selection strategy: cheapest model with streaming capability
     const sortedByCost = availableModels
-      .filter(m => {
+      .filter((m) => {
         const hasStreaming = m.capabilities?.includes('streaming') ?? true;
         const hasChat = m.capabilities?.includes('chat') ?? true;
         return hasStreaming && hasChat && m.inputCostPer1k > 0;
@@ -232,7 +235,7 @@ export class GoogleAdapter extends ProviderAdapter {
     // Try partial match (e.g., "gemini" matches "gemini-1.5-flash")
     // Prefer longer/more specific matches
     const partialMatches: Array<{ key: string; value: string; specificity: number }> = [];
-    
+
     for (const [key, value] of modelMap.entries()) {
       const keyNormalized = key.replace(/[\/\-_.]/g, '');
       const inputNormalized = normalized;
@@ -243,7 +246,7 @@ export class GoogleAdapter extends ProviderAdapter {
         partialMatches.push({ key, value, specificity });
       }
     }
-    
+
     // Sort by specificity (descending) and return the best match
     if (partialMatches.length > 0) {
       partialMatches.sort((a, b) => b.specificity - a.specificity);
@@ -251,7 +254,10 @@ export class GoogleAdapter extends ProviderAdapter {
     }
 
     // Return as-is if no match (let provider handle it or fail gracefully)
-    logger.warn({ modelId, availableModels: Array.from(modelMap.keys()) }, 'Model not found in available models');
+    logger.warn(
+      { modelId, availableModels: Array.from(modelMap.keys()) },
+      'Model not found in available models'
+    );
     return normalizedInput;
   }
 
@@ -291,7 +297,7 @@ export class GoogleAdapter extends ProviderAdapter {
         'Sending chat completion request'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
@@ -323,7 +329,7 @@ export class GoogleAdapter extends ProviderAdapter {
           return { text: '' };
         }),
       }));
-      
+
       // Create request object with proper typing
       const generateRequest = {
         contents: geminiContents,
@@ -356,7 +362,7 @@ export class GoogleAdapter extends ProviderAdapter {
           },
         ],
       };
-      
+
       // Type assertion needed due to SDK type mismatch - the structure is correct
       // Route through the resilience stack (bulkhead → breaker → timeout) so a
       // Gemini outage fast-fails and is isolated per-provider.
@@ -376,7 +382,22 @@ export class GoogleAdapter extends ProviderAdapter {
         'Chat completion successful'
       );
 
-      return this.convertResponse(result as { response: { candidates: Array<{ content: { parts: Array<{ text?: string }> }; finishReason?: string }>; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } } }, request.model || modelName);
+      return this.convertResponse(
+        result as {
+          response: {
+            candidates: Array<{
+              content: { parts: Array<{ text?: string }> };
+              finishReason?: string;
+            }>;
+            usageMetadata?: {
+              promptTokenCount?: number;
+              candidatesTokenCount?: number;
+              totalTokenCount?: number;
+            };
+          };
+        },
+        request.model || modelName
+      );
     } catch (error) {
       const duration = Date.now() - startTime;
       this.providerLog.error(
@@ -403,7 +424,7 @@ export class GoogleAdapter extends ProviderAdapter {
         'Sending streaming chat completion'
       );
 
-      const modelToUse = request.model || await this.getDefaultModel();
+      const modelToUse = request.model || (await this.getDefaultModel());
       if (!modelToUse) {
         throw new Error('Model is required for chat completion');
       }
@@ -468,7 +489,10 @@ export class GoogleAdapter extends ProviderAdapter {
       // stream read loop below stays outside the bulkhead slot so streaming
       // semantics are preserved (the slot is not held for the stream lifetime).
       const result = await this.executeThroughBulkhead(
-        () => model.generateContentStream(generateRequest as Parameters<typeof model.generateContentStream>[0]),
+        () =>
+          model.generateContentStream(
+            generateRequest as Parameters<typeof model.generateContentStream>[0]
+          ),
         'chat completion stream',
         this.estimateTokenCost(request)
       );
@@ -604,11 +628,14 @@ export class GoogleAdapter extends ProviderAdapter {
   /**
    * Calculate cost for request
    */
-  calculateCost(model: { inputCostPer1k?: number | string; outputCostPer1k?: number | string }, inputTokens: number, outputTokens: number): number {
+  calculateCost(
+    model: { inputCostPer1k?: number | string; outputCostPer1k?: number | string },
+    inputTokens: number,
+    outputTokens: number
+  ): number {
     const inputRate = Math.max(0, Number(model.inputCostPer1k) || 0);
     const outputRate = Math.max(0, Number(model.outputCostPer1k) || 0);
-    const cost = (inputTokens / 1000) * inputRate
-               + (outputTokens / 1000) * outputRate;
+    const cost = (inputTokens / 1000) * inputRate + (outputTokens / 1000) * outputRate;
     return Math.max(0, cost);
   }
 
@@ -617,10 +644,24 @@ export class GoogleAdapter extends ProviderAdapter {
    */
   private convertMessages(messages: ChatMessage[]): {
     systemInstruction?: string;
-    contents: Array<{ role: 'user' | 'model'; parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string }; fileData?: { fileUri: string; mimeType: string } }> }>;
+    contents: Array<{
+      role: 'user' | 'model';
+      parts: Array<{
+        text?: string;
+        inlineData?: { mimeType: string; data: string };
+        fileData?: { fileUri: string; mimeType: string };
+      }>;
+    }>;
   } {
     let systemInstruction: string | undefined;
-    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string }; fileData?: { fileUri: string; mimeType: string } }> }> = [];
+    const contents: Array<{
+      role: 'user' | 'model';
+      parts: Array<{
+        text?: string;
+        inlineData?: { mimeType: string; data: string };
+        fileData?: { fileUri: string; mimeType: string };
+      }>;
+    }> = [];
 
     for (const message of messages) {
       // Extract system message
@@ -641,7 +682,11 @@ export class GoogleAdapter extends ProviderAdapter {
         });
       } else if (Array.isArray(message.content)) {
         // Handle multimodal content (text + images)
-        const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string }; fileData?: { fileUri: string; mimeType: string } }> = [];
+        const parts: Array<{
+          text?: string;
+          inlineData?: { mimeType: string; data: string };
+          fileData?: { fileUri: string; mimeType: string };
+        }> = [];
 
         for (const item of message.content) {
           if (item.type === 'text') {
@@ -680,7 +725,10 @@ export class GoogleAdapter extends ProviderAdapter {
   /**
    * Convert Gemini response to our format
    */
-  private convertResponse(result: { response: { candidates?: unknown; usageMetadata?: unknown; text?: () => string } }, requestedModel: string): ChatResponse {
+  private convertResponse(
+    result: { response: { candidates?: unknown; usageMetadata?: unknown; text?: () => string } },
+    requestedModel: string
+  ): ChatResponse {
     const response = result.response || {};
     const candidates = Array.isArray(response.candidates)
       ? (response.candidates as Array<Record<string, unknown>>)
@@ -727,9 +775,22 @@ export class GoogleAdapter extends ProviderAdapter {
         },
       ],
       usage: {
-        prompt_tokens: usageMetadata && typeof usageMetadata.promptTokenCount === 'number' ? usageMetadata.promptTokenCount : 0,
-        completion_tokens: usageMetadata && typeof usageMetadata.candidatesTokenCount === 'number' ? usageMetadata.candidatesTokenCount : 0,
-        total_tokens: usageMetadata && typeof usageMetadata.totalTokenCount === 'number' ? usageMetadata.totalTokenCount : (usageMetadata && typeof usageMetadata.promptTokenCount === 'number' && typeof usageMetadata.candidatesTokenCount === 'number' ? usageMetadata.promptTokenCount + usageMetadata.candidatesTokenCount : 0),
+        prompt_tokens:
+          usageMetadata && typeof usageMetadata.promptTokenCount === 'number'
+            ? usageMetadata.promptTokenCount
+            : 0,
+        completion_tokens:
+          usageMetadata && typeof usageMetadata.candidatesTokenCount === 'number'
+            ? usageMetadata.candidatesTokenCount
+            : 0,
+        total_tokens:
+          usageMetadata && typeof usageMetadata.totalTokenCount === 'number'
+            ? usageMetadata.totalTokenCount
+            : usageMetadata &&
+                typeof usageMetadata.promptTokenCount === 'number' &&
+                typeof usageMetadata.candidatesTokenCount === 'number'
+              ? usageMetadata.promptTokenCount + usageMetadata.candidatesTokenCount
+              : 0,
       },
     };
   }
@@ -786,12 +847,21 @@ export class GoogleAdapter extends ProviderAdapter {
   /**
    * Convert streaming chunk to our format
    */
-  private convertStreamChunk(chunk: { text?: () => string } | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }, requestedModel: string): ChatResponse {
+  private convertStreamChunk(
+    chunk:
+      | { text?: () => string }
+      | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> },
+    requestedModel: string
+  ): ChatResponse {
     // Handle different chunk formats
     let content = '';
     if ('text' in chunk && typeof chunk.text === 'function') {
       content = chunk.text();
-    } else if ('candidates' in chunk && Array.isArray(chunk.candidates) && chunk.candidates[0]?.content?.parts) {
+    } else if (
+      'candidates' in chunk &&
+      Array.isArray(chunk.candidates) &&
+      chunk.candidates[0]?.content?.parts
+    ) {
       content = chunk.candidates[0].content.parts.map((p) => p.text || '').join('');
     }
 
@@ -965,7 +1035,8 @@ export class GoogleAdapter extends ProviderAdapter {
         throw new Error(`Failed to fetch media URL (${response.status})`);
       }
       const buffer = Buffer.from(await response.arrayBuffer());
-      const mimeType = response.headers.get('content-type')?.split(';')[0]?.trim() || defaultMimeType;
+      const mimeType =
+        response.headers.get('content-type')?.split(';')[0]?.trim() || defaultMimeType;
       return {
         mimeType,
         data: buffer.toString('base64'),
@@ -1018,7 +1089,7 @@ export class GoogleAdapter extends ProviderAdapter {
   /**
    * Text-to-Speech (TTS) - REAL IMPLEMENTATION
    * Converts text to audio using Google Cloud Text-to-Speech API
-   * 
+   *
    * Note: Google Gemini does NOT have dedicated TTS, but Google Cloud has Text-to-Speech API
    * Uses REST API directly for TTS
    */
@@ -1026,32 +1097,38 @@ export class GoogleAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     try {
-      this.providerLog.debug({ model: model.name, textLength: request.text.length, voice: request.voice }, 'Starting TTS request via Google Cloud TTS');
+      this.providerLog.debug(
+        { model: model.name, textLength: request.text.length, voice: request.voice },
+        'Starting TTS request via Google Cloud TTS'
+      );
 
       // Google Cloud Text-to-Speech API endpoint
       const apiKey = this.config.apiKey;
       const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
 
       // Map OpenAI voice names to Google TTS voice names
-      const voiceMapping: Record<string, { languageCode: string; name: string; ssmlGender: string }> = {
-        'alloy': { languageCode: 'en-US', name: 'en-US-Neural2-F', ssmlGender: 'FEMALE' },
-        'echo': { languageCode: 'en-US', name: 'en-US-Neural2-D', ssmlGender: 'MALE' },
-        'fable': { languageCode: 'en-GB', name: 'en-GB-Neural2-B', ssmlGender: 'MALE' },
-        'onyx': { languageCode: 'en-US', name: 'en-US-Neural2-J', ssmlGender: 'MALE' },
-        'nova': { languageCode: 'en-US', name: 'en-US-Neural2-C', ssmlGender: 'FEMALE' },
-        'shimmer': { languageCode: 'en-US', name: 'en-US-Neural2-E', ssmlGender: 'FEMALE' },
+      const voiceMapping: Record<
+        string,
+        { languageCode: string; name: string; ssmlGender: string }
+      > = {
+        alloy: { languageCode: 'en-US', name: 'en-US-Neural2-F', ssmlGender: 'FEMALE' },
+        echo: { languageCode: 'en-US', name: 'en-US-Neural2-D', ssmlGender: 'MALE' },
+        fable: { languageCode: 'en-GB', name: 'en-GB-Neural2-B', ssmlGender: 'MALE' },
+        onyx: { languageCode: 'en-US', name: 'en-US-Neural2-J', ssmlGender: 'MALE' },
+        nova: { languageCode: 'en-US', name: 'en-US-Neural2-C', ssmlGender: 'FEMALE' },
+        shimmer: { languageCode: 'en-US', name: 'en-US-Neural2-E', ssmlGender: 'FEMALE' },
       };
 
       const voiceConfig = voiceMapping[request.voice || 'alloy'] || voiceMapping['alloy'];
 
       // Map format
       const audioEncodingMap: Record<string, string> = {
-        'mp3': 'MP3',
-        'wav': 'LINEAR16',
-        'opus': 'OGG_OPUS',
-        'aac': 'MP3', // Google TTS doesn't support AAC directly, use MP3
-        'flac': 'FLAC',
-        'pcm': 'LINEAR16',
+        mp3: 'MP3',
+        wav: 'LINEAR16',
+        opus: 'OGG_OPUS',
+        aac: 'MP3', // Google TTS doesn't support AAC directly, use MP3
+        flac: 'FLAC',
+        pcm: 'LINEAR16',
       };
 
       const audioEncoding = audioEncodingMap[request.format || 'mp3'] || 'MP3';
@@ -1079,7 +1156,11 @@ export class GoogleAdapter extends ProviderAdapter {
       });
 
       if (!response.ok) {
-        const errorBody = (await response.json()) as { error?: string; message?: string; [key: string]: unknown };
+        const errorBody = (await response.json()) as {
+          error?: string;
+          message?: string;
+          [key: string]: unknown;
+        };
         throw new Error(`Google TTS API error: ${response.status} - ${JSON.stringify(errorBody)}`);
       }
 
@@ -1096,12 +1177,12 @@ export class GoogleAdapter extends ProviderAdapter {
       const latency = Date.now() - startTime;
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           audioSize: audioBuffer.length,
           format: request.format || 'mp3',
-        }, 
+        },
         'TTS request completed'
       );
 
@@ -1113,13 +1194,13 @@ export class GoogleAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'TTS request failed'
       );
 
@@ -1130,7 +1211,7 @@ export class GoogleAdapter extends ProviderAdapter {
   /**
    * Speech-to-Text (STT) - REAL IMPLEMENTATION
    * Transcribes audio using Gemini's audio understanding capability
-   * 
+   *
    * Note: Google Gemini does NOT have dedicated TTS - it uses generateContent with audio input
    * Uses REST API directly for file upload since SDK doesn't have fileManager
    */
@@ -1138,20 +1219,26 @@ export class GoogleAdapter extends ProviderAdapter {
     const startTime = Date.now();
 
     try {
-      this.providerLog.debug({ model: model.name, audioSize: request.audio.length }, 'Starting STT request via Gemini');
+      this.providerLog.debug(
+        { model: model.name, audioSize: request.audio.length },
+        'Starting STT request via Gemini'
+      );
 
       // Step 1: Upload audio file to Gemini Files API using REST API
       // The @google/generative-ai SDK doesn't have fileManager, so we use REST API directly
       const geminiApiKey = this.config.apiKey;
       const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${geminiApiKey}`;
-      
+
       // Create FormData for multipart upload
       const formData = new FormData();
       const audioBlob = new Blob([new Uint8Array(request.audio)], { type: 'audio/mpeg' });
       formData.append('file', audioBlob, `stt-${Date.now()}.mp3`);
-      formData.append('metadata', JSON.stringify({
-        display_name: `stt-${Date.now()}.mp3`,
-      }));
+      formData.append(
+        'metadata',
+        JSON.stringify({
+          display_name: `stt-${Date.now()}.mp3`,
+        })
+      );
 
       // Upload file using resumable upload protocol
       // First, initiate upload
@@ -1201,7 +1288,7 @@ export class GoogleAdapter extends ProviderAdapter {
         [key: string]: unknown;
       };
       const fileUri = uploadResult.file?.uri;
-      
+
       if (!fileUri) {
         throw new Error('No file URI received from upload');
       }
@@ -1221,31 +1308,35 @@ export class GoogleAdapter extends ProviderAdapter {
       // Use REST API directly since SDK doesn't support fileData properly
       const geminiApiKeyForGenerate = this.config.apiKey;
       const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model.name}:generateContent?key=${geminiApiKeyForGenerate}`;
-      
+
       const generateResponse = await fetch(generateUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [
-              {
-                fileData: {
-                  mimeType: 'audio/mpeg',
-                  fileUri: fileUri,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  fileData: {
+                    mimeType: 'audio/mpeg',
+                    fileUri: fileUri,
+                  },
                 },
-              },
-              { text: prompt },
-            ],
-          }],
+                { text: prompt },
+              ],
+            },
+          ],
         }),
       });
 
       if (!generateResponse.ok) {
         const errorBody = await generateResponse.json();
-        throw new Error(`Gemini generateContent failed: ${generateResponse.statusText} - ${JSON.stringify(errorBody)}`);
+        throw new Error(
+          `Gemini generateContent failed: ${generateResponse.statusText} - ${JSON.stringify(errorBody)}`
+        );
       }
 
       const generateResult = (await generateResponse.json()) as {
@@ -1272,11 +1363,11 @@ export class GoogleAdapter extends ProviderAdapter {
       const latency = Date.now() - startTime;
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           transcriptionLength: transcription.length,
-        }, 
+        },
         'STT request completed via Gemini'
       );
 
@@ -1291,13 +1382,13 @@ export class GoogleAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'STT request failed'
       );
 
@@ -1320,17 +1411,17 @@ export class GoogleAdapter extends ProviderAdapter {
       );
 
       const apiKey = this.config.apiKey;
-      
+
       // Check if model is Imagen or Gemini image model
       const isImagenModel = model.name.includes('imagen');
-      
+
       let imageBuffer: Buffer;
       let format = 'png';
 
       if (isImagenModel) {
         // Use Imagen API endpoint: /v1beta/models/{model}:predict
         const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model.name}:predict?key=${apiKey}`;
-        
+
         const imagenResponse = await fetch(imagenUrl, {
           method: 'POST',
           headers: {
@@ -1345,7 +1436,11 @@ export class GoogleAdapter extends ProviderAdapter {
             parameters: {
               sampleCount: (request.options?.n as number) || 1,
               imageSize: request.size === '1024x1024' ? '1K' : '1K',
-              aspectRatio: request.size?.includes('1024x1792') ? '9:16' : request.size?.includes('1792x1024') ? '16:9' : '1:1',
+              aspectRatio: request.size?.includes('1024x1792')
+                ? '9:16'
+                : request.size?.includes('1792x1024')
+                  ? '16:9'
+                  : '1:1',
             },
           }),
         });
@@ -1362,14 +1457,15 @@ export class GoogleAdapter extends ProviderAdapter {
           }>;
           [key: string]: unknown;
         };
-        
+
         if (!imagenResult.generatedImages || imagenResult.generatedImages.length === 0) {
           throw new Error('No images generated by Imagen API');
         }
 
         // Take first image
         const firstImage = imagenResult.generatedImages[0];
-        const imageData = firstImage?.image as { imageBytes?: string; [key: string]: unknown } | undefined;
+        const imageData = firstImage?.image as
+          { imageBytes?: string; [key: string]: unknown } | undefined;
         if (!imageData?.imageBytes) {
           throw new Error('Imagen API returned invalid image data');
         }
@@ -1384,7 +1480,7 @@ export class GoogleAdapter extends ProviderAdapter {
         // Use REST API directly for image generation since SDK doesn't support responseModalities
         const apiKey = this.config.apiKey;
         const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model.name}:generateContent?key=${apiKey}`;
-        
+
         const generateResponse = await fetch(generateUrl, {
           method: 'POST',
           headers: {
@@ -1401,7 +1497,9 @@ export class GoogleAdapter extends ProviderAdapter {
 
         if (!generateResponse.ok) {
           const errorBody = await generateResponse.json();
-          throw new Error(`Gemini image generation failed: ${generateResponse.statusText} - ${JSON.stringify(errorBody)}`);
+          throw new Error(
+            `Gemini image generation failed: ${generateResponse.statusText} - ${JSON.stringify(errorBody)}`
+          );
         }
 
         const generateResult = (await generateResponse.json()) as {
@@ -1422,7 +1520,7 @@ export class GoogleAdapter extends ProviderAdapter {
         };
 
         const response = result.response;
-        
+
         // Extract image from response parts
         let imageData: string | null = null;
         for (const candidate of response.candidates || []) {
@@ -1446,12 +1544,12 @@ export class GoogleAdapter extends ProviderAdapter {
       const latency = Date.now() - startTime;
 
       this.providerLog.info(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           imageSize: imageBuffer.length,
           format,
-        }, 
+        },
         'Image generation completed via Google'
       );
 
@@ -1467,13 +1565,13 @@ export class GoogleAdapter extends ProviderAdapter {
     } catch (error: unknown) {
       const latency = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       this.providerLog.error(
-        { 
-          model: model.name, 
-          latency, 
+        {
+          model: model.name,
+          latency,
           error: errorMessage,
-        }, 
+        },
         'Image generation failed'
       );
 
@@ -1601,9 +1699,7 @@ export class GoogleAdapter extends ProviderAdapter {
         : [];
 
       const responseFormat =
-        'response_format' in options && options.response_format === 'b64_json'
-          ? 'b64_json'
-          : 'url';
+        'response_format' in options && options.response_format === 'b64_json' ? 'b64_json' : 'url';
 
       const videos: Array<{ id?: string; url?: string; b64_json?: string }> = [];
       for (let index = 0; index < generatedSamples.length; index += 1) {
@@ -1678,9 +1774,7 @@ export class GoogleAdapter extends ProviderAdapter {
     const normalizedModel = await this.normalizeModelName(model.name || model.id);
     const apiKey = this.config.apiKey;
     const maxResults =
-      typeof request.maxResults === 'number'
-        ? Math.max(1, Math.floor(request.maxResults))
-        : 5;
+      typeof request.maxResults === 'number' ? Math.max(1, Math.floor(request.maxResults)) : 5;
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${normalizedModel}:generateContent?key=${apiKey}`;
 
     const response = await this.withRetry(async () => {
@@ -1770,7 +1864,8 @@ export class GoogleAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -1788,8 +1883,10 @@ export class GoogleAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -1801,8 +1898,10 @@ export class GoogleAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -1810,8 +1909,11 @@ export class GoogleAdapter extends ProviderAdapter {
     } catch (error) {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.providerLog.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+      this.providerLog.warn(
+        { error: errorMessage },
+        'Moderation analysis failed, returning safe defaults'
+      );
+
       return {
         flagged: false,
         categories: {
@@ -1850,21 +1952,35 @@ export class GoogleAdapter extends ProviderAdapter {
    * Google Gemini/Imagen does not have image editing via API
    */
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Google Gemini image editing is not yet implemented. Google Imagen does not provide image editing via API. Use OpenAI DALL-E for image editing.');
+    throw new Error(
+      'Google Gemini image editing is not yet implemented. Google Imagen does not provide image editing via API. Use OpenAI DALL-E for image editing.'
+    );
   }
 
   /**
    * Image Variation
    * Google Gemini/Imagen does not have image variation via API
    */
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Google Gemini image variation is not yet implemented. Google Imagen does not provide image variation via API. Use OpenAI DALL-E for image variations.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Google Gemini image variation is not yet implemented. Google Imagen does not provide image variation via API. Use OpenAI DALL-E for image variations.'
+    );
   }
 
   /**
    * Sanitize request for logging
    */
-  private sanitizeRequest(request: ChatRequest): { model: string; messageCount: number; temperature?: number; max_tokens?: number; stream?: boolean; toolCount: number } {
+  private sanitizeRequest(request: ChatRequest): {
+    model: string;
+    messageCount: number;
+    temperature?: number;
+    max_tokens?: number;
+    stream?: boolean;
+    toolCount: number;
+  } {
     return {
       model: request.model || 'unknown',
       messageCount: request.messages.length,

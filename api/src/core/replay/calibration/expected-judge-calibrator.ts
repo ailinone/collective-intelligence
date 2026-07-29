@@ -87,7 +87,8 @@ export const lowerConfidenceBoundEstimator: ExpectedJudgeEstimator = Object.free
 
 export const variancePenalizedMeanEstimator: ExpectedJudgeEstimator = Object.freeze({
   name: 'variancePenalizedMean',
-  estimate: (i: ExpectedJudgeEstimateInput) => clamp01(i.profile.judgeMean - 0.5 * i.profile.judgeStdDev),
+  estimate: (i: ExpectedJudgeEstimateInput) =>
+    clamp01(i.profile.judgeMean - 0.5 * i.profile.judgeStdDev),
 });
 
 export const empiricalBayesShrinkageEstimator: ExpectedJudgeEstimator = Object.freeze({
@@ -150,7 +151,7 @@ export interface EstimatorEvaluation {
 
 export function evaluateEstimator(
   estimator: ExpectedJudgeEstimator,
-  data: readonly TrainEvalDatum[],
+  data: readonly TrainEvalDatum[]
 ): EstimatorEvaluation {
   if (data.length === 0) {
     return Object.freeze({
@@ -193,7 +194,7 @@ export interface EstimatorSelectionResult {
  */
 export function pickBestEstimator(
   data: readonly TrainEvalDatum[],
-  estimators: readonly ExpectedJudgeEstimator[] = ALL_ESTIMATORS,
+  estimators: readonly ExpectedJudgeEstimator[] = ALL_ESTIMATORS
 ): EstimatorSelectionResult {
   const evaluations = estimators.map((e) => evaluateEstimator(e, data));
   const indexed = evaluations.map((e, i) => ({ e, i }));

@@ -50,7 +50,7 @@ export function isEmbeddingRefreshEnabled(): boolean {
 export async function runEmbeddingRefreshNow(): Promise<void> {
   if (!isEmbeddingRefreshEnabled()) {
     log.info(
-      'HCRA_EMBEDDER_URL is unset — skipping embedding refresh (semantic rerank degrades to lexical-only)',
+      'HCRA_EMBEDDER_URL is unset — skipping embedding refresh (semantic rerank degrades to lexical-only)'
     );
     return;
   }
@@ -70,6 +70,6 @@ export async function runEmbeddingRefreshNow(): Promise<void> {
       elapsedMs: stats.elapsedMs,
       maxRowsPerRun,
     },
-    'Embedding refresh tick complete',
+    'Embedding refresh tick complete'
   );
 }

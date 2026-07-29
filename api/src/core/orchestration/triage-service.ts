@@ -40,10 +40,7 @@ import {
   type TriageExecutionPlanRaw,
   type TriageStageRaw,
 } from './triage-schema.js';
-import {
-  incrementPromptMetric,
-  PROMPT_METRIC_NAMES,
-} from './prompts/prompt-metrics.js';
+import { incrementPromptMetric, PROMPT_METRIC_NAMES } from './prompts/prompt-metrics.js';
 import {
   TRIAGE_SLOT_DOCUMENTATION,
   TRIAGE_AUGMENTATION_DOCUMENTATION,
@@ -231,7 +228,7 @@ export class TriagingService {
     request: ChatRequest,
     context: OrchestrationContext,
     inference?: CapabilityInferenceResult,
-    availableModels?: Model[],
+    availableModels?: Model[]
   ): Promise<TriageDecision | undefined> {
     let triageStrategy: TriageStrategy | undefined;
 
@@ -246,7 +243,11 @@ export class TriagingService {
           resolveExecutionStrategy(
             typeof request.strategy === 'string' ? request.strategy : undefined
           ) ?? (request.strategy as ExecutionStrategyName | 'auto' | undefined);
-        const recommendedStrategy = this.mapIntentToStrategy(request.task_type, requestedStrategy, complexity);
+        const recommendedStrategy = this.mapIntentToStrategy(
+          request.task_type,
+          requestedStrategy,
+          complexity
+        );
         const decision: TriageDecision = {
           intent: request.task_type,
           complexity,
@@ -269,7 +270,7 @@ export class TriagingService {
       //    d) Configured default or 'balanced'
 
       triageStrategy = this.determineTriageStrategy(request, context);
-      
+
       this.log.debug(
         {
           strategy: triageStrategy,
@@ -281,7 +282,7 @@ export class TriagingService {
       // 2. Determine number of models for collective triage
       // Priority: request.triageCollective > config.collective > 1 (single model)
       const collectiveCount = this.determineCollectiveCount(request);
-      
+
       let decision: TriageDecision | undefined;
       // Latency budget (2026-07-13): triage now runs for EVERY auto request
       // (shouldRunTriage always true since PR#84), so its LLM call sits
@@ -293,15 +294,28 @@ export class TriagingService {
       // The abandoned LLM call resolves in background; its decision is
       // discarded.
       const triageDeadlineMs = Number(process.env.ORCHESTRATION_TRIAGE_TIMEOUT_MS) || 4000;
-      const llmTriage = collectiveCount > 1
-        ? this.collectiveTriage(request, context, triageStrategy, collectiveCount, inference, availableModels)
-        : this.singleModelTriage(request, context, triageStrategy, inference, availableModels);
+      const llmTriage =
+        collectiveCount > 1
+          ? this.collectiveTriage(
+              request,
+              context,
+              triageStrategy,
+              collectiveCount,
+              inference,
+              availableModels
+            )
+          : this.singleModelTriage(request, context, triageStrategy, inference, availableModels);
       decision = await Promise.race([
         llmTriage,
         new Promise<never>((_, reject) => {
           const t = setTimeout(
-            () => reject(new Error(`Triage LLM deadline exceeded (${triageDeadlineMs}ms) — falling back to heuristics`)),
-            triageDeadlineMs,
+            () =>
+              reject(
+                new Error(
+                  `Triage LLM deadline exceeded (${triageDeadlineMs}ms) — falling back to heuristics`
+                )
+              ),
+            triageDeadlineMs
           );
           t.unref();
         }),
@@ -333,14 +347,22 @@ export class TriagingService {
    */
   private determineCollectiveCount(request: ChatRequest): number {
     // Priority: user-specified > config > default (1)
-    if (request.triageCollective !== undefined && request.triageCollective >= 1 && request.triageCollective <= 3) {
+    if (
+      request.triageCollective !== undefined &&
+      request.triageCollective >= 1 &&
+      request.triageCollective <= 3
+    ) {
       return Math.min(3, Math.max(1, Math.floor(request.triageCollective)));
     }
-    
-    if (this.config.collective !== undefined && this.config.collective >= 1 && this.config.collective <= 3) {
+
+    if (
+      this.config.collective !== undefined &&
+      this.config.collective >= 1 &&
+      this.config.collective <= 3
+    ) {
       return Math.min(3, Math.max(1, Math.floor(this.config.collective)));
     }
-    
+
     return 1; // Default: single model
   }
 
@@ -352,7 +374,7 @@ export class TriagingService {
     context: OrchestrationContext,
     triageStrategy?: TriageStrategy,
     inference?: CapabilityInferenceResult,
-    availableModels?: Model[],
+    availableModels?: Model[]
   ): Promise<TriageDecision | undefined> {
     // Dynamically select triage model based on capabilities and triage strategy
     const selectedModel = await this.selectTriageModel(request, context, triageStrategy);
@@ -360,7 +382,7 @@ export class TriagingService {
       this.log.warn('No suitable triage model found, using heuristics');
       return this.runHeuristics(request, context);
     }
-    
+
     // Get adapter for the selected model
     const adapter = await this.selectTriageAdapter(selectedModel);
     if (!adapter) {
@@ -369,7 +391,7 @@ export class TriagingService {
     }
 
     const prompt = this.buildPrompt(request, inference, availableModels);
-    
+
     const triageRequest: ChatRequest = {
       model: selectedModel.id,
       messages: prompt,
@@ -400,7 +422,9 @@ export class TriagingService {
       );
 
       // Store triage model info in decision metadata for learning
-      (parsed as TriageDecision & { _metadata?: { triageModel?: { id: string; name: string } } })._metadata = {
+      (
+        parsed as TriageDecision & { _metadata?: { triageModel?: { id: string; name: string } } }
+      )._metadata = {
         triageModel: {
           id: selectedModel.id,
           name: selectedModel.name,
@@ -424,34 +448,50 @@ export class TriagingService {
     triageStrategy: TriageStrategy | undefined,
     modelCount: number,
     inference?: CapabilityInferenceResult,
-    availableModels?: Model[],
+    availableModels?: Model[]
   ): Promise<TriageDecision | undefined> {
     this.log.debug({ modelCount }, 'Starting collective triage with multiple models');
-    
+
     // 1. Select multiple diverse models for triage
-    const selectedModels = await this.selectMultipleTriageModels(request, context, triageStrategy, modelCount);
-    
+    const selectedModels = await this.selectMultipleTriageModels(
+      request,
+      context,
+      triageStrategy,
+      modelCount
+    );
+
     if (selectedModels.length === 0) {
-      this.log.warn('No suitable triage models found for collective triage, falling back to heuristics');
+      this.log.warn(
+        'No suitable triage models found for collective triage, falling back to heuristics'
+      );
       return this.runHeuristics(request, context);
     }
-    
+
     if (selectedModels.length === 1) {
       // Fallback to single model if only one available
-      return await this.singleModelTriage(request, context, triageStrategy, inference, availableModels);
+      return await this.singleModelTriage(
+        request,
+        context,
+        triageStrategy,
+        inference,
+        availableModels
+      );
     }
-    
+
     this.log.debug(
       {
         modelCount: selectedModels.length,
-        models: selectedModels.map(m => ({ id: m.id, name: m.name })),
+        models: selectedModels.map((m) => ({ id: m.id, name: m.name })),
       },
       'Selected models for collective triage'
     );
-    
+
     // 2. Execute triage in parallel with all selected models
     const prompt = this.buildPrompt(request, inference, availableModels);
-    const triageDecisions: Array<{ model: { id: string; name: string }; decision: TriageDecision }> = [];
+    const triageDecisions: Array<{
+      model: { id: string; name: string };
+      decision: TriageDecision;
+    }> = [];
     const executionErrors: Array<{ model: { id: string; name: string }; error: string }> = [];
 
     const executionPromises = selectedModels.map(async (model) => {
@@ -484,30 +524,35 @@ export class TriagingService {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         executionErrors.push({ model, error: errorMessage });
-        this.log.warn({ model: model.name, error: errorMessage }, 'Model failed in collective triage');
+        this.log.warn(
+          { model: model.name, error: errorMessage },
+          'Model failed in collective triage'
+        );
       }
     });
-    
+
     await Promise.all(executionPromises);
-    
+
     // 3. Check if we have enough successful decisions
     if (triageDecisions.length === 0) {
       this.log.warn('All models failed in collective triage, falling back to heuristics');
       return this.runHeuristics(request, context);
     }
-    
+
     // Cost-accounting integrity: sum the billable cost across ALL successful
     // collective triage calls (each was a real paid LLM call).
     const collectiveTriageCost = triageDecisions.reduce(
       (sum, td) => sum + (td.decision.costUsd ?? 0),
-      0,
+      0
     );
 
     if (triageDecisions.length === 1) {
       // Single successful decision, use it directly
       const { model, decision } = triageDecisions[0];
       decision.costUsd = collectiveTriageCost;
-      (decision as TriageDecision & { _metadata?: { triageModel?: { id: string; name: string } } })._metadata = {
+      (
+        decision as TriageDecision & { _metadata?: { triageModel?: { id: string; name: string } } }
+      )._metadata = {
         triageModel: model,
       };
       return decision;
@@ -516,7 +561,7 @@ export class TriagingService {
     // 4. Aggregate decisions through consensus/voting
     const consensusDecision = this.aggregateTriageDecisions(triageDecisions);
     consensusDecision.costUsd = collectiveTriageCost;
-    
+
     this.log.info(
       {
         totalModels: selectedModels.length,
@@ -525,26 +570,28 @@ export class TriagingService {
       },
       'Collective triage completed with consensus'
     );
-    
+
     // Store collective triage metadata
-    (consensusDecision as TriageDecision & { 
-      _metadata?: { 
-        triageModel?: { id: string; name: string };
-        collectiveTriage?: {
-          totalModels: number;
-          successfulModels: number;
-          modelsUsed: Array<{ id: string; name: string }>;
+    (
+      consensusDecision as TriageDecision & {
+        _metadata?: {
+          triageModel?: { id: string; name: string };
+          collectiveTriage?: {
+            totalModels: number;
+            successfulModels: number;
+            modelsUsed: Array<{ id: string; name: string }>;
+          };
         };
-      } 
-    })._metadata = {
+      }
+    )._metadata = {
       triageModel: selectedModels[0], // Primary model
       collectiveTriage: {
         totalModels: selectedModels.length,
         successfulModels: triageDecisions.length,
-        modelsUsed: triageDecisions.map(td => td.model),
+        modelsUsed: triageDecisions.map((td) => td.model),
       },
     };
-    
+
     return consensusDecision;
   }
 
@@ -560,11 +607,16 @@ export class TriagingService {
     try {
       const { getDynamicModelSelector } = await import('../selection/dynamic-model-selector.js');
       const selector = getDynamicModelSelector();
-      
+
       const requiredCapabilities = this.determineTriageCapabilities(request, context);
       const strategy = triageStrategy || this.config.strategy || 'balanced';
-      const selectionCriteria = this.applyTriageStrategy(strategy, request, context, requiredCapabilities);
-      
+      const selectionCriteria = this.applyTriageStrategy(
+        strategy,
+        request,
+        context,
+        requiredCapabilities
+      );
+
       // Select multiple models (request count + 1 for diversity, then limit)
       const selectedModels = await selector.selectModels(
         null,
@@ -586,8 +638,8 @@ export class TriagingService {
         },
         Math.min(count, 3) // Maximum 3 models
       );
-      
-      return selectedModels.map(sm => ({ id: sm.model.id, name: sm.model.name }));
+
+      return selectedModels.map((sm) => ({ id: sm.model.id, name: sm.model.name }));
     } catch (error) {
       this.log.warn({ error }, 'Failed to select multiple triage models');
       // Fallback: try to get at least one model
@@ -607,43 +659,46 @@ export class TriagingService {
     if (decisions.length === 0) {
       throw new Error('Cannot aggregate empty decisions');
     }
-    
+
     if (decisions.length === 1) {
       return decisions[0].decision;
     }
-    
+
     // Vote counting for categorical fields
     const intentVotes = new Map<string, number>();
     const complexityVotes = new Map<string, number>();
     const priorityVotes = new Map<string, number>();
     const strategyVotes = new Map<string, number>();
-    
+
     // Sum for numerical fields
     let totalConfidence = 0;
     let totalEstimatedTokens = 0;
     let requiresToolsCount = 0;
     let directResponseCount = 0;
     const reasons: string[] = [];
-    
+
     decisions.forEach(({ decision }) => {
       // Intent voting
       const intent = decision.intent || 'general';
       intentVotes.set(intent, (intentVotes.get(intent) || 0) + 1);
-      
+
       // Complexity voting
       const complexity = decision.complexity || 'medium';
       complexityVotes.set(complexity, (complexityVotes.get(complexity) || 0) + 1);
-      
+
       // Priority voting
       if (decision.priority) {
         priorityVotes.set(decision.priority, (priorityVotes.get(decision.priority) || 0) + 1);
       }
-      
+
       // Strategy voting
       if (decision.recommendedStrategy) {
-        strategyVotes.set(decision.recommendedStrategy, (strategyVotes.get(decision.recommendedStrategy) || 0) + 1);
+        strategyVotes.set(
+          decision.recommendedStrategy,
+          (strategyVotes.get(decision.recommendedStrategy) || 0) + 1
+        );
       }
-      
+
       // Numerical fields
       if (decision.confidence !== undefined) {
         totalConfidence += decision.confidence;
@@ -661,17 +716,18 @@ export class TriagingService {
         reasons.push(decision.reason);
       }
     });
-    
+
     // Get majority votes
     const majorityIntent = this.getMajorityVote(intentVotes) || 'general';
     const majorityComplexity = this.getMajorityVote(complexityVotes) || 'medium';
     const majorityPriority = this.getMajorityVote(priorityVotes);
     const majorityStrategy = this.getMajorityVote(strategyVotes);
-    
+
     // Calculate averages
     const avgConfidence = decisions.length > 0 ? totalConfidence / decisions.length : 0.5;
-    const avgEstimatedTokens = decisions.length > 0 ? Math.round(totalEstimatedTokens / decisions.length) : undefined;
-    
+    const avgEstimatedTokens =
+      decisions.length > 0 ? Math.round(totalEstimatedTokens / decisions.length) : undefined;
+
     // Determine requiresTools (majority rule)
     const requiresTools = requiresToolsCount > decisions.length / 2;
 
@@ -680,22 +736,23 @@ export class TriagingService {
     // Majority rule, consistent with the other votes here; ties default to
     // the safe side (planned_execution).
     const majorityDirectResponse = directResponseCount > decisions.length / 2;
-    
+
     // Aggregate reasons (concatenate unique reasons)
     const uniqueReasons = [...new Set(reasons)];
-    const aggregatedReason = uniqueReasons.length > 0 
-      ? `Consensus from ${decisions.length} models: ${uniqueReasons.slice(0, 2).join('; ')}`
-      : `Consensus from ${decisions.length} triage models`;
-    
+    const aggregatedReason =
+      uniqueReasons.length > 0
+        ? `Consensus from ${decisions.length} models: ${uniqueReasons.slice(0, 2).join('; ')}`
+        : `Consensus from ${decisions.length} triage models`;
+
     // Aggregate recommended models (union, limit to top 5)
     const allRecommendedModels = new Set<string>();
     decisions.forEach(({ decision }) => {
       if (decision.recommendedModels) {
-        decision.recommendedModels.forEach(modelId => allRecommendedModels.add(modelId));
+        decision.recommendedModels.forEach((modelId) => allRecommendedModels.add(modelId));
       }
     });
     const recommendedModels = Array.from(allRecommendedModels).slice(0, 5);
-    
+
     return {
       intent: majorityIntent as TaskType | 'support' | 'data-request' | 'other',
       complexity: majorityComplexity as 'low' | 'medium' | 'high',
@@ -717,17 +774,17 @@ export class TriagingService {
     if (votes.size === 0) {
       return undefined;
     }
-    
+
     let maxVotes = 0;
     let winner: string | undefined;
-    
+
     for (const [candidate, voteCount] of votes.entries()) {
       if (voteCount > maxVotes) {
         maxVotes = voteCount;
         winner = candidate;
       }
     }
-    
+
     return winner;
   }
 
@@ -746,25 +803,22 @@ export class TriagingService {
     if (request.triageStrategy) {
       return request.triageStrategy;
     }
-    
+
     // Priority 2: Learned recommendation (async - will use prompt detection as fallback)
     // Note: This is called synchronously, so we'll use prompt detection first,
     // then update with learned recommendation if available
-    
+
     // Priority 3: Auto-detect from prompt analysis
     const promptText = this.aggregateContent(request);
-    const promptCharacteristics = triageLearningSystem.detectStrategyFromPrompt(
-      promptText,
-      {
-        messageCount: request.messages.length,
-        hasTools: !!(request.tools && request.tools.length > 0),
-        contextSize: context.contextSize || this.estimateContextSize(request),
-      }
-    );
-    
+    const promptCharacteristics = triageLearningSystem.detectStrategyFromPrompt(promptText, {
+      messageCount: request.messages.length,
+      hasTools: !!(request.tools && request.tools.length > 0),
+      contextSize: context.contextSize || this.estimateContextSize(request),
+    });
+
     // Store for potential learning update
     // We'll use the detected strategy but can enhance with learned data if available
-    
+
     // Priority 4: Configured default
     return this.config.strategy || promptCharacteristics.recommendedStrategy || 'balanced';
   }
@@ -783,7 +837,7 @@ export class TriagingService {
   private async computeTriageCost(
     adapter: ProviderAdapter,
     modelId: string,
-    response: ChatResponse,
+    response: ChatResponse
   ): Promise<number> {
     try {
       const usage = response.usage;
@@ -799,7 +853,7 @@ export class TriagingService {
       const cost = adapter.calculateCost(
         model,
         usage.prompt_tokens || 0,
-        usage.completion_tokens || 0,
+        usage.completion_tokens || 0
       );
       return Math.max(0, cost) || 0;
     } catch (error) {
@@ -808,9 +862,10 @@ export class TriagingService {
     }
   }
 
-  private async selectTriageAdapter(
-    selectedModel: { id: string; name: string }
-  ): Promise<ProviderAdapter | null> {
+  private async selectTriageAdapter(selectedModel: {
+    id: string;
+    name: string;
+  }): Promise<ProviderAdapter | null> {
     // If model is explicitly configured, use it (backwards compatibility)
     if (this.config.model) {
       const result = await this.providerRegistry.findModelByName(this.config.model);
@@ -819,7 +874,7 @@ export class TriagingService {
         return result.adapter;
       }
     }
-    
+
     // Get adapter for the dynamically selected model
     const result = await this.providerRegistry.findModel(selectedModel.id);
     return result?.adapter || null;
@@ -846,13 +901,13 @@ export class TriagingService {
       // Use DynamicModelSelector for intelligent model selection
       const { getDynamicModelSelector } = await import('../selection/dynamic-model-selector.js');
       const selector = getDynamicModelSelector();
-      
+
       // Determine required capabilities based on request context
       const requiredCapabilities = this.determineTriageCapabilities(request, context);
-      
+
       // Use provided strategy or fallback to configured/default
       const strategy = triageStrategy || this.config.strategy || 'balanced';
-      
+
       // Apply triage strategy to adapt selection criteria dynamically
       const selectionCriteria = this.applyTriageStrategy(
         strategy,
@@ -860,7 +915,7 @@ export class TriagingService {
         context,
         requiredCapabilities
       );
-      
+
       this.log.debug(
         {
           strategy: triageStrategy,
@@ -869,7 +924,7 @@ export class TriagingService {
         },
         'Selecting triage model with strategy-based criteria'
       );
-      
+
       // Select model using triage strategy
       const selectedModels = await selector.selectModels(
         null, // No explicit model preference - let selector decide
@@ -902,7 +957,7 @@ export class TriagingService {
         );
         return { id: selected.model.id, name: selected.model.name };
       }
-      
+
       // Fallback: find any model with minimum required capabilities
       return await this.findFallbackTriageModel(requiredCapabilities);
     } catch (error) {
@@ -1031,17 +1086,17 @@ export class TriagingService {
     const contextSize = this.estimateContextSize(request);
     const hasTools = request.tools && request.tools.length > 0;
     const hasComplexContext = context.contextSize > 3000;
-    
+
     // High complexity indicators
     if (messageCount > 10 || contextSize > 8000 || hasComplexContext) {
       return 'high';
     }
-    
+
     // Medium complexity indicators
     if (messageCount > 5 || contextSize > 3000 || hasTools) {
       return 'medium';
     }
-    
+
     return 'low';
   }
 
@@ -1053,20 +1108,20 @@ export class TriagingService {
     context: OrchestrationContext
   ): ModelCapability[] {
     const capabilities: ModelCapability[] = ['chat']; // Always required
-    
+
     // Add analysis capability for better routing decisions
     capabilities.push('analysis');
-    
+
     // Add reasoning if request is complex or has multiple messages
     if (request.messages.length > 5 || context.contextSize > 2000) {
       capabilities.push('reasoning');
     }
-    
+
     // Add function_calling if tools are present in request
     if (request.tools && request.tools.length > 0) {
       capabilities.push('function_calling');
     }
-    
+
     return capabilities;
   }
 
@@ -1075,9 +1130,8 @@ export class TriagingService {
    */
   private estimateContextSize(request: ChatRequest): number {
     return request.messages.reduce((size, message) => {
-      const content = typeof message.content === 'string' 
-        ? message.content 
-        : JSON.stringify(message.content);
+      const content =
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
       return size + content.length;
     }, 0);
   }
@@ -1090,27 +1144,27 @@ export class TriagingService {
   ): Promise<{ id: string; name: string } | null> {
     try {
       const allModels = await this.providerRegistry.getAllModels();
-      
+
       // Find model with all required capabilities
       const suitableModel = allModels.find(
-        model =>
+        (model) =>
           model.status === 'active' &&
-          requiredCapabilities.every(cap => model.capabilities.includes(cap))
+          requiredCapabilities.every((cap) => model.capabilities.includes(cap))
       );
-      
+
       if (suitableModel) {
         return { id: suitableModel.id, name: suitableModel.name };
       }
-      
+
       // Fallback: any active chat model
       const chatModel = allModels.find(
-        m => m.status === 'active' && m.capabilities.includes('chat')
+        (m) => m.status === 'active' && m.capabilities.includes('chat')
       );
-      
+
       if (chatModel) {
         return { id: chatModel.id, name: chatModel.name };
       }
-      
+
       return null;
     } catch (error) {
       this.log.error({ error, requiredCapabilities }, 'Fallback triage model selection failed');
@@ -1121,7 +1175,7 @@ export class TriagingService {
   private buildPrompt(
     request: ChatRequest,
     inference?: CapabilityInferenceResult,
-    availableModels?: Model[],
+    availableModels?: Model[]
   ): ChatRequest['messages'] {
     const flattenedMessages = request.messages
       .map((message) => {
@@ -1193,17 +1247,21 @@ export class TriagingService {
         .sort((a, b) => (b.performance?.quality || 0) - (a.performance?.quality || 0))
         .slice(0, 30);
       modelsSummary = sorted
-        .map((m) => `${m.id} [${m.capabilities.slice(0, 6).join(',')}] ctx=${m.contextWindow} out=${m.maxOutputTokens}`)
+        .map(
+          (m) =>
+            `${m.id} [${m.capabilities.slice(0, 6).join(',')}] ctx=${m.contextWindow} out=${m.maxOutputTokens}`
+        )
         .join('\n');
     }
 
     // Inference hints from heuristic layer
     let inferenceHints = 'None';
     if (inference) {
-      inferenceHints = `taskType=${inference.taskType}, complexity=${inference.complexity}, `
-        + `capabilities=[${inference.requiredCapabilities.join(',')}], `
-        + `contextNeeds=${inference.contextNeeds}, riskProfile=${inference.riskProfile}, `
-        + `costSensitivity=${inference.costSensitivity}, confidence=${inference.confidence}`;
+      inferenceHints =
+        `taskType=${inference.taskType}, complexity=${inference.complexity}, ` +
+        `capabilities=[${inference.requiredCapabilities.join(',')}], ` +
+        `contextNeeds=${inference.contextNeeds}, riskProfile=${inference.riskProfile}, ` +
+        `costSensitivity=${inference.costSensitivity}, confidence=${inference.confidence}`;
     }
 
     // Security review fix: show triage ONLY the auto-recommendable allowlist
@@ -1211,8 +1269,7 @@ export class TriagingService {
     // set includes server-filesystem tools that must never be auto-attached.
     const toolsList = toolRegistry.describeTriageRecommendableToolsForPrompt();
 
-    const systemPrompt = TRIAGE_SYSTEM_PROMPT
-      .replace('{{CAPABILITIES}}', capabilitiesList)
+    const systemPrompt = TRIAGE_SYSTEM_PROMPT.replace('{{CAPABILITIES}}', capabilitiesList)
       .replace('{{STRATEGIES}}', strategiesList)
       .replace('{{ROLES}}', rolesList)
       .replace('{{TOOLS}}', toolsList)
@@ -1266,7 +1323,7 @@ export class TriagingService {
       incrementPromptMetric(PROMPT_METRIC_NAMES.TRIAGE_PARSE_FAILURES, { stage: 'zod' });
       this.log.warn(
         { issues: parsed.error.issues, preview: jsonText.slice(0, 200) },
-        'Triage response: Zod schema validation failed',
+        'Triage response: Zod schema validation failed'
       );
       return undefined;
     }
@@ -1312,12 +1369,14 @@ export class TriagingService {
       stages.push({
         name: 'main',
         strategy,
-        modelRoles: [{
-          role: 'primary',
-          count: ep.model_count,
-          preferredCapabilities: ep.required_capabilities,
-          qualityTarget: ep.quality_target,
-        }],
+        modelRoles: [
+          {
+            role: 'primary',
+            count: ep.model_count,
+            preferredCapabilities: ep.required_capabilities,
+            qualityTarget: ep.quality_target,
+          },
+        ],
         requiredCapabilities: ep.required_capabilities,
         maxTokens: ep.max_tokens,
       });
@@ -1325,10 +1384,15 @@ export class TriagingService {
 
     // Auto-recommend reasoning for high-complexity tasks that benefit from chain-of-thought.
     // Preserves existing heuristic unless the triage LLM set the flag explicitly.
-    const enableReasoning = typeof ep.enable_reasoning === 'boolean'
-      ? ep.enable_reasoning
-      : (ep.quality_target >= 0.85 && ep.model_count >= 3 && !ep.prefer_speed &&
-         ep.required_capabilities.some((c) => ['reasoning', 'analysis', 'deep_research'].includes(c)));
+    const enableReasoning =
+      typeof ep.enable_reasoning === 'boolean'
+        ? ep.enable_reasoning
+        : ep.quality_target >= 0.85 &&
+          ep.model_count >= 3 &&
+          !ep.prefer_speed &&
+          ep.required_capabilities.some((c) =>
+            ['reasoning', 'analysis', 'deep_research'].includes(c)
+          );
 
     return {
       maxTokens: ep.max_tokens,
@@ -1420,9 +1484,18 @@ export class TriagingService {
     let escaped = false;
     for (let i = start; i < trimmed.length; i++) {
       const ch = trimmed[i];
-      if (escaped) { escaped = false; continue; }
-      if (ch === '\\') { if (inString) escaped = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        if (inString) escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
       if (inString) continue;
       if (ch === '{') depth++;
       else if (ch === '}') {
@@ -1444,8 +1517,7 @@ export class TriagingService {
     const requestedStrategy =
       resolveExecutionStrategy(
         typeof request.strategy === 'string' ? request.strategy : undefined
-      ) ??
-      (request.strategy as ExecutionStrategyName | 'auto' | undefined);
+      ) ?? (request.strategy as ExecutionStrategyName | 'auto' | undefined);
     const recommendedStrategy = this.mapIntentToStrategy(intent, requestedStrategy, complexity);
     const requiresTools = /tool|function|call/i.test(content);
 
@@ -1456,7 +1528,7 @@ export class TriagingService {
     // stage-level system prompts or capability constraints.
     const heuristicModelCount = complexity === 'high' ? 3 : complexity === 'medium' ? 2 : 1;
     const heuristicQualityTarget =
-      complexity === 'high' ? 0.90 : complexity === 'medium' ? 0.85 : 0.80;
+      complexity === 'high' ? 0.9 : complexity === 'medium' ? 0.85 : 0.8;
 
     // Multimodal e2e fix (2026-07-13): when the heuristic capability
     // inference (high-precision regex) detected a MEDIA-GENERATION intent,
@@ -1471,9 +1543,20 @@ export class TriagingService {
     // detectMediaGenerationModality() already treats them as generation
     // stages, so heuristic fallback only needs to detect + include the tag.
     const MEDIA_GEN_CAPS = [
-      'image_generation', 'video_generation', 'audio_generation', 'text_to_speech',
-      'csv_generation', 'json_generation', 'markdown_generation', 'docx_generation', 'xlsx_generation',
-      'pdf_generation', 'pptx_generation', 'zip_generation', 'code_file_generation', 'file_generation',
+      'image_generation',
+      'video_generation',
+      'audio_generation',
+      'text_to_speech',
+      'csv_generation',
+      'json_generation',
+      'markdown_generation',
+      'docx_generation',
+      'xlsx_generation',
+      'pdf_generation',
+      'pptx_generation',
+      'zip_generation',
+      'code_file_generation',
+      'file_generation',
     ] as const;
     const inferredCaps = context.capabilityInference?.requiredCapabilities ?? [];
     const mediaCap = MEDIA_GEN_CAPS.find((c) => (inferredCaps as readonly string[]).includes(c));
@@ -1496,29 +1579,35 @@ export class TriagingService {
       // complexity so simple requests run exactly once (0 rounds), medium 1, high 2.
       maxDeliberationRounds: complexity === 'high' ? 2 : complexity === 'medium' ? 1 : 0,
       stages: mediaCap
-        ? [{
-            // Dedicated media-generation stage (see MEDIA_GEN_CAPS note
-            // above) — single-purpose per the triage prompt's own rule, with
-            // the raw user content as the self-contained generation prompt.
-            name: `${mediaCap.replace('_generation', '').replace('text_to_speech', 'audio')}_generation`,
-            strategy: 'single',
-            modelRoles: [],
-            requiredCapabilities: [mediaCap],
-            maxTokens: 1024,
-            generationPrompt: content.slice(0, 2000),
-          }]
-        : [{
-            name: 'main',
-            strategy: recommendedStrategy ?? 'single',
-            modelRoles: [{
-              role: 'primary' as ModelRole,
-              count: 1,
-              preferredCapabilities: [],
-              qualityTarget: heuristicQualityTarget,
-            }],
-            requiredCapabilities: [],
-            maxTokens: request.max_tokens ?? (complexity === 'high' ? 16384 : 4096),
-          }],
+        ? [
+            {
+              // Dedicated media-generation stage (see MEDIA_GEN_CAPS note
+              // above) — single-purpose per the triage prompt's own rule, with
+              // the raw user content as the self-contained generation prompt.
+              name: `${mediaCap.replace('_generation', '').replace('text_to_speech', 'audio')}_generation`,
+              strategy: 'single',
+              modelRoles: [],
+              requiredCapabilities: [mediaCap],
+              maxTokens: 1024,
+              generationPrompt: content.slice(0, 2000),
+            },
+          ]
+        : [
+            {
+              name: 'main',
+              strategy: recommendedStrategy ?? 'single',
+              modelRoles: [
+                {
+                  role: 'primary' as ModelRole,
+                  count: 1,
+                  preferredCapabilities: [],
+                  qualityTarget: heuristicQualityTarget,
+                },
+              ],
+              requiredCapabilities: [],
+              maxTokens: request.max_tokens ?? (complexity === 'high' ? 16384 : 4096),
+            },
+          ],
     };
 
     const decision: TriageDecision = {
@@ -1635,7 +1724,11 @@ export class TriagingService {
       case 'code-review':
         return complexity === 'high' ? 'devil-advocate-consensus' : 'debate';
       case 'analysis':
-        return complexity === 'high' ? 'debate' : complexity === 'medium' ? 'blind-debate' : 'single';
+        return complexity === 'high'
+          ? 'debate'
+          : complexity === 'medium'
+            ? 'blind-debate'
+            : 'single';
       case 'documentation':
         return complexity === 'high' ? 'stigmergic-refinement' : 'single';
       case 'creative':

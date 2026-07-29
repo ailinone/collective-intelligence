@@ -21,7 +21,10 @@ import type { RoutingTracePersistor } from '../routing-trace-collector';
 import type { RoutingDecisionTrace } from '../routing-decision-trace';
 import { makeValidTrace } from './fixtures/routing-trace.fixture';
 
-function makePersistor(): RoutingTracePersistor & { calls: number; lastBatch: ReadonlyArray<RoutingDecisionTrace> | null } {
+function makePersistor(): RoutingTracePersistor & {
+  calls: number;
+  lastBatch: ReadonlyArray<RoutingDecisionTrace> | null;
+} {
   let calls = 0;
   let lastBatch: ReadonlyArray<RoutingDecisionTrace> | null = null;
   return {

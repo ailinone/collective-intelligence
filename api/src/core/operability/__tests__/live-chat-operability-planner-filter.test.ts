@@ -104,7 +104,7 @@ describe('filterCandidatesByLiveOperability', () => {
         preferRecentChatSuccess: false,
         liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
         storeOverride: store,
-      },
+      }
     );
     expect(r.allowed).toHaveLength(0);
     expect(r.rejected[0].reason).toBe('cooldown_active');
@@ -112,31 +112,25 @@ describe('filterCandidatesByLiveOperability', () => {
   });
 
   it('allows unknown live state when allowUnknownLiveOperability=true', () => {
-    const r = filterCandidatesByLiveOperability(
-      [fakeCandidate('never-probed', 'm1')],
-      {
-        requireLiveChatOperability: true,
-        allowUnknownLiveOperability: true,
-        preferRecentChatSuccess: false,
-        liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
-        storeOverride: store,
-      },
-    );
+    const r = filterCandidatesByLiveOperability([fakeCandidate('never-probed', 'm1')], {
+      requireLiveChatOperability: true,
+      allowUnknownLiveOperability: true,
+      preferRecentChatSuccess: false,
+      liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
+      storeOverride: store,
+    });
     expect(r.allowed).toHaveLength(1);
     expect(r.rejected).toHaveLength(0);
   });
 
   it('rejects unknown live state when allowUnknownLiveOperability=false', () => {
-    const r = filterCandidatesByLiveOperability(
-      [fakeCandidate('never-probed', 'm1')],
-      {
-        requireLiveChatOperability: true,
-        allowUnknownLiveOperability: false,
-        preferRecentChatSuccess: false,
-        liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
-        storeOverride: store,
-      },
-    );
+    const r = filterCandidatesByLiveOperability([fakeCandidate('never-probed', 'm1')], {
+      requireLiveChatOperability: true,
+      allowUnknownLiveOperability: false,
+      preferRecentChatSuccess: false,
+      liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
+      storeOverride: store,
+    });
     expect(r.allowed).toHaveLength(0);
     expect(r.rejected[0].reason).toBe('live_chat_state_unknown');
   });
@@ -166,7 +160,7 @@ describe('filterCandidatesByLiveOperability', () => {
         preferRecentChatSuccess: true,
         liveChatSuccessMaxAgeMs: 24 * 60 * 60 * 1000,
         storeOverride: store,
-      },
+      }
     );
     expect(r.allowed.map((c) => c.providerId)).toEqual(['p-new', 'p-old']);
   });

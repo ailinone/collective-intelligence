@@ -62,7 +62,9 @@ export interface LeakageReport {
   readonly suspicious: number;
   readonly ok: number;
   readonly findings: readonly LeakageFinding[];
-  readonly byProvider: Readonly<Record<string, { leakage: number; suspicious: number; ok: number }>>;
+  readonly byProvider: Readonly<
+    Record<string, { leakage: number; suspicious: number; ok: number }>
+  >;
 }
 
 /**
@@ -128,8 +130,8 @@ const HUB_PROVIDERS_ACCEPTING_NAMESPACED_IDS: ReadonlySet<string> = new Set([
   'github-models',
   'gemini-openai',
   'vercel-ai-gateway',
-  'huggingface',  // HF router also accepts <org>/<model>
-  'replicate',    // Replicate uses <owner>/<model> format
+  'huggingface', // HF router also accepts <org>/<model>
+  'replicate', // Replicate uses <owner>/<model> format
   'wandb',
   'bytez',
   'cloudflare-workers-ai',
@@ -237,7 +239,7 @@ export function detectModelLeakage(model: CatalogModelLike): LeakageFinding {
  * Audit a full catalog. Returns aggregated findings + per-provider counts.
  */
 export function detectCrossProviderCatalogLeakage(
-  models: readonly CatalogModelLike[],
+  models: readonly CatalogModelLike[]
 ): LeakageReport {
   const findings: LeakageFinding[] = [];
   const byProvider: Record<string, { leakage: number; suspicious: number; ok: number }> = {};

@@ -36,7 +36,15 @@ import {
 } from '../experiment-tool-catalog';
 
 const log = narrowAs<Logger>({
-  info() {}, warn() {}, error() {}, debug() {}, trace() {}, fatal() {}, child() { return log; },
+  info() {},
+  warn() {},
+  error() {},
+  debug() {},
+  trace() {},
+  fatal() {},
+  child() {
+    return log;
+  },
 });
 
 const call = (name: string, args: Record<string, unknown>): ToolCall => ({
@@ -55,7 +63,10 @@ describe('server-side tool loop executes the registered benchmark tools', () => 
   });
 
   it('executeForStrategy runs getExchangeRate and returns the fictional rate (→ 100 ZRG = 375 USD)', async () => {
-    const res = await executeToolForStrategy(call('getExchangeRate', { from: 'ZRG', to: 'USD' }), log);
+    const res = await executeToolForStrategy(
+      call('getExchangeRate', { from: 'ZRG', to: 'USD' }),
+      log
+    );
     expect(res.success).toBe(true);
     const parsed = JSON.parse(res.output ?? '{}') as { rate: number };
     expect(parsed.rate).toBe(3.75);

@@ -10,14 +10,14 @@
 /**
  * Vector Stores Service
  * Manages vector stores for RAG (Retrieval-Augmented Generation)
- * 
+ *
  * Features:
  * - Vector store creation and management
  * - File associations for vectorization
  * - Status tracking (in_progress, completed, expired)
  * - Expiration management
  * - Organization-scoped isolation
- * 
+ *
  * NO HARDCODED MODELS - All embedding models selected dynamically
  */
 
@@ -27,10 +27,7 @@ import { nanoid } from 'nanoid';
 import { Prisma } from '@/generated/prisma/index.js';
 import { toPrismaJsonValue } from './assistants-service-helpers';
 import { FilesService } from './files-service';
-import {
-  VectorStoreIngestService,
-  type SearchChunkHit,
-} from './vector-store-ingest-service';
+import { VectorStoreIngestService, type SearchChunkHit } from './vector-store-ingest-service';
 import type {
   CreateVectorStoreRequest,
   ModifyVectorStoreRequest,
@@ -84,7 +81,12 @@ function isValidVectorStoreStatus(status: string): status is VectorStore['status
 }
 
 function isValidVectorStoreFileStatus(status: string): status is VectorStoreFile['status'] {
-  return status === 'in_progress' || status === 'completed' || status === 'failed' || status === 'cancelled';
+  return (
+    status === 'in_progress' ||
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'cancelled'
+  );
 }
 
 export class VectorStoresService {
@@ -96,10 +98,7 @@ export class VectorStoresService {
    *   ingest/search engine). Production uses the real GCS-backed FilesService
    *   and the pgvector-backed VectorStoreIngestService.
    */
-  constructor(deps?: {
-    filesService?: FilesService;
-    ingestService?: VectorStoreIngestService;
-  }) {
+  constructor(deps?: { filesService?: FilesService; ingestService?: VectorStoreIngestService }) {
     this.filesService = deps?.filesService ?? new FilesService();
     this.ingestService = deps?.ingestService ?? new VectorStoreIngestService();
   }
@@ -114,7 +113,10 @@ export class VectorStoresService {
     const vectorStoreId = `vs_${nanoid(24)}`;
     // DB-generated createdAt is the source of truth.
 
-    log.info({ requestId, vectorStoreId, name, fileCount: file_ids?.length || 0 }, 'Creating vector store');
+    log.info(
+      { requestId, vectorStoreId, name, fileCount: file_ids?.length || 0 },
+      'Creating vector store'
+    );
 
     try {
       // Calculate expires_at if expires_after is provided
@@ -167,7 +169,10 @@ export class VectorStoresService {
         }));
         await prisma.vectorStoreFile.createMany({ data: associations });
 
-        log.info({ requestId, vectorStoreId, fileCount: file_ids.length }, 'Vector store files associated');
+        log.info(
+          { requestId, vectorStoreId, fileCount: file_ids.length },
+          'Vector store files associated'
+        );
 
         // Real ingest for each associated file (chunk + embed + persist) — in
         // the BACKGROUND. The store stays `in_progress` and flips to `completed`
@@ -191,7 +196,10 @@ export class VectorStoresService {
           });
         })().catch((error: unknown) => {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          log.error({ requestId, vectorStoreId, error: errorMessage }, 'Background store ingest batch crashed');
+          log.error(
+            { requestId, vectorStoreId, error: errorMessage },
+            'Background store ingest batch crashed'
+          );
         });
       } else {
         // No files: nothing to process — instant completion, same as before.
@@ -216,7 +224,7 @@ export class VectorStoresService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, vectorStoreId, error: errorMessage }, 'Create vector store failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -252,7 +260,7 @@ export class VectorStoresService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, vectorStoreId, error: errorMessage }, 'Get vector store failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -285,7 +293,7 @@ export class VectorStoresService {
       if (before) {
         const beforeStore = await prisma.vectorStore.findUnique({ where: { id: before } });
         if (beforeStore) {
-          where.createdAt = where.createdAt 
+          where.createdAt = where.createdAt
             ? { ...where.createdAt, lt: beforeStore.createdAt }
             : { lt: beforeStore.createdAt };
         }
@@ -389,7 +397,7 @@ export class VectorStoresService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, vectorStoreId, error: errorMessage }, 'Modify vector store failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -434,7 +442,7 @@ export class VectorStoresService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, vectorStoreId, error: errorMessage }, 'Delete vector store failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -512,7 +520,10 @@ export class VectorStoresService {
         data: { lastActiveAt: new Date() },
       });
 
-      log.info({ requestId, vectorStoreId, fileId, vectorStoreFileId: vectorStoreFile.id }, 'Vector store file association created');
+      log.info(
+        { requestId, vectorStoreId, fileId, vectorStoreFileId: vectorStoreFile.id },
+        'Vector store file association created'
+      );
 
       // Real ingest: chunk + embed + persist vectors — in the BACKGROUND.
       // This pipeline (GCS download → chunking → embedding-provider calls →
@@ -532,7 +543,10 @@ export class VectorStoresService {
         // processFileIngest already records failures on the row; this catch only
         // guards against an unexpected throw outside its own error handling.
         const errorMessage = error instanceof Error ? error.message : String(error);
-        log.error({ requestId, vectorStoreId, fileId, error: errorMessage }, 'Background file ingest crashed');
+        log.error(
+          { requestId, vectorStoreId, fileId, error: errorMessage },
+          'Background file ingest crashed'
+        );
       });
 
       return {
@@ -544,8 +558,11 @@ export class VectorStoresService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, vectorStoreId, fileId, error: errorMessage }, 'Create vector store file failed');
-      
+      log.error(
+        { requestId, vectorStoreId, fileId, error: errorMessage },
+        'Create vector store file failed'
+      );
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -594,12 +611,17 @@ export class VectorStoresService {
         object: 'vector_store.file',
         created_at: Math.floor(vectorStoreFile.createdAt.getTime() / 1000),
         vector_store_id: vectorStoreFile.vectorStoreId,
-          status: isValidVectorStoreFileStatus(vectorStoreFile.status) ? vectorStoreFile.status : 'in_progress',
+        status: isValidVectorStoreFileStatus(vectorStoreFile.status)
+          ? vectorStoreFile.status
+          : 'in_progress',
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, vectorStoreId, fileId, error: errorMessage }, 'Get vector store file failed');
-      
+      log.error(
+        { requestId, vectorStoreId, fileId, error: errorMessage },
+        'Get vector store file failed'
+      );
+
       if (errorMessage.includes('not found') || errorMessage.includes('not associated')) {
         throw new Error(errorMessage);
       }
@@ -611,8 +633,19 @@ export class VectorStoresService {
    * List vector store files
    * REAL IMPLEMENTATION - Queries from database
    */
-  async listVectorStoreFiles(options: ListVectorStoreFilesRequest): Promise<ListVectorStoreFilesResponse> {
-    const { vectorStoreId, limit = 20, order = 'desc', after, before, filter, userContext, requestId } = options;
+  async listVectorStoreFiles(
+    options: ListVectorStoreFilesRequest
+  ): Promise<ListVectorStoreFilesResponse> {
+    const {
+      vectorStoreId,
+      limit = 20,
+      order = 'desc',
+      after,
+      before,
+      filter,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, vectorStoreId, limit, order, filter }, 'Listing vector store files');
 
@@ -630,7 +663,11 @@ export class VectorStoresService {
       }
 
       // Build query
-      const where: { vectorStoreId: string; status?: string; createdAt?: { gt?: Date; lt?: Date } } = { vectorStoreId };
+      const where: {
+        vectorStoreId: string;
+        status?: string;
+        createdAt?: { gt?: Date; lt?: Date };
+      } = { vectorStoreId };
 
       if (filter) {
         where.status = filter;
@@ -646,7 +683,7 @@ export class VectorStoresService {
       if (before) {
         const beforeFile = await prisma.vectorStoreFile.findUnique({ where: { id: before } });
         if (beforeFile) {
-          where.createdAt = where.createdAt 
+          where.createdAt = where.createdAt
             ? { ...where.createdAt, lt: beforeFile.createdAt }
             : { lt: beforeFile.createdAt };
         }
@@ -676,8 +713,11 @@ export class VectorStoresService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, vectorStoreId, error: errorMessage }, 'List vector store files failed');
-      
+      log.error(
+        { requestId, vectorStoreId, error: errorMessage },
+        'List vector store files failed'
+      );
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -689,7 +729,9 @@ export class VectorStoresService {
    * Delete vector store file association
    * REAL IMPLEMENTATION - Removes from database
    */
-  async deleteVectorStoreFile(options: DeleteVectorStoreFileRequest): Promise<DeleteVectorStoreFileResponse> {
+  async deleteVectorStoreFile(
+    options: DeleteVectorStoreFileRequest
+  ): Promise<DeleteVectorStoreFileResponse> {
     const { vectorStoreId, fileId, userContext, requestId } = options;
 
     log.info({ requestId, vectorStoreId, fileId }, 'Deleting vector store file association');
@@ -743,8 +785,11 @@ export class VectorStoresService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, vectorStoreId, fileId, error: errorMessage }, 'Delete vector store file failed');
-      
+      log.error(
+        { requestId, vectorStoreId, fileId, error: errorMessage },
+        'Delete vector store file failed'
+      );
+
       if (errorMessage.includes('not found') || errorMessage.includes('not associated')) {
         throw new Error(errorMessage);
       }
@@ -798,14 +843,14 @@ export class VectorStoresService {
 
       log.info(
         { requestId, vectorStoreId, fileId, vectorStoreFileId, chunks: result.chunksCreated },
-        'Vector store file ingest completed',
+        'Vector store file ingest completed'
       );
       return 'completed';
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error(
         { requestId, vectorStoreId, fileId, vectorStoreFileId, error: errorMessage },
-        'Vector store file ingest failed',
+        'Vector store file ingest failed'
       );
       // Best-effort status update; swallow secondary failure.
       try {
@@ -896,22 +941,29 @@ export class VectorStoresService {
     }>;
   }): VectorStore {
     // Type-safe conversion without 'as unknown as'
-    const expiresAfter: VectorStore['expires_after'] | null = 
-      store.expiresAfter && typeof store.expiresAfter === 'object' && 'anchor' in store.expiresAfter && 'days' in store.expiresAfter
+    const expiresAfter: VectorStore['expires_after'] | null =
+      store.expiresAfter &&
+      typeof store.expiresAfter === 'object' &&
+      'anchor' in store.expiresAfter &&
+      'days' in store.expiresAfter
         ? {
-            anchor: store.expiresAfter.anchor === 'last_active_at' ? 'last_active_at' : 'last_active_at',
+            anchor:
+              store.expiresAfter.anchor === 'last_active_at' ? 'last_active_at' : 'last_active_at',
             days: typeof store.expiresAfter.days === 'number' ? store.expiresAfter.days : 1,
           }
         : null;
-    
-    const metadata: Record<string, string> = 
+
+    const metadata: Record<string, string> =
       store.metadata && typeof store.metadata === 'object' && !Array.isArray(store.metadata)
-        ? Object.entries(store.metadata).reduce((acc, [key, value]) => {
-            if (typeof key === 'string' && typeof value === 'string') {
-              acc[key] = value;
-            }
-            return acc;
-          }, {} as Record<string, string>)
+        ? Object.entries(store.metadata).reduce(
+            (acc, [key, value]) => {
+              if (typeof key === 'string' && typeof value === 'string') {
+                acc[key] = value;
+              }
+              return acc;
+            },
+            {} as Record<string, string>
+          )
         : {};
 
     // Calculate file counts
@@ -931,9 +983,10 @@ export class VectorStoresService {
       status: isValidVectorStoreStatus(store.status) ? store.status : 'in_progress',
       expires_after: expiresAfter || undefined,
       expires_at: store.expiresAt ? Math.floor(store.expiresAt.getTime() / 1000) : undefined,
-      last_active_at: store.lastActiveAt ? Math.floor(store.lastActiveAt.getTime() / 1000) : undefined,
+      last_active_at: store.lastActiveAt
+        ? Math.floor(store.lastActiveAt.getTime() / 1000)
+        : undefined,
       metadata,
     };
   }
 }
-

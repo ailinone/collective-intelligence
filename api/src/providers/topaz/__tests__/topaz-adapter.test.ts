@@ -24,14 +24,19 @@ const BASE = 'https://api.topazlabs.com/image/v1';
 type FetchCall = { url: string; init: RequestInit };
 let calls: FetchCall[] = [];
 
-type RouteHandler = (url: string, init: RequestInit) => {
+type RouteHandler = (
+  url: string,
+  init: RequestInit
+) => {
   ok?: boolean;
   status?: number;
   body: unknown;
   binary?: ArrayBuffer;
 };
 
-function installFetchRouter(routes: Array<{ match: (url: string) => boolean; handler: RouteHandler }>) {
+function installFetchRouter(
+  routes: Array<{ match: (url: string) => boolean; handler: RouteHandler }>
+) {
   const original = globalThis.fetch;
   globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
@@ -107,7 +112,12 @@ describe('TopazAdapter — getModels (no probe)', () => {
     const original = globalThis.fetch;
     globalThis.fetch = ((..._args: unknown[]) => {
       sentinel.count++;
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}), text: async () => '' } as Response);
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+        text: async () => '',
+      } as Response);
     }) as unknown as typeof fetch;
     try {
       const models = await makeAdapter().getModels();
@@ -183,7 +193,7 @@ describe('TopazAdapter — imageEdit full flow', () => {
         makeAdapter().imageEdit(mockModel('standard_v2'), {
           image: Buffer.from([1, 2, 3]),
           prompt: '',
-        }),
+        })
       ).rejects.toThrow(/failed.*unsupported_format/);
     } finally {
       restore();
@@ -195,7 +205,7 @@ describe('TopazAdapter — imageEdit full flow', () => {
       makeAdapter().imageEdit(mockModel('standard_v2'), {
         image: undefined as unknown as Buffer,
         prompt: '',
-      }),
+      })
     ).rejects.toThrow(/image is required/);
   });
 
@@ -204,7 +214,7 @@ describe('TopazAdapter — imageEdit full flow', () => {
       makeAdapter().imageEdit(mockModel('super_v9'), {
         image: Buffer.from([0]),
         prompt: '',
-      }),
+      })
     ).rejects.toThrow(/unknown model/);
   });
 
@@ -240,14 +250,14 @@ describe('TopazAdapter — other surfaces', () => {
   it('chat / embeddings / imageGenerate all refuse', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'y' }] }),
+      adapter.chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'y' }] })
     ).rejects.toThrow(/image-only/);
     await expect(adapter.generateEmbeddings({ model: 'x', input: 'y' })).rejects.toThrow(
-      /image-only/,
+      /image-only/
     );
-    await expect(
-      adapter.imageGenerate(mockModel('standard_v2'), { prompt: 'x' }),
-    ).rejects.toThrow(/use imageEdit/);
+    await expect(adapter.imageGenerate(mockModel('standard_v2'), { prompt: 'x' })).rejects.toThrow(
+      /use imageEdit/
+    );
   });
 
   it('healthcheck unhealthy when key missing', async () => {

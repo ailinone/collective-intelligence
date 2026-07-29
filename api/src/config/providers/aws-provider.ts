@@ -107,7 +107,7 @@ export class AwsSecretsProvider implements SecretsProvider {
           errorName = nameDescriptor.value;
         }
       }
-      
+
       if (errorName !== 'ResourceNotFoundException') {
         throw error;
       }

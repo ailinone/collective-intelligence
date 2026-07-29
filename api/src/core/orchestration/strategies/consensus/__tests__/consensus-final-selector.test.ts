@@ -19,7 +19,7 @@ import { selectFinal } from '../consensus-final-selector';
 import type { EvaluationResult } from '../../evaluation/strategy-output-evaluator';
 
 const evalOf = (score: number): EvaluationResult =>
-  ({ verdict: 'pass', score } as unknown as EvaluationResult);
+  ({ verdict: 'pass', score }) as unknown as EvaluationResult;
 
 describe('consensus-final-selector — reduced fallback (2026-06-30)', () => {
   it('KEEPS synthesis when it slightly underperforms within the margin (near-tie)', () => {
@@ -38,7 +38,7 @@ describe('consensus-final-selector — reduced fallback (2026-06-30)', () => {
     // synthesis 0.70 vs best 0.88 → delta -0.18, well past the margin.
     const r = selectFinal({
       synthesisAvailable: true,
-      synthesisEvaluation: evalOf(0.70),
+      synthesisEvaluation: evalOf(0.7),
       bestIndividualScore: 0.88,
       bestIndividualModelId: 'm1',
     });
@@ -60,12 +60,20 @@ describe('consensus-final-selector — reduced fallback (2026-06-30)', () => {
   });
 
   it('still falls back when synthesis is unavailable / failed', () => {
-    expect(selectFinal({ synthesisAvailable: false, bestIndividualScore: 0.8, bestIndividualModelId: 'm1' }).source).toBe('best_individual');
-    expect(selectFinal({
-      synthesisAvailable: true,
-      synthesisEvaluation: { verdict: 'fail' } as unknown as EvaluationResult,
-      bestIndividualScore: 0.8,
-      bestIndividualModelId: 'm1',
-    }).source).toBe('best_individual');
+    expect(
+      selectFinal({
+        synthesisAvailable: false,
+        bestIndividualScore: 0.8,
+        bestIndividualModelId: 'm1',
+      }).source
+    ).toBe('best_individual');
+    expect(
+      selectFinal({
+        synthesisAvailable: true,
+        synthesisEvaluation: { verdict: 'fail' } as unknown as EvaluationResult,
+        bestIndividualScore: 0.8,
+        bestIndividualModelId: 'm1',
+      }).source
+    ).toBe('best_individual');
   });
 });

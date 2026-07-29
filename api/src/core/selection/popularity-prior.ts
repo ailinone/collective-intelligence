@@ -26,7 +26,7 @@
 export function computePopularityPrior(
   downloads?: number,
   likes?: number,
-  trendingScore?: number,
+  trendingScore?: number
 ): number | undefined {
   const hasDl = typeof downloads === 'number' && Number.isFinite(downloads);
   const hasLk = typeof likes === 'number' && Number.isFinite(likes);
@@ -45,13 +45,13 @@ export function computePopularityPrior(
 
 /** Extract popularity signals from a model's metadata blob and compute the prior. */
 export function popularityPriorFromMetadata(
-  metadata: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined
 ): number | undefined {
   if (!metadata) return undefined;
   const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
   return computePopularityPrior(
     num(metadata.downloads),
     num(metadata.likes),
-    num(metadata.trendingScore),
+    num(metadata.trendingScore)
   );
 }

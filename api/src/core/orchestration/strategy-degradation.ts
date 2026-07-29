@@ -33,9 +33,9 @@ const log = logger.child({ component: 'strategy-degradation' });
 export interface DegradationResult {
   originalStrategy: string;
   executedStrategy: string;
-  degradationPath: string[];       // chain of strategies tried
-  degradationReason: string;       // why original couldn't run
-  degradationDepth: number;        // 0 = no degradation, 1+ = degraded
+  degradationPath: string[]; // chain of strategies tried
+  degradationReason: string; // why original couldn't run
+  degradationDepth: number; // 0 = no degradation, 1+ = degraded
   isDegraded: boolean;
 }
 
@@ -76,23 +76,23 @@ const DEGRADATION_CHAINS: Record<string, string[]> = {
   'persona-exploration': ['collaborative', 'parallel', 'single'],
 
   // Debate/consensus family (need 3+ models for theoretical correctness)
-  'consensus': ['blind-debate', 'parallel', 'single'],
+  consensus: ['blind-debate', 'parallel', 'single'],
   'blind-debate': ['parallel', 'single'],
-  'debate': ['blind-debate', 'parallel', 'single'],
+  debate: ['blind-debate', 'parallel', 'single'],
   'devil-advocate-consensus': ['blind-debate', 'parallel', 'single'],
 
   // Multi-model collaboration
   'war-room': ['collaborative', 'parallel', 'single'],
   'expert-panel': ['collaborative', 'parallel', 'single'],
-  'collaborative': ['parallel', 'single'],
-  'competitive': ['parallel', 'single'],
+  collaborative: ['parallel', 'single'],
+  competitive: ['parallel', 'single'],
   'massive-parallel': ['parallel', 'single'],
   'diversity-ensemble': ['parallel', 'single'],
 
   // Sequential/cascade family
   'cost-cascade': ['sequential', 'single'],
   'quality-multipass': ['sequential', 'single'],
-  'quality_multipass': ['sequential', 'single'],  // both naming variants
+  quality_multipass: ['sequential', 'single'], // both naming variants
   'research-synthesize': ['parallel', 'sequential', 'single'],
   'clarification-first': ['sequential', 'single'],
   'critique-repair': ['sequential', 'single'],
@@ -101,47 +101,47 @@ const DEGRADATION_CHAINS: Record<string, string[]> = {
 
   // Exploration/learning
   'swarm-explore': ['massive-parallel', 'parallel', 'single'],
-  'agentic': ['hybrid', 'sequential', 'single'],
+  agentic: ['hybrid', 'sequential', 'single'],
 
   // Simple strategies (minimal or no degradation)
-  'hybrid': ['parallel', 'single'],
-  'parallel': ['single'],
-  'sequential': ['single'],
-  'hierarchical': ['sequential', 'single'],
-  'reinforcement': ['single'],
-  'contextual': ['single'],
-  'adaptive': ['parallel', 'single'],
+  hybrid: ['parallel', 'single'],
+  parallel: ['single'],
+  sequential: ['single'],
+  hierarchical: ['sequential', 'single'],
+  reinforcement: ['single'],
+  contextual: ['single'],
+  adaptive: ['parallel', 'single'],
   'safety-quorum': ['parallel', 'single'],
 
   // Terminal
-  'single': [],
+  single: [],
 };
 
 // ─── Strategy minModels (from strategy metadata or code inspection) ─────
 
 const STRATEGY_MIN_MODELS: Record<string, number> = {
-  'single': 1,
-  'sequential': 2,
-  'parallel': 2,
-  'hybrid': 2,
-  'collaborative': 2,
-  'competitive': 2,
+  single: 1,
+  sequential: 2,
+  parallel: 2,
+  hybrid: 2,
+  collaborative: 2,
+  competitive: 2,
   'cost-cascade': 2,
   'quality-multipass': 2,
-  'quality_multipass': 2,
+  quality_multipass: 2,
   'critique-repair': 2,
   'multi-hop-qa': 2,
   'clarification-first': 2,
-  'reinforcement': 1,
-  'contextual': 1,
-  'adaptive': 1,
-  'hierarchical': 2,
+  reinforcement: 1,
+  contextual: 1,
+  adaptive: 1,
+  hierarchical: 2,
   'stigmergic-refinement': 2,
-  'agentic': 1,
+  agentic: 1,
   'safety-quorum': 3,
-  'consensus': 3,
+  consensus: 3,
   'blind-debate': 3,
-  'debate': 3,
+  debate: 3,
   'devil-advocate-consensus': 3,
   'expert-panel': 3,
   'war-room': 3,
@@ -166,7 +166,7 @@ const STRATEGY_MIN_MODELS: Record<string, number> = {
 export function resolveWithDegradation(
   requestedStrategy: string,
   availableModelCount: number,
-  reason: string,
+  reason: string
 ): DegradationResult {
   const normalizedName = requestedStrategy.toLowerCase();
   const minModels = getMinModels(normalizedName);
@@ -192,15 +192,18 @@ export function resolveWithDegradation(
     path.push(candidate);
 
     if (availableModelCount >= candidateMin) {
-      log.info({
-        original: requestedStrategy,
-        degradedTo: candidate,
-        reason,
-        availableModels: availableModelCount,
-        originalMinModels: minModels,
-        degradedMinModels: candidateMin,
-        depth: path.length - 1,
-      }, 'Strategy degraded to simpler variant');
+      log.info(
+        {
+          original: requestedStrategy,
+          degradedTo: candidate,
+          reason,
+          availableModels: availableModelCount,
+          originalMinModels: minModels,
+          degradedMinModels: candidateMin,
+          depth: path.length - 1,
+        },
+        'Strategy degraded to simpler variant'
+      );
 
       return {
         originalStrategy: requestedStrategy,
@@ -214,12 +217,15 @@ export function resolveWithDegradation(
   }
 
   // Even 'single' can't run (0 models available)
-  log.warn({
-    original: requestedStrategy,
-    reason,
-    availableModels: availableModelCount,
-    chainExhausted: path,
-  }, 'Degradation chain exhausted — no strategy can run with 0 models');
+  log.warn(
+    {
+      original: requestedStrategy,
+      reason,
+      availableModels: availableModelCount,
+      chainExhausted: path,
+    },
+    'Degradation chain exhausted — no strategy can run with 0 models'
+  );
 
   return {
     originalStrategy: requestedStrategy,
@@ -273,7 +279,10 @@ export function hasDegradationChain(strategy: string): boolean {
  *   - JSON parse errors from strategy logic
  *   - Validation errors from strategy code
  */
-export function isInfraFailure(error: unknown): { isInfra: boolean; failureType: InfraFailureType | null } {
+export function isInfraFailure(error: unknown): {
+  isInfra: boolean;
+  failureType: InfraFailureType | null;
+} {
   // Code bugs — never degrade
   if (error instanceof TypeError) return { isInfra: false, failureType: null };
   if (error instanceof ReferenceError) return { isInfra: false, failureType: null };
@@ -283,37 +292,67 @@ export function isInfraFailure(error: unknown): { isInfra: boolean; failureType:
   const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
 
   // Timeout
-  if (msg.includes('timeout') || msg.includes('aborted') || msg.includes('etimedout') || msg.includes('deadline')) {
+  if (
+    msg.includes('timeout') ||
+    msg.includes('aborted') ||
+    msg.includes('etimedout') ||
+    msg.includes('deadline')
+  ) {
     return { isInfra: true, failureType: 'timeout' };
   }
 
   // Connection errors
-  if (msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('epipe') ||
-      msg.includes('enotfound') || msg.includes('fetch failed') || msg.includes('network error')) {
+  if (
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('epipe') ||
+    msg.includes('enotfound') ||
+    msg.includes('fetch failed') ||
+    msg.includes('network error')
+  ) {
     return { isInfra: true, failureType: 'connection_error' };
   }
 
   // Credit/balance
-  if (msg.includes('insufficient') || msg.includes('402') || msg.includes('quota') ||
-      msg.includes('credit') || msg.includes('balance') || msg.includes('funds')) {
+  if (
+    msg.includes('insufficient') ||
+    msg.includes('402') ||
+    msg.includes('quota') ||
+    msg.includes('credit') ||
+    msg.includes('balance') ||
+    msg.includes('funds')
+  ) {
     return { isInfra: true, failureType: 'credit_exhaustion' };
   }
 
   // Rate limiting
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('rate_limit') ||
-      msg.includes('too many requests')) {
+  if (
+    msg.includes('429') ||
+    msg.includes('rate limit') ||
+    msg.includes('rate_limit') ||
+    msg.includes('too many requests')
+  ) {
     return { isInfra: true, failureType: 'rate_limit' };
   }
 
   // Service unavailable
-  if (msg.includes('503') || msg.includes('502') || msg.includes('service unavailable') ||
-      msg.includes('bad gateway') || msg.includes('server error')) {
+  if (
+    msg.includes('503') ||
+    msg.includes('502') ||
+    msg.includes('service unavailable') ||
+    msg.includes('bad gateway') ||
+    msg.includes('server error')
+  ) {
     return { isInfra: true, failureType: 'provider_unavailable' };
   }
 
   // Pool contraction
-  if (msg.includes('pool') || msg.includes('no eligible') || msg.includes('no models') ||
-      msg.includes('requires at least')) {
+  if (
+    msg.includes('pool') ||
+    msg.includes('no eligible') ||
+    msg.includes('no models') ||
+    msg.includes('requires at least')
+  ) {
     return { isInfra: true, failureType: 'pool_contraction' };
   }
 
@@ -336,17 +375,18 @@ export function isInfraFailure(error: unknown): { isInfra: boolean; failureType:
  *   2. Execute it with the same request and remaining context
  *   3. Record the degradation trace in metadata
  */
-export function resolveRuntimeDegradation(
-  ctx: RuntimeDegradationContext,
-): DegradationResult {
+export function resolveRuntimeDegradation(ctx: RuntimeDegradationContext): DegradationResult {
   const reason = `runtime_${ctx.failureType}: ${ctx.error.message.substring(0, 200)}`;
 
-  log.warn({
-    strategy: ctx.strategy,
-    failureType: ctx.failureType,
-    currentPoolSize: ctx.currentPoolSize,
-    error: ctx.error.message.substring(0, 200),
-  }, 'Attempting runtime degradation');
+  log.warn(
+    {
+      strategy: ctx.strategy,
+      failureType: ctx.failureType,
+      currentPoolSize: ctx.currentPoolSize,
+      error: ctx.error.message.substring(0, 200),
+    },
+    'Attempting runtime degradation'
+  );
 
   return resolveWithDegradation(ctx.strategy, ctx.currentPoolSize, reason);
 }

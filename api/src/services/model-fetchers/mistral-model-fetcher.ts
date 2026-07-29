@@ -31,7 +31,7 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
     super();
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
-    
+
     if (!this.apiKey) {
       this.log.warn('Mistral API key not provided - models will not be discovered');
     }
@@ -62,7 +62,7 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
     try {
       // Mistral API REST endpoint for listing models
       const { default: fetch } = await import('node-fetch');
-      
+
       // Construct URL safely
       let requestUrl: string;
       try {
@@ -70,7 +70,10 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
         requestUrl = url.toString();
       } catch (urlError) {
         this.log.error(
-          { baseUrl: this.baseUrl, error: urlError instanceof Error ? urlError.message : String(urlError) },
+          {
+            baseUrl: this.baseUrl,
+            error: urlError instanceof Error ? urlError.message : String(urlError),
+          },
           'Failed to construct Mistral API URL - invalid baseUrl or character encoding issue'
         );
         return [];
@@ -78,7 +81,7 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
 
       const response = await fetch(requestUrl, {
         headers: {
-          'Authorization': `Bearer ${sanitizedApiKey}`,
+          Authorization: `Bearer ${sanitizedApiKey}`,
           'Content-Type': 'application/json',
         },
       });
@@ -87,13 +90,18 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
         if (response.status === 401) {
           this.log.error('Mistral API authentication failed - check API key');
         } else {
-          this.log.error({ status: response.status, statusText: response.statusText }, 'Failed to fetch models from Mistral API');
+          this.log.error(
+            { status: response.status, statusText: response.statusText },
+            'Failed to fetch models from Mistral API'
+          );
         }
         return [];
       }
 
-      const data = await response.json() as { data: Array<{ id: string; object: string; created: number; owned_by: string }> };
-      
+      const data = (await response.json()) as {
+        data: Array<{ id: string; object: string; created: number; owned_by: string }>;
+      };
+
       if (!data.data || !Array.isArray(data.data)) {
         this.log.warn('Mistral API returned invalid response format');
         return [];
@@ -103,9 +111,10 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
       this.log.info({ count: models.length }, 'Successfully fetched models from Mistral API');
       return models;
     } catch (error) {
-      const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+      const errorCode =
+        error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // Handle ERR_INVALID_CHAR specifically
       if (errorCode === 'ERR_INVALID_CHAR') {
         this.log.error(
@@ -132,7 +141,12 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
     }
   }
 
-  private convertMistralModel(mistralModel: { id: string; object?: string; created?: number; owned_by?: string }): ProviderModel {
+  private convertMistralModel(mistralModel: {
+    id: string;
+    object?: string;
+    created?: number;
+    owned_by?: string;
+  }): ProviderModel {
     const capabilities = this.extractCapabilitiesFromMistral(mistralModel);
     const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(mistralModel.id);
 
@@ -156,7 +170,10 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
     };
   }
 
-  private extractCapabilitiesFromMistral(model: { id: string; [key: string]: unknown }): ModelCapability[] {
+  private extractCapabilitiesFromMistral(model: {
+    id: string;
+    [key: string]: unknown;
+  }): ModelCapability[] {
     const capabilities: ModelCapability[] = ['chat', 'streaming'];
 
     const modelId = model.id.toLowerCase();

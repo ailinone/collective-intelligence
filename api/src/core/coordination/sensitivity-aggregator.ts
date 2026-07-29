@@ -51,7 +51,7 @@ const log = logger.child({ component: 'sensitivity-aggregator' });
 export function createInitialState(
   runId: string,
   strategy: string,
-  limits: CoordinationLimits,
+  limits: CoordinationLimits
 ): CoordinationState {
   return {
     runId,
@@ -83,9 +83,12 @@ export function createInitialState(
  * Group sensitivities by variable name.
  */
 function groupSensitivitiesByVariable(
-  signals: CoordinationSignal[],
+  signals: CoordinationSignal[]
 ): Map<string, Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>> {
-  const grouped = new Map<string, Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>>();
+  const grouped = new Map<
+    string,
+    Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>
+  >();
 
   for (const signal of signals) {
     for (const sens of signal.sensitivities) {
@@ -105,11 +108,11 @@ function groupSensitivitiesByVariable(
  * A conflict exists when agents disagree on direction for the same variable.
  */
 function detectConflicts(
-  entries: Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>,
+  entries: Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>
 ): boolean {
   if (entries.length < 2) return false;
 
-  const directions = new Set(entries.map(e => e.sensitivity.direction));
+  const directions = new Set(entries.map((e) => e.sensitivity.direction));
 
   // If we have both 'increase' and 'decrease' for the same variable, that's a conflict
   if (directions.has('increase') && directions.has('decrease')) return true;
@@ -126,37 +129,34 @@ function detectConflicts(
  */
 function weightedConfidenceAggregate(
   entries: Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>,
-  previousValue?: VariableState,
+  previousValue?: VariableState
 ): VariableState {
-  const totalWeight = entries.reduce(
-    (sum, e) => sum + e.sensitivity.confidence,
-    0,
-  );
+  const totalWeight = entries.reduce((sum, e) => sum + e.sensitivity.confidence, 0);
 
   if (totalWeight === 0) {
-    return previousValue ?? {
-      value: 'indeterminate',
-      confidence: 0,
-      updatedBy: entries.map(e => e.signal.agentId),
-      rationale: 'All sensitivities had zero confidence',
-      stability: 0,
-    };
+    return (
+      previousValue ?? {
+        value: 'indeterminate',
+        confidence: 0,
+        updatedBy: entries.map((e) => e.signal.agentId),
+        rationale: 'All sensitivities had zero confidence',
+        stability: 0,
+      }
+    );
   }
 
   // For numeric values with expectedDelta, compute weighted average
-  const numericEntries = entries.filter(e => e.sensitivity.expectedDelta !== undefined);
+  const numericEntries = entries.filter((e) => e.sensitivity.expectedDelta !== undefined);
   let value: number | string;
   let confidence: number;
 
   if (numericEntries.length > 0) {
-    value = numericEntries.reduce(
-      (sum, e) => sum + (e.sensitivity.expectedDelta! * e.sensitivity.confidence),
-      0,
-    ) / totalWeight;
-    confidence = entries.reduce(
-      (sum, e) => sum + e.sensitivity.confidence,
-      0,
-    ) / entries.length;
+    value =
+      numericEntries.reduce(
+        (sum, e) => sum + e.sensitivity.expectedDelta! * e.sensitivity.confidence,
+        0
+      ) / totalWeight;
+    confidence = entries.reduce((sum, e) => sum + e.sensitivity.confidence, 0) / entries.length;
   } else {
     // Non-numeric: use majority direction as value
     const directionCounts: Record<string, number> = {};
@@ -178,13 +178,13 @@ function weightedConfidenceAggregate(
 
   const rationale = entries
     .slice(0, 3)
-    .map(e => `[${e.signal.modelId}] ${e.sensitivity.rationale}`)
+    .map((e) => `[${e.signal.modelId}] ${e.sensitivity.rationale}`)
     .join('; ');
 
   return {
     value,
     confidence: Math.min(1, confidence),
-    updatedBy: entries.map(e => e.signal.agentId),
+    updatedBy: entries.map((e) => e.signal.agentId),
     rationale,
     stability,
   };
@@ -195,9 +195,9 @@ function weightedConfidenceAggregate(
  */
 function medianAggregate(
   entries: Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>,
-  previousValue?: VariableState,
+  previousValue?: VariableState
 ): VariableState {
-  const numericEntries = entries.filter(e => e.sensitivity.expectedDelta !== undefined);
+  const numericEntries = entries.filter((e) => e.sensitivity.expectedDelta !== undefined);
 
   if (numericEntries.length === 0) {
     // Fall back to weighted for non-numeric
@@ -205,7 +205,7 @@ function medianAggregate(
   }
 
   const sorted = [...numericEntries].sort(
-    (a, b) => a.sensitivity.expectedDelta! - b.sensitivity.expectedDelta!,
+    (a, b) => a.sensitivity.expectedDelta! - b.sensitivity.expectedDelta!
   );
   const mid = Math.floor(sorted.length / 2);
   const medianValue =
@@ -213,7 +213,7 @@ function medianAggregate(
       ? (sorted[mid - 1].sensitivity.expectedDelta! + sorted[mid].sensitivity.expectedDelta!) / 2
       : sorted[mid].sensitivity.expectedDelta!;
 
-  const confidences = entries.map(e => e.sensitivity.confidence).sort((a, b) => a - b);
+  const confidences = entries.map((e) => e.sensitivity.confidence).sort((a, b) => a - b);
   const medianConf =
     confidences.length % 2 === 0
       ? (confidences[confidences.length / 2 - 1] + confidences[confidences.length / 2]) / 2
@@ -222,7 +222,7 @@ function medianAggregate(
   return {
     value: medianValue,
     confidence: medianConf,
-    updatedBy: entries.map(e => e.signal.agentId),
+    updatedBy: entries.map((e) => e.signal.agentId),
     rationale: `Median of ${entries.length} signals`,
     stability: previousValue ? 1 - Math.abs(medianConf - previousValue.confidence) : 1,
   };
@@ -233,16 +233,16 @@ function medianAggregate(
  */
 function trimmedMeanAggregate(
   entries: Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>,
-  previousValue?: VariableState,
+  previousValue?: VariableState
 ): VariableState {
-  const numericEntries = entries.filter(e => e.sensitivity.expectedDelta !== undefined);
+  const numericEntries = entries.filter((e) => e.sensitivity.expectedDelta !== undefined);
 
   if (numericEntries.length < 3) {
     return weightedConfidenceAggregate(entries, previousValue);
   }
 
   const sorted = [...numericEntries].sort(
-    (a, b) => a.sensitivity.expectedDelta! - b.sensitivity.expectedDelta!,
+    (a, b) => a.sensitivity.expectedDelta! - b.sensitivity.expectedDelta!
   );
   const trim = Math.max(1, Math.floor(sorted.length * 0.2));
   const trimmed = sorted.slice(trim, sorted.length - trim);
@@ -253,13 +253,12 @@ function trimmedMeanAggregate(
 
   const avgValue =
     trimmed.reduce((sum, e) => sum + e.sensitivity.expectedDelta!, 0) / trimmed.length;
-  const avgConf =
-    trimmed.reduce((sum, e) => sum + e.sensitivity.confidence, 0) / trimmed.length;
+  const avgConf = trimmed.reduce((sum, e) => sum + e.sensitivity.confidence, 0) / trimmed.length;
 
   return {
     value: avgValue,
     confidence: avgConf,
-    updatedBy: entries.map(e => e.signal.agentId),
+    updatedBy: entries.map((e) => e.signal.agentId),
     rationale: `Trimmed mean of ${trimmed.length}/${entries.length} signals`,
     stability: previousValue ? 1 - Math.abs(avgConf - previousValue.confidence) : 1,
   };
@@ -277,7 +276,7 @@ function trimmedMeanAggregate(
 export function aggregateSignals(
   signals: CoordinationSignal[],
   currentState: CoordinationState,
-  method: AggregationMethod = DEFAULT_COORDINATION_CONFIG.aggregationMethod,
+  method: AggregationMethod = DEFAULT_COORDINATION_CONFIG.aggregationMethod
 ): SensitivityAggregationResult {
   if (signals.length === 0) {
     return {
@@ -287,12 +286,14 @@ export function aggregateSignals(
       updatedVariables: [],
       recommendedNextRound: false,
       stopReason: 'insufficient_valid_signals',
-      risks: [{
-        type: 'no_signals',
-        severity: 'critical',
-        description: 'No valid signals received in this round',
-        sourceSignalIds: [],
-      }],
+      risks: [
+        {
+          type: 'no_signals',
+          severity: 'critical',
+          description: 'No valid signals received in this round',
+          sourceSignalIds: [],
+        },
+      ],
     };
   }
 
@@ -323,7 +324,7 @@ export function aggregateSignals(
       log.warn(
         { variable, method, round: currentState.round + 1 },
         'llm_synthesis aggregation is not yet implemented — falling back to hybrid. ' +
-        'Remove llm_synthesis from config or implement the aggregation method.',
+          'Remove llm_synthesis from config or implement the aggregation method.'
       );
       effectiveMethod = 'hybrid';
     }
@@ -375,9 +376,17 @@ export function aggregateSignals(
     convergence,
     risks: [...currentState.risks, ...newRisks],
     history: [...currentState.history, ...signals],
-    totalCostUsd: currentState.totalCostUsd + signals.reduce((s, sig) => s + (sig.metrics?.estimatedCost ?? 0), 0),
-    totalLatencyMs: currentState.totalLatencyMs + Math.max(...signals.map(s => s.metrics?.latencyMs ?? 0)),
-    totalTokens: currentState.totalTokens + signals.reduce((s, sig) => s + (sig.metrics?.inputTokens ?? 0) + (sig.metrics?.outputTokens ?? 0), 0),
+    totalCostUsd:
+      currentState.totalCostUsd +
+      signals.reduce((s, sig) => s + (sig.metrics?.estimatedCost ?? 0), 0),
+    totalLatencyMs:
+      currentState.totalLatencyMs + Math.max(...signals.map((s) => s.metrics?.latencyMs ?? 0)),
+    totalTokens:
+      currentState.totalTokens +
+      signals.reduce(
+        (s, sig) => s + (sig.metrics?.inputTokens ?? 0) + (sig.metrics?.outputTokens ?? 0),
+        0
+      ),
   };
 
   // Determine stop conditions
@@ -392,7 +401,7 @@ export function aggregateSignals(
       convergence: convergence.score,
       stopReason,
     },
-    'Sensitivity aggregation completed',
+    'Sensitivity aggregation completed'
   );
 
   return {
@@ -422,23 +431,23 @@ function computeConvergence(
   // on the raw signal list. Kept in the signature so future variable-level
   // convergence logic can adopt it without a caller refactor; prefixed with
   // `_` to mark "intentionally unused, not dead".
-  _grouped: Map<string, Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>>,
+  _grouped: Map<string, Array<{ signal: CoordinationSignal; sensitivity: Sensitivity }>>
 ): ConvergenceMetrics {
   // Decision agreement
-  const decisionTypes = signals.map(s => s.decision.type);
+  const decisionTypes = signals.map((s) => s.decision.type);
   const majorityDecision = getMajority(decisionTypes);
   const dissent = majorityDecision
-    ? 1 - (decisionTypes.filter(d => d === majorityDecision).length / decisionTypes.length)
+    ? 1 - decisionTypes.filter((d) => d === majorityDecision).length / decisionTypes.length
     : 1;
 
   // Decision flip rate vs previous round
   let decisionFlipRate = 0;
   if (previousState.round > 0) {
-    const previousSignals = previousState.history.filter(s => s.round === previousState.round);
+    const previousSignals = previousState.history.filter((s) => s.round === previousState.round);
     if (previousSignals.length > 0) {
       let flips = 0;
       for (const signal of signals) {
-        const prev = previousSignals.find(s => s.agentId === signal.agentId);
+        const prev = previousSignals.find((s) => s.agentId === signal.agentId);
         if (prev && prev.decision.type !== signal.decision.type) {
           flips++;
         }
@@ -459,18 +468,20 @@ function computeConvergence(
   }
 
   // Overall convergence score: weighted combination
-  const variableStability = Object.keys(newVariables).length > 0
-    ? stableVariables.length / Object.keys(newVariables).length
-    : 0;
+  const variableStability =
+    Object.keys(newVariables).length > 0
+      ? stableVariables.length / Object.keys(newVariables).length
+      : 0;
 
   const agreementScore = 1 - dissent;
 
-  const confidenceAvg = signals.length > 0
-    ? signals.reduce((s, sig) => s + sig.decision.confidence, 0) / signals.length
-    : 0;
+  const confidenceAvg =
+    signals.length > 0
+      ? signals.reduce((s, sig) => s + sig.decision.confidence, 0) / signals.length
+      : 0;
 
   // Weighted convergence: 40% agreement + 30% variable stability + 30% confidence
-  const score = (agreementScore * 0.4) + (variableStability * 0.3) + (confidenceAvg * 0.3);
+  const score = agreementScore * 0.4 + variableStability * 0.3 + confidenceAvg * 0.3;
 
   // Confidence trend
   const confidenceTrend = [...previousState.convergence.confidenceTrend, confidenceAvg];
@@ -505,7 +516,9 @@ function getMajority(arr: string[]): string | undefined {
  * Evaluate whether coordination should stop based on current state.
  * Returns undefined if coordination should continue.
  */
-export function evaluateStopConditions(state: CoordinationState): CoordinationStopReason | undefined {
+export function evaluateStopConditions(
+  state: CoordinationState
+): CoordinationStopReason | undefined {
   const { convergence, limits, risks, round } = state;
 
   // Hard limits
@@ -523,14 +536,17 @@ export function evaluateStopConditions(state: CoordinationState): CoordinationSt
 
   // Critical risk
   if (limits.stopOnCriticalRisk) {
-    const hasCritical = risks.some(r => r.severity === 'critical');
+    const hasCritical = risks.some((r) => r.severity === 'critical');
     if (hasCritical) {
       return 'critical_risk';
     }
   }
 
   // Convergence reached
-  if (convergence.score >= limits.minConvergenceScore && convergence.decisionFlipRate <= limits.maxDecisionFlipRate) {
+  if (
+    convergence.score >= limits.minConvergenceScore &&
+    convergence.decisionFlipRate <= limits.maxDecisionFlipRate
+  ) {
     return 'converged';
   }
 
@@ -542,7 +558,11 @@ export function evaluateStopConditions(state: CoordinationState): CoordinationSt
   }
 
   // Persistent divergence
-  if (round >= 2 && convergence.dissent > limits.maxDissent && convergence.decisionFlipRate > limits.maxDecisionFlipRate) {
+  if (
+    round >= 2 &&
+    convergence.dissent > limits.maxDissent &&
+    convergence.decisionFlipRate > limits.maxDecisionFlipRate
+  ) {
     return 'persistent_divergence';
   }
 

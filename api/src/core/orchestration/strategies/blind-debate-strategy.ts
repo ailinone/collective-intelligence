@@ -41,13 +41,21 @@ export class BlindDebateStrategy extends BaseStrategy {
       id: 'blind-debate',
       name: 'blind-debate',
       displayName: 'Blind Debate (Independent Parallel)',
-      description: 'Multiple models respond independently in parallel, then adjudicator synthesizes. Independence-preservation principle (anti-cascade).',
+      description:
+        'Multiple models respond independently in parallel, then adjudicator synthesizes. Independence-preservation principle (anti-cascade).',
       minModels: 3,
       maxModels: 7,
       estimatedCostMultiplier: 4.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 2.5,
-      suitableFor: ['analysis', 'reasoning', 'code-review', 'debugging', 'documentation', 'refactoring'],
+      suitableFor: [
+        'analysis',
+        'reasoning',
+        'code-review',
+        'debugging',
+        'documentation',
+        'refactoring',
+      ],
     };
   }
 
@@ -56,7 +64,10 @@ export class BlindDebateStrategy extends BaseStrategy {
     return Promise.race([
       this.executeCore(request, context, startTime),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Blind debate timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error(`Blind debate timeout after ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS
+        )
       ),
     ]);
   }
@@ -64,7 +75,7 @@ export class BlindDebateStrategy extends BaseStrategy {
   private async executeCore(
     request: ChatRequest,
     context: OrchestrationContext,
-    startTime: number,
+    startTime: number
   ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Blind debate requires at least 3 models');
@@ -77,36 +88,47 @@ export class BlindDebateStrategy extends BaseStrategy {
     // principle requires the jury form opinions without external bias.
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
-      log.warn({
-        attempted: context.preferredModelIds?.[0],
-        reason: preference.pinReason,
-      }, 'Preferred model not eligible — falling back to quality-sorted adjudicator.');
+      log.warn(
+        {
+          attempted: context.preferredModelIds?.[0],
+          reason: preference.pinReason,
+        },
+        'Preferred model not eligible — falling back to quality-sorted adjudicator.'
+      );
     }
     const fallbackSelected = preference.pinnedExecutor
-      ? selected.filter(m => m.id !== preference.pinnedExecutor!.id)
+      ? selected.filter((m) => m.id !== preference.pinnedExecutor!.id)
       : selected;
-    const sortedFallback = [...fallbackSelected].sort((a, b) =>
-      (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+    const sortedFallback = [...fallbackSelected].sort(
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const sorted = withPreferredFirst(preference, sortedFallback);
     const adjudicator = sorted[0];
     const respondents = sorted.slice(1);
 
-    log.info({
-      adjudicator: adjudicator.id,
-      respondents: respondents.map(m => m.id),
-    }, 'Blind debate: starting parallel responses');
+    log.info(
+      {
+        adjudicator: adjudicator.id,
+        respondents: respondents.map((m) => m.id),
+      },
+      'Blind debate: starting parallel responses'
+    );
 
     const executions: ModelExecution[] = [];
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: respondents.map(m => m.name || m.id), summary: `Blind debate: ${respondents.length} respondents answering independently in parallel.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: respondents.map((m) => m.name || m.id),
+      summary: `Blind debate: ${respondents.length} respondents answering independently in parallel.`,
+    });
 
     // Phase 1: ALL respondents answer in PARALLEL (blind)
     // F3-EXPAND: resolve slots + variant for blind respondent (same pattern as consensus)
-    const promptSlots = process.env.ENABLE_PROMPT_SLOTS === 'true'
-      ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
-      : undefined;
+    const promptSlots =
+      process.env.ENABLE_PROMPT_SLOTS === 'true'
+        ? (context.executionPlan ?? context.triage?.executionPlan)?.stages?.[0]?.promptSlots
+        : undefined;
     const selectedVariant = this.selectPromptVariant('blindRespondent', context);
     const activeVariantId = selectedVariant?.id;
 
@@ -116,10 +138,7 @@ export class BlindDebateStrategy extends BaseStrategy {
     const blindSystemPrompt = this.withReasoningPrompt(basePrompt, request);
     const blindRequest: ChatRequest = {
       ...request,
-      messages: [
-        { role: 'system', content: blindSystemPrompt },
-        ...request.messages,
-      ],
+      messages: [{ role: 'system', content: blindSystemPrompt }, ...request.messages],
     };
     const reasoningEnabled = this.isReasoningEnabled(request);
 
@@ -154,7 +173,10 @@ export class BlindDebateStrategy extends BaseStrategy {
         executions.push(result.value.exec);
         const content = typeof result.value.content === 'string' ? result.value.content.trim() : '';
         if (content) {
-          successfulResponses.push({ modelName: result.value.model.displayName || result.value.model.id, content });
+          successfulResponses.push({
+            modelName: result.value.model.displayName || result.value.model.id,
+            content,
+          });
         }
       }
     }
@@ -164,31 +186,55 @@ export class BlindDebateStrategy extends BaseStrategy {
     }
 
     // Observer: responses collected
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${successfulResponses.length} independent responses collected. Adjudicator synthesizing.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: adjudicator.name || adjudicator.id, summary: 'Adjudicator evaluating and synthesizing independent responses.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${successfulResponses.length} independent responses collected. Adjudicator synthesizing.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: adjudicator.name || adjudicator.id,
+      summary: 'Adjudicator evaluating and synthesizing independent responses.',
+    });
 
     // Phase 2: Adjudicator synthesizes
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const responsesText = successfulResponses.map((r, i) => `### Response ${i + 1} (${r.modelName}):\n${r.content}`).join('\n\n---\n\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const responsesText = successfulResponses
+      .map((r, i) => `### Response ${i + 1} (${r.modelName}):\n${r.content}`)
+      .join('\n\n---\n\n');
 
     // Include reasoning traces if enabled — adjudicator sees HOW each respondent reasoned
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
 
     const synthesisRequest: ChatRequest = {
       ...request,
-      messages: [{
-        role: 'user',
-        content: `${PROMPTS.blindAdjudicator(successfulResponses.length)}\n\nORIGINAL QUESTION:\n${originalQ}\n\nINDEPENDENT RESPONSES:\n${responsesText}${reasoningTraces}`,
-      }],
+      messages: [
+        {
+          role: 'user',
+          content: `${PROMPTS.blindAdjudicator(successfulResponses.length)}\n\nORIGINAL QUESTION:\n${originalQ}\n\nINDEPENDENT RESPONSES:\n${responsesText}${reasoningTraces}`,
+        },
+      ],
     };
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
     const adjAdapter = await this.getAdapterForModel(adjudicator, context);
     if (!adjAdapter) throw new Error(`No adapter for adjudicator ${adjudicator.id}`);
-    const adjExec = await this.executeModel(adjAdapter, adjudicator, synthesisRequest, 'adjudicator');
+    const adjExec = await this.executeModel(
+      adjAdapter,
+      adjudicator,
+      synthesisRequest,
+      'adjudicator'
+    );
     executions.push(adjExec);
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Adjudicator produced definitive answer.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Adjudicator produced definitive answer.',
+    });
 
     return {
       finalResponse: adjExec.response,
@@ -197,87 +243,146 @@ export class BlindDebateStrategy extends BaseStrategy {
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
       metadata: {
-        strategy: 'blind-debate', respondents: respondents.length, successfulResponses: successfulResponses.length, adjudicator: adjudicator.id, independencePreserved: true,
-        ...(reasoningEnabled ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) } : {}),
+        strategy: 'blind-debate',
+        respondents: respondents.length,
+        successfulResponses: successfulResponses.length,
+        adjudicator: adjudicator.id,
+        independencePreserved: true,
+        ...(reasoningEnabled
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
+          : {}),
       },
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Blind debate requires at least 3 models');
     const selected = await this.selectDiverseModels(models, Math.min(5, models.length));
     // Pin biases the adjudicator slot (same rationale as execute()).
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
-      log.warn({
-        attempted: context.preferredModelIds?.[0],
-        reason: preference.pinReason,
-      }, 'Preferred model not eligible — falling back to quality-sorted adjudicator.');
+      log.warn(
+        {
+          attempted: context.preferredModelIds?.[0],
+          reason: preference.pinReason,
+        },
+        'Preferred model not eligible — falling back to quality-sorted adjudicator.'
+      );
     }
     const fallbackSelected = preference.pinnedExecutor
-      ? selected.filter(m => m.id !== preference.pinnedExecutor!.id)
+      ? selected.filter((m) => m.id !== preference.pinnedExecutor!.id)
       : selected;
-    const sortedFallback = [...fallbackSelected].sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5));
+    const sortedFallback = [...fallbackSelected].sort(
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
+    );
     const sorted = withPreferredFirst(preference, sortedFallback);
     const adjudicator = sorted[0];
     const respondents = sorted.slice(1);
 
     // Phase 1: blind responses (parallel)
-    this.emitObserverEvent(context, { type: 'phase_start', models: respondents.map(m => m.name || m.id), summary: `Blind debate: ${respondents.length} respondents answering independently.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: respondents.map((m) => m.name || m.id),
+      summary: `Blind debate: ${respondents.length} respondents answering independently.`,
+    });
     yield this.progressChunk(`${respondents.length} models responding independently...`, 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Note: model param omitted here because blindSystemPrompt is shared across all respondents.
     // Native thinking is detected per-model in executeModelWithReasoning() instead.
     const blindSystemPrompt = this.withReasoningPrompt(PROMPTS.blindRespondent(), request);
-    const blindRequest: ChatRequest = { ...request, messages: [{ role: 'system', content: blindSystemPrompt }, ...request.messages] };
+    const blindRequest: ChatRequest = {
+      ...request,
+      messages: [{ role: 'system', content: blindSystemPrompt }, ...request.messages],
+    };
     const reasoningEnabled = this.isReasoningEnabled(request);
     const executions: ModelExecution[] = [];
     const successfulResponses: Array<{ modelName: string; content: string }> = [];
 
-    const results = await Promise.allSettled(respondents.map(async (model) => {
-      if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
-      const adapter = await this.getAdapterForModel(model, context);
-      if (!adapter) throw new Error(`No adapter for ${model.id}`);
-      const exec = reasoningEnabled
-        ? await this.executeModelWithReasoning(adapter, model, blindRequest, 'respondent')
-        : await this.executeModel(adapter, model, blindRequest, 'respondent');
-      const rawContent = exec.response?.choices?.[0]?.message?.content;
-      return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
-    }));
+    const results = await Promise.allSettled(
+      respondents.map(async (model) => {
+        if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
+        const adapter = await this.getAdapterForModel(model, context);
+        if (!adapter) throw new Error(`No adapter for ${model.id}`);
+        const exec = reasoningEnabled
+          ? await this.executeModelWithReasoning(adapter, model, blindRequest, 'respondent')
+          : await this.executeModel(adapter, model, blindRequest, 'respondent');
+        const rawContent = exec.response?.choices?.[0]?.message?.content;
+        return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
+      })
+    );
 
     for (const r of results) {
       if (r.status === 'fulfilled') {
         executions.push(r.value.exec);
         const content = typeof r.value.content === 'string' ? r.value.content.trim() : '';
-        if (content) successfulResponses.push({ modelName: r.value.model.displayName || r.value.model.id, content });
+        if (content)
+          successfulResponses.push({
+            modelName: r.value.model.displayName || r.value.model.id,
+            content,
+          });
       }
     }
 
     if (successfulResponses.length === 0) throw new Error('All respondents failed');
 
     // Observer + progress: responses collected
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${successfulResponses.length} independent responses received.` });
-    yield this.progressChunk(`${successfulResponses.length} responses collected, adjudicator synthesizing...`, 1, 2);
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${successfulResponses.length} independent responses received.`,
+    });
+    yield this.progressChunk(
+      `${successfulResponses.length} responses collected, adjudicator synthesizing...`,
+      1,
+      2
+    );
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Phase 2: stream adjudicator synthesis
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-    const responsesText = successfulResponses.map((r, i) => `### Response ${i + 1} (${r.modelName}):\n${r.content}`).join('\n\n---\n\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    const responsesText = successfulResponses
+      .map((r, i) => `### Response ${i + 1} (${r.modelName}):\n${r.content}`)
+      .join('\n\n---\n\n');
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
 
     const synthesisRequest: ChatRequest = {
       ...request,
-      messages: [{
-        role: 'user',
-        content: `${PROMPTS.blindAdjudicator(successfulResponses.length)}\n\nORIGINAL QUESTION:\n${originalQ}\n\nINDEPENDENT RESPONSES:\n${responsesText}${reasoningTraces}`,
-      }],
+      messages: [
+        {
+          role: 'user',
+          content: `${PROMPTS.blindAdjudicator(successfulResponses.length)}\n\nORIGINAL QUESTION:\n${originalQ}\n\nINDEPENDENT RESPONSES:\n${responsesText}${reasoningTraces}`,
+        },
+      ],
     };
 
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: adjudicator.name || adjudicator.id, summary: 'Adjudicator synthesizing.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: adjudicator.name || adjudicator.id,
+      summary: 'Adjudicator synthesizing.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
@@ -290,13 +395,17 @@ export class BlindDebateStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       synthesisRequest,
       [{ adapter: adjAdapter, model: adjudicator }],
-      () => successfulResponses.reduce(
-        (best, r) => (r.content.length > best.length ? r.content : best),
-        successfulResponses[0].content,
-      ),
+      () =>
+        successfulResponses.reduce(
+          (best, r) => (r.content.length > best.length ? r.content : best),
+          successfulResponses[0].content
+        )
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Adjudicator synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Adjudicator synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
@@ -308,7 +417,9 @@ export class BlindDebateStrategy extends BaseStrategy {
       if (!byProvider.has(p)) byProvider.set(p, []);
       byProvider.get(p)!.push(m);
     }
-    const queues = [...byProvider.values()].map(ms => ms.sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)));
+    const queues = [...byProvider.values()].map((ms) =>
+      ms.sort((a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5))
+    );
     const selected: Model[] = [];
     let qi = 0;
     while (selected.length < count) {
@@ -322,10 +433,30 @@ export class BlindDebateStrategy extends BaseStrategy {
   }
 
   private errorResponse(model: Model): ChatResponse {
-    return { id: `error-${Date.now()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model.name, choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop', logprobs: null }] };
+    return {
+      id: `error-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: model.name,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: '' },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+    };
   }
 
   private emptyResult(startTime: number, executions: ModelExecution[]): OrchestrationResult {
-    return { finalResponse: this.errorResponse({ id: 'unknown', name: 'unknown' } as Model), strategyUsed: 'blind-debate', modelsUsed: executions, totalDuration: Date.now() - startTime, totalCost: 0, metadata: { strategy: 'blind-debate', error: 'all-failed' } };
+    return {
+      finalResponse: this.errorResponse({ id: 'unknown', name: 'unknown' } as Model),
+      strategyUsed: 'blind-debate',
+      modelsUsed: executions,
+      totalDuration: Date.now() - startTime,
+      totalCost: 0,
+      metadata: { strategy: 'blind-debate', error: 'all-failed' },
+    };
   }
 }

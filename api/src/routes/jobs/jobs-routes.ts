@@ -29,12 +29,16 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
       schema: {
         tags: ['Jobs'],
         summary: 'List all jobs',
-        description: 'Returns a list of all jobs (fine-tuning, batch processing) for the authenticated user\'s organization',
+        description:
+          "Returns a list of all jobs (fine-tuning, batch processing) for the authenticated user's organization",
         querystring: {
           type: 'object',
           properties: {
             type: { type: 'string', enum: ['fine-tuning', 'batch', 'all'] },
-            status: { type: 'string', enum: ['pending', 'running', 'completed', 'failed', 'cancelled'] },
+            status: {
+              type: 'string',
+              enum: ['pending', 'running', 'completed', 'failed', 'cancelled'],
+            },
             limit: { type: 'number', minimum: 1, maximum: 100, default: 20 },
             offset: { type: 'number', minimum: 0, default: 0 },
           },
@@ -83,7 +87,12 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
 
-        if (!user || typeof user !== 'object' || !('organizationId' in user) || typeof user.organizationId !== 'string') {
+        if (
+          !user ||
+          typeof user !== 'object' ||
+          !('organizationId' in user) ||
+          typeof user.organizationId !== 'string'
+        ) {
           return reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication required',
@@ -102,19 +111,32 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
 
         // Fine-tuning jobs are not stored in database yet
         // Return empty list for now
-        const fineTuningJobs: Array<{ id: string; status: string; createdAt: Date; updatedAt: Date }> = [];
+        const fineTuningJobs: Array<{
+          id: string;
+          status: string;
+          createdAt: Date;
+          updatedAt: Date;
+        }> = [];
 
         const hasMore = fineTuningJobs.length > limit;
-        const jobs = fineTuningJobs.slice(0, limit).map((job: { id: string; status: string; createdAt: Date; updatedAt: Date }) => ({
-          id: job.id,
-          type: 'fine-tuning',
-          status: job.status,
-          createdAt: job.createdAt.toISOString(),
-          updatedAt: job.updatedAt.toISOString(),
-        }));
+        const jobs = fineTuningJobs
+          .slice(0, limit)
+          .map((job: { id: string; status: string; createdAt: Date; updatedAt: Date }) => ({
+            id: job.id,
+            type: 'fine-tuning',
+            status: job.status,
+            createdAt: job.createdAt.toISOString(),
+            updatedAt: job.updatedAt.toISOString(),
+          }));
 
         // Get batch jobs if requested
-        let batchJobs: Array<{ id: string; type: string; status: string; createdAt: string; updatedAt: string }> = [];
+        let batchJobs: Array<{
+          id: string;
+          type: string;
+          status: string;
+          createdAt: string;
+          updatedAt: string;
+        }> = [];
         if (query.type === 'batch' || query.type === 'all') {
           const batches = await prisma.batch.findMany({
             where: {
@@ -141,7 +163,12 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
           }));
         }
 
-        const allJobs = query.type === 'batch' ? batchJobs : query.type === 'all' ? [...jobs, ...batchJobs] : jobs;
+        const allJobs =
+          query.type === 'batch'
+            ? batchJobs
+            : query.type === 'all'
+              ? [...jobs, ...batchJobs]
+              : jobs;
 
         return reply.send({
           data: allJobs,
@@ -212,7 +239,12 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
 
-        if (!user || typeof user !== 'object' || !('organizationId' in user) || typeof user.organizationId !== 'string') {
+        if (
+          !user ||
+          typeof user !== 'object' ||
+          !('organizationId' in user) ||
+          typeof user.organizationId !== 'string'
+        ) {
           return reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication required',
@@ -251,4 +283,3 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
     }
   );
 }
-

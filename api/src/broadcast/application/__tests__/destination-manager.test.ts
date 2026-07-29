@@ -94,7 +94,9 @@ function makeFakeDb(): {
       const ti = where.tenantId;
       const result = [...rows.values()].filter(
         (r) =>
-          r.tenantType === tt && r.tenantId === ti && (where.deletedAt === null ? r.deletedAt === null : true),
+          r.tenantType === tt &&
+          r.tenantId === ti &&
+          (where.deletedAt === null ? r.deletedAt === null : true)
       );
       if (orderBy && typeof orderBy === 'object' && 'createdAt' in orderBy) {
         result.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -125,7 +127,8 @@ function makeFakeDb(): {
     broadcastDestination,
     $queryRaw: async () => [],
     $executeRaw: async () => 0,
-    $transaction: async <T>(fn: (tx: ManagerRunner) => Promise<T>) => fn(db as unknown as ManagerRunner),
+    $transaction: async <T>(fn: (tx: ManagerRunner) => Promise<T>) =>
+      fn(db as unknown as ManagerRunner),
   } as unknown as ManagerRunner;
 
   return { db, rows };
@@ -312,11 +315,9 @@ describe('DestinationManager — update', () => {
 
   it('rotates the DEK when config changes', async () => {
     const before = rows.get(id)!.configDekWrapped.slice();
-    const result = await manager.update(
-      { tenantType: 'organization', tenantId: orgId },
-      id,
-      { config: webhookConfig('https://new.example.com/hook') },
-    );
+    const result = await manager.update({ tenantType: 'organization', tenantId: orgId }, id, {
+      config: webhookConfig('https://new.example.com/hook'),
+    });
     expect(result.ok).toBe(true);
     const after = rows.get(id)!.configDekWrapped;
     expect(Buffer.from(after).equals(Buffer.from(before))).toBe(false);
@@ -324,11 +325,10 @@ describe('DestinationManager — update', () => {
 
   it('patches metadata without touching config', async () => {
     const beforeBlob = Buffer.from(rows.get(id)!.configCiphertext);
-    const result = await manager.update(
-      { tenantType: 'organization', tenantId: orgId },
-      id,
-      { name: 'new name', enabled: false },
-    );
+    const result = await manager.update({ tenantType: 'organization', tenantId: orgId }, id, {
+      name: 'new name',
+      enabled: false,
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.destination.name).toBe('new name');
@@ -341,7 +341,7 @@ describe('DestinationManager — update', () => {
     const result = await manager.update(
       { tenantType: 'organization', tenantId: randomUUID() },
       id,
-      { name: 'evil' },
+      { name: 'evil' }
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -349,11 +349,9 @@ describe('DestinationManager — update', () => {
   });
 
   it('rejects invalid config during update', async () => {
-    const result = await manager.update(
-      { tenantType: 'organization', tenantId: orgId },
-      id,
-      { config: { url: 'not a url' } as unknown as Record<string, unknown> },
-    );
+    const result = await manager.update({ tenantType: 'organization', tenantId: orgId }, id, {
+      config: { url: 'not a url' } as unknown as Record<string, unknown>,
+    });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('invalid_config');
@@ -399,7 +397,7 @@ describe('DestinationManager — delete + decrypt', () => {
   it('decryptConfig round-trips the secret back', async () => {
     const result = await manager.decryptConfig<{ url: string; secret: string }>(
       { tenantType: 'organization', tenantId: orgId },
-      id,
+      id
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -410,7 +408,7 @@ describe('DestinationManager — delete + decrypt', () => {
   it('decryptConfig refuses cross-tenant access', async () => {
     const result = await manager.decryptConfig(
       { tenantType: 'organization', tenantId: randomUUID() },
-      id,
+      id
     );
     expect(result.ok).toBe(false);
   });

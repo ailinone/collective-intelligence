@@ -66,7 +66,7 @@ const CONFIG = {
   // Minimum improvement to count as "improving" (5% relative)
   significanceThreshold: 0.05,
   // Regression threshold — if any metric degrades beyond this, flag it
-  regressionThreshold: -0.10,
+  regressionThreshold: -0.1,
   // Stability: if stddev of quality scores is below this, system is stable
   stabilityThreshold: 0.15,
 };
@@ -88,13 +88,24 @@ export async function validateLearning(params: {
   const baselineWindow = params.baselineStart.toISOString().slice(0, 10);
   const comparisonWindow = params.comparisonStart.toISOString().slice(0, 10);
 
-  const baseline = await getWindowMetrics(params.scopeKey, params.baselineStart, params.baselineEnd);
-  const comparison = await getWindowMetrics(params.scopeKey, params.comparisonStart, params.comparisonEnd);
+  const baseline = await getWindowMetrics(
+    params.scopeKey,
+    params.baselineStart,
+    params.baselineEnd
+  );
+  const comparison = await getWindowMetrics(
+    params.scopeKey,
+    params.comparisonStart,
+    params.comparisonEnd
+  );
 
   // Insufficient data
-  if (!baseline || !comparison ||
-      baseline.sampleSize < CONFIG.minSamplesPerWindow ||
-      comparison.sampleSize < CONFIG.minSamplesPerWindow) {
+  if (
+    !baseline ||
+    !comparison ||
+    baseline.sampleSize < CONFIG.minSamplesPerWindow ||
+    comparison.sampleSize < CONFIG.minSamplesPerWindow
+  ) {
     const result: LearningValidationResult = {
       scopeType: params.scopeType,
       scopeKey: params.scopeKey,
@@ -115,12 +126,14 @@ export async function validateLearning(params: {
   // Calculate deltas (positive = improvement for quality/successRate; negative = improvement for latency/cost)
   const qualityDelta = comparison.avgQuality - baseline.avgQuality;
   const successDelta = comparison.successRate - baseline.successRate;
-  const latencyDelta = baseline.avgLatencyMs > 0
-    ? (baseline.avgLatencyMs - comparison.avgLatencyMs) / baseline.avgLatencyMs
-    : 0; // positive = faster = better
-  const costDelta = baseline.avgCostUsd > 0
-    ? (baseline.avgCostUsd - comparison.avgCostUsd) / baseline.avgCostUsd
-    : 0; // positive = cheaper = better
+  const latencyDelta =
+    baseline.avgLatencyMs > 0
+      ? (baseline.avgLatencyMs - comparison.avgLatencyMs) / baseline.avgLatencyMs
+      : 0; // positive = faster = better
+  const costDelta =
+    baseline.avgCostUsd > 0
+      ? (baseline.avgCostUsd - comparison.avgCostUsd) / baseline.avgCostUsd
+      : 0; // positive = cheaper = better
 
   const improvementDelta: Record<string, number> = {
     quality: qualityDelta,
@@ -136,36 +149,38 @@ export async function validateLearning(params: {
     regressions.push({
       metric: 'quality',
       delta: qualityDelta,
-      severity: qualityDelta < -0.20 ? 'critical' : 'warning',
+      severity: qualityDelta < -0.2 ? 'critical' : 'warning',
     });
   }
   if (successDelta < CONFIG.regressionThreshold) {
     regressions.push({
       metric: 'successRate',
       delta: successDelta,
-      severity: successDelta < -0.20 ? 'critical' : 'warning',
+      severity: successDelta < -0.2 ? 'critical' : 'warning',
     });
   }
   if (latencyDelta < CONFIG.regressionThreshold) {
     regressions.push({
       metric: 'latency',
       delta: latencyDelta,
-      severity: latencyDelta < -0.30 ? 'critical' : 'warning',
+      severity: latencyDelta < -0.3 ? 'critical' : 'warning',
     });
   }
 
   // Calculate learning velocity (quality improvement per unit of time)
-  const windowDurationDays = (params.comparisonEnd.getTime() - params.comparisonStart.getTime()) / 86_400_000;
+  const windowDurationDays =
+    (params.comparisonEnd.getTime() - params.comparisonStart.getTime()) / 86_400_000;
   const learningVelocity = windowDurationDays > 0 ? qualityDelta / windowDurationDays : 0;
 
   // Stability index: 1 - normalized stddev (higher = more stable)
-  const stabilityIndex = comparison.qualityStddev > 0
-    ? Math.max(0, 1 - comparison.qualityStddev / CONFIG.stabilityThreshold)
-    : 1.0;
+  const stabilityIndex =
+    comparison.qualityStddev > 0
+      ? Math.max(0, 1 - comparison.qualityStddev / CONFIG.stabilityThreshold)
+      : 1.0;
 
   // Determine verdict
   let verdict: LearningVerdict;
-  const hasCriticalRegression = regressions.some(r => r.severity === 'critical');
+  const hasCriticalRegression = regressions.some((r) => r.severity === 'critical');
 
   if (hasCriticalRegression) {
     verdict = 'degrading';
@@ -199,14 +214,17 @@ export async function validateLearning(params: {
   // Persist the report
   await persistReport(result);
 
-  log.info({
-    scope: params.scopeKey,
-    verdict,
-    qualityDelta: qualityDelta.toFixed(4),
-    learningVelocity: learningVelocity.toFixed(6),
-    stabilityIndex: stabilityIndex.toFixed(3),
-    regressions: regressions.length,
-  }, 'Learning validation completed');
+  log.info(
+    {
+      scope: params.scopeKey,
+      verdict,
+      qualityDelta: qualityDelta.toFixed(4),
+      learningVelocity: learningVelocity.toFixed(6),
+      stabilityIndex: stabilityIndex.toFixed(3),
+      regressions: regressions.length,
+    },
+    'Learning validation completed'
+  );
 
   return result;
 }
@@ -251,23 +269,32 @@ export async function validateAllStrategies(): Promise<LearningValidationResult[
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function emptyMetrics(): WindowMetrics {
-  return { sampleSize: 0, avgQuality: 0, avgLatencyMs: 0, avgCostUsd: 0, successRate: 0, qualityStddev: 0 };
+  return {
+    sampleSize: 0,
+    avgQuality: 0,
+    avgLatencyMs: 0,
+    avgCostUsd: 0,
+    successRate: 0,
+    qualityStddev: 0,
+  };
 }
 
 async function getWindowMetrics(
   scopeKey: string,
   since: Date,
-  until: Date,
+  until: Date
 ): Promise<WindowMetrics | null> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      sample_size: bigint;
-      avg_quality: number | null;
-      avg_latency_ms: number | null;
-      avg_cost_usd: number | null;
-      success_rate: number | null;
-      quality_stddev: number | null;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        sample_size: bigint;
+        avg_quality: number | null;
+        avg_latency_ms: number | null;
+        avg_cost_usd: number | null;
+        success_rate: number | null;
+        quality_stddev: number | null;
+      }>
+    >`
       SELECT
         COUNT(*) as sample_size,
         AVG(quality_score) as avg_quality,

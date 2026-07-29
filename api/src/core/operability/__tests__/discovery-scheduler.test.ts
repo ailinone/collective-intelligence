@@ -12,20 +12,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  getDiscoveryScheduler,
-  resetDiscoveryShedulerForTesting,
-} from '../discovery-scheduler';
+import { getDiscoveryScheduler, resetDiscoveryShedulerForTesting } from '../discovery-scheduler';
 import {
   getOperationalCandidatePool,
   resetOperationalCandidatePoolForTesting,
 } from '../operational-candidate-pool';
-import {
-  resetProviderDiscoveryServiceForTesting,
-} from '../discovery-service';
-import {
-  resetProviderHealthRegistryForTesting,
-} from '../provider-health-registry';
+import { resetProviderDiscoveryServiceForTesting } from '../discovery-service';
+import { resetProviderHealthRegistryForTesting } from '../provider-health-registry';
 import { resetHealthSyncBusForTesting } from '../health-sync-bus';
 
 describe('DiscoveryScheduler', () => {
@@ -100,9 +93,7 @@ describe('DiscoveryScheduler', () => {
         resolveCount++;
         // Slow resolver to overlap calls
         await new Promise((r) => setTimeout(r, 10));
-        return [
-          { providerId: 'p', integrationClass: 'native-anthropic', apiKeyEnvVar: 'K' },
-        ];
+        return [{ providerId: 'p', integrationClass: 'native-anthropic', apiKeyEnvVar: 'K' }];
       },
       resolveFallbackModels: () => ({ p: [{ modelId: 'm' }] }),
       resolveIntegrationClasses: () => ({ p: 'native-anthropic' }),

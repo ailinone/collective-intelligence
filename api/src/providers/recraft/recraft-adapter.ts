@@ -77,7 +77,14 @@ export interface RecraftAdapterConfig extends BaseProviderConfig {
 
 /** Documented style families per model — Recraft rejects mismatches server-side. */
 const STYLES_BY_MODEL: Readonly<Record<string, readonly string[]>> = {
-  recraftv3: ['any', 'realistic_image', 'digital_illustration', 'vector_illustration', 'icon', 'logo_raster'],
+  recraftv3: [
+    'any',
+    'realistic_image',
+    'digital_illustration',
+    'vector_illustration',
+    'icon',
+    'logo_raster',
+  ],
   recraftv2: ['realistic_image', 'digital_illustration'],
 } as const;
 
@@ -148,17 +155,16 @@ export class RecraftAdapter extends ProviderAdapter {
    * sentinel test guards against future accidental network leakage.
    */
   async getModels(): Promise<Model[]> {
-    return STATIC_MODELS.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'recraft',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: ['image_generation'],
-        })),
+    return STATIC_MODELS.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'recraft',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: ['image_generation'],
+      })
     );
   }
 
@@ -182,7 +188,9 @@ export class RecraftAdapter extends ProviderAdapter {
   async imageGenerate(model: Model, request: ImageGenRequest): Promise<ImageGenResponse> {
     const modelId = (model.name || model.id || 'recraftv3').trim();
     if (!STATIC_MODELS.includes(modelId)) {
-      throw new Error(`recraft: unknown model ${modelId} — expected one of ${STATIC_MODELS.join(', ')}`);
+      throw new Error(
+        `recraft: unknown model ${modelId} — expected one of ${STATIC_MODELS.join(', ')}`
+      );
     }
 
     const options = (request.options || {}) as Record<string, unknown>;
@@ -202,7 +210,7 @@ export class RecraftAdapter extends ProviderAdapter {
     if (request.size) {
       if (!ALLOWED_SIZES.includes(request.size)) {
         throw new Error(
-          `recraft: invalid size ${request.size} — expected one of ${ALLOWED_SIZES.slice(0, 5).join(', ')}...`,
+          `recraft: invalid size ${request.size} — expected one of ${ALLOWED_SIZES.slice(0, 5).join(', ')}...`
         );
       }
       payload.size = request.size;
@@ -212,7 +220,7 @@ export class RecraftAdapter extends ProviderAdapter {
     if (typeof options.style === 'string') {
       if (!RecraftAdapter.isValidStyleForModel(modelId, options.style)) {
         throw new Error(
-          `recraft: style "${options.style}" not valid for ${modelId} — expected one of ${STYLES_BY_MODEL[modelId].join(', ')}`,
+          `recraft: style "${options.style}" not valid for ${modelId} — expected one of ${STYLES_BY_MODEL[modelId].join(', ')}`
         );
       }
       payload.style = options.style;
@@ -330,7 +338,7 @@ export class RecraftAdapter extends ProviderAdapter {
 
   private async fetchJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> },
+    init: { method: 'GET' | 'POST'; body?: Record<string, unknown> }
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
     const timeoutMs = Math.max(1000, this.config.timeout ?? 60000);

@@ -10,13 +10,21 @@
 import { describe, expect, it } from 'vitest';
 import type { Model } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
-import { resolveModelOperability, isAdapterMethodImplemented, isAdapterMethodOverridden } from '@/providers/provider-operability';
+import {
+  resolveModelOperability,
+  isAdapterMethodImplemented,
+  isAdapterMethodOverridden,
+} from '@/providers/provider-operability';
 import { ProviderAdapter as BaseProviderAdapter } from '@/providers/base/provider-adapter';
 import { OpenRouterAdapter } from '@/providers/openrouter/openrouter-adapter';
-import type { ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse, Provider } from '@/types';
 import type {
-  HealthCheckResult,
-} from '@/providers/base/provider-adapter';
+  ChatRequest,
+  ChatResponse,
+  EmbeddingRequest,
+  EmbeddingResponse,
+  Provider,
+} from '@/types';
+import type { HealthCheckResult } from '@/providers/base/provider-adapter';
 import type {
   ImageEditRequest,
   ImageEditResponse,
@@ -87,12 +95,7 @@ describe('provider-operability', () => {
 
     expect(result.runnable).toBe(true);
     expect(result.resolvedProvider).toBe('vertex-ai');
-    expect(result.fallbackChain).toEqual([
-      'unknown-provider',
-      'vertex-ai',
-      'google',
-      'openrouter',
-    ]);
+    expect(result.fallbackChain).toEqual(['unknown-provider', 'vertex-ai', 'google', 'openrouter']);
   });
 
   it('returns non-operational when no candidate provider has an adapter', () => {
@@ -280,7 +283,9 @@ describe('provider-operability', () => {
           object: 'chat.completion',
           created: 0,
           model: 'fake-model',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
         };
       }

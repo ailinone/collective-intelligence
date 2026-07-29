@@ -97,7 +97,8 @@ const DEFAULT_PROFILES: AilinVirtualModelProfile[] = [
   {
     id: 'ailin-voice',
     displayName: 'Ailin Voice',
-    description: 'Best voice model — all TTS/STT/STS providers (cloud + self-hosted). Optimal selection by latency and health.',
+    description:
+      'Best voice model — all TTS/STT/STS providers (cloud + self-hosted). Optimal selection by latency and health.',
     strategy: 'single',
     endpoints: ['audio_speech', 'audio_transcriptions', 'realtime'],
   },
@@ -162,7 +163,10 @@ function normalizeAlias(value: string): string {
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean);
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function toPositiveNumber(value: unknown): number | undefined {
@@ -190,8 +194,12 @@ function parseRuntimeConstraints(value: unknown): AilinRuntimeConstraints | unde
     typeof obj.requiredEndpoint === 'string' && obj.requiredEndpoint.trim().length > 0
       ? obj.requiredEndpoint.trim()
       : undefined;
-  const preferredProviders = toStringArray(obj.preferredProviders).map((entry) => entry.toLowerCase());
-  const excludedProviders = toStringArray(obj.excludedProviders).map((entry) => entry.toLowerCase());
+  const preferredProviders = toStringArray(obj.preferredProviders).map((entry) =>
+    entry.toLowerCase()
+  );
+  const excludedProviders = toStringArray(obj.excludedProviders).map((entry) =>
+    entry.toLowerCase()
+  );
 
   const constraints: AilinRuntimeConstraints = {
     requiredCapabilities: requiredCapabilities.length > 0 ? requiredCapabilities : undefined,
@@ -244,15 +252,19 @@ function parseVirtualProfilesFromEnv(): AilinVirtualModelProfile[] {
       const id = typeof obj.id === 'string' ? normalizeAlias(obj.id) : '';
       if (!id) continue;
 
-      const strategyInput = typeof obj.strategy === 'string' ? obj.strategy.trim().toLowerCase() : undefined;
+      const strategyInput =
+        typeof obj.strategy === 'string' ? obj.strategy.trim().toLowerCase() : undefined;
       const strategy = strategyInput
-        ? resolveExecutionStrategy(strategyInput) ??
+        ? (resolveExecutionStrategy(strategyInput) ??
           (EXECUTION_STRATEGIES.has(strategyInput as ExecutionStrategyName)
             ? (strategyInput as ExecutionStrategyName)
-            : undefined)
+            : undefined))
         : undefined;
       if (strategyInput && !strategy) {
-        log.warn({ id, strategy: strategyInput }, 'Ignoring invalid strategy in AILIN_VIRTUAL_MODEL_PROFILES');
+        log.warn(
+          { id, strategy: strategyInput },
+          'Ignoring invalid strategy in AILIN_VIRTUAL_MODEL_PROFILES'
+        );
       }
 
       profiles.push({
@@ -268,13 +280,19 @@ function parseVirtualProfilesFromEnv(): AilinVirtualModelProfile[] {
         taskType: parseTaskType(obj.taskType),
         constraints: parseRuntimeConstraints(obj.constraints),
         billing: parseBillingProfile(obj.billing),
-        endpoints: toStringArray(obj.endpoints).length > 0 ? toStringArray(obj.endpoints) : ['chat_completions', 'responses'],
+        endpoints:
+          toStringArray(obj.endpoints).length > 0
+            ? toStringArray(obj.endpoints)
+            : ['chat_completions', 'responses'],
       });
     }
     return profiles;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    log.warn({ error: message }, 'Failed to parse AILIN_VIRTUAL_MODEL_PROFILES; using defaults only');
+    log.warn(
+      { error: message },
+      'Failed to parse AILIN_VIRTUAL_MODEL_PROFILES; using defaults only'
+    );
     return [];
   }
 }
@@ -325,14 +343,16 @@ function strategyTierToExecution(strategy: string): ExecutionStrategyName {
 
 export function resolveAilinVirtualModelAlias(
   modelInput?: string,
-  rates: TierRateCard = STATIC_RATE_CARD,
+  rates: TierRateCard = STATIC_RATE_CARD
 ): ResolvedAilinVirtualModel | null {
   if (typeof modelInput !== 'string') return null;
   const normalized = normalizeAlias(modelInput);
   if (!normalized || normalized === 'auto') return null;
 
   // 1) Legacy preset aliases (ailin-best, ailin-consensus, …) keep their EXACT behaviour.
-  const match = getAilinVirtualModelProfiles().find((profile) => normalizeAlias(profile.id) === normalized);
+  const match = getAilinVirtualModelProfiles().find(
+    (profile) => normalizeAlias(profile.id) === normalized
+  );
   if (match) {
     return {
       alias: match.id,

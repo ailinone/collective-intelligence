@@ -97,7 +97,9 @@ export function validateSelectionCriteria(criteria: SelectionCriteria): Validati
       // sanitized.contextSize on the warning branch, silently disabling the
       // contextWindow >= contextSize selection gate for huge requests (bug).
       if (contextSize > 10_000_000) {
-        warnings.push(`contextSize is very large: ${contextSize}. This may cause performance issues`);
+        warnings.push(
+          `contextSize is very large: ${contextSize}. This may cause performance issues`
+        );
       }
       sanitized.contextSize = contextSize;
     }
@@ -143,8 +145,8 @@ export function validateSelectionCriteria(criteria: SelectionCriteria): Validati
       if (invalidCapabilities.length > 0) {
         warnings.push(`Invalid capabilities: ${invalidCapabilities.join(', ')}. Will be ignored`);
       }
-      sanitized.requiredCapabilities = criteria.requiredCapabilities.filter((cap: ModelCapability) =>
-        VALID_CAPABILITIES.includes(cap)
+      sanitized.requiredCapabilities = criteria.requiredCapabilities.filter(
+        (cap: ModelCapability) => VALID_CAPABILITIES.includes(cap)
       );
     }
   }

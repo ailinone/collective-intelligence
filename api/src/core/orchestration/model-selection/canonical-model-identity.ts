@@ -127,7 +127,9 @@ const VENDOR_FAMILY_HINTS: ReadonlyArray<{
 // ─── Internal helpers ─────────────────────────────────────────────────────
 
 function lower(v: string | undefined | null): string {
-  return String(v ?? '').trim().toLowerCase();
+  return String(v ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -209,7 +211,7 @@ export function normalizeModelId(input: string): string {
  * canonical id.
  */
 export function deriveCanonicalModelIdentity(
-  input: DeriveCanonicalIdentityInput,
+  input: DeriveCanonicalIdentityInput
 ): CanonicalModelIdentity {
   // Prefer apiModelId when present — it's the upstream-visible name.
   // Fall back to modelId. Both empty → empty canonical.

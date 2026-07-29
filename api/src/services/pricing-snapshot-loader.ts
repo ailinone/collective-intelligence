@@ -89,7 +89,7 @@ export interface SnapshotToPointsOptions {
 export function snapshotToBenchmarkPoints(
   entries: readonly QualityEntryLike[],
   costMap: ReadonlyMap<string, ModelCost>,
-  opts: SnapshotToPointsOptions = {},
+  opts: SnapshotToPointsOptions = {}
 ): BenchmarkPoint[] {
   const floor = CONFIDENCE_RANK[opts.minConfidence ?? 'low'] ?? 1;
   const dropZero = opts.dropZeroCost ?? true;

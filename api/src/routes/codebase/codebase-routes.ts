@@ -266,7 +266,10 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
         // ValidationError → 400 with the specific field errors so callers can
         // fix the payload. Anything else → 500.
         if (error instanceof ValidationError) {
-          log.warn({ error: errorMessage, details: error.details }, 'Invalid code analysis payload');
+          log.warn(
+            { error: errorMessage, details: error.details },
+            'Invalid code analysis payload'
+          );
           return reply.status(400).send({
             error: {
               code: error.code ?? 'validation_error',

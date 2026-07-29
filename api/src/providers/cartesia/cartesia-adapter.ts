@@ -18,9 +18,19 @@
  * NO HARDCODED MODELS — model/voice selection by capabilities.
  */
 
-import { ProviderAdapter, type ProviderConfig, type HealthCheckResult } from '@/providers/base/provider-adapter';
+import {
+  ProviderAdapter,
+  type ProviderConfig,
+  type HealthCheckResult,
+} from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
-import type { AudioTTSRequest, AudioTTSResponse, ModerationResponse, ImageEditResponse, ImageVariationResponse } from '@/types/model-client';
+import type {
+  AudioTTSRequest,
+  AudioTTSResponse,
+  ModerationResponse,
+  ImageEditResponse,
+  ImageVariationResponse,
+} from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import WebSocket from 'ws';
 
@@ -52,14 +62,18 @@ export class CartesiaAdapter extends ProviderAdapter {
 
     try {
       // Resolve voice: if UUID use directly, if name map to UUID, fallback to default
-      const rawVoice = request.voice || request.options?.voice as string || '';
+      const rawVoice = request.voice || (request.options?.voice as string) || '';
       const voiceId = this.resolveVoiceId(rawVoice);
 
       // Map format
       let outputFormat: Record<string, unknown>;
       const format = request.format || 'mp3';
       if (format === 'pcm' || format === 'wav') {
-        outputFormat = { container: format === 'wav' ? 'wav' : 'raw', encoding: 'pcm_s16le', sample_rate: 24000 };
+        outputFormat = {
+          container: format === 'wav' ? 'wav' : 'raw',
+          encoding: 'pcm_s16le',
+          sample_rate: 24000,
+        };
       } else {
         outputFormat = { container: 'mp3', encoding: 'mp3', sample_rate: 44100 };
       }
@@ -120,12 +134,12 @@ export class CartesiaAdapter extends ProviderAdapter {
 
     // Map common OpenAI-compatible names to Cartesia voice UUIDs
     const voiceMap: Record<string, string> = {
-      alloy: 'a0e99841-438c-4a64-b679-ae501e7d6091',  // Barbershop Man
-      echo: 'c2ac25f9-ecc4-4f56-9095-651354df60c0',  // Classy British Man
-      fable: '87748186-23bb-4571-b42b-1acb74960a72',  // Wise Lady
-      onyx: 'daf747c6-6bc2-4083-bd59-aa94dce23233',  // Wise Man
-      nova: 'b7d50908-b17c-442d-ad8d-810c63997ed9',  // Friendly Sidekick
-      shimmer: '2ee87190-8f84-4925-97da-e52547f9462c',  // Gentle Lady
+      alloy: 'a0e99841-438c-4a64-b679-ae501e7d6091', // Barbershop Man
+      echo: 'c2ac25f9-ecc4-4f56-9095-651354df60c0', // Classy British Man
+      fable: '87748186-23bb-4571-b42b-1acb74960a72', // Wise Lady
+      onyx: 'daf747c6-6bc2-4083-bd59-aa94dce23233', // Wise Man
+      nova: 'b7d50908-b17c-442d-ad8d-810c63997ed9', // Friendly Sidekick
+      shimmer: '2ee87190-8f84-4925-97da-e52547f9462c', // Gentle Lady
       default: 'a0e99841-438c-4a64-b679-ae501e7d6091',
       auto: 'a0e99841-438c-4a64-b679-ae501e7d6091',
     };
@@ -149,22 +163,31 @@ export class CartesiaAdapter extends ProviderAdapter {
     return new Promise((resolve, reject) => {
       const wsUrl = `wss://api.cartesia.ai/tts/websocket?api_key=${this.config.apiKey}&cartesia_version=${CARTESIA_VERSION}`;
       const ws = new WebSocket(wsUrl);
-      const timeout = setTimeout(() => { ws.close(); reject(new Error('Cartesia WS TTS timeout 10s')); }, 10000);
+      const timeout = setTimeout(() => {
+        ws.close();
+        reject(new Error('Cartesia WS TTS timeout 10s'));
+      }, 10000);
       const contextId = `ctx_${Date.now()}`;
 
       ws.on('open', () => {
-        ws.send(JSON.stringify({
-          model_id: modelId,
-          transcript: text,
-          voice: { mode: 'id', id: voiceId },
-          output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: 24000 },
-          context_id: contextId,
-        }));
+        ws.send(
+          JSON.stringify({
+            model_id: modelId,
+            transcript: text,
+            voice: { mode: 'id', id: voiceId },
+            output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: 24000 },
+            context_id: contextId,
+          })
+        );
       });
 
       ws.on('message', (data: Buffer) => {
         try {
-          const msg = JSON.parse(data.toString()) as { type?: string; data?: string; done?: boolean };
+          const msg = JSON.parse(data.toString()) as {
+            type?: string;
+            data?: string;
+            done?: boolean;
+          };
           if (msg.type === 'chunk' && msg.data) {
             const audioBuf = Buffer.from(msg.data, 'base64');
             onAudioChunk(audioBuf);
@@ -182,8 +205,14 @@ export class CartesiaAdapter extends ProviderAdapter {
         }
       });
 
-      ws.on('close', () => { clearTimeout(timeout); resolve(); });
-      ws.on('error', (err) => { clearTimeout(timeout); reject(err); });
+      ws.on('close', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      ws.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
     });
   }
 
@@ -202,12 +231,21 @@ export class CartesiaAdapter extends ProviderAdapter {
 
   async getModels(): Promise<Model[]> {
     // Dynamically discover models from Cartesia API — zero hardcoded models
-    const perf: import('@/types').ModelPerformance = { latencyMs: 90, throughput: 0, quality: 0.95, reliability: 0.9 };
+    const perf: import('@/types').ModelPerformance = {
+      latencyMs: 90,
+      throughput: 0,
+      quality: 0.95,
+      reliability: 0.9,
+    };
     const base: Omit<Model, 'id' | 'name' | 'displayName' | 'capabilities'> = {
-      providerId: 'cartesia', provider: 'cartesia',
-      contextWindow: 0, maxOutputTokens: 0,
-      inputCostPer1k: 0, outputCostPer1k: 0,
-      status: 'active', performance: perf,
+      providerId: 'cartesia',
+      provider: 'cartesia',
+      contextWindow: 0,
+      maxOutputTokens: 0,
+      inputCostPer1k: 0,
+      outputCostPer1k: 0,
+      status: 'active',
+      performance: perf,
     };
 
     try {
@@ -221,14 +259,19 @@ export class CartesiaAdapter extends ProviderAdapter {
         return [];
       }
 
-      const data = await response.json() as Array<{ id: string; name?: string; description?: string; languages?: string[] }>;
+      const data = (await response.json()) as Array<{
+        id: string;
+        name?: string;
+        description?: string;
+        languages?: string[];
+      }>;
 
       if (!Array.isArray(data) || data.length === 0) {
         log.warn('Cartesia returned no models');
         return [];
       }
 
-      return data.map(m => ({
+      return data.map((m) => ({
         ...base,
         id: `cartesia/${m.id}`,
         name: m.id,
@@ -237,7 +280,10 @@ export class CartesiaAdapter extends ProviderAdapter {
         metadata: { languages: m.languages, description: m.description },
       }));
     } catch (err) {
-      log.warn({ error: err instanceof Error ? err.message : String(err) }, 'Cartesia model discovery failed');
+      log.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        'Cartesia model discovery failed'
+      );
       return [];
     }
   }
@@ -255,19 +301,47 @@ export class CartesiaAdapter extends ProviderAdapter {
         checkedAt: new Date(),
       };
     } catch (error) {
-      return { healthy: false, latency: 0, error: error instanceof Error ? error.message : 'Unknown', checkedAt: new Date() };
+      return {
+        healthy: false,
+        latency: 0,
+        error: error instanceof Error ? error.message : 'Unknown',
+        checkedAt: new Date(),
+      };
     }
   }
 
   // ── Not Supported (TTS-only provider) ──────────────────
 
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('Cartesia: TTS-only provider'); }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('Cartesia: TTS-only provider');
+  }
+
   // eslint-disable-next-line require-yield -- TTS-only provider; this generator never yields.
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse> { throw new Error('Cartesia: TTS-only provider'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('Not supported'); }
-  calculateCost(): number { return 0; }
-  normalizeModelName(name: string): string { return name; }
-  async moderate(): Promise<ModerationResponse> { throw new Error('Not supported'); }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('Not supported'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('Not supported'); }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse> {
+    throw new Error('Cartesia: TTS-only provider');
+  }
+
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('Not supported');
+  }
+
+  calculateCost(): number {
+    return 0;
+  }
+
+  normalizeModelName(name: string): string {
+    return name;
+  }
+
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('Not supported');
+  }
 }

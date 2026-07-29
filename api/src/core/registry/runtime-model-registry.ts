@@ -93,41 +93,35 @@ export class RuntimeModelRegistry {
       canonicalModels: [],
       offerings: [],
       routes: [],
-    },
+    }
   ) {
     this.canonicalModels = freezeMap(
-      snapshot.canonicalModels.map((c) => [c.canonicalModelId, c] as const),
+      snapshot.canonicalModels.map((c) => [c.canonicalModelId, c] as const)
     );
-    this.offerings = freezeMap(
-      snapshot.offerings.map((o) => [o.offeringId, o] as const),
-    );
-    this.routes = freezeMap(
-      snapshot.routes.map((r) => [r.routeId, r] as const),
-    );
+    this.offerings = freezeMap(snapshot.offerings.map((o) => [o.offeringId, o] as const));
+    this.routes = freezeMap(snapshot.routes.map((r) => [r.routeId, r] as const));
 
     this.offeringsByCanonical = buildMultiIndex(
       snapshot.offerings,
       (o) => o.canonicalModelId,
-      (o) => o.offeringId,
+      (o) => o.offeringId
     );
     this.routesByCanonical = buildMultiIndex(
       snapshot.routes,
       (r) => r.canonicalModelId,
-      (r) => r.routeId,
+      (r) => r.routeId
     );
     this.routesByOffering = buildMultiIndex(
       snapshot.routes,
       (r) => r.offeringId,
-      (r) => r.routeId,
+      (r) => r.routeId
     );
 
     // MVP 2: freeze the legacy snapshot sequence VERBATIM so callers
     // get back exactly what was fed in. No sorting, no filtering, no
     // dedup, no normalization. The registry_cache invariant depends on
     // this — see registry-cache-equivalence.test.ts.
-    this.legacyModels = Object.freeze(
-      (snapshot.legacyModels ?? []).slice(),
-    );
+    this.legacyModels = Object.freeze((snapshot.legacyModels ?? []).slice());
 
     this._builtAt = snapshot.builtAt ?? Date.now();
     this._version = snapshot.version ?? 1;
@@ -241,7 +235,7 @@ function freezeMap<K, V>(entries: ReadonlyArray<readonly [K, V]>): ReadonlyMap<K
 function buildMultiIndex<T, K>(
   items: ReadonlyArray<T>,
   keyFn: (item: T) => K,
-  valueFn: (item: T) => string,
+  valueFn: (item: T) => string
 ): ReadonlyMap<K, ReadonlyArray<string>> {
   const m = new Map<K, string[]>();
   for (const item of items) {

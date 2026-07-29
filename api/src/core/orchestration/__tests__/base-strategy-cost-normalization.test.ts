@@ -34,7 +34,7 @@ function effectiveExecutionCost(
   promptTokens?: number,
   completionTokens?: number,
   inputCostPer1k?: number,
-  outputCostPer1k?: number,
+  outputCostPer1k?: number
 ): number {
   let cost = rawCost;
   try {
@@ -45,7 +45,7 @@ function effectiveExecutionCost(
       promptTokens,
       completionTokens,
       inputCostPer1k,
-      outputCostPer1k,
+      outputCostPer1k
     );
     const normalized = record.normalizedCostUsd;
     if (typeof normalized === 'number' && Number.isFinite(normalized)) {
@@ -67,7 +67,7 @@ describe('base-strategy cost normalization (COST #1)', () => {
       500,
       200,
       0.01, // model.inputCostPer1k from catalog
-      0.03, // model.outputCostPer1k from catalog
+      0.03 // model.outputCostPer1k from catalog
     );
 
     expect(cost).toBeGreaterThan(0);
@@ -83,7 +83,7 @@ describe('base-strategy cost normalization (COST #1)', () => {
       1000,
       1000,
       0, // no catalog pricing
-      0,
+      0
     );
     // No DB pricing, no family match → generic fallback estimate, still > 0.
     expect(cost).toBeGreaterThan(0);
@@ -99,7 +99,7 @@ describe('base-strategy cost normalization (COST #1)', () => {
       1000,
       500,
       0.003,
-      0.015,
+      0.015
     );
 
     // Provider-reported positive cost is trusted as-is (high confidence).

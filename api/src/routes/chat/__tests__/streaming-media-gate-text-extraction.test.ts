@@ -24,10 +24,7 @@
  *      paid on every streaming request regardless of hit/miss.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  extractLastUserTurnTextForMediaGate,
-  STREAMING_MEDIA_GATE_TEXT_CAP,
-} from '../chat-routes';
+import { extractLastUserTurnTextForMediaGate, STREAMING_MEDIA_GATE_TEXT_CAP } from '../chat-routes';
 import type { ChatMessage } from '@/types';
 
 describe('extractLastUserTurnTextForMediaGate', () => {
@@ -59,7 +56,10 @@ describe('extractLastUserTurnTextForMediaGate', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'describe this image' },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,' + 'A'.repeat(2_000_000) } },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,' + 'A'.repeat(2_000_000) },
+          },
         ],
       },
     ];

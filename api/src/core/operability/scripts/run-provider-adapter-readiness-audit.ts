@@ -47,7 +47,10 @@
  *     --write-json /tmp/provider_adapter_readiness_01c1b_g.json
  */
 import { writeFileSync } from 'node:fs';
-import { classifyProviderError, type ProviderErrorKind } from '../../orchestration/failures/provider-error-classifier';
+import {
+  classifyProviderError,
+  type ProviderErrorKind,
+} from '../../orchestration/failures/provider-error-classifier';
 
 interface Args {
   readonly maxTokens: number;
@@ -86,9 +89,11 @@ function parseArgs(): Args {
     else if (a === '--prompt') opts.prompt = argv[++i] ?? 'Say OK';
     else if (a === '--max-total-cost-usd') opts.maxTotalCostUsd = Number(argv[++i] ?? '0.05');
     else if (a === '--max-total-probes') opts.maxTotalProbes = Number(argv[++i] ?? '150');
-    else if (a === '--sample-models-per-provider') opts.samplePerProvider = Number(argv[++i] ?? '1');
-    else if (a === '--all-providers') { /* default scope is all */ }
-    else if (a === '--include-discovery') opts.includeDiscovery = true;
+    else if (a === '--sample-models-per-provider')
+      opts.samplePerProvider = Number(argv[++i] ?? '1');
+    else if (a === '--all-providers') {
+      /* default scope is all */
+    } else if (a === '--include-discovery') opts.includeDiscovery = true;
     else if (a === '--include-chat-probe') opts.includeChatProbe = true;
     else if (a === '--include-ollama') opts.includeOllama = true;
     else if (a === '--no-retries') opts.noRetries = true;
@@ -216,7 +221,7 @@ async function bootstrap(): Promise<void> {
     await loadProviderCatalog();
   } catch (err) {
     process.stderr.write(
-      `loadProviderCatalog failed (proceeding without): ${err instanceof Error ? err.message : String(err)}\n`,
+      `loadProviderCatalog failed (proceeding without): ${err instanceof Error ? err.message : String(err)}\n`
     );
   }
 }
@@ -250,8 +255,14 @@ function recommendedFixFor(bucket: Bucket): string | undefined {
 
 async function auditOne(
   providerId: string,
-  budget: { accrued: number; cap: number; probeCount: number; probeCap: number; perProbeEstimate: number },
-  args: Args,
+  budget: {
+    accrued: number;
+    cap: number;
+    probeCount: number;
+    probeCap: number;
+    perProbeEstimate: number;
+  },
+  args: Args
 ): Promise<ProviderAuditResult> {
   const { getProviderRegistry } = await import('@/providers/provider-registry');
   const registry = getProviderRegistry();
@@ -267,7 +278,9 @@ async function auditOne(
       try {
         const { classifyProviderKind } = await import('@/core/selection/provider-kind');
         providerKind = String(classifyProviderKind(providerId));
-      } catch { /* keep unknown */ }
+      } catch {
+        /* keep unknown */
+      }
     }
   } catch {
     adapterInstantiable = false;
@@ -285,9 +298,10 @@ async function auditOne(
       providerId.toUpperCase().replace(/-/g, '_'),
       providerId.toUpperCase().replace(/-/g, ''),
     ];
-    const allLoaded = [...(summary.fromGCP ?? []), ...(summary.fromEnv ?? [])].map((s) => s.toUpperCase());
-    secretsResolvedFromGcp =
-      candidates.some((c) => allLoaded.some((l) => l.includes(c))) || null;
+    const allLoaded = [...(summary.fromGCP ?? []), ...(summary.fromEnv ?? [])].map((s) =>
+      s.toUpperCase()
+    );
+    secretsResolvedFromGcp = candidates.some((c) => allLoaded.some((l) => l.includes(c))) || null;
   } catch {
     secretsResolvedFromGcp = null;
   }
@@ -300,14 +314,22 @@ async function auditOne(
   let sanitizedMessage: string | undefined;
   let sampleModelId: string | undefined;
 
-  if (adapter && args.includeChatProbe && budget.probeCount < budget.probeCap && budget.accrued + budget.perProbeEstimate <= budget.cap) {
+  if (
+    adapter &&
+    args.includeChatProbe &&
+    budget.probeCount < budget.probeCap &&
+    budget.accrued + budget.perProbeEstimate <= budget.cap
+  ) {
     // Pick the FIRST model the catalog has for this provider.
     try {
       const { modelCatalogService } = await import('@/services/model-catalog-service');
       const all = await modelCatalogService.listModels();
       const candidate = all.find(
-        (m) => m.status === 'active' && (m.provider ?? '').toLowerCase() === providerId.toLowerCase() &&
-          Array.isArray(m.capabilities) && (m.capabilities as readonly string[]).includes('chat'),
+        (m) =>
+          m.status === 'active' &&
+          (m.provider ?? '').toLowerCase() === providerId.toLowerCase() &&
+          Array.isArray(m.capabilities) &&
+          (m.capabilities as readonly string[]).includes('chat')
       );
       if (candidate) {
         sampleModelId = candidate.id;
@@ -418,7 +440,9 @@ async function auditOllama(): Promise<ProviderAuditResult> {
       };
     }
     const body = (await r.json()) as { models?: ReadonlyArray<{ name?: string }> };
-    const models = (body.models ?? []).filter((m): m is { name: string } => typeof m?.name === 'string');
+    const models = (body.models ?? []).filter(
+      (m): m is { name: string } => typeof m?.name === 'string'
+    );
     return {
       providerId: 'ollama',
       providerKind: 'local_ollama',
@@ -431,7 +455,8 @@ async function auditOllama(): Promise<ProviderAuditResult> {
       sampleModelId: models[0]?.name,
       chatProbeAttempted: false,
       chatReady: models.length > 0,
-      bucket: models.length > 0 ? 'K_local_ollama_ready' : 'L_local_ollama_configured_but_unreachable',
+      bucket:
+        models.length > 0 ? 'K_local_ollama_ready' : 'L_local_ollama_configured_but_unreachable',
       lastSanitizedMessage: `ollama_models=${models.length}`,
     };
   } catch (err) {
@@ -454,7 +479,11 @@ async function auditOllama(): Promise<ProviderAuditResult> {
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs() as Args & { help?: boolean; dryRun?: boolean; noProviderCalls?: boolean };
+  const args = parseArgs() as Args & {
+    help?: boolean;
+    dryRun?: boolean;
+    noProviderCalls?: boolean;
+  };
   // 01C.1B-J1R §9.2 — pre-bootstrap flags. Re-parsed here from argv since
   // parseArgs() doesn't yet declare them. Refactor to Args interface in a
   // follow-up turn; for J1R we just need the CLI to not hang.
@@ -463,41 +492,49 @@ async function main(): Promise<void> {
   const dryRunFlag = rawArgv.includes('--dry-run');
   const noProviderCallsFlag = rawArgv.includes('--no-provider-calls');
   if (helpFlag) {
-    console.log('\n01C.1B — Provider Adapter Readiness Audit\n\n' +
-      'USAGE: pnpm tsx run-provider-adapter-readiness-audit.ts \\\n' +
-      '  --all-providers --sample-models-per-provider 1 \\\n' +
-      '  --max-total-probes <N> --max-total-cost-usd <USD> \\\n' +
-      '  --max-tokens 10 --prompt "Say OK" \\\n' +
-      '  --no-retries --sanitize \\\n' +
-      '  [--include-discovery] [--include-chat-probe] [--include-ollama] \\\n' +
-      '  [--use-discovery-first] [--use-provider-aliases] [--use-route-candidates] \\\n' +
-      '  [--classify-specialized-providers] \\\n' +
-      '  [--write-json <path>] [--write-csv <path>] \\\n' +
-      '  [--dry-run] [--no-provider-calls] [--help]\n\n' +
-      'PRE-BOOTSTRAP FLAGS (parsed before any DB/GCP/provider init):\n' +
-      '  --help              Print this help and exit 0.\n' +
-      '  --dry-run           Print parsed config, no provider call.\n' +
-      '  --no-provider-calls Hard-block any chat probe.\n');
+    console.log(
+      '\n01C.1B — Provider Adapter Readiness Audit\n\n' +
+        'USAGE: pnpm tsx run-provider-adapter-readiness-audit.ts \\\n' +
+        '  --all-providers --sample-models-per-provider 1 \\\n' +
+        '  --max-total-probes <N> --max-total-cost-usd <USD> \\\n' +
+        '  --max-tokens 10 --prompt "Say OK" \\\n' +
+        '  --no-retries --sanitize \\\n' +
+        '  [--include-discovery] [--include-chat-probe] [--include-ollama] \\\n' +
+        '  [--use-discovery-first] [--use-provider-aliases] [--use-route-candidates] \\\n' +
+        '  [--classify-specialized-providers] \\\n' +
+        '  [--write-json <path>] [--write-csv <path>] \\\n' +
+        '  [--dry-run] [--no-provider-calls] [--help]\n\n' +
+        'PRE-BOOTSTRAP FLAGS (parsed before any DB/GCP/provider init):\n' +
+        '  --help              Print this help and exit 0.\n' +
+        '  --dry-run           Print parsed config, no provider call.\n' +
+        '  --no-provider-calls Hard-block any chat probe.\n'
+    );
     process.exit(0);
   }
   if (dryRunFlag) {
-    console.log(JSON.stringify({
-      mode: 'dry-run',
-      bootstrapTriggered: false,
-      providerCallsAttempted: 0,
-      args: {
-        maxTokens: args.maxTokens,
-        maxTotalCostUsd: args.maxTotalCostUsd,
-        maxTotalProbes: args.maxTotalProbes,
-        prompt: args.prompt,
-        sanitize: args.sanitize,
-        noRetries: args.noRetries,
-        includeDiscovery: args.includeDiscovery,
-        includeChatProbe: args.includeChatProbe,
-        includeOllama: args.includeOllama,
-      },
-      estimatedWorstCaseCostUsd: args.maxTotalCostUsd,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          mode: 'dry-run',
+          bootstrapTriggered: false,
+          providerCallsAttempted: 0,
+          args: {
+            maxTokens: args.maxTokens,
+            maxTotalCostUsd: args.maxTotalCostUsd,
+            maxTotalProbes: args.maxTotalProbes,
+            prompt: args.prompt,
+            sanitize: args.sanitize,
+            noRetries: args.noRetries,
+            includeDiscovery: args.includeDiscovery,
+            includeChatProbe: args.includeChatProbe,
+            includeOllama: args.includeOllama,
+          },
+          estimatedWorstCaseCostUsd: args.maxTotalCostUsd,
+        },
+        null,
+        2
+      )
+    );
     if (args.writeJsonPath) {
       writeFileSync(args.writeJsonPath, JSON.stringify({ mode: 'dry-run' }, null, 2));
     }
@@ -537,7 +574,8 @@ async function main(): Promise<void> {
   const summary = {
     registeredProviders: providerNames.length,
     adapterRegistered: results.filter((r) => r.adapterRegistered).length,
-    adapterMissing: results.filter((r) => !r.adapterRegistered && r.providerKind !== 'local_ollama').length,
+    adapterMissing: results.filter((r) => !r.adapterRegistered && r.providerKind !== 'local_ollama')
+      .length,
     secretResolved: results.filter((r) => r.secretsResolvedFromGcp === true).length,
     secretUnknown: results.filter((r) => r.secretsResolvedFromGcp === null).length,
     chatProbesAttempted: results.filter((r) => r.chatProbeAttempted).length,
@@ -554,7 +592,8 @@ async function main(): Promise<void> {
     writeFileSync(args.writeJsonPath, JSON.stringify(output, null, 2), 'utf-8');
   }
   if (args.writeCsvPath) {
-    const header = 'providerId,providerKind,adapterRegistered,secretsResolved,chatReady,bucket,errorKind,recommendedFix';
+    const header =
+      'providerId,providerKind,adapterRegistered,secretsResolved,chatReady,bucket,errorKind,recommendedFix';
     const lines = results.map((r) =>
       [
         r.providerId,
@@ -565,7 +604,7 @@ async function main(): Promise<void> {
         r.bucket,
         r.errorKind ?? '',
         r.recommendedFix ?? '',
-      ].join(','),
+      ].join(',')
     );
     writeFileSync(args.writeCsvPath, [header, ...lines].join('\n'), 'utf-8');
   }
@@ -574,6 +613,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `ERROR: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
+  );
   process.exit(1);
 });

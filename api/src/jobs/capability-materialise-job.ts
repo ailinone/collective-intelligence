@@ -73,6 +73,6 @@ export async function runCapabilityMaterialiseNow(): Promise<void> {
       capabilitiesSuppressed: stats.capabilitiesSuppressed,
       elapsedMs: stats.elapsedMs,
     },
-    'Capability materialise tick complete',
+    'Capability materialise tick complete'
   );
 }

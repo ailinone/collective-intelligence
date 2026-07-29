@@ -20,11 +20,7 @@
  * Pure function. No I/O.
  */
 
-import type {
-  JudgeScale,
-  NormalisedRow,
-  SanitisedRow,
-} from './historical-results-schema';
+import type { JudgeScale, NormalisedRow, SanitisedRow } from './historical-results-schema';
 
 export interface NormaliseResult {
   readonly normalised: readonly NormalisedRow[];
@@ -57,9 +53,7 @@ export function normaliseRow(raw: SanitisedRow): NormalisedRow | null {
   const taskIndex = taskIndexRaw === null ? undefined : Math.trunc(taskIndexRaw);
   const repetitionRaw = pickNumber(raw, 'repetition');
   const repetition = repetitionRaw === null ? undefined : Math.trunc(repetitionRaw);
-  const taskId =
-    pickString(raw, 'taskId') ??
-    buildTaskId(experimentId, taskIndex, repetition);
+  const taskId = pickString(raw, 'taskId') ?? buildTaskId(experimentId, taskIndex, repetition);
 
   const judgeRaw = pickNumber(raw, 'judgeScore');
   const judgeScale = detectJudgeScale(judgeRaw);
@@ -197,7 +191,7 @@ function pickModality(row: SanitisedRow): NormalisedRow['modality'] {
 function buildTaskId(
   experimentId: string,
   taskIndex: number | undefined,
-  repetition: number | undefined,
+  repetition: number | undefined
 ): string {
   return `${experimentId}::${taskIndex ?? '_'}::${repetition ?? 0}`;
 }

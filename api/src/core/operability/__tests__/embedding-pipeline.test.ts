@@ -22,17 +22,16 @@ import {
   getOperationalCandidatePool,
   resetOperationalCandidatePoolForTesting,
 } from '../operational-candidate-pool';
-import {
-  getSemanticIndex,
-  resetSemanticIndexForTesting,
-} from '../semantic-index';
+import { getSemanticIndex, resetSemanticIndexForTesting } from '../semantic-index';
 import { resetTEIClientForTesting } from '../tei-client';
 import { resetEmbeddingCacheForTesting } from '../embedding-cache';
 import { resetProviderHealthRegistryForTesting } from '../provider-health-registry';
 import { resetHealthSyncBusForTesting } from '../health-sync-bus';
 import type { ProviderDiscoverySnapshot } from '../types';
 
-function buildSnap(rows: Array<{ providerId: string; modelId: string }>): ProviderDiscoverySnapshot {
+function buildSnap(
+  rows: Array<{ providerId: string; modelId: string }>
+): ProviderDiscoverySnapshot {
   const map = new Map();
   const grouped = new Map<string, string[]>();
   for (const r of rows) {
@@ -158,7 +157,7 @@ describe('rebuildEmbeddingIndex', () => {
     const fakeTei = {
       embed: vi.fn(),
       embedBatch: vi.fn(async (texts: readonly string[]) =>
-        texts.map((_, i) => Float32Array.from([i, 0, 0])),
+        texts.map((_, i) => Float32Array.from([i, 0, 0]))
       ),
       isHealthy: vi.fn(async () => true),
     };
@@ -180,7 +179,7 @@ describe('rebuildEmbeddingIndex', () => {
     const fakeTei = {
       embed: vi.fn(),
       embedBatch: vi.fn(async (texts: readonly string[]) =>
-        texts.map(() => Float32Array.from([1, 2])),
+        texts.map(() => Float32Array.from([1, 2]))
       ),
       isHealthy: vi.fn(async () => true),
     };
@@ -227,7 +226,7 @@ describe('rebuildEmbeddingIndex', () => {
         source: 'discovery_listed',
         addedAt: '2026-01-01',
       },
-      fakeTei as never,
+      fakeTei as never
     );
     expect(entry.id).toBe('foo::bar');
     expect(entry.embedding).toBeInstanceOf(Float32Array);

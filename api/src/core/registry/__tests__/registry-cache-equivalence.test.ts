@@ -108,9 +108,7 @@ describe('registry_cache equivalence — snapshots preserved verbatim', () => {
     // Two Azure deployment rows share `id=gpt-4o` but have different
     // providerIds (prod-chat vs prod-fallback), so they are distinct
     // canonicals in MVP 2's strictly-structural resolution.
-    const uniqueCanonical = new Set(
-      LEGACY_MODELS_FIXTURE.map((m) => `${m.providerId}:${m.id}`),
-    );
+    const uniqueCanonical = new Set(LEGACY_MODELS_FIXTURE.map((m) => `${m.providerId}:${m.id}`));
     expect(diagnostics.canonicalModelCount).toBe(uniqueCanonical.size);
   });
 
@@ -136,8 +134,6 @@ describe('registry_cache equivalence — snapshots preserved verbatim', () => {
     const b = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     expect(a.registry).not.toBe(b.registry);
     // …but produces equivalent legacy-snapshot output.
-    expect(a.registry.getModelSnapshots().length).toBe(
-      b.registry.getModelSnapshots().length,
-    );
+    expect(a.registry.getModelSnapshots().length).toBe(b.registry.getModelSnapshots().length);
   });
 });

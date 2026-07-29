@@ -114,7 +114,7 @@ export class ParallelStrategy extends BaseStrategy {
     // Observer: start
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: selectedModels.map(m => m.model.name || m.model.id),
+      models: selectedModels.map((m) => m.model.name || m.model.id),
       summary: `Parallel: ${selectedModels.length} models competing.`,
     });
 
@@ -171,8 +171,18 @@ export class ParallelStrategy extends BaseStrategy {
           'All parallel executions failed — retrying fan-out with fresh providers (excluding failed)'
         );
         executions = await this.executeModelsInParallel([
-          { adapter: retryModels[0].adapter, model: retryModels[0].model, request: enhancedRequest, role: 'primary' },
-          { adapter: retryModels[1].adapter, model: retryModels[1].model, request: enhancedRequest, role: 'secondary' },
+          {
+            adapter: retryModels[0].adapter,
+            model: retryModels[0].model,
+            request: enhancedRequest,
+            role: 'primary',
+          },
+          {
+            adapter: retryModels[1].adapter,
+            model: retryModels[1].model,
+            request: enhancedRequest,
+            role: 'secondary',
+          },
         ]);
         successful = executions.filter((e) => e.success);
       }
@@ -226,8 +236,18 @@ export class ParallelStrategy extends BaseStrategy {
           duration: e.durationMs,
           cost: e.cost,
         })),
-        ...(this.isReasoningEnabled(request) && executions.some(e => e.reasoning)
-          ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && executions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -253,16 +273,27 @@ export class ParallelStrategy extends BaseStrategy {
   // length + finish_reason. Which of the 2 wins is unknown until BOTH are
   // done, so neither can be streamed live without risking the client
   // receiving tokens for the response that loses the comparison.
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Parallel: 2 models competing.' });
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Parallel: 2 models competing.',
+    });
     yield this.progressChunk('2 models executing in parallel...', 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const result = await this.execute(request, context);
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Parallel: best response selected.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Parallel: best response selected.',
+    });
     yield this.progressChunk('Best response selected.', 1, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -337,43 +368,48 @@ export class ParallelStrategy extends BaseStrategy {
       try {
         const { shouldSkipNearZero } = await import('@/core/operability');
         const healthy = rawSelected.filter(
-          (s) => !shouldSkipNearZero(
-            {
-              providerId: (
-                (typeof s.model.metadata?.executionProvider === 'string' && s.model.metadata.executionProvider) ||
-                s.model.provider || ''
-              ).toLowerCase(),
-              modelId: s.model.id,
-            },
-            { silent: true },
-          ).skip
+          (s) =>
+            !shouldSkipNearZero(
+              {
+                providerId: (
+                  (typeof s.model.metadata?.executionProvider === 'string' &&
+                    s.model.metadata.executionProvider) ||
+                  s.model.provider ||
+                  ''
+                ).toLowerCase(),
+                modelId: s.model.id,
+              },
+              { silent: true }
+            ).skip
         );
         if (healthy.length >= 2) {
           selectedModels = healthy;
         }
-      } catch { /* operability module unavailable — use raw selection */ }
+      } catch {
+        /* operability module unavailable — use raw selection */
+      }
 
       if (selectedModels.length >= 2) {
         // Pin biases the primary slot. selector.selectModels already
         // returned its top-N picks; we just reorder so the user's pin
         // wins if it's in that pool. If pin missed the pool, log and
         // accept the selector's ordering — second-class fallback.
-        const selectedJustModels = selectedModels.map(s => s.model);
+        const selectedJustModels = selectedModels.map((s) => s.model);
         const preference = resolvePreferredExecutor(selectedJustModels, context, []);
         if (preference.pinReason === 'pin-not-in-pool') {
           this.log.warn(
             {
               attempted: context.preferredModelIds?.[0],
               reason: preference.pinReason,
-              pool: selectedJustModels.map(m => m.id),
+              pool: selectedJustModels.map((m) => m.id),
             },
-            'Preferred model not in DynamicModelSelector pool — falling back to selector primary.',
+            'Preferred model not in DynamicModelSelector pool — falling back to selector primary.'
           );
         }
         const orderedScored = preference.pinnedExecutor
           ? [
-              selectedModels.find(s => s.model.id === preference.pinnedExecutor!.id)!,
-              ...selectedModels.filter(s => s.model.id !== preference.pinnedExecutor!.id),
+              selectedModels.find((s) => s.model.id === preference.pinnedExecutor!.id)!,
+              ...selectedModels.filter((s) => s.model.id !== preference.pinnedExecutor!.id),
             ]
           : selectedModels;
 
@@ -430,7 +466,10 @@ export class ParallelStrategy extends BaseStrategy {
     this.log.warn(
       {
         totalModelsAvailable: models.length,
-        taskType: ('task_type' in request && typeof request.task_type === 'string' ? request.task_type : undefined) || context.taskType,
+        taskType:
+          ('task_type' in request && typeof request.task_type === 'string'
+            ? request.task_type
+            : undefined) || context.taskType,
       },
       'Using fallback scoring for parallel strategy'
     );
@@ -459,7 +498,7 @@ export class ParallelStrategy extends BaseStrategy {
     // against the eligible (non-zero-score) subset so a pinned model
     // that fails capability/budget filters is still treated as
     // ineligible (pin-not-in-pool path).
-    const eligibleModels = scoredModels.filter(s => s.score > 0).map(s => s.model);
+    const eligibleModels = scoredModels.filter((s) => s.score > 0).map((s) => s.model);
     const fallbackPreference = resolvePreferredExecutor(eligibleModels, context, []);
     if (fallbackPreference.pinReason === 'pin-not-in-pool') {
       this.log.warn(
@@ -467,7 +506,7 @@ export class ParallelStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: fallbackPreference.pinReason,
         },
-        'Preferred model failed parallel-fallback eligibility — falling back to score-sorted primary.',
+        'Preferred model failed parallel-fallback eligibility — falling back to score-sorted primary.'
       );
     }
 
@@ -475,7 +514,7 @@ export class ParallelStrategy extends BaseStrategy {
     let primary = scoredModels[0];
     if (fallbackPreference.pinnedExecutor) {
       const pinnedScored = scoredModels.find(
-        s => s.model.id === fallbackPreference.pinnedExecutor!.id,
+        (s) => s.model.id === fallbackPreference.pinnedExecutor!.id
       );
       if (pinnedScored) primary = pinnedScored;
     }
@@ -486,12 +525,12 @@ export class ParallelStrategy extends BaseStrategy {
     // Select complementary model (different provider, but not the primary)
     const primaryProvider = primary.model.provider;
     let secondary = scoredModels.find(
-      (m) => m.model.id !== primary.model.id && m.model.provider !== primaryProvider && m.score > 0,
+      (m) => m.model.id !== primary.model.id && m.model.provider !== primaryProvider && m.score > 0
     );
 
     // If no different provider found, just use second best (excluding primary)
     if (!secondary) {
-      secondary = scoredModels.find(s => s.model.id !== primary.model.id && s.score > 0);
+      secondary = scoredModels.find((s) => s.model.id !== primary.model.id && s.score > 0);
       if (!secondary || secondary.score === 0) {
         return [];
       }
@@ -547,7 +586,10 @@ export class ParallelStrategy extends BaseStrategy {
       case 'code-generation':
       case 'code-review':
         // Prefer models with code-related capabilities
-        if (model.capabilities.includes('code_generation') || model.capabilities.includes('code_interpreter')) {
+        if (
+          model.capabilities.includes('code_generation') ||
+          model.capabilities.includes('code_interpreter')
+        ) {
           score += 0.15;
         }
         if (model.capabilities.includes('function_calling')) {
@@ -558,7 +600,10 @@ export class ParallelStrategy extends BaseStrategy {
       case 'debugging':
       case 'refactoring':
         // Prefer models with code generation and reasoning capabilities
-        if (model.capabilities.includes('code_generation') || model.capabilities.includes('code_interpreter')) {
+        if (
+          model.capabilities.includes('code_generation') ||
+          model.capabilities.includes('code_interpreter')
+        ) {
           score += 0.1;
         }
         if (model.capabilities.includes('reasoning')) {
@@ -666,11 +711,9 @@ export class ParallelStrategy extends BaseStrategy {
         (msg) =>
           typeof msg.content === 'object' &&
           Array.isArray(msg.content) &&
-          msg.content.some((c): c is ImageContent => 
-            typeof c === 'object' &&
-            c !== null &&
-            'type' in c &&
-            c.type === 'image_url'
+          msg.content.some(
+            (c): c is ImageContent =>
+              typeof c === 'object' && c !== null && 'type' in c && c.type === 'image_url'
           )
       ) || false;
 
@@ -780,14 +823,15 @@ export class ParallelStrategy extends BaseStrategy {
     if (capabilities?.includes('image_generation')) {
       return 'images';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && (cap === 'text_to_speech' || cap.includes('speech'))
-    )) {
+    if (
+      capabilities?.some(
+        (cap): boolean =>
+          typeof cap === 'string' && (cap === 'text_to_speech' || cap.includes('speech'))
+      )
+    ) {
       return 'audio_speech';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && cap === 'realtime'
-    )) {
+    if (capabilities?.some((cap): boolean => typeof cap === 'string' && cap === 'realtime')) {
       return 'realtime';
     }
 

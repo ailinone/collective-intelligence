@@ -20,7 +20,12 @@ import {
   type NormalizedArtificialAnalysisModel,
 } from '@/core/orchestration/model-selection/external-benchmarks/artificial-analysis-normalizer';
 
-function aa(input: { id: string; name: string; slug?: string; creator?: { id?: string; name?: string; slug?: string } }): NormalizedArtificialAnalysisModel {
+function aa(input: {
+  id: string;
+  name: string;
+  slug?: string;
+  creator?: { id?: string; name?: string; slug?: string };
+}): NormalizedArtificialAnalysisModel {
   return normalizeArtificialAnalysisModel({
     id: input.id,
     name: input.name,
@@ -74,7 +79,9 @@ describe('01C.1B-J2-C-R6 — matchArtificialAnalysisModel', () => {
   });
 
   it('explicit alias ceiling caps confidence at high', () => {
-    const aaSet = [aa({ id: 'qwen3-235b-a22b-thinking-2507', name: 'Qwen3-235B-A22B-Thinking-2507' })];
+    const aaSet = [
+      aa({ id: 'qwen3-235b-a22b-thinking-2507', name: 'Qwen3-235B-A22B-Thinking-2507' }),
+    ];
     const explicit: ExplicitAliasEntry[] = [
       {
         runtimePattern: 'Qwen3-235B-Thinking',

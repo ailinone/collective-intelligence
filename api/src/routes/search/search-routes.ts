@@ -10,14 +10,14 @@
 /**
  * Search & Grounding API Routes
  * Web search and grounding capabilities with multi-provider orchestration
- * 
+ *
  * Features:
  * - Multi-provider orchestration (Tavily, models with web_search capability like Perplexity, etc.)
  * - Dynamic model/service selection based on capabilities
  * - Basic and deep search modes
  * - Context extraction for RAG
  * - Google Maps integration (when available)
- * 
+ *
  * NO HARDCODED PROVIDERS - All selection is dynamic via capabilities
  */
 
@@ -87,48 +87,50 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
     schema: {
       tags: ['Search', 'Grounding'],
       summary: 'Web search with AI grounding',
-      description: 'Performs web search using multi-provider orchestration (Tavily, models with web_search capability like Perplexity, Google Search Grounding, etc.). Automatically selects the best search provider/model based on query type and depth requirements.',
+      description:
+        'Performs web search using multi-provider orchestration (Tavily, models with web_search capability like Perplexity, Google Search Grounding, etc.). Automatically selects the best search provider/model based on query type and depth requirements.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
         required: ['query'],
         properties: {
-          query: { 
-            type: 'string', 
-            minLength: 1, 
+          query: {
+            type: 'string',
+            minLength: 1,
             maxLength: 2000,
             description: 'Search query text',
           },
-          model: { 
-            type: 'string', 
+          model: {
+            type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates between Tavily, Perplexity, and other models with web_search capability.',
+            description:
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates between Tavily, Perplexity, and other models with web_search capability.',
           },
-          search_depth: { 
-            type: 'string', 
+          search_depth: {
+            type: 'string',
             enum: ['basic', 'advanced'],
             default: 'basic',
             description: 'Search depth: basic (fast) or advanced (comprehensive)',
           },
-          max_results: { 
-            type: 'integer', 
-            minimum: 1, 
+          max_results: {
+            type: 'integer',
+            minimum: 1,
             maximum: 100,
             default: 10,
             description: 'Maximum number of results to return',
           },
-          include_images: { 
-            type: 'boolean', 
+          include_images: {
+            type: 'boolean',
             default: false,
             description: 'Include images in results',
           },
-          include_answer: { 
-            type: 'boolean', 
+          include_answer: {
+            type: 'boolean',
             default: true,
             description: 'Include AI-generated answer summary',
           },
-          include_raw_content: { 
-            type: 'boolean', 
+          include_raw_content: {
+            type: 'boolean',
             default: false,
             description: 'Include raw HTML/text content from pages',
           },
@@ -165,9 +167,17 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
                   title: { type: 'string', description: 'Result title' },
                   url: { type: 'string', description: 'Result URL' },
                   content: { type: 'string', description: 'Result content snippet' },
-                  rawContent: { type: 'string', nullable: true, description: 'Raw HTML/text content' },
+                  rawContent: {
+                    type: 'string',
+                    nullable: true,
+                    description: 'Raw HTML/text content',
+                  },
                   score: { type: 'number', description: 'Relevance score' },
-                  publishedDate: { type: 'string', nullable: true, description: 'Publication date' },
+                  publishedDate: {
+                    type: 'string',
+                    nullable: true,
+                    description: 'Publication date',
+                  },
                 },
               },
             },
@@ -194,9 +204,15 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_query", "invalid_parameter")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_query", "invalid_parameter")',
+                },
               },
             },
           },
@@ -222,9 +238,15 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "resource_not_found", "url_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "resource_not_found", "url_not_found")',
+                },
               },
             },
           },
@@ -236,7 +258,10 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -251,7 +276,10 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
       const extendedRequest = request as ExtendedFastifyRequest;
       const userContext = extendedRequest.userContext || createOrchestrationContext(request);
 
-      log.info({ requestId, query: request.body.query, model: request.body.model }, 'Search request received');
+      log.info(
+        { requestId, query: request.body.query, model: request.body.model },
+        'Search request received'
+      );
 
       try {
         // Validate request body
@@ -286,13 +314,14 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
           },
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Search request failed';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'search_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ requestId, error: errorMessage }, 'Search request failed');
         return reply.code(statusCode).send({
           error: {
@@ -318,17 +347,17 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
         type: 'object',
         required: ['urls'],
         properties: {
-          urls: { 
-            type: 'array', 
+          urls: {
+            type: 'array',
             items: { type: 'string', format: 'uri' },
             minItems: 1,
             maxItems: 10,
-            description: 'Array of URLs to extract content from (1-10 URLs allowed)' 
+            description: 'Array of URLs to extract content from (1-10 URLs allowed)',
           },
-          include_images: { 
-            type: 'boolean', 
+          include_images: {
+            type: 'boolean',
             default: false,
-            description: 'Whether to include image URLs found on the pages (default: false)' 
+            description: 'Whether to include image URLs found on the pages (default: false)',
           },
         },
       },
@@ -379,7 +408,10 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -407,9 +439,15 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "resource_not_found", "url_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "resource_not_found", "url_not_found")',
+                },
               },
             },
           },
@@ -421,7 +459,10 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -439,7 +480,10 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
       const extendedRequest = request as ExtendedFastifyRequest;
       const userContext = extendedRequest.userContext || createOrchestrationContext(request);
 
-      log.info({ requestId, urlCount: request.body.urls.length }, 'Grounding extract request received');
+      log.info(
+        { requestId, urlCount: request.body.urls.length },
+        'Grounding extract request received'
+      );
 
       try {
         const validated = GroundingRequestSchema.parse(request.body);
@@ -461,13 +505,14 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
           },
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Content extraction failed';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'grounding_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ requestId, error: errorMessage }, 'Grounding extract request failed');
         return reply.code(statusCode).send({
           error: {

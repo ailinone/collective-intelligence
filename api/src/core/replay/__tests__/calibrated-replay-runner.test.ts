@@ -22,17 +22,12 @@ import {
   learnTaskTypeOffsets,
 } from '../calibration/calibrated-expected-judge-estimator';
 import { computeCalibrationMetrics } from '../calibration/calibration-metrics';
-import {
-  pickBestEstimator,
-  type TrainEvalDatum,
-} from '../calibration/expected-judge-calibrator';
+import { pickBestEstimator, type TrainEvalDatum } from '../calibration/expected-judge-calibrator';
 import { runHistoricalReplay } from '../historical-replay-runner';
 import { splitTrainHoldout } from '../historical-replay-split';
 import { SYNTHETIC_REPLAY_FIXTURE } from './fixtures/synthetic-replay.fixture';
 import type { HistoricalExecution } from '../../contribution/historical-execution-types';
-import type {
-  HistoricalReplayExecution,
-} from '../historical-replay-types';
+import type { HistoricalReplayExecution } from '../historical-replay-types';
 
 function adapt(e: HistoricalReplayExecution): HistoricalExecution {
   return {
@@ -82,7 +77,7 @@ describe('calibrated replay runner', () => {
 
     // Patch the profiles: replace judgeMean with calibrated estimate.
     const calibratedProfiles = trainHistory.modelProfiles.map((p) =>
-      Object.freeze({ ...p, judgeMean: estimateCalibratedJudge(ctx, p) }),
+      Object.freeze({ ...p, judgeMean: estimateCalibratedJudge(ctx, p) })
     );
     const calibratedHistory = Object.freeze({
       ...trainHistory,
@@ -114,14 +109,14 @@ describe('calibrated replay runner', () => {
         train: split.train,
         holdout: split.holdout,
         trainHistory,
-      }),
+      })
     );
     const b = JSON.stringify(
       runHistoricalReplay({
         train: split.train,
         holdout: split.holdout,
         trainHistory,
-      }),
+      })
     );
     expect(a).toBe(b);
   });

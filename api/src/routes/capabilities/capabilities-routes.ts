@@ -31,7 +31,10 @@ import {
 } from '@/core/capabilities/capability-registry';
 import { getAllCatalogModels } from '@/services/model-catalog-service';
 import { getProviderRegistry } from '@/providers/provider-registry';
-import { isCapabilityOperationalForModel, type ModelOperability } from '@/providers/provider-operability';
+import {
+  isCapabilityOperationalForModel,
+  type ModelOperability,
+} from '@/providers/provider-operability';
 import { isModelCapability } from '@/types';
 import { executeRouteWithRetry } from '@/utils/route-retry';
 
@@ -124,7 +127,11 @@ const AUDIO_SYNTH_CAPABILITIES = new Set<ModelCapability>([
   'audio_output',
 ]);
 
-const REALTIME_STREAM_ONLY = new Set<ModelCapability>(['realtime', 'realtime_audio', 'audio_to_audio']);
+const REALTIME_STREAM_ONLY = new Set<ModelCapability>([
+  'realtime',
+  'realtime_audio',
+  'audio_to_audio',
+]);
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
@@ -158,7 +165,7 @@ function decodeBase64Payload(value: unknown, fieldName: string): Buffer {
     throw new Error(`${fieldName} is required and must be a base64 string`);
   }
 
-  const raw = value.includes(',') ? value.split(',').pop() ?? value : value;
+  const raw = value.includes(',') ? (value.split(',').pop() ?? value) : value;
   return Buffer.from(raw, 'base64');
 }
 
@@ -235,9 +242,7 @@ async function proxyJsonRequest(
   const isJson = typeof contentType === 'string' && contentType.includes('application/json');
   // The forwarded body is opaque from the route's perspective; we keep
   // the parsed shape as `unknown` and let downstream consumers narrow it.
-  const parsedPayload: unknown = isJson
-    ? JSON.parse(forwarded.payload || '{}')
-    : forwarded.payload;
+  const parsedPayload: unknown = isJson ? JSON.parse(forwarded.payload || '{}') : forwarded.payload;
 
   if (forwarded.statusCode >= 400) {
     throw buildCapabilityError('proxy_route', `Proxy execution failed for ${url}`, {
@@ -308,7 +313,9 @@ function parseEnvelope(body: CapabilityRequestBody): CapabilityExecutionEnvelope
   if (typeof sandboxPreferenceRaw === 'string') {
     sandboxPreference = [sandboxPreferenceRaw];
   } else if (Array.isArray(sandboxPreferenceRaw)) {
-    sandboxPreference = sandboxPreferenceRaw.filter((item): item is string => typeof item === 'string');
+    sandboxPreference = sandboxPreferenceRaw.filter(
+      (item): item is string => typeof item === 'string'
+    );
   }
 
   return {
@@ -326,7 +333,10 @@ function parseEnvelope(body: CapabilityRequestBody): CapabilityExecutionEnvelope
   };
 }
 
-function deriveTextInput(body: CapabilityRequestBody, envelope: CapabilityExecutionEnvelope): string {
+function deriveTextInput(
+  body: CapabilityRequestBody,
+  envelope: CapabilityExecutionEnvelope
+): string {
   const fromInput = asString(envelope.input);
   if (fromInput) return fromInput;
 
@@ -438,7 +448,7 @@ async function executeNativeAdapterMode(
   const allowFallback =
     requestBody.allow_fallback !== undefined
       ? asBoolean(requestBody.allow_fallback, true)
-      : envelope.execution?.allowFallback ?? true;
+      : (envelope.execution?.allowFallback ?? true);
   const maxCost = asNumber(requestBody.max_cost) ?? envelope.execution?.maxCost;
   const qualityTarget = asNumber(requestBody.quality_target) ?? envelope.execution?.qualityTarget;
   const executionUserContext = {
@@ -491,7 +501,9 @@ async function executeNativeAdapterMode(
     );
     const filename = asString(requestBody.filename) ?? 'audio.wav';
     const responseFormatRaw = asString(requestBody.response_format) ?? 'json';
-    const responseFormat = TRANSCRIPTION_FORMATS.has(responseFormatRaw) ? responseFormatRaw : 'json';
+    const responseFormat = TRANSCRIPTION_FORMATS.has(responseFormatRaw)
+      ? responseFormatRaw
+      : 'json';
 
     const transcription = await services.audio.transcribeAudio({
       audioBuffer,
@@ -746,9 +758,13 @@ async function executeSandboxWorkflowMode(
   codeExecutionService: CodeExecutionService
 ): Promise<CapabilityModeResult> {
   if (!CODE_CAPABILITIES.has(capability)) {
-    throw buildCapabilityError(capability, `No sandbox workflow executor available for ${capability}`, {
-      executionMode: 'sandbox_workflow',
-    });
+    throw buildCapabilityError(
+      capability,
+      `No sandbox workflow executor available for ${capability}`,
+      {
+        executionMode: 'sandbox_workflow',
+      }
+    );
   }
 
   const userContext = getUserContext(request);
@@ -1222,7 +1238,9 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
 
       const candidateModels =
         requiredCaps.length > 0
-          ? allModels.filter((model) => requiredCaps.every((required) => model.capabilities.includes(required)))
+          ? allModels.filter((model) =>
+              requiredCaps.every((required) => model.capabilities.includes(required))
+            )
           : [];
 
       let runnableCount = 0;
@@ -1261,7 +1279,9 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         if (operational) {
           runnableCount += 1;
         } else {
-          const uniqueReasons = Array.from(new Set(reasons.length > 0 ? reasons : ['not_runnable']));
+          const uniqueReasons = Array.from(
+            new Set(reasons.length > 0 ? reasons : ['not_runnable'])
+          );
           for (const reason of uniqueReasons) {
             reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
             const dependency = reason.split(':')[0];
@@ -1319,7 +1339,8 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
     {
       schema: {
         tags: ['Capabilities'],
-        description: 'List complete capability matrix with execution metadata and dependency hints.',
+        description:
+          'List complete capability matrix with execution metadata and dependency hints.',
       },
       preHandler: [authenticateRequest, requireTenantContext()],
     },

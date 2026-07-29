@@ -65,7 +65,6 @@ const REQ = {
 };
 
 describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
-
   describe('policy version', () => {
     it('C3_SCOPE_POLICY_VERSION is 01C.1B-C3-SCOPE-DESIGN-R4-v1 (R4 integrity lock)', () => {
       expect(C3_SCOPE_POLICY_VERSION).toBe('01C.1B-C3-SCOPE-DESIGN-R4-v1');
@@ -82,15 +81,21 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
     });
 
     it('J2C_HARDEN_DECISION is the correct phrase', () => {
-      expect(J2C_HARDEN_DECISION).toBe('CONSENSUS_01C_1B_J2C_R6_HARDEN_C3_BLOCKED_BY_MEDIUM_CONFIDENCE_MODELS');
+      expect(J2C_HARDEN_DECISION).toBe(
+        'CONSENSUS_01C_1B_J2C_R6_HARDEN_C3_BLOCKED_BY_MEDIUM_CONFIDENCE_MODELS'
+      );
     });
 
     it('J1D_R4B_DECISION is the correct phrase (was inventory sample, not full universe)', () => {
-      expect(J1D_R4B_DECISION).toBe('CONSENSUS_01C_1B_J1D_R4B_INVENTORY_READY_FOR_CONTEXT_WINDOW_AND_DIVERSITY_FIX');
+      expect(J1D_R4B_DECISION).toBe(
+        'CONSENSUS_01C_1B_J1D_R4B_INVENTORY_READY_FOR_CONTEXT_WINDOW_AND_DIVERSITY_FIX'
+      );
     });
 
     it('J1D_R4D_DECISION is the correct phrase', () => {
-      expect(J1D_R4D_DECISION).toBe('CONSENSUS_01C_1B_J1D_R4D_STRICT_EXECUTABLE_READY_FOR_QUALITY_COVERAGE');
+      expect(J1D_R4D_DECISION).toBe(
+        'CONSENSUS_01C_1B_J1D_R4D_STRICT_EXECUTABLE_READY_FOR_QUALITY_COVERAGE'
+      );
     });
   });
 
@@ -141,8 +146,10 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
     it('contains debate', () => expect(C3_ELIGIBLE_STRATEGIES).toContain('debate'));
     it('contains expert-panel', () => expect(C3_ELIGIBLE_STRATEGIES).toContain('expert-panel'));
     it('contains cost-cascade', () => expect(C3_ELIGIBLE_STRATEGIES).toContain('cost-cascade'));
-    it('contains critique-repair', () => expect(C3_ELIGIBLE_STRATEGIES).toContain('critique-repair'));
-    it('contains quality-multipass', () => expect(C3_ELIGIBLE_STRATEGIES).toContain('quality-multipass'));
+    it('contains critique-repair', () =>
+      expect(C3_ELIGIBLE_STRATEGIES).toContain('critique-repair'));
+    it('contains quality-multipass', () =>
+      expect(C3_ELIGIBLE_STRATEGIES).toContain('quality-multipass'));
     it('does NOT contain fast', () => {
       const eligible: readonly string[] = C3_ELIGIBLE_STRATEGIES;
       expect(eligible.includes('fast')).toBe(false);
@@ -159,8 +166,10 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
     it('debate has 2 steps', () => expect(C3_STRATEGY_STEP_COUNTS['debate']).toBe(2));
     it('expert-panel has 2 steps', () => expect(C3_STRATEGY_STEP_COUNTS['expert-panel']).toBe(2));
     it('cost-cascade has 4 steps', () => expect(C3_STRATEGY_STEP_COUNTS['cost-cascade']).toBe(4));
-    it('critique-repair has 3 steps', () => expect(C3_STRATEGY_STEP_COUNTS['critique-repair']).toBe(3));
-    it('quality-multipass has 4 steps', () => expect(C3_STRATEGY_STEP_COUNTS['quality-multipass']).toBe(4));
+    it('critique-repair has 3 steps', () =>
+      expect(C3_STRATEGY_STEP_COUNTS['critique-repair']).toBe(3));
+    it('quality-multipass has 4 steps', () =>
+      expect(C3_STRATEGY_STEP_COUNTS['quality-multipass']).toBe(4));
   });
 
   describe('participant sample sizes per strategy (R3: sampling from 934-model pool)', () => {
@@ -172,12 +181,17 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
     });
 
     it('single uses 1 participant', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['single']).toBe(1));
-    it('consensus uses 5 participants (tier-diverse sample)', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['consensus']).toBe(5));
+    it('consensus uses 5 participants (tier-diverse sample)', () =>
+      expect(C3_PARTICIPANT_SAMPLE_SIZES['consensus']).toBe(5));
     it('debate uses 2 participants', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['debate']).toBe(2));
-    it('expert-panel uses 3 participants', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['expert-panel']).toBe(3));
-    it('cost-cascade uses 3 participants (economy-tier preferred)', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['cost-cascade']).toBe(3));
-    it('critique-repair uses 2 participants', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['critique-repair']).toBe(2));
-    it('quality-multipass uses 3 participants', () => expect(C3_PARTICIPANT_SAMPLE_SIZES['quality-multipass']).toBe(3));
+    it('expert-panel uses 3 participants', () =>
+      expect(C3_PARTICIPANT_SAMPLE_SIZES['expert-panel']).toBe(3));
+    it('cost-cascade uses 3 participants (economy-tier preferred)', () =>
+      expect(C3_PARTICIPANT_SAMPLE_SIZES['cost-cascade']).toBe(3));
+    it('critique-repair uses 2 participants', () =>
+      expect(C3_PARTICIPANT_SAMPLE_SIZES['critique-repair']).toBe(2));
+    it('quality-multipass uses 3 participants', () =>
+      expect(C3_PARTICIPANT_SAMPLE_SIZES['quality-multipass']).toBe(3));
 
     it('all sample sizes are positive integers', () => {
       for (const strategy of C3_ELIGIBLE_STRATEGIES) {
@@ -201,7 +215,14 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
     for (const strategy of C3_ELIGIBLE_STRATEGIES) {
       it(`${strategy}: dry-run plan matches C3_STRATEGY_STEP_COUNTS`, () => {
         const result = buildPlanOnlyResult(
-          strategy, 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+          strategy,
+          'explicit',
+          'request-flag',
+          REQ,
+          CTX,
+          null,
+          0.85,
+          { registered: true }
         );
         const meta = result.metadata as Record<string, unknown>;
         const plan = meta['executionPlan'] as { steps: unknown[] };
@@ -271,8 +292,10 @@ describe('01C.1B-C3-SCOPE-DESIGN-R3 §1 — strategy scope contract', () => {
 
   describe('absolute prohibitions', () => {
     it('c3Executed is false', () => expect(C3_SCOPE_DESIGN_PROHIBITIONS.c3Executed).toBe(false));
-    it('dryRunFalseExecuted is false', () => expect(C3_SCOPE_DESIGN_PROHIBITIONS.dryRunFalseExecuted).toBe(false));
-    it('providerCallsMade is false', () => expect(C3_SCOPE_DESIGN_PROHIBITIONS.providerCallsMade).toBe(false));
+    it('dryRunFalseExecuted is false', () =>
+      expect(C3_SCOPE_DESIGN_PROHIBITIONS.dryRunFalseExecuted).toBe(false));
+    it('providerCallsMade is false', () =>
+      expect(C3_SCOPE_DESIGN_PROHIBITIONS.providerCallsMade).toBe(false));
     it('billableCostUsd is 0', () => expect(C3_SCOPE_DESIGN_PROHIBITIONS.billableCostUsd).toBe(0));
     it('secretsLeaked is 0', () => expect(C3_SCOPE_DESIGN_PROHIBITIONS.secretsLeaked).toBe(0));
   });

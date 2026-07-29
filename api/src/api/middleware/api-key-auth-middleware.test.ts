@@ -9,7 +9,7 @@
 
 /**
  * API Key Authentication Middleware - Tests (Enterprise-Grade)
- * 
+ *
  * Test Coverage:
  * - Public routes bypass
  * - API key extraction (x-api-key, Authorization headers)
@@ -152,17 +152,14 @@ describe('API Key Authentication Middleware', () => {
       ['/health/ready', 'K8s readiness'],
       ['/metrics', 'Prometheus scraping'],
       ['/v1/status/health', 'product status health'],
-    ])(
-      'skips authentication for %s (%s)',
-      async (url) => {
-        mockRequest.url = url;
+    ])('skips authentication for %s (%s)', async (url) => {
+      mockRequest.url = url;
 
-        await apiKeyAuthMiddleware(mockRequest as FastifyRequest, mockReply as FastifyReply);
+      await apiKeyAuthMiddleware(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      },
-    );
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
+    });
 
     it('skips authentication for /v1/hcra/health regardless of query string', async () => {
       // Live probes append timestamps/probe-ids; this guards the
@@ -594,4 +591,3 @@ describe('API Key Authentication Middleware', () => {
     });
   });
 });
-

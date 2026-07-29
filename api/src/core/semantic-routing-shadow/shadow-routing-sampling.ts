@@ -27,10 +27,7 @@ const FNV_PRIME = 0x01000193;
  *   sampleRate=1   → always true (when requestId non-empty)
  *   sampleRate=0.1 → ~10% of requests, deterministic per requestId
  */
-export function shouldSample(
-  requestId: string,
-  sampleRate: number,
-): boolean {
+export function shouldSample(requestId: string, sampleRate: number): boolean {
   if (!Number.isFinite(sampleRate)) return false;
   if (sampleRate <= 0) return false;
   if (sampleRate >= 1) return requestId.length > 0;

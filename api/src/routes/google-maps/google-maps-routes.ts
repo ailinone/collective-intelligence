@@ -10,7 +10,7 @@
 /**
  * Google Maps Integration Routes
  * Real implementation using Google Maps API
- * 
+ *
  * Features:
  * - Places search
  * - Geocoding / Reverse geocoding
@@ -41,7 +41,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Search places',
-      description: 'Searches for places (businesses, points of interest, landmarks) using the Google Maps Places API. Supports text queries with optional location bias, radius filtering, and place type filtering. Returns detailed place information including names, addresses, ratings, and place IDs for further operations.',
+      description:
+        'Searches for places (businesses, points of interest, landmarks) using the Google Maps Places API. Supports text queries with optional location bias, radius filtering, and place type filtering. Returns detailed place information including names, addresses, ratings, and place IDs for further operations.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -58,7 +59,10 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
           },
           radius: { type: 'number', minimum: 1, description: 'Search radius in meters' },
           type: { type: 'string', description: 'Place type filter (e.g., "restaurant", "hotel")' },
-          language: { type: 'string', description: 'Language code for results (e.g., "en", "pt-BR")' },
+          language: {
+            type: 'string',
+            description: 'Language code for results (e.g., "en", "pt-BR")',
+          },
         },
       },
       response: {
@@ -128,7 +132,10 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -171,7 +178,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         if (!googleMapsService.isAvailable()) {
           return reply.code(503).send({
             error: {
-              message: 'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
+              message:
+                'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
               type: 'service_unavailable',
             },
           });
@@ -203,7 +211,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Geocode address',
-      description: 'Converts a human-readable address or place name into geographic coordinates (latitude and longitude). Supports addresses in various formats and languages. Returns precise location data along with formatted addresses, location types, and place IDs. Essential for mapping applications and location-based services.',
+      description:
+        'Converts a human-readable address or place name into geographic coordinates (latitude and longitude). Supports addresses in various formats and languages. Returns precise location data along with formatted addresses, location types, and place IDs. Essential for mapping applications and location-based services.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -211,7 +220,10 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         properties: {
           address: { type: 'string', description: 'Address to geocode' },
           language: { type: 'string', description: 'Language code for results' },
-          region: { type: 'string', description: 'Region code for biasing results (e.g., "us", "br")' },
+          region: {
+            type: 'string',
+            description: 'Region code for biasing results (e.g., "us", "br")',
+          },
         },
       },
       response: {
@@ -294,7 +306,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         if (!googleMapsService.isAvailable()) {
           return reply.code(503).send({
             error: {
-              message: 'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
+              message:
+                'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
               type: 'service_unavailable',
             },
           });
@@ -326,14 +339,20 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Reverse geocode coordinates',
-      description: 'Converts geographic coordinates (latitude and longitude) into human-readable addresses and location information. Returns formatted addresses, location components, place IDs, and administrative boundaries. Useful for displaying user-friendly location information from GPS coordinates or map clicks.',
+      description:
+        'Converts geographic coordinates (latitude and longitude) into human-readable addresses and location information. Returns formatted addresses, location components, place IDs, and administrative boundaries. Useful for displaying user-friendly location information from GPS coordinates or map clicks.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
         required: ['lat', 'lng'],
         properties: {
           lat: { type: 'number', minimum: -90, maximum: 90, description: 'Latitude (-90 to 90)' },
-          lng: { type: 'number', minimum: -180, maximum: 180, description: 'Longitude (-180 to 180)' },
+          lng: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+            description: 'Longitude (-180 to 180)',
+          },
           language: { type: 'string', description: 'Language code for results' },
         },
       },
@@ -417,7 +436,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         if (!googleMapsService.isAvailable()) {
           return reply.code(503).send({
             error: {
-              message: 'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
+              message:
+                'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
               type: 'service_unavailable',
             },
           });
@@ -452,7 +472,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Get directions',
-      description: 'Retrieves detailed turn-by-turn directions between two locations using the Google Maps Directions API. Supports multiple travel modes (driving, walking, bicycling, transit), route optimization, waypoints, and alternative routes. Returns step-by-step directions, distances, durations, and route geometry for mapping applications.',
+      description:
+        'Retrieves detailed turn-by-turn directions between two locations using the Google Maps Directions API. Supports multiple travel modes (driving, walking, bicycling, transit), route optimization, waypoints, and alternative routes. Returns step-by-step directions, distances, durations, and route geometry for mapping applications.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -460,7 +481,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         properties: {
           origin: {
             oneOf: [
-              { type: 'string', description: 'Address string (e.g., "1600 Amphitheatre Parkway, Mountain View, CA")' },
+              {
+                type: 'string',
+                description:
+                  'Address string (e.g., "1600 Amphitheatre Parkway, Mountain View, CA")',
+              },
               {
                 type: 'object',
                 description: 'Coordinate object with latitude and longitude',
@@ -483,16 +508,18 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
               },
             ],
           },
-          mode: { 
-            type: 'string', 
-            enum: ['driving', 'walking', 'bicycling', 'transit'],
-            description: 'Travel mode: driving (default), walking, bicycling, or transit (public transport)',
-          },
-          language: { 
+          mode: {
             type: 'string',
-            description: 'Language code for route instructions (e.g., "en", "pt-BR"). Default: "en"',
+            enum: ['driving', 'walking', 'bicycling', 'transit'],
+            description:
+              'Travel mode: driving (default), walking, bicycling, or transit (public transport)',
           },
-          alternatives: { 
+          language: {
+            type: 'string',
+            description:
+              'Language code for route instructions (e.g., "en", "pt-BR"). Default: "en"',
+          },
+          alternatives: {
             type: 'boolean',
             description: 'Whether to return alternative routes (if available). Default: false',
           },
@@ -519,8 +546,14 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
                     items: {
                       type: 'object',
                       properties: {
-                        distance: { type: 'object', properties: { value: { type: 'number' }, text: { type: 'string' } } },
-                        duration: { type: 'object', properties: { value: { type: 'number' }, text: { type: 'string' } } },
+                        distance: {
+                          type: 'object',
+                          properties: { value: { type: 'number' }, text: { type: 'string' } },
+                        },
+                        duration: {
+                          type: 'object',
+                          properties: { value: { type: 'number' }, text: { type: 'string' } },
+                        },
                         start_address: { type: 'string' },
                         end_address: { type: 'string' },
                         steps: { type: 'array' },
@@ -582,7 +615,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         if (!googleMapsService.isAvailable()) {
           return reply.code(503).send({
             error: {
-              message: 'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
+              message:
+                'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
               type: 'service_unavailable',
             },
           });
@@ -614,7 +648,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Get place details',
-      description: 'Retrieves comprehensive information about a specific place using its place ID. Returns detailed data including address, phone number, website, opening hours, ratings, reviews, photos, and amenities. Supports field filtering to request only needed information, optimizing response size and API costs. Essential for building detailed place profile pages.',
+      description:
+        'Retrieves comprehensive information about a specific place using its place ID. Returns detailed data including address, phone number, website, opening hours, ratings, reviews, photos, and amenities. Supports field filtering to request only needed information, optimizing response size and API costs. Essential for building detailed place profile pages.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -710,7 +745,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         if (!googleMapsService.isAvailable()) {
           return reply.code(503).send({
             error: {
-              message: 'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
+              message:
+                'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.',
               type: 'service_unavailable',
             },
           });
@@ -736,7 +772,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Tools', 'Google Maps'],
       summary: 'Google Maps integration (legacy)',
-      description: 'Legacy endpoint. Use specific endpoints: /search, /geocode, /directions, /place-details',
+      description:
+        'Legacy endpoint. Use specific endpoints: /search, /geocode, /directions, /place-details',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -744,7 +781,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         properties: {
           operation: {
             type: 'string',
-            description: 'Legacy operation type. This endpoint is deprecated - use specific endpoints instead.',
+            description:
+              'Legacy operation type. This endpoint is deprecated - use specific endpoints instead.',
           },
         },
       },
@@ -753,8 +791,14 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
           description: 'Google Maps service status',
           type: 'object',
           properties: {
-            message: { type: 'string', description: 'Status message indicating the service availability' },
-            available: { type: 'boolean', description: 'Whether Google Maps API is configured and available' },
+            message: {
+              type: 'string',
+              description: 'Status message indicating the service availability',
+            },
+            available: {
+              type: 'boolean',
+              description: 'Whether Google Maps API is configured and available',
+            },
           },
         },
         400: {
@@ -764,7 +808,10 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -792,7 +839,10 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -804,7 +854,8 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
     preHandler: authenticateRequest,
     handler: async (_request, reply) => {
       return reply.send({
-        message: 'Google Maps integration is available. Use specific endpoints: /v1/tools/google-maps/search, /geocode, /reverse-geocode, /directions, /place-details',
+        message:
+          'Google Maps integration is available. Use specific endpoints: /v1/tools/google-maps/search, /geocode, /reverse-geocode, /directions, /place-details',
         available: googleMapsService.isAvailable(),
       });
     },
@@ -812,4 +863,3 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
 
   log.info('Google Maps routes registered successfully');
 }
-

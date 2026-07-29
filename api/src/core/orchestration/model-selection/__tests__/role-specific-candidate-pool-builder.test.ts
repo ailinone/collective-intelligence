@@ -38,7 +38,7 @@ function makeRepo(): ModelRepositoryLike & { calls: Array<unknown> } {
             id: `m-${minCtx}-${i}`,
             provider: `prov-${i % 5}`,
             contextWindow: minCtx >= 32_000 ? 64_000 : minCtx >= 16_000 ? 16_000 : 8_000,
-          }),
+          })
         );
       }
       return out;

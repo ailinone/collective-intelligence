@@ -67,9 +67,7 @@ describe('splitTrainHoldout — by_experiment_id', () => {
       holdoutFraction: 0.5,
       minPerSide: 1_000,
     });
-    expect(
-      s.leakageWarnings.some((w) => w.indexOf('train_below_min') !== -1),
-    ).toBe(true);
+    expect(s.leakageWarnings.some((w) => w.indexOf('train_below_min') !== -1)).toBe(true);
   });
 });
 
@@ -89,7 +87,7 @@ describe('splitTrainHoldout — by_time', () => {
       createdAt,
     });
     const rows = Array.from({ length: 10 }, (_, i) =>
-      exec(`e${i}`, `2026-01-${(i + 1).toString().padStart(2, '0')}T00:00:00Z`),
+      exec(`e${i}`, `2026-01-${(i + 1).toString().padStart(2, '0')}T00:00:00Z`)
     );
     const s = splitTrainHoldout(rows as readonly any[], {
       strategy: 'by_time',

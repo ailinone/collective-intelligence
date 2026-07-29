@@ -75,8 +75,12 @@ describe('parseAuditorVerdict', () => {
   });
 
   it('falls back to the configured policy when both ACCEPT and REVISE appear', () => {
-    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'accept').status).toBe('accept');
-    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'revise').status).toBe('revise');
+    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'accept').status).toBe(
+      'accept'
+    );
+    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'revise').status).toBe(
+      'revise'
+    );
   });
 
   it('falls back to the configured policy when neither ACCEPT nor REVISE appears', () => {
@@ -86,7 +90,9 @@ describe('parseAuditorVerdict', () => {
 
   it('marks ambiguous verdicts as inferred=true', () => {
     expect(parseAuditorVerdict('looks fine', 'accept').inferred).toBe(true);
-    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'accept').inferred).toBe(true);
+    expect(parseAuditorVerdict('first ACCEPT but on reflection REVISE', 'accept').inferred).toBe(
+      true
+    );
   });
 
   it('returns the ambiguous default for non-string input', () => {
@@ -119,7 +125,16 @@ describe('decideRoleForTurn', () => {
 
   it('turn 2 is always solver', () => {
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: makeModel(), responseText: 'p', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: makeModel(),
+        responseText: 'p',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ];
     const decision = decideRoleForTurn(2, transcript);
     expect(decision.role).toBe('solver');
@@ -128,8 +143,26 @@ describe('decideRoleForTurn', () => {
 
   it('after a solver turn, the next role is auditor', () => {
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: makeModel(), responseText: 'p', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: makeModel(), responseText: 's', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: makeModel(),
+        responseText: 'p',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: makeModel(),
+        responseText: 's',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ];
     const decision = decideRoleForTurn(3, transcript);
     expect(decision.role).toBe('auditor');
@@ -138,8 +171,26 @@ describe('decideRoleForTurn', () => {
 
   it('after an auditor REVISE, the next role is solver again', () => {
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: makeModel(), responseText: 'p', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: makeModel(), responseText: 's', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: makeModel(),
+        responseText: 'p',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: makeModel(),
+        responseText: 's',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
       {
         turn: 3,
         role: 'auditor' as const,
@@ -159,8 +210,26 @@ describe('decideRoleForTurn', () => {
 
   it('after an auditor ACCEPT, the loop should not call decideRoleForTurn again — but defensive default is auditor', () => {
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: makeModel(), responseText: 'p', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: makeModel(), responseText: 's', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: makeModel(),
+        responseText: 'p',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: makeModel(),
+        responseText: 's',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
       {
         turn: 3,
         role: 'auditor' as const,
@@ -186,8 +255,26 @@ describe('decideRoleForTurn', () => {
     // identifier so downstream training data can tell apart the legacy
     // fixed scheduler from a future trained coordinator.
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: makeModel(), responseText: 'p', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: makeModel(), responseText: 's', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: makeModel(),
+        responseText: 'p',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: makeModel(),
+        responseText: 's',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ];
     expect(decideRoleForTurn(1, []).scheduler).toBe('fixed-state-machine');
     expect(decideRoleForTurn(2, transcript.slice(0, 1)).scheduler).toBe('fixed-state-machine');
@@ -222,8 +309,26 @@ describe('pickModelForTurn', () => {
   it('forces auditor model to differ from most-recent solver', () => {
     const pool = [makeModel({ id: 'a' }), makeModel({ id: 'b' })];
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: pool[0], responseText: '', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: pool[1], responseText: '', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: pool[0],
+        responseText: '',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: pool[1],
+        responseText: '',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ];
     // Round-robin would pick pool[(3-1) % 2] = pool[0] = 'a' for turn 3.
     // Solver was 'b'; auditor 'a' is different. So no swap needed here.
@@ -233,8 +338,26 @@ describe('pickModelForTurn', () => {
   it('swaps to a different model when round-robin would collide with the most-recent solver', () => {
     const pool = [makeModel({ id: 'a' }), makeModel({ id: 'b' })];
     const transcript = [
-      { turn: 1, role: 'planner' as const, model: pool[1], responseText: '', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
-      { turn: 2, role: 'solver' as const, model: pool[0], responseText: '', cost: 0, durationMs: 0, inputTokens: 0, outputTokens: 0 },
+      {
+        turn: 1,
+        role: 'planner' as const,
+        model: pool[1],
+        responseText: '',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+      {
+        turn: 2,
+        role: 'solver' as const,
+        model: pool[0],
+        responseText: '',
+        cost: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ];
     // Round-robin would pick pool[(3-1) % 2] = pool[0] = 'a' for turn 3.
     // But solver was 'a' — swap to next so auditor uses 'b'.

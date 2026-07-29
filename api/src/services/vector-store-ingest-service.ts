@@ -35,10 +35,7 @@
 import type { Pool } from 'pg';
 import { nanoid } from 'nanoid';
 import { logger } from '@/utils/logger';
-import {
-  type CapabilityEmbedder,
-  EMBEDDING_DIM,
-} from '@/capability/embedder/embedder';
+import { type CapabilityEmbedder, EMBEDDING_DIM } from '@/capability/embedder/embedder';
 import { getCapabilityEmbedder } from '@/capability/embedder/embedder-factory';
 import { getCapabilityPool } from '@/capability/db/capability-pool';
 
@@ -70,10 +67,7 @@ export interface ChunkOptions {
  */
 export function chunkText(text: string, opts: ChunkOptions = {}): string[] {
   const chunkSize = Math.max(1, opts.chunkSize ?? DEFAULT_CHUNK_SIZE);
-  const overlap = Math.min(
-    Math.max(0, opts.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP),
-    chunkSize - 1,
-  );
+  const overlap = Math.min(Math.max(0, opts.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP), chunkSize - 1);
   const maxChunks = Math.max(1, opts.maxChunks ?? MAX_CHUNKS_PER_FILE);
 
   const normalized = text.replace(/\r\n/g, '\n').trim();
@@ -163,7 +157,7 @@ interface ChunkRow {
 export class VectorStoreIngestService {
   constructor(
     private readonly pool: Pool = getCapabilityPool(),
-    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder(),
+    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder()
   ) {}
 
   /**
@@ -188,24 +182,21 @@ export class VectorStoreIngestService {
     const chunks = chunkText(input.content, input.chunkOptions);
 
     // Replace any prior chunks for this association (idempotent re-ingest).
-    await this.pool.query(
-      `DELETE FROM vector_store_chunks WHERE vector_store_file_id = $1;`,
-      [input.vectorStoreFileId],
-    );
+    await this.pool.query(`DELETE FROM vector_store_chunks WHERE vector_store_file_id = $1;`, [
+      input.vectorStoreFileId,
+    ]);
 
     if (chunks.length === 0) {
       log.info(
         { vectorStoreFileId: input.vectorStoreFileId, fileId: input.fileId },
-        'No textual content to embed — 0 chunks created',
+        'No textual content to embed — 0 chunks created'
       );
       return { chunksCreated: 0, embeddingModel: this.embedder.id };
     }
 
     const embeddings = await this.embedder.embedBatch(chunks);
     if (embeddings.length !== chunks.length) {
-      throw new Error(
-        `Embedder returned ${embeddings.length} vectors for ${chunks.length} chunks`,
-      );
+      throw new Error(`Embedder returned ${embeddings.length} vectors for ${chunks.length} chunks`);
     }
 
     const metadataJson = JSON.stringify(input.metadata ?? {});
@@ -213,9 +204,7 @@ export class VectorStoreIngestService {
     for (let i = 0; i < chunks.length; i += 1) {
       const vector = embeddings[i]?.vector;
       if (!vector || vector.length !== EMBEDDING_DIM) {
-        throw new Error(
-          `Embedding ${i} has dim ${vector?.length ?? 0}, expected ${EMBEDDING_DIM}`,
-        );
+        throw new Error(`Embedding ${i} has dim ${vector?.length ?? 0}, expected ${EMBEDDING_DIM}`);
       }
       await this.pool.query(
         `INSERT INTO vector_store_chunks
@@ -233,7 +222,7 @@ export class VectorStoreIngestService {
           vectorToPgLiteral(vector),
           this.embedder.id,
           metadataJson,
-        ],
+        ]
       );
     }
 
@@ -244,7 +233,7 @@ export class VectorStoreIngestService {
         chunks: chunks.length,
         embedder: this.embedder.id,
       },
-      'File ingested into vector store',
+      'File ingested into vector store'
     );
 
     return { chunksCreated: chunks.length, embeddingModel: this.embedder.id };
@@ -275,7 +264,7 @@ export class VectorStoreIngestService {
     const queryEmbedding = await this.embedder.embed(q);
     if (queryEmbedding.vector.length !== EMBEDDING_DIM) {
       throw new Error(
-        `Query embedding has dim ${queryEmbedding.vector.length}, expected ${EMBEDDING_DIM}`,
+        `Query embedding has dim ${queryEmbedding.vector.length}, expected ${EMBEDDING_DIM}`
       );
     }
 
@@ -307,7 +296,7 @@ export class VectorStoreIngestService {
          ${fileClause}
        ORDER BY embedding <=> $1::vector
        LIMIT $4;`,
-      params,
+      params
     );
 
     return rows.map((r) => ({

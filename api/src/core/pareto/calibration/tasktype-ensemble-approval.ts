@@ -61,15 +61,11 @@ export interface TaskTypeApprovalInput {
   readonly codeGenerationErrorCeiling?: number;
 }
 
-export function decideTaskTypeApproval(
-  input: TaskTypeApprovalInput,
-): TaskTypeEnsembleApproval {
+export function decideTaskTypeApproval(input: TaskTypeApprovalInput): TaskTypeEnsembleApproval {
   const reasons: string[] = [];
   const p = input.policy;
   const errorCeiling =
-    input.taskType === 'code-generation'
-      ? input.codeGenerationErrorCeiling ?? 0.25
-      : 0.3;
+    input.taskType === 'code-generation' ? (input.codeGenerationErrorCeiling ?? 0.25) : 0.3;
 
   // Sample size first — short-circuits everything.
   if (
@@ -77,7 +73,7 @@ export function decideTaskTypeApproval(
     input.holdoutSamples < p.minHoldoutSamplesForTaskTypeApproval
   ) {
     reasons.push(
-      `samples:train=${input.trainSamples}<${p.minTrainSamplesForTaskTypeApproval}_or_holdout=${input.holdoutSamples}<${p.minHoldoutSamplesForTaskTypeApproval}`,
+      `samples:train=${input.trainSamples}<${p.minTrainSamplesForTaskTypeApproval}_or_holdout=${input.holdoutSamples}<${p.minHoldoutSamplesForTaskTypeApproval}`
     );
     return build(input, 'blocked_insufficient_data', false, reasons);
   }
@@ -88,16 +84,14 @@ export function decideTaskTypeApproval(
     (input.fallbackRate >= 1.0 || input.nonFallbackRate < p.minNonFallbackRate)
   ) {
     reasons.push(
-      `nonFallbackRate=${input.nonFallbackRate.toFixed(3)}<${p.minNonFallbackRate}_OR_fallbackRate>=1.0`,
+      `nonFallbackRate=${input.nonFallbackRate.toFixed(3)}<${p.minNonFallbackRate}_OR_fallbackRate>=1.0`
     );
     return build(input, 'blocked_fallback_only', false, reasons);
   }
 
   // Judge error.
   if (input.expectedVsObservedJudgeError > errorCeiling) {
-    reasons.push(
-      `judge_error=${input.expectedVsObservedJudgeError.toFixed(3)}>${errorCeiling}`,
-    );
+    reasons.push(`judge_error=${input.expectedVsObservedJudgeError.toFixed(3)}>${errorCeiling}`);
     return build(input, 'blocked_high_error', false, reasons);
   }
 
@@ -116,7 +110,7 @@ export function decideTaskTypeApproval(
   // Quality+cost combined.
   if (input.qualityAndCostSuccessRate < 0.8) {
     reasons.push(
-      `quality_and_cost_success_rate=${input.qualityAndCostSuccessRate.toFixed(3)}<0.80`,
+      `quality_and_cost_success_rate=${input.qualityAndCostSuccessRate.toFixed(3)}<0.80`
     );
     return build(input, 'blocked_quality', false, reasons);
   }
@@ -129,7 +123,7 @@ function build(
   input: TaskTypeApprovalInput,
   status: TaskTypeApprovalStatus,
   approved: boolean,
-  reasons: string[],
+  reasons: string[]
 ): TaskTypeEnsembleApproval {
   return Object.freeze({
     taskType: input.taskType,

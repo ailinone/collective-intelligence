@@ -43,7 +43,9 @@ beforeEach(() => {
   }));
 });
 
-function makeResults(overrides: Partial<BenchmarkResult> & { count?: number } = {}): BenchmarkResult[] {
+function makeResults(
+  overrides: Partial<BenchmarkResult> & { count?: number } = {}
+): BenchmarkResult[] {
   const count = overrides.count ?? 5;
   const base: BenchmarkResult = {
     taskType: 'code-generation',
@@ -61,20 +63,36 @@ describe('evaluateChallenger', () => {
   it('promotes when challenger beats champion by >= threshold', async () => {
     // Champion has quality 0.70
     mockFindMany.mockResolvedValue([
-      { taskType: 'code-generation', complexity: 'medium', strategy: 'single', avgQuality: 0.70, successRate: 0.80, weight: 1.35, sampleCount: 20 },
+      {
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        avgQuality: 0.7,
+        successRate: 0.8,
+        weight: 1.35,
+        sampleCount: 20,
+      },
     ]);
 
     const { evaluateChallenger } = await import('../champion-challenger');
-    const result = await evaluateChallenger(makeResults({ qualityScore: 0.80, count: 5 }));
+    const result = await evaluateChallenger(makeResults({ qualityScore: 0.8, count: 5 }));
 
     expect(result.overallVerdict).toBe('promoted');
     expect(result.promoted).toHaveLength(1);
-    expect(result.promoted[0].delta).toBeCloseTo(0.10, 2);
+    expect(result.promoted[0].delta).toBeCloseTo(0.1, 2);
   });
 
   it('returns no-change when delta is below threshold', async () => {
     mockFindMany.mockResolvedValue([
-      { taskType: 'code-generation', complexity: 'medium', strategy: 'single', avgQuality: 0.80, successRate: 0.90, weight: 1.40, sampleCount: 20 },
+      {
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        avgQuality: 0.8,
+        successRate: 0.9,
+        weight: 1.4,
+        sampleCount: 20,
+      },
     ]);
 
     const { evaluateChallenger } = await import('../champion-challenger');
@@ -87,12 +105,20 @@ describe('evaluateChallenger', () => {
 
   it('rejects when challenger degrades beyond limit', async () => {
     mockFindMany.mockResolvedValue([
-      { taskType: 'code-generation', complexity: 'medium', strategy: 'single', avgQuality: 0.90, successRate: 0.95, weight: 1.45, sampleCount: 20 },
+      {
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        avgQuality: 0.9,
+        successRate: 0.95,
+        weight: 1.45,
+        sampleCount: 20,
+      },
     ]);
 
     const { evaluateChallenger } = await import('../champion-challenger');
     // Quality drops from 0.90 to 0.80 = -0.10 which exceeds degradation limit (0.05)
-    const result = await evaluateChallenger(makeResults({ qualityScore: 0.80, count: 5 }));
+    const result = await evaluateChallenger(makeResults({ qualityScore: 0.8, count: 5 }));
 
     expect(result.overallVerdict).toBe('rejected');
     expect(result.rejected.length).toBeGreaterThan(0);
@@ -102,16 +128,44 @@ describe('evaluateChallenger', () => {
   it('rejects ALL strategies when any single one critically degrades', async () => {
     // Two strategies: one improving, one degrading
     mockFindMany.mockResolvedValue([
-      { taskType: 'code-gen', complexity: 'high', strategy: 'single', avgQuality: 0.70, successRate: 0.80, weight: 1.35, sampleCount: 20 },
-      { taskType: 'code-gen', complexity: 'high', strategy: 'debate', avgQuality: 0.90, successRate: 0.95, weight: 1.45, sampleCount: 20 },
+      {
+        taskType: 'code-gen',
+        complexity: 'high',
+        strategy: 'single',
+        avgQuality: 0.7,
+        successRate: 0.8,
+        weight: 1.35,
+        sampleCount: 20,
+      },
+      {
+        taskType: 'code-gen',
+        complexity: 'high',
+        strategy: 'debate',
+        avgQuality: 0.9,
+        successRate: 0.95,
+        weight: 1.45,
+        sampleCount: 20,
+      },
     ]);
 
     const { evaluateChallenger } = await import('../champion-challenger');
     const results: BenchmarkResult[] = [
       // single improves (0.70 → 0.85 = +0.15)
-      ...makeResults({ taskType: 'code-gen', complexity: 'high', strategy: 'single', qualityScore: 0.85, count: 5 }),
+      ...makeResults({
+        taskType: 'code-gen',
+        complexity: 'high',
+        strategy: 'single',
+        qualityScore: 0.85,
+        count: 5,
+      }),
       // debate degrades (0.90 → 0.75 = -0.15, beyond limit)
-      ...makeResults({ taskType: 'code-gen', complexity: 'high', strategy: 'debate', qualityScore: 0.75, count: 5 }),
+      ...makeResults({
+        taskType: 'code-gen',
+        complexity: 'high',
+        strategy: 'debate',
+        qualityScore: 0.75,
+        count: 5,
+      }),
     ];
 
     const result = await evaluateChallenger(results);
@@ -146,11 +200,19 @@ describe('evaluateChallenger', () => {
 
   it('auto-promotes when champion has insufficient samples', async () => {
     mockFindMany.mockResolvedValue([
-      { taskType: 'code-generation', complexity: 'medium', strategy: 'single', avgQuality: 0.90, successRate: 0.95, weight: 1.45, sampleCount: 3 }, // < 10
+      {
+        taskType: 'code-generation',
+        complexity: 'medium',
+        strategy: 'single',
+        avgQuality: 0.9,
+        successRate: 0.95,
+        weight: 1.45,
+        sampleCount: 3,
+      }, // < 10
     ]);
 
     const { evaluateChallenger } = await import('../champion-challenger');
-    const result = await evaluateChallenger(makeResults({ qualityScore: 0.70, count: 5 }));
+    const result = await evaluateChallenger(makeResults({ qualityScore: 0.7, count: 5 }));
 
     // Should auto-promote even though quality is lower — champion not established
     expect(result.overallVerdict).toBe('promoted');
@@ -165,7 +227,14 @@ describe('promoteChallenger', () => {
 
     const evaluation: ChampionChallengerResult = {
       promoted: [
-        { taskType: 'code-gen', complexity: 'high', strategy: 'single', championQuality: 0.70, challengerQuality: 0.85, delta: 0.15 },
+        {
+          taskType: 'code-gen',
+          complexity: 'high',
+          strategy: 'single',
+          championQuality: 0.7,
+          challengerQuality: 0.85,
+          delta: 0.15,
+        },
       ],
       rejected: [],
       unchanged: 0,
@@ -173,7 +242,13 @@ describe('promoteChallenger', () => {
       timestamp: new Date().toISOString(),
     };
 
-    const results = makeResults({ taskType: 'code-gen', complexity: 'high', strategy: 'single', qualityScore: 0.85, count: 5 });
+    const results = makeResults({
+      taskType: 'code-gen',
+      complexity: 'high',
+      strategy: 'single',
+      qualityScore: 0.85,
+      count: 5,
+    });
 
     await promoteChallenger(evaluation, results);
 

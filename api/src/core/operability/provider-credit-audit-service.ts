@@ -74,13 +74,12 @@ export interface ProviderCreditAuditDeps {
   readonly probeRegistry?: ProviderProbeRegistry;
 }
 
-const HEALTHY_STATES: ReadonlySet<string> = new Set([
-  'healthy',
-  'degraded',
-  'recovering',
-]);
+const HEALTHY_STATES: ReadonlySet<string> = new Set(['healthy', 'degraded', 'recovering']);
 
-function classifyFromHub(operabilityState: string, hasCredential: boolean): ProviderCreditAuditProviderResult['classification'] {
+function classifyFromHub(
+  operabilityState: string,
+  hasCredential: boolean
+): ProviderCreditAuditProviderResult['classification'] {
   if (!hasCredential) return 'no_credential_configured';
   if (operabilityState === 'no_credits') return 'no_credits';
   if (operabilityState === 'auth_failed') return 'auth_failed';
@@ -98,7 +97,7 @@ export class ProviderCreditAuditService {
   async run(input: ProviderCreditAuditInput): Promise<ProviderCreditAuditResult> {
     if (input.mode === 'minimal_billable_probe') {
       throw new Error(
-        'minimal_billable_probe is not implemented in this turn — requires per-run authorization and a billable budget guard.',
+        'minimal_billable_probe is not implemented in this turn — requires per-run authorization and a billable budget guard.'
       );
     }
     // Strategy 01C.0.2 — non_billable_probe path is now supported via
@@ -168,8 +167,13 @@ export class ProviderCreditAuditService {
       // metadata_only.
       const probeMeta = this.deps.probeRegistry?.getMetadata(providerId);
       let probeResult: import('./provider-credit-audit-types').ProviderProbeResult | undefined;
-      let reconciliation: import('./provider-credit-audit-types').ProviderReconciliation | undefined;
-      if (input.mode === 'non_billable_probe' && probeMeta?.probeSupported && probeMeta.probeBillableRisk === 'none') {
+      let reconciliation:
+        import('./provider-credit-audit-types').ProviderReconciliation | undefined;
+      if (
+        input.mode === 'non_billable_probe' &&
+        probeMeta?.probeSupported &&
+        probeMeta.probeBillableRisk === 'none'
+      ) {
         probeResult = await this.deps.probeRegistry!.run(providerId, 5000);
         reconciliation = reconcileProviderState({
           providerId,
@@ -272,7 +276,9 @@ export class ProviderCreditAuditService {
         isCritical: r.reconciliation.isCriticalStale,
       });
     }
-    const criticalStaleOperabilityStateCount = staleOperabilityStates.filter((s) => s.isCritical).length;
+    const criticalStaleOperabilityStateCount = staleOperabilityStates.filter(
+      (s) => s.isCritical
+    ).length;
 
     log.info(
       {
@@ -281,7 +287,7 @@ export class ProviderCreditAuditService {
         buckets,
         modelsUsable,
       },
-      'provider credit audit complete',
+      'provider credit audit complete'
     );
 
     return {

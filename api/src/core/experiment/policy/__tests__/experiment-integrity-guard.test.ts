@@ -37,7 +37,9 @@ import type { ClassifiedModel } from '../model-classification';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
-function makeArm(o: Partial<ResolvedExperimentArm> & { policy: ArmEvaluationPolicy }): ResolvedExperimentArm {
+function makeArm(
+  o: Partial<ResolvedExperimentArm> & { policy: ArmEvaluationPolicy }
+): ResolvedExperimentArm {
   return Object.freeze({
     armId: o.armId ?? 'test-arm',
     mode: o.mode ?? 'single-model',
@@ -61,7 +63,7 @@ function makeAttempt(
   providerId: string,
   modelId: string,
   modelFamily: string,
-  o: Partial<ModelAttemptRecord> = {},
+  o: Partial<ModelAttemptRecord> = {}
 ): ModelAttemptRecord {
   return {
     attemptIndex: index,
@@ -78,7 +80,12 @@ function makeAttempt(
   };
 }
 
-function makeClass(modelId: string, providerId: string, modelFamily: string, opts: Partial<ClassifiedModel> = {}): ClassifiedModel {
+function makeClass(
+  modelId: string,
+  providerId: string,
+  modelFamily: string,
+  opts: Partial<ClassifiedModel> = {}
+): ClassifiedModel {
   return {
     modelId,
     providerId,
@@ -106,9 +113,7 @@ describe('strict_baseline integrity', () => {
     });
 
     const attempts = [makeAttempt(0, 'openai-native', 'gpt-4o', 'openai', { costUsd: 0.01 })];
-    const classifications = new Map([
-      ['gpt-4o', makeClass('gpt-4o', 'openai-native', 'openai')],
-    ]);
+    const classifications = new Map([['gpt-4o', makeClass('gpt-4o', 'openai-native', 'openai')]]);
 
     const record: ExecutionRecord = {
       executionId: 'exec-1',
@@ -180,7 +185,13 @@ describe('strict_baseline integrity', () => {
     ];
 
     const classifications = new Map([
-      ['qwen2.5:32b', makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', { isLocal: true, capabilityTier: 'local-frontier' })],
+      [
+        'qwen2.5:32b',
+        makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', {
+          isLocal: true,
+          capabilityTier: 'local-frontier',
+        }),
+      ],
     ]);
 
     const record: ExecutionRecord = {
@@ -212,13 +223,9 @@ describe('family_baseline integrity', () => {
       declaredModelFamily: 'openai',
     });
 
-    const attempts = [
-      makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', { costUsd: 0.01 }),
-    ];
+    const attempts = [makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', { costUsd: 0.01 })];
 
-    const classifications = new Map([
-      ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')],
-    ]);
+    const classifications = new Map([['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')]]);
 
     const record: ExecutionRecord = {
       executionId: 'exec-4',
@@ -286,7 +293,12 @@ describe('dynamic_router integrity', () => {
 
     const classifications = new Map([
       ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai', { capabilityTier: 'frontier' })],
-      ['claude-3.5-sonnet', makeClass('claude-3.5-sonnet', 'anthropic-native', 'anthropic', { capabilityTier: 'frontier' })],
+      [
+        'claude-3.5-sonnet',
+        makeClass('claude-3.5-sonnet', 'anthropic-native', 'anthropic', {
+          capabilityTier: 'frontier',
+        }),
+      ],
     ]);
 
     const record: ExecutionRecord = {
@@ -320,7 +332,13 @@ describe('dynamic_router integrity', () => {
 
     const classifications = new Map([
       ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai', { capabilityTier: 'frontier' })],
-      ['qwen2.5:32b', makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', { isLocal: true, capabilityTier: 'local-frontier' })],
+      [
+        'qwen2.5:32b',
+        makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', {
+          isLocal: true,
+          capabilityTier: 'local-frontier',
+        }),
+      ],
     ]);
 
     const record: ExecutionRecord = {
@@ -356,7 +374,13 @@ describe('dynamic_router integrity', () => {
     ];
 
     const classifications = new Map([
-      ['qwen2.5:32b', makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', { isLocal: true, capabilityTier: 'local-frontier' })],
+      [
+        'qwen2.5:32b',
+        makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', {
+          isLocal: true,
+          capabilityTier: 'local-frontier',
+        }),
+      ],
     ]);
 
     const record: ExecutionRecord = {
@@ -380,19 +404,17 @@ describe('dynamic_router integrity', () => {
 
     const attempts = [
       makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', {
-        costUsd: POLICY_DYNAMIC_ROUTER.totalArmBudgetUsd + 0.10,
+        costUsd: POLICY_DYNAMIC_ROUTER.totalArmBudgetUsd + 0.1,
       }),
     ];
 
-    const classifications = new Map([
-      ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')],
-    ]);
+    const classifications = new Map([['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')]]);
 
     const record: ExecutionRecord = {
       executionId: 'exec-9',
       arm,
       attempts,
-      totalCostUsd: POLICY_DYNAMIC_ROUTER.totalArmBudgetUsd + 0.10,
+      totalCostUsd: POLICY_DYNAMIC_ROUTER.totalArmBudgetUsd + 0.1,
       totalDurationMs: 5_000,
     };
 
@@ -407,13 +429,9 @@ describe('dynamic_router integrity', () => {
       role: 'dynamic_router',
     });
 
-    const attempts = [
-      makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', { costUsd: 0.01 }),
-    ];
+    const attempts = [makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', { costUsd: 0.01 })];
 
-    const classifications = new Map([
-      ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')],
-    ]);
+    const classifications = new Map([['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai')]]);
 
     const record: ExecutionRecord = {
       executionId: 'exec-10',
@@ -443,13 +461,16 @@ describe('dynamic_router integrity', () => {
         makeAttempt(i + 1, 'p' + (i + 1), 'm' + (i + 1), 'f', {
           roleInStrategy: 'fallback',
           costUsd: 0.001,
-        }),
+        })
       ),
     ];
 
     const classifications = new Map<string, ClassifiedModel>();
     for (const a of attempts) {
-      classifications.set(a.modelId, makeClass(a.modelId, a.providerId, a.modelFamily, { capabilityTier: 'frontier' }));
+      classifications.set(
+        a.modelId,
+        makeClass(a.modelId, a.providerId, a.modelFamily, { capabilityTier: 'frontier' })
+      );
     }
 
     const record: ExecutionRecord = {
@@ -479,15 +500,34 @@ describe('collective_strategy integrity', () => {
     });
 
     const attempts = [
-      makeAttempt(0, 'p1', 'm1', 'f1', { roleInStrategy: 'expert', costUsd: 0.005, timestampMs: Date.now() }),
-      makeAttempt(1, 'p2', 'm2', 'f2', { roleInStrategy: 'expert', costUsd: 0.005, timestampMs: Date.now() + 1_000 }),
-      makeAttempt(2, 'p3', 'm3', 'f3', { roleInStrategy: 'expert', costUsd: 0.005, timestampMs: Date.now() + 2_000 }),
-      makeAttempt(3, 'p1', 'm-agg', 'f1', { roleInStrategy: 'aggregator', costUsd: 0.003, timestampMs: Date.now() + 3_000 }),
+      makeAttempt(0, 'p1', 'm1', 'f1', {
+        roleInStrategy: 'expert',
+        costUsd: 0.005,
+        timestampMs: Date.now(),
+      }),
+      makeAttempt(1, 'p2', 'm2', 'f2', {
+        roleInStrategy: 'expert',
+        costUsd: 0.005,
+        timestampMs: Date.now() + 1_000,
+      }),
+      makeAttempt(2, 'p3', 'm3', 'f3', {
+        roleInStrategy: 'expert',
+        costUsd: 0.005,
+        timestampMs: Date.now() + 2_000,
+      }),
+      makeAttempt(3, 'p1', 'm-agg', 'f1', {
+        roleInStrategy: 'aggregator',
+        costUsd: 0.003,
+        timestampMs: Date.now() + 3_000,
+      }),
     ];
 
     const classifications = new Map<string, ClassifiedModel>();
     for (const a of attempts) {
-      classifications.set(a.modelId, makeClass(a.modelId, a.providerId, a.modelFamily, { capabilityTier: 'frontier' }));
+      classifications.set(
+        a.modelId,
+        makeClass(a.modelId, a.providerId, a.modelFamily, { capabilityTier: 'frontier' })
+      );
     }
 
     const record: ExecutionRecord = {
@@ -515,13 +555,27 @@ describe('resilience_strategy integrity', () => {
 
     const attempts = [
       makeAttempt(0, 'cometapi', 'gpt-4o', 'openai', { status: 'failed', costUsd: 0 }),
-      makeAttempt(1, 'aihubmix', 'gpt-4o', 'openai', { status: 'failed', roleInStrategy: 'fallback', costUsd: 0 }),
-      makeAttempt(2, 'ollama-local', 'qwen2.5:32b', 'self_hosted', { status: 'succeeded', roleInStrategy: 'fallback', costUsd: 0 }),
+      makeAttempt(1, 'aihubmix', 'gpt-4o', 'openai', {
+        status: 'failed',
+        roleInStrategy: 'fallback',
+        costUsd: 0,
+      }),
+      makeAttempt(2, 'ollama-local', 'qwen2.5:32b', 'self_hosted', {
+        status: 'succeeded',
+        roleInStrategy: 'fallback',
+        costUsd: 0,
+      }),
     ];
 
     const classifications = new Map([
       ['gpt-4o', makeClass('gpt-4o', 'cometapi', 'openai', { capabilityTier: 'frontier' })],
-      ['qwen2.5:32b', makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', { isLocal: true, capabilityTier: 'local-frontier' })],
+      [
+        'qwen2.5:32b',
+        makeClass('qwen2.5:32b', 'ollama-local', 'self_hosted', {
+          isLocal: true,
+          capabilityTier: 'local-frontier',
+        }),
+      ],
     ]);
 
     const record: ExecutionRecord = {

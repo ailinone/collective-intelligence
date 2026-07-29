@@ -84,9 +84,7 @@ describe('runHistoricalReplay — smoke', () => {
     for (const r of result.rows) {
       const h = split.holdout.find((x) => x.executionId === r.executionId);
       expect(h).toBeDefined();
-      expect(r.selectors.actual_historical.expectedJudge).toBe(
-        h!.judgeScore ?? 0,
-      );
+      expect(r.selectors.actual_historical.expectedJudge).toBe(h!.judgeScore ?? 0);
     }
   });
 

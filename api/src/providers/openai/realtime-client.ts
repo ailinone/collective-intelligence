@@ -97,7 +97,10 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
   private baseUrl: string;
 
-  constructor(private apiKey: string, baseUrl?: string) {
+  constructor(
+    private apiKey: string,
+    baseUrl?: string
+  ) {
     super();
     // Default to OpenAI; providers like OpenRouter pass their own baseUrl
     this.baseUrl = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
@@ -293,7 +296,9 @@ export class OpenAIRealtimeClient extends EventEmitter {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         if (errMsg.includes('404') || errMsg.includes('Not Found')) {
-          this.logger.info('Provider does not support client_secrets — using direct WebSocket auth');
+          this.logger.info(
+            'Provider does not support client_secrets — using direct WebSocket auth'
+          );
           useDirectAuth = true;
         } else {
           throw err;
@@ -351,7 +356,8 @@ export class OpenAIRealtimeClient extends EventEmitter {
                 resolve();
               } else if (message.type === 'error') {
                 settled = true;
-                const errMsg = (message as { error?: { message?: string } }).error?.message || 'Upstream error';
+                const errMsg =
+                  (message as { error?: { message?: string } }).error?.message || 'Upstream error';
                 reject(new Error(errMsg));
                 return; // Don't forward this error — it's handled by the catch in the caller
               }

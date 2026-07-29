@@ -46,7 +46,14 @@ const REQ = {
 
 function build(strategy: string, qualityTarget = 0.88) {
   const result = buildPlanOnlyResult(
-    strategy, 'explicit', 'request-flag', REQ, CTX3, null, qualityTarget, { registered: true },
+    strategy,
+    'explicit',
+    'request-flag',
+    REQ,
+    CTX3,
+    null,
+    qualityTarget,
+    { registered: true }
   );
   return result.metadata as Record<string, unknown>;
 }
@@ -163,7 +170,7 @@ describe('01C.1B-SM-R3 §12d — strategy prompt/cost/route trace', () => {
       const mrt = meta['model_ranking_trace'] as Record<string, unknown>;
       const candidates = mrt['candidateModels'] as Array<{ id: string }>;
       for (const id of considered) {
-        expect(candidates.some(c => c.id === id)).toBe(true);
+        expect(candidates.some((c) => c.id === id)).toBe(true);
       }
     });
   });
@@ -172,13 +179,24 @@ describe('01C.1B-SM-R3 §12d — strategy prompt/cost/route trace', () => {
     it('consensus has higher expectedQualityScore than single', () => {
       const metaConsensus = build('consensus', 0.85);
       const metaSingle = build('single', 0.85);
-      const qConsensus = (metaConsensus['cost_quality_trace'] as Record<string, unknown>)['expectedQualityScore'] as number;
-      const qSingle = (metaSingle['cost_quality_trace'] as Record<string, unknown>)['expectedQualityScore'] as number;
+      const qConsensus = (metaConsensus['cost_quality_trace'] as Record<string, unknown>)[
+        'expectedQualityScore'
+      ] as number;
+      const qSingle = (metaSingle['cost_quality_trace'] as Record<string, unknown>)[
+        'expectedQualityScore'
+      ] as number;
       expect(qConsensus).toBeGreaterThan(qSingle);
     });
 
     it('all strategies have expectedQualityScore between 0 and 1', () => {
-      const strategies = ['single', 'cost-cascade', 'consensus', 'debate', 'quality-multipass', 'expert-panel'];
+      const strategies = [
+        'single',
+        'cost-cascade',
+        'consensus',
+        'debate',
+        'quality-multipass',
+        'expert-panel',
+      ];
       for (const s of strategies) {
         const meta = build(s, 0.8);
         const cqt = meta['cost_quality_trace'] as Record<string, unknown>;

@@ -116,8 +116,7 @@ export const POLICIES: Record<StrategyModelRole, RolePolicy> = {
   },
   observer: {
     role: 'observer',
-    description:
-      'Watches the collective without voting. Light footprint, low cost preferred.',
+    description: 'Watches the collective without voting. Light footprint, low cost preferred.',
     requiredCapabilities: baseChat,
     preferredCapabilities: ['reasoning'],
     contextWindowMin: 16000,
@@ -214,7 +213,7 @@ export const POLICIES: Record<StrategyModelRole, RolePolicy> = {
  */
 export function augmentPolicyForTask(
   policy: RolePolicy,
-  task: { taskType?: string; expectedFormat?: 'json' | 'code' | 'reasoning' | 'free_text' },
+  task: { taskType?: string; expectedFormat?: 'json' | 'code' | 'reasoning' | 'free_text' }
 ): RolePolicy {
   const extra: string[] = [];
   const tt = (task.taskType ?? '').toLowerCase();

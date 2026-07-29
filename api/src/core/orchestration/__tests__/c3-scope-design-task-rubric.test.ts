@@ -30,14 +30,13 @@ import {
 } from '@/core/experiment/c3-scope-design-contract';
 
 describe('01C.1B-C3-SCOPE-DESIGN §4+5 — task set and quality rubric contract', () => {
-
   describe('task set: count and IDs', () => {
     it('C3_TASK_IDS has exactly 8 entries', () => {
       expect(C3_TASK_IDS.length).toBe(8);
     });
 
     it('contains T1 through T8 in order', () => {
-      expect([...C3_TASK_IDS]).toEqual(['T1','T2','T3','T4','T5','T6','T7','T8']);
+      expect([...C3_TASK_IDS]).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8']);
     });
   });
 
@@ -82,7 +81,7 @@ describe('01C.1B-C3-SCOPE-DESIGN §4+5 — task set and quality rubric contract'
     });
 
     it('all task categories are unique (no duplicate categories)', () => {
-      const categories = C3_TASK_IDS.map(id => C3_TASK_CATEGORIES[id]);
+      const categories = C3_TASK_IDS.map((id) => C3_TASK_CATEGORIES[id]);
       const unique = new Set(categories);
       expect(unique.size).toBe(C3_TASK_IDS.length);
     });

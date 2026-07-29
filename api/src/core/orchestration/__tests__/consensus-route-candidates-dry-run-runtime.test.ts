@@ -31,7 +31,9 @@ import type { ChatRequest } from '@/types';
 
 function basePool() {
   return [
-    ...diversePool().filter((c) => c.hasCredits).map((c) => c.model),
+    ...diversePool()
+      .filter((c) => c.hasCredits)
+      .map((c) => c.model),
     makeCandidate({
       id: 'judge-candidate',
       model: makeModel({
@@ -95,7 +97,7 @@ describe('runtime wiring — routeCandidates in consensus dry-run', () => {
     const plan = await svc.plan({
       chatRequest: reqWith({
         // @ts-expect-error
-        eval: { includeRouteCandidates: true, allowOutOfPlanRoutes: true },  // caller tries to relax
+        eval: { includeRouteCandidates: true, allowOutOfPlanRoutes: true }, // caller tries to relax
       }),
       candidatePool: basePool(),
     });

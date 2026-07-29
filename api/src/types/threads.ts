@@ -17,14 +17,16 @@ import type { RequestUserContext } from './index';
 export interface CreateThreadRequest {
   messages?: Array<{
     role: 'user' | 'assistant' | 'system' | 'tool';
-    content: string | Array<{
-      type: 'text' | 'image_url';
-      text?: string;
-      image_url?: {
-        url: string;
-        detail?: 'low' | 'high' | 'auto';
-      };
-    }>;
+    content:
+      | string
+      | Array<{
+          type: 'text' | 'image_url';
+          text?: string;
+          image_url?: {
+            url: string;
+            detail?: 'low' | 'high' | 'auto';
+          };
+        }>;
     file_ids?: string[];
     metadata?: Record<string, string>;
     tool_call_id?: string; // Required for 'tool' role
@@ -57,14 +59,16 @@ export interface DeleteThreadRequest {
 export interface CreateMessageRequest {
   threadId: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string | Array<{
-    type: 'text' | 'image_url';
-    text?: string;
-    image_url?: {
-      url: string;
-      detail?: 'low' | 'high' | 'auto';
-    };
-  }>;
+  content:
+    | string
+    | Array<{
+        type: 'text' | 'image_url';
+        text?: string;
+        image_url?: {
+          url: string;
+          detail?: 'low' | 'high' | 'auto';
+        };
+      }>;
   file_ids?: string[];
   metadata?: Record<string, string>;
   tool_call_id?: string; // Required for 'tool' role
@@ -170,7 +174,15 @@ export interface ThreadRun {
   created_at: number;
   thread_id: string;
   assistant_id: string;
-  status: 'queued' | 'in_progress' | 'requires_action' | 'cancelling' | 'cancelled' | 'failed' | 'completed' | 'expired';
+  status:
+    | 'queued'
+    | 'in_progress'
+    | 'requires_action'
+    | 'cancelling'
+    | 'cancelled'
+    | 'failed'
+    | 'completed'
+    | 'expired';
   required_action?: {
     type: 'submit_tool_outputs';
     submit_tool_outputs: {
@@ -327,22 +339,24 @@ export interface ThreadRunStep {
   run_id: string;
   type: 'message_creation' | 'tool_calls';
   status: 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'expired';
-  step_details: {
-    type: 'message_creation';
-    message_creation?: {
-      message_id: string;
-    };
-  } | {
-    type: 'tool_calls';
-    tool_calls?: Array<{
-      id: string;
-      type: 'function';
-      function: {
-        name: string;
-        arguments: string;
+  step_details:
+    | {
+        type: 'message_creation';
+        message_creation?: {
+          message_id: string;
+        };
+      }
+    | {
+        type: 'tool_calls';
+        tool_calls?: Array<{
+          id: string;
+          type: 'function';
+          function: {
+            name: string;
+            arguments: string;
+          };
+        }>;
       };
-    }>;
-  };
   expired_at?: number | null;
   cancelled_at?: number | null;
   completed_at?: number | null;
@@ -360,4 +374,3 @@ export interface ListRunStepsResponse {
   first_id?: string;
   last_id?: string;
 }
-

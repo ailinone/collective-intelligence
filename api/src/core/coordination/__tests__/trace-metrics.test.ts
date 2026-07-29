@@ -30,7 +30,12 @@ describe('recordCollectiveTrace (F2.11)', () => {
   });
 
   it('no-ops on missing input', () => {
-    expect(() => recordCollectiveTrace('test-strategy', null as unknown as ReturnType<CollectiveTrace['describe']>)).not.toThrow();
+    expect(() =>
+      recordCollectiveTrace(
+        'test-strategy',
+        null as unknown as ReturnType<CollectiveTrace['describe']>
+      )
+    ).not.toThrow();
   });
 
   it('no-ops when spanCount is non-finite', () => {
@@ -41,7 +46,7 @@ describe('recordCollectiveTrace (F2.11)', () => {
         completed: true,
         statusCounts: {},
         phaseCounts: {},
-      }),
+      })
     ).not.toThrow();
   });
 
@@ -78,7 +83,7 @@ describe('recordCollectiveTrace (F2.11)', () => {
         completed: true,
         statusCounts: {},
         phaseCounts: {},
-      }),
+      })
     ).not.toThrow();
   });
 
@@ -90,7 +95,7 @@ describe('recordCollectiveTrace (F2.11)', () => {
         completed: true,
         statusCounts: { ok: -1, error: Number.NaN, cancelled: 'string' as unknown as number },
         phaseCounts: { aggregate: 0, round_start: -3 },
-      }),
+      })
     ).not.toThrow();
   });
 });

@@ -52,9 +52,7 @@ describe('01C.1B-J2-C-R5 — matchQualitySnapshotEntry', () => {
 
   it('provider_unwrapped_alias: runtime fireworks wrapper stripped, matches snapshot bare id', () => {
     const id = makeIdentity('accounts/fireworks/models/deepseek-v4-pro');
-    const entries: QualitySnapshotEntry[] = [
-      { modelId: 'deepseek-v4-pro', qualityScore: 0.95 },
-    ];
+    const entries: QualitySnapshotEntry[] = [{ modelId: 'deepseek-v4-pro', qualityScore: 0.95 }];
     const r = matchQualitySnapshotEntry({
       runtimeIdentity: id,
       snapshotEntries: entries,
@@ -74,14 +72,14 @@ describe('01C.1B-J2-C-R5 — matchQualitySnapshotEntry', () => {
     });
     expect(r.matched).toBe(true);
     // Both sides normalize to the same canonical → exact_canonical
-    expect(r.confidence === 'high' || r.confidence === 'exact' || r.confidence === 'medium').toBe(true);
+    expect(r.confidence === 'high' || r.confidence === 'exact' || r.confidence === 'medium').toBe(
+      true
+    );
   });
 
   it('no silent collapse: kimi-k2p5 vs Kimi-K2.6 are different versions', () => {
     const id = makeIdentity('kimi-k2p5');
-    const entries: QualitySnapshotEntry[] = [
-      { modelId: 'Kimi-K2.6', qualityScore: 0.94 },
-    ];
+    const entries: QualitySnapshotEntry[] = [{ modelId: 'Kimi-K2.6', qualityScore: 0.94 }];
     const r = matchQualitySnapshotEntry({
       runtimeIdentity: id,
       snapshotEntries: entries,
@@ -133,7 +131,9 @@ describe('01C.1B-J2-C-R5 — matchQualitySnapshotEntry', () => {
       snapshotEntries: entries,
     });
     expect(r.matched).toBe(true);
-    expect(['provider_unwrapped_alias', 'normalized_alias', 'exact_model_id']).toContain(r.matchKind);
+    expect(['provider_unwrapped_alias', 'normalized_alias', 'exact_model_id']).toContain(
+      r.matchKind
+    );
   });
 
   it('ambiguous family match refuses to pick', () => {

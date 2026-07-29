@@ -98,7 +98,7 @@ describe('resolveKekProviderFromConfig', () => {
       resolveKekProviderFromConfig({
         backend: 'gcp-kms',
         keyResource: 'not-a-kms-resource',
-      }),
+      })
     ).toThrow(/invalid KEK resource.*projects\//);
   });
 
@@ -107,7 +107,7 @@ describe('resolveKekProviderFromConfig', () => {
       resolveKekProviderFromConfig({
         backend: 'aws-kms',
         keyResource: 'arn:aws:kms:us-east-1:000000000000:key/demo',
-      }),
+      })
     ).toThrow(/aws-kms.*not yet implemented/i);
   });
 
@@ -117,7 +117,7 @@ describe('resolveKekProviderFromConfig', () => {
         backend: 'azure-keyvault',
         vaultUrl: 'https://demo.vault.azure.net',
         keyName: 'demo-key',
-      }),
+      })
     ).toThrow(/azure-keyvault.*not yet implemented/i);
   });
 });
@@ -141,7 +141,7 @@ describe('parseKekConfigFromEnv', () => {
       parseKekConfigFromEnv({
         NODE_ENV: 'production',
         BROADCAST_LOCAL_KEK_B64: MASTER_SECRET_B64,
-      }),
+      })
     ).toThrow(/unset.*production.*explicit configuration/i);
   });
 
@@ -150,7 +150,7 @@ describe('parseKekConfigFromEnv', () => {
       parseKekConfigFromEnv({
         NODE_ENV: 'development',
         BROADCAST_KEK_PROVIDER: 'local',
-      }),
+      })
     ).toThrow(/BROADCAST_LOCAL_KEK_B64/);
   });
 
@@ -163,9 +163,9 @@ describe('parseKekConfigFromEnv', () => {
   });
 
   it('requires BROADCAST_KMS_KEK_RESOURCE when backend is gcp-kms', () => {
-    expect(() =>
-      parseKekConfigFromEnv({ BROADCAST_KEK_PROVIDER: 'gcp-kms' }),
-    ).toThrow(/gcp-kms.*BROADCAST_KMS_KEK_RESOURCE/);
+    expect(() => parseKekConfigFromEnv({ BROADCAST_KEK_PROVIDER: 'gcp-kms' })).toThrow(
+      /gcp-kms.*BROADCAST_KMS_KEK_RESOURCE/
+    );
   });
 
   it('parses the aws-kms backend and threads the optional region through', () => {
@@ -201,14 +201,14 @@ describe('parseKekConfigFromEnv', () => {
       parseKekConfigFromEnv({
         BROADCAST_KEK_PROVIDER: 'azure-keyvault',
         BROADCAST_KV_VAULT_URL: 'https://demo.vault.azure.net',
-      }),
+      })
     ).toThrow(/azure-keyvault.*BROADCAST_KV_VAULT_URL.*BROADCAST_KV_KEY_NAME/);
   });
 
   it('rejects an unknown backend name with the full list of valid choices', () => {
-    expect(() =>
-      parseKekConfigFromEnv({ BROADCAST_KEK_PROVIDER: 'hashicorp-vault' }),
-    ).toThrow(/Unknown BROADCAST_KEK_PROVIDER="hashicorp-vault".*local.*gcp-kms.*aws-kms.*azure-keyvault/);
+    expect(() => parseKekConfigFromEnv({ BROADCAST_KEK_PROVIDER: 'hashicorp-vault' })).toThrow(
+      /Unknown BROADCAST_KEK_PROVIDER="hashicorp-vault".*local.*gcp-kms.*aws-kms.*azure-keyvault/
+    );
   });
 });
 
@@ -243,7 +243,7 @@ describe('GcpKmsKekProvider without @google-cloud/kms installed', () => {
   // absent" code path.
   const missingPkgError = Object.assign(
     new Error('Failed to load url @google-cloud/kms (module not found)'),
-    { code: 'ERR_MODULE_NOT_FOUND' },
+    { code: 'ERR_MODULE_NOT_FOUND' }
   );
 
   beforeEach(() => {
@@ -257,14 +257,12 @@ describe('GcpKmsKekProvider without @google-cloud/kms installed', () => {
   it('throws an operator-readable error on first wrap(), telling them how to fix it', async () => {
     const provider = new GcpKmsKekProvider(GCP_KEY_RESOURCE);
     await expect(provider.wrap(Buffer.alloc(32, 0x11))).rejects.toThrow(
-      /gcp-kms.*is configured.*optional dependency.*@google-cloud\/kms.*not installed/is,
+      /gcp-kms.*is configured.*optional dependency.*@google-cloud\/kms.*not installed/is
     );
   });
 
   it('rejects wrap() for a non-32-byte DEK before ever touching the KMS client', async () => {
     const provider = new GcpKmsKekProvider(GCP_KEY_RESOURCE);
-    await expect(provider.wrap(Buffer.alloc(16, 0x11))).rejects.toThrow(
-      /DEK must be 32 bytes/,
-    );
+    await expect(provider.wrap(Buffer.alloc(16, 0x11))).rejects.toThrow(/DEK must be 32 bytes/);
   });
 });

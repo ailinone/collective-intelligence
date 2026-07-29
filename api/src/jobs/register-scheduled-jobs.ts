@@ -49,16 +49,30 @@ export function isBullmqCronsEnabled(): boolean {
 
 // ── Metric imports (lazily resolved to avoid circular deps) ──
 let cronExecutionTotal: { inc: (labels: Record<string, string>) => void } | null = null;
-let cronExecutionDuration: { observe: (labels: Record<string, string>, value: number) => void } | null = null;
+let cronExecutionDuration: {
+  observe: (labels: Record<string, string>, value: number) => void;
+} | null = null;
 let cronExecutionErrors: { inc: (labels: Record<string, string>) => void } | null = null;
 
 async function ensureMetrics() {
   if (cronExecutionTotal) return;
   try {
     const promClient = await import('prom-client');
-    cronExecutionTotal = new promClient.Counter({ name: 'ailin_dev_cron_execution_total', help: 'Total cron job executions', labelNames: ['job_name', 'status'] });
-    cronExecutionDuration = new promClient.Histogram({ name: 'ailin_dev_cron_execution_duration_seconds', help: 'Cron job execution duration', labelNames: ['job_name'] });
-    cronExecutionErrors = new promClient.Counter({ name: 'ailin_dev_cron_execution_errors_total', help: 'Cron job execution errors', labelNames: ['job_name'] });
+    cronExecutionTotal = new promClient.Counter({
+      name: 'ailin_dev_cron_execution_total',
+      help: 'Total cron job executions',
+      labelNames: ['job_name', 'status'],
+    });
+    cronExecutionDuration = new promClient.Histogram({
+      name: 'ailin_dev_cron_execution_duration_seconds',
+      help: 'Cron job execution duration',
+      labelNames: ['job_name'],
+    });
+    cronExecutionErrors = new promClient.Counter({
+      name: 'ailin_dev_cron_execution_errors_total',
+      help: 'Cron job execution errors',
+      labelNames: ['job_name'],
+    });
   } catch {
     // Metrics unavailable — non-fatal
   }
@@ -72,11 +86,15 @@ type JobHandler = () => Promise<void>;
 const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   'revoke-expired-keys': async () => {
     const m = await import('./api-key-maintenance.js');
-    return async () => { await m.manualRevokeExpired(); };
+    return async () => {
+      await m.manualRevokeExpired();
+    };
   },
   'auto-rotation-check': async () => {
     const m = await import('./api-key-maintenance.js');
-    return async () => { await m.manualAutoRotation(); };
+    return async () => {
+      await m.manualAutoRotation();
+    };
   },
   'billing-reconciliation': async () => {
     const m = await import('./billing-usage-reconciliation-job.js');
@@ -86,7 +104,9 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
     // stripe-catalog-sync-job.ts only exports startStripeCatalogSyncJob which schedules node-cron.
     // The actual sync logic is inline. We import from billing-plan-service directly.
     const m = await import('@/services/billing-plan-service.js');
-    return async () => { await m.syncStripeCatalog(); };
+    return async () => {
+      await m.syncStripeCatalog();
+    };
   },
   'secret-rotation': async () => {
     // secret-rotation-job.ts only exports startSecretRotationJob which schedules node-cron.
@@ -94,11 +114,15 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
     // the job is already scheduled. So we need to extract the logic.
     // For now, use the start function as a no-op guard and let the inline logic run.
     const m = await import('./secret-rotation-job.js');
-    return async () => { m.startSecretRotationJob(); };
+    return async () => {
+      m.startSecretRotationJob();
+    };
   },
   'security-audit-retention': async () => {
     const m = await import('./security-audit-retention-job.js');
-    return async () => { m.startSecurityAuditRetentionJob(); };
+    return async () => {
+      m.startSecurityAuditRetentionJob();
+    };
   },
   'log-retention': async () => {
     const m = await import('./log-retention-job.js');
@@ -106,11 +130,15 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   },
   'context-cache-cleanup': async () => {
     const m = await import('./context-cache-cleanup-job.js');
-    return async () => { await m.runContextCacheCleanupNow(); };
+    return async () => {
+      await m.runContextCacheCleanupNow();
+    };
   },
   'continuous-benchmark': async () => {
     const m = await import('./continuous-benchmark-job.js');
-    return async () => { await m.runContinuousBenchmarkNow(); };
+    return async () => {
+      await m.runContinuousBenchmarkNow();
+    };
   },
   'ci-reflection': async () => {
     const m = await import('./collective-intelligence-reflection-job.js');
@@ -122,11 +150,15 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   },
   'training-data-export': async () => {
     const m = await import('./training-data-export-job.js');
-    return async () => { await m.runTrainingDataExport(); };
+    return async () => {
+      await m.runTrainingDataExport();
+    };
   },
   'evaluation-pipeline': async () => {
     const m = await import('./evaluation-cron-job.js');
-    return async () => { await m.runEvaluationPipeline(); };
+    return async () => {
+      await m.runEvaluationPipeline();
+    };
   },
   // R7 fix: Outbox table cleanup — delete published events older than 7 days
   'outbox-cleanup': async () => {
@@ -147,7 +179,8 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
       const { count } = await prisma.processedWebhookEvent.deleteMany({
         where: { processedAt: { lt: cutoff } },
       });
-      if (count > 0) log.info({ deleted: count }, 'Webhook events cleanup: removed old processed events');
+      if (count > 0)
+        log.info({ deleted: count }, 'Webhook events cleanup: removed old processed events');
     };
   },
   // Chip 5: Embedding refresh — populates HCRA L3 vectors so semantic rerank
@@ -168,7 +201,9 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
   // first run after deploy is the only one that does meaningful UPDATEs.
   'metadata-backfill': async () => {
     const m = await import('./metadata-backfill-job.js');
-    return async () => { await m.runMetadataBackfillNow(); };
+    return async () => {
+      await m.runMetadataBackfillNow();
+    };
   },
 };
 
@@ -186,21 +221,50 @@ interface ScheduledJobDef {
 }
 
 const SCHEDULED_JOBS: ScheduledJobDef[] = [
-  { name: 'revoke-expired-keys',       pattern: '0 * * * *' },
-  { name: 'auto-rotation-check',       pattern: '0 2 * * *' },
-  { name: 'billing-reconciliation',    pattern: '0 2 * * *',   enabled: () => config.payments?.stripe?.enabled ?? false },
-  { name: 'stripe-catalog-sync',       pattern: '15 * * * *',  enabled: () => config.payments?.stripe?.enabled ?? false },
-  { name: 'secret-rotation',           pattern: '0 3 * * *' },
-  { name: 'security-audit-retention',  pattern: '0 4 * * *' },
-  { name: 'log-retention',             pattern: '0 2 * * *',   timeout: 3_600_000 },
-  { name: 'context-cache-cleanup',     pattern: '0 * * * *' },
-  { name: 'continuous-benchmark',      pattern: '0 3 * * *',   timeout: 1_800_000,  enabled: () => process.env.CI_BENCHMARK_JOB_ENABLED !== 'false' },
-  { name: 'ci-reflection',             pattern: '15 */6 * * *', enabled: () => process.env.CI_REFLECTION_JOB_ENABLED !== 'false' },
-  { name: 'strategy-weight-decay',     pattern: '0 2 * * 0',   enabled: () => process.env.CI_REFLECTION_JOB_ENABLED !== 'false' },
-  { name: 'training-data-export',      pattern: '0 2 * * *',   enabled: () => process.env.FEEDBACK_EXPORT_ENABLED !== 'false' },
-  { name: 'evaluation-pipeline',       pattern: '0 4 * * *',   enabled: () => process.env.EVAL_CRON_ENABLED !== 'false' },
-  { name: 'outbox-cleanup',           pattern: '30 3 * * *' },  // R7: daily 03:30 UTC
-  { name: 'webhook-events-cleanup',   pattern: '45 3 * * 0' },  // R8: weekly Sunday 03:45 UTC
+  { name: 'revoke-expired-keys', pattern: '0 * * * *' },
+  { name: 'auto-rotation-check', pattern: '0 2 * * *' },
+  {
+    name: 'billing-reconciliation',
+    pattern: '0 2 * * *',
+    enabled: () => config.payments?.stripe?.enabled ?? false,
+  },
+  {
+    name: 'stripe-catalog-sync',
+    pattern: '15 * * * *',
+    enabled: () => config.payments?.stripe?.enabled ?? false,
+  },
+  { name: 'secret-rotation', pattern: '0 3 * * *' },
+  { name: 'security-audit-retention', pattern: '0 4 * * *' },
+  { name: 'log-retention', pattern: '0 2 * * *', timeout: 3_600_000 },
+  { name: 'context-cache-cleanup', pattern: '0 * * * *' },
+  {
+    name: 'continuous-benchmark',
+    pattern: '0 3 * * *',
+    timeout: 1_800_000,
+    enabled: () => process.env.CI_BENCHMARK_JOB_ENABLED !== 'false',
+  },
+  {
+    name: 'ci-reflection',
+    pattern: '15 */6 * * *',
+    enabled: () => process.env.CI_REFLECTION_JOB_ENABLED !== 'false',
+  },
+  {
+    name: 'strategy-weight-decay',
+    pattern: '0 2 * * 0',
+    enabled: () => process.env.CI_REFLECTION_JOB_ENABLED !== 'false',
+  },
+  {
+    name: 'training-data-export',
+    pattern: '0 2 * * *',
+    enabled: () => process.env.FEEDBACK_EXPORT_ENABLED !== 'false',
+  },
+  {
+    name: 'evaluation-pipeline',
+    pattern: '0 4 * * *',
+    enabled: () => process.env.EVAL_CRON_ENABLED !== 'false',
+  },
+  { name: 'outbox-cleanup', pattern: '30 3 * * *' }, // R7: daily 03:30 UTC
+  { name: 'webhook-events-cleanup', pattern: '45 3 * * 0' }, // R8: weekly Sunday 03:45 UTC
   // Chip 5: Every 6 hours. First-deploy backfill of 64K rows takes ~3 ticks
   // at the default 5K maxRowsPerRun cap (~12-18h to fully warm). Steady-state
   // is near-zero work — only newly discovered/updated models get re-embedded.
@@ -262,7 +326,7 @@ export async function registerScheduledJobs(): Promise<void> {
     // defensive no-op. In the API process, index.ts fails fast on this
     // misconfiguration before we are ever reached.
     log.warn(
-      'BullMQ crons explicitly disabled via USE_BULLMQ_CRONS=false — registering no scheduled jobs (node-cron fallback removed)',
+      'BullMQ crons explicitly disabled via USE_BULLMQ_CRONS=false — registering no scheduled jobs (node-cron fallback removed)'
     );
     return;
   }
@@ -286,7 +350,7 @@ export async function registerScheduledJobs(): Promise<void> {
     }
 
     const pattern = jobDef.envOverride
-      ? (process.env[jobDef.envOverride] || jobDef.pattern)
+      ? process.env[jobDef.envOverride] || jobDef.pattern
       : jobDef.pattern;
 
     await scheduledQueue.upsertJobScheduler(
@@ -299,7 +363,7 @@ export async function registerScheduledJobs(): Promise<void> {
           attempts: 1,
           ...(jobDef.timeout ? { timeout: jobDef.timeout } : {}),
         },
-      },
+      }
     );
     registered++;
     log.debug({ jobName: jobDef.name, pattern }, 'Scheduled job registered');
@@ -354,7 +418,7 @@ export async function startScheduledTasksWorker(): Promise<void> {
     {
       connection,
       concurrency: 3, // Allow up to 3 cron jobs to run in parallel
-    },
+    }
   );
 
   // BullMQ erases the Job<TData> generic on the 'failed' event, so we
@@ -362,7 +426,7 @@ export async function startScheduledTasksWorker(): Promise<void> {
   scheduledWorker.on('failed', (job: Job<ScheduledJobData> | undefined, err: Error) => {
     log.error(
       { jobId: job?.id, jobName: job?.data.jobName, err: err.message },
-      'Scheduled task failed',
+      'Scheduled task failed'
     );
   });
 

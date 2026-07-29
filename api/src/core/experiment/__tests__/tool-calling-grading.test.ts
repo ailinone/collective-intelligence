@@ -22,7 +22,12 @@
 import { describe, it, expect } from 'vitest';
 import { narrowAs } from '@/utils/type-guards';
 import type { ToolExecutionContext } from '@/services/advanced-tool-execution-service';
-import { EXPERIMENT_SUITE, getToolCallingTaskIndices, getVerifiableTaskIndices, getRunnableTextTaskIndices } from '../experiment-suite';
+import {
+  EXPERIMENT_SUITE,
+  getToolCallingTaskIndices,
+  getVerifiableTaskIndices,
+  getRunnableTextTaskIndices,
+} from '../experiment-suite';
 import {
   gradeToolCallingResponse,
   isToolCallingTask,
@@ -50,7 +55,17 @@ const toolCall = (name: string, args: Record<string, unknown>): ObservedToolCall
 
 const ctx = narrowAs<ToolExecutionContext>({
   workingDirectory: process.cwd(),
-  log: { info() {}, warn() {}, error() {}, debug() {}, trace() {}, fatal() {}, child() { return this; } },
+  log: {
+    info() {},
+    warn() {},
+    error() {},
+    debug() {},
+    trace() {},
+    fatal() {},
+    child() {
+      return this;
+    },
+  },
 });
 
 describe('tool-calling grader — the core 1-vs-0 guarantee', () => {
@@ -99,18 +114,28 @@ describe('tool-calling grader — the core 1-vs-0 guarantee', () => {
 
 describe('tool-calling grader — matching + extraction details', () => {
   it('matchToolCall is loose/case-insensitive on args (ZorgCoin ⊇ ZRG)', () => {
-    expect(matchToolCall([toolCall('getExchangeRate', { from: 'ZorgCoin (ZRG)', to: 'usd' })], task166.expectTool!)).toBe(true);
-    expect(matchToolCall([toolCall('getExchangeRate', { from: 'BLP', to: 'USD' })], task166.expectTool!)).toBe(false);
+    expect(
+      matchToolCall(
+        [toolCall('getExchangeRate', { from: 'ZorgCoin (ZRG)', to: 'usd' })],
+        task166.expectTool!
+      )
+    ).toBe(true);
+    expect(
+      matchToolCall([toolCall('getExchangeRate', { from: 'BLP', to: 'USD' })], task166.expectTool!)
+    ).toBe(false);
     expect(matchToolCall([], task166.expectTool!)).toBe(false);
   });
 
   it('uses the canonical FINAL extraction: LAST FINAL line wins, prose tolerated', () => {
     // Same instrument as every other verifiable task (best-of-n-verifier).
     expect(
-      gradeToolCallingResponse(task166, { content: 'draft FINAL: 42\ncorrected FINAL: 375' }).objectiveScore,
+      gradeToolCallingResponse(task166, { content: 'draft FINAL: 42\ncorrected FINAL: 375' })
+        .objectiveScore
     ).toBe(1);
     // No FINAL marker → falls back to the last number in the reply.
-    expect(gradeToolCallingResponse(task166, { content: 'that comes to 375' }).objectiveScore).toBe(1);
+    expect(gradeToolCallingResponse(task166, { content: 'that comes to 375' }).objectiveScore).toBe(
+      1
+    );
   });
 
   it('every 166-169 task is a tool-calling task with tools + expectTool + answerCheck + FINAL prompt', () => {
@@ -127,7 +152,10 @@ describe('tool-calling grader — matching + extraction details', () => {
 
   it('the tasks are wired into the shared EXPERIMENT_SUITE', () => {
     for (const idx of TOOL_CALLING_TASK_INDICES) {
-      expect(EXPERIMENT_SUITE.find((t) => t.index === idx), `suite has ${idx}`).toBeDefined();
+      expect(
+        EXPERIMENT_SUITE.find((t) => t.index === idx),
+        `suite has ${idx}`
+      ).toBeDefined();
     }
   });
 
@@ -153,7 +181,8 @@ describe('tool-calling grader — matching + extraction details', () => {
 });
 
 describe('tool handlers ARE the single source of truth for the expected answers', () => {
-  const handlerOf = (name: string) => EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS.find((t) => t.name === name)!.handler;
+  const handlerOf = (name: string) =>
+    EXPERIMENT_BENCHMARK_TOOL_REGISTRATIONS.find((t) => t.name === name)!.handler;
 
   it('getExchangeRate(ZRG,USD)=3.75 → 100 ZRG = 375 USD (matches task 166 + TOOL_TASK_EXPECTED)', async () => {
     const res = await handlerOf('getExchangeRate')({ from: 'ZRG', to: 'USD' }, 'c1', ctx);

@@ -73,7 +73,7 @@ export class ModelRepository {
 
   /**
    * Busca modelos com critérios avançados
-   * 
+   *
    * Uses PostgreSQL native JSON queries with GIN indexes for efficient filtering/ordering
    * instead of in-memory processing. All filtering and sorting is pushed to the database.
    */
@@ -143,7 +143,7 @@ export class ModelRepository {
     cacheKey: string | undefined
   ): Promise<Model[]> {
     // Check if we need PostgreSQL native JSON queries (array containment, JSON path sorting)
-    const needsNativeJson = 
+    const needsNativeJson =
       (criteria.capabilities && criteria.capabilities.length > 0) ||
       (criteria.tags && criteria.tags.length > 0) ||
       (criteria.specializations && criteria.specializations.length > 0) ||
@@ -173,9 +173,10 @@ export class ModelRepository {
       if (where.provider && typeof where.provider === 'object' && 'id' in where.provider) {
         const existingProviderFilter = where.provider.id as { in?: string[] } | undefined;
         where.provider = {
-          id: existingProviderFilter && 'in' in existingProviderFilter
-            ? { in: existingProviderFilter.in, notIn: criteria.excludeProviders }
-            : { notIn: criteria.excludeProviders },
+          id:
+            existingProviderFilter && 'in' in existingProviderFilter
+              ? { in: existingProviderFilter.in, notIn: criteria.excludeProviders }
+              : { notIn: criteria.excludeProviders },
         };
       } else {
         where.provider = {
@@ -185,12 +186,14 @@ export class ModelRepository {
     }
 
     if (criteria.minContextWindow) {
-      const existingContextWindow = where.contextWindow && typeof where.contextWindow === 'object' ? where.contextWindow : {};
+      const existingContextWindow =
+        where.contextWindow && typeof where.contextWindow === 'object' ? where.contextWindow : {};
       where.contextWindow = { ...existingContextWindow, gte: criteria.minContextWindow };
     }
 
     if (criteria.maxContextWindow) {
-      const existingContextWindow = where.contextWindow && typeof where.contextWindow === 'object' ? where.contextWindow : {};
+      const existingContextWindow =
+        where.contextWindow && typeof where.contextWindow === 'object' ? where.contextWindow : {};
       where.contextWindow = { ...existingContextWindow, lte: criteria.maxContextWindow };
     }
 
@@ -221,7 +224,9 @@ export class ModelRepository {
     }
 
     // Ordering
-    let orderBy: Prisma.ModelOrderByWithRelationInput | Prisma.ModelOrderByWithRelationInput[] = { createdAt: 'desc' };
+    let orderBy: Prisma.ModelOrderByWithRelationInput | Prisma.ModelOrderByWithRelationInput[] = {
+      createdAt: 'desc',
+    };
 
     if (criteria.sortBy) {
       switch (criteria.sortBy) {
@@ -308,7 +313,9 @@ export class ModelRepository {
     // Cost filters
     if (criteria.maxCostPer1k !== undefined) {
       paramIndex++;
-      conditions.push(`(m.input_cost_per_1k <= $${paramIndex} OR m.output_cost_per_1k <= $${paramIndex})`);
+      conditions.push(
+        `(m.input_cost_per_1k <= $${paramIndex} OR m.output_cost_per_1k <= $${paramIndex})`
+      );
       params.push(criteria.maxCostPer1k);
     }
 
@@ -432,23 +439,25 @@ export class ModelRepository {
     // Execute raw SQL query
     // IMPORTANT: Database connection errors should NOT be masked
     // If database is unavailable, the application should fail fast and alert operations
-    const rows = await prisma.$queryRawUnsafe<Array<{
-      id: string;
-      provider_id: string;
-      name: string;
-      display_name: string;
-      context_window: number;
-      max_output_tokens: number;
-      input_cost_per_1k: Prisma.Decimal;
-      output_cost_per_1k: Prisma.Decimal;
-      capabilities: Prisma.JsonValue;
-      performance: Prisma.JsonValue;
-      metadata: Prisma.JsonValue;
-      status: string;
-      created_at: Date;
-      updated_at: Date;
-      provider_name: string;
-    }>>(sql, ...params);
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        provider_id: string;
+        name: string;
+        display_name: string;
+        context_window: number;
+        max_output_tokens: number;
+        input_cost_per_1k: Prisma.Decimal;
+        output_cost_per_1k: Prisma.Decimal;
+        capabilities: Prisma.JsonValue;
+        performance: Prisma.JsonValue;
+        metadata: Prisma.JsonValue;
+        status: string;
+        created_at: Date;
+        updated_at: Date;
+        provider_name: string;
+      }>
+    >(sql, ...params);
 
     // Map results to Model type
     const result = rows.map((row) => this.mapRawRowToModel(row));
@@ -482,16 +491,18 @@ export class ModelRepository {
     updated_at: Date;
     provider_name: string;
   }): Model {
-    const inputCost = row.input_cost_per_1k instanceof Prisma.Decimal 
-      ? row.input_cost_per_1k.toNumber() 
-      : typeof row.input_cost_per_1k === 'number' 
-        ? row.input_cost_per_1k 
-        : 0;
-    const outputCost = row.output_cost_per_1k instanceof Prisma.Decimal 
-      ? row.output_cost_per_1k.toNumber() 
-      : typeof row.output_cost_per_1k === 'number' 
-        ? row.output_cost_per_1k 
-        : 0;
+    const inputCost =
+      row.input_cost_per_1k instanceof Prisma.Decimal
+        ? row.input_cost_per_1k.toNumber()
+        : typeof row.input_cost_per_1k === 'number'
+          ? row.input_cost_per_1k
+          : 0;
+    const outputCost =
+      row.output_cost_per_1k instanceof Prisma.Decimal
+        ? row.output_cost_per_1k.toNumber()
+        : typeof row.output_cost_per_1k === 'number'
+          ? row.output_cost_per_1k
+          : 0;
 
     let capabilities: ModelCapability[] = [];
     if (Array.isArray(row.capabilities)) {
@@ -1013,12 +1024,12 @@ export class ModelRepository {
       qa: ['chat', 'reasoning'],
       general: ['chat'],
       caching: ['chat'],
-      'reasoning': ['chat', 'reasoning', 'thinking_mode'],
+      reasoning: ['chat', 'reasoning', 'thinking_mode'],
       'decision-making': ['chat', 'reasoning', 'analysis'],
-      'architecture': ['chat', 'reasoning', 'analysis', 'code_generation'],
-      'creative': ['chat', 'text_generation'],
+      architecture: ['chat', 'reasoning', 'analysis', 'code_generation'],
+      creative: ['chat', 'text_generation'],
       'factual-qa': ['chat', 'reasoning'],
-      'adversarial': ['chat', 'reasoning'],
+      adversarial: ['chat', 'reasoning'],
       'document-understanding': ['chat', 'reasoning', 'analysis'],
     };
 
@@ -1030,16 +1041,18 @@ export class ModelRepository {
    */
   private mapPrismaToModel(prismaModel: PrismaModel & { provider?: { name: string } }): Model {
     // Convert Decimal to number
-    const inputCost = prismaModel.inputCostPer1k instanceof Prisma.Decimal 
-      ? prismaModel.inputCostPer1k.toNumber() 
-      : typeof prismaModel.inputCostPer1k === 'number' 
-        ? prismaModel.inputCostPer1k 
-        : 0;
-    const outputCost = prismaModel.outputCostPer1k instanceof Prisma.Decimal 
-      ? prismaModel.outputCostPer1k.toNumber() 
-      : typeof prismaModel.outputCostPer1k === 'number' 
-        ? prismaModel.outputCostPer1k 
-        : 0;
+    const inputCost =
+      prismaModel.inputCostPer1k instanceof Prisma.Decimal
+        ? prismaModel.inputCostPer1k.toNumber()
+        : typeof prismaModel.inputCostPer1k === 'number'
+          ? prismaModel.inputCostPer1k
+          : 0;
+    const outputCost =
+      prismaModel.outputCostPer1k instanceof Prisma.Decimal
+        ? prismaModel.outputCostPer1k.toNumber()
+        : typeof prismaModel.outputCostPer1k === 'number'
+          ? prismaModel.outputCostPer1k
+          : 0;
 
     // Convert capabilities from JsonValue to ModelCapability[]
     let capabilities: ModelCapability[] = [];
@@ -1049,13 +1062,21 @@ export class ModelRepository {
 
     // Convert metadata from JsonValue to Record<string, unknown>
     let metadata: Record<string, unknown> = {};
-    if (prismaModel.metadata && typeof prismaModel.metadata === 'object' && prismaModel.metadata !== null) {
+    if (
+      prismaModel.metadata &&
+      typeof prismaModel.metadata === 'object' &&
+      prismaModel.metadata !== null
+    ) {
       metadata = prismaModel.metadata as Record<string, unknown>;
     }
 
     // Convert performance from JsonValue to ModelPerformance
     let performance: ModelPerformance;
-    if (prismaModel.performance && typeof prismaModel.performance === 'object' && prismaModel.performance !== null) {
+    if (
+      prismaModel.performance &&
+      typeof prismaModel.performance === 'object' &&
+      prismaModel.performance !== null
+    ) {
       const perfObj = prismaModel.performance as Record<string, unknown>;
       performance = {
         latencyMs: typeof perfObj.latencyMs === 'number' ? perfObj.latencyMs : 0,
@@ -1122,7 +1143,7 @@ export class ModelRepository {
     const prismaModels = await prisma.model.findMany({
       orderBy: { name: 'asc' },
     });
-    return prismaModels.map(model => this.mapPrismaToModel(model));
+    return prismaModels.map((model) => this.mapPrismaToModel(model));
   }
 
   /**

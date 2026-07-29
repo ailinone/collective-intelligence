@@ -33,7 +33,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ALL_COLLECTIVE_STRATEGIES, type CollectiveStrategy } from '@/core/experiment/experiment-types';
+import {
+  ALL_COLLECTIVE_STRATEGIES,
+  type CollectiveStrategy,
+} from '@/core/experiment/experiment-types';
 import type { BaseStrategy, StrategyMetadata } from '@/core/orchestration/base-strategy';
 
 import { CollaborativeStrategy } from '@/core/orchestration/strategies/collaborative-strategy';
@@ -156,7 +159,10 @@ function validateMetadata(name: CollectiveStrategy, metadata: StrategyMetadata):
   ) {
     issues.push(`estimatedQualityBoost out of [0, 1]: ${metadata.estimatedQualityBoost}`);
   }
-  if (!Number.isFinite(metadata.estimatedDurationMultiplier) || metadata.estimatedDurationMultiplier <= 0) {
+  if (
+    !Number.isFinite(metadata.estimatedDurationMultiplier) ||
+    metadata.estimatedDurationMultiplier <= 0
+  ) {
     issues.push(`estimatedDurationMultiplier invalid: ${metadata.estimatedDurationMultiplier}`);
   }
   if (!Array.isArray(metadata.suitableFor) || metadata.suitableFor.length === 0) {

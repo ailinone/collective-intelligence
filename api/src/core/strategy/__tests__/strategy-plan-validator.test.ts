@@ -35,7 +35,9 @@ function makePlan(overrides: Partial<StrategyPlan>): StrategyPlan {
 
 describe('validateStrategyPlan — happy paths', () => {
   it('valid single_best passes', () => {
-    const v = validateStrategyPlan(makePlan({ strategy: 'single_best', selectedRouteIds: ['r-1'] }));
+    const v = validateStrategyPlan(
+      makePlan({ strategy: 'single_best', selectedRouteIds: ['r-1'] })
+    );
     expect(v.valid).toBe(true);
     expect(v.errors).toEqual([]);
   });
@@ -46,7 +48,7 @@ describe('validateStrategyPlan — happy paths', () => {
         strategy: 'consensus',
         selectedRouteIds: ['r-1', 'r-2', 'r-3'],
         maxParallelism: 3,
-      }),
+      })
     );
     expect(v.valid).toBe(true);
   });
@@ -58,7 +60,7 @@ describe('validateStrategyPlan — happy paths', () => {
         selectedRouteIds: [],
         maxParallelism: 0,
         confidence: 0,
-      }),
+      })
     );
     expect(v.valid).toBe(true);
   });
@@ -89,7 +91,7 @@ describe('validateStrategyPlan — duplicates', () => {
         strategy: 'consensus',
         selectedRouteIds: ['r-1', 'r-1', 'r-2'],
         maxParallelism: 3,
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('duplicate_in_selectedRouteIds');
@@ -100,7 +102,7 @@ describe('validateStrategyPlan — duplicates', () => {
       makePlan({
         selectedRouteIds: ['r-1'],
         fallbackRouteIds: ['r-2', 'r-2'],
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('duplicate_in_fallbackRouteIds');
@@ -111,7 +113,7 @@ describe('validateStrategyPlan — duplicates', () => {
       makePlan({
         selectedRouteIds: ['r-1'],
         fallbackRouteIds: ['r-1', 'r-2'],
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors.some((e) => e.startsWith('fallback_overlaps_selected'))).toBe(true);
@@ -124,7 +126,7 @@ describe('validateStrategyPlan — strategy-specific rules', () => {
       makePlan({
         strategy: 'no_viable_strategy',
         selectedRouteIds: ['r-1'],
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('no_viable_strategy_has_selected_routes');
@@ -135,7 +137,7 @@ describe('validateStrategyPlan — strategy-specific rules', () => {
       makePlan({
         strategy: 'single_best',
         selectedRouteIds: ['r-1', 'r-2'],
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors.some((e) => e.startsWith('single_best_too_many_selected'))).toBe(true);
@@ -146,7 +148,7 @@ describe('validateStrategyPlan — strategy-specific rules', () => {
       makePlan({
         strategy: 'local_first',
         selectedRouteIds: ['r-1', 'r-2'],
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors.some((e) => e.startsWith('local_first_too_many_selected'))).toBe(true);
@@ -158,7 +160,7 @@ describe('validateStrategyPlan — strategy-specific rules', () => {
         strategy: 'consensus',
         selectedRouteIds: ['r-1', 'r-2', 'r-3'],
         maxParallelism: 2, // too small
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors.some((e) => e.startsWith('collective_exceeds_maxParallelism'))).toBe(true);
@@ -170,7 +172,7 @@ describe('validateStrategyPlan — strategy-specific rules', () => {
         strategy: 'consensus',
         selectedRouteIds: ['r-1'],
         maxParallelism: 0,
-      }),
+      })
     );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('collective_zero_parallelism');
@@ -187,12 +189,10 @@ describe('validateStrategyPlan — local_required rule', () => {
       {
         privacyMode: 'local_required',
         routeKindById: new Map([['r-cloud', 'native']]),
-      },
+      }
     );
     expect(v.valid).toBe(false);
-    expect(v.errors.some((e) => e.includes('local_required_includes_external_route'))).toBe(
-      true,
-    );
+    expect(v.errors.some((e) => e.includes('local_required_includes_external_route'))).toBe(true);
   });
 
   it('REJECTS plan whose fallbackRouteIds include external route', () => {
@@ -208,11 +208,11 @@ describe('validateStrategyPlan — local_required rule', () => {
           ['r-local', 'local'],
           ['r-cloud-fallback', 'native'],
         ]),
-      },
+      }
     );
     expect(v.valid).toBe(false);
     expect(
-      v.errors.some((e) => e.includes('local_required_fallback_includes_external_route')),
+      v.errors.some((e) => e.includes('local_required_fallback_includes_external_route'))
     ).toBe(true);
   });
 
@@ -225,7 +225,7 @@ describe('validateStrategyPlan — local_required rule', () => {
       {
         privacyMode: 'local_required',
         routeKindById: new Map([['r-local-1', 'local']]),
-      },
+      }
     );
     expect(v.valid).toBe(true);
   });
@@ -246,7 +246,7 @@ describe('validateStrategyPlan — explicit pin + fallback policy', () => {
           allowSubstitution: false,
         },
         policy: { ...DEFAULT_STRATEGY_POLICY, allowFallbackForExplicitPin: false },
-      },
+      }
     );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('explicit_pin_has_fallback_but_policy_forbids');
@@ -266,7 +266,7 @@ describe('validateStrategyPlan — explicit pin + fallback policy', () => {
           allowSubstitution: true,
         },
         policy: { ...DEFAULT_STRATEGY_POLICY, allowFallbackForExplicitPin: true },
-      },
+      }
     );
     expect(v.valid).toBe(true);
   });

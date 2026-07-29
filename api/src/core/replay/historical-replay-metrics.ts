@@ -65,8 +65,7 @@ export function computeReplayMetrics(input: ComputeMetricsInput): ReplayMetrics 
 
     // Pareto-aware fell back AND actual historical was a paid collective
     // → optimizer correctly avoided an unjustified collective.
-    const actualWasCollective =
-      r.selectors.actual_historical.selectedModelIds.length > 1;
+    const actualWasCollective = r.selectors.actual_historical.selectedModelIds.length > 1;
     const paretoFallback = r.pareto_single_fallback;
     if (paretoFallback && actualWasCollective) {
       unjustifiedCollectiveAvoided += 1;
@@ -85,8 +84,7 @@ export function computeReplayMetrics(input: ComputeMetricsInput): ReplayMetrics 
     // with cost < single baseline AND quality >= single baseline.
     if (
       !paretoFallback &&
-      r.selectors.pareto_aware.expectedCostUsd <
-        r.baseline.singleCostUsd * 0.5 &&
+      r.selectors.pareto_aware.expectedCostUsd < r.baseline.singleCostUsd * 0.5 &&
       r.selectors.pareto_aware.expectedJudge >= r.baseline.singleJudge
     ) {
       cheapGoodPreserved += 1;
@@ -107,28 +105,20 @@ export function computeReplayMetrics(input: ComputeMetricsInput): ReplayMetrics 
     }
 
     const judgeDelta =
-      r.selectors.pareto_aware.expectedJudge -
-      r.selectors.structural_naive.expectedJudge;
+      r.selectors.pareto_aware.expectedJudge - r.selectors.structural_naive.expectedJudge;
     const costDelta =
-      r.selectors.pareto_aware.expectedCostUsd -
-      r.selectors.structural_naive.expectedCostUsd;
+      r.selectors.pareto_aware.expectedCostUsd - r.selectors.structural_naive.expectedCostUsd;
     judgeDeltas.push(judgeDelta);
     costDeltas.push(costDelta);
 
     if (r.baseline.actualHistoricalJudge !== undefined) {
       judgeErrors.push(
-        Math.abs(
-          r.selectors.pareto_aware.expectedJudge -
-            r.baseline.actualHistoricalJudge,
-        ),
+        Math.abs(r.selectors.pareto_aware.expectedJudge - r.baseline.actualHistoricalJudge)
       );
     }
     if (r.baseline.actualHistoricalCostUsd !== undefined) {
       costErrors.push(
-        Math.abs(
-          r.selectors.pareto_aware.expectedCostUsd -
-            r.baseline.actualHistoricalCostUsd,
-        ),
+        Math.abs(r.selectors.pareto_aware.expectedCostUsd - r.baseline.actualHistoricalCostUsd)
       );
     }
   }
@@ -136,18 +126,16 @@ export function computeReplayMetrics(input: ComputeMetricsInput): ReplayMetrics 
   const paretoQpd = average(
     rows.map((r) =>
       r.selectors.pareto_aware.expectedCostUsd > 1e-9
-        ? r.selectors.pareto_aware.expectedJudge /
-          r.selectors.pareto_aware.expectedCostUsd
-        : 0,
-    ),
+        ? r.selectors.pareto_aware.expectedJudge / r.selectors.pareto_aware.expectedCostUsd
+        : 0
+    )
   );
   const structuralQpd = average(
     rows.map((r) =>
       r.selectors.structural_naive.expectedCostUsd > 1e-9
-        ? r.selectors.structural_naive.expectedJudge /
-          r.selectors.structural_naive.expectedCostUsd
-        : 0,
-    ),
+        ? r.selectors.structural_naive.expectedJudge / r.selectors.structural_naive.expectedCostUsd
+        : 0
+    )
   );
 
   return Object.freeze({
@@ -186,7 +174,7 @@ export function computeReplayMetrics(input: ComputeMetricsInput): ReplayMetrics 
 // ─── Per-taskType breakdown ─────────────────────────────────────────────
 
 export function computeMetricsByTaskType(
-  rows: readonly ReplayRowResult[],
+  rows: readonly ReplayRowResult[]
 ): readonly ReplayMetricsByTaskType[] {
   const buckets = new Map<string, ReplayRowResult[]>();
   for (const r of rows) {
@@ -206,31 +194,20 @@ export function computeMetricsByTaskType(
         taskType,
         holdoutCount: items.length,
         structuralExpectedJudgeMean: average(
-          items.map((r) => r.selectors.structural_naive.expectedJudge),
+          items.map((r) => r.selectors.structural_naive.expectedJudge)
         ),
-        paretoExpectedJudgeMean: average(
-          items.map((r) => r.selectors.pareto_aware.expectedJudge),
-        ),
-        singleBaselineJudgeMean: average(
-          items.map((r) => r.baseline.singleJudge),
-        ),
+        paretoExpectedJudgeMean: average(items.map((r) => r.selectors.pareto_aware.expectedJudge)),
+        singleBaselineJudgeMean: average(items.map((r) => r.baseline.singleJudge)),
         structuralExpectedCostMean: average(
-          items.map((r) => r.selectors.structural_naive.expectedCostUsd),
+          items.map((r) => r.selectors.structural_naive.expectedCostUsd)
         ),
-        paretoExpectedCostMean: average(
-          items.map((r) => r.selectors.pareto_aware.expectedCostUsd),
-        ),
-        singleBaselineCostMean: average(
-          items.map((r) => r.baseline.singleCostUsd),
-        ),
+        paretoExpectedCostMean: average(items.map((r) => r.selectors.pareto_aware.expectedCostUsd)),
+        singleBaselineCostMean: average(items.map((r) => r.baseline.singleCostUsd)),
         quality_and_cost_success_rate: successCount / items.length,
         single_fallback_rate: fallbackCount / items.length,
-        harmful_model_avoided_total: items.filter((r) => r.harmful_model_avoided)
-          .length,
-        modality_mismatch_avoided_total: items.filter(
-          (r) => r.modality_mismatch_avoided,
-        ).length,
-      }),
+        harmful_model_avoided_total: items.filter((r) => r.harmful_model_avoided).length,
+        modality_mismatch_avoided_total: items.filter((r) => r.modality_mismatch_avoided).length,
+      })
     );
   }
   return Object.freeze(out);
@@ -240,7 +217,7 @@ export function computeMetricsByTaskType(
 
 function emptyMetrics(
   totalHoldoutRows: number,
-  excludedDueToMissingBaseline: number,
+  excludedDueToMissingBaseline: number
 ): ReplayMetrics {
   return {
     totalHoldoutRows,

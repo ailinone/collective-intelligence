@@ -37,7 +37,7 @@ export interface RegisterDefaultProbesOptions {
  */
 export function registerDefaultProbes(
   registry: ProviderProbeRegistry,
-  opts: RegisterDefaultProbesOptions = {},
+  opts: RegisterDefaultProbesOptions = {}
 ): readonly string[] {
   const registered: string[] = [];
 
@@ -58,7 +58,12 @@ export function registerDefaultProbes(
   // well-known aggregator endpoints; operators can override via
   // `<UPPERCASE>_BASE_URL`. Each aggregator's `/v1/models` is verified
   // to be non-billable.
-  const candidates: ReadonlyArray<{ providerId: string; baseUrl?: string; apiKey?: string; defaultBaseUrl: string }> = [
+  const candidates: ReadonlyArray<{
+    providerId: string;
+    baseUrl?: string;
+    apiKey?: string;
+    defaultBaseUrl: string;
+  }> = [
     {
       providerId: 'aihubmix',
       baseUrl: process.env.AIHUBMIX_BASE_URL,
@@ -87,7 +92,7 @@ export function registerDefaultProbes(
           baseUrl,
           apiKey: c.apiKey,
           fetchImpl: opts.fetchImpl,
-        }),
+        })
       );
       registered.push(c.providerId);
     }

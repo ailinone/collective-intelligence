@@ -44,9 +44,7 @@
 
 import { logger } from '@/utils/logger';
 import { getProviderHealthRegistry } from './provider-health-registry';
-import {
-  recordDeadProviderHttpAttempt,
-} from './skip-near-zero';
+import { recordDeadProviderHttpAttempt } from './skip-near-zero';
 import type { HealthKey, ProviderHealthRecord, ProviderHealthState } from './types';
 
 const log = logger.child({ component: 'dead-provider-audit' });
@@ -76,7 +74,12 @@ export interface HttpOutcome {
   /** Whether the attempt produced a usable response. */
   success: boolean;
   /** Optional caller hint about which code path made the call. */
-  source?: 'orchestrator_primary' | 'cross_provider_retry' | 'embedding_pipeline' | 'readiness_probe' | 'unknown';
+  source?:
+    | 'orchestrator_primary'
+    | 'cross_provider_retry'
+    | 'embedding_pipeline'
+    | 'readiness_probe'
+    | 'unknown';
 }
 
 /**
@@ -109,7 +112,7 @@ export function recordHttpOutcome(outcome: HttpOutcome): void {
           reason: bypass.reason,
           stateAtAttempt: bypass.stateAtAttempt,
         },
-        'Dead-provider HTTP attempt detected — skip-near-zero bypass',
+        'Dead-provider HTTP attempt detected — skip-near-zero bypass'
       );
     }
   } catch (err) {

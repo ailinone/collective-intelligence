@@ -48,13 +48,13 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         openEvents: events,
         count: events.length,
         severity: {
-          critical: events.filter(e => e.severity === 'critical').length,
-          high: events.filter(e => e.severity === 'high').length,
-          medium: events.filter(e => e.severity === 'medium').length,
-          low: events.filter(e => e.severity === 'low').length,
+          critical: events.filter((e) => e.severity === 'critical').length,
+          high: events.filter((e) => e.severity === 'high').length,
+          medium: events.filter((e) => e.severity === 'medium').length,
+          low: events.filter((e) => e.severity === 'low').length,
         },
       });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
       log.info('Admin-triggered drift detection');
       const result = await detectDrift();
       return reply.send(result);
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -81,19 +81,23 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
     async (_request: FastifyRequest, reply: FastifyReply) => {
       const reports = await validateAllStrategies();
       const verdictCounts = {
-        improving: reports.filter(r => r.verdict === 'improving').length,
-        stable: reports.filter(r => r.verdict === 'stable').length,
-        degrading: reports.filter(r => r.verdict === 'degrading').length,
-        inconclusive: reports.filter(r => r.verdict === 'inconclusive').length,
+        improving: reports.filter((r) => r.verdict === 'improving').length,
+        stable: reports.filter((r) => r.verdict === 'stable').length,
+        degrading: reports.filter((r) => r.verdict === 'degrading').length,
+        inconclusive: reports.filter((r) => r.verdict === 'inconclusive').length,
       };
       return reply.send({
         reports,
         summary: verdictCounts,
         totalStrategies: reports.length,
-        systemVerdict: verdictCounts.degrading > 0 ? 'degrading' :
-          verdictCounts.improving > 0 ? 'improving' : 'stable',
+        systemVerdict:
+          verdictCounts.degrading > 0
+            ? 'degrading'
+            : verdictCounts.improving > 0
+              ? 'improving'
+              : 'stable',
       });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -107,7 +111,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
       log.info('Admin-triggered learning validation');
       const reports = await validateAllStrategies();
       return reply.send({ reports, count: reports.length });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -146,7 +150,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         count: outcomes.length,
         window: { hours, strategy: query.strategy ?? 'all' },
       });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -162,9 +166,9 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         validateAllStrategies(),
       ]);
 
-      const hasCriticalDrift = driftEvents.some(e => e.severity === 'critical');
-      const hasDegrading = learningReports.some(r => r.verdict === 'degrading');
-      const hasImproving = learningReports.some(r => r.verdict === 'improving');
+      const hasCriticalDrift = driftEvents.some((e) => e.severity === 'critical');
+      const hasDegrading = learningReports.some((r) => r.verdict === 'degrading');
+      const hasImproving = learningReports.some((r) => r.verdict === 'improving');
 
       let healthStatus: string;
       if (hasCriticalDrift || hasDegrading) {
@@ -181,17 +185,17 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         status: healthStatus,
         drift: {
           openEvents: driftEvents.length,
-          criticalCount: driftEvents.filter(e => e.severity === 'critical').length,
+          criticalCount: driftEvents.filter((e) => e.severity === 'critical').length,
         },
         learning: {
-          improving: learningReports.filter(r => r.verdict === 'improving').length,
-          stable: learningReports.filter(r => r.verdict === 'stable').length,
-          degrading: learningReports.filter(r => r.verdict === 'degrading').length,
-          inconclusive: learningReports.filter(r => r.verdict === 'inconclusive').length,
+          improving: learningReports.filter((r) => r.verdict === 'improving').length,
+          stable: learningReports.filter((r) => r.verdict === 'stable').length,
+          degrading: learningReports.filter((r) => r.verdict === 'degrading').length,
+          inconclusive: learningReports.filter((r) => r.verdict === 'inconclusive').length,
         },
         timestamp: new Date().toISOString(),
       });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -207,7 +211,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         Promise.resolve(getShadowEvalConfig()),
       ]);
       return reply.send({ stats, config });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -224,7 +228,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
         windowDays: query.days ?? 7,
       });
       return reply.send({ rankings: data, count: data.length });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -237,7 +241,7 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
     async (_request: FastifyRequest, reply: FastifyReply) => {
       const rollbacks = await getRecentRollbacks();
       return reply.send({ rollbacks, count: rollbacks.length });
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -251,6 +255,6 @@ export async function registerEvaluationAdminRoutes(server: FastifyInstance): Pr
       log.info('Admin-triggered full evaluation pipeline');
       const result = await runEvaluationPipeline();
       return reply.send(result);
-    },
+    }
   );
 }

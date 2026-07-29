@@ -172,7 +172,9 @@ export function parseMetadata(metadata: Prisma.JsonValue): Record<string, string
  */
 export function toPrismaJsonValue(value: unknown): Prisma.InputJsonValue {
   if (value === null) {
-    throw new Error('toPrismaJsonValue does not accept null. Use toPrismaNullableJsonValue instead.');
+    throw new Error(
+      'toPrismaJsonValue does not accept null. Use toPrismaNullableJsonValue instead.'
+    );
   }
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return value;
@@ -201,4 +203,3 @@ export function toPrismaNullableJsonValue(
   }
   return toPrismaJsonValue(value);
 }
-

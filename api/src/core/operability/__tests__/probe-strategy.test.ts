@@ -27,7 +27,10 @@ describe('resolveProbeStrategy', () => {
   });
 
   it('falls back to integration class default', () => {
-    const s = resolveProbeStrategy({ providerId: 'unknown-provider', integrationClass: 'oai-compat-pure' });
+    const s = resolveProbeStrategy({
+      providerId: 'unknown-provider',
+      integrationClass: 'oai-compat-pure',
+    });
     expect(s.credentialProbe).toBe('env_only');
     expect(s.endpointProbe).toBe('models_api');
     expect(s.modelProbe).toBe('list_models');
@@ -42,7 +45,10 @@ describe('resolveProbeStrategy', () => {
   });
 
   it('native-anthropic does NOT enumerate models', () => {
-    const s = resolveProbeStrategy({ providerId: 'anthropic', integrationClass: 'native-anthropic' });
+    const s = resolveProbeStrategy({
+      providerId: 'anthropic',
+      integrationClass: 'native-anthropic',
+    });
     expect(s.modelProbe).toBe('known_catalog_alias');
     expect(s.endpointProbe).toBe('not_supported');
   });
@@ -54,7 +60,10 @@ describe('resolveProbeStrategy', () => {
   });
 
   it('self-hosted has no credential check (open daemon)', () => {
-    const s = resolveProbeStrategy({ providerId: 'ollama', integrationClass: 'self-hosted-oai-compat' });
+    const s = resolveProbeStrategy({
+      providerId: 'ollama',
+      integrationClass: 'self-hosted-oai-compat',
+    });
     expect(s.credentialProbe).toBe('not_supported');
     expect(s.modelProbe).toBe('list_models');
   });

@@ -11,13 +11,7 @@ import { logger } from '@/utils/logger';
 import type { ToolResult } from '@/services/tool-execution-service';
 
 export type JinaToolName =
-  | 'reader'
-  | 'search'
-  | 'embeddings'
-  | 'rerank'
-  | 'classify'
-  | 'segment'
-  | 'deepsearch';
+  'reader' | 'search' | 'embeddings' | 'rerank' | 'classify' | 'segment' | 'deepsearch';
 
 interface ExecuteJinaToolInput {
   toolName: JinaToolName;
@@ -77,7 +71,8 @@ export class JinaToolsService {
   constructor() {
     this.apiKey = process.env.JINA_API_KEY || '';
     this.apiBaseUrl = process.env.JINA_API_BASE_URL || 'https://api.jina.ai/v1';
-    this.deepSearchBaseUrl = process.env.JINA_DEEPSEARCH_BASE_URL || 'https://deepsearch.jina.ai/v1';
+    this.deepSearchBaseUrl =
+      process.env.JINA_DEEPSEARCH_BASE_URL || 'https://deepsearch.jina.ai/v1';
     this.readerBaseUrl = process.env.JINA_READER_BASE_URL || 'https://r.jina.ai';
     this.searchBaseUrl = process.env.JINA_SEARCH_BASE_URL || 'https://s.jina.ai';
     this.maxRetries = this.readIntegerEnv('JINA_TOOLS_MAX_RETRIES', DEFAULT_MAX_RETRIES, 0, 10);
@@ -87,7 +82,12 @@ export class JinaToolsService {
       50,
       30_000
     );
-    this.timeoutMs = this.readIntegerEnv('JINA_TOOLS_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, 1000, 120_000);
+    this.timeoutMs = this.readIntegerEnv(
+      'JINA_TOOLS_TIMEOUT_MS',
+      DEFAULT_TIMEOUT_MS,
+      1000,
+      120_000
+    );
   }
 
   async executeTool(input: ExecuteJinaToolInput): Promise<ToolResult> {
@@ -228,7 +228,10 @@ export class JinaToolsService {
     };
   }
 
-  private async requestWithRetry(toolName: JinaToolName, request: RequestOptions): Promise<Response> {
+  private async requestWithRetry(
+    toolName: JinaToolName,
+    request: RequestOptions
+  ): Promise<Response> {
     let attempt = 0;
     let lastError: unknown;
 
@@ -238,7 +241,8 @@ export class JinaToolsService {
         const response = await fetch(request.url, {
           method: request.method,
           headers: this.buildHeaders(request.method),
-          body: request.method === 'POST' && request.body ? JSON.stringify(request.body) : undefined,
+          body:
+            request.method === 'POST' && request.body ? JSON.stringify(request.body) : undefined,
           signal: AbortSignal.timeout(this.timeoutMs),
         });
 
@@ -273,11 +277,7 @@ export class JinaToolsService {
     }
 
     const message = lastError instanceof Error ? lastError.message : String(lastError);
-    throw new JinaToolsServiceError(
-      `Jina tool request failed: ${message}`,
-      502,
-      'request_failed'
-    );
+    throw new JinaToolsServiceError(`Jina tool request failed: ${message}`, 502, 'request_failed');
   }
 
   private normalizeUpstreamError(
@@ -287,7 +287,8 @@ export class JinaToolsService {
     upstreamUrl: string
   ): JinaToolsServiceError {
     const normalizedBody = upstreamBody.trim();
-    const excerpt = normalizedBody.length > 600 ? `${normalizedBody.slice(0, 600)}...` : normalizedBody;
+    const excerpt =
+      normalizedBody.length > 600 ? `${normalizedBody.slice(0, 600)}...` : normalizedBody;
     const code = this.statusToCode(statusCode);
     const message = excerpt
       ? `Jina ${toolName} failed with HTTP ${statusCode}: ${excerpt}`
@@ -406,12 +407,7 @@ export class JinaToolsService {
     );
   }
 
-  private readIntegerEnv(
-    envVar: string,
-    fallback: number,
-    min: number,
-    max: number
-  ): number {
+  private readIntegerEnv(envVar: string, fallback: number, min: number, max: number): number {
     const raw = process.env[envVar];
     const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
     if (!Number.isFinite(parsed)) {
@@ -432,4 +428,3 @@ export class JinaToolsService {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
-

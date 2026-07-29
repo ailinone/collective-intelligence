@@ -18,13 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { composeRoutingPipeline } from '../routing-pipeline-composer';
 import { createStaticRoutingConfigProvider } from '../../routing-config/runtime-routing-config-provider';
 import { buildFixtureRegistry } from '../../routing/__tests__/fixtures/dry-run.fixture';
@@ -36,11 +30,7 @@ const __dirname = dirname(__filename);
 const SOURCES: Record<string, string> = {
   'routing-pipeline-types.ts': resolve(__dirname, '..', 'routing-pipeline-types.ts'),
   'routing-pipeline-trace.ts': resolve(__dirname, '..', 'routing-pipeline-trace.ts'),
-  'routing-pipeline-composer.ts': resolve(
-    __dirname,
-    '..',
-    'routing-pipeline-composer.ts',
-  ),
+  'routing-pipeline-composer.ts': resolve(__dirname, '..', 'routing-pipeline-composer.ts'),
 };
 
 const sourceContent: Record<string, string> = {};
@@ -85,7 +75,7 @@ describe('routing-pipeline — fetch is never called', () => {
           configProvider: createStaticRoutingConfigProvider({ mode }),
           nowIso: '2026-05-12T13:06:00.000Z',
           traceId: 'trace-no-net',
-        }),
+        })
       ).not.toThrow();
     });
   }

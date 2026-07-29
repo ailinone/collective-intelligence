@@ -37,11 +37,7 @@
  */
 
 import { logger } from '@/utils/logger';
-import type {
-  ProviderDiscoverySnapshot,
-  ProviderHealthState,
-  DiscoveredModel,
-} from './types';
+import type { ProviderDiscoverySnapshot, ProviderHealthState, DiscoveredModel } from './types';
 import { getProviderHealthRegistry } from './provider-health-registry';
 
 const log = logger.child({ component: 'operational-candidate-pool' });
@@ -57,12 +53,17 @@ export type ProviderTier = 'native' | 'edge' | 'aggregator' | 'local' | 'observe
  */
 function classifyProviderTier(
   providerId: string,
-  integrationClass: string | undefined,
+  integrationClass: string | undefined
 ): ProviderTier {
   const id = providerId.toLowerCase();
   const cls = (integrationClass ?? '').toLowerCase();
 
-  if (cls === 'self-hosted-oai-compat' || id.startsWith('ollama') || id === 'self-hosted' || id.includes('local')) {
+  if (
+    cls === 'self-hosted-oai-compat' ||
+    id.startsWith('ollama') ||
+    id === 'self-hosted' ||
+    id.includes('local')
+  ) {
     return 'local';
   }
   if (cls === 'aggregator-with-billing' || isKnownAggregator(id)) {
@@ -79,9 +80,21 @@ function classifyProviderTier(
 }
 
 const KNOWN_AGGREGATORS = new Set([
-  'aihubmix', 'cometapi', 'openrouter', 'aiml', 'nanogpt', 'edenai',
-  'novita', 'routeway', 'requesty', 'helicone', 'heliconeai', 'poe',
-  'ai302', '302ai', 'imagerouter',
+  'aihubmix',
+  'cometapi',
+  'openrouter',
+  'aiml',
+  'nanogpt',
+  'edenai',
+  'novita',
+  'routeway',
+  'requesty',
+  'helicone',
+  'heliconeai',
+  'poe',
+  'ai302',
+  '302ai',
+  'imagerouter',
 ]);
 
 function isKnownAggregator(id: string): boolean {
@@ -150,9 +163,8 @@ class OperationalCandidatePool {
     for (const [providerId, result] of input.snapshot.results) {
       if (!result.includeInOperationalPool) continue;
       const tier = classifyProviderTier(providerId, integrationClassByProvider[providerId]);
-      const modelsToInsert = result.models.length > 0
-        ? result.models
-        : (fallback[providerId] ?? []);
+      const modelsToInsert =
+        result.models.length > 0 ? result.models : (fallback[providerId] ?? []);
       for (const model of modelsToInsert) {
         const key = candidateKey(providerId, model.modelId);
         if (next.has(key)) continue; // discovery wins over fallback
@@ -178,7 +190,7 @@ class OperationalCandidatePool {
         providerCount: this.byProvider.size,
         builtAt: this.builtAt,
       },
-      'OperationalCandidatePool rebuilt',
+      'OperationalCandidatePool rebuilt'
     );
   }
 
@@ -190,7 +202,7 @@ class OperationalCandidatePool {
   addCandidatesByProvider(
     providerId: string,
     models: readonly DiscoveredModel[],
-    integrationClass?: string,
+    integrationClass?: string
   ): void {
     const next = new Map(this.candidates);
     const tier = classifyProviderTier(providerId, integrationClass);
@@ -229,9 +241,9 @@ class OperationalCandidatePool {
     const now = Date.now();
 
     const candidates = filter.providerId
-      ? this.byProvider.get(filter.providerId) ?? []
+      ? (this.byProvider.get(filter.providerId) ?? [])
       : filter.providerTier
-        ? this.byTier.get(filter.providerTier) ?? []
+        ? (this.byTier.get(filter.providerTier) ?? [])
         : Array.from(this.candidates.values());
 
     const result: OperationalCandidate[] = [];

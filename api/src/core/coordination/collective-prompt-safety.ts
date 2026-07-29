@@ -62,7 +62,7 @@ const PROMPT_TEMPLATE_MARKERS = [
  */
 export function sanitizeForPromptContext(
   value: unknown,
-  maxLength: number = PROMPT_CONTEXT_DEFAULT_MAX_LENGTH,
+  maxLength: number = PROMPT_CONTEXT_DEFAULT_MAX_LENGTH
 ): string {
   if (typeof value !== 'string') return '';
   if (value.length === 0) return '';
@@ -111,13 +111,9 @@ export function sanitizeVariableName(value: unknown): string {
   // else (including whitespace and quotes) is replaced with an underscore
   // to keep the resulting string usable as a key in the formatted state
   // listing without being mistaken for a control character.
-  const safe = trimmed
-    .replace(/[^A-Za-z0-9._\-/:]+/g, '_')
-    .replace(/_{2,}/g, '_');
+  const safe = trimmed.replace(/[^A-Za-z0-9._\-/:]+/g, '_').replace(/_{2,}/g, '_');
 
-  return safe.length > VARIABLE_NAME_MAX_LENGTH
-    ? safe.slice(0, VARIABLE_NAME_MAX_LENGTH)
-    : safe;
+  return safe.length > VARIABLE_NAME_MAX_LENGTH ? safe.slice(0, VARIABLE_NAME_MAX_LENGTH) : safe;
 }
 
 /**

@@ -33,7 +33,10 @@ const CLIENT = 'ailin-dev-server';
 let privatePem: string;
 let publicJwk: Record<string, unknown>;
 
-function sign(payload: Record<string, unknown>, opts: { alg?: jwt.Algorithm; key?: string } = {}): string {
+function sign(
+  payload: Record<string, unknown>,
+  opts: { alg?: jwt.Algorithm; key?: string } = {}
+): string {
   return jwt.sign(payload, opts.key ?? privatePem, {
     algorithm: opts.alg ?? 'RS256',
     keyid: KID,
@@ -98,7 +101,9 @@ describe('verifyServiceToken', () => {
   it('rejects an HS256 (shared-secret) token as unsupported algorithm', async () => {
     __primeJwksForTests([publicJwk as never]);
     const token = jwt.sign(baseServiceClaims(), 'a-shared-secret', { algorithm: 'HS256' });
-    await expect(verifyServiceToken(token)).rejects.toMatchObject({ reason: 'unsupported_algorithm' });
+    await expect(verifyServiceToken(token)).rejects.toMatchObject({
+      reason: 'unsupported_algorithm',
+    });
   });
 
   it('rejects a wrong issuer (signature/claims verification failure)', async () => {
@@ -121,7 +126,9 @@ describe('verifyServiceToken', () => {
 
   it('rejects a token from a non-allowlisted client', async () => {
     __primeJwksForTests([publicJwk as never]);
-    const token = sign(baseServiceClaims({ client_id: 'some-rogue-client', sub: 'some-rogue-client' }));
+    const token = sign(
+      baseServiceClaims({ client_id: 'some-rogue-client', sub: 'some-rogue-client' })
+    );
     await expect(verifyServiceToken(token)).rejects.toMatchObject({ reason: 'client_not_allowed' });
   });
 
@@ -133,6 +140,8 @@ describe('verifyServiceToken', () => {
 
   it('rejects a malformed token', async () => {
     __primeJwksForTests([publicJwk as never]);
-    await expect(verifyServiceToken('not-a-jwt')).rejects.toMatchObject({ reason: 'malformed_token' });
+    await expect(verifyServiceToken('not-a-jwt')).rejects.toMatchObject({
+      reason: 'malformed_token',
+    });
   });
 });

@@ -110,7 +110,7 @@ const COORDINATOR_MAX_TOKENS_CEILING = 131_072;
  */
 export function resolveCoordinatorMaxTokens(
   clientMaxTokens?: number,
-  coordinatorModelMaxOutput?: number,
+  coordinatorModelMaxOutput?: number
 ): number {
   const requested = Number(clientMaxTokens);
   if (Number.isFinite(requested) && requested > 0) {
@@ -415,7 +415,10 @@ export class ResponseAggregator {
     responses: ModelResponse[],
     context: AggregationContext
   ): Promise<AggregatedResponse> {
-    log.debug({ requestId: context.requestId }, 'Executing synthesis aggregation with LLM coordinator');
+    log.debug(
+      { requestId: context.requestId },
+      'Executing synthesis aggregation with LLM coordinator'
+    );
 
     // 1. Analyze strengths/weaknesses of each response
     const analysis = this.analyzeResponses(responses);
@@ -491,7 +494,12 @@ export class ResponseAggregator {
       const { adapter } = result;
 
       // Build coordination prompt
-      const coordinationPrompt = this.buildCoordinationPrompt(parts, responses, context, coordinator.contextWindow);
+      const coordinationPrompt = this.buildCoordinationPrompt(
+        parts,
+        responses,
+        context,
+        coordinator.contextWindow
+      );
 
       // Call coordinator LLM
       const coordinatedResponse = await adapter.chatCompletion({
@@ -568,7 +576,7 @@ export class ResponseAggregator {
     parts: Array<{ source: string; content: string }>,
     responses: ModelResponse[],
     context: AggregationContext,
-    coordinatorContextWindow?: number,
+    coordinatorContextWindow?: number
   ): string {
     let prompt = `Task: ${context.taskType}\n\n`;
     prompt += `I have ${responses.length} solutions from different AI models. Please synthesize them into a single, high-quality response.\n\n`;

@@ -83,7 +83,7 @@ describe('VercelAIGatewayAdapter — attributeFromDiscovery', () => {
     expect(
       VercelAIGatewayAdapter.attributeFromDiscovery({
         id: 'xai/grok-4',
-      }),
+      })
     ).toEqual({
       family: 'xai',
       model: 'grok-4',
@@ -93,7 +93,7 @@ describe('VercelAIGatewayAdapter — attributeFromDiscovery', () => {
       VercelAIGatewayAdapter.attributeFromDiscovery({
         id: 'xai/grok-4',
         owned_by: '',
-      }),
+      })
     ).toEqual({
       family: 'xai',
       model: 'grok-4',
@@ -114,9 +114,7 @@ describe('VercelAIGatewayAdapter — attributeFromDiscovery', () => {
   });
 
   it('returns undefined when everything is missing', () => {
-    expect(
-      VercelAIGatewayAdapter.attributeFromDiscovery({ id: 'bare' }),
-    ).toBeUndefined();
+    expect(VercelAIGatewayAdapter.attributeFromDiscovery({ id: 'bare' })).toBeUndefined();
   });
 });
 

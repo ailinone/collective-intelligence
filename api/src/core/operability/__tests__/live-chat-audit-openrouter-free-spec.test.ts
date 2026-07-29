@@ -32,7 +32,7 @@ import path from 'node:path';
 
 const auditScriptSource = fs.readFileSync(
   path.resolve(__dirname, '../scripts/run-live-chat-operability-audit.ts'),
-  'utf8',
+  'utf8'
 );
 
 describe('01C.1B-J1C §8 — OpenRouter audit spec', () => {
@@ -67,7 +67,9 @@ describe('01C.1B-J1C §8 — OpenRouter audit spec', () => {
     // that contains `.replace(/:free/`, etc. The COMMENT may mention
     // `:free` to document the intent — the FUNCTION body must not
     // strip it.
-    const block = auditScriptSource.match(/openrouter:\s*\{[\s\S]*?\},?\s*(?='fireworks-ai'|\}\s*;)/);
+    const block = auditScriptSource.match(
+      /openrouter:\s*\{[\s\S]*?\},?\s*(?='fireworks-ai'|\}\s*;)/
+    );
     expect(block).not.toBeNull();
     if (block) {
       expect(block[0]).not.toMatch(/normalizeModelId/);

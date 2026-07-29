@@ -118,7 +118,10 @@ async function processThreadRun(
     for (const msg of threadMessages) {
       const content = msg.content as ThreadMessage['content'];
       const textContent = content
-        .filter((c): c is { type: 'text'; text: { value: string } } => c.type === 'text' && !!c.text?.value)
+        .filter(
+          (c): c is { type: 'text'; text: { value: string } } =>
+            c.type === 'text' && !!c.text?.value
+        )
         .map((c) => c.text.value)
         .join('\n');
 
@@ -143,7 +146,10 @@ async function processThreadRun(
       }
     }
 
-    if (chatMessages.length === 0 || (chatMessages.length === 1 && chatMessages[0].role === 'system')) {
+    if (
+      chatMessages.length === 0 ||
+      (chatMessages.length === 1 && chatMessages[0].role === 'system')
+    ) {
       throw new Error('No messages in thread to process');
     }
 
@@ -160,8 +166,13 @@ async function processThreadRun(
     // Add tools if available
     if (tools && tools.length > 0) {
       const functionTools = tools
-        .filter((t): t is { type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } } =>
-          t.type === 'function' && !!t.function
+        .filter(
+          (
+            t
+          ): t is {
+            type: 'function';
+            function: { name: string; description: string; parameters: Record<string, unknown> };
+          } => t.type === 'function' && !!t.function
         )
         .map((t) => ({
           type: 'function' as const,
@@ -187,17 +198,12 @@ async function processThreadRun(
     );
 
     // 6. Execute via OrchestrationEngine
-    const result = await orchestrationEngine.execute(
-      chatRequest,
-      organizationId,
-      userId
-    );
+    const result = await orchestrationEngine.execute(chatRequest, organizationId, userId);
 
     // 7. Extract response content
     const responseContent = result.finalResponse.choices[0]?.message?.content || '';
-    const responseContentStr = typeof responseContent === 'string' 
-      ? responseContent 
-      : JSON.stringify(responseContent);
+    const responseContentStr =
+      typeof responseContent === 'string' ? responseContent : JSON.stringify(responseContent);
 
     // Check for tool calls
     const toolCalls = result.finalResponse.choices[0]?.message?.tool_calls;
@@ -225,7 +231,9 @@ async function processThreadRun(
         data: {
           status: 'requires_action',
           requiredAction,
-          usage: result.finalResponse.usage ? (JSON.parse(JSON.stringify(result.finalResponse.usage)) as Prisma.InputJsonValue) : Prisma.DbNull,
+          usage: result.finalResponse.usage
+            ? (JSON.parse(JSON.stringify(result.finalResponse.usage)) as Prisma.InputJsonValue)
+            : Prisma.DbNull,
         },
       });
 
@@ -333,7 +341,9 @@ function formatThreadRun(run: {
     thread_id: run.threadId,
     assistant_id: run.assistantId,
     status: run.status as ThreadRun['status'],
-    expires_at: run.expiresAt ? Math.floor(run.expiresAt.getTime() / 1000) : Math.floor(Date.now() / 1000) + 3600,
+    expires_at: run.expiresAt
+      ? Math.floor(run.expiresAt.getTime() / 1000)
+      : Math.floor(Date.now() / 1000) + 3600,
     started_at: run.startedAt ? Math.floor(run.startedAt.getTime() / 1000) : null,
     cancelled_at: run.cancelledAt ? Math.floor(run.cancelledAt.getTime() / 1000) : null,
     failed_at: run.failedAt ? Math.floor(run.failedAt.getTime() / 1000) : null,
@@ -370,4 +380,3 @@ export async function setupThreadRunWorkers(
 export async function stopThreadRunWorkers(): Promise<void> {
   await threadRunQueueService.stopWorkers();
 }
-

@@ -20,10 +20,7 @@
  * and the full `judge()` client path, including the emitted metric.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  ProviderLLMJudgeClient,
-  coerceRawResult,
-} from '../provider-llm-judge-client';
+import { ProviderLLMJudgeClient, coerceRawResult } from '../provider-llm-judge-client';
 import {
   METRIC_NAMES,
   getCounterValueForTesting,
@@ -75,7 +72,10 @@ const JUDGE_INPUT = {
 } as const;
 
 function clientReturning(content: string): ProviderLLMJudgeClient {
-  const adapter = { getName: () => 'mockprov', chatCompletion: vi.fn(async () => fakeChatResponse(content)) };
+  const adapter = {
+    getName: () => 'mockprov',
+    chatCompletion: vi.fn(async () => fakeChatResponse(content)),
+  };
   return new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
 }
 
@@ -86,7 +86,11 @@ function clientReturning(content: string): ProviderLLMJudgeClient {
 describe('coerceRawResult — tolerant salvage of real LLM judge drift', () => {
   it('#0 confidence as string + extra keys (maxScore), verdict preserved', () => {
     const r = coerceRawResult({
-      score: 0.7, maxScore: 1, verdict: 'pass', rationale: 'ok', confidence: '0.9',
+      score: 0.7,
+      maxScore: 1,
+      verdict: 'pass',
+      rationale: 'ok',
+      confidence: '0.9',
     });
     expect(r.score).toBe(0.7);
     expect(r.confidence).toBe(0.9);
@@ -114,7 +118,9 @@ describe('coerceRawResult — tolerant salvage of real LLM judge drift', () => {
 
   it('extracts subScores leniently (string axis coerced, missing axes undefined)', () => {
     const r = coerceRawResult({
-      score: 0.8, verdict: 'pass', subScores: { correctness: 0.9, safety: '0.7' },
+      score: 0.8,
+      verdict: 'pass',
+      subScores: { correctness: 0.9, safety: '0.7' },
     });
     expect(r.subScores?.correctness).toBe(0.9);
     expect(r.subScores?.safety).toBe(0.7); // '0.7' string coerced
@@ -168,7 +174,7 @@ describe('coerceRawResult — regex salvage of unparseable judge JSON', () => {
 
   it('still throws when no numeric score is present in unparseable text', () => {
     expect(() => coerceRawResult('```json\n{\n  "feedback": "great work, but')).toThrow(
-      /unparseable/,
+      /unparseable/
     );
   });
 });
@@ -197,7 +203,9 @@ describe('ProviderLLMJudgeClient.judge — metric emission by parse class', () =
   });
 
   it('emits an `unrecoverable` failure metric when no score can be salvaged', async () => {
-    await expect(clientReturning('{"feedback":"nice"}').judge({ ...JUDGE_INPUT })).rejects.toThrow();
+    await expect(
+      clientReturning('{"feedback":"nice"}').judge({ ...JUDGE_INPUT })
+    ).rejects.toThrow();
     expect(resultTotal('none', 'unrecoverable')).toBe(1);
   });
 

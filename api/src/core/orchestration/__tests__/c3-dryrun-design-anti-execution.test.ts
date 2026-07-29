@@ -31,25 +31,25 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — anti-execution guard', () => {
 
     it('case 23: flags providerCallExecuted=true', () => {
       expect(detectC3ExecutionViolations({ providerCallExecuted: true })).toContain(
-        'providerCallExecuted_true',
+        'providerCallExecuted_true'
       );
     });
 
     it('case 24: flags c3ExecutionAuthorized=true', () => {
       expect(detectC3ExecutionViolations({ c3ExecutionAuthorized: true })).toContain(
-        'c3ExecutionAuthorized_true',
+        'c3ExecutionAuthorized_true'
       );
     });
 
     it('flags billable / provider-probe / model-probe authorization', () => {
       expect(detectC3ExecutionViolations({ billableProviderCallsAuthorized: true })).toContain(
-        'billableProviderCallsAuthorized_true',
+        'billableProviderCallsAuthorized_true'
       );
       expect(detectC3ExecutionViolations({ providerProbesAuthorized: true })).toContain(
-        'providerProbesAuthorized_true',
+        'providerProbesAuthorized_true'
       );
       expect(detectC3ExecutionViolations({ modelProbesAuthorized: true })).toContain(
-        'modelProbesAuthorized_true',
+        'modelProbesAuthorized_true'
       );
     });
   });
@@ -68,7 +68,7 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — anti-execution guard', () => {
     it('case 28: contract source contains no credential-like tokens', () => {
       const src = readFileSync(
         resolve(process.cwd(), 'src/core/experiment/c3-dryrun-experiment-design-contract.ts'),
-        'utf8',
+        'utf8'
       );
       expect(/sk-[A-Za-z0-9_-]{20,}/.test(src)).toBe(false);
       expect(/ak_local_[A-Za-z0-9._-]+/.test(src)).toBe(false);

@@ -92,7 +92,12 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
 
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || typeof currentUser.userId !== 'string') {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          typeof currentUser.userId !== 'string'
+        ) {
           return reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication required',
@@ -119,16 +124,13 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Internal server error';
         const errorStack = error instanceof Error ? error.stack : undefined;
-        server.log.error(
-          { error: errorMessage, stack: errorStack },
-          'Error fetching user profile'
-        );
+        server.log.error({ error: errorMessage, stack: errorStack }, 'Error fetching user profile');
         return reply.code(500).send({
           error: 'Internal server error',
           message: errorMessage,
         });
       }
-    },
+    }
   );
 
   /**
@@ -195,7 +197,12 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
         const extendedRequest = request as ExtendedFastifyRequest;
         const currentUser = extendedRequest.user;
 
-        if (!currentUser || typeof currentUser !== 'object' || !('userId' in currentUser) || typeof currentUser.userId !== 'string') {
+        if (
+          !currentUser ||
+          typeof currentUser !== 'object' ||
+          !('userId' in currentUser) ||
+          typeof currentUser.userId !== 'string'
+        ) {
           return reply.code(401).send({
             error: 'Unauthorized',
             message: 'Authentication required',
@@ -234,7 +241,7 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
           message: errorMessage,
         });
       }
-    },
+    }
   );
 }
 

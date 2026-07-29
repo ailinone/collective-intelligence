@@ -67,12 +67,7 @@ function validatedHttpUrl(opts: { label: string }) {
       // URL parses "[::1]" into hostname "::1" on some runtimes and "[::1]"
       // on others — strip brackets so the check matches either shape.
       const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-      if (
-        host === 'localhost' ||
-        host === '127.0.0.1' ||
-        host === '::1' ||
-        host === '0.0.0.0'
-      ) {
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `${opts.label} host ${host} is not a permitted destination target`,
@@ -149,12 +144,11 @@ export type DestinationConfigInput =
   | { type: 'datadog'; config: z.infer<typeof DatadogConfigSchema> };
 
 export type DestinationConfigValidation =
-  | { ok: true; config: Record<string, unknown> }
-  | { ok: false; error: string };
+  { ok: true; config: Record<string, unknown> } | { ok: false; error: string };
 
 export function validateDestinationConfig(
   destinationType: DestinationType,
-  raw: unknown,
+  raw: unknown
 ): DestinationConfigValidation {
   const schema = SCHEMAS[destinationType];
   if (!schema) {

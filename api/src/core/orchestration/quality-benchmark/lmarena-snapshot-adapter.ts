@@ -67,11 +67,7 @@ export interface CandidateLike {
 export interface MatchResult {
   readonly matched: boolean;
   readonly candidate?: CandidateLike;
-  readonly matchKind:
-    | 'exact_canonical'
-    | 'exact_model_id'
-    | 'normalized_name'
-    | 'unmatched';
+  readonly matchKind: 'exact_canonical' | 'exact_model_id' | 'normalized_name' | 'unmatched';
   readonly matchConfidence: ModelQualityConfidence;
   readonly matchReason: string;
 }
@@ -270,7 +266,7 @@ export function parseLmArenaMarkdown(text: string): {
  */
 export function matchLmArenaRowToCatalogModel(
   modelName: string,
-  candidates: readonly CandidateLike[],
+  candidates: readonly CandidateLike[]
 ): MatchResult {
   if (candidates.length === 0) {
     return {
@@ -357,7 +353,7 @@ export function lmArenaRowsToCalibrationEntry(
     readonly benchmarkRunId?: string;
     readonly attributionWarning?: string;
     readonly capturedAt?: string;
-  } = {},
+  } = {}
 ): ModelQualityCalibrationEntry | undefined {
   if (rows.length === 0) return undefined;
 
@@ -393,7 +389,9 @@ export function lmArenaRowsToCalibrationEntry(
 
   const canonicalFromCandidate = opts.match?.candidate?.canonicalModelId;
   const modelId =
-    canonicalFromCandidate ?? opts.match?.candidate?.modelId ?? canonicalizeLmArenaModelName(modelName);
+    canonicalFromCandidate ??
+    opts.match?.candidate?.modelId ??
+    canonicalizeLmArenaModelName(modelName);
 
   const sourceScores: SourceSpecificQualityScore[] = [
     {
@@ -410,7 +408,9 @@ export function lmArenaRowsToCalibrationEntry(
 
   const warnings: string[] = [opts.attributionWarning ?? ATTRIBUTION_WARNING];
   if (opts.match) {
-    warnings.push(`match_kind=${opts.match.matchKind} match_confidence=${opts.match.matchConfidence}`);
+    warnings.push(
+      `match_kind=${opts.match.matchKind} match_confidence=${opts.match.matchConfidence}`
+    );
   }
   warnings.push(`lmarena_categories=${Object.keys(categoryScores).sort().join(',')}`);
 
@@ -444,9 +444,7 @@ export function lmArenaRowsToCalibrationEntry(
  *  - `notCovered`  — catalog candidates that have NO LMArena rows
  *  - `skipped`     — rows dropped (e.g., low-confidence match + reject)
  */
-export function buildLmArenaQualitySnapshot(
-  input: BuildLmArenaSnapshotInput,
-): SnapshotBuildResult {
+export function buildLmArenaQualitySnapshot(input: BuildLmArenaSnapshotInput): SnapshotBuildResult {
   const candidates = input.candidates ?? [];
   const matchedReports: Array<SnapshotBuildResult['matched'][number]> = [];
   const skippedReports: Array<SnapshotBuildResult['skipped'][number]> = [];
@@ -462,11 +460,12 @@ export function buildLmArenaQualitySnapshot(
 
   const entries: ModelQualityCalibrationEntry[] = [];
   for (const [modelKey, rows] of byModel.entries()) {
-    const match = candidates.length > 0
-      ? matchLmArenaRowToCatalogModel(rows[0].modelName, candidates)
-      : undefined;
+    const match =
+      candidates.length > 0
+        ? matchLmArenaRowToCatalogModel(rows[0].modelName, candidates)
+        : undefined;
 
-    const allowEmit = input.emitUnmatchedRows === true || (match?.matched === true);
+    const allowEmit = input.emitUnmatchedRows === true || match?.matched === true;
     if (!allowEmit) {
       skippedReports.push({
         modelName: modelKey,

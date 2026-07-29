@@ -19,10 +19,7 @@
  * 'own-model', 'self-hosted', ...). No hardcoded model names.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  ModelRoleResolver,
-  isLocalProvider,
-} from '../model-role-resolver';
+import { ModelRoleResolver, isLocalProvider } from '../model-role-resolver';
 import { makeCandidate, makeModel } from './role-resolver.fixtures';
 import type { ModelCapability } from '@/types';
 
@@ -79,7 +76,9 @@ describe('ModelRoleResolver — local / Ollama', () => {
       constraints: { requireLocal: true },
     });
     expect(r.selected.every((c) => c.isLocal)).toBe(true);
-    expect(r.rejected.some((rej) => rej.modelId === 'cloud-1' && rej.reason === 'not_local')).toBe(true);
+    expect(r.rejected.some((rej) => rej.modelId === 'cloud-1' && rej.reason === 'not_local')).toBe(
+      true
+    );
   });
 
   it('allowLocal=false filters out local candidates', async () => {
@@ -101,7 +100,9 @@ describe('ModelRoleResolver — local / Ollama', () => {
       constraints: { allowLocal: false },
     });
     expect(r.selected.every((c) => !c.isLocal)).toBe(true);
-    expect(r.rejected.some((rej) => rej.modelId === 'local-1' && rej.reason === 'local_disallowed')).toBe(true);
+    expect(
+      r.rejected.some((rej) => rej.modelId === 'local-1' && rej.reason === 'local_disallowed')
+    ).toBe(true);
   });
 
   it('preferLocal boosts local candidates in ranking', async () => {

@@ -101,7 +101,7 @@ export class PerplexityAdapter extends OpenAICompatibleHubAdapter {
   }
 
   override async *chatCompletionStream(
-    request: ChatRequest,
+    request: ChatRequest
   ): AsyncGenerator<PerplexityChatResponse, void, unknown> {
     for await (const chunk of super.chatCompletionStream(request)) {
       yield chunk as PerplexityChatResponse;
@@ -117,7 +117,7 @@ export class PerplexityAdapter extends OpenAICompatibleHubAdapter {
    */
   protected override getExtraChatPayloadFields(
     _resolvedModel: string,
-    request: ChatRequest,
+    request: ChatRequest
   ): Record<string, unknown> {
     const searchOpts = this.extractSearchOptions(request);
     return searchOpts ? { ...searchOpts } : {};
@@ -128,19 +128,15 @@ export class PerplexityAdapter extends OpenAICompatibleHubAdapter {
    * request root (both forms are accepted by the upstream). The allowlist
    * prevents option-bag leakage into the body.
    */
-  private extractSearchOptions(
-    request: ChatRequest,
-  ): Partial<PerplexitySearchOptions> | undefined {
-    const opts = (narrowAs<{ options?: Record<string, unknown> }>(request)).options;
+  private extractSearchOptions(request: ChatRequest): Partial<PerplexitySearchOptions> | undefined {
+    const opts = narrowAs<{ options?: Record<string, unknown> }>(request).options;
     const source: Record<string, unknown> =
-      opts && typeof opts === 'object'
-        ? opts
-        : (narrowAs<Record<string, unknown>>(request));
+      opts && typeof opts === 'object' ? opts : narrowAs<Record<string, unknown>>(request);
 
     const picked: Partial<PerplexitySearchOptions> = {};
     if (Array.isArray(source.search_domain_filter)) {
       const filtered = source.search_domain_filter.filter(
-        (v): v is string => typeof v === 'string' && v.length > 0,
+        (v): v is string => typeof v === 'string' && v.length > 0
       );
       if (filtered.length > 0) picked.search_domain_filter = filtered;
     }
@@ -148,7 +144,8 @@ export class PerplexityAdapter extends OpenAICompatibleHubAdapter {
     if (recency === 'day' || recency === 'week' || recency === 'month' || recency === 'year') {
       picked.search_recency_filter = recency;
     }
-    if (typeof source.return_citations === 'boolean') picked.return_citations = source.return_citations;
+    if (typeof source.return_citations === 'boolean')
+      picked.return_citations = source.return_citations;
     if (typeof source.return_images === 'boolean') picked.return_images = source.return_images;
     if (typeof source.return_related_questions === 'boolean') {
       picked.return_related_questions = source.return_related_questions;

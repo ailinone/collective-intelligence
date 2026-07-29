@@ -67,7 +67,7 @@ function makeState(overrides: Partial<CoordinationState> = {}): CoordinationStat
     variables: {},
     convergence: {
       score: 0.85,
-      decisionFlipRate: 0.10,
+      decisionFlipRate: 0.1,
       dissent: 0.15,
       confidenceTrend: [0.6, 0.85],
       stableVariables: ['risk'],
@@ -97,7 +97,7 @@ function makeResult(overrides: Partial<CoordinationResult> = {}): CoordinationRe
     ],
     convergence: {
       score: 0.85,
-      decisionFlipRate: 0.10,
+      decisionFlipRate: 0.1,
       dissent: 0.15,
       confidenceTrend: [0.6, 0.85],
       stableVariables: ['risk'],
@@ -107,7 +107,13 @@ function makeResult(overrides: Partial<CoordinationResult> = {}): CoordinationRe
     stopReason: 'converged',
     criticalVariables: ['data_loss'],
     dominantSensitivities: [
-      { variable: 'risk', direction: 'decrease', trigger: 'tests pass', confidence: 0.9, rationale: 'good coverage' },
+      {
+        variable: 'risk',
+        direction: 'decrease',
+        trigger: 'tests pass',
+        confidence: 0.9,
+        rationale: 'good coverage',
+      },
     ],
     dissent: [],
     finalResponseText: 'final answer',
@@ -173,7 +179,11 @@ describe('buildCollectiveRunCreatePayload', () => {
       organizationId: 'org-1',
       state: makeState(),
       result: makeResult(),
-      config: { ...DEFAULT_COORDINATION_CONFIG, entropySeedEnabled: true, aggregationMethod: 'llm_synthesis' },
+      config: {
+        ...DEFAULT_COORDINATION_CONFIG,
+        entropySeedEnabled: true,
+        aggregationMethod: 'llm_synthesis',
+      },
     });
     const config = payload.config as Record<string, unknown>;
     expect(config.entropySeedEnabled).toBe(true);
@@ -219,7 +229,12 @@ describe('buildCollectiveSignalCreatePayloads', () => {
   it('maps every signal field including optional metrics and rationale', () => {
     const signal = makeSignal({
       role: 'expert',
-      decision: { type: 'reject', value: { reason: 'tests fail' }, confidence: 0.7, rationale: 'coverage too low' },
+      decision: {
+        type: 'reject',
+        value: { reason: 'tests fail' },
+        confidence: 0.7,
+        rationale: 'coverage too low',
+      },
     });
     const payloads = buildCollectiveSignalCreatePayloads([signal]);
     expect(payloads).toHaveLength(1);
@@ -262,7 +277,14 @@ describe('buildCollectiveSignalCreatePayloads', () => {
     const signal = makeSignal({
       sensitivities: [
         { variable: 'a', direction: 'increase', trigger: 't1', confidence: 0.7, rationale: 'r1' },
-        { variable: 'b', direction: 'decrease', trigger: 't2', confidence: 0.8, rationale: 'r2', risk: 'high' },
+        {
+          variable: 'b',
+          direction: 'decrease',
+          trigger: 't2',
+          confidence: 0.8,
+          rationale: 'r2',
+          risk: 'high',
+        },
       ],
     });
     const payloads = buildCollectiveSignalCreatePayloads([signal]);
@@ -406,16 +428,14 @@ function makeTriRoleTurn(overrides: Partial<TriRoleTurnInput> = {}): TriRoleTurn
   };
 }
 
-function makeTriRoleInput(
-  overrides: Partial<PersistTriRoleRunInput> = {},
-): PersistTriRoleRunInput {
+function makeTriRoleInput(overrides: Partial<PersistTriRoleRunInput> = {}): PersistTriRoleRunInput {
   return {
     organizationId: 'org-1',
     requestId: 'req-tri-1',
     runId: 'run-tri-1',
     config: {
       maxTurns: 5,
-      maxCostUsd: 0.30,
+      maxCostUsd: 0.3,
       maxLatencyMs: 60000,
       ambiguityResolution: 'accept',
     },
@@ -504,7 +524,7 @@ describe('buildTriRoleRunCreatePayload (F4.1 prep)', () => {
         traceSpans: [
           { spanId: 's1', name: 'run_init', startedAt: 0, endedAt: 5, attributes: { runId: 'r' } },
         ],
-      }),
+      })
     );
     const metadata = payload.metadata as Record<string, unknown>;
     expect(Array.isArray(metadata.collectiveTraceSpans)).toBe(true);
@@ -597,7 +617,11 @@ describe('buildTriRoleSignalCreatePayloads (F4.1 prep)', () => {
     const payloads = buildTriRoleSignalCreatePayloads([
       makeTriRoleTurn({
         role: 'auditor',
-        verdict: { status: 'revise', feedback: 'Add error handling for nil input', inferred: false },
+        verdict: {
+          status: 'revise',
+          feedback: 'Add error handling for nil input',
+          inferred: false,
+        },
       }),
     ]);
     expect(payloads[0].decisionRationale).toBe('Add error handling for nil input');
@@ -735,9 +759,15 @@ describe('buildDebateRunCreatePayload (F4.1 audit-flow extension)', () => {
     const payload = buildDebateRunCreatePayload(
       makeDebateInput({
         traceSpans: [
-          { spanId: 's1', name: 'debate_init', startedAt: 0, endedAt: 5, attributes: { runId: 'r' } },
+          {
+            spanId: 's1',
+            name: 'debate_init',
+            startedAt: 0,
+            endedAt: 5,
+            attributes: { runId: 'r' },
+          },
         ],
-      }),
+      })
     );
     const metadata = payload.metadata as Record<string, unknown>;
     expect(Array.isArray(metadata.collectiveTraceSpans)).toBe(true);
@@ -793,7 +823,9 @@ describe('buildDebateSignalCreatePayloads (F4.1 audit-flow extension)', () => {
 // Expert-Panel persistence (F4.1 audit-flow extension)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function makeExpertPanelSignal(overrides: Partial<ExpertPanelSignalInput> = {}): ExpertPanelSignalInput {
+function makeExpertPanelSignal(
+  overrides: Partial<ExpertPanelSignalInput> = {}
+): ExpertPanelSignalInput {
   return {
     round: 1,
     agentName: 'GPT-5',
@@ -812,13 +844,17 @@ function makeExpertPanelSignal(overrides: Partial<ExpertPanelSignalInput> = {}):
 }
 
 function makeExpertPanelInput(
-  overrides: Partial<PersistExpertPanelRunInput> = {},
+  overrides: Partial<PersistExpertPanelRunInput> = {}
 ): PersistExpertPanelRunInput {
   return {
     organizationId: 'org-1',
     requestId: 'req-panel-1',
     runId: 'run-panel-1',
-    config: { expertCount: 3, domains: ['coding', 'security', 'testing'], crossReviewEnabled: true },
+    config: {
+      expertCount: 3,
+      domains: ['coding', 'security', 'testing'],
+      crossReviewEnabled: true,
+    },
     panelScheduler: 'pin-or-quality',
     panelReason: 'quality-fallback',
     stopReason: 'completed',
@@ -876,7 +912,7 @@ describe('buildExpertPanelRunCreatePayload (F4.1 audit-flow extension)', () => {
     const payload = buildExpertPanelRunCreatePayload(
       makeExpertPanelInput({
         config: { expertCount: 3, domains: ['a', 'b', 'c'], crossReviewEnabled: false },
-      }),
+      })
     );
     expect(payload.rounds).toBe(2);
   });

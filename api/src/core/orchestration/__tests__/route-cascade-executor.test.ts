@@ -26,7 +26,9 @@ import {
   type RouteSelectionPolicy,
 } from '../route-candidates';
 
-function makeRoute(over: Partial<ApprovedRouteCandidate> & { providerId: string }): ApprovedRouteCandidate {
+function makeRoute(
+  over: Partial<ApprovedRouteCandidate> & { providerId: string }
+): ApprovedRouteCandidate {
   return {
     routeId: `${over.providerId}::api::openai-compatible-chat`,
     logicalModelId: 'gpt-4o',
@@ -45,7 +47,7 @@ function frozenClock(): () => number {
   let t = 1_700_000_000_000;
   return () => {
     const v = t;
-    t += 100;  // each call advances 100ms (gives latencyMs=100 per attempt)
+    t += 100; // each call advances 100ms (gives latencyMs=100 per attempt)
     return v;
   };
 }
@@ -57,7 +59,12 @@ function frozenClock(): () => number {
 describe('runRouteCascade — first route succeeds', () => {
   it('returns success on attempt 1 and records exactly one attempt', async () => {
     const routes = [makeRoute({ providerId: 'openai' }), makeRoute({ providerId: 'openrouter' })];
-    const callRoute = vi.fn(async () => ({ ok: true, response: { content: 'OK' }, costUsd: 0.0001 } as RouteCallResult<{ content: string }>));
+    const callRoute = vi.fn(
+      async () =>
+        ({ ok: true, response: { content: 'OK' }, costUsd: 0.0001 }) as RouteCallResult<{
+          content: string;
+        }>
+    );
     const out = await runRouteCascade({
       role: 'participant',
       logicalModelId: 'gpt-4o',
@@ -96,8 +103,13 @@ describe('runRouteCascade — fallback to next route', () => {
   it('when openai 401 invalid_auth, falls through to openrouter and succeeds', async () => {
     const routes = [
       makeRoute({ providerId: 'openai' }),
-      makeRoute({ providerId: 'openrouter', routerId: 'openrouter', upstreamProviderId: 'openai',
-                 source: 'router_taxonomy', equivalenceKind: 'same_provider_model_via_router' }),
+      makeRoute({
+        providerId: 'openrouter',
+        routerId: 'openrouter',
+        upstreamProviderId: 'openai',
+        source: 'router_taxonomy',
+        equivalenceKind: 'same_provider_model_via_router',
+      }),
     ];
     const callRoute = vi.fn(async (route) => {
       if (route.providerId === 'openai') {
@@ -124,7 +136,12 @@ describe('runRouteCascade — fallback to next route', () => {
 
   it('cascades through credit/auth/rate_limit/model_not_supported failures', async () => {
     const routes = ['a', 'b', 'c', 'd'].map((p) => makeRoute({ providerId: p }));
-    const failures = ['insufficient_credits', 'invalid_auth', 'rate_limited', 'model_not_supported'] as const;
+    const failures = [
+      'insufficient_credits',
+      'invalid_auth',
+      'rate_limited',
+      'model_not_supported',
+    ] as const;
     let idx = 0;
     const callRoute = vi.fn(async () => {
       const kind = failures[idx];
@@ -156,7 +173,11 @@ describe('runRouteCascade — fallback to next route', () => {
 describe('runRouteCascade — all routes fail', () => {
   it('returns aggregate=all_routes_failed when every route fails', async () => {
     const routes = ['a', 'b', 'c'].map((p) => makeRoute({ providerId: p }));
-    const callRoute = vi.fn(async () => ({ ok: false, errorKind: 'invalid_auth' as const, costUsd: 0 }));
+    const callRoute = vi.fn(async () => ({
+      ok: false,
+      errorKind: 'invalid_auth' as const,
+      costUsd: 0,
+    }));
     const out = await runRouteCascade({
       role: 'judge',
       logicalModelId: 'gpt-4o',
@@ -193,8 +214,15 @@ describe('runRouteCascade — all routes fail', () => {
 describe('runRouteCascade — attempt cap', () => {
   it('respects maxRouteAttempts=2 even with 5 routes available', async () => {
     const routes = ['a', 'b', 'c', 'd', 'e'].map((p) => makeRoute({ providerId: p }));
-    const callRoute = vi.fn(async () => ({ ok: false, errorKind: 'invalid_auth' as const, costUsd: 0 }));
-    const policy: RouteSelectionPolicy = { ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY, maxRouteAttempts: 2 };
+    const callRoute = vi.fn(async () => ({
+      ok: false,
+      errorKind: 'invalid_auth' as const,
+      costUsd: 0,
+    }));
+    const policy: RouteSelectionPolicy = {
+      ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY,
+      maxRouteAttempts: 2,
+    };
     const out = await runRouteCascade({
       role: 'participant',
       logicalModelId: 'gpt-4o',
@@ -336,7 +364,7 @@ describe('summarizeCascadeRuns', () => {
     expect(summary.totalRoles).toBe(2);
     expect(summary.succeededRoles).toBe(2);
     expect(summary.totalAttempts).toBe(3);
-    expect(summary.fallbackUsedCount).toBe(1);  // o1's attempt 2 had wasRouteFallback=true
+    expect(summary.fallbackUsedCount).toBe(1); // o1's attempt 2 had wasRouteFallback=true
     expect(summary.totalCostUsd).toBeCloseTo(0.0003, 5);
   });
 });

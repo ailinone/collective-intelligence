@@ -26,28 +26,22 @@ describe('withNormalizedMetadata', () => {
   });
 
   it('preserves pre-existing endpoint AND falls through tools inference', () => {
-    const result = withNormalizedMetadata(
-      { endpoint: 'realtime' },
-      ['web_search'],
-    );
+    const result = withNormalizedMetadata({ endpoint: 'realtime' }, ['web_search']);
     expect(result.endpoint).toBe('realtime');
     expect(result.tools).toEqual(['web_search']);
   });
 
   it('preserves pre-existing tools AND falls through endpoint inference', () => {
-    const result = withNormalizedMetadata(
-      { tools: ['custom_tool'] },
-      ['embedding'],
-    );
+    const result = withNormalizedMetadata({ tools: ['custom_tool'] }, ['embedding']);
     expect(result.endpoint).toBe('embeddings');
     expect(result.tools).toEqual(['custom_tool']);
   });
 
   it('preserves both when both are pre-set', () => {
-    const result = withNormalizedMetadata(
-      { endpoint: 'completions', tools: [] },
-      ['image_generation', 'web_search'],
-    );
+    const result = withNormalizedMetadata({ endpoint: 'completions', tools: [] }, [
+      'image_generation',
+      'web_search',
+    ]);
     expect(result.endpoint).toBe('completions');
     expect(result.tools).toEqual([]);
   });

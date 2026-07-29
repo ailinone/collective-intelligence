@@ -25,13 +25,16 @@ import { defaultAggOverride } from './consensus-module-mocks';
 globalThis.__consensusAggOverride = defaultAggOverride();
 
 vi.mock('@/core/aggregation/response-aggregator', async () =>
-  (await import('./consensus-module-mocks')).responseAggregatorModuleMock());
+  (await import('./consensus-module-mocks')).responseAggregatorModuleMock()
+);
 
 vi.mock('@/core/coordination/ensemble-coordinator-shadow', async () =>
-  (await import('./consensus-module-mocks')).ensembleShadowModuleMock());
+  (await import('./consensus-module-mocks')).ensembleShadowModuleMock()
+);
 
 vi.mock('@/core/coordination/ensemble-coordinator-client', async () =>
-  (await import('./consensus-module-mocks')).ensembleClientModuleMock());
+  (await import('./consensus-module-mocks')).ensembleClientModuleMock()
+);
 
 // Reset to the default healthy synthesis between each test so one test's
 // override does not leak into another.

@@ -53,11 +53,7 @@ export type {
   ProviderProbeStrategy,
 } from './types';
 
-export {
-  buildHealthKey,
-  mapHealthStateToLegacyOperability,
-  DEFAULT_COOLDOWNS,
-} from './types';
+export { buildHealthKey, mapHealthStateToLegacyOperability, DEFAULT_COOLDOWNS } from './types';
 
 // Error classification
 export {
@@ -86,17 +82,11 @@ export {
 export type { ProviderHealthRegistry } from './provider-health-registry';
 
 // Health sync bus
-export {
-  getHealthSyncBus,
-  resetHealthSyncBusForTesting,
-} from './health-sync-bus';
+export { getHealthSyncBus, resetHealthSyncBusForTesting } from './health-sync-bus';
 export type { HealthSyncBus, HealthSyncMessage, HealthSyncEventKind } from './health-sync-bus';
 
 // Skip-near-zero
-export {
-  shouldSkipNearZero,
-  recordDeadProviderHttpAttempt,
-} from './skip-near-zero';
+export { shouldSkipNearZero, recordDeadProviderHttpAttempt } from './skip-near-zero';
 export type { ShouldSkipNearZeroOptions } from './skip-near-zero';
 
 // Dead-provider audit (R5 — bypass detection over the registry)
@@ -152,16 +142,10 @@ export type {
 } from './operational-candidate-pool';
 
 // TEI client + embedding cache + semantic index (Phase 4)
-export {
-  getTEIClient,
-  resetTEIClientForTesting,
-} from './tei-client';
+export { getTEIClient, resetTEIClientForTesting } from './tei-client';
 export type { TEIClient, TEIClientConfig } from './tei-client';
 
-export {
-  getEmbeddingCache,
-  resetEmbeddingCacheForTesting,
-} from './embedding-cache';
+export { getEmbeddingCache, resetEmbeddingCacheForTesting } from './embedding-cache';
 export type { EmbeddingCache } from './embedding-cache';
 
 export {
@@ -179,23 +163,12 @@ export type {
   CreateSemanticIndexInput,
 } from './semantic-index';
 
-export {
-  resolveSemanticCandidates,
-} from './semantic-resolver';
-export type {
-  RankedCandidate,
-  ResolveSemanticCandidatesInput,
-} from './semantic-resolver';
+export { resolveSemanticCandidates } from './semantic-resolver';
+export type { RankedCandidate, ResolveSemanticCandidatesInput } from './semantic-resolver';
 
 // Discovery scheduler (orchestrates periodic discovery + pool rebuild)
-export {
-  getDiscoveryScheduler,
-  resetDiscoveryShedulerForTesting,
-} from './discovery-scheduler';
-export type {
-  DiscoveryScheduler,
-  DiscoveryScheduleConfig,
-} from './discovery-scheduler';
+export { getDiscoveryScheduler, resetDiscoveryShedulerForTesting } from './discovery-scheduler';
+export type { DiscoveryScheduler, DiscoveryScheduleConfig } from './discovery-scheduler';
 
 // Embedding pipeline (Phase 4.2 — populates SemanticIndex)
 export {
@@ -205,10 +178,7 @@ export {
   embedSingleCandidate,
   buildCandidateText,
 } from './embedding-pipeline';
-export type {
-  EmbeddingPipeline,
-  EmbeddingPipelineConfig,
-} from './embedding-pipeline';
+export type { EmbeddingPipeline, EmbeddingPipelineConfig } from './embedding-pipeline';
 
 // Catalog resolver (PROVIDER_CATALOG → scheduler inputs)
 export {

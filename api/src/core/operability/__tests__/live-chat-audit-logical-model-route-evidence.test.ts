@@ -64,8 +64,8 @@ function classifyRouteFromEvidence(input: {
   });
   const exact = input.evidence.find((e) => e.evidenceKey === exactKey);
   if (exact && exact.liveReady) return 'route_live_ready';
-  const providerHasAny = input.evidence.some((e) =>
-    e.providerId.toLowerCase() === input.routeProviderId.toLowerCase() && e.liveReady,
+  const providerHasAny = input.evidence.some(
+    (e) => e.providerId.toLowerCase() === input.routeProviderId.toLowerCase() && e.liveReady
   );
   if (providerHasAny) return 'provider_ready_route_unaudited';
   return 'route_not_audited_for_logical_model';
@@ -134,23 +134,27 @@ describe('01C.1B-J1D §11.2 — logical-model route evidence', () => {
         }),
       },
     ];
-    expect(classifyRouteFromEvidence({
-      routeProviderId: 'openrouter',
-      routeApiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
-      routeAdapterKind: 'openai-compatible-chat',
-      routeLogicalModelId: 'anthropic-claude-3.7-sonnet',
-      evidence,
-    })).toBe('route_live_ready');
+    expect(
+      classifyRouteFromEvidence({
+        routeProviderId: 'openrouter',
+        routeApiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
+        routeAdapterKind: 'openai-compatible-chat',
+        routeLogicalModelId: 'anthropic-claude-3.7-sonnet',
+        evidence,
+      })
+    ).toBe('route_live_ready');
   });
 
   it('provider with no evidence at all → route_not_audited_for_logical_model', () => {
-    expect(classifyRouteFromEvidence({
-      routeProviderId: 'cometapi',
-      routeApiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
-      routeAdapterKind: 'openai-compatible-chat',
-      routeLogicalModelId: 'anthropic-claude-3.7-sonnet',
-      evidence: [],
-    })).toBe('route_not_audited_for_logical_model');
+    expect(
+      classifyRouteFromEvidence({
+        routeProviderId: 'cometapi',
+        routeApiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
+        routeAdapterKind: 'openai-compatible-chat',
+        routeLogicalModelId: 'anthropic-claude-3.7-sonnet',
+        evidence: [],
+      })
+    ).toBe('route_not_audited_for_logical_model');
   });
 
   it('same provider with different apiModelId requires new evidence', () => {
@@ -175,7 +179,7 @@ describe('01C.1B-J1D §11.2 — logical-model route evidence', () => {
     // Different apiModelId on the same provider → still unaudited for the new model
     const c = classifyRouteFromEvidence({
       routeProviderId: 'openrouter',
-      routeApiModelId: 'meta-llama/Llama-4',  // DIFFERENT model
+      routeApiModelId: 'meta-llama/Llama-4', // DIFFERENT model
       routeAdapterKind: 'openai-compatible-chat',
       routeLogicalModelId: 'meta-llama/Llama-4',
       evidence,

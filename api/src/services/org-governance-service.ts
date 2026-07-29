@@ -133,11 +133,15 @@ export function parseGovernanceFromSettings(settings: unknown): OrgGovernanceCon
   const result: OrgGovernanceConfig = {};
 
   const budgetRaw = asRecord(gov.budget);
-  if (typeof budgetRaw.maxMonthlyCostUsd === 'number' && Number.isFinite(budgetRaw.maxMonthlyCostUsd)) {
+  if (
+    typeof budgetRaw.maxMonthlyCostUsd === 'number' &&
+    Number.isFinite(budgetRaw.maxMonthlyCostUsd)
+  ) {
     result.budget = {
       maxMonthlyCostUsd: budgetRaw.maxMonthlyCostUsd,
       alertThresholds: coerceNumberArray(budgetRaw.alertThresholds),
-      updatedAt: typeof budgetRaw.updatedAt === 'string' ? budgetRaw.updatedAt : new Date(0).toISOString(),
+      updatedAt:
+        typeof budgetRaw.updatedAt === 'string' ? budgetRaw.updatedAt : new Date(0).toISOString(),
       updatedBy: typeof budgetRaw.updatedBy === 'string' ? budgetRaw.updatedBy : undefined,
     };
   }
@@ -146,12 +150,18 @@ export function parseGovernanceFromSettings(settings: unknown): OrgGovernanceCon
   const allowedStrategies = coerceStringArray(policyRaw.allowedStrategies);
   const allowedModels = coerceStringArray(policyRaw.allowedModels);
   const blockedModels = coerceStringArray(policyRaw.blockedModels);
-  if (allowedStrategies.length || allowedModels.length || blockedModels.length || policyRaw.updatedAt) {
+  if (
+    allowedStrategies.length ||
+    allowedModels.length ||
+    blockedModels.length ||
+    policyRaw.updatedAt
+  ) {
     result.policy = {
       allowedStrategies,
       allowedModels,
       blockedModels,
-      updatedAt: typeof policyRaw.updatedAt === 'string' ? policyRaw.updatedAt : new Date(0).toISOString(),
+      updatedAt:
+        typeof policyRaw.updatedAt === 'string' ? policyRaw.updatedAt : new Date(0).toISOString(),
       updatedBy: typeof policyRaw.updatedBy === 'string' ? policyRaw.updatedBy : undefined,
     };
   }

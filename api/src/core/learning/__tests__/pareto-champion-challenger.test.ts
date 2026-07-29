@@ -37,10 +37,10 @@ async function importPareto() {
   vi.resetModules();
   vi.mock('@/utils/logger', () => ({
     logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
       child: () => ({
         info: vi.fn(),
         debug: vi.fn(),
@@ -72,9 +72,24 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
       const { evaluatePareto } = await importPareto();
 
       const results = [
-        ...makeResults(5, { taskType: 'code-generation', complexity: 'medium', strategy: 'single', qualityScore: 0.8 }),
-        ...makeResults(5, { taskType: 'code-generation', complexity: 'high', strategy: 'debate', qualityScore: 0.9 }),
-        ...makeResults(5, { taskType: 'analysis', complexity: 'medium', strategy: 'consensus', qualityScore: 0.85 }),
+        ...makeResults(5, {
+          taskType: 'code-generation',
+          complexity: 'medium',
+          strategy: 'single',
+          qualityScore: 0.8,
+        }),
+        ...makeResults(5, {
+          taskType: 'code-generation',
+          complexity: 'high',
+          strategy: 'debate',
+          qualityScore: 0.9,
+        }),
+        ...makeResults(5, {
+          taskType: 'analysis',
+          complexity: 'medium',
+          strategy: 'consensus',
+          qualityScore: 0.85,
+        }),
       ];
 
       const result = evaluatePareto(results);
@@ -94,7 +109,7 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
       const result = evaluatePareto(results);
       // Only 'debate' should be in the frontier (single has too few samples)
       const frontier = result.frontiers[0];
-      expect(frontier.nonDominated.every(c => c.strategy !== 'single')).toBe(true);
+      expect(frontier.nonDominated.every((c) => c.strategy !== 'single')).toBe(true);
     });
 
     it('correctly identifies dominant strategies', async () => {
@@ -102,16 +117,26 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
 
       // Strategy A: better in ALL objectives
       const results = [
-        ...makeResults(5, { strategy: 'superior', qualityScore: 0.95, durationMs: 1000, costUsd: 0.005 }),
-        ...makeResults(5, { strategy: 'inferior', qualityScore: 0.5, durationMs: 5000, costUsd: 0.05 }),
+        ...makeResults(5, {
+          strategy: 'superior',
+          qualityScore: 0.95,
+          durationMs: 1000,
+          costUsd: 0.005,
+        }),
+        ...makeResults(5, {
+          strategy: 'inferior',
+          qualityScore: 0.5,
+          durationMs: 5000,
+          costUsd: 0.05,
+        }),
       ];
 
       const result = evaluatePareto(results);
       const frontier = result.frontiers[0];
 
       // 'superior' should dominate 'inferior'
-      expect(frontier.nonDominated.some(c => c.strategy === 'superior')).toBe(true);
-      expect(frontier.dominated.some(c => c.strategy === 'inferior')).toBe(true);
+      expect(frontier.nonDominated.some((c) => c.strategy === 'superior')).toBe(true);
+      expect(frontier.dominated.some((c) => c.strategy === 'inferior')).toBe(true);
     });
 
     it('preserves non-dominated strategies with trade-offs', async () => {
@@ -119,8 +144,18 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
 
       // Two strategies with genuine trade-offs: high quality vs. high speed
       const results = [
-        ...makeResults(5, { strategy: 'quality-focused', qualityScore: 0.95, durationMs: 8000, costUsd: 0.05 }),
-        ...makeResults(5, { strategy: 'speed-focused', qualityScore: 0.7, durationMs: 500, costUsd: 0.002 }),
+        ...makeResults(5, {
+          strategy: 'quality-focused',
+          qualityScore: 0.95,
+          durationMs: 8000,
+          costUsd: 0.05,
+        }),
+        ...makeResults(5, {
+          strategy: 'speed-focused',
+          qualityScore: 0.7,
+          durationMs: 500,
+          costUsd: 0.002,
+        }),
       ];
 
       const result = evaluatePareto(results);
@@ -128,7 +163,10 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
 
       // Both should be non-dominated (genuine Pareto trade-off)
       expect(frontier.nonDominated).toHaveLength(2);
-      expect(frontier.nonDominated.map(c => c.strategy).sort()).toEqual(['quality-focused', 'speed-focused']);
+      expect(frontier.nonDominated.map((c) => c.strategy).sort()).toEqual([
+        'quality-focused',
+        'speed-focused',
+      ]);
     });
 
     it('tracks frontier changes between evaluations', async () => {
@@ -193,8 +231,18 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
       // The Pareto speed scoring uses raw 1/ms which produces very small numbers.
       // Verify the preference at least distinguishes between candidates.
       const results = [
-        ...makeResults(5, { strategy: 'fast', qualityScore: 0.82, durationMs: 500, costUsd: 0.005 }),
-        ...makeResults(5, { strategy: 'slow', qualityScore: 0.84, durationMs: 8000, costUsd: 0.05 }),
+        ...makeResults(5, {
+          strategy: 'fast',
+          qualityScore: 0.82,
+          durationMs: 500,
+          costUsd: 0.005,
+        }),
+        ...makeResults(5, {
+          strategy: 'slow',
+          qualityScore: 0.84,
+          durationMs: 8000,
+          costUsd: 0.05,
+        }),
       ];
       evaluatePareto(results);
 
@@ -239,8 +287,18 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
       const { evaluatePareto, isOnFrontier } = await importPareto();
 
       evaluatePareto([
-        ...makeResults(5, { strategy: 'superior', qualityScore: 0.95, durationMs: 500, costUsd: 0.001 }),
-        ...makeResults(5, { strategy: 'inferior', qualityScore: 0.4, durationMs: 10000, costUsd: 0.1 }),
+        ...makeResults(5, {
+          strategy: 'superior',
+          qualityScore: 0.95,
+          durationMs: 500,
+          costUsd: 0.001,
+        }),
+        ...makeResults(5, {
+          strategy: 'inferior',
+          qualityScore: 0.4,
+          durationMs: 10000,
+          costUsd: 0.1,
+        }),
       ]);
 
       // 'inferior' should be dominated
@@ -254,7 +312,7 @@ describe('Pareto Champion/Challenger (OI-09)', () => {
 
       // Two strategies within epsilon tolerance (0.005)
       const results = [
-        ...makeResults(5, { strategy: 'alpha', qualityScore: 0.800 }),
+        ...makeResults(5, { strategy: 'alpha', qualityScore: 0.8 }),
         ...makeResults(5, { strategy: 'beta', qualityScore: 0.803 }), // within epsilon
       ];
 

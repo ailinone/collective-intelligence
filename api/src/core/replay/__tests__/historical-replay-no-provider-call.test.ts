@@ -18,13 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { scoreHistoricalContribution } from '../../contribution/historical-contribution-scorer';
 import { loadFromJsonl } from '../historical-replay-loader';
 import { runHistoricalReplay } from '../historical-replay-runner';
@@ -100,7 +94,7 @@ describe('replay — runtime calls', () => {
         train: split.train,
         holdout: split.holdout,
         trainHistory,
-      }),
+      })
     ).not.toThrow();
   });
 });

@@ -210,13 +210,15 @@ export async function getSnapshots(
   limit = 500
 ): Promise<LearningSnapshot[]> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      metric_type: string;
-      niche: string | null;
-      execution_count: number;
-      value: string;
-      created_at: Date;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        metric_type: string;
+        niche: string | null;
+        execution_count: number;
+        value: string;
+        created_at: Date;
+      }>
+    >`
       SELECT metric_type, niche, execution_count, value, created_at
       FROM learning_snapshots
       WHERE metric_type = ${metricType}
@@ -225,16 +227,17 @@ export async function getSnapshots(
       LIMIT ${limit}
     `;
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       metricType: row.metric_type as SnapshotMetricType,
       niche: row.niche,
       executionCount: row.execution_count,
       // The DB column is JSONB; Postgres + node-postgres can deliver it
       // either parsed-already or as a string depending on the driver
       // path. Accept both and narrow to the snapshot shape.
-      value: (typeof row.value === 'string'
-        ? (JSON.parse(row.value) as Record<string, unknown>)
-        : (row.value as Record<string, unknown>)),
+      value:
+        typeof row.value === 'string'
+          ? (JSON.parse(row.value) as Record<string, unknown>)
+          : (row.value as Record<string, unknown>),
       timestamp: row.created_at,
     }));
   } catch (err) {
@@ -255,8 +258,8 @@ export function computeLearningTrend(
     return { slope: 0, rSquared: 0, improving: false };
   }
 
-  const xs = snapshots.map(s => s.executionCount);
-  const ys = snapshots.map(s => {
+  const xs = snapshots.map((s) => s.executionCount);
+  const ys = snapshots.map((s) => {
     const val = s.value[valueKey];
     return typeof val === 'number' ? val : 0;
   });
@@ -276,7 +279,7 @@ export function computeLearningTrend(
 
   // R² (coefficient of determination)
   const ssRes = ys.reduce((acc, y, i) => {
-    const predicted = (sumY / n) + slope * (xs[i] - sumX / n);
+    const predicted = sumY / n + slope * (xs[i] - sumX / n);
     return acc + (y - predicted) ** 2;
   }, 0);
   const ssTot = ys.reduce((acc, y) => acc + (y - sumY / n) ** 2, 0);
@@ -300,6 +303,9 @@ async function writeSnapshot(snapshot: LearningSnapshot): Promise<void> {
       )
     `;
   } catch (err) {
-    log.warn({ error: String(err), metricType: snapshot.metricType }, 'Failed to write learning snapshot');
+    log.warn(
+      { error: String(err), metricType: snapshot.metricType },
+      'Failed to write learning snapshot'
+    );
   }
 }

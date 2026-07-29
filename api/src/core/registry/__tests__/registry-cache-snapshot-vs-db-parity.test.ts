@@ -57,9 +57,7 @@ function findSnapshot(predicate: (m: LegacyModelSnapshot) => boolean): LegacyMod
 describe('parity — pricing cost-per-1k × 1000 = cost-per-1M', () => {
   it('Anthropic claude-opus-4-7: 0.015 per 1k → 15.0 per 1M (input)', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7');
     const routes = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(routes).toHaveLength(1);
     const r = routes[0];
@@ -69,9 +67,7 @@ describe('parity — pricing cost-per-1k × 1000 = cost-per-1M', () => {
 
   it('OpenAI gpt-5.5-pro: 0.005 → 5.0; 0.020 → 20.0', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro');
     const routes = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     const r = routes[0];
     expect(r.inputCostPer1M).toBe(5.0);
@@ -80,9 +76,7 @@ describe('parity — pricing cost-per-1k × 1000 = cost-per-1M', () => {
 
   it('Ollama local llama: 0 → 0', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'ollama' && m.id === 'llama-3.3-70b',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'ollama' && m.id === 'llama-3.3-70b');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.inputCostPer1M).toBe(0);
     expect(r.outputCostPer1M).toBe(0);
@@ -91,7 +85,7 @@ describe('parity — pricing cost-per-1k × 1000 = cost-per-1M', () => {
   it('null cost → 0 (route never carries null pricing — explicit 0)', () => {
     const { registry } = buildWithFixture();
     const snap = findSnapshot(
-      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x',
+      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x'
     );
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.inputCostPer1M).toBe(0);
@@ -102,12 +96,8 @@ describe('parity — pricing cost-per-1k × 1000 = cost-per-1M', () => {
 describe('parity — capabilities (URI preferred, legacy JSON fallback)', () => {
   it('capabilityUris is copied verbatim into Offering.providerReportedCapabilities', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7',
-    );
-    const offering = registry.lookupOffering(
-      snap.uid ?? `${snap.providerId}:${snap.id}`,
-    );
+    const snap = findSnapshot((m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7');
+    const offering = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(offering?.providerReportedCapabilities).toEqual([
       'chat',
       'tools',
@@ -121,23 +111,17 @@ describe('parity — capabilities (URI preferred, legacy JSON fallback)', () => 
     const { registry } = buildWithFixture();
     // openrouter row #7 uses legacy `capabilities: ['chat', 'tools']`
     const snap = findSnapshot(
-      (m) => m.providerId === 'openrouter' && m.id === 'anthropic/claude-opus-4-7',
+      (m) => m.providerId === 'openrouter' && m.id === 'anthropic/claude-opus-4-7'
     );
-    const offering = registry.lookupOffering(
-      snap.uid ?? `${snap.providerId}:${snap.id}`,
-    );
+    const offering = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(offering?.providerReportedCapabilities).toEqual(['chat', 'tools']);
   });
 
   it('legacy capabilities record is normalised (only true keys retained)', () => {
     const { registry } = buildWithFixture();
     // mistral mixtral-8x22b uses `{ chat: true, tools: true, vision: false, streaming: true }`
-    const snap = findSnapshot(
-      (m) => m.providerId === 'mistral' && m.id === 'mixtral-8x22b',
-    );
-    const offering = registry.lookupOffering(
-      snap.uid ?? `${snap.providerId}:${snap.id}`,
-    );
+    const snap = findSnapshot((m) => m.providerId === 'mistral' && m.id === 'mixtral-8x22b');
+    const offering = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     const caps = offering?.providerReportedCapabilities ?? [];
     expect(caps).toContain('chat');
     expect(caps).toContain('tools');
@@ -148,11 +132,9 @@ describe('parity — capabilities (URI preferred, legacy JSON fallback)', () => 
   it('no capabilities at all → empty array', () => {
     const { registry } = buildWithFixture();
     const snap = findSnapshot(
-      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x',
+      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x'
     );
-    const offering = registry.lookupOffering(
-      snap.uid ?? `${snap.providerId}:${snap.id}`,
-    );
+    const offering = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(offering?.providerReportedCapabilities).toEqual([]);
   });
 });
@@ -160,9 +142,7 @@ describe('parity — capabilities (URI preferred, legacy JSON fallback)', () => 
 describe('parity — route-level supports* flags derived from capabilities', () => {
   it('chat+tools+json_mode+streaming+vision sets all flags correctly', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.supportsStreaming).toBe(true);
     expect(r.supportsJson).toBe(true);
@@ -174,9 +154,7 @@ describe('parity — route-level supports* flags derived from capabilities', () 
 
   it('image_generation-only model sets supportsImages true, others false', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'replicate' && m.id === 'flux-pro-1.1',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'replicate' && m.id === 'flux-pro-1.1');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.supportsImages).toBe(true);
     expect(r.supportsStreaming).toBe(false);
@@ -187,9 +165,7 @@ describe('parity — route-level supports* flags derived from capabilities', () 
   it('audio_generation sets supportsAudio true', () => {
     const { registry } = buildWithFixture();
     // gemini-2.5-pro #5 has audio_generation
-    const snap = findSnapshot(
-      (m) => m.providerId === 'google' && m.id === 'gemini-2.5-pro',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'google' && m.id === 'gemini-2.5-pro');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.supportsAudio).toBe(true);
     expect(r.supportsVision).toBe(true);
@@ -198,7 +174,7 @@ describe('parity — route-level supports* flags derived from capabilities', () 
   it('no capabilities → all flags false', () => {
     const { registry } = buildWithFixture();
     const snap = findSnapshot(
-      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x',
+      (m) => m.providerId === 'experimental-lab' && m.id === 'unknown-experimental-x'
     );
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.supportsStreaming).toBe(false);
@@ -213,9 +189,7 @@ describe('parity — route-level supports* flags derived from capabilities', () 
 describe('parity — contextWindow + maxOutputTokens propagate', () => {
   it('contextWindow propagates to BOTH offering and route', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7');
     const o = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(o?.providerReportedContextWindow).toBe(200_000);
@@ -224,9 +198,7 @@ describe('parity — contextWindow + maxOutputTokens propagate', () => {
 
   it('1M context window preserved', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'google' && m.id === 'gemini-2.5-pro-1m',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'google' && m.id === 'gemini-2.5-pro-1m');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.contextWindow).toBe(1_000_000);
   });
@@ -251,9 +223,7 @@ describe('parity — contextWindow + maxOutputTokens propagate', () => {
 describe('parity — routeId determinism', () => {
   it('without creds/region, routeId = `${offeringId}::${providerId}`', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'openai' && m.id === 'gpt-5.5-pro');
     const r = registry.routesForOffering(snap.uid ?? `${snap.providerId}:${snap.id}`)[0];
     expect(r.routeId).toBe(`${snap.uid ?? `${snap.providerId}:${snap.id}`}::openai`);
   });
@@ -261,18 +231,16 @@ describe('parity — routeId determinism', () => {
   it('two Azure deployments share id="gpt-4o" but produce DISTINCT routeIds', () => {
     const { registry } = buildWithFixture();
     const prodChat = findSnapshot(
-      (m) =>
-        m.providerId === 'azure-openai-prod-chat' && m.id === 'gpt-4o',
+      (m) => m.providerId === 'azure-openai-prod-chat' && m.id === 'gpt-4o'
     );
     const prodFallback = findSnapshot(
-      (m) =>
-        m.providerId === 'azure-openai-prod-fallback' && m.id === 'gpt-4o',
+      (m) => m.providerId === 'azure-openai-prod-fallback' && m.id === 'gpt-4o'
     );
     const r1 = registry.routesForOffering(
-      prodChat.uid ?? `${prodChat.providerId}:${prodChat.id}`,
+      prodChat.uid ?? `${prodChat.providerId}:${prodChat.id}`
     )[0];
     const r2 = registry.routesForOffering(
-      prodFallback.uid ?? `${prodFallback.providerId}:${prodFallback.id}`,
+      prodFallback.uid ?? `${prodFallback.providerId}:${prodFallback.id}`
     )[0];
     expect(r1.routeId).not.toBe(r2.routeId);
     // And their pricing is independent.
@@ -320,9 +288,7 @@ describe('parity — routeKindByProvider drives ProviderModelRoute.routeKind', (
 describe('parity — lifecycle mapping', () => {
   it('canonical lifecycle maps preview correctly', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'openai' && m.id === 'o3-mini-preview',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'openai' && m.id === 'o3-mini-preview');
     const c = registry.lookupCanonicalModel(`${snap.providerId}:${snap.id}`);
     expect(c?.lifecycle).toBe('preview');
   });
@@ -330,9 +296,7 @@ describe('parity — lifecycle mapping', () => {
   it('canonical lifecycle maps deprecated correctly', () => {
     const { registry } = buildWithFixture();
     const snap = findSnapshot(
-      (m) =>
-        m.providerId === 'anthropic' &&
-        m.id === 'claude-3-5-sonnet-20240620',
+      (m) => m.providerId === 'anthropic' && m.id === 'claude-3-5-sonnet-20240620'
     );
     const c = registry.lookupCanonicalModel(`${snap.providerId}:${snap.id}`);
     expect(c?.lifecycle).toBe('deprecated');
@@ -341,7 +305,7 @@ describe('parity — lifecycle mapping', () => {
   it('offering lifecycle maps inactive → retired', () => {
     const { registry } = buildWithFixture();
     const snap = findSnapshot(
-      (m) => m.providerId === 'openai' && m.id === 'gpt-4-0314' && m.status === 'inactive',
+      (m) => m.providerId === 'openai' && m.id === 'gpt-4-0314' && m.status === 'inactive'
     );
     const o = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(o?.lifecycle).toBe('retired');
@@ -349,9 +313,7 @@ describe('parity — lifecycle mapping', () => {
 
   it('offering lifecycle maps deprecated → sunset', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.status === 'deprecated',
-    );
+    const snap = findSnapshot((m) => m.status === 'deprecated');
     const o = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(o?.lifecycle).toBe('sunset');
   });
@@ -372,9 +334,7 @@ describe('parity — canonical model identity (MVP 2 conservative)', () => {
 
   it('Offering FK points back to the correct CanonicalModel', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'mistral' && m.id === 'mistral-large-2',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'mistral' && m.id === 'mistral-large-2');
     const o = registry.lookupOffering(snap.uid ?? `${snap.providerId}:${snap.id}`);
     expect(o?.canonicalModelId).toBe('mistral:mistral-large-2');
     const c = registry.lookupCanonicalModel(o!.canonicalModelId);
@@ -383,9 +343,7 @@ describe('parity — canonical model identity (MVP 2 conservative)', () => {
 
   it('Route FK points back to the correct CanonicalModel and Offering', () => {
     const { registry } = buildWithFixture();
-    const snap = findSnapshot(
-      (m) => m.providerId === 'cohere' && m.id === 'command-a',
-    );
+    const snap = findSnapshot((m) => m.providerId === 'cohere' && m.id === 'command-a');
     const offeringId = snap.uid ?? `${snap.providerId}:${snap.id}`;
     const r = registry.routesForOffering(offeringId)[0];
     expect(r.canonicalModelId).toBe('cohere:command-a');

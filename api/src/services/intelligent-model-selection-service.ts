@@ -22,11 +22,20 @@
  */
 
 import { logger } from '@/utils/logger';
-import { type ChatRequest, type ChatResponse, type Model, type ModelCapability, ensureModelCapabilityArray } from '@/types';
+import {
+  type ChatRequest,
+  type ChatResponse,
+  type Model,
+  type ModelCapability,
+  ensureModelCapabilityArray,
+} from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getProviderRegistry } from '@/providers/provider-registry.js';
 import { getCentralModelDiscoveryService } from '@/services/central-model-discovery-service.js';
-import { providerAvailabilityService, type ProviderStatus } from '@/services/provider-availability-service';
+import {
+  providerAvailabilityService,
+  type ProviderStatus,
+} from '@/services/provider-availability-service';
 import { nanoid } from 'nanoid';
 import { LRUCache } from 'lru-cache';
 
@@ -141,7 +150,9 @@ interface ToolSchemaAdapter {
 }
 
 // Helper functions for schema adaptation
-function adaptSchemaForAnthropic(params: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function adaptSchemaForAnthropic(
+  params: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
   if (!params || Object.keys(params).length === 0) {
     return {
       type: 'object',
@@ -152,7 +163,9 @@ function adaptSchemaForAnthropic(params: Record<string, unknown> | null | undefi
   return params;
 }
 
-function adaptSchemaForGoogle(params: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function adaptSchemaForGoogle(
+  params: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
   if (!params || !params.properties || Object.keys(params.properties).length === 0) {
     return {
       type: 'object',
@@ -174,7 +187,9 @@ interface JSONSchemaParams {
   required?: string[];
 }
 
-function convertToCohereParams(params: JSONSchemaParams | null | undefined): Record<string, { type: string; description: string; required: boolean }> {
+function convertToCohereParams(
+  params: JSONSchemaParams | null | undefined
+): Record<string, { type: string; description: string; required: boolean }> {
   if (!params?.properties) return {};
   const result: Record<string, { type: string; description: string; required: boolean }> = {};
   for (const [key, value] of Object.entries(params.properties)) {
@@ -189,9 +204,12 @@ function convertToCohereParams(params: JSONSchemaParams | null | undefined): Rec
 }
 
 function adaptToolsForOpenAI(tools: Tool[]): Array<Record<string, unknown>> {
-  return tools.map(tool => {
+  return tools.map((tool) => {
     const params = tool.function?.parameters || {};
-    if (params.type === 'object' && (!params.properties || Object.keys(params.properties).length === 0)) {
+    if (
+      params.type === 'object' &&
+      (!params.properties || Object.keys(params.properties).length === 0)
+    ) {
       return {
         ...tool,
         function: {
@@ -242,7 +260,7 @@ const toolSchemaAdapters: Record<string, ToolSchemaAdapter> = {
 
   anthropic: {
     adaptTools(tools: Tool[]) {
-      return tools.map(tool => ({
+      return tools.map((tool) => ({
         name: tool.function.name,
         description: tool.function.description,
         input_schema: adaptSchemaForAnthropic(tool.function.parameters),
@@ -255,12 +273,14 @@ const toolSchemaAdapters: Record<string, ToolSchemaAdapter> = {
 
   google: {
     adaptTools(tools: Tool[]) {
-      return tools.map(tool => ({
-        function_declarations: [{
-          name: tool.function.name,
-          description: tool.function.description,
-          parameters: adaptSchemaForGoogle(tool.function.parameters),
-        }],
+      return tools.map((tool) => ({
+        function_declarations: [
+          {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: adaptSchemaForGoogle(tool.function.parameters),
+          },
+        ],
       }));
     },
     validateSchema() {
@@ -285,7 +305,7 @@ const toolSchemaAdapters: Record<string, ToolSchemaAdapter> = {
 
   cohere: {
     adaptTools(tools: Tool[]) {
-      return tools.map(tool => ({
+      return tools.map((tool) => ({
         name: tool.function.name,
         description: tool.function.description,
         parameter_definitions: convertToCohereParams(tool.function.parameters),
@@ -298,7 +318,7 @@ const toolSchemaAdapters: Record<string, ToolSchemaAdapter> = {
 
   default: {
     adaptTools(tools: Tool[]): Array<Record<string, unknown>> {
-      return tools.map(tool => {
+      return tools.map((tool) => {
         // Convert Tool to Record<string, unknown> by creating a new object
         return {
           type: tool.type,
@@ -425,7 +445,10 @@ export class IntelligentModelSelectionService {
       return this.triageCache.get(cacheKey)!;
     }
 
-    this.log.info({ complexity: requirements.complexity }, 'Starting input triage with fast models');
+    this.log.info(
+      { complexity: requirements.complexity },
+      'Starting input triage with fast models'
+    );
 
     try {
       // Find fast models for triage
@@ -478,18 +501,21 @@ export class IntelligentModelSelectionService {
 
       // Cross-validate and merge results
       const enrichedInput = this.crossValidateTriageResults(content, triageResults);
-      enrichedInput.triageModelsUsed = triageResults.map(r => r.model);
+      enrichedInput.triageModelsUsed = triageResults.map((r) => r.model);
       enrichedInput.crossValidated = triageResults.length >= 2;
 
       // Cache result
       this.triageCache.set(cacheKey, enrichedInput);
 
-      this.log.info({
-        modelsUsed: enrichedInput.triageModelsUsed,
-        suggestedCapabilities: enrichedInput.suggestedCapabilities,
-        taskType: enrichedInput.suggestedTaskType,
-        confidence: enrichedInput.confidence,
-      }, 'Input triage completed');
+      this.log.info(
+        {
+          modelsUsed: enrichedInput.triageModelsUsed,
+          suggestedCapabilities: enrichedInput.suggestedCapabilities,
+          taskType: enrichedInput.suggestedTaskType,
+          confidence: enrichedInput.confidence,
+        },
+        'Input triage completed'
+      );
 
       return enrichedInput;
     } catch (error) {
@@ -509,13 +535,16 @@ export class IntelligentModelSelectionService {
     const startTime = Date.now();
     const requestId = nanoid(8);
 
-    this.log.info({
-      requestId,
-      requiredCapabilities: requirements.required,
-      preferredCapabilities: requirements.preferred,
-      taskType: requirements.taskType,
-      complexity: requirements.complexity,
-    }, 'Starting capability-based model selection');
+    this.log.info(
+      {
+        requestId,
+        requiredCapabilities: requirements.required,
+        preferredCapabilities: requirements.preferred,
+        taskType: requirements.taskType,
+        complexity: requirements.complexity,
+      },
+      'Starting capability-based model selection'
+    );
 
     try {
       const registry = getProviderRegistry();
@@ -568,18 +597,21 @@ export class IntelligentModelSelectionService {
 
       const selectionTime = Date.now() - startTime;
 
-      this.log.info({
-        requestId,
-        totalModelsEvaluated,
-        totalModelsMatched: candidates.length,
-        topCandidates: candidates.slice(0, 5).map(c => ({
-          model: c.model.id,
-          provider: c.model.provider,
-          score: c.score,
-          reason: c.reason,
-        })),
-        selectionTime,
-      }, 'Model selection completed');
+      this.log.info(
+        {
+          requestId,
+          totalModelsEvaluated,
+          totalModelsMatched: candidates.length,
+          topCandidates: candidates.slice(0, 5).map((c) => ({
+            model: c.model.id,
+            provider: c.model.provider,
+            score: c.score,
+            reason: c.reason,
+          })),
+          selectionTime,
+        },
+        'Model selection completed'
+      );
 
       return {
         candidates,
@@ -635,9 +667,7 @@ export class IntelligentModelSelectionService {
     // the private loop lacked. This removes the shadow execution engine that
     // previously served /v1/chat/completions/intelligent without those
     // guarantees. Dynamic import avoids a load-time cycle with the engine.
-    const { getOrchestrationEngine } = await import(
-      '@/core/orchestration/orchestration-engine.js'
-    );
+    const { getOrchestrationEngine } = await import('@/core/orchestration/orchestration-engine.js');
     const engine = getOrchestrationEngine();
     const engineRequest: ChatRequest = {
       ...request,
@@ -648,12 +678,9 @@ export class IntelligentModelSelectionService {
       // pinning disables the engine's fallback chain. Pass the required
       // capabilities so the engine's HEALTH-AWARE selector picks a healthy
       // capable model and retains its full cross-provider fallback.
-      model: request.model && request.model.trim() && request.model !== 'auto'
-        ? request.model
-        : 'auto',
-      ...(requiredCapabilities && requiredCapabilities.length
-        ? { requiredCapabilities }
-        : {}),
+      model:
+        request.model && request.model.trim() && request.model !== 'auto' ? request.model : 'auto',
+      ...(requiredCapabilities && requiredCapabilities.length ? { requiredCapabilities } : {}),
     };
 
     this.log.info(
@@ -815,12 +842,15 @@ export class IntelligentModelSelectionService {
         continue;
       }
 
-      this.log.info({
-        requestId,
-        attemptNumber,
-        provider: providerName,
-        model: candidate.model.id,
-      }, 'Starting streaming attempt');
+      this.log.info(
+        {
+          requestId,
+          attemptNumber,
+          provider: providerName,
+          model: candidate.model.id,
+        },
+        'Starting streaming attempt'
+      );
 
       try {
         const adaptedRequest = this.adaptRequestForProvider(request, candidate);
@@ -834,11 +864,14 @@ export class IntelligentModelSelectionService {
           chunkCount++;
           if (!firstChunkReceived) {
             firstChunkReceived = true;
-            this.log.debug({
-              requestId,
-              attemptNumber,
-              provider: providerName,
-            }, 'First chunk received');
+            this.log.debug(
+              {
+                requestId,
+                attemptNumber,
+                provider: providerName,
+              },
+              'First chunk received'
+            );
           }
           yield chunk;
         }
@@ -857,14 +890,17 @@ export class IntelligentModelSelectionService {
 
         providerAvailabilityService.markAvailable(providerName);
 
-        this.log.info({
-          requestId,
-          attemptNumber,
-          provider: providerName,
-          model: candidate.model.id,
-          chunkCount,
-          latencyMs,
-        }, 'Streaming completed successfully');
+        this.log.info(
+          {
+            requestId,
+            attemptNumber,
+            provider: providerName,
+            model: candidate.model.id,
+            chunkCount,
+            latencyMs,
+          },
+          'Streaming completed successfully'
+        );
 
         return {
           success: true,
@@ -908,13 +944,16 @@ export class IntelligentModelSelectionService {
           );
         }
 
-        this.log.warn({
-          requestId,
-          attemptNumber,
-          provider: providerName,
-          error: errorInfo.message,
-          errorCode: errorInfo.code,
-        }, 'Streaming attempt failed');
+        this.log.warn(
+          {
+            requestId,
+            attemptNumber,
+            provider: providerName,
+            error: errorInfo.message,
+            errorCode: errorInfo.code,
+          },
+          'Streaming attempt failed'
+        );
       }
     }
 
@@ -956,9 +995,10 @@ export class IntelligentModelSelectionService {
   }
 
   private extractContent(request: ChatRequest): string {
-    return request.messages
-      ?.map(m => typeof m.content === 'string' ? m.content : '')
-      .join('\n') || '';
+    return (
+      request.messages?.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n') ||
+      ''
+    );
   }
 
   private estimateContextSize(request: ChatRequest): number {
@@ -991,7 +1031,7 @@ export class IntelligentModelSelectionService {
       /\.(ts|js|py|java|go|rs|cpp|c|rb|php)\b/,
       /\b(code|implement|debug|refactor|fix|bug)\b/i,
     ];
-    return codePatterns.some(p => p.test(content));
+    return codePatterns.some((p) => p.test(content));
   }
 
   private containsAnalysisPatterns(content: string): boolean {
@@ -1000,16 +1040,18 @@ export class IntelligentModelSelectionService {
       /\b(why|how|what.*reason|compare|contrast)\b/i,
       /\b(analisa|analisar|análise|analise|avaliar|avaliação|avaliacao|comparar|comparativo|diagnosticar|investigar|risco|riscos)\b/i,
     ];
-    return analysisPatterns.some(p => p.test(content));
+    return analysisPatterns.some((p) => p.test(content));
   }
 
   private containsVisionPatterns(request: ChatRequest): boolean {
-    return request.messages?.some(m => {
-      if (Array.isArray(m.content)) {
-        return m.content.some(c => c.type === 'image_url');
-      }
-      return false;
-    }) || false;
+    return (
+      request.messages?.some((m) => {
+        if (Array.isArray(m.content)) {
+          return m.content.some((c) => c.type === 'image_url');
+        }
+        return false;
+      }) || false
+    );
   }
 
   private detectTaskType(content: string, explicitType?: string): string {
@@ -1018,7 +1060,7 @@ export class IntelligentModelSelectionService {
     // Order matters - more specific patterns first
     const taskPatterns: Record<string, RegExp[]> = {
       // Testing patterns - check before code-generation since "generate tests" is testing
-      'testing': [
+      testing: [
         /\b(unit|integration|e2e|end-to-end)\s*test/i,
         /\bgenerate\s+(tests?|specs?)\b/i,
         /\bwrite\s+tests?\s+for\b/i,
@@ -1030,12 +1072,12 @@ export class IntelligentModelSelectionService {
         /\bcreate\s+(a|an)?\s*\w+\s*(in|using|with)\s*(node|python|typescript|javascript|go|rust)/i,
       ],
       // Debugging patterns
-      'debugging': [
+      debugging: [
         /\b(debug|fix|error|bug|issue|problem)\b/i,
         /\bwhy\s+(is|does|isn't|doesn't)\b.*\b(work|return|fail)/i,
       ],
       // Refactoring patterns
-      'refactoring': [
+      refactoring: [
         /\b(refactor|improve|optimize|clean\s*up)\b/i,
         /\bmake\s+(this|the|it)\s+(more|better|cleaner)/i,
       ],
@@ -1045,14 +1087,14 @@ export class IntelligentModelSelectionService {
         /\bcheck\s+(this|the|my)?\s*(code|implementation)\s+for/i,
         /\baudit\s+(this|the|my)?\s*(code|codebase)/i,
       ],
-      // Documentation patterns  
-      'documentation': [
+      // Documentation patterns
+      documentation: [
         /\b(write|create|generate)\s+(documentation|docs|readme)/i,
         /\bdocument\s+(this|the|my)/i,
         /\badd\s+comments?\s+to/i,
       ],
       // Analysis patterns - must reference code/architecture/system/performance
-      'analysis': [
+      analysis: [
         /\banalyze\s+(this|the|my)\s*(code|architecture|system|implementation|codebase|function|class|performance)/i,
         /\bexplain\s+(how|why)\s+(this|the|my)\s*(code|function|system|works)/i,
         /\bunderstand\s+(this|the)\s*(code|implementation|architecture|flow)/i,
@@ -1061,7 +1103,7 @@ export class IntelligentModelSelectionService {
     };
 
     for (const [taskType, patterns] of Object.entries(taskPatterns)) {
-      if (patterns.some(p => p.test(content))) {
+      if (patterns.some((p) => p.test(content))) {
         return taskType;
       }
     }
@@ -1080,7 +1122,7 @@ export class IntelligentModelSelectionService {
 
         for (const model of models) {
           const nameLower = model.name.toLowerCase();
-          const isFast = this.FAST_MODEL_KEYWORDS.some(k => nameLower.includes(k));
+          const isFast = this.FAST_MODEL_KEYWORDS.some((k) => nameLower.includes(k));
 
           if (isFast && model.capabilities?.includes('chat')) {
             fastModels.push({ model, adapter });
@@ -1098,8 +1140,10 @@ export class IntelligentModelSelectionService {
   }
 
   private buildTriagePrompt(content: string, requirements: CapabilityRequirements): string {
-    const requiredCaps = requirements.required.length > 0 ? requirements.required.join(', ') : 'none';
-    const preferredCaps = requirements.preferred.length > 0 ? requirements.preferred.join(', ') : 'none';
+    const requiredCaps =
+      requirements.required.length > 0 ? requirements.required.join(', ') : 'none';
+    const preferredCaps =
+      requirements.preferred.length > 0 ? requirements.preferred.join(', ') : 'none';
     const toolHint = requirements.needsTools
       ? `Tools required (~${requirements.toolCount}): yes`
       : 'Tools required: no';
@@ -1147,14 +1191,28 @@ Respond ONLY with the JSON, no other text.`;
 
       // JSON.parse returns `unknown` — narrow each accessed field structurally.
       const parsed: unknown = JSON.parse(jsonMatch[0]);
-      const obj: { suggested_capabilities?: unknown; task_type?: unknown; complexity?: unknown; confidence?: unknown } =
+      const obj: {
+        suggested_capabilities?: unknown;
+        task_type?: unknown;
+        complexity?: unknown;
+        confidence?: unknown;
+      } =
         typeof parsed === 'object' && parsed !== null
-          ? (parsed as { suggested_capabilities?: unknown; task_type?: unknown; complexity?: unknown; confidence?: unknown })
+          ? (parsed as {
+              suggested_capabilities?: unknown;
+              task_type?: unknown;
+              complexity?: unknown;
+              confidence?: unknown;
+            })
           : {};
       return {
         capabilities: ensureModelCapabilityArray(obj.suggested_capabilities),
-        taskType: typeof obj.task_type === 'string' && obj.task_type.length > 0 ? obj.task_type : 'general',
-        complexity: typeof obj.complexity === 'string' && obj.complexity.length > 0 ? obj.complexity : 'moderate',
+        taskType:
+          typeof obj.task_type === 'string' && obj.task_type.length > 0 ? obj.task_type : 'general',
+        complexity:
+          typeof obj.complexity === 'string' && obj.complexity.length > 0
+            ? obj.complexity
+            : 'moderate',
         confidence: typeof obj.confidence === 'number' ? obj.confidence : 0.5,
       };
     } catch {
@@ -1197,10 +1255,10 @@ Respond ONLY with the JSON, no other text.`;
     }
 
     // Select most voted task type and complexity
-    const suggestedTaskType = [...taskTypeVotes.entries()]
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || 'general';
-    const suggestedComplexity = [...complexityVotes.entries()]
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || 'moderate';
+    const suggestedTaskType =
+      [...taskTypeVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'general';
+    const suggestedComplexity =
+      [...complexityVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'moderate';
 
     // Map complexity levels to expected type
     const complexityMap: Record<string, 'expert' | 'simple' | 'complex' | 'moderate'> = {
@@ -1369,7 +1427,11 @@ Respond ONLY with the JSON, no other text.`;
   ): Promise<{ candidates: ModelCandidate[]; evaluated: number }> {
     // (a) Look up / build-and-cache the per-provider scored map. This is the
     // only place the 76k-model scan runs; a warm key reuses the cached scoring.
-    const cacheKey = this.buildScoringCacheKey(requiredCapabilities, preferredCapabilities, requirements);
+    const cacheKey = this.buildScoringCacheKey(
+      requiredCapabilities,
+      preferredCapabilities,
+      requirements
+    );
     let scored = this.scoredCandidateCache.get(cacheKey);
     if (!scored) {
       scored = await this.scoreAllProviders(
@@ -1455,10 +1517,13 @@ Respond ONLY with the JSON, no other text.`;
       }
 
       if (validationErrors.length > 0) {
-        this.log.warn({
-          provider: providerName,
-          errors: validationErrors,
-        }, 'Tool schema validation warnings');
+        this.log.warn(
+          {
+            provider: providerName,
+            errors: validationErrors,
+          },
+          'Tool schema validation warnings'
+        );
       }
 
       // Note: We don't replace request.tools here because the adapter
@@ -1477,22 +1542,29 @@ Respond ONLY with the JSON, no other text.`;
     provider: string
   ): { message: string; code?: string; type?: string } {
     const errorObj = error && typeof error === 'object' && error !== null ? error : {};
-    const withProvider = (message: string) =>
-      provider ? `[${provider}] ${message}` : message;
+    const withProvider = (message: string) => (provider ? `[${provider}] ${message}` : message);
 
     // Type guard for error with response property - safely extract without assertions.
     // `Object.getOwnPropertyDescriptor(...).value` is typed `any` (intentionally,
     // since descriptors are heterogeneous); annotate `unknown` and narrow.
-    if ('response' in errorObj && errorObj.response && typeof errorObj.response === 'object' && 'data' in errorObj.response) {
+    if (
+      'response' in errorObj &&
+      errorObj.response &&
+      typeof errorObj.response === 'object' &&
+      'data' in errorObj.response
+    ) {
       const responseDataDescriptor = Object.getOwnPropertyDescriptor(errorObj.response, 'data');
       const responseData: unknown = responseDataDescriptor?.value;
-      
+
       if (responseData && typeof responseData === 'object' && responseData !== null) {
         // Safely extract error message
         let errorMessage: string = String(error);
         const errorDescriptor = Object.getOwnPropertyDescriptor(responseData, 'error');
         if (errorDescriptor && errorDescriptor.value && typeof errorDescriptor.value === 'object') {
-          const errorMsgDescriptor = Object.getOwnPropertyDescriptor(errorDescriptor.value, 'message');
+          const errorMsgDescriptor = Object.getOwnPropertyDescriptor(
+            errorDescriptor.value,
+            'message'
+          );
           if (errorMsgDescriptor) {
             errorMessage = String(errorMsgDescriptor.value || error);
           }
@@ -1502,10 +1574,13 @@ Respond ONLY with the JSON, no other text.`;
             errorMessage = String(messageDescriptor.value || error);
           }
         }
-        
+
         // Safely extract error code
         let errorCode: string | undefined;
-        const errorObjDescriptor = errorDescriptor?.value && typeof errorDescriptor.value === 'object' ? Object.getOwnPropertyDescriptor(errorDescriptor.value, 'code') : null;
+        const errorObjDescriptor =
+          errorDescriptor?.value && typeof errorDescriptor.value === 'object'
+            ? Object.getOwnPropertyDescriptor(errorDescriptor.value, 'code')
+            : null;
         if (errorObjDescriptor) {
           errorCode = String(errorObjDescriptor.value);
         } else {
@@ -1514,10 +1589,13 @@ Respond ONLY with the JSON, no other text.`;
             errorCode = String(codeDescriptor.value);
           }
         }
-        
+
         // Safely extract error type
         let errorType: string | undefined;
-        const errorTypeDescriptor = errorDescriptor?.value && typeof errorDescriptor.value === 'object' ? Object.getOwnPropertyDescriptor(errorDescriptor.value, 'type') : null;
+        const errorTypeDescriptor =
+          errorDescriptor?.value && typeof errorDescriptor.value === 'object'
+            ? Object.getOwnPropertyDescriptor(errorDescriptor.value, 'type')
+            : null;
         if (errorTypeDescriptor) {
           errorType = String(errorTypeDescriptor.value);
         } else {
@@ -1526,7 +1604,7 @@ Respond ONLY with the JSON, no other text.`;
             errorType = String(typeDescriptor.value);
           }
         }
-        
+
         return {
           message: withProvider(errorMessage),
           code: errorCode,
@@ -1536,30 +1614,35 @@ Respond ONLY with the JSON, no other text.`;
     }
 
     // Type guard for error with error property - safely extract without assertions
-    if ('error' in errorObj && errorObj.error && typeof errorObj.error === 'object' && errorObj.error !== null) {
+    if (
+      'error' in errorObj &&
+      errorObj.error &&
+      typeof errorObj.error === 'object' &&
+      errorObj.error !== null
+    ) {
       const errorProp = errorObj.error;
-      
+
       // Safely extract message
       let errorMessage: string = String(error);
       const messageDescriptor = Object.getOwnPropertyDescriptor(errorProp, 'message');
       if (messageDescriptor) {
         errorMessage = String(messageDescriptor.value || error);
       }
-      
+
       // Safely extract code
       let errorCode: string | undefined;
       const codeDescriptor = Object.getOwnPropertyDescriptor(errorProp, 'code');
       if (codeDescriptor) {
         errorCode = String(codeDescriptor.value);
       }
-      
+
       // Safely extract type
       let errorType: string | undefined;
       const typeDescriptor = Object.getOwnPropertyDescriptor(errorProp, 'type');
       if (typeDescriptor) {
         errorType = String(typeDescriptor.value);
       }
-      
+
       return {
         message: withProvider(errorMessage),
         code: errorCode,
@@ -1575,21 +1658,21 @@ Respond ONLY with the JSON, no other text.`;
       if (messageDescriptor) {
         messageValue = messageDescriptor.value;
       }
-      
+
       // Safely extract code
       let errorCode: string | undefined;
       const codeDescriptor = Object.getOwnPropertyDescriptor(errorObj, 'code');
       if (codeDescriptor) {
         errorCode = String(codeDescriptor.value);
       }
-      
+
       // Safely extract name as type
       let errorType: string | undefined;
       const nameDescriptor = Object.getOwnPropertyDescriptor(errorObj, 'name');
       if (nameDescriptor && typeof nameDescriptor.value === 'string') {
         errorType = nameDescriptor.value;
       }
-      
+
       return {
         message: withProvider(String(messageValue || error)),
         code: errorCode,
@@ -1609,29 +1692,49 @@ Respond ONLY with the JSON, no other text.`;
     let hash = 0;
     for (let i = 0; i < Math.min(content.length, 1000); i++) {
       const char = content.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
     return `triage-${hash}`;
   }
 
-  private isCredentialError(errorInfo: { message?: string; code?: string; type?: string }): boolean {
-    const content = `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
+  private isCredentialError(errorInfo: {
+    message?: string;
+    code?: string;
+    type?: string;
+  }): boolean {
+    const content =
+      `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
     if (!content) return false;
 
-    if (content.includes('api key') && (content.includes('invalid') || content.includes('not valid') || content.includes('missing') || content.includes('revoked'))) {
+    if (
+      content.includes('api key') &&
+      (content.includes('invalid') ||
+        content.includes('not valid') ||
+        content.includes('missing') ||
+        content.includes('revoked'))
+    ) {
       return true;
     }
 
-    if (content.includes('unauthorized') || content.includes('authentication') || content.includes('401')) {
+    if (
+      content.includes('unauthorized') ||
+      content.includes('authentication') ||
+      content.includes('401')
+    ) {
       return true;
     }
 
     return false;
   }
 
-  private isModelAvailabilityError(errorInfo: { message?: string; code?: string; type?: string }): boolean {
-    const content = `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
+  private isModelAvailabilityError(errorInfo: {
+    message?: string;
+    code?: string;
+    type?: string;
+  }): boolean {
+    const content =
+      `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
     if (!content) return false;
 
     return (
@@ -1651,7 +1754,8 @@ Respond ONLY with the JSON, no other text.`;
     code?: string;
     type?: string;
   }): boolean {
-    const content = `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
+    const content =
+      `${errorInfo.message || ''} ${errorInfo.code || ''} ${errorInfo.type || ''}`.toLowerCase();
     if (!content) return false;
 
     return (

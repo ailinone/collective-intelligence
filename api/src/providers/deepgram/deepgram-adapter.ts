@@ -18,9 +18,22 @@
  * NO HARDCODED MODELS — model selection by capabilities via AudioOrchestrationService.
  */
 
-import { ProviderAdapter, type ProviderConfig, type HealthCheckResult, type BalanceCheckResult } from '@/providers/base/provider-adapter';
+import {
+  ProviderAdapter,
+  type ProviderConfig,
+  type HealthCheckResult,
+  type BalanceCheckResult,
+} from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
-import type { AudioTTSRequest, AudioTTSResponse, AudioSTTRequest, AudioSTTResponse, ModerationResponse, ImageEditResponse, ImageVariationResponse } from '@/types/model-client';
+import type {
+  AudioTTSRequest,
+  AudioTTSResponse,
+  AudioSTTRequest,
+  AudioSTTResponse,
+  ModerationResponse,
+  ImageEditResponse,
+  ImageVariationResponse,
+} from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import WebSocket from 'ws';
 
@@ -74,7 +87,7 @@ export class DeepgramAdapter extends ProviderAdapter {
         return res;
       }, 'speech-to-text');
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         results?: {
           channels?: Array<{
             alternatives?: Array<{
@@ -90,7 +103,10 @@ export class DeepgramAdapter extends ProviderAdapter {
       const alt = data.results?.channels?.[0]?.alternatives?.[0];
       const latency = Date.now() - start;
 
-      log.info({ model: modelName, latency, textLen: alt?.transcript?.length || 0 }, 'STT completed');
+      log.info(
+        { model: modelName, latency, textLen: alt?.transcript?.length || 0 },
+        'STT completed'
+      );
 
       return {
         text: alt?.transcript || '',
@@ -135,7 +151,10 @@ export class DeepgramAdapter extends ProviderAdapter {
       const wsUrl = `wss://api.deepgram.com/v1/listen?${params}`;
       const ws = new WebSocket(wsUrl, { headers: this.authHeaders() });
       let finalTranscript = '';
-      const timeout = setTimeout(() => { ws.close(); reject(new Error('Deepgram WS STT timeout 15s')); }, 15000);
+      const timeout = setTimeout(() => {
+        ws.close();
+        reject(new Error('Deepgram WS STT timeout 15s'));
+      }, 15000);
 
       ws.on('open', () => {
         // Send audio in 8KB chunks for smooth streaming
@@ -164,13 +183,18 @@ export class DeepgramAdapter extends ProviderAdapter {
               onInterim(transcript);
             }
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       });
 
       ws.on('close', () => {
         clearTimeout(timeout);
         const latency = Date.now() - start;
-        log.info({ model: modelName, latency, textLen: finalTranscript.length, method: 'websocket' }, 'STT streaming completed');
+        log.info(
+          { model: modelName, latency, textLen: finalTranscript.length, method: 'websocket' },
+          'STT streaming completed'
+        );
         resolve({ text: finalTranscript, raw: { latency, method: 'websocket' } });
       });
 
@@ -253,12 +277,21 @@ export class DeepgramAdapter extends ProviderAdapter {
 
   async getModels(): Promise<Model[]> {
     // Dynamically discover models from Deepgram API
-    const perf: import('@/types').ModelPerformance = { latencyMs: 300, throughput: 0, quality: 0.9, reliability: 0.95 };
+    const perf: import('@/types').ModelPerformance = {
+      latencyMs: 300,
+      throughput: 0,
+      quality: 0.9,
+      reliability: 0.95,
+    };
     const base: Omit<Model, 'id' | 'name' | 'displayName' | 'capabilities'> = {
-      providerId: 'deepgram', provider: 'deepgram',
-      contextWindow: 0, maxOutputTokens: 0,
-      inputCostPer1k: 0, outputCostPer1k: 0,
-      status: 'active', performance: perf,
+      providerId: 'deepgram',
+      provider: 'deepgram',
+      contextWindow: 0,
+      maxOutputTokens: 0,
+      inputCostPer1k: 0,
+      outputCostPer1k: 0,
+      status: 'active',
+      performance: perf,
     };
 
     try {
@@ -271,21 +304,36 @@ export class DeepgramAdapter extends ProviderAdapter {
         return [];
       }
 
-      const data = await response.json() as { stt?: Array<{ name: string; canonical_name?: string; languages?: string[] }>; tts?: Array<{ name: string; canonical_name?: string }> };
+      const data = (await response.json()) as {
+        stt?: Array<{ name: string; canonical_name?: string; languages?: string[] }>;
+        tts?: Array<{ name: string; canonical_name?: string }>;
+      };
 
       const models: Model[] = [];
 
       // STT models
       if (Array.isArray(data.stt)) {
         for (const m of data.stt) {
-          models.push({ ...base, id: `deepgram/${m.name}`, name: m.name, displayName: `Deepgram ${m.canonical_name || m.name} (STT)`, capabilities: ['speech_to_text', 'streaming'] });
+          models.push({
+            ...base,
+            id: `deepgram/${m.name}`,
+            name: m.name,
+            displayName: `Deepgram ${m.canonical_name || m.name} (STT)`,
+            capabilities: ['speech_to_text', 'streaming'],
+          });
         }
       }
 
       // TTS models
       if (Array.isArray(data.tts)) {
         for (const m of data.tts) {
-          models.push({ ...base, id: `deepgram/${m.name}`, name: m.name, displayName: `Deepgram ${m.canonical_name || m.name} (TTS)`, capabilities: ['text_to_speech', 'streaming'] });
+          models.push({
+            ...base,
+            id: `deepgram/${m.name}`,
+            name: m.name,
+            displayName: `Deepgram ${m.canonical_name || m.name} (TTS)`,
+            capabilities: ['text_to_speech', 'streaming'],
+          });
         }
       }
 
@@ -298,16 +346,30 @@ export class DeepgramAdapter extends ProviderAdapter {
       const rawData = data as Record<string, unknown>;
       const allModels = Object.entries(rawData).flatMap(([category, items]) => {
         if (!Array.isArray(items)) return [];
-        return (items as Array<{ name?: string; model?: string }>).map(item => {
-          const name = item.name || item.model || '';
-          const isTTS = category.includes('tts') || name.includes('aura');
-          return { ...base, id: `deepgram/${name}`, name, displayName: `Deepgram ${name}`, capabilities: [isTTS ? 'text_to_speech' : 'speech_to_text', 'streaming'] as import('@/types').ModelCapability[] };
-        }).filter(m => m.name);
+        return (items as Array<{ name?: string; model?: string }>)
+          .map((item) => {
+            const name = item.name || item.model || '';
+            const isTTS = category.includes('tts') || name.includes('aura');
+            return {
+              ...base,
+              id: `deepgram/${name}`,
+              name,
+              displayName: `Deepgram ${name}`,
+              capabilities: [
+                isTTS ? 'text_to_speech' : 'speech_to_text',
+                'streaming',
+              ] as import('@/types').ModelCapability[],
+            };
+          })
+          .filter((m) => m.name);
       });
 
       return allModels;
     } catch (err) {
-      log.warn({ error: err instanceof Error ? err.message : String(err) }, 'Deepgram model discovery failed');
+      log.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        'Deepgram model discovery failed'
+      );
       return [];
     }
   }
@@ -327,7 +389,8 @@ export class DeepgramAdapter extends ProviderAdapter {
       return {
         healthy: false,
         latency: 0,
-        error: error instanceof Error ? error.message : 'Unknown', checkedAt: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown',
+        checkedAt: new Date(),
       };
     }
   }
@@ -347,7 +410,9 @@ export class DeepgramAdapter extends ProviderAdapter {
       });
       if (!res.ok) return null;
 
-      const data = (await res.json()) as { balances?: Array<{ balance_id?: string; amount?: number; units?: string }> };
+      const data = (await res.json()) as {
+        balances?: Array<{ balance_id?: string; amount?: number; units?: string }>;
+      };
       const first = data.balances?.[0];
       const balance = typeof first?.amount === 'number' ? first.amount : undefined;
       return {
@@ -375,8 +440,13 @@ export class DeepgramAdapter extends ProviderAdapter {
     throw new Error('Deepgram does not support embeddings — audio-only provider');
   }
 
-  calculateCost(): number { return 0; }
-  normalizeModelName(name: string): string { return name; }
+  calculateCost(): number {
+    return 0;
+  }
+
+  normalizeModelName(name: string): string {
+    return name;
+  }
 
   async moderate(): Promise<ModerationResponse> {
     throw new Error('Not supported');

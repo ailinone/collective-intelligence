@@ -26,10 +26,33 @@
  * then PINNED for that experiment run (not 'auto' during execution).
  */
 
-import type { ExperimentConfig, ModeConfig, AblationConfig, CollectiveStrategy, CollectiveConfig, SingleModelConfig, SingleBudgetConfig, ForcedPoolCollectiveConfig, AdversarialScenarioName } from './experiment-types';
+import type {
+  ExperimentConfig,
+  ModeConfig,
+  AblationConfig,
+  CollectiveStrategy,
+  CollectiveConfig,
+  SingleModelConfig,
+  SingleBudgetConfig,
+  ForcedPoolCollectiveConfig,
+  AdversarialScenarioName,
+} from './experiment-types';
 import { BENCHMARK_COLLECTIVE_STRATEGIES } from './experiment-types';
-import { EXPERIMENT_SUITE, getVerifiableTaskIndices, getCanvasPhysicsTaskIndices, getHardVerifiableTaskIndices, getCodeVerifiedTaskIndices, getRunnableTextTaskIndices, getToolCallingTaskIndices } from './experiment-suite';
-import { loadHumanEvalTasks, loadHumanEvalPlusTasks, loadGsm8kTasks, loadLiveBenchReasoningTasks } from './experiment-dataset-loader';
+import {
+  EXPERIMENT_SUITE,
+  getVerifiableTaskIndices,
+  getCanvasPhysicsTaskIndices,
+  getHardVerifiableTaskIndices,
+  getCodeVerifiedTaskIndices,
+  getRunnableTextTaskIndices,
+  getToolCallingTaskIndices,
+} from './experiment-suite';
+import {
+  loadHumanEvalTasks,
+  loadHumanEvalPlusTasks,
+  loadGsm8kTasks,
+  loadLiveBenchReasoningTasks,
+} from './experiment-dataset-loader';
 import { scoreModelFreshness } from './model-freshness';
 import { CANONICAL_MODEL_OWNERS, classifyProviderTier, extractModelOwner } from './c3-resolvers';
 import { generateAblationMatrix } from '@/core/validation/c3/ablation-config';
@@ -89,9 +112,9 @@ export function pickStratifiedTaskIndices(perBucket = 4): number[] {
  * scenarios run against tasks DESIGNED for adversarial probing, not
  * the first 6 generic tasks (which previous default did).
  */
-export const ADVERSARIAL_TASK_INDICES: number[] = EXPERIMENT_SUITE
-  .filter((t) => t.taskType === 'adversarial')
-  .map((t) => t.index);
+export const ADVERSARIAL_TASK_INDICES: number[] = EXPERIMENT_SUITE.filter(
+  (t) => t.taskType === 'adversarial'
+).map((t) => t.index);
 
 // ─── Dynamic Model Resolution ────────────────────────────────────────────
 
@@ -142,7 +165,10 @@ async function getOperabilityGate(): Promise<(providerName: string) => boolean> 
     const hub = mod.getProviderOperabilityHub();
     return (providerName: string) => hub.isProviderUsable(providerName);
   } catch (err) {
-    log.warn({ error: String(err) }, 'Operability hub unavailable — arm resolvers proceeding optimistic');
+    log.warn(
+      { error: String(err) },
+      'Operability hub unavailable — arm resolvers proceeding optimistic'
+    );
     return () => true;
   }
 }
@@ -162,8 +188,8 @@ function isCanonicalOwnerModel(modelId: string, providerName: string): boolean {
   const providerTier = classifyProviderTier(providerName);
   const providerNameLower = providerName.toLowerCase();
   return modelId.includes('/')
-    ? (CANONICAL_MODEL_OWNERS.has(owner) || owner === providerNameLower)
-    : (providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerNameLower));
+    ? CANONICAL_MODEL_OWNERS.has(owner) || owner === providerNameLower
+    : providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerNameLower);
 }
 
 async function resolveTopTierModels(options?: {
@@ -188,10 +214,10 @@ async function resolveTopTierModels(options?: {
   // operator can still scope a specific run down via
   // EXPERIMENT_TOP_TIER_MAX_PROVIDERS or the `maxProviders` param; that is
   // now an explicit choice instead of an alphabetical accident.
-  const maxProviders = options?.maxProviders
-    ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? Infinity);
-  const perProvider = options?.perProvider
-    ?? Number(process.env.EXPERIMENT_TOP_TIER_PER_PROVIDER ?? 1);
+  const maxProviders =
+    options?.maxProviders ?? Number(process.env.EXPERIMENT_TOP_TIER_MAX_PROVIDERS ?? Infinity);
+  const perProvider =
+    options?.perProvider ?? Number(process.env.EXPERIMENT_TOP_TIER_PER_PROVIDER ?? 1);
   const minContext = Number(process.env.EXPERIMENT_TOP_TIER_MIN_CONTEXT ?? 4096);
   const requireChat = (process.env.EXPERIMENT_TOP_TIER_REQUIRE_CHAT ?? 'true') === 'true';
   const includeLocal = (process.env.EXPERIMENT_TOP_TIER_INCLUDE_LOCAL ?? 'true') === 'true';
@@ -204,7 +230,10 @@ async function resolveTopTierModels(options?: {
     const mod = await import('@/services/credit-monitor-service');
     creditMonitor = mod.getCreditMonitorService();
   } catch (err) {
-    log.warn({ error: String(err) }, 'Credit monitor unavailable — proceeding without credit-aware filter');
+    log.warn(
+      { error: String(err) },
+      'Credit monitor unavailable — proceeding without credit-aware filter'
+    );
   }
   const isOperable = await getOperabilityGate();
   const { isNonGenerativeModel } = await import('@/core/pool/non-generative-filter');
@@ -235,12 +264,12 @@ async function resolveTopTierModels(options?: {
         .filter((name) => includeLocal || !name.startsWith('ollama'));
       log.info(
         { discoveredProviders: providers.length, includeLocal },
-        'Dynamic provider discovery complete (no hardcoded list)',
+        'Dynamic provider discovery complete (no hardcoded list)'
       );
     } catch (err) {
       log.error(
         { error: err instanceof Error ? err.message : String(err) },
-        'Dynamic provider discovery failed; returning empty pool',
+        'Dynamic provider discovery failed; returning empty pool'
       );
       return [];
     }
@@ -256,10 +285,7 @@ async function resolveTopTierModels(options?: {
         provider: { name: family },
         ...(minContext > 0 ? { contextWindow: { gte: minContext } } : {}),
       },
-      orderBy: [
-        { contextWindow: 'desc' },
-        { inputCostPer1k: 'asc' },
-      ],
+      orderBy: [{ contextWindow: 'desc' }, { inputCostPer1k: 'asc' }],
       include: { provider: true },
       take: Math.max(perProvider * 5, 5), // window for credit-aware fallback
     });
@@ -321,7 +347,7 @@ async function resolveTopTierModels(options?: {
     if (pickedForProvider === 0) {
       log.debug(
         { family, candidatesConsidered: candidates.length, skipReasons: skipReasons.slice(0, 3) },
-        'No usable model in provider window — skipping',
+        'No usable model in provider window — skipping'
       );
       continue;
     }
@@ -332,7 +358,7 @@ async function resolveTopTierModels(options?: {
         modelsPickedForProvider: pickedForProvider,
         skippedAlternatives: skipReasons.length,
       },
-      'Resolved top-tier model(s) for provider (dynamic + credit-aware)',
+      'Resolved top-tier model(s) for provider (dynamic + credit-aware)'
     );
   }
 
@@ -396,7 +422,7 @@ async function resolveOwnModels(): Promise<Array<{ id: string; displayName: stri
     if (chatModels.length === 0) {
       log.warn(
         { ownModelEnabled: true, totalRows: models.length },
-        'OWN_MODEL_ENABLED=true but no chat-capable own/* model in DB — Mixed Collective arms will be skipped',
+        'OWN_MODEL_ENABLED=true but no chat-capable own/* model in DB — Mixed Collective arms will be skipped'
       );
       return [];
     }
@@ -429,12 +455,14 @@ async function resolveBudgetModels(): Promise<Array<{ id: string; displayName: s
     // the budget arms were the most junk-prone in c3-v4.
     const chatModels = models.filter((m) => {
       const caps = Array.isArray(m.capabilities) ? m.capabilities : [];
-      return caps.includes('chat')
-        && !isNonGenerativeModel({ id: m.id, capabilities: caps as string[] })
+      return (
+        caps.includes('chat') &&
+        !isNonGenerativeModel({ id: m.id, capabilities: caps as string[] }) &&
         // Canonical-owner gate: the cheapest rows are also where anonymous
         // community forks on aggregators concentrate — same mis-election risk
         // as the frontier/top-tier resolvers.
-        && isCanonicalOwnerModel(m.id, m.provider.name);
+        isCanonicalOwnerModel(m.id, m.provider.name)
+      );
     });
 
     // Pick cheapest 2 from different OPERABLE providers
@@ -550,7 +578,7 @@ export async function buildC3MainComparison(options?: {
       mode: 'single-budget',
       modelId: m.id,
       displayName: `Budget: ${m.displayName}`,
-      qualityTarget: 0.30,
+      qualityTarget: 0.3,
       requiredCapabilities: ['chat'],
     })),
 
@@ -562,7 +590,7 @@ export async function buildC3MainComparison(options?: {
 
   return {
     name: `C3 Main Comparison — ${modes.length}-arm matrix`,
-    description: `${armSummary}. Models pinned at creation: [${topModels.map(m => m.id).join(', ')}]. Budget: [${budgetModels.map(m => m.id).join(', ')}].`,
+    description: `${armSummary}. Models pinned at creation: [${topModels.map((m) => m.id).join(', ')}]. Budget: [${budgetModels.map((m) => m.id).join(', ')}].`,
     // Default to the RUNNABLE text set, not [] (whole suite). An empty list made
     // getFilteredTasks return every task — including compositor-strategy tasks
     // (strategy unimplemented → mislabeled, contaminating attribution) and
@@ -628,8 +656,18 @@ export async function buildC3VerifiableMiniRun(options?: {
     // The two collective arms H-A compares: consensus (verifier-armed via the
     // tasks' answerCheck) and blind-debate (strongest q_pos collective in
     // 7bb900e2 that is CHEAPER than single — the independence-preserving arm).
-    { mode: 'collective', strategy: 'consensus', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
-    { mode: 'collective', strategy: 'blind-debate', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
+    {
+      mode: 'collective',
+      strategy: 'consensus',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
+    {
+      mode: 'collective',
+      strategy: 'blind-debate',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
   ];
 
   return {
@@ -684,11 +722,10 @@ export async function buildC3VerifiableMiniRun(options?: {
  * an arm, alongside the full provider breadth ("frontier models alongside all
  * the others").
  */
-async function resolveBenchmarkSingles(): Promise<Array<{ id: string; displayName: string; provider: string }>> {
-  const [broad, frontier] = await Promise.all([
-    resolveTopTierModels(),
-    resolveFrontierModels(),
-  ]);
+async function resolveBenchmarkSingles(): Promise<
+  Array<{ id: string; displayName: string; provider: string }>
+> {
+  const [broad, frontier] = await Promise.all([resolveTopTierModels(), resolveFrontierModels()]);
   const seen = new Set<string>();
   const merged: Array<{ id: string; displayName: string; provider: string }> = [];
   for (const m of [...frontier, ...broad]) {
@@ -717,10 +754,20 @@ export async function buildC3HaHard(options?: {
     // consensus is the ONLY strategy that consumes context.answerVerifier →
     // best-of-N selects a checker-passing voter when synthesis/majority is wrong.
     // This is the mechanism under test.
-    { mode: 'collective', strategy: 'consensus', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
+    {
+      mode: 'collective',
+      strategy: 'consensus',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
     // blind-debate: a collective WITHOUT the verifier — the contrast that shows
     // whether any collective edge comes from the verifier or from ensembling alone.
-    { mode: 'collective', strategy: 'blind-debate', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
+    {
+      mode: 'collective',
+      strategy: 'blind-debate',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
   ];
 
   return {
@@ -758,8 +805,11 @@ export async function buildC3CodeVerified(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const taskIndices = getCodeVerifiedTaskIndices();
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'debate', 'competitive'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'debate',
+    'competitive',
+  ];
 
   const modes: ModeConfig[] = [
     ...topModels.map((m): SingleModelConfig => ({
@@ -818,8 +868,11 @@ export async function buildAilinHumanEval(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const tasks = loadHumanEvalTasks({ limit: options?.limit });
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'critique-repair', 'cost-cascade'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'critique-repair',
+    'cost-cascade',
+  ];
 
   const modes: ModeConfig[] = [
     ...topModels.map((m): SingleModelConfig => ({
@@ -880,8 +933,11 @@ export async function buildAilinHumanEvalPlus(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const tasks = loadHumanEvalPlusTasks({ limit: options?.limit });
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'critique-repair', 'cost-cascade'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'critique-repair',
+    'cost-cascade',
+  ];
 
   const modes: ModeConfig[] = [
     ...topModels.map((m): SingleModelConfig => ({
@@ -939,8 +995,11 @@ export async function buildAilinGsm8k(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const tasks = loadGsm8kTasks({ limit: options?.limit ?? 100 });
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'adaptive', 'cost-cascade'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'adaptive',
+    'cost-cascade',
+  ];
 
   const modes: ModeConfig[] = [
     ...topModels.map((m): SingleModelConfig => ({
@@ -1005,8 +1064,11 @@ export async function buildAilinLiveBenchReasoning(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const tasks = loadLiveBenchReasoningTasks({ limit: options?.limit });
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'cost-cascade', 'critique-repair'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'cost-cascade',
+    'critique-repair',
+  ];
 
   // (c) FRONTIER-AS-MEMBERS pool: 2-3 frontier flagship IDs + a couple cheaper
   // members. resolveFrontierModels/resolveBudgetModels each catch-and-return []
@@ -1107,8 +1169,11 @@ export async function buildC3ToolCalling(options?: {
     ? options.taskIndices
     : getToolCallingTaskIndices();
   // Loop-capable, genuine collectives only (all branch to executeModelWithTools).
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['agentic', 'collaborative', 'sequential'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'agentic',
+    'collaborative',
+    'sequential',
+  ];
   const CAPS = ['chat', 'function_calling'];
 
   const modes: ModeConfig[] = [
@@ -1167,8 +1232,12 @@ export async function buildC3CanvasPhysics(options?: {
 }): Promise<ExperimentConfig> {
   const topModels = await resolveBenchmarkSingles();
   const taskIndices = getCanvasPhysicsTaskIndices();
-  const strategies: CollectiveStrategy[] =
-    options?.collectiveStrategies ?? ['consensus', 'blind-debate', 'competitive', 'massive-parallel'];
+  const strategies: CollectiveStrategy[] = options?.collectiveStrategies ?? [
+    'consensus',
+    'blind-debate',
+    'competitive',
+    'massive-parallel',
+  ];
 
   const modes: ModeConfig[] = [
     ...topModels.map((m): SingleModelConfig => ({
@@ -1254,16 +1323,54 @@ interface FrontierFamilySpec {
 }
 
 const FRONTIER_FAMILY_SPECS: FrontierFamilySpec[] = [
-  { family: 'gpt', label: 'GPT-5.x (top-2 newest)', homeProviders: ['openai'], match: (id) => id.includes('gpt-5'), minGeneration: 5.0, take: 2 },
-  { family: 'claude', label: 'Claude Opus 4.6+', homeProviders: ['anthropic'], match: (id) => id.includes('opus'), minGeneration: 4.5 },
+  {
+    family: 'gpt',
+    label: 'GPT-5.x (top-2 newest)',
+    homeProviders: ['openai'],
+    match: (id) => id.includes('gpt-5'),
+    minGeneration: 5.0,
+    take: 2,
+  },
+  {
+    family: 'claude',
+    label: 'Claude Opus 4.6+',
+    homeProviders: ['anthropic'],
+    match: (id) => id.includes('opus'),
+    minGeneration: 4.5,
+  },
   // Mythos-class tier (2026-07-05 round 2): Fable/Mythos ids do not carry a
   // parseable claude version (freshness score 0), so their floor is 0 and
   // the match pattern is the selector. Absent from the catalog → arm omitted
   // and logged, run proceeds.
-  { family: 'claude', label: 'Claude Fable 5', homeProviders: ['anthropic'], match: (id) => id.includes('fable'), minGeneration: 0 },
-  { family: 'claude', label: 'Claude Mythos 5', homeProviders: ['anthropic'], match: (id) => id.includes('mythos'), minGeneration: 0 },
-  { family: 'gemini', label: 'Gemini Pro (top-2 newest)', homeProviders: ['google'], match: (id) => id.includes('gemini') && id.includes('pro'), minGeneration: 2.5, take: 2 },
-  { family: 'grok', label: 'Grok 4+', homeProviders: ['xai', 'x-ai'], match: (id) => id.includes('grok'), minGeneration: 4.0 },
+  {
+    family: 'claude',
+    label: 'Claude Fable 5',
+    homeProviders: ['anthropic'],
+    match: (id) => id.includes('fable'),
+    minGeneration: 0,
+  },
+  {
+    family: 'claude',
+    label: 'Claude Mythos 5',
+    homeProviders: ['anthropic'],
+    match: (id) => id.includes('mythos'),
+    minGeneration: 0,
+  },
+  {
+    family: 'gemini',
+    label: 'Gemini Pro (top-2 newest)',
+    homeProviders: ['google'],
+    match: (id) => id.includes('gemini') && id.includes('pro'),
+    minGeneration: 2.5,
+    take: 2,
+  },
+  {
+    family: 'grok',
+    label: 'Grok 4+',
+    homeProviders: ['xai', 'x-ai'],
+    match: (id) => id.includes('grok'),
+    minGeneration: 4.0,
+  },
 ];
 
 /**
@@ -1272,16 +1379,31 @@ const FRONTIER_FAMILY_SPECS: FrontierFamilySpec[] = [
  * flagship arm filled by one of these would fake the comparison low.
  */
 const FRONTIER_VARIANT_EXCLUSIONS = [
-  'mini', 'nano', 'lite', 'flash', 'fast', 'micro', 'tiny', 'small',
-  'codex', 'distill', 'air', 'search', 'audio', 'realtime', 'transcribe',
-  'tts', 'embed', 'image',
+  'mini',
+  'nano',
+  'lite',
+  'flash',
+  'fast',
+  'micro',
+  'tiny',
+  'small',
+  'codex',
+  'distill',
+  'air',
+  'search',
+  'audio',
+  'realtime',
+  'transcribe',
+  'tts',
+  'embed',
+  'image',
 ];
 
 // Token-bounded matcher: variants are dash/dot-delimited segments of the
 // id ('gpt-5.1-codex-mini', 'grok-4-fast'). A raw substring test would
 // false-positive on 'geMINI' — the token must sit between delimiters.
 const FRONTIER_VARIANT_EXCLUSION_RE = new RegExp(
-  `(?:^|[-_./])(?:${FRONTIER_VARIANT_EXCLUSIONS.join('|')})(?:$|[-_./])`,
+  `(?:^|[-_./])(?:${FRONTIER_VARIANT_EXCLUSIONS.join('|')})(?:$|[-_./])`
 );
 
 export async function resolveFrontierModels(options?: {
@@ -1322,7 +1444,9 @@ export async function resolveFrontierModels(options?: {
 
   // Operator override: exact catalog ids, DB-existence checked, order kept.
   const overrideIds = (process.env.EXPERIMENT_FRONTIER_MODEL_IDS ?? '')
-    .split(',').map((s) => s.trim()).filter(Boolean);
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (overrideIds.length > 0) {
     const rows: Row[] = await prisma.model.findMany({
       where: { status: 'active', id: { in: overrideIds } },
@@ -1332,7 +1456,10 @@ export async function resolveFrontierModels(options?: {
     const pinned = overrideIds
       .filter((id) => {
         if (byId.has(id)) return true;
-        log.warn({ modelId: id }, 'EXPERIMENT_FRONTIER_MODEL_IDS entry not active+chat-capable in DB — skipped');
+        log.warn(
+          { modelId: id },
+          'EXPERIMENT_FRONTIER_MODEL_IDS entry not active+chat-capable in DB — skipped'
+        );
         return false;
       })
       .slice(0, maxModels)
@@ -1345,7 +1472,10 @@ export async function resolveFrontierModels(options?: {
           family: scoreModelFreshness(row.id).family,
         };
       });
-    log.info({ requested: overrideIds.length, pinned: pinned.length }, 'Frontier singles pinned via EXPERIMENT_FRONTIER_MODEL_IDS');
+    log.info(
+      { requested: overrideIds.length, pinned: pinned.length },
+      'Frontier singles pinned via EXPERIMENT_FRONTIER_MODEL_IDS'
+    );
     return pinned;
   }
 
@@ -1357,7 +1487,9 @@ export async function resolveFrontierModels(options?: {
     const raw = await prisma.model.findMany({
       where: {
         status: 'active',
-        OR: ['gpt-5', 'opus', 'gemini', 'grok', 'fable', 'mythos'].map((p) => ({ id: { contains: p } })),
+        OR: ['gpt-5', 'opus', 'gemini', 'grok', 'fable', 'mythos'].map((p) => ({
+          id: { contains: p },
+        })),
       },
       orderBy: [{ contextWindow: 'desc' }],
       include: { provider: true },
@@ -1365,7 +1497,10 @@ export async function resolveFrontierModels(options?: {
     });
     rows = Array.isArray(raw) ? raw : [];
   } catch (err) {
-    log.error({ error: err instanceof Error ? err.message : String(err) }, 'Frontier resolution query failed — no flagship singles');
+    log.error(
+      { error: err instanceof Error ? err.message : String(err) },
+      'Frontier resolution query failed — no flagship singles'
+    );
     return [];
   }
 
@@ -1384,8 +1519,10 @@ export async function resolveFrontierModels(options?: {
         // Operability gate (review F3) — skip a flagship whose provider the hub
         // knows is not currently usable, so it never becomes a dead single arm.
         if (!operable(row.provider.name)) {
-          log.warn({ modelId: row.id, provider: row.provider.name, family: spec.family },
-            'Frontier candidate rejected — provider not operable');
+          log.warn(
+            { modelId: row.id, provider: row.provider.name, family: spec.family },
+            'Frontier candidate rejected — provider not operable'
+          );
           return false;
         }
         // Canonical-owner gate (mis-election guard): the broad substring
@@ -1400,11 +1537,13 @@ export async function resolveFrontierModels(options?: {
         const providerTier = classifyProviderTier(row.provider.name);
         const providerName = row.provider.name.toLowerCase();
         const isCanonicalOwner = row.id.includes('/')
-          ? (CANONICAL_MODEL_OWNERS.has(owner) || owner === providerName)
-          : (providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerName));
+          ? CANONICAL_MODEL_OWNERS.has(owner) || owner === providerName
+          : providerTier === 'local' || CANONICAL_MODEL_OWNERS.has(providerName);
         if (!isCanonicalOwner) {
-          log.warn({ modelId: row.id, provider: row.provider.name, owner, family: spec.family },
-            'Frontier candidate rejected — non-canonical model owner');
+          log.warn(
+            { modelId: row.id, provider: row.provider.name, owner, family: spec.family },
+            'Frontier candidate rejected — non-canonical model owner'
+          );
           return false;
         }
         return true;
@@ -1414,9 +1553,8 @@ export async function resolveFrontierModels(options?: {
         // Sanity clamp: date-token parses (e.g. claude-3-opus-20240229 →
         // 20240229) must not outrank real versions. >100 means the parser
         // read a date/sequence, not a generation — treat as unparseable.
-        const score = fresh.family === spec.family && fresh.generationScore <= 100
-          ? fresh.generationScore
-          : 0;
+        const score =
+          fresh.family === spec.family && fresh.generationScore <= 100 ? fresh.generationScore : 0;
         return { row, fresh, score };
       })
       .filter((c) => c.score >= spec.minGeneration && !c.fresh.isDeprecated)
@@ -1432,7 +1570,7 @@ export async function resolveFrontierModels(options?: {
     if (candidates.length === 0) {
       log.warn(
         { family: spec.family, label: spec.label, minGeneration: spec.minGeneration },
-        'No current-flagship candidate in catalog for frontier family — arm omitted',
+        'No current-flagship candidate in catalog for frontier family — arm omitted'
       );
       continue;
     }
@@ -1462,7 +1600,7 @@ export async function resolveFrontierModels(options?: {
           pickIndex: taken,
           alternativesConsidered: candidates.length - 1,
         },
-        'Frontier flagship elected for family (newest generation wins)',
+        'Frontier flagship elected for family (newest generation wins)'
       );
     }
   }
@@ -1489,16 +1627,34 @@ export async function buildC3FrontierComparison(options?: {
     // (verifier-armed on the verifiable subset), blind-debate (strongest
     // cheap independence-preserving arm in 7bb900e2), expert-panel
     // (strongest role-structured arm).
-    { mode: 'collective', strategy: 'consensus', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
-    { mode: 'collective', strategy: 'blind-debate', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
-    { mode: 'collective', strategy: 'expert-panel', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
+    {
+      mode: 'collective',
+      strategy: 'consensus',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
+    {
+      mode: 'collective',
+      strategy: 'blind-debate',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
+    {
+      mode: 'collective',
+      strategy: 'expert-panel',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
   ];
 
   // Same suite as the main run, sampled to stay cheap: a wide stratified
   // draw plus ALL verifiable tasks (H-A needs them against real flagships).
-  const taskIndices = options?.taskIndices && options.taskIndices.length > 0
-    ? options.taskIndices
-    : [...new Set([...pickStratifiedTaskIndices(10), ...VERIFIABLE_TASK_INDICES])].sort((a, b) => a - b);
+  const taskIndices =
+    options?.taskIndices && options.taskIndices.length > 0
+      ? options.taskIndices
+      : [...new Set([...pickStratifiedTaskIndices(10), ...VERIFIABLE_TASK_INDICES])].sort(
+          (a, b) => a - b
+        );
 
   return {
     name: `C3 Frontier Supplement — ${frontier.length} flagship singles vs 3 collectives × ${taskIndices.length} tasks`,
@@ -1548,9 +1704,24 @@ export function buildC3FrontierHaTopup(options?: {
   maxBudgetUsd?: number;
 }): ExperimentConfig {
   const modes: ModeConfig[] = [
-    { mode: 'collective', strategy: 'consensus', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
-    { mode: 'collective', strategy: 'blind-debate', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
-    { mode: 'collective', strategy: 'expert-panel', qualityTarget: 1.0, requiredCapabilities: ['chat'] },
+    {
+      mode: 'collective',
+      strategy: 'consensus',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
+    {
+      mode: 'collective',
+      strategy: 'blind-debate',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
+    {
+      mode: 'collective',
+      strategy: 'expert-panel',
+      qualityTarget: 1.0,
+      requiredCapabilities: ['chat'],
+    },
   ];
 
   return {
@@ -1599,8 +1770,9 @@ export async function buildC3HbMixedMiniRun(options?: {
   const ownModels = await resolveOwnModels();
   // Own models are near-zero-cost, so the budget resolver would pick them
   // too — dedupe so the mixed pool is genuinely [own + 2 EXTERNAL cheap].
-  const budgetModels = (await resolveBudgetModels())
-    .filter((b) => !ownModels.some((o) => o.id === b.id));
+  const budgetModels = (await resolveBudgetModels()).filter(
+    (b) => !ownModels.some((o) => o.id === b.id)
+  );
 
   const modes: ModeConfig[] = [];
   for (const m of ownModels.slice(0, 2)) {
@@ -1634,17 +1806,33 @@ export async function buildC3HbMixedMiniRun(options?: {
       qualityTarget: 0.95,
     });
   }
-  modes.push({ mode: 'collective', strategy: 'consensus', qualityTarget: 1.0, requiredCapabilities: ['chat'] });
+  modes.push({
+    mode: 'collective',
+    strategy: 'consensus',
+    qualityTarget: 1.0,
+    requiredCapabilities: ['chat'],
+  });
 
-  const taskIndices = options?.taskIndices && options.taskIndices.length > 0
-    ? options.taskIndices
-    : [...new Set([...pickStratifiedTaskIndices(10), ...VERIFIABLE_TASK_INDICES])].sort((a, b) => a - b);
+  const taskIndices =
+    options?.taskIndices && options.taskIndices.length > 0
+      ? options.taskIndices
+      : [...new Set([...pickStratifiedTaskIndices(10), ...VERIFIABLE_TASK_INDICES])].sort(
+          (a, b) => a - b
+        );
 
   return {
     name: `C3 H-B Mixed Mini-Run — ${ownModels.length} own + mixed collectives × ${taskIndices.length} tasks`,
     description:
-      `First H-B instantiation: own/self-hosted model(s) (${ownModels.slice(0, 2).map((m) => m.id).join(', ') || 'NONE RESOLVED'}) ` +
-      `alone and inside Mixed Collectives (forced pool own + 2 budget: ${budgetModels.slice(0, 2).map((m) => m.id).join(', ')}), ` +
+      `First H-B instantiation: own/self-hosted model(s) (${
+        ownModels
+          .slice(0, 2)
+          .map((m) => m.id)
+          .join(', ') || 'NONE RESOLVED'
+      }) ` +
+      `alone and inside Mixed Collectives (forced pool own + 2 budget: ${budgetModels
+        .slice(0, 2)
+        .map((m) => m.id)
+        .join(', ')}), ` +
       `vs dynamic consensus and the cheapest external single. Same suite/judge as the frontier campaign — ` +
       `judge must stay pinned NON-competitor (EXPERIMENT_JUDGE_MODEL).`,
     taskIndices,
@@ -1767,7 +1955,7 @@ export async function buildC3LearningBaselines(options?: {
     {
       mode: 'collective',
       strategy,
-      qualityTarget: 0.80,
+      qualityTarget: 0.8,
       requiredCapabilities: ['chat'],
     },
     // Ablation: random selection (bandit disabled)
@@ -1994,7 +2182,11 @@ export function buildC3AdversarialPilot(options?: {
 }): ExperimentConfig {
   return {
     ...buildC3AdversarialRobustness({
-      strategies: options?.strategies ?? ['consensus', 'sensitivity-consensus', 'tri-role-collective'],
+      strategies: options?.strategies ?? [
+        'consensus',
+        'sensitivity-consensus',
+        'tri-role-collective',
+      ],
       // Pilot uses the two highest-signal scenarios so detector
       // wiring is exercised without the full cross-product cost.
       scenarios: options?.scenarios ?? ['sensitivity_poisoning', 'herding_cascade'],
@@ -2002,13 +2194,14 @@ export function buildC3AdversarialPilot(options?: {
       // the full robustness phase to keep the pilot cheap.
       taskIndices: ADVERSARIAL_TASK_INDICES.slice(
         0,
-        Math.max(3, Math.ceil(ADVERSARIAL_TASK_INDICES.length / 2)),
+        Math.max(3, Math.ceil(ADVERSARIAL_TASK_INDICES.length / 2))
       ),
       repetitions: 1,
       maxBudgetUsd: options?.maxBudgetUsd ?? 30,
     }),
     name: 'C3 Adversarial Pilot',
-    description: 'Mini adversarial run to validate detector wiring across 3 strategies × 2 scenarios on adversarial-tagged tasks.',
+    description:
+      'Mini adversarial run to validate detector wiring across 3 strategies × 2 scenarios on adversarial-tagged tasks.',
   };
 }
 
@@ -2031,7 +2224,8 @@ export function buildC3AblationPilot(options?: {
       maxBudgetUsd: options?.maxBudgetUsd ?? 30,
     }),
     name: 'C3 Ablation Pilot',
-    description: 'Mini ablation run to verify all 10 component ablations produce observable differences.',
+    description:
+      'Mini ablation run to verify all 10 component ablations produce observable differences.',
   };
 }
 
@@ -2053,7 +2247,8 @@ export const C3_CONFIG_BUILDERS: Record<
   (opts?: Record<string, unknown>) => ExperimentConfig | Promise<ExperimentConfig>
 > = {
   'c3-pilot': (opts) => buildC3Pilot(opts as Parameters<typeof buildC3Pilot>[0]),
-  'c3-ablation-pilot': (opts) => buildC3AblationPilot(opts as Parameters<typeof buildC3AblationPilot>[0]),
+  'c3-ablation-pilot': (opts) =>
+    buildC3AblationPilot(opts as Parameters<typeof buildC3AblationPilot>[0]),
   'c3-main-comparison': (opts) =>
     buildC3MainComparison(opts as Parameters<typeof buildC3MainComparison>[0]),
   // H-A adjudication: verifiable tasks (116-125, answer_check → best-of-N
@@ -2064,8 +2259,7 @@ export const C3_CONFIG_BUILDERS: Record<
   // PURE H-A test (2026-07-12): hard verifiable tier (146-155) × singles +
   // verifier-armed consensus + blind-debate contrast. The fairest, undiluted
   // chance for the thesis in the objective-verification regime.
-  'c3-ha-hard': (opts) =>
-    buildC3HaHard(opts as Parameters<typeof buildC3HaHard>[0]),
+  'c3-ha-hard': (opts) => buildC3HaHard(opts as Parameters<typeof buildC3HaHard>[0]),
   // Code-verified benchmark (2026-07-12): executed-and-tested code (156-160),
   // scored by sandbox pass rate — "coding with real functional delivery".
   'c3-code-verified': (opts) =>
@@ -2073,8 +2267,7 @@ export const C3_CONFIG_BUILDERS: Record<
   // Capability #4 (tool-calling, 2026-07-13): the answer is only reachable by
   // calling a provided deterministic tool (tasks 166-169). Objectively graded —
   // no LLM judge, so no judge pin required. See buildC3ToolCalling.
-  'c3-tool-calling': (opts) =>
-    buildC3ToolCalling(opts as Parameters<typeof buildC3ToolCalling>[0]),
+  'c3-tool-calling': (opts) => buildC3ToolCalling(opts as Parameters<typeof buildC3ToolCalling>[0]),
   // Public-benchmark axes (2026-07-21): Ailin¹ Collective Intelligence vs
   // flagship-solo on the STANDARD public datasets, so results map onto what
   // the market reports. Both judge-free (sandbox pass@1 / numeric_equals), so
@@ -2088,8 +2281,7 @@ export const C3_CONFIG_BUILDERS: Record<
   // (sandbox pass@1). Directly comparable to 'ailin-humaneval'.
   'ailin-humaneval-plus': (opts) =>
     buildAilinHumanEvalPlus(opts as Parameters<typeof buildAilinHumanEvalPlus>[0]),
-  'ailin-gsm8k': (opts) =>
-    buildAilinGsm8k(opts as Parameters<typeof buildAilinGsm8k>[0]),
+  'ailin-gsm8k': (opts) => buildAilinGsm8k(opts as Parameters<typeof buildAilinGsm8k>[0]),
   // LiveBench reasoning (2026-07-24): contamination-free, ORACLE-FREE reasoning
   // axis — LiveBench's own vendored scorers grade a held-out ground truth that is
   // NEVER forwarded to the collective. Frontier-as-members + adaptive-router
@@ -2151,7 +2343,10 @@ export const C3_CONFIG_BUILDERS: Record<
   // coverage. Same builder, same 11-condition (full + 10 single-component)
   // matrix, just the remaining strategy names — no new logic.
   'c3-ablation-collaborative': (opts) =>
-    buildC3Ablation({ strategy: 'collaborative', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'collaborative',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-parallel': (opts) =>
     buildC3Ablation({ strategy: 'parallel', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-sequential': (opts) =>
@@ -2161,39 +2356,75 @@ export const C3_CONFIG_BUILDERS: Record<
   'c3-ablation-competitive': (opts) =>
     buildC3Ablation({ strategy: 'competitive', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-massive-parallel': (opts) =>
-    buildC3Ablation({ strategy: 'massive-parallel', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'massive-parallel',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-cost-cascade': (opts) =>
     buildC3Ablation({ strategy: 'cost-cascade', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-quality-multipass': (opts) =>
-    buildC3Ablation({ strategy: 'quality-multipass', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'quality-multipass',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-adaptive': (opts) =>
     buildC3Ablation({ strategy: 'adaptive', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-contextual': (opts) =>
     buildC3Ablation({ strategy: 'contextual', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-reinforcement': (opts) =>
-    buildC3Ablation({ strategy: 'reinforcement', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'reinforcement',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-blind-debate': (opts) =>
     buildC3Ablation({ strategy: 'blind-debate', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-devil-advocate-consensus': (opts) =>
-    buildC3Ablation({ strategy: 'devil-advocate-consensus', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'devil-advocate-consensus',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-safety-quorum': (opts) =>
-    buildC3Ablation({ strategy: 'safety-quorum', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'safety-quorum',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-diversity-ensemble': (opts) =>
-    buildC3Ablation({ strategy: 'diversity-ensemble', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'diversity-ensemble',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-stigmergic-refinement': (opts) =>
-    buildC3Ablation({ strategy: 'stigmergic-refinement', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'stigmergic-refinement',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-swarm-explore': (opts) =>
-    buildC3Ablation({ strategy: 'swarm-explore', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'swarm-explore',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-clarification-first': (opts) =>
-    buildC3Ablation({ strategy: 'clarification-first', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'clarification-first',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-research-synthesize': (opts) =>
-    buildC3Ablation({ strategy: 'research-synthesize', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'research-synthesize',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-double-diamond': (opts) =>
-    buildC3Ablation({ strategy: 'double-diamond', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'double-diamond',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-multi-hop-qa': (opts) =>
     buildC3Ablation({ strategy: 'multi-hop-qa', ...(opts as Record<string, unknown> | undefined) }),
   'c3-ablation-persona-exploration': (opts) =>
-    buildC3Ablation({ strategy: 'persona-exploration', ...(opts as Record<string, unknown> | undefined) }),
+    buildC3Ablation({
+      strategy: 'persona-exploration',
+      ...(opts as Record<string, unknown> | undefined),
+    }),
   'c3-ablation-agentic': (opts) =>
     buildC3Ablation({ strategy: 'agentic', ...(opts as Record<string, unknown> | undefined) }),
   'c3-independence-herding': (opts) =>
@@ -2223,7 +2454,7 @@ export async function getAllC3Configs(): Promise<Record<string, ExperimentConfig
     Object.entries(C3_CONFIG_BUILDERS).map(async ([key, builder]) => {
       const config = await builder();
       return [key, config] as const;
-    }),
+    })
   );
   return Object.fromEntries(entries);
 }

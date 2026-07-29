@@ -80,9 +80,19 @@ export interface PromptSlotDefinition {
 export const SLOT_REGISTRY: Record<string, PromptSlotDefinition[]> = {
   expertSpecialist: [
     { name: 'domainFraming', maxLength: 200, purpose: 'Specific domain/topic framing' },
-    { name: 'criticalDimensions', maxLength: 100, maxItems: 5, purpose: 'Key dimensions to analyze' },
+    {
+      name: 'criticalDimensions',
+      maxLength: 100,
+      maxItems: 5,
+      purpose: 'Key dimensions to analyze',
+    },
     { name: 'pitfallHints', maxLength: 150, maxItems: 3, purpose: 'Common mistakes to avoid' },
-    { name: 'evidencePriorities', maxLength: 150, maxItems: 3, purpose: 'Types of evidence to prioritize' },
+    {
+      name: 'evidencePriorities',
+      maxLength: 150,
+      maxItems: 3,
+      purpose: 'Types of evidence to prioritize',
+    },
   ],
   consensusVoter: [
     { name: 'domainFraming', maxLength: 200, purpose: 'Specific domain/topic framing' },
@@ -91,8 +101,18 @@ export const SLOT_REGISTRY: Record<string, PromptSlotDefinition[]> = {
   ],
   debateOpening: [
     { name: 'domainFraming', maxLength: 200, purpose: 'Specific domain/topic framing' },
-    { name: 'criticalDimensions', maxLength: 100, maxItems: 5, purpose: 'Key dimensions to debate' },
-    { name: 'pitfallHints', maxLength: 150, maxItems: 3, purpose: 'Common pitfalls in this domain' },
+    {
+      name: 'criticalDimensions',
+      maxLength: 100,
+      maxItems: 5,
+      purpose: 'Key dimensions to debate',
+    },
+    {
+      name: 'pitfallHints',
+      maxLength: 150,
+      maxItems: 3,
+      purpose: 'Common pitfalls in this domain',
+    },
   ],
   blindRespondent: [
     { name: 'domainFraming', maxLength: 200, purpose: 'Specific domain/topic framing' },
@@ -190,17 +210,14 @@ export function estimateSlotTokens(slots: PromptSlotValues): number {
  * slots if valid and within token budget, or `undefined` if validation fails
  * (fail-closed — the canonical prompt is used as-is).
  */
-export function validatePromptSlots(
-  raw: unknown,
-  where: string,
-): PromptSlotValues | undefined {
+export function validatePromptSlots(raw: unknown, where: string): PromptSlotValues | undefined {
   const result = PromptSlotValueSchema.safeParse(raw);
 
   if (!result.success) {
     incrementPromptMetric(METRIC_SLOT_VALIDATION_FAILURES, { where });
     log.warn(
       { where, errors: result.error.issues.map((i) => i.message) },
-      'Prompt slot validation failed — dropping slots, using canonical prompt',
+      'Prompt slot validation failed — dropping slots, using canonical prompt'
     );
     return undefined;
   }
@@ -209,7 +226,7 @@ export function validatePromptSlots(
 
   // Check for empty object (all fields undefined)
   const hasContent = Object.values(slots).some(
-    (v) => v !== undefined && v !== null && (!Array.isArray(v) || v.length > 0),
+    (v) => v !== undefined && v !== null && (!Array.isArray(v) || v.length > 0)
   );
   if (!hasContent) return undefined;
 
@@ -219,7 +236,7 @@ export function validatePromptSlots(
     incrementPromptMetric(METRIC_SLOT_TOKEN_BUDGET_EXCEEDED, { where, tokens });
     log.warn(
       { where, tokens, maxTokens: MAX_SLOT_TOKENS },
-      'Prompt slot token budget exceeded — dropping slots',
+      'Prompt slot token budget exceeded — dropping slots'
     );
     return undefined;
   }
@@ -227,7 +244,7 @@ export function validatePromptSlots(
   incrementPromptMetric(METRIC_SLOT_INJECTIONS, { where });
   log.debug(
     { where, slotHash: hashSlotValues(slots), tokens },
-    'Prompt slots validated and ready for injection',
+    'Prompt slots validated and ready for injection'
   );
 
   return slots;

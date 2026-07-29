@@ -162,7 +162,13 @@ interface ReprobeResult {
 async function reprobeOne(
   providerId: string,
   args: Args,
-  budget: { accruedUsd: number; capUsd: number; probesUsed: number; probeCap: number; perProbeUsd: number },
+  budget: {
+    accruedUsd: number;
+    capUsd: number;
+    probesUsed: number;
+    probeCap: number;
+    perProbeUsd: number;
+  }
 ): Promise<ReprobeResult> {
   if (budget.accruedUsd + budget.perProbeUsd > budget.capUsd) {
     return {
@@ -203,10 +209,14 @@ async function reprobeOne(
     try {
       const list = (adapter as { listModels?: () => Promise<unknown[]> }).listModels?.();
       const arr = (await list) ?? [];
-      discoveredModels = (arr as Array<{ id?: string; name?: string }>).map((m) => ({
-        id: String(m.id ?? m.name ?? ''),
-      })).filter((m) => m.id.length > 0);
-    } catch { /* discovery may be unavailable; proceed */ }
+      discoveredModels = (arr as Array<{ id?: string; name?: string }>)
+        .map((m) => ({
+          id: String(m.id ?? m.name ?? ''),
+        }))
+        .filter((m) => m.id.length > 0);
+    } catch {
+      /* discovery may be unavailable; proceed */
+    }
   }
 
   // Step 2: load catalog candidates from modelCatalogService.
@@ -215,9 +225,14 @@ async function reprobeOne(
     const { modelCatalogService } = await import('@/services/model-catalog-service');
     const all = await modelCatalogService.listModels();
     catalogModels = all
-      .filter((m) => m.status === 'active' && (m.provider ?? '').toLowerCase() === providerId.toLowerCase())
+      .filter(
+        (m) =>
+          m.status === 'active' && (m.provider ?? '').toLowerCase() === providerId.toLowerCase()
+      )
       .map((m) => ({ id: m.id, capabilities: m.capabilities as readonly string[] }));
-  } catch { /* catalog may be unavailable; proceed with discovery only */ }
+  } catch {
+    /* catalog may be unavailable; proceed with discovery only */
+  }
 
   const canonical = resolveCanonicalProbeModel({
     providerId,
@@ -365,7 +380,7 @@ async function main(): Promise<void> {
 
   await bootstrap();
 
-  const perProbeUsd = 0.0005;  // worst-case estimate at max_tokens=10
+  const perProbeUsd = 0.0005; // worst-case estimate at max_tokens=10
   const budget = {
     accruedUsd: 0,
     capUsd: args.maxTotalCostUsd,
@@ -378,7 +393,9 @@ async function main(): Promise<void> {
   for (const providerId of args.providers) {
     const r = await reprobeOne(providerId, args, budget);
     results.push(r);
-    console.log(`  ${providerId.padEnd(20)}  ${r.bucketAfter.padEnd(40)}  cost=${r.costUsd.toFixed(4)}`);
+    console.log(
+      `  ${providerId.padEnd(20)}  ${r.bucketAfter.padEnd(40)}  cost=${r.costUsd.toFixed(4)}`
+    );
   }
 
   const summary = {

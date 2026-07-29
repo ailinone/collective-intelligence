@@ -56,11 +56,7 @@ import type { ModelCapability } from '@/types';
  *   Will produce false positives ("agent" in name ≠ agent capability).
  */
 export type CapabilitySource =
-  | 'provider-declared'
-  | 'helicone-oracle'
-  | 'modality-derived'
-  | 'parameter-derived'
-  | 'name-regex';
+  'provider-declared' | 'helicone-oracle' | 'modality-derived' | 'parameter-derived' | 'name-regex';
 
 /**
  * Numeric priority for sorting (lower = stronger). Used internally and exposed
@@ -131,7 +127,7 @@ export interface MergedCapabilities {
  * Sources are deduplicated and sorted strongest-first within each group.
  */
 function groupByCapability(
-  signals: readonly CapabilitySignal[],
+  signals: readonly CapabilitySignal[]
 ): Map<ModelCapability, CapabilitySource[]> {
   const grouped = new Map<ModelCapability, Set<CapabilitySource>>();
   for (const signal of signals) {
@@ -144,9 +140,7 @@ function groupByCapability(
   }
   const sortedSources = new Map<ModelCapability, CapabilitySource[]>();
   for (const [capability, sourceSet] of grouped.entries()) {
-    const sorted = Array.from(sourceSet).sort(
-      (a, b) => SOURCE_PRIORITY[a] - SOURCE_PRIORITY[b],
-    );
+    const sorted = Array.from(sourceSet).sort((a, b) => SOURCE_PRIORITY[a] - SOURCE_PRIORITY[b]);
     sortedSources.set(capability, sorted);
   }
   return sortedSources;
@@ -219,9 +213,7 @@ function hasAnyStrongSignal(signals: readonly CapabilitySignal[]): boolean {
  * @returns        Canonical merged result. `capabilities` is sorted alphabetically
  *                 for stable serialization to JSONB.
  */
-export function mergeCapabilities(
-  signals: readonly CapabilitySignal[],
-): MergedCapabilities {
+export function mergeCapabilities(signals: readonly CapabilitySignal[]): MergedCapabilities {
   const grouped = groupByCapability(signals);
   const strongSignalPresent = hasAnyStrongSignal(signals);
 

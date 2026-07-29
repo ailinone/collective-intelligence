@@ -186,9 +186,17 @@ describe('01C.1B-J2-C-R4 §8 — parseLmArenaMarkdown', () => {
 
 describe('01C.1B-J2-C-R4 §8 — matchLmArenaRowToCatalogModel', () => {
   const candidates: CandidateLike[] = [
-    { canonicalModelId: 'claude-opus-4-7', modelId: 'anthropic/claude-opus-4.7', family: 'anthropic_claude' },
+    {
+      canonicalModelId: 'claude-opus-4-7',
+      modelId: 'anthropic/claude-opus-4.7',
+      family: 'anthropic_claude',
+    },
     { canonicalModelId: 'gpt-4o-mini', modelId: 'gpt-4o-mini', family: 'openai_gpt' },
-    { canonicalModelId: 'moonshotai/kimi-k2.6', modelId: 'moonshotai/Kimi-K2.6', family: 'moonshot' },
+    {
+      canonicalModelId: 'moonshotai/kimi-k2.6',
+      modelId: 'moonshotai/Kimi-K2.6',
+      family: 'moonshot',
+    },
   ];
 
   it('exact canonicalModelId → high confidence', () => {
@@ -246,7 +254,11 @@ describe('01C.1B-J2-C-R4 §8 — lmArenaRowsToCalibrationEntry', () => {
     expect(entry!.qualityScoreSource).toBe('external_benchmark');
     expect(entry!.qualityConfidence).toBe('high');
     expect(entry!.taskCategoryScores).toBeDefined();
-    expect(Object.keys(entry!.taskCategoryScores!).sort()).toEqual(['chat_document', 'chat_text', 'code_webdev']);
+    expect(Object.keys(entry!.taskCategoryScores!).sort()).toEqual([
+      'chat_document',
+      'chat_text',
+      'code_webdev',
+    ]);
     expect(entry!.sourceScores).toBeDefined();
     expect(entry!.sourceScores!.length).toBe(1);
     expect(entry!.sourceScores![0].source).toBe('lmarena');
@@ -275,9 +287,7 @@ describe('01C.1B-J2-C-R4 §8 — lmArenaRowsToCalibrationEntry', () => {
   });
 
   it('attaches ATTRIBUTION_WARNING by default', () => {
-    const rows: LmArenaRow[] = [
-      { category: 'chat_text', rank: 1, modelName: 'm', elo: 1400 },
-    ];
+    const rows: LmArenaRow[] = [{ category: 'chat_text', rank: 1, modelName: 'm', elo: 1400 }];
     const entry = lmArenaRowsToCalibrationEntry('m', rows, { match: baseMatch });
     expect(entry!.warnings.some((w) => w.includes('LMArena'))).toBe(true);
   });
@@ -288,9 +298,7 @@ describe('01C.1B-J2-C-R4 §8 — lmArenaRowsToCalibrationEntry', () => {
   });
 
   it('returns undefined when all elos are unparseable', () => {
-    const rows: LmArenaRow[] = [
-      { category: 'chat_text', rank: 1, modelName: 'm', elo: NaN },
-    ];
+    const rows: LmArenaRow[] = [{ category: 'chat_text', rank: 1, modelName: 'm', elo: NaN }];
     const entry = lmArenaRowsToCalibrationEntry('m', rows, { match: baseMatch });
     expect(entry).toBeUndefined();
   });
@@ -298,16 +306,42 @@ describe('01C.1B-J2-C-R4 §8 — lmArenaRowsToCalibrationEntry', () => {
 
 describe('01C.1B-J2-C-R4 §8 — buildLmArenaQualitySnapshot', () => {
   const candidates: CandidateLike[] = [
-    { canonicalModelId: 'claude-opus-4-7', modelId: 'anthropic/claude-opus-4.7', family: 'anthropic_claude' },
+    {
+      canonicalModelId: 'claude-opus-4-7',
+      modelId: 'anthropic/claude-opus-4.7',
+      family: 'anthropic_claude',
+    },
     { canonicalModelId: 'gpt-4o-mini', modelId: 'gpt-4o-mini', family: 'openai_gpt' },
-    { canonicalModelId: 'nano-banana-pro-preview', modelId: 'nano-banana-pro-preview', family: 'google_image' },
+    {
+      canonicalModelId: 'nano-banana-pro-preview',
+      modelId: 'nano-banana-pro-preview',
+      family: 'google_image',
+    },
   ];
 
   const rows: LmArenaRow[] = [
     { category: 'chat_text', rank: 4, modelName: 'claude-opus-4-7', elo: 1492, votes: 41203 },
-    { category: 'chat_text', rank: 211, modelName: 'gpt-4o-mini-2024-07-18', elo: 1317, votes: 42081 },
-    { category: 'chat_vision', rank: 96, modelName: 'gpt-4o-mini-2024-07-18', elo: 1098, votes: 5402 },
-    { category: 'image_edit', rank: 3, modelName: 'nano-banana-pro-preview', elo: 1387, votes: 6210 },
+    {
+      category: 'chat_text',
+      rank: 211,
+      modelName: 'gpt-4o-mini-2024-07-18',
+      elo: 1317,
+      votes: 42081,
+    },
+    {
+      category: 'chat_vision',
+      rank: 96,
+      modelName: 'gpt-4o-mini-2024-07-18',
+      elo: 1098,
+      votes: 5402,
+    },
+    {
+      category: 'image_edit',
+      rank: 3,
+      modelName: 'nano-banana-pro-preview',
+      elo: 1387,
+      votes: 6210,
+    },
     { category: 'chat_text', rank: 999, modelName: 'unknown-model-xyz', elo: 1000, votes: 100 },
   ];
 
@@ -386,16 +420,21 @@ describe('01C.1B-J2-C-R4 §8 — buildLmArenaQualitySnapshot', () => {
 
   it('snapshot hash is deterministic for same input', async () => {
     const r1 = buildLmArenaQualitySnapshot({
-      rows, candidates, version: '1.0.0-test', sourceArtifacts: [],
+      rows,
+      candidates,
+      version: '1.0.0-test',
+      sourceArtifacts: [],
     });
     const r2 = buildLmArenaQualitySnapshot({
-      rows, candidates, version: '1.0.0-test', sourceArtifacts: [],
+      rows,
+      candidates,
+      version: '1.0.0-test',
+      sourceArtifacts: [],
     });
     // Note: hash depends on entries — but createdAt is ephemeral, hash computation
     // strips it. Both should produce same hash.
-    const { computeSnapshotHash } = await import(
-      '@/core/orchestration/role-selection/model-quality-calibration'
-    );
+    const { computeSnapshotHash } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     expect(computeSnapshotHash(r1.snapshot)).toBe(computeSnapshotHash(r2.snapshot));
   });
 });

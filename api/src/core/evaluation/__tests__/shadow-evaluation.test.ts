@@ -64,12 +64,12 @@ describe('Shadow Evaluation', () => {
         },
         {
           shadowStrategy: 'debate',
-          shadowQuality: 0.90,
+          shadowQuality: 0.9,
           shadowLatencyMs: 5000,
           shadowCostUsd: 0.05,
           qualityRegret: 0.15,
           winnerStrategy: 'debate',
-        },
+        }
       );
 
       expect(mockExecuteRaw).toHaveBeenCalledOnce();
@@ -79,16 +79,27 @@ describe('Shadow Evaluation', () => {
       mockExecuteRaw.mockRejectedValue(new Error('DB down'));
       const { recordShadowEvaluation } = await import('../shadow-evaluation');
 
-      await expect(recordShadowEvaluation(
-        {
-          decisionTraceId: 'req-fail', taskType: 'general', complexity: 'low',
-          chosenStrategy: 'single', chosenQuality: 0.8, chosenLatencyMs: 1000, chosenCostUsd: 0.01,
-        },
-        {
-          shadowStrategy: 'debate', shadowQuality: 0.85, shadowLatencyMs: 3000,
-          shadowCostUsd: 0.03, qualityRegret: 0.05, winnerStrategy: 'debate',
-        },
-      )).resolves.not.toThrow();
+      await expect(
+        recordShadowEvaluation(
+          {
+            decisionTraceId: 'req-fail',
+            taskType: 'general',
+            complexity: 'low',
+            chosenStrategy: 'single',
+            chosenQuality: 0.8,
+            chosenLatencyMs: 1000,
+            chosenCostUsd: 0.01,
+          },
+          {
+            shadowStrategy: 'debate',
+            shadowQuality: 0.85,
+            shadowLatencyMs: 3000,
+            shadowCostUsd: 0.03,
+            qualityRegret: 0.05,
+            winnerStrategy: 'debate',
+          }
+        )
+      ).resolves.not.toThrow();
     });
   });
 
@@ -104,18 +115,18 @@ describe('Shadow Evaluation', () => {
           taskType: 'code-generation',
           complexity: 'medium',
           chosenStrategy: 'single',
-          chosenQuality: 0.70,
+          chosenQuality: 0.7,
           chosenLatencyMs: 2000,
           chosenCostUsd: 0.01,
         },
         'debate',
-        async () => ({ quality: 0.90, latencyMs: 5000, costUsd: 0.05 }),
+        async () => ({ quality: 0.9, latencyMs: 5000, costUsd: 0.05 })
       );
 
       expect(result).not.toBeNull();
       expect(result!.shadowStrategy).toBe('debate');
-      expect(result!.shadowQuality).toBe(0.90);
-      expect(result!.qualityRegret).toBeCloseTo(0.20, 2);
+      expect(result!.shadowQuality).toBe(0.9);
+      expect(result!.qualityRegret).toBeCloseTo(0.2, 2);
       expect(result!.winnerStrategy).toBe('debate');
     });
 
@@ -126,11 +137,18 @@ describe('Shadow Evaluation', () => {
 
       const result = await runShadowEvaluation(
         {
-          decisionTraceId: 'req-fail', taskType: 'general', complexity: 'low',
-          chosenStrategy: 'single', chosenQuality: 0.8, chosenLatencyMs: 1000, chosenCostUsd: 0.01,
+          decisionTraceId: 'req-fail',
+          taskType: 'general',
+          complexity: 'low',
+          chosenStrategy: 'single',
+          chosenQuality: 0.8,
+          chosenLatencyMs: 1000,
+          chosenCostUsd: 0.01,
         },
         'debate',
-        async () => { throw new Error('Provider timeout'); },
+        async () => {
+          throw new Error('Provider timeout');
+        }
       );
 
       expect(result).toBeNull();
@@ -140,12 +158,21 @@ describe('Shadow Evaluation', () => {
   describe('getShadowEvalStats', () => {
     it('returns aggregated stats from DB', async () => {
       mockQueryRaw
-        .mockResolvedValueOnce([{
-          total: BigInt(100), avg_regret: 0.08,
-          chosen_wins: BigInt(65), shadow_wins: BigInt(35),
-        }])
         .mockResolvedValueOnce([
-          { chosen_strategy: 'single', shadow_strategy: 'debate', avg_regret: 0.15, cnt: BigInt(20) },
+          {
+            total: BigInt(100),
+            avg_regret: 0.08,
+            chosen_wins: BigInt(65),
+            shadow_wins: BigInt(35),
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            chosen_strategy: 'single',
+            shadow_strategy: 'debate',
+            avg_regret: 0.15,
+            cnt: BigInt(20),
+          },
         ]);
 
       const { getShadowEvalStats } = await import('../shadow-evaluation');

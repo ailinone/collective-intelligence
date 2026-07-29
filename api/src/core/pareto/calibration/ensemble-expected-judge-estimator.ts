@@ -37,7 +37,7 @@ function buildEstimate(
   name: string,
   expectedJudge: number,
   uncertainty: number,
-  reasons: readonly string[],
+  reasons: readonly string[]
 ): EnsembleExpectedJudgeEstimate {
   const ej = clamp01(expectedJudge);
   const u = Math.max(0, Math.min(1, uncertainty));
@@ -95,12 +95,11 @@ export const additiveCurrentEstimator: EnsembleEstimator = Object.freeze({
     const anchor = anchorJudge(input);
     const additional = input.memberProfiles.length - 1;
     const sumLifts = additional * Math.max(0, input.peerLift);
-    return buildEstimate(
-      'additive_current',
-      anchor + sumLifts,
-      0,
-      [`anchor=${anchor.toFixed(4)}`, `peer_lift=${input.peerLift.toFixed(4)}`, `n_extras=${additional}`],
-    );
+    return buildEstimate('additive_current', anchor + sumLifts, 0, [
+      `anchor=${anchor.toFixed(4)}`,
+      `peer_lift=${input.peerLift.toFixed(4)}`,
+      `n_extras=${additional}`,
+    ]);
   },
 });
 
@@ -115,16 +114,11 @@ export const multiplicativeBoundedEstimator: EnsembleEstimator = Object.freeze({
     const totalLift = Math.min(maxLift, additional * Math.max(0, input.peerLift));
     const expected = anchor * (1 + totalLift);
     const uncertainty = input.uncertaintyPenaltyWeight * meanStdDev(input);
-    return buildEstimate(
-      'multiplicative_bounded',
-      expected,
-      uncertainty,
-      [
-        `anchor=${anchor.toFixed(4)}`,
-        `totalLift=${totalLift.toFixed(4)}`,
-        `uncertainty=${uncertainty.toFixed(4)}`,
-      ],
-    );
+    return buildEstimate('multiplicative_bounded', expected, uncertainty, [
+      `anchor=${anchor.toFixed(4)}`,
+      `totalLift=${totalLift.toFixed(4)}`,
+      `uncertainty=${uncertainty.toFixed(4)}`,
+    ]);
   },
 });
 
@@ -139,12 +133,10 @@ export const cappedAdditiveEstimator: EnsembleEstimator = Object.freeze({
     const totalCap = 0.18;
     const raw = additional * Math.max(0, Math.min(input.peerLift, perCap));
     const cappedGain = Math.min(totalCap, raw);
-    return buildEstimate(
-      'capped_additive',
-      Math.min(1, anchor + cappedGain),
-      0,
-      [`anchor=${anchor.toFixed(4)}`, `gain=${cappedGain.toFixed(4)}`],
-    );
+    return buildEstimate('capped_additive', Math.min(1, anchor + cappedGain), 0, [
+      `anchor=${anchor.toFixed(4)}`,
+      `gain=${cappedGain.toFixed(4)}`,
+    ]);
   },
 });
 
@@ -159,12 +151,11 @@ export const weightedAnchorSupportEstimator: EnsembleEstimator = Object.freeze({
     const stdDev = meanStdDev(input);
     const uncertaintyPenalty = input.uncertaintyPenaltyWeight * stdDev;
     const expected = 0.7 * anchor + 0.25 * support + 0.05 * pairBonus - uncertaintyPenalty;
-    return buildEstimate(
-      'weighted_anchor_support',
-      expected,
-      uncertaintyPenalty,
-      [`anchor=${anchor.toFixed(4)}`, `support=${support.toFixed(4)}`, `pairBonus=${pairBonus.toFixed(4)}`],
-    );
+    return buildEstimate('weighted_anchor_support', expected, uncertaintyPenalty, [
+      `anchor=${anchor.toFixed(4)}`,
+      `support=${support.toFixed(4)}`,
+      `pairBonus=${pairBonus.toFixed(4)}`,
+    ]);
   },
 });
 
@@ -178,12 +169,11 @@ export const pairAwareDirectEstimator: EnsembleEstimator = Object.freeze({
     if (pair && typeof pair.judgeMean === 'number') {
       const winRate = pair.paretoWinRate ?? 0.5;
       const expected = (1 - winRate) * anchor + winRate * pair.judgeMean;
-      return buildEstimate(
-        'pair_aware_direct',
-        expected,
-        0,
-        [`anchor=${anchor.toFixed(4)}`, `pairJudge=${pair.judgeMean.toFixed(4)}`, `winRate=${winRate.toFixed(4)}`],
-      );
+      return buildEstimate('pair_aware_direct', expected, 0, [
+        `anchor=${anchor.toFixed(4)}`,
+        `pairJudge=${pair.judgeMean.toFixed(4)}`,
+        `winRate=${winRate.toFixed(4)}`,
+      ]);
     }
     return buildEstimate('pair_aware_direct', anchor + input.peerLift, 0, [
       `anchor=${anchor.toFixed(4)}`,
@@ -202,12 +192,10 @@ export const lowerBoundEnsembleEstimator: EnsembleEstimator = Object.freeze({
     const raw = anchor + additional * Math.max(0, input.peerLift) * 0.5;
     const stdDev = meanStdDev(input);
     const uncertainty = input.uncertaintyPenaltyWeight * stdDev + 0.05;
-    return buildEstimate(
-      'lower_bound_ensemble',
-      raw - uncertainty,
-      uncertainty,
-      [`anchor=${anchor.toFixed(4)}`, `uncertainty=${uncertainty.toFixed(4)}`],
-    );
+    return buildEstimate('lower_bound_ensemble', raw - uncertainty, uncertainty, [
+      `anchor=${anchor.toFixed(4)}`,
+      `uncertainty=${uncertainty.toFixed(4)}`,
+    ]);
   },
 });
 
@@ -220,12 +208,10 @@ export const conservativeParallelEstimator: EnsembleEstimator = Object.freeze({
     const support = supportJudge(input);
     const base = Math.max(anchor, 0.7 * anchor + 0.3 * support);
     const lift = Math.max(0, input.peerLift) * 0.75;
-    return buildEstimate(
-      'conservative_parallel',
-      base + lift,
-      0,
-      [`base=${base.toFixed(4)}`, `lift=${lift.toFixed(4)}`],
-    );
+    return buildEstimate('conservative_parallel', base + lift, 0, [
+      `base=${base.toFixed(4)}`,
+      `lift=${lift.toFixed(4)}`,
+    ]);
   },
 });
 
@@ -242,7 +228,7 @@ export interface EmpiricalEnsembleCalibration {
 }
 
 export function makeEmpiricalEnsembleEstimator(
-  cal: EmpiricalEnsembleCalibration,
+  cal: EmpiricalEnsembleCalibration
 ): EnsembleEstimator {
   return Object.freeze({
     name: 'empirical_ensemble_calibrated',
@@ -251,12 +237,11 @@ export function makeEmpiricalEnsembleEstimator(
       const additional = input.memberProfiles.length - 1;
       const raw = anchor + additional * Math.max(0, input.peerLift);
       const calibrated = raw * cal.scale + cal.offset;
-      return buildEstimate(
-        'empirical_ensemble_calibrated',
-        calibrated,
-        0,
-        [`anchor=${anchor.toFixed(4)}`, `scale=${cal.scale.toFixed(4)}`, `offset=${cal.offset.toFixed(4)}`],
-      );
+      return buildEstimate('empirical_ensemble_calibrated', calibrated, 0, [
+        `anchor=${anchor.toFixed(4)}`,
+        `scale=${cal.scale.toFixed(4)}`,
+        `offset=${cal.offset.toFixed(4)}`,
+      ]);
     },
   });
 }
@@ -268,7 +253,7 @@ export function makeEmpiricalEnsembleEstimator(
  */
 export function learnEmpiricalCalibration(
   examples: readonly EnsembleCalibrationExample[],
-  peerLiftLookup: (ex: EnsembleCalibrationExample) => number,
+  peerLiftLookup: (ex: EnsembleCalibrationExample) => number
 ): EmpiricalEnsembleCalibration {
   const points: Array<{ x: number; y: number }> = [];
   for (const ex of examples) {
@@ -334,7 +319,7 @@ export interface EvaluateEnsembleEstimatorInput {
 }
 
 export function evaluateEnsembleEstimator(
-  input: EvaluateEnsembleEstimatorInput,
+  input: EvaluateEnsembleEstimatorInput
 ): EnsembleEstimatorEvaluation {
   const errors: number[] = [];
   let nonFallback = 0;
@@ -383,7 +368,7 @@ export interface PickBestEnsembleEstimatorResult {
 }
 
 export function pickBestEnsembleEstimator(
-  input: PickBestEnsembleEstimatorInput,
+  input: PickBestEnsembleEstimatorInput
 ): PickBestEnsembleEstimatorResult {
   const estimators = input.estimators ?? ALL_ENSEMBLE_ESTIMATORS;
   const evaluations = estimators.map((est) =>
@@ -392,7 +377,7 @@ export function pickBestEnsembleEstimator(
       examples: input.examples,
       peerLiftLookup: input.peerLiftLookup,
       uncertaintyPenaltyWeight: input.uncertaintyPenaltyWeight,
-    }),
+    })
   );
   // Composite = MAE + 0.3 * (1 - nonFallbackRate). Lower is better.
   const composites = evaluations.map((e) => e.meanAbsoluteError + 0.3 * (1 - e.nonFallbackRate));
