@@ -207,6 +207,13 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   // understands (documented as a follow-up in the catalog entry itself).
   // Postdates the 2026-04-28 DB snapshot, same as LOTE O-S.
   'ailin':             'not live-probed (no AILIN_API_KEY provisioned this session); contract-verified against openapi-spec.yaml only — see catalog entry notes for the discovery-shape gap',
+  // LOTE U (2026-07-29) — sakana-ai. Discovery live-probed successfully
+  // (200 on /v1/models, real 5-model list) but chat/completions execution
+  // could NOT be confirmed end-to-end this session: the provisioned key's
+  // account has no active subscription/PAYG billing (429
+  // usage_limit_reached on both fugu and fugu-ultra). Postdates the
+  // 2026-04-28 DB snapshot regardless — see catalog entry notes.
+  'sakana-ai':         'live-probed 2026-07-29 (200 on /v1/models); chat/completions execution blocked by account billing (429 usage_limit_reached, no active subscription) — see catalog entry notes',
 };
 
 // ──────────────────────────────────────────────────────────────────────────

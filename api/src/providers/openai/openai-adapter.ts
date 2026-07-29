@@ -1993,7 +1993,7 @@ export class OpenAIAdapter extends ProviderAdapter {
         let convertedToolCalls: ToolCall[] | undefined = undefined;
         if (choice.message.tool_calls && Array.isArray(choice.message.tool_calls)) {
           convertedToolCalls = choice.message.tool_calls
-            .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageToolCall => {
+            .filter((tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => {
               return typeof tc === 'object' && tc !== null && 'id' in tc && typeof tc.id === 'string' && 'type' in tc && 'function' in tc && typeof tc.function === 'object' && tc.function !== null && 'name' in tc.function && typeof (tc.function as { name: unknown }).name === 'string' && 'arguments' in tc.function && typeof (tc.function as { arguments: unknown }).arguments === 'string';
             })
             .map((tc) => ({

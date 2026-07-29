@@ -201,7 +201,8 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // LOTE R (2026-07-13): +fastrouter (same shape) — integrado 85→86.
     // LOTE S (2026-07-13): +perplexity-agent (same shape) — integrado 86→87.
     // LOTE T (2026-07-13): +ailin (same shape) — integrado 87→88.
-    expect(buckets['integrado-sem-live-validation'].length).toBe(88);
+    // LOTE U (2026-07-29): +sakana-ai (same shape) — integrado 88→89.
+    expect(buckets['integrado-sem-live-validation'].length).toBe(89);
     // credentials-missing history:
     //   22 (original) → 25 (Lot B, 2026-04-23: +writer/upstage/rekaai)
     //                → 36 (LOTE M complement lot, 2026-04-23: +11 catalog
@@ -229,7 +230,7 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // from provider-registry.ts — it was unreachable and Bedrock is served
     // by its catalog row with the AwsBedrockAdapter factory binding).
     expect(buckets['switch-only-legitimate'].length).toBe(21);
-    // Sum: 88 + 0 + 1 + 1 + 21 = 111 (= |catalog 90| + |switch 21|,
-    // recomputed 2026-07-13 after LOTE T ailin onboarding).
+    // Sum: 89 + 0 + 1 + 1 + 21 = 112 (= |catalog 91| + |switch 21|,
+    // recomputed 2026-07-29 after LOTE U sakana-ai onboarding).
   });
 });
