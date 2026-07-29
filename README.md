@@ -424,11 +424,11 @@ Maintained by **Ailin One, Inc.** The AGPL licenses the code, not the marks.
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Star the repo and back a new, more collective and collaborative era of AI</b></a>
 </p>
 
-<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+<a href="https://github.com/ailinone/collective-intelligence/stargazers">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
-   <img alt="Star History Chart: cumulative GitHub stars over time for ailinone/collective-intelligence" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ailinone/collective-intelligence/main/.github/star-history/chart-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ailinone/collective-intelligence/main/.github/star-history/chart-light.svg" />
+   <img alt="Star History Chart: cumulative GitHub stars over time for ailinone/collective-intelligence" src="https://raw.githubusercontent.com/ailinone/collective-intelligence/main/.github/star-history/chart-light.svg" />
  </picture>
 </a>
 
