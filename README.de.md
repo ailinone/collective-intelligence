@@ -10,7 +10,11 @@ Source: https://github.com/ailinone/collective-intelligence
 -->
 
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Ailin¹ Collective Intelligence: thousands of AI models coordinate inside one collective model" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.png">
+    <img src=".github/assets/banner-dark.png" alt="Ailin¹ Collective Intelligence: thousands of AI models coordinate inside one collective model" width="100%">
+  </picture>
 </p>
 
 # Ailin¹ Collective Intelligence
