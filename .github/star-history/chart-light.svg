@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400" role="img" aria-label="Cumulative GitHub stars over time for ailinone/collective-intelligence, currently 157">
+  <rect x="0" y="0" width="800" height="400" fill="#ffffff" />
+  <text x="56" y="24" font-size="14" font-weight="600" fill="#1f2328" font-family="-apple-system, Segoe UI, sans-serif">ailinone/collective-intelligence: star history</text>
+  <g>
+    <line x1="56" y1="360.0" x2="772" y2="360.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="320.0" x2="772" y2="320.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="280.0" x2="772" y2="280.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="240.0" x2="772" y2="240.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="200.0" x2="772" y2="200.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="160.0" x2="772" y2="160.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="120.0" x2="772" y2="120.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="80.0" x2="772" y2="80.0" stroke="#e2e6ec" stroke-width="1" />
+    <line x1="56" y1="40.0" x2="772" y2="40.0" stroke="#e2e6ec" stroke-width="1" />
+    <text x="46" y="364.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">0</text>
+    <text x="46" y="324.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">20</text>
+    <text x="46" y="284.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">40</text>
+    <text x="46" y="244.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">60</text>
+    <text x="46" y="204.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">80</text>
+    <text x="46" y="164.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">100</text>
+    <text x="46" y="124.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">120</text>
+    <text x="46" y="84.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">140</text>
+    <text x="46" y="44.0" text-anchor="end" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">160</text>
+    <text x="56.0" y="386" text-anchor="middle" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">Jul 20</text>
+    <text x="235.0" y="386" text-anchor="middle" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">Jul 22</text>
+    <text x="414.0" y="386" text-anchor="middle" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">Jul 24</text>
+    <text x="593.0" y="386" text-anchor="middle" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">Jul 27</text>
+    <text x="772.0" y="386" text-anchor="middle" font-size="12" fill="#57606a" font-family="ui-monospace, Consolas, monospace">Jul 29</text>
+  </g>
+  <path d="M56.0,358.0 L56.2,356.0 L57.0,354.0 L57.1,352.0 L58.0,350.0 L60.7,348.0 L65.0,346.0 L66.2,344.0 L73.0,342.0 L75.0,340.0 L105.4,338.0 L124.8,336.0 L126.7,334.0 L130.5,332.0 L134.1,330.0 L135.4,328.0 L139.6,326.0 L151.3,324.0 L172.4,322.0 L172.6,320.0 L172.9,318.0 L174.2,316.0 L176.7,314.0 L176.8,312.0 L180.2,310.0 L180.8,308.0 L181.3,306.0 L183.7,304.0 L186.9,302.0 L191.0,300.0 L207.9,298.0 L208.3,296.0 L210.2,294.0 L210.9,292.0 L211.4,290.0 L211.7,288.0 L212.1,286.0 L213.3,284.0 L214.6,282.0 L214.7,280.0 L218.0,278.0 L219.0,276.0 L219.1,274.0 L219.7,272.0 L223.9,270.0 L225.6,268.0 L227.7,266.0 L227.8,264.0 L228.7,262.0 L230.3,260.0 L231.0,258.0 L233.0,256.0 L234.4,254.0 L235.8,252.0 L238.4,250.0 L239.2,248.0 L244.0,246.0 L245.3,244.0 L248.6,242.0 L264.3,240.0 L267.3,238.0 L269.5,236.0 L273.5,234.0 L279.9,232.0 L290.4,230.0 L295.2,228.0 L308.7,226.0 L310.2,224.0 L310.5,222.0 L312.3,220.0 L313.4,218.0 L313.5,216.0 L323.3,214.0 L325.7,212.0 L326.4,210.0 L328.9,208.0 L336.1,206.0 L339.2,204.0 L368.7,202.0 L372.0,200.0 L372.5,198.0 L373.7,196.0 L373.8,194.0 L375.2,192.0 L377.9,190.0 L378.3,188.0 L380.4,186.0 L381.4,184.0 L381.7,182.0 L381.8,180.0 L381.9,178.0 L382.0,176.0 L382.1,174.0 L382.2,172.0 L382.4,170.0 L382.5,168.0 L383.0,166.0 L383.2,164.0 L383.5,162.0 L383.7,160.0 L384.0,158.0 L384.5,156.0 L385.1,154.0 L385.4,152.0 L385.7,150.0 L386.2,148.0 L387.4,146.0 L390.8,144.0 L394.7,142.0 L401.8,140.0 L404.8,138.0 L411.6,136.0 L411.9,134.0 L416.9,132.0 L446.5,130.0 L446.8,128.0 L447.4,126.0 L470.6,124.0 L493.5,122.0 L521.9,120.0 L527.8,118.0 L565.0,116.0 L605.0,114.0 L607.5,112.0 L607.8,110.0 L607.9,108.0 L607.9,106.0 L608.5,104.0 L617.1,102.0 L628.0,100.0 L629.1,98.0 L643.1,96.0 L651.0,94.0 L652.7,92.0 L664.1,90.0 L671.7,88.0 L678.7,86.0 L679.4,84.0 L688.0,82.0 L692.8,80.0 L693.0,78.0 L703.5,76.0 L703.5,74.0 L704.1,72.0 L704.6,70.0 L707.8,68.0 L718.4,66.0 L720.0,64.0 L721.2,62.0 L723.5,60.0 L737.7,58.0 L746.7,56.0 L747.6,54.0 L749.6,52.0 L754.4,50.0 L769.5,48.0 L772.0,46.0 L772.0,360.0 L56.0,360.0 Z" fill="url(#fill-light)" stroke="none" />
+  <path d="M56.0,358.0 L56.2,356.0 L57.0,354.0 L57.1,352.0 L58.0,350.0 L60.7,348.0 L65.0,346.0 L66.2,344.0 L73.0,342.0 L75.0,340.0 L105.4,338.0 L124.8,336.0 L126.7,334.0 L130.5,332.0 L134.1,330.0 L135.4,328.0 L139.6,326.0 L151.3,324.0 L172.4,322.0 L172.6,320.0 L172.9,318.0 L174.2,316.0 L176.7,314.0 L176.8,312.0 L180.2,310.0 L180.8,308.0 L181.3,306.0 L183.7,304.0 L186.9,302.0 L191.0,300.0 L207.9,298.0 L208.3,296.0 L210.2,294.0 L210.9,292.0 L211.4,290.0 L211.7,288.0 L212.1,286.0 L213.3,284.0 L214.6,282.0 L214.7,280.0 L218.0,278.0 L219.0,276.0 L219.1,274.0 L219.7,272.0 L223.9,270.0 L225.6,268.0 L227.7,266.0 L227.8,264.0 L228.7,262.0 L230.3,260.0 L231.0,258.0 L233.0,256.0 L234.4,254.0 L235.8,252.0 L238.4,250.0 L239.2,248.0 L244.0,246.0 L245.3,244.0 L248.6,242.0 L264.3,240.0 L267.3,238.0 L269.5,236.0 L273.5,234.0 L279.9,232.0 L290.4,230.0 L295.2,228.0 L308.7,226.0 L310.2,224.0 L310.5,222.0 L312.3,220.0 L313.4,218.0 L313.5,216.0 L323.3,214.0 L325.7,212.0 L326.4,210.0 L328.9,208.0 L336.1,206.0 L339.2,204.0 L368.7,202.0 L372.0,200.0 L372.5,198.0 L373.7,196.0 L373.8,194.0 L375.2,192.0 L377.9,190.0 L378.3,188.0 L380.4,186.0 L381.4,184.0 L381.7,182.0 L381.8,180.0 L381.9,178.0 L382.0,176.0 L382.1,174.0 L382.2,172.0 L382.4,170.0 L382.5,168.0 L383.0,166.0 L383.2,164.0 L383.5,162.0 L383.7,160.0 L384.0,158.0 L384.5,156.0 L385.1,154.0 L385.4,152.0 L385.7,150.0 L386.2,148.0 L387.4,146.0 L390.8,144.0 L394.7,142.0 L401.8,140.0 L404.8,138.0 L411.6,136.0 L411.9,134.0 L416.9,132.0 L446.5,130.0 L446.8,128.0 L447.4,126.0 L470.6,124.0 L493.5,122.0 L521.9,120.0 L527.8,118.0 L565.0,116.0 L605.0,114.0 L607.5,112.0 L607.8,110.0 L607.9,108.0 L607.9,106.0 L608.5,104.0 L617.1,102.0 L628.0,100.0 L629.1,98.0 L643.1,96.0 L651.0,94.0 L652.7,92.0 L664.1,90.0 L671.7,88.0 L678.7,86.0 L679.4,84.0 L688.0,82.0 L692.8,80.0 L693.0,78.0 L703.5,76.0 L703.5,74.0 L704.1,72.0 L704.6,70.0 L707.8,68.0 L718.4,66.0 L720.0,64.0 L721.2,62.0 L723.5,60.0 L737.7,58.0 L746.7,56.0 L747.6,54.0 L749.6,52.0 L754.4,50.0 L769.5,48.0 L772.0,46.0" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="772.0" cy="46.0" r="4" fill="#6d28d9" stroke="#ffffff" stroke-width="2" />
+  <text x="764.0" y="34.0" text-anchor="end" font-size="13" font-weight="600" fill="#1f2328" font-family="-apple-system, Segoe UI, sans-serif">157 stars</text>
+  <defs>
+    <linearGradient id="fill-light" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(109, 40, 217, 0.16)" />
+      <stop offset="100%" stop-color="rgba(109, 40, 217, 0.0)" />
+    </linearGradient>
+  </defs>
+</svg>
