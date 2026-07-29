@@ -31,17 +31,28 @@ function mockLargeExperiment(): ExperimentExecutionResult[] {
       for (let rep = 1; rep <= 3; rep++) {
         results.push({
           experimentId: 'exp-gng',
-          taskIndex: task.index, repetition: rep,
-          executionMode: 'single-model', strategy: 'single', model,
-          taskType: task.taskType, complexity: task.complexity, domain: task.domain, prompt: task.prompt,
+          taskIndex: task.index,
+          repetition: rep,
+          executionMode: 'single-model',
+          strategy: 'single',
+          model,
+          taskType: task.taskType,
+          complexity: task.complexity,
+          domain: task.domain,
+          prompt: task.prompt,
           qualityScore: 0.72 + Math.random() * 0.15,
           costUsd: 0.01 + Math.random() * 0.02,
           latencyMs: 800 + Math.random() * 1500,
           totalTokens: 500 + Math.floor(Math.random() * 500),
-          success: true, modelsUsed: [model],
-          judgeScore: 0.72 + Math.random() * 0.15, judgeRubric: task.judgeRubric,
-          faithfulnessScore: null, instructionFollowingScore: null, failureMode: null,
-          phase: 'frozen', responseSummary: 'Mock',
+          success: true,
+          modelsUsed: [model],
+          judgeScore: 0.72 + Math.random() * 0.15,
+          judgeRubric: task.judgeRubric,
+          faithfulnessScore: null,
+          instructionFollowingScore: null,
+          failureMode: null,
+          phase: 'frozen',
+          responseSummary: 'Mock',
         });
       }
     }
@@ -53,17 +64,28 @@ function mockLargeExperiment(): ExperimentExecutionResult[] {
       for (let rep = 1; rep <= 3; rep++) {
         results.push({
           experimentId: 'exp-gng',
-          taskIndex: task.index, repetition: rep,
-          executionMode: 'collective', strategy, model: null,
-          taskType: task.taskType, complexity: task.complexity, domain: task.domain, prompt: task.prompt,
+          taskIndex: task.index,
+          repetition: rep,
+          executionMode: 'collective',
+          strategy,
+          model: null,
+          taskType: task.taskType,
+          complexity: task.complexity,
+          domain: task.domain,
+          prompt: task.prompt,
           qualityScore: 0.75 + Math.random() * 0.15,
-          costUsd: 0.05 + Math.random() * 0.10,
+          costUsd: 0.05 + Math.random() * 0.1,
           latencyMs: 3000 + Math.random() * 5000,
           totalTokens: 1500 + Math.floor(Math.random() * 1000),
-          success: true, modelsUsed: ['a', 'b', 'c'],
-          judgeScore: 0.75 + Math.random() * 0.15, judgeRubric: task.judgeRubric,
-          faithfulnessScore: null, instructionFollowingScore: null, failureMode: null,
-          phase: 'frozen', responseSummary: 'Mock collective',
+          success: true,
+          modelsUsed: ['a', 'b', 'c'],
+          judgeScore: 0.75 + Math.random() * 0.15,
+          judgeRubric: task.judgeRubric,
+          faithfulnessScore: null,
+          instructionFollowingScore: null,
+          failureMode: null,
+          phase: 'frozen',
+          responseSummary: 'Mock collective',
         });
       }
     }
@@ -74,17 +96,28 @@ function mockLargeExperiment(): ExperimentExecutionResult[] {
     for (let rep = 1; rep <= 3; rep++) {
       results.push({
         experimentId: 'exp-gng',
-        taskIndex: task.index, repetition: rep,
-        executionMode: 'adaptive', strategy: 'auto', model: null,
-        taskType: task.taskType, complexity: task.complexity, domain: task.domain, prompt: task.prompt,
+        taskIndex: task.index,
+        repetition: rep,
+        executionMode: 'adaptive',
+        strategy: 'auto',
+        model: null,
+        taskType: task.taskType,
+        complexity: task.complexity,
+        domain: task.domain,
+        prompt: task.prompt,
         qualityScore: 0.74 + Math.random() * 0.14,
         costUsd: 0.02 + Math.random() * 0.05,
         latencyMs: 1500 + Math.random() * 3000,
         totalTokens: 800 + Math.floor(Math.random() * 600),
-        success: true, modelsUsed: ['auto'],
-        judgeScore: 0.74 + Math.random() * 0.14, judgeRubric: task.judgeRubric,
-        faithfulnessScore: null, instructionFollowingScore: null, failureMode: null,
-        phase: 'frozen', responseSummary: 'Mock adaptive',
+        success: true,
+        modelsUsed: ['auto'],
+        judgeScore: 0.74 + Math.random() * 0.14,
+        judgeRubric: task.judgeRubric,
+        faithfulnessScore: null,
+        instructionFollowingScore: null,
+        failureMode: null,
+        phase: 'frozen',
+        responseSummary: 'Mock adaptive',
       });
     }
   }
@@ -105,7 +138,7 @@ describe('GO/NO-GO Engine', () => {
 
     // Decisions exist for all profiles
     expect(report.decisions.length).toBeGreaterThan(0);
-    const profiles = new Set(report.decisions.map(d => d.profile));
+    const profiles = new Set(report.decisions.map((d) => d.profile));
     expect(profiles.has('max-quality')).toBe(true);
     expect(profiles.has('low-cost')).toBe(true);
     expect(profiles.has('low-latency')).toBe(true);
@@ -139,7 +172,7 @@ describe('GO/NO-GO Engine', () => {
     const report = generateGoNoGoReport('exp-gng', results);
 
     // At least one approach should have GO for some profile
-    const goDecisions = report.decisions.filter(d => d.verdict === 'GO');
+    const goDecisions = report.decisions.filter((d) => d.verdict === 'GO');
     expect(goDecisions.length).toBeGreaterThan(0);
   });
 
@@ -170,7 +203,7 @@ describe('GO/NO-GO Engine', () => {
     const report = generateGoNoGoReport('exp-strict', results, strictThresholds);
 
     // With quality floor at 0.99, everything should be NO-GO
-    const goDecisions = report.decisions.filter(d => d.verdict === 'GO');
+    const goDecisions = report.decisions.filter((d) => d.verdict === 'GO');
     expect(goDecisions.length).toBe(0);
   });
 
@@ -179,8 +212,8 @@ describe('GO/NO-GO Engine', () => {
     const report = generateGoNoGoReport('exp-gng', results);
 
     // Should have cells for multiple rows and columns
-    const rows = new Set(report.heatmap.map(c => c.row));
-    const columns = new Set(report.heatmap.map(c => c.column));
+    const rows = new Set(report.heatmap.map((c) => c.row));
+    const columns = new Set(report.heatmap.map((c) => c.column));
 
     expect(rows.size).toBeGreaterThan(1);
     expect(columns.size).toBeGreaterThan(1);

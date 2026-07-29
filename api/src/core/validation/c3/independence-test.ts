@@ -125,7 +125,7 @@ export class IndependenceTestService {
     // Compute embeddings if function provided
     if (embedFn) {
       try {
-        const texts = outputs.map(o => o.content);
+        const texts = outputs.map((o) => o.content);
         const embeddings = await embedFn(texts);
         for (let i = 0; i < outputs.length; i++) {
           outputs[i].embedding = embeddings[i];
@@ -145,10 +145,8 @@ export class IndependenceTestService {
     }
 
     // Aggregate
-    const cosines = pairwiseSimilarities.map(p => p.cosineSimilarity);
-    const avgCosine = cosines.length > 0
-      ? cosines.reduce((a, b) => a + b, 0) / cosines.length
-      : 0;
+    const cosines = pairwiseSimilarities.map((p) => p.cosineSimilarity);
+    const avgCosine = cosines.length > 0 ? cosines.reduce((a, b) => a + b, 0) / cosines.length : 0;
     const maxCosine = cosines.length > 0 ? Math.max(...cosines) : 0;
     const minCosine = cosines.length > 0 ? Math.min(...cosines) : 0;
 
@@ -192,16 +190,15 @@ export class IndependenceTestService {
     strategy: string,
     windowSize = 50
   ): { avgDiversity: number; trend: 'improving' | 'stable' | 'degrading'; collapseRate: number } {
-    const relevant = this.measurements
-      .filter(m => m.strategy === strategy)
-      .slice(-windowSize);
+    const relevant = this.measurements.filter((m) => m.strategy === strategy).slice(-windowSize);
 
     if (relevant.length < 2) {
       return { avgDiversity: 0, trend: 'stable', collapseRate: 0 };
     }
 
-    const avgDiversity = 1 - (relevant.reduce((s, m) => s + m.avgCosineSimilarity, 0) / relevant.length);
-    const collapseRate = relevant.filter(m => m.diversityCollapsed).length / relevant.length;
+    const avgDiversity =
+      1 - relevant.reduce((s, m) => s + m.avgCosineSimilarity, 0) / relevant.length;
+    const collapseRate = relevant.filter((m) => m.diversityCollapsed).length / relevant.length;
 
     // Compute trend: compare first half vs second half
     const half = Math.floor(relevant.length / 2);
@@ -223,7 +220,10 @@ export class IndependenceTestService {
     return [...this.measurements];
   }
 
-  private computePairwiseSimilarity(a: IntermediateOutput, b: IntermediateOutput): PairwiseSimilarity {
+  private computePairwiseSimilarity(
+    a: IntermediateOutput,
+    b: IntermediateOutput
+  ): PairwiseSimilarity {
     let cosineSimilarity = 0;
     if (a.embedding && b.embedding) {
       cosineSimilarity = this.cosineSim(a.embedding, b.embedding);
@@ -241,7 +241,9 @@ export class IndependenceTestService {
 
   private cosineSim(a: number[], b: number[]): number {
     if (a.length !== b.length || a.length === 0) return 0;
-    let dot = 0, normA = 0, normB = 0;
+    let dot = 0,
+      normA = 0,
+      normB = 0;
     for (let i = 0; i < a.length; i++) {
       dot += a[i] * b[i];
       normA += a[i] * a[i];
@@ -254,7 +256,7 @@ export class IndependenceTestService {
   private jaccardSim(textA: string, textB: string): number {
     const wordsA = new Set(textA.toLowerCase().split(/\s+/));
     const wordsB = new Set(textB.toLowerCase().split(/\s+/));
-    const intersection = new Set([...wordsA].filter(w => wordsB.has(w)));
+    const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)));
     const union = new Set([...wordsA, ...wordsB]);
     return union.size === 0 ? 0 : intersection.size / union.size;
   }
@@ -268,7 +270,7 @@ export class IndependenceTestService {
     const ngramSize = 3; // trigrams
 
     // Extract n-grams for each output
-    const ngramSets = outputs.map(o => this.extractNgrams(o.content, ngramSize));
+    const ngramSets = outputs.map((o) => this.extractNgrams(o.content, ngramSize));
 
     for (let i = 0; i < outputs.length; i++) {
       const myNgrams = ngramSets[i];
@@ -281,7 +283,7 @@ export class IndependenceTestService {
         }
       }
 
-      const uniqueNgrams = [...myNgrams].filter(ng => !otherNgrams.has(ng));
+      const uniqueNgrams = [...myNgrams].filter((ng) => !otherNgrams.has(ng));
       const uniqueness = myNgrams.size === 0 ? 0 : uniqueNgrams.length / myNgrams.size;
       result.set(outputs[i].modelId, uniqueness);
     }
@@ -301,7 +303,9 @@ export class IndependenceTestService {
 
 /** Singleton */
 let instance: IndependenceTestService | null = null;
-export function getIndependenceTestService(config?: IndependenceTestConfig): IndependenceTestService {
+export function getIndependenceTestService(
+  config?: IndependenceTestConfig
+): IndependenceTestService {
   if (!instance) {
     instance = new IndependenceTestService(config);
   }

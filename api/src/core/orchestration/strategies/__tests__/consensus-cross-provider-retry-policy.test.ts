@@ -36,20 +36,17 @@ import { describe, it, expect } from 'vitest';
  * rescue block.
  */
 function crossProviderRescueAllowed(
-  evalBag: { maxRetriesPerProvider?: number; allowCrossProviderRouteFallback?: boolean } | undefined,
+  evalBag: { maxRetriesPerProvider?: number; allowCrossProviderRouteFallback?: boolean } | undefined
 ): boolean {
-  const maxRetries = typeof evalBag?.maxRetriesPerProvider === 'number'
-    ? evalBag.maxRetriesPerProvider
-    : undefined;
+  const maxRetries =
+    typeof evalBag?.maxRetriesPerProvider === 'number' ? evalBag.maxRetriesPerProvider : undefined;
   const allow = evalBag?.allowCrossProviderRouteFallback;
   return allow === true || (maxRetries === undefined && allow !== false);
 }
 
 describe('cross-provider rescue gate', () => {
   it('denies rescue when maxRetriesPerProvider=0 and no explicit allow flag', () => {
-    expect(
-      crossProviderRescueAllowed({ maxRetriesPerProvider: 0 }),
-    ).toBe(false);
+    expect(crossProviderRescueAllowed({ maxRetriesPerProvider: 0 })).toBe(false);
   });
 
   it('denies rescue when maxRetriesPerProvider=0 and allow=false', () => {
@@ -57,7 +54,7 @@ describe('cross-provider rescue gate', () => {
       crossProviderRescueAllowed({
         maxRetriesPerProvider: 0,
         allowCrossProviderRouteFallback: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -66,7 +63,7 @@ describe('cross-provider rescue gate', () => {
       crossProviderRescueAllowed({
         maxRetriesPerProvider: 0,
         allowCrossProviderRouteFallback: true,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -80,7 +77,7 @@ describe('cross-provider rescue gate', () => {
       crossProviderRescueAllowed({
         maxRetriesPerProvider: 3,
         allowCrossProviderRouteFallback: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -89,9 +86,7 @@ describe('cross-provider rescue gate', () => {
     // times on the SAME provider". It does NOT authorize cross-provider
     // rescue — that requires an explicit `allowCrossProviderRouteFallback`
     // opt-in. The legacy unconditional rescue path is gone.
-    expect(
-      crossProviderRescueAllowed({ maxRetriesPerProvider: 3 }),
-    ).toBe(false);
+    expect(crossProviderRescueAllowed({ maxRetriesPerProvider: 3 })).toBe(false);
   });
 
   it('allows rescue when maxRetries>0 AND explicit allow=true', () => {
@@ -99,7 +94,7 @@ describe('cross-provider rescue gate', () => {
       crossProviderRescueAllowed({
         maxRetriesPerProvider: 3,
         allowCrossProviderRouteFallback: true,
-      }),
+      })
     ).toBe(true);
   });
 });

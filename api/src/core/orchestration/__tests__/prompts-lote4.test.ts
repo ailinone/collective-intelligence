@@ -37,7 +37,10 @@ import {
   resetPromptMetrics,
   getPromptMetric,
 } from '../prompts/prompt-metrics';
-import { normalizeJudgeOutput, JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS } from '@/core/quality/judge-schema';
+import {
+  normalizeJudgeOutput,
+  JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS,
+} from '@/core/quality/judge-schema';
 
 // ────────────────────────────────────────────────────────────────────────────
 // J-Final — migrated judges produce canonical-compatible parse paths
@@ -58,9 +61,7 @@ describe('J-Final — migrated judges parse canonical verdicts', () => {
   it('quality-multipass canonical input produces a verdict with score and issues', () => {
     const raw = JSON.stringify({
       score: 0.82,
-      issues: [
-        { severity: 'major', location: 'paragraph 3', description: 'missing test case' },
-      ],
+      issues: [{ severity: 'major', location: 'paragraph 3', description: 'missing test case' }],
     });
     const v = normalizeJudgeOutput(raw, { where: 'quality-multipass.validator' });
     expect(v?.score).toBeCloseTo(0.82, 3);
@@ -132,11 +133,7 @@ describe('J-Final — migrated judges parse canonical verdicts', () => {
   it('arbitration-system: legacy {scores: [0-100], weaknesses} still adapts through normalizer', () => {
     const raw = JSON.stringify({
       scores: [65, 90, 72],
-      weaknesses: [
-        ['too terse', 'lacks examples'],
-        [],
-        ['missing edge case'],
-      ],
+      weaknesses: [['too terse', 'lacks examples'], [], ['missing edge case']],
       recommendation: 'Solution 2 dominates on completeness.',
       confidence: 0.85,
     });
@@ -170,11 +167,11 @@ describe('J-Final — migrated judges parse canonical verdicts', () => {
       const src = await fs.readFile(path.join(repoRoot, rel), 'utf8');
       expect(
         src.includes('JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS'),
-        `${rel} should embed JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS in its judge prompt`,
+        `${rel} should embed JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS in its judge prompt`
       ).toBe(true);
       expect(
         src.includes('normalizeJudgeOutput'),
-        `${rel} should route its parse through normalizeJudgeOutput`,
+        `${rel} should route its parse through normalizeJudgeOutput`
       ).toBe(true);
     }
   });
@@ -219,9 +216,7 @@ describe('M-Export — Prometheus text-format exporter', () => {
     incrementPromptMetric(PROMPT_METRIC_NAMES.JUDGE_NORMALIZATIONS);
     const snapshot = exportPromptMetricsAsJson();
     expect(snapshot.metrics.length).toBe(Object.values(PROMPT_METRIC_NAMES).length);
-    const entry = snapshot.metrics.find(
-      (m) => m.name === PROMPT_METRIC_NAMES.JUDGE_NORMALIZATIONS,
-    );
+    const entry = snapshot.metrics.find((m) => m.name === PROMPT_METRIC_NAMES.JUDGE_NORMALIZATIONS);
     expect(entry?.value).toBe(1);
     expect(entry?.type).toBe('counter');
     expect(entry?.help.length).toBeGreaterThan(0);
@@ -248,7 +243,7 @@ describe('Z-Real — CLI runner module', () => {
     const repoRoot = path.resolve(__dirname, '../../../..');
     const src = await fs.readFile(
       path.join(repoRoot, 'scripts/run-peer-review-benchmark.ts'),
-      'utf8',
+      'utf8'
     );
     expect(src).toContain('runPeerReviewABBenchmark');
     expect(src).toContain('normalizeJudgeOutput');
@@ -308,22 +303,17 @@ describe('A-Final — strategies/ directory contains no stray system-prompt lite
       lines.forEach((line, i) => {
         // Match:  role: 'system', content: 'You are ...'
         // Skip lines that use PROMPTS.xxx references (those import from catalog).
-        if (
-          /role:\s*['"]system['"]/.test(line) &&
-          /content:\s*['"`](You are|Your )/.test(line)
-        ) {
+        if (/role:\s*['"]system['"]/.test(line) && /content:\s*['"`](You are|Your )/.test(line)) {
           offenders.push({ file: entry, line: i + 1, snippet: line.trim().slice(0, 120) });
         }
       });
     }
 
     if (offenders.length > 0) {
-      const report = offenders
-        .map((o) => `  ${o.file}:${o.line}  ${o.snippet}`)
-        .join('\n');
+      const report = offenders.map((o) => `  ${o.file}:${o.line}  ${o.snippet}`).join('\n');
       throw new Error(
         `A-Final guardrail: stray system-prompt literals found in strategies/.\n${report}\n` +
-          `Move these to the SOTA catalog (sota-system-prompts.ts) or add the file to the allowlist with justification.`,
+          `Move these to the SOTA catalog (sota-system-prompts.ts) or add the file to the allowlist with justification.`
       );
     }
   });

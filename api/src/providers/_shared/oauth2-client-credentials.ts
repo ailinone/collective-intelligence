@@ -69,7 +69,7 @@ interface TokenResponse {
 }
 
 export function createOAuth2ClientCredentialsProvider(
-  opts: OAuth2ClientCredentialsOptions,
+  opts: OAuth2ClientCredentialsOptions
 ): TokenProvider {
   if (!opts.authUrl) throw new Error('OAuth2: authUrl is required');
   if (!opts.clientId) throw new Error('OAuth2: clientId is required');
@@ -112,7 +112,7 @@ export function createOAuth2ClientCredentialsProvider(
     if (!res.ok) {
       const text = await res.text().catch(() => '<unreadable>');
       throw new Error(
-        `OAuth2 token exchange failed: HTTP ${res.status} at ${opts.authUrl} — ${text.slice(0, 400)}`,
+        `OAuth2 token exchange failed: HTTP ${res.status} at ${opts.authUrl} — ${text.slice(0, 400)}`
       );
     }
 

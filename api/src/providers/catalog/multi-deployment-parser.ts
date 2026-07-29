@@ -137,16 +137,13 @@ export function isValidAlias(alias: unknown): alias is string {
  * Supports a subset that is safe for ops: no shell-style fallbacks
  * (`${VAR:-default}`), no command substitution. Deliberately minimal.
  */
-export function expandEnvInString(
-  raw: string,
-  envSource: NodeJS.ProcessEnv = process.env,
-): string {
+export function expandEnvInString(raw: string, envSource: NodeJS.ProcessEnv = process.env): string {
   return raw.replace(/\$\{([A-Z][A-Z0-9_]*)\}/g, (_match, varName: string) => {
     const v = envSource[varName];
     if (v === undefined || v === '') {
       log.warn(
         { varName },
-        'multi-deployment-parser: interpolation failed — env var unresolved or empty',
+        'multi-deployment-parser: interpolation failed — env var unresolved or empty'
       );
       return '';
     }
@@ -206,10 +203,7 @@ export interface SageMakerEndpointSpec {
  * Union of all spec shapes — used only for the generic
  * `parseMultiDeploymentEnv` helper.
  */
-export type DeploymentSpec =
-  | AzureDeploymentSpec
-  | DatabricksEndpointSpec
-  | SageMakerEndpointSpec;
+export type DeploymentSpec = AzureDeploymentSpec | DatabricksEndpointSpec | SageMakerEndpointSpec;
 
 // ─── Generic top-level parser ────────────────────────────────────────────
 
@@ -225,7 +219,7 @@ export type DeploymentSpec =
 export function parseMultiDeploymentEnv<T extends DeploymentSpec>(
   raw: string | undefined,
   envVarName: string,
-  validate: (entry: unknown, index: number) => T | null,
+  validate: (entry: unknown, index: number) => T | null
 ): readonly T[] {
   if (!isNonEmptyString(raw)) {
     return [];
@@ -237,7 +231,7 @@ export function parseMultiDeploymentEnv<T extends DeploymentSpec>(
   } catch (err) {
     log.error(
       { envVarName, err: err instanceof Error ? err.message : String(err) },
-      'multi-deployment-parser: JSON.parse failed — ignoring env var',
+      'multi-deployment-parser: JSON.parse failed — ignoring env var'
     );
     return [];
   }
@@ -245,7 +239,7 @@ export function parseMultiDeploymentEnv<T extends DeploymentSpec>(
   if (!Array.isArray(parsed)) {
     log.error(
       { envVarName, typeOfRoot: typeof parsed },
-      'multi-deployment-parser: root is not an array — ignoring env var',
+      'multi-deployment-parser: root is not an array — ignoring env var'
     );
     return [];
   }
@@ -258,7 +252,7 @@ export function parseMultiDeploymentEnv<T extends DeploymentSpec>(
     if (seenAliases.has(validated.alias)) {
       log.warn(
         { envVarName, alias: validated.alias, index: i },
-        'multi-deployment-parser: duplicate alias — keeping first occurrence, dropping this one',
+        'multi-deployment-parser: duplicate alias — keeping first occurrence, dropping this one'
       );
       continue;
     }
@@ -285,7 +279,7 @@ export function parseMultiDeploymentEnv<T extends DeploymentSpec>(
  */
 export function parseAzureDeployments(
   raw: string | undefined,
-  envSource: NodeJS.ProcessEnv = process.env,
+  envSource: NodeJS.ProcessEnv = process.env
 ): readonly AzureDeploymentSpec[] {
   return parseMultiDeploymentEnv<AzureDeploymentSpec>(
     raw,
@@ -300,34 +294,25 @@ export function parseAzureDeployments(
       if (!isValidAlias(alias)) {
         log.warn(
           { index, alias: typeof alias === 'string' ? alias : typeof alias },
-          'Azure deployment: invalid/missing alias (kebab-case, 2-32 chars) — skipping',
+          'Azure deployment: invalid/missing alias (kebab-case, 2-32 chars) — skipping'
         );
         return null;
       }
       if (!isNonEmptyString(obj.deployment)) {
-        log.warn(
-          { index, alias },
-          'Azure deployment: missing "deployment" field — skipping',
-        );
+        log.warn({ index, alias }, 'Azure deployment: missing "deployment" field — skipping');
         return null;
       }
       return {
         alias,
         deployment: obj.deployment.trim(),
-        resourceName: isNonEmptyString(obj.resourceName)
-          ? obj.resourceName.trim()
-          : undefined,
-        endpoint: isNonEmptyString(obj.endpoint)
-          ? obj.endpoint.trim()
-          : undefined,
-        apiVersion: isNonEmptyString(obj.apiVersion)
-          ? obj.apiVersion.trim()
-          : undefined,
+        resourceName: isNonEmptyString(obj.resourceName) ? obj.resourceName.trim() : undefined,
+        endpoint: isNonEmptyString(obj.endpoint) ? obj.endpoint.trim() : undefined,
+        apiVersion: isNonEmptyString(obj.apiVersion) ? obj.apiVersion.trim() : undefined,
         apiKey: isNonEmptyString(obj.apiKey)
           ? expandEnvInString(obj.apiKey.trim(), envSource)
           : undefined,
       };
-    },
+    }
   );
 }
 
@@ -340,7 +325,7 @@ export function parseAzureDeployments(
  */
 export function parseDatabricksEndpoints(
   raw: string | undefined,
-  envSource: NodeJS.ProcessEnv = process.env,
+  envSource: NodeJS.ProcessEnv = process.env
 ): readonly DatabricksEndpointSpec[] {
   return parseMultiDeploymentEnv<DatabricksEndpointSpec>(
     raw,
@@ -355,28 +340,23 @@ export function parseDatabricksEndpoints(
       if (!isValidAlias(alias)) {
         log.warn(
           { index, alias: typeof alias === 'string' ? alias : typeof alias },
-          'Databricks endpoint: invalid/missing alias (kebab-case, 2-32 chars) — skipping',
+          'Databricks endpoint: invalid/missing alias (kebab-case, 2-32 chars) — skipping'
         );
         return null;
       }
       if (!isNonEmptyString(obj.endpoint)) {
-        log.warn(
-          { index, alias },
-          'Databricks endpoint: missing "endpoint" field — skipping',
-        );
+        log.warn({ index, alias }, 'Databricks endpoint: missing "endpoint" field — skipping');
         return null;
       }
       return {
         alias,
         endpoint: obj.endpoint.trim(),
-        workspaceHost: isNonEmptyString(obj.workspaceHost)
-          ? obj.workspaceHost.trim()
-          : undefined,
+        workspaceHost: isNonEmptyString(obj.workspaceHost) ? obj.workspaceHost.trim() : undefined,
         apiKey: isNonEmptyString(obj.apiKey)
           ? expandEnvInString(obj.apiKey.trim(), envSource)
           : undefined,
       };
-    },
+    }
   );
 }
 
@@ -395,9 +375,7 @@ const SAGEMAKER_SCHEMA_VALUES = new Set<SageMakerEndpointSpec['payloadSchema']>(
  * be one of the three known values — unknown schemas are discarded
  * (not silently coerced) so typos become loud errors.
  */
-export function parseSageMakerEndpoints(
-  raw: string | undefined,
-): readonly SageMakerEndpointSpec[] {
+export function parseSageMakerEndpoints(raw: string | undefined): readonly SageMakerEndpointSpec[] {
   return parseMultiDeploymentEnv<SageMakerEndpointSpec>(
     raw,
     'AWS_SAGEMAKER_ENDPOINTS',
@@ -411,15 +389,12 @@ export function parseSageMakerEndpoints(
       if (!isValidAlias(alias)) {
         log.warn(
           { index, alias: typeof alias === 'string' ? alias : typeof alias },
-          'SageMaker endpoint: invalid/missing alias (kebab-case, 2-32 chars) — skipping',
+          'SageMaker endpoint: invalid/missing alias (kebab-case, 2-32 chars) — skipping'
         );
         return null;
       }
       if (!isNonEmptyString(obj.endpointName)) {
-        log.warn(
-          { index, alias },
-          'SageMaker endpoint: missing "endpointName" field — skipping',
-        );
+        log.warn({ index, alias }, 'SageMaker endpoint: missing "endpointName" field — skipping');
         return null;
       }
       let payloadSchema: SageMakerEndpointSpec['payloadSchema'];
@@ -427,7 +402,7 @@ export function parseSageMakerEndpoints(
         if (!SAGEMAKER_SCHEMA_VALUES.has(obj.payloadSchema as never)) {
           log.warn(
             { index, alias, payloadSchema: obj.payloadSchema },
-            'SageMaker endpoint: unknown payloadSchema — must be "openai" | "jumpstart" | "hf-tgi" — skipping entry',
+            'SageMaker endpoint: unknown payloadSchema — must be "openai" | "jumpstart" | "hf-tgi" — skipping entry'
           );
           return null;
         }
@@ -442,7 +417,7 @@ export function parseSageMakerEndpoints(
           ? obj.customAttributes.trim()
           : undefined,
       };
-    },
+    }
   );
 }
 
@@ -456,15 +431,12 @@ export function parseSageMakerEndpoints(
  * case by `isValidAlias`. Max length is capped to keep downstream
  * callers that assume ≤ 40 chars (the catalog Zod limit) safe.
  */
-export function synthesizeDeploymentProviderId(
-  parent: string,
-  alias: string,
-): string {
+export function synthesizeDeploymentProviderId(parent: string, alias: string): string {
   const combined = `${parent}-${alias}`;
   if (combined.length > 40) {
     log.warn(
       { parent, alias, combined },
-      'multi-deployment-parser: synthesized providerId exceeds 40 chars — truncating',
+      'multi-deployment-parser: synthesized providerId exceeds 40 chars — truncating'
     );
     return combined.slice(0, 40);
   }

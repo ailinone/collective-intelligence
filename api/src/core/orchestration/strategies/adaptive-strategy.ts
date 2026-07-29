@@ -50,7 +50,10 @@ export class AdaptiveStrategy extends BaseStrategy {
     const startTime = Date.now();
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Adaptive: analyzing request to select best strategy.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Adaptive: analyzing request to select best strategy.',
+    });
 
     // 1. Analyze request characteristics
     const analysis = this.analyzeRequest(request);
@@ -71,7 +74,10 @@ export class AdaptiveStrategy extends BaseStrategy {
       // Dynamic quorum (Quorum Sensing): when confidence is moderate (0.3-0.6),
       // prefer multi-model strategies over single-model for robustness
       const QUORUM_ESCALATION_THRESHOLD = Number(process.env.ADAPTIVE_QUORUM_THRESHOLD ?? 0.6);
-      if (recommendation.confidence < QUORUM_ESCALATION_THRESHOLD && selectedStrategy === 'single') {
+      if (
+        recommendation.confidence < QUORUM_ESCALATION_THRESHOLD &&
+        selectedStrategy === 'single'
+      ) {
         // Low confidence on "single" = high uncertainty. Escalate to collective.
         selectedStrategy = analysis.complexity === 'complex' ? 'collaborative' : 'consensus';
         this.log.info(
@@ -124,8 +130,18 @@ export class AdaptiveStrategy extends BaseStrategy {
           selectionMethod === 'learning'
             ? `Learning-driven: ${selectedStrategy} (${recommendation!.sampleSize} samples, confidence ${(recommendation!.confidence * 100).toFixed(0)}%)`
             : `Heuristic: ${selectedStrategy} based on ${analysis.complexity} complexity and ${analysis.type} type`,
-        ...(execution.modelsUsed.some(e => e.reasoning)
-          ? { reasoning_traces: execution.modelsUsed.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(execution.modelsUsed.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: execution.modelsUsed
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -178,7 +194,8 @@ export class AdaptiveStrategy extends BaseStrategy {
     // P0 strategies: route based on quality target and modality
     const qualityTarget = context.qualityTarget ?? 0;
     if (qualityTarget >= 0.9 && analysis.complexity !== 'simple') return 'critique-repair';
-    if (analysis.type === 'factual-qa' && analysis.complexity === 'complex') return 'research-synthesize';
+    if (analysis.type === 'factual-qa' && analysis.complexity === 'complex')
+      return 'research-synthesize';
 
     if (analysis.complexity === 'complex') {
       // Complex tasks benefit most from multi-model deliberation
@@ -227,7 +244,10 @@ export class AdaptiveStrategy extends BaseStrategy {
     // Fallback: sibling not found (should not happen in production).
     // Pin biases the single-model decision here. Helper resolves the
     // pin if eligible; otherwise we fall back to highest-quality.
-    this.log.warn({ strategyName }, 'Sibling strategy not found — falling back to direct model call');
+    this.log.warn(
+      { strategyName },
+      'Sibling strategy not found — falling back to direct model call'
+    );
     const eligible = this.getEligibleModels(context);
     const preference = resolvePreferredExecutor(eligible, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
@@ -236,7 +256,7 @@ export class AdaptiveStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible for adaptive fallback — using highest-quality.',
+        'Preferred model not eligible for adaptive fallback — using highest-quality.'
       );
     }
     const model = preference.pinnedExecutor ?? this.selectBestModel(eligible);

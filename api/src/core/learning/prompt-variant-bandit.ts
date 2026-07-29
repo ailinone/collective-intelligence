@@ -77,14 +77,12 @@ function encodeContext(ctx: VariantBanditContext): number[] {
 
 function identityMatrix(d: number): number[][] {
   return Array.from({ length: d }, (_, i) =>
-    Array.from({ length: d }, (_, j) => (i === j ? 1 : 0)),
+    Array.from({ length: d }, (_, j) => (i === j ? 1 : 0))
   );
 }
 
 function addOuterProduct(A: number[][], x: number[]): void {
-  for (let i = 0; i < x.length; i++)
-    for (let j = 0; j < x.length; j++)
-      A[i][j] += x[i] * x[j];
+  for (let i = 0; i < x.length; i++) for (let j = 0; j < x.length; j++) A[i][j] += x[i] * x[j];
 }
 
 function addScaledVector(b: number[], x: number[], scalar: number): void {
@@ -155,7 +153,7 @@ export class PromptVariantBandit {
   selectVariant(
     promptKey: string,
     variants: PromptVariant[],
-    context: VariantBanditContext,
+    context: VariantBanditContext
   ): VariantSelectionResult | null {
     if (!variants.length) return null;
 
@@ -196,7 +194,7 @@ export class PromptVariantBandit {
         candidates: scored.length,
         context: `${context.taskType}/${context.complexity}`,
       },
-      'Prompt variant selected',
+      'Prompt variant selected'
     );
 
     incrementPromptMetric('ailin_prompt_variant_selected_total', {
@@ -260,7 +258,9 @@ export class PromptVariantBandit {
       const { getRedisClient } = await import('@/cache/redis-client');
       const redis = getRedisClient();
       if (!redis) {
-        incrementPromptMetric('ailin_prompt_variant_bandit_persistence_total', { event: 'redis-unavailable' });
+        incrementPromptMetric('ailin_prompt_variant_bandit_persistence_total', {
+          event: 'redis-unavailable',
+        });
         log.warn('Prompt variant bandit: Redis unavailable — starting with empty state');
         return;
       }
@@ -273,7 +273,11 @@ export class PromptVariantBandit {
           if (!raw) continue;
           const arm = JSON.parse(raw) as LinUCBArm;
           // Validate shape minimally
-          if (Array.isArray(arm.A) && Array.isArray(arm.b) && typeof arm.observations === 'number') {
+          if (
+            Array.isArray(arm.A) &&
+            Array.isArray(arm.b) &&
+            typeof arm.observations === 'number'
+          ) {
             const armKey = redisKey.slice(PromptVariantBandit.REDIS_KEY_PREFIX.length);
             this.arms.set(armKey, arm);
             loaded++;
@@ -286,12 +290,17 @@ export class PromptVariantBandit {
         event: 'loaded',
         count: loaded,
       });
-      log.info({ loaded, totalKeys: keys.length }, 'Prompt variant bandit: loaded arm state from Redis');
+      log.info(
+        { loaded, totalKeys: keys.length },
+        'Prompt variant bandit: loaded arm state from Redis'
+      );
     } catch (err) {
-      incrementPromptMetric('ailin_prompt_variant_bandit_persistence_total', { event: 'load-failed' });
+      incrementPromptMetric('ailin_prompt_variant_bandit_persistence_total', {
+        event: 'load-failed',
+      });
       log.warn(
         { error: err instanceof Error ? err.message : String(err) },
-        'Prompt variant bandit: Redis load failed — starting cold',
+        'Prompt variant bandit: Redis load failed — starting cold'
       );
     }
   }

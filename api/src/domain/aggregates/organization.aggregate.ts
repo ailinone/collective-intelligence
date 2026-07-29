@@ -27,7 +27,9 @@ import { TierLevel } from '../value-objects/organization-tier';
 export class OrganizationAggregate {
   private organization: OrganizationEntity;
   private members: Map<string, UserEntity>;
-  private domainEvents: Array<BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent>;
+  private domainEvents: Array<
+    BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent
+  >;
 
   private constructor(organization: OrganizationEntity, members: UserEntity[] = []) {
     this.organization = organization;
@@ -59,7 +61,10 @@ export class OrganizationAggregate {
     const ownerEmailStr =
       typeof data.ownerEmail === 'string'
         ? data.ownerEmail
-        : (data.ownerEmail && typeof data.ownerEmail === 'object' && 'getValue' in data.ownerEmail && typeof (data.ownerEmail as { getValue: () => string }).getValue === 'function')
+        : data.ownerEmail &&
+            typeof data.ownerEmail === 'object' &&
+            'getValue' in data.ownerEmail &&
+            typeof (data.ownerEmail as { getValue: () => string }).getValue === 'function'
           ? (data.ownerEmail as { getValue: () => string }).getValue()
           : String(data.ownerEmail);
 
@@ -113,10 +118,13 @@ export class OrganizationAggregate {
     const emailStr: string =
       typeof emailValue === 'string'
         ? emailValue
-        : (emailValue && typeof emailValue === 'object' && 'getValue' in emailValue && typeof emailValue.getValue === 'function')
-          // The structural check above gives us a function; we still need
-          // to constrain its return type because `function` is `Function`.
-          ? String((emailValue as EmailValueObject).getValue?.() ?? '')
+        : emailValue &&
+            typeof emailValue === 'object' &&
+            'getValue' in emailValue &&
+            typeof emailValue.getValue === 'function'
+          ? // The structural check above gives us a function; we still need
+            // to constrain its return type because `function` is `Function`.
+            String((emailValue as EmailValueObject).getValue?.() ?? '')
           : String(emailValue);
 
     const member = UserEntity.create({
@@ -249,11 +257,15 @@ export class OrganizationAggregate {
   /**
    * Domain Events Management
    */
-  private addDomainEvent(event: BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent): void {
+  private addDomainEvent(
+    event: BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent
+  ): void {
     this.domainEvents.push(event);
   }
 
-  getDomainEvents(): Array<BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent> {
+  getDomainEvents(): Array<
+    BaseDomainEvent | OrganizationTierUpgradedEvent | OrganizationTierDowngradedEvent
+  > {
     return [...this.domainEvents];
   }
 

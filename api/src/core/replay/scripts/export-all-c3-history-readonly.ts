@@ -37,7 +37,6 @@ import { resolve } from 'node:path';
 import { harvestHistoricalResults } from '../harvest/historical-results-harvester';
 import type { HistoricalRawRow } from '../harvest/historical-results-schema';
 
-
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
 const RAW_PATH = resolve(ARTIFACTS_DIR, 'c3-history-full-export.raw.jsonl');
 const SANITIZED_PATH = resolve(ARTIFACTS_DIR, 'c3-history-full-export.sanitized.jsonl');
@@ -76,8 +75,7 @@ ORDER BY t.created_at;
 `.trim();
 
 const COUNT_ALL_SQL = 'SELECT COUNT(*) FROM experiment_executions;';
-const COUNT_EXPERIMENTS_SQL =
-  'SELECT COUNT(DISTINCT experiment_id) FROM experiment_executions;';
+const COUNT_EXPERIMENTS_SQL = 'SELECT COUNT(DISTINCT experiment_id) FROM experiment_executions;';
 const TABLES_SQL =
   "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (table_name LIKE 'experiment%' OR table_name LIKE 'execution%' OR table_name='models' OR table_name='providers') ORDER BY table_name;";
 
@@ -119,43 +117,30 @@ function main(): void {
   if (skippedLines > 0) console.warn('[export-all] skipped lines:', skippedLines);
 
   // Write raw (already PII-free per SELECT) + run harvest pipeline.
-  writeFileSync(
-    RAW_PATH,
-    rawRows.map((r) => JSON.stringify(r)).join('\n') + '\n',
-    'utf-8',
-  );
+  writeFileSync(RAW_PATH, rawRows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf-8');
   console.log('[export-all] wrote raw:', rawRows.length, 'rows');
 
   const harvest = harvestHistoricalResults(rawRows);
-  console.log(
-    '[export-all] harvest counts:',
-    JSON.stringify(harvest.counts, null, 2),
-  );
+  console.log('[export-all] harvest counts:', JSON.stringify(harvest.counts, null, 2));
 
   // Sanitised JSONL = the sanitiser output (same shape but normalised keys).
   // We mirror the eligible (training-and-holdout) candidates as the
   // "normalised" artefact for the next stage.
   writeFileSync(
     NORMALIZED_PATH,
-    harvest.trainingAndHoldoutCandidates
-      .map((r) => JSON.stringify(r))
-      .join('\n') + '\n',
-    'utf-8',
+    harvest.trainingAndHoldoutCandidates.map((r) => JSON.stringify(r)).join('\n') + '\n',
+    'utf-8'
   );
   console.log(
     '[export-all] wrote normalised:',
     harvest.trainingAndHoldoutCandidates.length,
-    'rows',
+    'rows'
   );
 
   // For audit transparency, also dump the post-sanitiser raw shape.
   // (We don't keep the FORBIDDEN fields anywhere; this is a pass-through
   // of what made it past the sanitiser keep-list.)
-  writeFileSync(
-    SANITIZED_PATH,
-    rawRows.map((r) => JSON.stringify(r)).join('\n') + '\n',
-    'utf-8',
-  );
+  writeFileSync(SANITIZED_PATH, rawRows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf-8');
 
   const meta = {
     exportedAt: new Date().toISOString(),
@@ -175,7 +160,7 @@ function main(): void {
         acc[d.usage] = (acc[d.usage] ?? 0) + 1;
         return acc;
       },
-      {} as Record<string, number>,
+      {} as Record<string, number>
     ),
     sampleDecisions: harvest.decisions.slice(0, 50),
   };

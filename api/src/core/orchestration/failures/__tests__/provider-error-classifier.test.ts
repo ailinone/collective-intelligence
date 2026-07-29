@@ -59,7 +59,7 @@ describe('classifyProviderError — non-retryable provider conditions', () => {
     });
     expect(c.kind).toBe('model_not_supported');
     expect(c.retryable).toBe(false);
-    expect(c.routeHealthy).toBe(true);          // provider OK
+    expect(c.routeHealthy).toBe(true); // provider OK
     expect(c.providerHealthy).toBe(true);
     expect(c.modelRouteCompatible).toBe(false); // this specific model isn't supported
   });

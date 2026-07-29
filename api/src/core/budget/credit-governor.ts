@@ -26,8 +26,19 @@
 
 import { logger } from '@/utils/logger';
 import { getProviderOperabilityHub } from '../provider-operability-hub';
-import { buildRouteKey, extractModelFamily, isRouteUsable, isExternalRoute } from '../operability/operability-snapshot';
-import type { CreditCheckResult, CreditCheckReason, BudgetAllocation, SpendRecord, RouteExhaustionRecord } from './budget-types';
+import {
+  buildRouteKey,
+  extractModelFamily,
+  isRouteUsable,
+  isExternalRoute,
+} from '../operability/operability-snapshot';
+import type {
+  CreditCheckResult,
+  CreditCheckReason,
+  BudgetAllocation,
+  SpendRecord,
+  RouteExhaustionRecord,
+} from './budget-types';
 
 const log = logger.child({ component: 'credit-governor' });
 
@@ -57,7 +68,7 @@ export class CreditGovernor {
     executionProvider: string,
     modelId: string,
     estimatedCostUsd: number,
-    armKey?: string,
+    armKey?: string
   ): CreditCheckResult {
     const modelFamily = extractModelFamily(modelId);
     const routeKey = buildRouteKey(executionProvider, modelFamily);
@@ -149,7 +160,13 @@ export class CreditGovernor {
   /**
    * Record actual spend after a successful execution.
    */
-  recordSpend(executionProvider: string, modelId: string, costUsd: number, armKey?: string, requestId?: string): void {
+  recordSpend(
+    executionProvider: string,
+    modelId: string,
+    costUsd: number,
+    armKey?: string,
+    requestId?: string
+  ): void {
     const modelFamily = extractModelFamily(modelId);
     const routeKey = buildRouteKey(executionProvider, modelFamily);
 
@@ -277,7 +294,10 @@ export class CreditGovernor {
 
   // ── Private ───────────────────────────────────────────────────────
 
-  private checkRouteState(record: { operabilityState: string; operabilityReasonCode: string }, _routeKey: string): CreditCheckReason | null {
+  private checkRouteState(
+    record: { operabilityState: string; operabilityReasonCode: string },
+    _routeKey: string
+  ): CreditCheckReason | null {
     switch (record.operabilityState) {
       case 'no_credits':
         return 'route_exhausted';
@@ -318,6 +338,9 @@ export function getCreditGovernor(): CreditGovernor {
  */
 export function initCreditGovernor(budget: BudgetAllocation): CreditGovernor {
   instance = new CreditGovernor(budget);
-  log.info({ budget: budget.experimentBudgetUsd, buffer: budget.minBufferUsd }, 'CreditGovernor initialized');
+  log.info(
+    { budget: budget.experimentBudgetUsd, buffer: budget.minBufferUsd },
+    'CreditGovernor initialized'
+  );
   return instance;
 }

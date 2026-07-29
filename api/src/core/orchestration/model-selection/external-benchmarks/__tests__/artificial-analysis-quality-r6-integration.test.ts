@@ -42,7 +42,11 @@ const MOCK_AA: ArtificialAnalysisModelsResponse = {
         artificial_analysis_coding_index: 90,
         gpqa: 70,
       },
-      pricing: { price_1m_blended_3_to_1: 2.5, price_1m_input_tokens: 1, price_1m_output_tokens: 7 },
+      pricing: {
+        price_1m_blended_3_to_1: 2.5,
+        price_1m_input_tokens: 1,
+        price_1m_output_tokens: 7,
+      },
       median_output_tokens_per_second: 120,
       median_time_to_first_token_seconds: 0.5,
     },

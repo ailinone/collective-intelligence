@@ -33,11 +33,14 @@ import {
 } from './consensus-strategy.fixtures';
 
 vi.mock('@/core/aggregation/response-aggregator', async () =>
-  (await import('./consensus-module-mocks')).responseAggregatorModuleMock());
+  (await import('./consensus-module-mocks')).responseAggregatorModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-shadow', async () =>
-  (await import('./consensus-module-mocks')).ensembleShadowModuleMock());
+  (await import('./consensus-module-mocks')).ensembleShadowModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-client', async () =>
-  (await import('./consensus-module-mocks')).ensembleClientModuleMock());
+  (await import('./consensus-module-mocks')).ensembleClientModuleMock()
+);
 
 // Long enough to clear the outlier length threshold.
 const reasoning =
@@ -62,9 +65,15 @@ describe('ConsensusStrategy — <solution> tag majority agreement', () => {
     setAggregatorOverride({ content: `SENTINEL_SYNTHESIS ${reasoning}`, confidence: 0.9 });
     const { strategy } = wireStrategy({
       responses: {
-        'voter-a': { content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>` },
-        'voter-b': { content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>` },
-        'voter-c': { content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>` },
+        'voter-a': {
+          content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
+        },
+        'voter-b': {
+          content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
+        },
+        'voter-c': {
+          content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>`,
+        },
       },
       evaluator: makeMockEvaluator({ fallback: 0.5, synthesis: 0.9 }),
       eligibleModels: models,
@@ -73,7 +82,9 @@ describe('ConsensusStrategy — <solution> tag majority agreement', () => {
     const r = await strategy.execute(makeRequest(), makeContext(models));
     const a = artifactsOf(r);
 
-    expect(contentOf(r)).toContain('<solution>1, filmmaking, police-officer, journalist</solution>');
+    expect(contentOf(r)).toContain(
+      '<solution>1, filmmaking, police-officer, journalist</solution>'
+    );
     expect(contentOf(r)).not.toContain('SENTINEL_SYNTHESIS');
     expect(a.effectiveStrategyId).toBe('consensus_agreement_individual');
     expect(a.finalSelection.source).toBe('agreement_individual');
@@ -88,9 +99,15 @@ describe('ConsensusStrategy — <solution> tag majority agreement', () => {
     setAggregatorOverride({ content: `SENTINEL_SYNTHESIS ${reasoning}`, confidence: 0.9 });
     const { strategy } = wireStrategy({
       responses: {
-        'voter-a': { content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>` },
-        'voter-b': { content: `${reasoning}<solution>1,Filmmaking,Police-Officer, journalist</solution>` },
-        'voter-c': { content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>` },
+        'voter-a': {
+          content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
+        },
+        'voter-b': {
+          content: `${reasoning}<solution>1,Filmmaking,Police-Officer, journalist</solution>`,
+        },
+        'voter-c': {
+          content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>`,
+        },
       },
       evaluator: makeMockEvaluator({ fallback: 0.5, synthesis: 0.9 }),
       eligibleModels: models,
@@ -108,9 +125,15 @@ describe('ConsensusStrategy — <solution> tag majority agreement', () => {
     setAggregatorOverride({ content: `SENTINEL_SYNTHESIS ${reasoning}`, confidence: 0.9 });
     const { strategy } = wireStrategy({
       responses: {
-        'voter-a': { content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>` },
-        'voter-b': { content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>` },
-        'voter-c': { content: `${reasoning}<solution>1, collecting, police-officer, journalist</solution>` },
+        'voter-a': {
+          content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
+        },
+        'voter-b': {
+          content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>`,
+        },
+        'voter-c': {
+          content: `${reasoning}<solution>1, collecting, police-officer, journalist</solution>`,
+        },
       },
       evaluator: makeMockEvaluator({ fallback: 0.5, synthesis: 0.9 }),
       eligibleModels: models,
@@ -134,8 +157,12 @@ describe('ConsensusStrategy — <solution> tag majority agreement', () => {
         'voter-a': {
           content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution> Wait, let me recheck. ${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
         },
-        'voter-b': { content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>` },
-        'voter-c': { content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>` },
+        'voter-b': {
+          content: `${reasoning}<solution>1, filmmaking, police-officer, journalist</solution>`,
+        },
+        'voter-c': {
+          content: `${reasoning}<solution>2, collecting, journalist, police-officer</solution>`,
+        },
       },
       evaluator: makeMockEvaluator({ fallback: 0.5, synthesis: 0.9 }),
       eligibleModels: models,

@@ -90,7 +90,7 @@ describe('prepaid-wallet · idempotent debit (DI-01)', () => {
   it('races on the same key resolve to a single charge', async () => {
     const wallet = new PrepaidWallet(new InMemoryBalanceStore({ org: 5 }));
     const results = await Promise.all(
-      Array.from({ length: 8 }, () => wallet.debit('org', 1, 'req_dup')),
+      Array.from({ length: 8 }, () => wallet.debit('org', 1, 'req_dup'))
     );
     // Every caller sees the post-charge balance; the balance dropped by exactly $1.
     for (const r of results) expect(r).toBeCloseTo(4, 6);
@@ -128,7 +128,7 @@ describe('prepaid-wallet · persisted holds (DI-02)', () => {
 
     // Five requests race to reserve $0.40 each against a $1.00 balance.
     const decisions = await Promise.all(
-      Array.from({ length: 5 }, (_, i) => wallet.reserve('org', `hold_${i}`, 0.4)),
+      Array.from({ length: 5 }, (_, i) => wallet.reserve('org', `hold_${i}`, 0.4))
     );
 
     const allowed = decisions.filter((d) => d.allowed).length;
@@ -201,19 +201,14 @@ class FailingDebitStore implements BalanceStore {
   async adjustBalanceUsd(): Promise<number> {
     throw new Error('db down');
   }
-  async applyDebit(
-    _o: string,
-    _a: number,
-    _k: string,
-    _m: CreditMemo,
-  ): Promise<DebitResult> {
+  async applyDebit(_o: string, _a: number, _k: string, _m: CreditMemo): Promise<DebitResult> {
     throw new Error('db down');
   }
   async reserveHold(
     _o: string,
     _h: string,
     _a: number,
-    _opts?: ReserveOptions,
+    _opts?: ReserveOptions
   ): Promise<ReserveResult> {
     throw new Error('db down');
   }

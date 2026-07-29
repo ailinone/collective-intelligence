@@ -144,17 +144,16 @@ export class TopazAdapter extends ProviderAdapter {
   }
 
   async getModels(): Promise<Model[]> {
-    return ENHANCE_MODELS.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'topaz',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: ['image_upscale', 'image_enhance'],
-        })),
+    return ENHANCE_MODELS.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'topaz',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: ['image_upscale', 'image_enhance'],
+      })
     );
   }
 
@@ -173,7 +172,7 @@ export class TopazAdapter extends ProviderAdapter {
 
   async imageGenerate(_m: Model, _r: ImageGenRequest): Promise<ImageGenResponse> {
     throw new Error(
-      'topaz: imageGenerate not supported — Topaz enhances existing images; use imageEdit',
+      'topaz: imageGenerate not supported — Topaz enhances existing images; use imageEdit'
     );
   }
 
@@ -184,7 +183,9 @@ export class TopazAdapter extends ProviderAdapter {
   async imageEdit(model: Model, request: ImageEditRequest): Promise<ImageEditResponse> {
     const modelId = (model.name || model.id || 'standard_v2').trim();
     if (!TopazAdapter.isTopazModel(modelId)) {
-      throw new Error(`topaz: unknown model ${modelId} — expected one of ${ENHANCE_MODELS.join(', ')}`);
+      throw new Error(
+        `topaz: unknown model ${modelId} — expected one of ${ENHANCE_MODELS.join(', ')}`
+      );
     }
 
     const options = (request.options || {}) as Record<string, unknown>;
@@ -223,7 +224,7 @@ export class TopazAdapter extends ProviderAdapter {
     const norm = terminal.status.toLowerCase();
     if (norm === 'failed' || norm === 'cancelled' || norm === 'error') {
       throw new Error(
-        `topaz: process ${processId} ended in ${terminal.status}: ${terminal.error ?? '(no error detail)'}`,
+        `topaz: process ${processId} ended in ${terminal.status}: ${terminal.error ?? '(no error detail)'}`
       );
     }
 
@@ -305,14 +306,11 @@ export class TopazAdapter extends ProviderAdapter {
 
   protected async pollStatus(processId: string): Promise<TopazStatus> {
     for (let attempt = 0; attempt < this.pollMaxAttempts; attempt++) {
-      const res = await fetch(
-        `${this.baseUrl}/status/${encodeURIComponent(processId)}`,
-        {
-          method: 'GET',
-          headers: { 'X-API-Key': this.apiKey, Accept: 'application/json' },
-          signal: AbortSignal.timeout(10_000),
-        },
-      );
+      const res = await fetch(`${this.baseUrl}/status/${encodeURIComponent(processId)}`, {
+        method: 'GET',
+        headers: { 'X-API-Key': this.apiKey, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => '<unreadable>');
         throw new Error(`Topaz HTTP ${res.status} on status: ${text.slice(0, 500)}`);
@@ -324,7 +322,7 @@ export class TopazAdapter extends ProviderAdapter {
       await this.sleep(this.pollIntervalMs);
     }
     throw new Error(
-      `topaz: process ${processId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`,
+      `topaz: process ${processId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`
     );
   }
 
@@ -335,7 +333,7 @@ export class TopazAdapter extends ProviderAdapter {
   private async buildForm(
     modelId: string,
     image: Buffer | string,
-    options: Record<string, unknown>,
+    options: Record<string, unknown>
   ): Promise<FormData> {
     const form = new FormData();
     form.append('model', modelId);

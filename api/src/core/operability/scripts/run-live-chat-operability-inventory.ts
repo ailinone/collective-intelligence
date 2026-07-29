@@ -82,14 +82,24 @@ function parseArgs(): InvArgs {
     else if (a === '--max-tokens') out.maxTokens = Number(argv[++i]);
     else if (a === '--prompt') out.prompt = String(argv[++i]);
     else if (a === '--no-provider-calls' || a === '--plan-only') out.noProviderCalls = true;
-    else if (a === '--write-plan') out.writePlan = String(next), i++;
-    else if (a === '--write-summary') out.writeSummary = String(next), i++;
-    else if (a === '--write-results' || a === '--write-json') out.writeResults = String(next), i++;
-    else if (a === '--write-snapshot' || a === '--snapshot-path') out.writeSnapshotPath = String(next), i++;
-    else if (a === '--temperature') i++; // accepted + ignored (probe is always temp=0)
-    else if (a === '--sanitize') out.sanitize = true; // already default
-    else if (a === '--catalog-from-file') out.catalogFromFile = String(next), i++;
-    else if (a === '--no-retries' || a === '--inventory-from-catalog' || a === '--providers-with-local-secrets-only' || a === '--exclude-specialized-non-chat-providers' || a === '--bootstrap-runtime') {
+    else if (a === '--write-plan') ((out.writePlan = String(next)), i++);
+    else if (a === '--write-summary') ((out.writeSummary = String(next)), i++);
+    else if (a === '--write-results' || a === '--write-json')
+      ((out.writeResults = String(next)), i++);
+    else if (a === '--write-snapshot' || a === '--snapshot-path')
+      ((out.writeSnapshotPath = String(next)), i++);
+    else if (a === '--temperature')
+      i++; // accepted + ignored (probe is always temp=0)
+    else if (a === '--sanitize')
+      out.sanitize = true; // already default
+    else if (a === '--catalog-from-file') ((out.catalogFromFile = String(next)), i++);
+    else if (
+      a === '--no-retries' ||
+      a === '--inventory-from-catalog' ||
+      a === '--providers-with-local-secrets-only' ||
+      a === '--exclude-specialized-non-chat-providers' ||
+      a === '--bootstrap-runtime'
+    ) {
       // accepted no-ops (flags documented in spec; behaviors are built-in defaults)
     }
   }
@@ -222,7 +232,7 @@ async function main(): Promise<void> {
       // downstream validators can see canonical + context-window data.
       results: results.map((r) => {
         const planned = plan.plannedProbes.find(
-          (p) => p.providerId === r.providerId && p.apiModelId === r.modelId,
+          (p) => p.providerId === r.providerId && p.apiModelId === r.modelId
         );
         return {
           ...r,
@@ -259,8 +269,8 @@ async function main(): Promise<void> {
         ...plan.summary,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 

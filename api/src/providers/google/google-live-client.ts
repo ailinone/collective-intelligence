@@ -195,10 +195,7 @@ export class GoogleLiveClient extends EventEmitter {
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
-          log.info(
-            { code, reason: reason.toString() },
-            'Google Live API WebSocket closed'
-          );
+          log.info({ code, reason: reason.toString() }, 'Google Live API WebSocket closed');
           this.isConnected = false;
           this.emit('close', { code, reason: reason.toString() });
         });
@@ -364,11 +361,7 @@ export class GoogleLiveClient extends EventEmitter {
   /**
    * Send tool response
    */
-  sendToolResponse(
-    callId: string,
-    name: string,
-    response: Record<string, unknown>
-  ): void {
+  sendToolResponse(callId: string, name: string, response: Record<string, unknown>): void {
     const message: GoogleLiveClientMessage = {
       toolResponse: {
         functionResponses: [
@@ -430,4 +423,3 @@ export class GoogleLiveClient extends EventEmitter {
     return this.isConnected;
   }
 }
-

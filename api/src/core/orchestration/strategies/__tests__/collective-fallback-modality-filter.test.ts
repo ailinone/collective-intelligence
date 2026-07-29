@@ -65,11 +65,23 @@ function makeRequest(): ChatRequest {
 // Exact model IDs observed in the production DB rows for this bug.
 const videoModels: Model[] = [
   makeModel({ id: 'kling/kling-3.0-4k', provider: 'kling', capabilities: ['video_generation'] }),
-  makeModel({ id: 'bytedance/seedance-2-mini', provider: 'bytedance', capabilities: ['video_generation'] }),
+  makeModel({
+    id: 'bytedance/seedance-2-mini',
+    provider: 'bytedance',
+    capabilities: ['video_generation'],
+  }),
 ];
 const chatModels: Model[] = [
-  makeModel({ id: 'chat-model-fast', provider: 'prov-fast', capabilities: ['chat', 'text_generation'] }),
-  makeModel({ id: 'chat-model-quality', provider: 'prov-quality', capabilities: ['chat', 'text_generation'] }),
+  makeModel({
+    id: 'chat-model-fast',
+    provider: 'prov-fast',
+    capabilities: ['chat', 'text_generation'],
+  }),
+  makeModel({
+    id: 'chat-model-quality',
+    provider: 'prov-quality',
+    capabilities: ['chat', 'text_generation'],
+  }),
 ];
 
 function wireGetAdapter(strategy: unknown): void {
@@ -77,7 +89,9 @@ function wireGetAdapter(strategy: unknown): void {
   anyStrat.log = silentLogger;
   anyStrat.getAdapterForModel = vi.fn(async (model: Model) => ({
     getName: () => model.provider,
-    chatCompletion: async () => { throw new Error('not called by selectModels'); },
+    chatCompletion: async () => {
+      throw new Error('not called by selectModels');
+    },
     calculateCost: () => 0,
   }));
 }
@@ -88,9 +102,11 @@ describe('SequentialStrategy fallback — modality filter', () => {
     wireGetAdapter(strategy);
 
     const context: OrchestrationContext = makeContext([...videoModels, ...chatModels]);
-    const selected = await (strategy as unknown as {
-      selectModels: (r: ChatRequest, c: OrchestrationContext) => Promise<Array<{ model: Model }>>;
-    }).selectModels(makeRequest(), context);
+    const selected = await (
+      strategy as unknown as {
+        selectModels: (r: ChatRequest, c: OrchestrationContext) => Promise<Array<{ model: Model }>>;
+      }
+    ).selectModels(makeRequest(), context);
 
     const selectedIds = selected.map((s) => s.model.id);
     expect(selectedIds).not.toContain('kling/kling-3.0-4k');
@@ -109,9 +125,11 @@ describe('SequentialStrategy fallback — modality filter', () => {
     wireGetAdapter(strategy);
 
     const context: OrchestrationContext = makeContext([...videoModels]);
-    const selected = await (strategy as unknown as {
-      selectModels: (r: ChatRequest, c: OrchestrationContext) => Promise<Array<{ model: Model }>>;
-    }).selectModels(makeRequest(), context);
+    const selected = await (
+      strategy as unknown as {
+        selectModels: (r: ChatRequest, c: OrchestrationContext) => Promise<Array<{ model: Model }>>;
+      }
+    ).selectModels(makeRequest(), context);
 
     expect(selected).toEqual([]);
   });
@@ -123,9 +141,15 @@ describe('ParallelStrategy fallback — modality filter', () => {
     wireGetAdapter(strategy);
 
     const context: OrchestrationContext = makeContext([...videoModels, ...chatModels]);
-    const selected = await (strategy as unknown as {
-      selectModels: (r: ChatRequest, c: OrchestrationContext, exclude?: readonly string[]) => Promise<Array<{ model: Model }>>;
-    }).selectModels(makeRequest(), context);
+    const selected = await (
+      strategy as unknown as {
+        selectModels: (
+          r: ChatRequest,
+          c: OrchestrationContext,
+          exclude?: readonly string[]
+        ) => Promise<Array<{ model: Model }>>;
+      }
+    ).selectModels(makeRequest(), context);
 
     const selectedIds = selected.map((s) => s.model.id);
     expect(selectedIds).not.toContain('kling/kling-3.0-4k');
@@ -141,9 +165,15 @@ describe('ParallelStrategy fallback — modality filter', () => {
     wireGetAdapter(strategy);
 
     const context: OrchestrationContext = makeContext([...videoModels]);
-    const selected = await (strategy as unknown as {
-      selectModels: (r: ChatRequest, c: OrchestrationContext, exclude?: readonly string[]) => Promise<Array<{ model: Model }>>;
-    }).selectModels(makeRequest(), context);
+    const selected = await (
+      strategy as unknown as {
+        selectModels: (
+          r: ChatRequest,
+          c: OrchestrationContext,
+          exclude?: readonly string[]
+        ) => Promise<Array<{ model: Model }>>;
+      }
+    ).selectModels(makeRequest(), context);
 
     expect(selected).toEqual([]);
   });

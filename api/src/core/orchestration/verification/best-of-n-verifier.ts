@@ -24,11 +24,7 @@
  * the replacement for the plain majority-vote step inside collective strategies.
  */
 
-import {
-  extractLastNumericToken,
-  normalizeNumericToken,
-  parseLocaleNumber,
-} from './locale-number';
+import { extractLastNumericToken, normalizeNumericToken, parseLocaleNumber } from './locale-number';
 
 export type VerifyMethod = 'checker' | 'self_consistency' | 'none';
 
@@ -148,7 +144,7 @@ export function passesCompletenessGates(
     readonly scope?: 'final' | 'full';
     readonly completionAnyOf?: readonly string[];
     readonly truncated?: boolean;
-  },
+  }
 ): boolean {
   if ((opts.scope ?? 'final') !== 'full') return true;
   if (opts.truncated === true) return false;
@@ -163,7 +159,7 @@ export function passesCompletenessGates(
 /** The string the checker inspects for a candidate, per scope. */
 export function answerForScope(
   text: string | null | undefined,
-  scope: 'final' | 'full' = 'final',
+  scope: 'final' | 'full' = 'final'
 ): string | null {
   if (scope === 'full') {
     const t = text == null ? '' : String(text);
@@ -181,7 +177,7 @@ export function answerForScope(
  */
 export function selectVerifiedAnswer(
   candidateTexts: ReadonlyArray<string | null | undefined>,
-  opts: SelectOptions = {},
+  opts: SelectOptions = {}
 ): VerifyResult {
   const answers = candidateTexts.map((t) => answerForScope(t, opts.scope));
   const parseable = answers.filter((a): a is string => a != null);

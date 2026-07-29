@@ -92,7 +92,7 @@ describe('buildReplayReport — approval gates', () => {
     });
     expect(r.approval.approved).toBe(false);
     expect(
-      r.approval.reasons.some((s) => s.indexOf('quality_and_cost_success_rate_below_0_5') !== -1),
+      r.approval.reasons.some((s) => s.indexOf('quality_and_cost_success_rate_below_0_5') !== -1)
     ).toBe(true);
   });
 
@@ -111,9 +111,7 @@ describe('buildReplayReport — approval gates', () => {
       nowIso: 't',
     });
     expect(r.approval.approved).toBe(false);
-    expect(
-      r.approval.reasons.some((s) => s.indexOf('holdout_too_small') !== -1),
-    ).toBe(true);
+    expect(r.approval.reasons.some((s) => s.indexOf('holdout_too_small') !== -1)).toBe(true);
   });
 
   it('rejects when single_fallback_rate is excessive', () => {
@@ -131,9 +129,9 @@ describe('buildReplayReport — approval gates', () => {
       nowIso: 't',
     });
     expect(r.approval.approved).toBe(false);
-    expect(
-      r.approval.reasons.some((s) => s.indexOf('single_fallback_rate_excessive') !== -1),
-    ).toBe(true);
+    expect(r.approval.reasons.some((s) => s.indexOf('single_fallback_rate_excessive') !== -1)).toBe(
+      true
+    );
   });
 
   it('rejects when expected_vs_observed_judge_error > 0.30', () => {
@@ -152,7 +150,7 @@ describe('buildReplayReport — approval gates', () => {
     });
     expect(r.approval.approved).toBe(false);
     expect(
-      r.approval.reasons.some((s) => s.indexOf('expected_vs_observed_judge_error_high') !== -1),
+      r.approval.reasons.some((s) => s.indexOf('expected_vs_observed_judge_error_high') !== -1)
     ).toBe(true);
   });
 
@@ -175,9 +173,7 @@ describe('buildReplayReport — approval gates', () => {
       nowIso: 't',
     });
     expect(r.approval.approved).toBe(false);
-    expect(
-      r.approval.reasons.some((s) => s.indexOf('leakage_detected') !== -1),
-    ).toBe(true);
+    expect(r.approval.reasons.some((s) => s.indexOf('leakage_detected') !== -1)).toBe(true);
   });
 });
 

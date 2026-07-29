@@ -12,10 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  sanitiseRow,
-  sanitiseRows,
-} from '../harvest/historical-results-sanitizer';
+import { sanitiseRow, sanitiseRows } from '../harvest/historical-results-sanitizer';
 
 describe('sanitiseRow', () => {
   it('strips PII fields (prompt, response, messages, rawContext, …)', () => {

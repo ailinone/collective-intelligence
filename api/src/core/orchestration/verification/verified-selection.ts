@@ -93,7 +93,7 @@ function passesChecker(checker: (answer: string) => boolean, answer: string | nu
  */
 function bestPasserIndex(
   passerIndices: ReadonlyArray<number>,
-  input: VerifiedSelectionInput,
+  input: VerifiedSelectionInput
 ): number {
   const scoreAt = (i: number): number => {
     const s = input.candidateScores?.[i];
@@ -104,8 +104,7 @@ function bestPasserIndex(
   let best = passerIndices[0];
   for (const i of passerIndices.slice(1)) {
     const better =
-      scoreAt(i) > scoreAt(best) ||
-      (scoreAt(i) === scoreAt(best) && lengthAt(i) > lengthAt(best));
+      scoreAt(i) > scoreAt(best) || (scoreAt(i) === scoreAt(best) && lengthAt(i) > lengthAt(best));
     if (better) best = i;
   }
   return best;
@@ -150,13 +149,15 @@ export function selectWithVerification(input: VerifiedSelectionInput): VerifiedS
         ? bestPasserIndex(verify.passerIndices, input)
         : input.candidateTexts.findIndex((t, i) => {
             const a = answerForScope(t, scope);
-            return a === verify.answer
-              && passesCompletenessGates(t, {
+            return (
+              a === verify.answer &&
+              passesCompletenessGates(t, {
                 scope,
                 completionAnyOf: input.completionAnyOf,
                 truncated: input.candidateTruncated?.[i],
-              })
-              && passesChecker(input.checker, a);
+              }) &&
+              passesChecker(input.checker, a)
+            );
           });
     if (idx >= 0) {
       return { decision: 'override_to_voter', voterIndex: idx, synthesisVerified, verify };

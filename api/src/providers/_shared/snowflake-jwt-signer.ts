@@ -89,7 +89,8 @@ export class SnowflakeJwtSigner implements TokenProvider {
   constructor(opts: SnowflakeJwtSignerOptions) {
     if (!opts.account?.trim()) throw new Error('SnowflakeJwtSigner: account is required');
     if (!opts.user?.trim()) throw new Error('SnowflakeJwtSigner: user is required');
-    if (!opts.privateKeyPem?.trim()) throw new Error('SnowflakeJwtSigner: privateKeyPem is required');
+    if (!opts.privateKeyPem?.trim())
+      throw new Error('SnowflakeJwtSigner: privateKeyPem is required');
 
     this.account = opts.account.toUpperCase();
     this.user = opts.user.toUpperCase();
@@ -105,7 +106,7 @@ export class SnowflakeJwtSigner implements TokenProvider {
       });
     } catch (err) {
       throw new Error(
-        `SnowflakeJwtSigner: failed to parse private key — ${err instanceof Error ? err.message : String(err)}`,
+        `SnowflakeJwtSigner: failed to parse private key — ${err instanceof Error ? err.message : String(err)}`
       );
     }
 

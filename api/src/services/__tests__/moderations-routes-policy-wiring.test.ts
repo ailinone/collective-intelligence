@@ -39,7 +39,9 @@ vi.mock('@/middleware/auth-middleware', () => ({
 
 vi.mock('@/api/middleware/tenant-isolation-middleware', () => ({
   requireTenantContext: () => async (request: FastifyRequest) => {
-    (request as unknown as { tenantContext: { organizationId: string; userId: string } }).tenantContext = {
+    (
+      request as unknown as { tenantContext: { organizationId: string; userId: string } }
+    ).tenantContext = {
       organizationId: TEST_ORG,
       userId: 'user-1',
     };
@@ -139,7 +141,10 @@ describe('Moderation policy routes', () => {
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
     expect(body.policy.id).toBe('pol-1');
-    expect(createPolicyMock).toHaveBeenCalledWith(TEST_ORG, expect.objectContaining({ name: 'strict' }));
+    expect(createPolicyMock).toHaveBeenCalledWith(
+      TEST_ORG,
+      expect.objectContaining({ name: 'strict' })
+    );
   });
 
   it('POST /v1/moderations/policies → 409 on a name conflict', async () => {
@@ -164,7 +169,10 @@ describe('Moderation policy routes', () => {
   });
 
   it('GET /v1/moderations/policies → 200 list scoped to the caller org', async () => {
-    listPoliciesMock.mockResolvedValueOnce([policyRecord(), policyRecord({ id: 'pol-2', name: 'lax' })]);
+    listPoliciesMock.mockResolvedValueOnce([
+      policyRecord(),
+      policyRecord({ id: 'pol-2', name: 'lax' }),
+    ]);
     const res = await server.inject({ method: 'GET', url: '/v1/moderations/policies' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
@@ -183,7 +191,10 @@ describe('Moderation policy routes', () => {
 
   it('GET /v1/moderations/policies/:id → 404 for a cross-tenant / missing id', async () => {
     getPolicyMock.mockResolvedValueOnce(null);
-    const res = await server.inject({ method: 'GET', url: '/v1/moderations/policies/other-org-policy' });
+    const res = await server.inject({
+      method: 'GET',
+      url: '/v1/moderations/policies/other-org-policy',
+    });
     expect(res.statusCode).toBe(404);
     expect(JSON.parse(res.body).error.code).toBe('policy_not_found');
   });
@@ -223,7 +234,9 @@ describe('Moderation policy routes', () => {
   });
 
   it('POST /v1/moderations WITH policy_id applies thresholds and changes flagged', async () => {
-    getPolicyMock.mockResolvedValueOnce(policyRecord({ thresholds: { hate: 0.3 }, action: 'flag' }));
+    getPolicyMock.mockResolvedValueOnce(
+      policyRecord({ thresholds: { hate: 0.3 }, action: 'flag' })
+    );
     moderateContentMock.mockResolvedValueOnce(baseResult({ hate: 0.4, violence: 0 }, false));
 
     const res = await server.inject({
@@ -242,7 +255,9 @@ describe('Moderation policy routes', () => {
   });
 
   it("POST /v1/moderations with an action='block' policy sets blocked=true", async () => {
-    getPolicyMock.mockResolvedValueOnce(policyRecord({ thresholds: { hate: 0.3 }, action: 'block' }));
+    getPolicyMock.mockResolvedValueOnce(
+      policyRecord({ thresholds: { hate: 0.3 }, action: 'block' })
+    );
     moderateContentMock.mockResolvedValueOnce(baseResult({ hate: 0.9, violence: 0 }, true));
 
     const res = await server.inject({

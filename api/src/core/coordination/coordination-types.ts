@@ -29,13 +29,7 @@
 // Enums
 // ============================================
 
-export const SENSITIVITY_DIRECTIONS = [
-  'increase',
-  'decrease',
-  'hold',
-  'block',
-  'unlock',
-] as const;
+export const SENSITIVITY_DIRECTIONS = ['increase', 'decrease', 'hold', 'block', 'unlock'] as const;
 export type SensitivityDirection = (typeof SENSITIVITY_DIRECTIONS)[number];
 
 export const RISK_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
@@ -388,7 +382,7 @@ export const DEFAULT_COORDINATION_CONFIG: CoordinationConfig = {
   minConvergenceScore: 0.82,
   maxDecisionFlipRate: 0.15,
   maxDissent: 0.35,
-  maxCostUsd: 0.50,
+  maxCostUsd: 0.5,
   maxLatencyMs: 60000,
   stopOnCriticalRisk: true,
   minModelsPerRound: 3,
@@ -407,8 +401,7 @@ export const DEFAULT_COORDINATION_CONFIG: CoordinationConfig = {
  * Falls back to defaults for any unset values.
  */
 export function getCoordinationConfigFromEnv(): CoordinationConfig {
-  const env = (key: string, fallback: string): string =>
-    process.env[key] ?? fallback;
+  const env = (key: string, fallback: string): string => process.env[key] ?? fallback;
 
   return {
     enabled: env('CI_SENSITIVITY_CONSENSUS_ENABLED', 'false') === 'true',
@@ -422,7 +415,10 @@ export function getCoordinationConfigFromEnv(): CoordinationConfig {
     minModelsPerRound: Math.max(2, parseInt(env('CI_COORDINATION_MIN_MODELS', '3'), 10)),
     maxModelsPerRound: Math.min(7, parseInt(env('CI_COORDINATION_MAX_MODELS', '5'), 10)),
     requireQualityTarget: parseFloat(env('CI_COORDINATION_REQUIRE_QUALITY', '0.8')),
-    aggregationMethod: (env('CI_COORDINATION_AGGREGATION_METHOD', 'weighted_confidence') as AggregationMethod),
+    aggregationMethod: env(
+      'CI_COORDINATION_AGGREGATION_METHOD',
+      'weighted_confidence'
+    ) as AggregationMethod,
     persistAuditTrail: env('CI_COORDINATION_PERSIST_AUDIT', 'false') === 'true',
     enableForExperiments: env('CI_COORDINATION_ENABLE_EXPERIMENTS', 'true') === 'true',
     entropySeedEnabled: env('CI_COLLECTIVE_ENTROPY_SEED_ENABLED', 'false') === 'true',

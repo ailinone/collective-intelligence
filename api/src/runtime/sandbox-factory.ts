@@ -32,7 +32,10 @@ function parseBackendOrder(value: string | undefined): SandboxBackend[] {
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => entry.length > 0)
-    .filter((entry): entry is SandboxBackend => entry === 'e2b' || entry === 'daytona' || entry === 'local');
+    .filter(
+      (entry): entry is SandboxBackend =>
+        entry === 'e2b' || entry === 'daytona' || entry === 'local'
+    );
   return parsed.length > 0 ? parsed : defaults;
 }
 
@@ -143,7 +146,13 @@ export class MultiBackendSandbox implements CodeSandbox {
 
       fallbackChain.push(entry.backend);
       try {
-        const result = await entry.sandbox.testFunction(lang, userCode, functionName, tests, options);
+        const result = await entry.sandbox.testFunction(
+          lang,
+          userCode,
+          functionName,
+          tests,
+          options
+        );
         this.breaker.delete(entry.backend); // success closes the circuit
         result.metadata = {
           ...(result.metadata ?? {}),

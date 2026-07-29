@@ -78,8 +78,8 @@ export function getModelEquivalenceService(): ModelEquivalenceService {
 
 export class ModelEquivalenceService {
   private index = new Map<string, ModelEmbeddingEntry>(); // keyed by uid
-  private groups = new Map<string, EquivalenceGroup>();   // keyed by groupId
-  private modelToGroup = new Map<string, string>();       // modelId → groupId (many-to-one)
+  private groups = new Map<string, EquivalenceGroup>(); // keyed by groupId
+  private modelToGroup = new Map<string, string>(); // modelId → groupId (many-to-one)
   private lastBuildAt: Date | null = null;
 
   // ─── Public API ────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export class ModelEquivalenceService {
     this.modelToGroup.clear();
 
     // Compute embeddings for all models
-    const entries: ModelEmbeddingEntry[] = models.map(m => {
+    const entries: ModelEmbeddingEntry[] = models.map((m) => {
       const meta = safeMetadata(m.metadata);
       return {
         uid: m.uid,
@@ -183,7 +183,7 @@ export class ModelEquivalenceService {
           memberCount++;
           if (++opCount >= YIELD_EVERY_OPS) {
             opCount = 0;
-            await new Promise(resolve => setImmediate(resolve));
+            await new Promise((resolve) => setImmediate(resolve));
           }
         }
         if (memberCount === 0) continue;
@@ -212,14 +212,16 @@ export class ModelEquivalenceService {
         this.groups.set(groupId, {
           groupId,
           canonicalName: entry.modelId,
-          members: [{
-            uid: entry.uid,
-            modelId: entry.modelId,
-            providerId: entry.providerId,
-            provider: entry.provider,
-            sourceType: entry.sourceType,
-            similarity: 1.0,
-          }],
+          members: [
+            {
+              uid: entry.uid,
+              modelId: entry.modelId,
+              providerId: entry.providerId,
+              provider: entry.provider,
+              sourceType: entry.sourceType,
+              similarity: 1.0,
+            },
+          ],
         });
       }
 
@@ -230,11 +232,14 @@ export class ModelEquivalenceService {
     this.lastBuildAt = new Date();
     const durationMs = Date.now() - start;
 
-    log.info({
-      groups: this.groups.size,
-      models: entries.length,
-      durationMs,
-    }, 'Model equivalence index built');
+    log.info(
+      {
+        groups: this.groups.size,
+        models: entries.length,
+        durationMs,
+      },
+      'Model equivalence index built'
+    );
 
     return { groups: this.groups.size, models: entries.length, durationMs };
   }
@@ -278,7 +283,12 @@ export class ModelEquivalenceService {
     if (!group) return null;
 
     // Sort members: native_api first, then cloud_hub, then router
-    const SOURCE_ORDER: Record<string, number> = { native_api: 0, cloud_hub: 1, router: 2, aggregator: 3 };
+    const SOURCE_ORDER: Record<string, number> = {
+      native_api: 0,
+      cloud_hub: 1,
+      router: 2,
+      aggregator: 3,
+    };
     const sorted = {
       ...group,
       members: [...group.members].sort((a, b) => {

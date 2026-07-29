@@ -54,7 +54,8 @@ describe('AnthropicAdapter account pool', () => {
 
   it('estimateTokenCost estimates prompt tokens plus max_tokens', () => {
     const adapter = new AnthropicAdapter({ apiKey: 'sk-ant-only' });
-    const estimate = (adapter as unknown as { estimateTokenCost: (r: unknown) => number }).estimateTokenCost;
+    const estimate = (adapter as unknown as { estimateTokenCost: (r: unknown) => number })
+      .estimateTokenCost;
     const request = { messages: [{ role: 'user', content: 'a'.repeat(400) }], max_tokens: 500 };
     expect(estimate(request)).toBe(600); // 400/4=100 + 500
   });
@@ -97,7 +98,8 @@ describe('GoogleAdapter account pool', () => {
 
   it('estimateTokenCost estimates prompt tokens plus max_tokens', () => {
     const adapter = new GoogleAdapter({ apiKey: 'AIza-only', enabled: true, name: 'google' });
-    const estimate = (adapter as unknown as { estimateTokenCost: (r: unknown) => number }).estimateTokenCost;
+    const estimate = (adapter as unknown as { estimateTokenCost: (r: unknown) => number })
+      .estimateTokenCost;
     const request = { messages: [{ role: 'user', content: 'b'.repeat(200) }], max_tokens: 300 };
     expect(estimate(request)).toBe(350); // 200/4=50 + 300
   });

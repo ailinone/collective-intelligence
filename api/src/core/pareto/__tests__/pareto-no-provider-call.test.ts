@@ -62,7 +62,7 @@ describe('pareto — no fetch / no provider call', () => {
         taskType: 'code-generation',
         taskModality: 'text',
         baseline: { singleModelJudge: 0.6, singleModelCostUsd: 0.02 },
-      }),
+      })
     ).not.toThrow();
   });
 });

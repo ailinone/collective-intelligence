@@ -105,14 +105,14 @@ describe('historical-replay — determinism', () => {
         rows: run.rows,
         totalHoldoutRows: split.holdout.length,
         excludedDueToMissingBaseline: 0,
-      }),
+      })
     );
     const b = JSON.stringify(
       computeReplayMetrics({
         rows: run.rows,
         totalHoldoutRows: split.holdout.length,
         excludedDueToMissingBaseline: 0,
-      }),
+      })
     );
     expect(a).toBe(b);
   });

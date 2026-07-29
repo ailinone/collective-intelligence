@@ -87,7 +87,13 @@ export function isChatPrimaryProvider(providerId: string): boolean {
   // 'search' providers (perplexity) often ALSO serve chat; probe.
   // 'gateway' providers proxy chat; probe.
   // 'local' providers can serve chat if they have the model; probe.
-  return kind === 'chat' || kind === 'multi_modal' || kind === 'search' || kind === 'gateway' || kind === 'local';
+  return (
+    kind === 'chat' ||
+    kind === 'multi_modal' ||
+    kind === 'search' ||
+    kind === 'gateway' ||
+    kind === 'local'
+  );
 }
 
 export function isSpecializedNonChatProvider(providerId: string): boolean {

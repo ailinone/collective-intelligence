@@ -151,10 +151,10 @@ describe('VoyageAdapter — rerank', () => {
   it('rejects empty query and empty documents before hitting the wire', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.rerank({ query: '', documents: ['a'], model: 'rerank-fixture' }),
+      adapter.rerank({ query: '', documents: ['a'], model: 'rerank-fixture' })
     ).rejects.toThrow(/query.*non-empty/i);
     await expect(
-      adapter.rerank({ query: 'q', documents: [], model: 'rerank-fixture' }),
+      adapter.rerank({ query: 'q', documents: [], model: 'rerank-fixture' })
     ).rejects.toThrow(/documents.*non-empty/i);
   });
 });
@@ -166,7 +166,7 @@ describe('VoyageAdapter — chat is explicitly unsupported', () => {
       adapter.chatCompletion({
         model: 'voyage-fixture-embed',
         messages: [{ role: 'user', content: 'hi' }],
-      }),
+      })
     ).rejects.toThrow(/embeddings \+ rerank only/i);
   });
 

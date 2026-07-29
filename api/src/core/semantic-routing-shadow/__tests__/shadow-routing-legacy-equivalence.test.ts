@@ -17,10 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  DefaultShadowRoutingService,
-  type ShadowParetoComputer,
-} from '../shadow-routing-service';
+import { DefaultShadowRoutingService, type ShadowParetoComputer } from '../shadow-routing-service';
 import { resolveShadowConfig } from '../shadow-routing-config';
 import type { ShadowRoutingInput } from '../shadow-routing-types';
 

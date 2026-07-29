@@ -18,7 +18,7 @@ import { buildModelHarmProfile } from '../model-harm-profile';
 import type { HistoricalExecution } from '../historical-execution-types';
 
 function ex(
-  overrides: Partial<HistoricalExecution> & { judgeScore: number; modelId?: string },
+  overrides: Partial<HistoricalExecution> & { judgeScore: number; modelId?: string }
 ): HistoricalExecution {
   return {
     executionId: 'x',
@@ -56,43 +56,33 @@ describe('buildModelHarmProfile', () => {
   });
 
   it('all degraded → high degradedRate and harmScore', () => {
-    const execs = Array.from({ length: 4 }, () =>
-      ex({ judgeScore: 0.5, degraded: true }),
-    );
+    const execs = Array.from({ length: 4 }, () => ex({ judgeScore: 0.5, degraded: true }));
     const p = buildModelHarmProfile('m', 'code-generation', execs);
     expect(p.degradedRate).toBe(1);
     expect(p.summary).toContain('degraded');
   });
 
   it('all failures → high failureRate', () => {
-    const execs = Array.from({ length: 4 }, () =>
-      ex({ judgeScore: 0, success: false }),
-    );
+    const execs = Array.from({ length: 4 }, () => ex({ judgeScore: 0, success: false }));
     const p = buildModelHarmProfile('m', 'code-generation', execs);
     expect(p.failureRate).toBe(1);
   });
 
   it('modality mismatch counted when expectedModality is given', () => {
-    const execs = Array.from({ length: 4 }, () =>
-      ex({ judgeScore: 0.3, modality: 'audio' }),
-    );
+    const execs = Array.from({ length: 4 }, () => ex({ judgeScore: 0.3, modality: 'audio' }));
     const p = buildModelHarmProfile('m', 'code-generation', execs, 'text');
     expect(p.modalityMismatchRate).toBe(1);
     expect(p.summary).toContain('modality_mismatch');
   });
 
   it('mixed modality is NOT counted as mismatch', () => {
-    const execs = Array.from({ length: 4 }, () =>
-      ex({ judgeScore: 0.5, modality: 'mixed' }),
-    );
+    const execs = Array.from({ length: 4 }, () => ex({ judgeScore: 0.5, modality: 'mixed' }));
     const p = buildModelHarmProfile('m', 'code-generation', execs, 'text');
     expect(p.modalityMismatchRate).toBe(0);
   });
 
   it('healthy executions → low harm, summary=no_significant_harm', () => {
-    const execs = Array.from({ length: 10 }, () =>
-      ex({ judgeScore: 0.7, modality: 'text' }),
-    );
+    const execs = Array.from({ length: 10 }, () => ex({ judgeScore: 0.7, modality: 'text' }));
     const p = buildModelHarmProfile('m', 'code-generation', execs, 'text');
     expect(p.harmScore).toBeLessThan(0.2);
     expect(p.summary).toBe('no_significant_harm');

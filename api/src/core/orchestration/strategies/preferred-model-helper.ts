@@ -76,10 +76,10 @@ export interface PreferredModelResolution {
   readonly pinnedExecutor: Model | undefined;
   readonly fallbackPool: readonly Model[];
   readonly pinReason:
-    | 'no-preference'           // context.preferredModelIds was empty
-    | 'pinned'                  // pin honored, pinnedExecutor is the user's model
-    | 'pin-collision-excluded'  // pin matched but was in excludeIds (e.g. is the analyzer)
-    | 'pin-not-in-pool';        // pin specified but not found in models — fall through
+    | 'no-preference' // context.preferredModelIds was empty
+    | 'pinned' // pin honored, pinnedExecutor is the user's model
+    | 'pin-collision-excluded' // pin matched but was in excludeIds (e.g. is the analyzer)
+    | 'pin-not-in-pool'; // pin specified but not found in models — fall through
   readonly requestedId: string | undefined;
 }
 
@@ -111,7 +111,7 @@ export interface PreferredModelResolution {
 export function resolvePreferredExecutor(
   models: readonly Model[],
   context: OrchestrationContext,
-  excludeIds: readonly string[] = [],
+  excludeIds: readonly string[] = []
 ): PreferredModelResolution {
   const requestedId = context.preferredModelIds?.[0];
   const excludeSet = new Set(excludeIds);
@@ -160,9 +160,7 @@ export function resolvePreferredExecutor(
   // model and the caller's exclusions.
   return {
     pinnedExecutor: pinnedCandidate,
-    fallbackPool: models.filter(
-      (m) => !excludeSet.has(m.id) && m.id !== pinnedCandidate.id,
-    ),
+    fallbackPool: models.filter((m) => !excludeSet.has(m.id) && m.id !== pinnedCandidate.id),
     pinReason: 'pinned',
     requestedId,
   };
@@ -186,7 +184,7 @@ export function resolvePreferredExecutor(
 export function assembleExecutors(
   resolution: PreferredModelResolution,
   count: number,
-  comparator: (a: Model, b: Model) => number,
+  comparator: (a: Model, b: Model) => number
 ): Model[] {
   if (count <= 0) return [];
 
@@ -238,7 +236,7 @@ export function assembleExecutors(
  */
 export function withPreferredFirst<T extends Model>(
   resolution: PreferredModelResolution,
-  selection: readonly T[],
+  selection: readonly T[]
 ): T[] {
   if (!resolution.pinnedExecutor) return [...selection];
   const pinId = resolution.pinnedExecutor.id;

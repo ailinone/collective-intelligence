@@ -26,10 +26,7 @@
  */
 
 import { buildCandidateExplanation } from './contribution-explanation';
-import type {
-  ModelRole,
-  ModelTaskPerformanceProfile,
-} from './model-task-performance-profile';
+import type { ModelRole, ModelTaskPerformanceProfile } from './model-task-performance-profile';
 
 export type CandidateModality = 'text' | 'image' | 'audio' | 'video' | 'mixed';
 
@@ -103,7 +100,7 @@ export const DEFAULT_CONTRIBUTION_AWARE_POLICY: ContributionAwarePolicy = Object
 
 export function scoreContributionAwareCandidate(
   candidate: ContributionAwareCandidate,
-  policy: ContributionAwarePolicy = DEFAULT_CONTRIBUTION_AWARE_POLICY,
+  policy: ContributionAwarePolicy = DEFAULT_CONTRIBUTION_AWARE_POLICY
 ): ContributionAwareScore {
   const rejections: string[] = [];
 
@@ -140,17 +137,14 @@ export function scoreContributionAwareCandidate(
   // Treat absent profile as insufficient_data (no historical signal),
   // honouring policy.allowExploration the same way as an explicit
   // insufficient_data profile.
-  const isInsufficient =
-    !profile || profile.recommendedRole === 'insufficient_data';
+  const isInsufficient = !profile || profile.recommendedRole === 'insufficient_data';
   if (isInsufficient && !policy.allowExploration) {
     rejections.push('insufficient_data');
   }
 
   // ─── Breakdown ───────────────────────────────────────────────────────
   // qualityPerDollarScore is a normalised [0..1] projection — pure logistic-ish.
-  const qpdScore = qualityPerDollar > 0
-    ? Math.min(1, qualityPerDollar / 1_000)
-    : 0;
+  const qpdScore = qualityPerDollar > 0 ? Math.min(1, qualityPerDollar / 1_000) : 0;
   // Harm penalty grows linearly with harmRate and harmScore.
   const harmPenalty = -(0.6 * harmRate + 0.4 * harmScore);
   // Cost penalty grows as cost approaches the hard ceiling.
@@ -173,8 +167,7 @@ export function scoreContributionAwareCandidate(
 
   const total = composeTotal(breakdown);
   const rejected = rejections.length > 0;
-  const recommendedRole: ModelRole =
-    profile?.recommendedRole ?? 'insufficient_data';
+  const recommendedRole: ModelRole = profile?.recommendedRole ?? 'insufficient_data';
 
   const explanation = buildCandidateExplanation({
     modelId: candidate.modelId,

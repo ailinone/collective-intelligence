@@ -412,7 +412,10 @@ export async function getModelsByProvider(providerName: string): Promise<Model[]
 
       const mapped = models.map((record) => mapPrismaModel(record));
 
-      byProviderCache.set(providerName, { expiresAt: Date.now() + CATALOG_CACHE_TTL_MS, models: mapped });
+      byProviderCache.set(providerName, {
+        expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
+        models: mapped,
+      });
       await modelCacheService.setMany(mapped);
 
       return mapped;
@@ -424,7 +427,10 @@ export async function getModelsByProvider(providerName: string): Promise<Model[]
   return p;
 }
 
-export async function getModelById(modelId: string, preferredProvider?: string): Promise<Model | null> {
+export async function getModelById(
+  modelId: string,
+  preferredProvider?: string
+): Promise<Model | null> {
   // Fast path: check the in-process catalog cache first. This avoids hammering
   // Postgres with per-model findFirst queries during orchestration — the
   // dynamic-model-selector and other consumers call getModelById in tight
@@ -448,7 +454,7 @@ export async function getModelById(modelId: string, preferredProvider?: string):
   if (catalogCache) {
     if (preferredProvider) {
       const hit = catalogCache.models.find(
-        (m) => m.id === modelId && m.provider === preferredProvider,
+        (m) => m.id === modelId && m.provider === preferredProvider
       );
       if (hit) return hit;
     }
@@ -493,7 +499,10 @@ export async function listCatalogModelsByProvider(providerName: string): Promise
   return getModelsByProvider(providerName);
 }
 
-export async function getCatalogModel(modelId: string, preferredProvider?: string): Promise<Model | null> {
+export async function getCatalogModel(
+  modelId: string,
+  preferredProvider?: string
+): Promise<Model | null> {
   return getModelById(modelId, preferredProvider);
 }
 
@@ -532,11 +541,18 @@ export async function getChatEligibleModels(options?: {
 
   const CHAT_CAPABILITIES = new Set(['chat', 'text_generation', 'function_calling', 'streaming']);
   const EXCLUDED_CAPABILITIES = new Set([
-    'text_to_speech', 'tts', 'audio_generation',
-    'speech_to_text', 'transcription', 'diarization',
-    'embeddings', 'embedding',
-    'image_generation', 'image_editing',
-    'video_generation', 'video_editing',
+    'text_to_speech',
+    'tts',
+    'audio_generation',
+    'speech_to_text',
+    'transcription',
+    'diarization',
+    'embeddings',
+    'embedding',
+    'image_generation',
+    'image_editing',
+    'video_generation',
+    'video_editing',
     'moderation',
   ]);
   // Kept in sync with core/provider-operability-hub.ts SELF_HOSTED_PROVIDERS.
@@ -546,22 +562,39 @@ export async function getChatEligibleModels(options?: {
   // catalog entry, update BOTH sets.
   const SELF_HOSTED_PROVIDERS = new Set([
     'self-hosted',
-    'ollama', 'local-llama', 'local-kobold', 'local-embeddings',
-    'vllm', 'lm-studio', 'xinference', 'triton',
-    'local-ocr', 'local-docling', 'local-piper', 'local-nllb',
+    'ollama',
+    'local-llama',
+    'local-kobold',
+    'local-embeddings',
+    'vllm',
+    'lm-studio',
+    'xinference',
+    'triton',
+    'local-ocr',
+    'local-docling',
+    'local-piper',
+    'local-nllb',
   ]);
 
   return all.filter((model) => {
     // Exclude self-hosted unless explicitly requested or individually pinned
-    if (!options?.includeSelfHosted && !allowSelfHostedIds.has(model.id) && !allowSelfHostedIds.has(model.name)) {
+    if (
+      !options?.includeSelfHosted &&
+      !allowSelfHostedIds.has(model.id) &&
+      !allowSelfHostedIds.has(model.name)
+    ) {
       const provider = (model.provider || '').toLowerCase();
-      if (SELF_HOSTED_PROVIDERS.has(provider) || provider.startsWith('local-') || provider.includes('local')) {
+      if (
+        SELF_HOSTED_PROVIDERS.has(provider) ||
+        provider.startsWith('local-') ||
+        provider.includes('local')
+      ) {
         return false;
       }
     }
 
     // Must have at least one chat capability
-    const caps = Array.isArray(model.capabilities) ? model.capabilities as string[] : [];
+    const caps = Array.isArray(model.capabilities) ? (model.capabilities as string[]) : [];
     const hasChatCapability = caps.some((c) => CHAT_CAPABILITIES.has(c));
     if (!hasChatCapability) return false;
 
@@ -593,7 +626,7 @@ export async function getAllEntriesForModel(modelId: string): Promise<Model[]> {
 
     if (group && group.members.length > 0) {
       // Fetch full model records for all members in the equivalence group
-      const uids = group.members.map(m => m.uid);
+      const uids = group.members.map((m) => m.uid);
       const records = await prisma.model.findMany({
         where: { uid: { in: uids }, status: 'active' },
         // Phase 6 Fix 2: catalog hot-path allowlist. We additionally need
@@ -616,9 +649,14 @@ export async function getAllEntriesForModel(modelId: string): Promise<Model[]> {
 
   if (!modelId.includes('/')) {
     const familyPrefixes: Record<string, string[]> = {
-      gpt: ['openai'], o1: ['openai'], o3: ['openai'], o4: ['openai'], chatgpt: ['openai'],
+      gpt: ['openai'],
+      o1: ['openai'],
+      o3: ['openai'],
+      o4: ['openai'],
+      chatgpt: ['openai'],
       claude: ['anthropic'],
-      gemini: ['google'], gemma: ['google'],
+      gemini: ['google'],
+      gemma: ['google'],
       grok: ['xai', 'x-ai'],
       deepseek: ['deepseek'],
       mistral: ['mistralai', 'mistral'],
@@ -652,7 +690,7 @@ export async function getAllEntriesForModel(modelId: string): Promise<Model[]> {
   });
   // Filter Strategy 3 LIKE results to only date-versioned variants (baseName-YYYY-MM-DD)
   const variantSet = new Set(variants);
-  const filtered = records.filter(r => {
+  const filtered = records.filter((r) => {
     if (variantSet.has(r.id)) return true; // Strategy 2 exact match — keep
     const suffix = r.id.slice(baseName.length);
     return /^-\d{4}-\d{2}-\d{2}/.test(suffix);

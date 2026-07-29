@@ -23,11 +23,7 @@ import { ModelRoleResolver } from '@/core/orchestration/model-selection/model-ro
 import { DEFAULT_HYBRID_SYNTHESIZER_POLICY } from '@/core/orchestration/role-selection/synthesizer-role-policy';
 import type { ModelCandidate } from '@/core/orchestration/model-selection/model-role-types';
 
-function makeCandidate(opts: {
-  id: string;
-  providerId: string;
-  quality?: number;
-}): ModelCandidate {
+function makeCandidate(opts: { id: string; providerId: string; quality?: number }): ModelCandidate {
   return {
     model: {
       id: opts.id,
@@ -41,8 +37,10 @@ function makeCandidate(opts: {
       capabilities: ['chat', 'reasoning', 'instruction_following'] as never,
       status: 'active',
       performance: {
-        latencyMs: 800, throughput: 100,
-        quality: opts.quality ?? 0.8, reliability: 0.9,
+        latencyMs: 800,
+        throughput: 100,
+        quality: opts.quality ?? 0.8,
+        reliability: 0.9,
       },
       metadata: {},
       providerName: opts.providerId,
@@ -63,14 +61,18 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     const pool = [makeCandidate({ id: 'a', providerId: 'p1' })];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
-    expect(result.synthesizerSelectionSummary!.policyVersion)
-      .toBe('01C.1B-J1G-R2:DEFAULT_HYBRID_SYNTHESIZER_POLICY');
-    expect(result.synthesizerSelectionSummary!.qualityFloor)
-      .toBe(DEFAULT_HYBRID_SYNTHESIZER_POLICY.qualityFloor);
+    expect(result.synthesizerSelectionSummary!.policyVersion).toBe(
+      '01C.1B-J1G-R2:DEFAULT_HYBRID_SYNTHESIZER_POLICY'
+    );
+    expect(result.synthesizerSelectionSummary!.qualityFloor).toBe(
+      DEFAULT_HYBRID_SYNTHESIZER_POLICY.qualityFloor
+    );
   });
 
   it('summary.poolSize / acceptedCount / rejectedCount match pool composition', async () => {
@@ -84,9 +86,11 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     ];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
     const s = result.synthesizerSelectionSummary!;
     expect(s.poolSize).toBe(5);
@@ -102,9 +106,11 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     ];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
     const reasons = result.synthesizerSelectionSummary!.rejectionsByReason;
     expect(reasons.quality_below_floor).toBe(2);
@@ -114,21 +120,25 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     const pool = [
       makeCandidate({ id: 'best', providerId: 'p1', quality: 0.95 }),
       makeCandidate({ id: 'second', providerId: 'p2', quality: 0.85 }),
-      makeCandidate({ id: 'third', providerId: 'p3', quality: 0.80 }),
+      makeCandidate({ id: 'third', providerId: 'p3', quality: 0.8 }),
       makeCandidate({ id: 'fourth', providerId: 'p4', quality: 0.75 }),
     ];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
     const s = result.synthesizerSelectionSummary!;
     // Winner should NOT appear in topAlternatives
     expect(s.topAlternatives.find((alt) => alt.modelId === s.winner!.modelId)).toBeUndefined();
     // Alternatives ordered by finalScore desc
     for (let i = 1; i < s.topAlternatives.length; i++) {
-      expect(s.topAlternatives[i - 1].finalScore).toBeGreaterThanOrEqual(s.topAlternatives[i].finalScore);
+      expect(s.topAlternatives[i - 1].finalScore).toBeGreaterThanOrEqual(
+        s.topAlternatives[i].finalScore
+      );
     }
   });
 
@@ -136,9 +146,11 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     const pool = [makeCandidate({ id: 'a', providerId: 'p1' })];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
     const breakdown = result.synthesizerSelectionSummary!.winnerComponentBreakdown!;
     expect(Object.keys(breakdown).length).toBe(14);
@@ -170,9 +182,11 @@ describe('01C.1B-J1G-R0 §10.3 — role selection runtime trace inclusion', () =
     ];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
-      strategyName: 'consensus', role: 'synthesizer',
+      strategyName: 'consensus',
+      role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'text', userMessageExcerpt: '' },
-      constraints: {}, candidatePool: pool,
+      constraints: {},
+      candidatePool: pool,
     });
     expect(result.synthesizerSelectionSummary!.winner!.providerCoverageCount).toBe(5);
   });

@@ -312,7 +312,8 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
           const existing = byTaskType.get(data.taskType) || { count: 0, avgQuality: 0 };
           existing.count += data.count;
           existing.avgQuality =
-            (existing.avgQuality * (existing.count - data.count) + Number(data.avgQuality) * data.count) /
+            (existing.avgQuality * (existing.count - data.count) +
+              Number(data.avgQuality) * data.count) /
             existing.count;
           byTaskType.set(data.taskType, existing);
         }

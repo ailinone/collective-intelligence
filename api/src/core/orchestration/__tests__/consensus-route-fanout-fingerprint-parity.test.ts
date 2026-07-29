@@ -36,7 +36,14 @@ const baseLookups = {
 };
 
 // Compute a minimal fingerprint of the execution-subset projection.
-function projectAndHash(routes: readonly { routeId: string; equivalenceKind: string; apiModelId: string; providerId: string }[]): string {
+function projectAndHash(
+  routes: readonly {
+    routeId: string;
+    equivalenceKind: string;
+    apiModelId: string;
+    providerId: string;
+  }[]
+): string {
   const projection = routes.map((c) => ({
     routeId: c.routeId,
     equivalenceKind: c.equivalenceKind,
@@ -51,9 +58,30 @@ function projectAndHash(routes: readonly { routeId: string; equivalenceKind: str
 describe('01C.1B-J1R2 — fingerprint determinism', () => {
   it('same execution subset → same fingerprint', () => {
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'p1', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p2', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p3', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'p1',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p2',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p3',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const r1 = buildRouteCandidatesForModel({
@@ -80,9 +108,30 @@ describe('01C.1B-J1R2 — fingerprint determinism', () => {
   it('discovery-only addition (beyond runtime cap) does NOT change execution fingerprint', () => {
     // Three providers within runtime cap of 3.
     const baseProviders: ServingProviderEntry[] = [
-      { providerId: 'p1', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p2', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p3', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'p1',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p2',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p3',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
     // Extra providers that will land beyond the runtime cap (sorted by providerId).
     const extraProvider: ServingProviderEntry = {
@@ -123,9 +172,30 @@ describe('01C.1B-J1R2 — fingerprint determinism', () => {
 
   it('different runtime cap → potentially different execution fingerprint', () => {
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'p1', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p2', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p3', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'p1',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p2',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p3',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const r1 = buildRouteCandidatesForModel({
@@ -134,7 +204,11 @@ describe('01C.1B-J1R2 — fingerprint determinism', () => {
       nativeProviderId: 'p1',
       taskCapability: 'chat',
       ...baseLookups,
-      policy: { ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY, requireLiveReadyForCriticalRoles: false, runtimeMaxRouteAttempts: 1 },
+      policy: {
+        ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY,
+        requireLiveReadyForCriticalRoles: false,
+        runtimeMaxRouteAttempts: 1,
+      },
       servingProviders,
     });
     const r3 = buildRouteCandidatesForModel({
@@ -143,11 +217,17 @@ describe('01C.1B-J1R2 — fingerprint determinism', () => {
       nativeProviderId: 'p1',
       taskCapability: 'chat',
       ...baseLookups,
-      policy: { ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY, requireLiveReadyForCriticalRoles: false, runtimeMaxRouteAttempts: 3 },
+      policy: {
+        ...STRICT_DEFAULT_ROUTE_SELECTION_POLICY,
+        requireLiveReadyForCriticalRoles: false,
+        runtimeMaxRouteAttempts: 3,
+      },
       servingProviders,
     });
     expect(r1.approvedForExecution.length).toBe(1);
     expect(r3.approvedForExecution.length).toBe(3);
-    expect(projectAndHash(r1.approvedForExecution)).not.toBe(projectAndHash(r3.approvedForExecution));
+    expect(projectAndHash(r1.approvedForExecution)).not.toBe(
+      projectAndHash(r3.approvedForExecution)
+    );
   });
 });

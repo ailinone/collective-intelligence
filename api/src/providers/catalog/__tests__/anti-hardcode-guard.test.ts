@@ -44,12 +44,7 @@ const __dirname = dirname(__filename);
 
 // Resolve provider-registry.ts relative to this test file. Robust against
 // different working directories (vitest changes cwd in some configs).
-const REGISTRY_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  'provider-registry.ts',
-);
+const REGISTRY_PATH = join(__dirname, '..', '..', 'provider-registry.ts');
 
 // ─── Baseline — the "do-not-regress" threshold ───────────────────────────
 //
@@ -168,7 +163,7 @@ describe('anti-hardcode guard: provider-registry.ts switch cases', () => {
       // eslint-disable-next-line no-console
       console.warn(
         `anti-hardcode-guard: switch-case count is ${caseIds.length}, baseline is ${SWITCH_CASE_BASELINE}. ` +
-          `Consider lowering SWITCH_CASE_BASELINE in this file to lock in the improvement.`,
+          `Consider lowering SWITCH_CASE_BASELINE in this file to lock in the improvement.`
       );
     }
     expect(caseIds.length).toBeGreaterThan(0); // sanity: file isn't empty
@@ -208,7 +203,7 @@ describe('anti-hardcode guard: catalog/switch disjointness', () => {
       // eslint-disable-next-line no-console
       console.error(
         `anti-hardcode-guard: the following catalog entries ALSO exist as switch cases — ` +
-          `remove them from provider-registry.ts or mark them catalog-only during migration:\n  - ${duplicates.join('\n  - ')}`,
+          `remove them from provider-registry.ts or mark them catalog-only during migration:\n  - ${duplicates.join('\n  - ')}`
       );
     }
     expect(duplicates).toEqual([]);

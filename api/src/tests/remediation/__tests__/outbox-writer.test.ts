@@ -28,7 +28,9 @@ describe('outbox-writer', () => {
       constructor(aggregateId: string) {
         super({ occurredAt: new Date(), aggregateId, eventVersion: 1 }, 'TestEvent');
       }
-      getData() { return { test: true }; }
+      getData() {
+        return { test: true };
+      }
     }
 
     const event = new TestEvent('aggregate-1');
@@ -75,8 +77,12 @@ describe('BaseDomainEvent C1 extensions', () => {
   it('generates unique eventId per instance', async () => {
     const { BaseDomainEvent } = await import('@/domain/events/base-domain-event');
     class E extends BaseDomainEvent {
-      constructor() { super({ occurredAt: new Date(), aggregateId: 'a', eventVersion: 1 }, 'E'); }
-      getData() { return {}; }
+      constructor() {
+        super({ occurredAt: new Date(), aggregateId: 'a', eventVersion: 1 }, 'E');
+      }
+      getData() {
+        return {};
+      }
     }
     const e1 = new E();
     const e2 = new E();
@@ -88,8 +94,15 @@ describe('BaseDomainEvent C1 extensions', () => {
   it('includes eventId and correlationId in toJSON', async () => {
     const { BaseDomainEvent } = await import('@/domain/events/base-domain-event');
     class E extends BaseDomainEvent {
-      constructor() { super({ occurredAt: new Date(), aggregateId: 'a', eventVersion: 1, correlationId: 'corr-1' }, 'E'); }
-      getData() { return { key: 'val' }; }
+      constructor() {
+        super(
+          { occurredAt: new Date(), aggregateId: 'a', eventVersion: 1, correlationId: 'corr-1' },
+          'E'
+        );
+      }
+      getData() {
+        return { key: 'val' };
+      }
     }
     const json = new E().toJSON();
     expect(json).toHaveProperty('eventId');

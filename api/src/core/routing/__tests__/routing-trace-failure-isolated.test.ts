@@ -17,10 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  RoutingTraceCollector,
-  ROUTING_TRACE_METRIC_NAMES,
-} from '../routing-trace-collector';
+import { RoutingTraceCollector, ROUTING_TRACE_METRIC_NAMES } from '../routing-trace-collector';
 import type { RoutingTracePersistor } from '../routing-trace-collector';
 import type { RoutingTraceMetrics } from '../routing-decision-trace';
 import { makeValidTrace } from './fixtures/routing-trace.fixture';
@@ -31,12 +28,8 @@ class CountingMetrics implements RoutingTraceMetrics {
   public gauges: Record<string, number> = {};
   increment(name: string, labels?: Readonly<Record<string, string>>): void {
     this.counters[name] = (this.counters[name] ?? 0) + 1;
-    if (
-      name === ROUTING_TRACE_METRIC_NAMES.PERSIST_ERROR_TOTAL &&
-      labels?.reason
-    ) {
-      this.persistErrorReasons[labels.reason] =
-        (this.persistErrorReasons[labels.reason] ?? 0) + 1;
+    if (name === ROUTING_TRACE_METRIC_NAMES.PERSIST_ERROR_TOTAL && labels?.reason) {
+      this.persistErrorReasons[labels.reason] = (this.persistErrorReasons[labels.reason] ?? 0) + 1;
     }
   }
   gauge(name: string, value: number): void {

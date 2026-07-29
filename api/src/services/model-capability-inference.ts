@@ -89,7 +89,12 @@ const CAPABILITY_ALIAS_MAP: Record<string, ModelCapability> = {
 };
 
 function normalizeToken(value: string): string {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+/, '').replace(/_+$/, '');
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+/, '')
+    .replace(/_+$/, '');
 }
 
 function coerceStringArray(value: unknown): string[] {
@@ -405,7 +410,14 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
   const hasOutputAudio = outputModalities.has('audio');
   const hasOutputVideo = outputModalities.has('video');
 
-  if (hasInputImage || hasInputAudio || hasInputVideo || hasOutputImage || hasOutputAudio || hasOutputVideo) {
+  if (
+    hasInputImage ||
+    hasInputAudio ||
+    hasInputVideo ||
+    hasOutputImage ||
+    hasOutputAudio ||
+    hasOutputVideo
+  ) {
     capabilities.add('multimodal');
   }
 
@@ -439,7 +451,12 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
     capabilities.add('image_to_video');
   }
   if (hasInputVideo && hasOutputText) {
-    addCapabilities(capabilities, ['video_understanding', 'video_to_text', 'video_transcription', 'transcription']);
+    addCapabilities(capabilities, [
+      'video_understanding',
+      'video_to_text',
+      'video_transcription',
+      'transcription',
+    ]);
   }
   if (hasInputAudio && hasOutputText) {
     addCapabilities(capabilities, ['speech_to_text', 'transcription']);
@@ -451,11 +468,17 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
     addCapabilities(capabilities, ['audio_to_audio', 'realtime_audio']);
   }
 
-  if ((hasInputAudio || hasOutputAudio) && /\b(realtime|real[\s_-]?time|live)\b/.test(combinedText)) {
+  if (
+    (hasInputAudio || hasOutputAudio) &&
+    /\b(realtime|real[\s_-]?time|live)\b/.test(combinedText)
+  ) {
     addCapabilities(capabilities, ['realtime', 'realtime_audio']);
   }
 
-  if ((hasInputVideo || hasOutputVideo) && /\b(realtime|real[\s_-]?time|live)\b/.test(combinedText)) {
+  if (
+    (hasInputVideo || hasOutputVideo) &&
+    /\b(realtime|real[\s_-]?time|live)\b/.test(combinedText)
+  ) {
     capabilities.add('realtime');
   }
   if (hasInputPdf || normalizedModelId.includes('pdf')) {
@@ -481,7 +504,11 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
     ) {
       capabilities.add('json_mode');
     }
-    if (parameter === 'reasoning' || parameter === 'include_reasoning' || parameter === 'thinking') {
+    if (
+      parameter === 'reasoning' ||
+      parameter === 'include_reasoning' ||
+      parameter === 'thinking'
+    ) {
       addCapabilities(capabilities, ['reasoning', 'thinking_mode']);
     }
     if (parameter === 'web_search' || parameter === 'grounding' || parameter === 'search') {
@@ -520,7 +547,9 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
 
   const likelyChatModel =
     hasOutputText ||
-    /\b(gpt|chatgpt|chat|claude|gemini|llama|qwen|mistral|deepseek|grok|assistant)\b/.test(combinedText);
+    /\b(gpt|chatgpt|chat|claude|gemini|llama|qwen|mistral|deepseek|grok|assistant)\b/.test(
+      combinedText
+    );
   const exclusiveNonChat =
     isEmbeddingModel ||
     (!hasOutputText && (hasOutputImage || hasOutputVideo || hasOutputAudio) && !hasInputText);
@@ -534,7 +563,10 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
     capabilities.add('text_generation');
   }
 
-  if (capabilities.has('realtime') && (capabilities.has('audio') || capabilities.has('audio_to_audio'))) {
+  if (
+    capabilities.has('realtime') &&
+    (capabilities.has('audio') || capabilities.has('audio_to_audio'))
+  ) {
     capabilities.add('realtime_audio');
   }
 
@@ -563,35 +595,45 @@ export type CapabilityTier = 'native' | 'multimodal' | 'inferred';
  */
 export function inferCapabilityTiers(
   input: CapabilityInferenceInput,
-  capabilities: readonly ModelCapability[],
+  capabilities: readonly ModelCapability[]
 ): Partial<Record<ModelCapability, CapabilityTier>> {
   const tiers: Partial<Record<ModelCapability, CapabilityTier>> = {};
   const modelId = (input.modelId || '').toLowerCase();
   const metadata = input.metadata || {};
   const endpoints = metadata.endpoints as string[] | undefined;
-  const provider = (metadata.provider as string || '').toLowerCase();
+  const provider = ((metadata.provider as string) || '').toLowerCase();
 
   // Seed capabilities from the provider are considered native
   const seedCaps = new Set<string>(
-    [...(input.seedCapabilities || []), ...coerceStringArray(metadata.capabilities)]
-      .map(c => c.toLowerCase())
+    [...(input.seedCapabilities || []), ...coerceStringArray(metadata.capabilities)].map((c) =>
+      c.toLowerCase()
+    )
   );
 
   // Providers known to have native audio endpoints
   const nativeSTTProviders = new Set(['deepgram', 'self-hosted', 'openai']);
-  const nativeTTSProviders = new Set(['deepgram', 'cartesia', 'elevenlabs', 'self-hosted', 'openai']);
+  const nativeTTSProviders = new Set([
+    'deepgram',
+    'cartesia',
+    'elevenlabs',
+    'self-hosted',
+    'openai',
+  ]);
 
   // Model name patterns that indicate native audio models
-  const nativeSTTPatterns = /\b(whisper|nova|deepgram|faster-whisper|sherpa|moonshine|sensevoice)\b/i;
-  const nativeTTSPatterns = /\b(tts|piper|kokoro|melotts|cosyvoice|cartesia|sonic|aura|xtts|coqui|fish-speech)\b/i;
+  const nativeSTTPatterns =
+    /\b(whisper|nova|deepgram|faster-whisper|sherpa|moonshine|sensevoice)\b/i;
+  const nativeTTSPatterns =
+    /\b(tts|piper|kokoro|melotts|cosyvoice|cartesia|sonic|aura|xtts|coqui|fish-speech)\b/i;
 
   for (const cap of capabilities) {
     // Check for explicit endpoint support
-    const hasExplicitEndpoint = endpoints?.some(e =>
-      (cap === 'speech_to_text' && e.includes('audio/transcriptions')) ||
-      (cap === 'text_to_speech' && (e.includes('audio/speech') || e.includes('tts'))) ||
-      (cap === 'embeddings' && e.includes('embeddings')) ||
-      (cap === 'image_generation' && e.includes('images'))
+    const hasExplicitEndpoint = endpoints?.some(
+      (e) =>
+        (cap === 'speech_to_text' && e.includes('audio/transcriptions')) ||
+        (cap === 'text_to_speech' && (e.includes('audio/speech') || e.includes('tts'))) ||
+        (cap === 'embeddings' && e.includes('embeddings')) ||
+        (cap === 'image_generation' && e.includes('images'))
     );
 
     if (hasExplicitEndpoint) {

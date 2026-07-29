@@ -55,7 +55,7 @@ export function inferCapabilityTier(
   contextWindow: number | null | undefined,
   capabilities: ReadonlyArray<string>,
   inputCostPer1k: number | null | undefined,
-  providerId: string,
+  providerId: string
 ): CapabilityTier {
   const ctx = contextWindow ?? 0;
   const caps = new Set(capabilities ?? []);
@@ -123,7 +123,7 @@ function buildCatalogIndex(): CatalogIndex {
     byProviderId,
     familyByProviderId,
     providersByFamily: new Map(
-      [...providersByFamily.entries()].map(([k, v]) => [k, Object.freeze(v)] as const),
+      [...providersByFamily.entries()].map(([k, v]) => [k, Object.freeze(v)] as const)
     ),
   };
 }
@@ -213,15 +213,16 @@ export async function classifyModelById(modelId: string): Promise<ClassifiedMode
 
     // Hub case: catalog says provider is a hub, but the underlying model
     // belongs to another family. Use metadata.originalProvider when present.
-    const metadata = (row.metadata as Prisma.JsonValue) as Record<string, unknown> | null;
-    const originalProvider = (metadata && typeof metadata === 'object'
-      ? (metadata as Record<string, unknown>).originalProvider
-      : null);
+    const metadata = row.metadata as Prisma.JsonValue as Record<string, unknown> | null;
+    const originalProvider =
+      metadata && typeof metadata === 'object'
+        ? (metadata as Record<string, unknown>).originalProvider
+        : null;
 
     const modelFamily =
       typeof originalProvider === 'string' && originalProvider.length > 0
         ? originalProvider.toLowerCase()
-        : familyFromCatalog ?? providerId; // fallback: providerId as family
+        : (familyFromCatalog ?? providerId); // fallback: providerId as family
 
     const capabilities = Array.isArray(row.capabilities)
       ? (row.capabilities as ReadonlyArray<string>)
@@ -237,7 +238,12 @@ export async function classifyModelById(modelId: string): Promise<ClassifiedMode
       contextWindow: row.contextWindow ?? 0,
       capabilities,
       inputCostPer1k,
-      capabilityTier: inferCapabilityTier(row.contextWindow, capabilities, inputCostPer1k, providerId),
+      capabilityTier: inferCapabilityTier(
+        row.contextWindow,
+        capabilities,
+        inputCostPer1k,
+        providerId
+      ),
       isLocal: isOllamaProviderId(providerId),
     };
 
@@ -246,7 +252,7 @@ export async function classifyModelById(modelId: string): Promise<ClassifiedMode
   } catch (err) {
     log.warn(
       { modelId, error: err instanceof Error ? err.message : String(err) },
-      'classifyModelById: DB lookup failed',
+      'classifyModelById: DB lookup failed'
     );
     return null;
   }
@@ -254,7 +260,7 @@ export async function classifyModelById(modelId: string): Promise<ClassifiedMode
 
 /** Classify multiple models in parallel with deduplication. */
 export async function classifyModelsByIds(
-  modelIds: ReadonlyArray<string>,
+  modelIds: ReadonlyArray<string>
 ): Promise<ReadonlyMap<string, ClassifiedModel>> {
   const unique = [...new Set(modelIds)];
   const results = await Promise.all(unique.map((id) => classifyModelById(id)));
@@ -285,7 +291,7 @@ export function classifyFromFields(input: {
   const modelFamily =
     input.metadataOriginalProvider && input.metadataOriginalProvider.length > 0
       ? input.metadataOriginalProvider.toLowerCase()
-      : familyFromCatalog ?? input.providerId;
+      : (familyFromCatalog ?? input.providerId);
 
   return {
     modelId: input.modelId,
@@ -298,7 +304,7 @@ export function classifyFromFields(input: {
       input.contextWindow,
       input.capabilities,
       input.inputCostPer1k,
-      input.providerId,
+      input.providerId
     ),
     isLocal: isOllamaProviderId(input.providerId),
   };

@@ -20,13 +20,9 @@
  * Pure. No I/O.
  */
 
-import type {
-  EstimatorEvaluation,
-} from './expected-judge-calibrator';
+import type { EstimatorEvaluation } from './expected-judge-calibrator';
 import type { CalibrationMetrics } from './calibration-metrics';
-import type {
-  CalibrationPolicy,
-} from './calibration-policy';
+import type { CalibrationPolicy } from './calibration-policy';
 import type { TaskTypeCalibrationRecord } from './tasktype-calibration';
 
 export interface CalibrationApprovalDecision {
@@ -67,9 +63,7 @@ const MVP_8B5_BASELINE = Object.freeze({
   cost_prediction_error: 0.048,
 });
 
-export function buildCalibrationReport(
-  input: BuildCalibrationReportInput,
-): CalibrationReport {
+export function buildCalibrationReport(input: BuildCalibrationReportInput): CalibrationReport {
   const approval = decideApproval(input);
   return Object.freeze({
     chosenEstimator: input.chosenEstimator,
@@ -83,9 +77,7 @@ export function buildCalibrationReport(
   });
 }
 
-function decideApproval(
-  input: BuildCalibrationReportInput,
-): CalibrationApprovalDecision {
+function decideApproval(input: BuildCalibrationReportInput): CalibrationApprovalDecision {
   const reasons: string[] = [];
   let approved = true;
   const policy = input.policy;
@@ -95,40 +87,38 @@ function decideApproval(
   if (m.expected_vs_observed_judge_error >= policy.maxOverallJudgeError) {
     approved = false;
     reasons.push(
-      `overall_judge_error_high:${m.expected_vs_observed_judge_error.toFixed(3)}>=${policy.maxOverallJudgeError}`,
+      `overall_judge_error_high:${m.expected_vs_observed_judge_error.toFixed(3)}>=${policy.maxOverallJudgeError}`
     );
   } else {
-    reasons.push(
-      `overall_judge_error_ok:${m.expected_vs_observed_judge_error.toFixed(3)}`,
-    );
+    reasons.push(`overall_judge_error_ok:${m.expected_vs_observed_judge_error.toFixed(3)}`);
   }
 
   // 2. quality_and_cost_success_rate.
   if (m.quality_and_cost_success_rate < policy.minQualityAndCostSuccessRate) {
     approved = false;
     reasons.push(
-      `quality_and_cost_success_rate_low:${m.quality_and_cost_success_rate.toFixed(3)}<${policy.minQualityAndCostSuccessRate}`,
+      `quality_and_cost_success_rate_low:${m.quality_and_cost_success_rate.toFixed(3)}<${policy.minQualityAndCostSuccessRate}`
     );
   }
   // 3. quality_ge_single_rate.
   if (m.quality_ge_single_rate < policy.minQualityGeSingleRate) {
     approved = false;
     reasons.push(
-      `quality_ge_single_rate_low:${m.quality_ge_single_rate.toFixed(3)}<${policy.minQualityGeSingleRate}`,
+      `quality_ge_single_rate_low:${m.quality_ge_single_rate.toFixed(3)}<${policy.minQualityGeSingleRate}`
     );
   }
   // 4. cost_le_single_rate.
   if (m.cost_le_single_rate < policy.minCostLeSingleRate) {
     approved = false;
     reasons.push(
-      `cost_le_single_rate_low:${m.cost_le_single_rate.toFixed(3)}<${policy.minCostLeSingleRate}`,
+      `cost_le_single_rate_low:${m.cost_le_single_rate.toFixed(3)}<${policy.minCostLeSingleRate}`
     );
   }
   // 5. cost prediction.
   if (m.cost_prediction_error > policy.maxCostPredictionError) {
     approved = false;
     reasons.push(
-      `cost_prediction_error_high:${m.cost_prediction_error.toFixed(4)}>${policy.maxCostPredictionError}`,
+      `cost_prediction_error_high:${m.cost_prediction_error.toFixed(4)}>${policy.maxCostPredictionError}`
     );
   }
   // 6. coverage.

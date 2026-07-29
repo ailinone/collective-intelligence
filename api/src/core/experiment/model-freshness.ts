@@ -38,11 +38,11 @@
  */
 
 export interface FreshnessSignal {
-  family: string;         // 'kimi' | 'gpt' | 'claude' | …
+  family: string; // 'kimi' | 'gpt' | 'claude' | …
   generationScore: number; // higher = more recent. Family-specific scale.
-  isPreview: boolean;     // model id contains "preview" / "alpha" / "beta" / "exp"
-  isDeprecated: boolean;  // model id matches a known stale pattern
-  rationale: string;      // short explanation for audit/log output
+  isPreview: boolean; // model id contains "preview" / "alpha" / "beta" / "exp"
+  isDeprecated: boolean; // model id matches a known stale pattern
+  rationale: string; // short explanation for audit/log output
 }
 
 /**
@@ -68,7 +68,7 @@ export const KNOWN_FAMILIES = [
   'nemotron',
 ] as const;
 
-export type ModelFamily = typeof KNOWN_FAMILIES[number];
+export type ModelFamily = (typeof KNOWN_FAMILIES)[number];
 
 // ─── Family detection ──────────────────────────────────────────────────
 
@@ -124,20 +124,40 @@ export function detectFamily(modelId: string): ModelFamily | null {
 
 // ─── Preview / deprecation flags ───────────────────────────────────────
 
-const PREVIEW_HINTS = ['preview', 'alpha', 'beta', 'rc-', 'experimental', '-exp', '-ea-', 'snapshot'];
+const PREVIEW_HINTS = [
+  'preview',
+  'alpha',
+  'beta',
+  'rc-',
+  'experimental',
+  '-exp',
+  '-ea-',
+  'snapshot',
+];
 const DEPRECATED_HINTS = [
   // Generic
-  'legacy', 'deprecated', 'retired',
+  'legacy',
+  'deprecated',
+  'retired',
   // Known stale generations the user spec specifically called out as needing
   // to lose to current frontier — keep this short, never add a family just
   // to suppress one model unless you've confirmed the vendor has shipped a
   // successor that the resolver should select instead.
-  'gpt-3.5', 'gpt-4-1106', 'gpt-4-0314', 'gpt-4-0613',
-  'claude-2', 'claude-instant',
-  'gemini-1.0', 'gemini-1.5-flash-001',
-  'kimi-k2-0905-preview', 'kimi-k2-0905', 'k2-0905',
-  'llama-2', 'llama2',
-  'qwen-1', 'qwen-2',
+  'gpt-3.5',
+  'gpt-4-1106',
+  'gpt-4-0314',
+  'gpt-4-0613',
+  'claude-2',
+  'claude-instant',
+  'gemini-1.0',
+  'gemini-1.5-flash-001',
+  'kimi-k2-0905-preview',
+  'kimi-k2-0905',
+  'k2-0905',
+  'llama-2',
+  'llama2',
+  'qwen-1',
+  'qwen-2',
 ];
 
 function isPreviewModel(id: string): boolean {
@@ -175,10 +195,11 @@ function isDeprecatedModel(id: string): boolean {
  */
 function parseGenericVersion(modelId: string, family: ModelFamily): number {
   // 1) Strip dates + bare year tokens so we don't read "2025-03-20" as v2025.
-  const cleaned = modelId.toLowerCase()
-    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')   // YYYY-MM-DD
+  const cleaned = modelId
+    .toLowerCase()
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '') // YYYY-MM-DD
     .replace(/\b\d{4}\/\d{2}\/\d{2}\b/g, '') // YYYY/MM/DD
-    .replace(/\b20\d{2}\b/g, '');             // bare 20xx year tokens
+    .replace(/\b20\d{2}\b/g, ''); // bare 20xx year tokens
 
   // 2) Family-specific normalization first — these win when matched.
 
@@ -256,7 +277,9 @@ function parseGenericVersion(modelId: string, family: ModelFamily): number {
   // ids carry only an alias not a numeric version. Use what we can find,
   // dot-only for minor.
   if (family === 'mistral') {
-    const m = cleaned.match(/mistral[-]?(?:large|medium|small|tiny|nemo|7b|8x7b)?[-]?(\d+)(?:\.(\d+))?/);
+    const m = cleaned.match(
+      /mistral[-]?(?:large|medium|small|tiny|nemo|7b|8x7b)?[-]?(\d+)(?:\.(\d+))?/
+    );
     if (m) return parseFloat(`${m[1]}.${m[2] ?? '0'}`);
   }
 
@@ -292,7 +315,15 @@ function parseGenericVersion(modelId: string, family: ModelFamily): number {
   // Families WITHOUT specific parsers (fall through to generics):
   //   command, magistral, pixtral, jamba, phi, nemotron
   const KNOWN_SPECIFIC_PARSER_FAMILIES: ReadonlySet<ModelFamily> = new Set([
-    'gpt', 'claude', 'gemini', 'grok', 'kimi', 'deepseek', 'mistral', 'qwen', 'llama',
+    'gpt',
+    'claude',
+    'gemini',
+    'grok',
+    'kimi',
+    'deepseek',
+    'mistral',
+    'qwen',
+    'llama',
   ]);
   if (KNOWN_SPECIFIC_PARSER_FAMILIES.has(family)) {
     return 0;

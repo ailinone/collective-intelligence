@@ -37,11 +37,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type {
-  DeliveryContext,
-  DeliveryOutcome,
-  DestinationAdapter,
-} from './destination-adapter';
+import type { DeliveryContext, DeliveryOutcome, DestinationAdapter } from './destination-adapter';
 import { EgressBlockedError, safeFetch } from './safe-http';
 
 // ─── Config ─────────────────────────────────────────────────────────────
@@ -223,7 +219,7 @@ export class LangfuseDestinationAdapter implements DestinationAdapter {
                 errorClass: 'partial_failure',
                 errorMessage: truncate(
                   parsedBody.errors.map((e) => e.message ?? '').join(';'),
-                  512,
+                  512
                 ),
                 latencyMs,
               };

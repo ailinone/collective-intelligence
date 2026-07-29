@@ -24,7 +24,11 @@ import type { ServingProviderEntry } from '@/core/orchestration/lookup-serving-p
 
 const lookups = {
   // Delegate to the J1E central resolver
-  resolveApiModelId: (args: { providerId: string; logicalModelId: string; nativeProviderId: string }) =>
+  resolveApiModelId: (args: {
+    providerId: string;
+    logicalModelId: string;
+    nativeProviderId: string;
+  }) =>
     resolveApiModelIdCentral({
       providerId: args.providerId,
       logicalModelId: args.logicalModelId,
@@ -60,7 +64,9 @@ describe('01C.1B-J1E §14.2 — route candidates wiring', () => {
       servingProviders,
     });
     // No route can carry the bad apiModelId
-    const badRoutes = result.approved.filter((r) => r.apiModelId === 'anthropic/anthropic-claude-3.7-sonnet');
+    const badRoutes = result.approved.filter(
+      (r) => r.apiModelId === 'anthropic/anthropic-claude-3.7-sonnet'
+    );
     expect(badRoutes).toEqual([]);
   });
 
@@ -89,9 +95,7 @@ describe('01C.1B-J1E §14.2 — route candidates wiring', () => {
       taskCapability: 'chat',
       ...lookups,
       policy: permissivePolicy,
-      routeCandidatesOverride: [
-        { providerId: 'anthropic', kind: 'native' },
-      ],
+      routeCandidatesOverride: [{ providerId: 'anthropic', kind: 'native' }],
     });
     const nativeRoute = result.approved.find((r) => r.providerId === 'anthropic');
     expect(nativeRoute).toBeDefined();
@@ -142,10 +146,16 @@ describe('01C.1B-J1E §14.2 — route candidates wiring', () => {
       ...lookups,
       policy: permissivePolicy,
       routeCandidatesOverride: [
-        { providerId: 'novel-router-not-in-alias-map', kind: 'router', nativeProviderId: 'anthropic' },
+        {
+          providerId: 'novel-router-not-in-alias-map',
+          kind: 'router',
+          nativeProviderId: 'anthropic',
+        },
       ],
     });
-    const novelRoute = result.approved.find((r) => r.providerId === 'novel-router-not-in-alias-map');
+    const novelRoute = result.approved.find(
+      (r) => r.providerId === 'novel-router-not-in-alias-map'
+    );
     expect(novelRoute).toBeDefined();
     // Conservative derivation: strips duplicate prefix → anthropic/claude-3.7-sonnet
     expect(novelRoute?.apiModelId).toBe('anthropic/claude-3.7-sonnet');

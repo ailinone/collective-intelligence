@@ -131,8 +131,7 @@ export const C3_ELIGIBILITY_GATE_2 = 'model_has_chat_capability' as const;
 export const C3_ELIGIBILITY_GATE_3 = 'no_unresolved_variant_flag' as const;
 
 export const C3_QUALITY_SCORE_REQUIRED_FOR_ELIGIBILITY = false as const;
-export const C3_QUALITY_SCORE_ROLE =
-  'stratification_and_priority_not_eligibility_gate' as const;
+export const C3_QUALITY_SCORE_ROLE = 'stratification_and_priority_not_eligibility_gate' as const;
 export const C3_QUALITY_SCORE_UPDATE_POLICY =
   'updated_from_execution_results_bayesian_weighted' as const;
 
@@ -144,8 +143,7 @@ export const C3_BLOCK_POLICY_VARIANT =
   'model_blocked_if_variant_suffix_present_without_confirmed_alias' as const;
 export const C3_BLOCK_POLICY_PROVIDER =
   'model_ineligible_if_provider_fails_chat_ready_probe' as const;
-export const C3_BLOCK_POLICY_CAPABILITY =
-  'model_ineligible_if_chat_capability_absent' as const;
+export const C3_BLOCK_POLICY_CAPABILITY = 'model_ineligible_if_chat_capability_absent' as const;
 
 // ── Provider pool (R4: 23 chat-ready — 17 R3 baseline + 6 from J1-R3-REPROBE+HZU) ───
 // Source: provider_adapter_readiness_01c1b_j1b_r2.json (17) +
@@ -184,7 +182,7 @@ export const C3_CHAT_READY_PROVIDERS = [
   'huggingface',
 ] as const;
 
-export type C3ChatReadyProvider = typeof C3_CHAT_READY_PROVIDERS[number];
+export type C3ChatReadyProvider = (typeof C3_CHAT_READY_PROVIDERS)[number];
 
 export const C3_CHAT_READY_PROVIDER_COUNT = 23 as const;
 
@@ -223,40 +221,40 @@ export const C3_CANDIDATE_POOL_FORMULA =
 // Per-provider known candidate counts (design-time DB snapshot)
 export const C3_KNOWN_CANDIDATES_BY_PROVIDER: Record<C3ChatReadyProvider, number> = {
   // R3 baseline 17 providers
-  'openrouter': 365,
-  'alibaba': 156,
+  openrouter: 365,
+  alibaba: 156,
   'vercel-ai-gateway': 134,
-  'deepinfra': 113,
-  'mistral': 64,
-  'upstage': 17,
-  'groq': 14,
+  deepinfra: 113,
+  mistral: 64,
+  upstage: 17,
+  groq: 14,
   'fireworks-ai': 14,
-  'cohere': 14,
-  'moonshot': 9,
-  'writer': 8,
-  'sambanova': 8,
-  'minimax': 7,
-  'cerebras': 4,
-  'avian': 3,
-  'rekaai': 2,
-  'deepseek': 2,
+  cohere: 14,
+  moonshot: 9,
+  writer: 8,
+  sambanova: 8,
+  minimax: 7,
+  cerebras: 4,
+  avian: 3,
+  rekaai: 2,
+  deepseek: 2,
   // Reprobe additions (J1-R3-REPROBE 2026-05-26)
-  'perplexity': 24,
-  'nvidia': 107,
-  'wandb': 27,
+  perplexity: 24,
+  nvidia: 107,
+  wandb: 27,
   // HZU additions (J1-R3-HZU 2026-05-26)
-  'inworld': 6,
-  'infermatic': 18,
+  inworld: 6,
+  infermatic: 18,
   // HuggingFace (catalog_candidate_pool; provider_probe_validated)
-  'huggingface': 12692,
+  huggingface: 12692,
 };
 
 // ── Quality stratification (NOT a gate — stratification + priority only) ───────
 // Source: Artificial Analysis intelligenceIndex (0-100 scale), 523 AA models.
 // Updated per execution via Bayesian update (C3_QUALITY_UPDATE_ALPHA).
 
-export const C3_QUALITY_TIER_HIGH_THRESHOLD = 45 as const;  // intelligenceIndex ≥ 45
-export const C3_QUALITY_TIER_MID_LOWER = 25 as const;       // 25 ≤ intelligenceIndex < 45
+export const C3_QUALITY_TIER_HIGH_THRESHOLD = 45 as const; // intelligenceIndex ≥ 45
+export const C3_QUALITY_TIER_MID_LOWER = 25 as const; // 25 ≤ intelligenceIndex < 45
 export const C3_QUALITY_TIER_HIGH_KNOWN_COUNT = 32 as const;
 export const C3_QUALITY_TIER_MID_KNOWN_COUNT = 137 as const;
 export const C3_QUALITY_TIER_LOW_KNOWN_COUNT = 303 as const;
@@ -268,33 +266,33 @@ export const C3_QUALITY_TIER_AA_INDEXED_COUNT = 472 as const; // 32+137+303
 
 // Quality score sources (priority order — first available wins)
 export const C3_QUALITY_SCORE_SOURCES = [
-  'execution_history',                      // highest priority — updated from C3 runs
+  'execution_history', // highest priority — updated from C3 runs
   'artificial_analysis_intelligence_index', // AA normalized intelligenceIndex
-  'benchlm_lmarena_composite',              // BenchLM + LMArena composite score
-  'provider_tier_proxy',                    // provider reputation (last resort)
+  'benchlm_lmarena_composite', // BenchLM + LMArena composite score
+  'provider_tier_proxy', // provider reputation (last resort)
 ] as const;
 
-export type C3QualityScoreSource = typeof C3_QUALITY_SCORE_SOURCES[number];
+export type C3QualityScoreSource = (typeof C3_QUALITY_SCORE_SOURCES)[number];
 
 // ── Cost stratification ───────────────────────────────────────────────────────
 // Used to track cost efficiency and validate thesis (quality/cost metric).
 
-export const C3_COST_TIER_PREMIUM_USD_PER_1M = 3.0 as const;  // blended > $3 → premium
-export const C3_COST_TIER_ECONOMY_USD_PER_1M = 0.5 as const;  // blended < $0.5 → economy
+export const C3_COST_TIER_PREMIUM_USD_PER_1M = 3.0 as const; // blended > $3 → premium
+export const C3_COST_TIER_ECONOMY_USD_PER_1M = 0.5 as const; // blended < $0.5 → economy
 // $0.5–$3 → standard
 
-export const C3_COST_KNOWN_CHEAP_COUNT = 368 as const;  // < $1/1M in AA dataset
-export const C3_COST_KNOWN_MID_COUNT = 67 as const;     // $1–$3/1M
-export const C3_COST_KNOWN_UPPER_COUNT = 45 as const;   // $3–$5/1M
+export const C3_COST_KNOWN_CHEAP_COUNT = 368 as const; // < $1/1M in AA dataset
+export const C3_COST_KNOWN_MID_COUNT = 67 as const; // $1–$3/1M
+export const C3_COST_KNOWN_UPPER_COUNT = 45 as const; // $3–$5/1M
 
 // ── Participant sampling policy ───────────────────────────────────────────────
 // Per strategy cell: sample from the candidate pool with tier diversity.
 // Judge and synthesizer are NOT sampled — they are pre-selected high-tier models.
 
 export const C3_PARTICIPANT_SAMPLE_SIZES: Record<string, number> = {
-  'single': 1,
-  'consensus': 5,
-  'debate': 2,
+  single: 1,
+  consensus: 5,
+  debate: 2,
   'expert-panel': 3,
   'cost-cascade': 3,
   'critique-repair': 2,
@@ -318,16 +316,16 @@ export const C3_ELIGIBLE_STRATEGIES = [
   'quality-multipass',
 ] as const;
 
-export type C3EligibleStrategy = typeof C3_ELIGIBLE_STRATEGIES[number];
+export type C3EligibleStrategy = (typeof C3_ELIGIBLE_STRATEGIES)[number];
 
 export const C3_EXCLUDED_ALIASES = ['fast'] as const;
 export const C3_PROXY_ENDPOINTS = ['sensitivity-consensus'] as const;
 export const FAST_STRATEGY_DECISION = 'proxy_alias_excluded_from_c3' as const;
 
 export const C3_STRATEGY_STEP_COUNTS: Record<C3EligibleStrategy, number> = {
-  'single': 1,
-  'consensus': 2,
-  'debate': 2,
+  single: 1,
+  consensus: 2,
+  debate: 2,
   'expert-panel': 2,
   'cost-cascade': 4,
   'critique-repair': 3,
@@ -344,7 +342,7 @@ export const C3_BASELINES = [
   'baseline-no-synthesis',
 ] as const;
 
-export type C3Baseline = typeof C3_BASELINES[number];
+export type C3Baseline = (typeof C3_BASELINES)[number];
 
 // ── Judge and synthesizer (high-tier pre-selected models) ─────────────────────
 // These are NOT participants — they are pre-selected from the known high tier.
@@ -359,22 +357,21 @@ export const C3_JUDGE_POOL: readonly string[] = [
   'deepseek-ai/DeepSeek-R1-0528', // intelligenceIndex ~45+, quality 0.753 (AA), independent
 ];
 
-export const C3_POOL_SEPARATION_INVARIANT =
-  'judge_not_in_synthesizer_pool' as const;
+export const C3_POOL_SEPARATION_INVARIANT = 'judge_not_in_synthesizer_pool' as const;
 
 export const C3_JUDGE_TIER_REQUIRED = 'high' as const;
 export const C3_SYNTHESIZER_TIER_REQUIRED = 'high' as const;
 
 // Known quality scores for judge/synthesizer (from hardened snapshot — not fabricated)
-export const C3_SYNTHESIZER_QUALITY_SCORE = 0.9625 as const;  // claude-opus-4-7
+export const C3_SYNTHESIZER_QUALITY_SCORE = 0.9625 as const; // claude-opus-4-7
 export const C3_SYNTHESIZER_QUALITY_SOURCE = 'benchlm+lmarena' as const;
-export const C3_JUDGE_QUALITY_SCORE = 0.753 as const;          // deepseek-r1-0528
+export const C3_JUDGE_QUALITY_SCORE = 0.753 as const; // deepseek-r1-0528
 export const C3_JUDGE_QUALITY_SOURCE = 'artificial_analysis_api' as const;
 
 // ── Task set ──────────────────────────────────────────────────────────────────
 
 export const C3_TASK_IDS = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'] as const;
-export type C3TaskId = typeof C3_TASK_IDS[number];
+export type C3TaskId = (typeof C3_TASK_IDS)[number];
 
 export const C3_TASK_CATEGORIES: Record<C3TaskId, string> = {
   T1: 'mathematical_reasoning',
@@ -399,15 +396,15 @@ export const C3_RUBRIC_DIMENSIONS = [
   'helpfulness',
 ] as const;
 
-export type C3RubricDimension = typeof C3_RUBRIC_DIMENSIONS[number];
+export type C3RubricDimension = (typeof C3_RUBRIC_DIMENSIONS)[number];
 
 export const C3_RUBRIC_WEIGHTS: Record<C3RubricDimension, number> = {
   correctness: 0.25,
-  completeness: 0.20,
+  completeness: 0.2,
   coherence: 0.15,
-  conciseness: 0.10,
+  conciseness: 0.1,
   relevance: 0.15,
-  factuality: 0.10,
+  factuality: 0.1,
   helpfulness: 0.05,
 };
 
@@ -416,13 +413,13 @@ export const C3_RUBRIC_WEIGHTS: Record<C3RubricDimension, number> = {
 // cells should run well under cap — that gap IS the thesis measurement opportunity.
 
 export const C3_STRATEGY_BUDGET_CAPS_USD: Record<C3EligibleStrategy, number> = {
-  'single': 0.010,
-  'consensus': 0.050,
-  'debate': 0.050,
-  'expert-panel': 0.050,
-  'cost-cascade': 0.030,
-  'critique-repair': 0.040,
-  'quality-multipass': 0.080,
+  single: 0.01,
+  consensus: 0.05,
+  debate: 0.05,
+  'expert-panel': 0.05,
+  'cost-cascade': 0.03,
+  'critique-repair': 0.04,
+  'quality-multipass': 0.08,
 };
 
 // ── Provenance schema (R3: 3 new fields vs R2) ───────────────────────────────
@@ -442,12 +439,12 @@ export const C3_PROVENANCE_REQUIRED_FIELDS = [
   'judgeModelId',
   'qualityScore',
   'qualityDimensions',
-  'qualityTier',          // R3: high | mid | low | unknown
-  'costTier',             // R3: premium | standard | economy | unknown
-  'participantSampleId',  // R3: fingerprint of the sample drawn from candidate pool
+  'qualityTier', // R3: high | mid | low | unknown
+  'costTier', // R3: premium | standard | economy | unknown
+  'participantSampleId', // R3: fingerprint of the sample drawn from candidate pool
   'latencyMs',
   'costUsdEstimated',
-  'qualityPerDollar',     // R3: thesis metric = qualityScore / costUsdEstimated
+  'qualityPerDollar', // R3: thesis metric = qualityScore / costUsdEstimated
   'timestamp',
   'providerIds',
   'c3EligibilityPolicyVersion',
@@ -455,27 +452,24 @@ export const C3_PROVENANCE_REQUIRED_FIELDS = [
   'stepCount',
 ] as const;
 
-export type C3ProvenanceField = typeof C3_PROVENANCE_REQUIRED_FIELDS[number];
+export type C3ProvenanceField = (typeof C3_PROVENANCE_REQUIRED_FIELDS)[number];
 
 // ── Experiment matrix dimensions ──────────────────────────────────────────────
 // Matrix cell count unchanged from R2 (88). The expansion is in DEPTH (more
 // candidate models per cell via sampling), not in breadth (cell count).
 
-export const C3_MATRIX_STRATEGY_CELLS =
-  C3_TASK_IDS.length * C3_ELIGIBLE_STRATEGIES.length; // 8 × 7 = 56
+export const C3_MATRIX_STRATEGY_CELLS = C3_TASK_IDS.length * C3_ELIGIBLE_STRATEGIES.length; // 8 × 7 = 56
 
-export const C3_MATRIX_BASELINE_CELLS =
-  C3_TASK_IDS.length * C3_BASELINES.length; // 8 × 4 = 32
+export const C3_MATRIX_BASELINE_CELLS = C3_TASK_IDS.length * C3_BASELINES.length; // 8 × 4 = 32
 
-export const C3_MATRIX_TOTAL_CELLS =
-  C3_MATRIX_STRATEGY_CELLS + C3_MATRIX_BASELINE_CELLS; // 88
+export const C3_MATRIX_TOTAL_CELLS = C3_MATRIX_STRATEGY_CELLS + C3_MATRIX_BASELINE_CELLS; // 88
 
 // ── R3 vs R2 delta markers ────────────────────────────────────────────────────
 
 export const C3_R3_VS_R2 = {
   // Historical R3 baseline counts (what R3 introduced vs R2)
-  candidatePool: { r2: 10,  r3: 934,  r3Extended: 13808 },
-  chatReadyProviders: { r2: 4,   r3: 17,   r3Extended: 23    },
+  candidatePool: { r2: 10, r3: 934, r3Extended: 13808 },
+  chatReadyProviders: { r2: 4, r3: 17, r3Extended: 23 },
   eligibilityGate: { r2: 'quality_score_required', r3: 'chat_ready_provider_and_capability' },
   qualityScoreRole: { r2: 'eligibility_gate', r3: 'stratification_and_priority' },
   participantPool: { r2: 'fixed_3_models', r3: 'sampled_from_934_stratified' },

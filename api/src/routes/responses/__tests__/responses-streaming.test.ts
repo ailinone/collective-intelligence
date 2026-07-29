@@ -135,10 +135,7 @@ async function* gen(chunks: ChatResponse[]): AsyncGenerator<ChatResponse> {
 }
 
 /** Async generator that yields some chunks then throws mid-stream. */
-async function* genThenThrow(
-  chunks: ChatResponse[],
-  error: Error
-): AsyncGenerator<ChatResponse> {
+async function* genThenThrow(chunks: ChatResponse[], error: Error): AsyncGenerator<ChatResponse> {
   for (const c of chunks) {
     yield c;
   }
@@ -167,7 +164,12 @@ describe('extractDeltaText', () => {
       created: 1,
       model: 'observer',
       choices: [
-        { index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null, logprobs: null },
+        {
+          index: 0,
+          delta: { role: 'assistant', content: '' },
+          finish_reason: null,
+          logprobs: null,
+        },
       ],
       ailin_metadata: { type: 'progress', message: 'thinking', step: 1, total: 3 },
     };
@@ -175,7 +177,13 @@ describe('extractDeltaText', () => {
   });
 
   it('returns empty when there are no choices', () => {
-    const empty = { id: 'e', object: 'chat.completion', created: 1, model: 'm', choices: [] } as ChatResponse;
+    const empty = {
+      id: 'e',
+      object: 'chat.completion',
+      created: 1,
+      model: 'm',
+      choices: [],
+    } as ChatResponse;
     expect(extractDeltaText(empty)).toBe('');
   });
 
@@ -275,7 +283,12 @@ describe('streamResponse — successful stream', () => {
     });
 
     const completed = sink.events().find((e) => e.type === 'response.completed') as
-      | { response: { output: Array<{ content?: Array<{ type: string; text: string }> }>; status: string } }
+      | {
+          response: {
+            output: Array<{ content?: Array<{ type: string; text: string }> }>;
+            status: string;
+          };
+        }
       | undefined;
     expect(completed).toBeDefined();
     expect(completed!.response.status).toBe('completed');
@@ -294,8 +307,7 @@ describe('streamResponse — successful stream', () => {
     });
 
     const metaEvent = sink.events().find((e) => e.type === 'ailin.metadata') as
-      | { ailin_metadata: Record<string, unknown> }
-      | undefined;
+      { ailin_metadata: Record<string, unknown> } | undefined;
     expect(metaEvent).toBeDefined();
     const meta = metaEvent!.ailin_metadata;
     expect(meta.strategy_used).toBe('single');
@@ -321,8 +333,7 @@ describe('streamResponse — successful stream', () => {
     expect(deltas).toEqual(['A complete answer']);
 
     const completed = sink.events().find((e) => e.type === 'response.completed') as
-      | { response: { output: Array<{ content?: Array<{ text: string }> }> } }
-      | undefined;
+      { response: { output: Array<{ content?: Array<{ text: string }> }> } } | undefined;
     expect(completed!.response.output[0]?.content?.[0]?.text).toBe('A complete answer');
   });
 
@@ -439,8 +450,7 @@ describe('streamResponse — parity with chat streaming', () => {
 
     // Same chunk source → coherent Responses output.
     const completed = sink.events().find((e) => e.type === 'response.completed') as
-      | { response: { output: Array<{ content?: Array<{ text: string }> }> } }
-      | undefined;
+      { response: { output: Array<{ content?: Array<{ text: string }> }> } } | undefined;
     expect(completed!.response.output[0]?.content?.[0]?.text).toBe('Tokens');
   });
 

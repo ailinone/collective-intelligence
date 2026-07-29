@@ -49,8 +49,6 @@ export function compareCandidates(a: ModelScoreResult, b: ModelScoreResult): num
 /**
  * Returns a NEW sorted array. Does not mutate the input.
  */
-export function sortCandidates(
-  results: readonly ModelScoreResult[],
-): readonly ModelScoreResult[] {
+export function sortCandidates(results: readonly ModelScoreResult[]): readonly ModelScoreResult[] {
   return [...results].sort(compareCandidates);
 }

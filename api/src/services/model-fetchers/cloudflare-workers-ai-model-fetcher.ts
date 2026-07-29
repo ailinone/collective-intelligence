@@ -57,8 +57,8 @@ interface CloudflareModelsSearchResponse {
 const TASK_NAME_TO_CAPABILITIES: Record<string, ModelCapability[]> = {
   'text generation': ['chat', 'completions'],
   'text-generation': ['chat', 'completions'],
-  'summarization': ['chat'],
-  'translation': ['chat'],
+  summarization: ['chat'],
+  translation: ['chat'],
   'text embeddings': ['embedding'],
   'text-embeddings': ['embedding'],
   'text-to-image': ['image_generation'],
@@ -79,7 +79,7 @@ export class CloudflareWorkersAIModelFetcher extends BaseProviderModelFetcher {
   constructor(
     apiToken: string,
     accountId: string,
-    requestTimeoutMs = Number(process.env.CLOUDFLARE_DISCOVERY_TIMEOUT_MS || '15000'),
+    requestTimeoutMs = Number(process.env.CLOUDFLARE_DISCOVERY_TIMEOUT_MS || '15000')
   ) {
     super();
     this.apiToken = apiToken;
@@ -89,7 +89,10 @@ export class CloudflareWorkersAIModelFetcher extends BaseProviderModelFetcher {
 
   async getModels(): Promise<ProviderModel[]> {
     if (!this.apiToken || this.isMockKey(this.apiToken)) {
-      this.log.warn({ tokenPresent: Boolean(this.apiToken) }, 'Cloudflare Workers AI discovery skipped: no/mock token');
+      this.log.warn(
+        { tokenPresent: Boolean(this.apiToken) },
+        'Cloudflare Workers AI discovery skipped: no/mock token'
+      );
       return [];
     }
     if (!this.accountId || !this.accountId.trim()) {
@@ -115,7 +118,10 @@ export class CloudflareWorkersAIModelFetcher extends BaseProviderModelFetcher {
 
       const body = (await response.json()) as CloudflareModelsSearchResponse;
       if (body.success === false) {
-        this.log.warn({ errors: body.errors }, 'Cloudflare Workers AI models/search returned success:false');
+        this.log.warn(
+          { errors: body.errors },
+          'Cloudflare Workers AI models/search returned success:false'
+        );
         return [];
       }
 
@@ -124,7 +130,10 @@ export class CloudflareWorkersAIModelFetcher extends BaseProviderModelFetcher {
         .filter((m) => typeof m.name === 'string' && m.name.length > 0)
         .map((m) => this.transform(m));
 
-      this.log.info({ received: list.length, emitted: out.length }, 'Cloudflare Workers AI discovery completed');
+      this.log.info(
+        { received: list.length, emitted: out.length },
+        'Cloudflare Workers AI discovery completed'
+      );
       return out;
     } catch (error) {
       this.log.error({ error }, 'Cloudflare Workers AI discovery failed');

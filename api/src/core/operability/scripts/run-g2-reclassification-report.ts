@@ -24,10 +24,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { applyG2Reclassification, type GAuditRecordLike } from '../apply-g2-reclassification';
-import {
-  BUCKET_DESCRIPTIONS,
-  type ProviderReadinessBucket,
-} from '../provider-readiness-buckets';
+import { BUCKET_DESCRIPTIONS, type ProviderReadinessBucket } from '../provider-readiness-buckets';
 
 function parseArgs(): { inPath: string; outPath?: string } {
   const argv = process.argv.slice(2);
@@ -67,7 +64,16 @@ function main(): void {
   // narrow and conservative.
   const hints = {
     // Providers that need deployment endpoint or region.
-    requiresDeployment: ['azure-openai', 'aws-bedrock', 'vertex-ai', 'sap-ai-core', 'aws-sagemaker', 'databricks', 'snowflake', 'watsonx'],
+    requiresDeployment: [
+      'azure-openai',
+      'aws-bedrock',
+      'vertex-ai',
+      'sap-ai-core',
+      'aws-sagemaker',
+      'databricks',
+      'snowflake',
+      'watsonx',
+    ],
     // Providers known to have catalog id mismatch (binding row → wrong adapter).
     catalogIdMismatched: ['sambanova', 'perplexity', 'replicate'],
     // Providers we suspect of secret-alias loader mismatch (Loader uses
@@ -115,7 +121,7 @@ function main(): void {
 
   // ── Canonical reprobe candidates ───────────────────────────────────
   const reprobeCandidates = out.records.filter(
-    (r) => r.bucketG2 === 'G_model_alias_mismatch_probable' && r.canonicalProbeApiModelId,
+    (r) => r.bucketG2 === 'G_model_alias_mismatch_probable' && r.canonicalProbeApiModelId
   );
   console.log('\n── Canonical reprobe candidates (G_alias_probable with resolved apiModelId) ──');
   if (reprobeCandidates.length === 0) {
@@ -123,7 +129,7 @@ function main(): void {
   } else {
     for (const r of reprobeCandidates) {
       console.log(
-        `  ${r.providerId.padEnd(22, ' ')}  catalog=${(r.canonicalProbeModelId ?? '-').padEnd(40, ' ')}  api=${r.canonicalProbeApiModelId}  (source=${r.canonicalProbeSource})`,
+        `  ${r.providerId.padEnd(22, ' ')}  catalog=${(r.canonicalProbeModelId ?? '-').padEnd(40, ' ')}  api=${r.canonicalProbeApiModelId}  (source=${r.canonicalProbeSource})`
       );
     }
   }
@@ -164,10 +170,18 @@ function main(): void {
   console.log('\n╔═══════════════════════════════════════════════════════════════════╗');
   console.log('║                       SUMMARY                                     ║');
   console.log('╠═══════════════════════════════════════════════════════════════════╣');
-  console.log(`║  Chat-ready providers:           ${totalReady.toString().padStart(3, ' ')} / ${records.length.toString().padEnd(3, ' ')}                          ║`);
-  console.log(`║  Reclassified out of unknown:    ${(records.filter((r: { bucket: string }) => r.bucket === 'unknown').length - truelyUnknown).toString().padStart(3, ' ')}                                  ║`);
-  console.log(`║  Still V_unknown_unclassified:   ${truelyUnknown.toString().padStart(3, ' ')}                                  ║`);
-  console.log(`║  Reprobe candidates (G alias):   ${reprobeCandidates.length.toString().padStart(3, ' ')}                                  ║`);
+  console.log(
+    `║  Chat-ready providers:           ${totalReady.toString().padStart(3, ' ')} / ${records.length.toString().padEnd(3, ' ')}                          ║`
+  );
+  console.log(
+    `║  Reclassified out of unknown:    ${(records.filter((r: { bucket: string }) => r.bucket === 'unknown').length - truelyUnknown).toString().padStart(3, ' ')}                                  ║`
+  );
+  console.log(
+    `║  Still V_unknown_unclassified:   ${truelyUnknown.toString().padStart(3, ' ')}                                  ║`
+  );
+  console.log(
+    `║  Reprobe candidates (G alias):   ${reprobeCandidates.length.toString().padStart(3, ' ')}                                  ║`
+  );
   console.log('╚═══════════════════════════════════════════════════════════════════╝');
 }
 

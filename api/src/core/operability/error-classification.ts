@@ -265,12 +265,7 @@ const UNSUPPORTED_CAPABILITY_KEYWORDS = [
   'modality not supported',
 ];
 
-const STREAMING_BROKEN_KEYWORDS = [
-  'stream',
-  'streaming',
-  'chunk',
-  'sse',
-];
+const STREAMING_BROKEN_KEYWORDS = ['stream', 'streaming', 'chunk', 'sse'];
 
 // HTTP 200 OK but no usable assistant text. Unfunded gateways frequently
 // 200-OK an empty body ("Provider returned empty assistant response").
@@ -304,11 +299,10 @@ function classification(
     shouldRemoveFromCandidatePool: boolean;
     shouldSkipNearZero: boolean;
   },
-  defaultsContext?: { retryAfterMs?: number; httpStatus?: number; message?: string },
+  defaultsContext?: { retryAfterMs?: number; httpStatus?: number; message?: string }
 ): ProviderErrorClassification {
-  const cooldown = partial.cooldownMs
-    ?? defaultsContext?.retryAfterMs
-    ?? DEFAULT_COOLDOWNS[errorClass];
+  const cooldown =
+    partial.cooldownMs ?? defaultsContext?.retryAfterMs ?? DEFAULT_COOLDOWNS[errorClass];
   return {
     errorClass,
     cooldownMs: cooldown,
@@ -349,7 +343,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -364,12 +358,15 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
   // ─── Quota (separate from rate-limit: quota is usage cap, rate is QPS) ─
-  if (containsAny(messageLower, QUOTA_KEYWORDS) && !containsAny(messageLower, RATE_LIMIT_KEYWORDS)) {
+  if (
+    containsAny(messageLower, QUOTA_KEYWORDS) &&
+    !containsAny(messageLower, RATE_LIMIT_KEYWORDS)
+  ) {
     return classification(
       'quota_exceeded',
       {
@@ -379,7 +376,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -394,7 +391,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -409,7 +406,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -432,7 +429,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -447,15 +444,12 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
   // ─── Context exceeded (request-scoped, NOT provider-scoped) ──────────
-  if (
-    containsAny(messageLower, CONTEXT_EXCEEDED_KEYWORDS) ||
-    httpStatus === 413
-  ) {
+  if (containsAny(messageLower, CONTEXT_EXCEEDED_KEYWORDS) || httpStatus === 413) {
     return classification(
       'context_exceeded',
       {
@@ -466,7 +460,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -481,7 +475,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -499,7 +493,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -514,7 +508,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -530,7 +524,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -539,7 +533,9 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
   // an error indicator (SSE parse error, chunk decoding failure).
   if (
     containsAny(messageLower, STREAMING_BROKEN_KEYWORDS) &&
-    (messageLower.includes('parse') || messageLower.includes('decode') || messageLower.includes('malformed'))
+    (messageLower.includes('parse') ||
+      messageLower.includes('decode') ||
+      messageLower.includes('malformed'))
   ) {
     return classification(
       'streaming_broken',
@@ -550,12 +546,15 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
   // ─── Malformed response (parse error without streaming context) ─────
-  if (messageLower.includes('json') && (messageLower.includes('parse') || messageLower.includes('unexpected'))) {
+  if (
+    messageLower.includes('json') &&
+    (messageLower.includes('parse') || messageLower.includes('unexpected'))
+  ) {
     return classification(
       'malformed_response',
       {
@@ -565,7 +564,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -580,7 +579,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: false,
         shouldSkipNearZero: false,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -600,7 +599,7 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
         shouldRemoveFromCandidatePool: true,
         shouldSkipNearZero: true,
       },
-      ctx,
+      ctx
     );
   }
 
@@ -614,6 +613,6 @@ export function classifyProviderError(error: unknown): ProviderErrorClassificati
       shouldRemoveFromCandidatePool: false,
       shouldSkipNearZero: false,
     },
-    ctx,
+    ctx
   );
 }

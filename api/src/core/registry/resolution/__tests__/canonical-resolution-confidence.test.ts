@@ -233,10 +233,10 @@ describe('pickHigherAuthority — deterministic conflict resolution', () => {
     expect(set.size).toBe(values.length); // unique
     // manual_override has the highest value.
     expect(CANONICAL_SOURCE_AUTHORITY.manual_override).toBeGreaterThan(
-      CANONICAL_SOURCE_AUTHORITY.declared_alias,
+      CANONICAL_SOURCE_AUTHORITY.declared_alias
     );
     expect(CANONICAL_SOURCE_AUTHORITY.declared_alias).toBeGreaterThan(
-      CANONICAL_SOURCE_AUTHORITY.heuristic_family_version,
+      CANONICAL_SOURCE_AUTHORITY.heuristic_family_version
     );
     expect(CANONICAL_SOURCE_AUTHORITY.fallback_provider_model_id).toBe(0);
   });

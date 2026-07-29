@@ -71,7 +71,7 @@ export const DEFAULT_COLLECTIVE_SELECTION_POLICY: CollectiveSelectionPolicy = Ob
  * Frozen output.
  */
 export function resolveCollectiveSelectionPolicy(
-  override?: Partial<CollectiveSelectionPolicy>,
+  override?: Partial<CollectiveSelectionPolicy>
 ): CollectiveSelectionPolicy {
   if (!override) return DEFAULT_COLLECTIVE_SELECTION_POLICY;
   return Object.freeze({
@@ -80,8 +80,8 @@ export function resolveCollectiveSelectionPolicy(
     preferParallelForTaskTypes: Object.freeze(
       Array.from(
         override.preferParallelForTaskTypes ??
-          DEFAULT_COLLECTIVE_SELECTION_POLICY.preferParallelForTaskTypes,
-      ),
+          DEFAULT_COLLECTIVE_SELECTION_POLICY.preferParallelForTaskTypes
+      )
     ),
   });
 }

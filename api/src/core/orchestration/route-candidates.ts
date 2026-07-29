@@ -40,13 +40,7 @@ import type { ProviderErrorKind } from './failures/provider-error-classifier';
  * synthesizer / judge / fallback ALL require `endpointKind='chat'`.
  */
 export type RouteEndpointKind =
-  | 'chat'
-  | 'embeddings'
-  | 'rerank'
-  | 'image'
-  | 'audio'
-  | 'video'
-  | 'unknown';
+  'chat' | 'embeddings' | 'rerank' | 'image' | 'audio' | 'video' | 'unknown';
 
 /**
  * How a route is equivalent to the LOGICAL model the role resolver
@@ -55,23 +49,23 @@ export type RouteEndpointKind =
  * is requested without exact-equivalence proof.
  */
 export type RouteEquivalenceKind =
-  | 'exact_same_model'                  // identical apiModelId on native + same training
-  | 'same_provider_model_via_router'    // same native model accessed via router peering
-  | 'router_alias_probable'             // router lists a same-name model but no canonical proof
-  | 'family_equivalent'                 // sibling within same model family
-  | 'not_equivalent';                   // different model entirely
+  | 'exact_same_model' // identical apiModelId on native + same training
+  | 'same_provider_model_via_router' // same native model accessed via router peering
+  | 'router_alias_probable' // router lists a same-name model but no canonical proof
+  | 'family_equivalent' // sibling within same model family
+  | 'not_equivalent'; // different model entirely
 
 /**
  * Source of evidence for this route. Higher-priority sources are listed
  * first; the builder uses this to break ties when ordering routes.
  */
 export type RouteCandidateSource =
-  | 'last_success'           // recently chat-succeeded — strongest live signal
-  | 'native_provider'        // direct provider catalog entry
-  | 'provider_discovery'     // discovered via provider's /v1/models endpoint
-  | 'router_taxonomy'        // derived from provider-routing-taxonomy peering
-  | 'catalog_binding'        // catalog row points at this route
-  | 'manual_probe_spec';     // caller passed it explicitly
+  | 'last_success' // recently chat-succeeded — strongest live signal
+  | 'native_provider' // direct provider catalog entry
+  | 'provider_discovery' // discovered via provider's /v1/models endpoint
+  | 'router_taxonomy' // derived from provider-routing-taxonomy peering
+  | 'catalog_binding' // catalog row points at this route
+  | 'manual_probe_spec'; // caller passed it explicitly
 
 export interface ApprovedRouteCandidate {
   /** Stable id for this exact route. Recommended formula:
@@ -177,12 +171,7 @@ export interface RouteSelectionPolicy {
 }
 
 export type RouteOrderCriterion =
-  | 'liveReady'
-  | 'recentSuccess'
-  | 'cost'
-  | 'latency'
-  | 'context'
-  | 'nativeFirst';
+  'liveReady' | 'recentSuccess' | 'cost' | 'latency' | 'context' | 'nativeFirst';
 
 /**
  * Strict default policy used when the caller does not override.
@@ -217,7 +206,7 @@ export function resolveRouteCaps(policy: RouteSelectionPolicy): {
   const runtimeCap = policy.runtimeMaxRouteAttempts ?? policy.maxRouteAttempts;
   const discoveryCap = Math.max(
     policy.discoveryMaxRouteCandidates ?? Math.max(200, runtimeCap),
-    runtimeCap,
+    runtimeCap
   );
   return { discoveryCap, runtimeCap };
 }
@@ -284,7 +273,9 @@ export interface RouteCandidateFingerprintShape {
   readonly equivalenceKind: RouteEquivalenceKind;
 }
 
-export function projectRouteForFingerprint(c: ApprovedRouteCandidate): RouteCandidateFingerprintShape {
+export function projectRouteForFingerprint(
+  c: ApprovedRouteCandidate
+): RouteCandidateFingerprintShape {
   const shape: RouteCandidateFingerprintShape = {
     routeId: c.routeId,
     logicalModelId: c.logicalModelId,

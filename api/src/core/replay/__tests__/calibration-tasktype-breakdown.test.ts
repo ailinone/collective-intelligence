@@ -13,9 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildTaskTypeCalibration } from '../calibration/tasktype-calibration';
-import {
-  DEFAULT_CALIBRATION_POLICY,
-} from '../calibration/calibration-policy';
+import { DEFAULT_CALIBRATION_POLICY } from '../calibration/calibration-policy';
 import type { ReplayRowResult } from '../historical-replay-types';
 
 function makeRow(taskType: string, paretoBoth: boolean, fallback: boolean): ReplayRowResult {

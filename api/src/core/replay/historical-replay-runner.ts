@@ -61,9 +61,7 @@ export interface ReplayRunnerResult {
   readonly rows: readonly ReplayRowResult[];
 }
 
-export function runHistoricalReplay(
-  input: ReplayRunnerInput,
-): ReplayRunnerResult {
+export function runHistoricalReplay(input: ReplayRunnerInput): ReplayRunnerResult {
   const _policy = resolveCollectiveSelectionPolicy({
     ...input.policy,
     // Replay always allows exploration so insufficient_data candidates
@@ -85,11 +83,7 @@ export function runHistoricalReplay(
     }
     const baseline = buildRowBaseline(h, baselineIndex);
     const profilesByModel = buildProfileIndex(input.trainHistory);
-    const scores = buildContributionAwareScores(
-      candidates,
-      h,
-      profilesByModel,
-    );
+    const scores = buildContributionAwareScores(candidates, h, profilesByModel);
     if (scores.length === 0) continue;
 
     const structural = pickStructuralNaive(scores);
@@ -113,15 +107,12 @@ export function runHistoricalReplay(
     const structuralSelector = structuralProjection(structural, scores);
 
     // Verdicts vs single baseline.
-    const qualityOk =
-      paretoSelector.expectedJudge >= baseline.singleJudge - 1e-9;
-    const costOk =
-      paretoSelector.expectedCostUsd <= baseline.singleCostUsd + 1e-9;
+    const qualityOk = paretoSelector.expectedJudge >= baseline.singleJudge - 1e-9;
+    const costOk = paretoSelector.expectedCostUsd <= baseline.singleCostUsd + 1e-9;
     const harmfulAvoided = detectHarmfulAvoidance(scores, structural, paretoSelector);
     const modalityAvoided = detectModalityAvoidance(scores, paretoSelector);
     const isFallback =
-      paretoPlan.strategyId === 'single_fallback' ||
-      paretoPlan.paretoStatus === 'single_fallback';
+      paretoPlan.strategyId === 'single_fallback' || paretoPlan.paretoStatus === 'single_fallback';
 
     rows.push(
       Object.freeze({
@@ -143,7 +134,7 @@ export function runHistoricalReplay(
         harmful_model_avoided: harmfulAvoided,
         modality_mismatch_avoided: modalityAvoided,
         pareto_single_fallback: isFallback,
-      }),
+      })
     );
   }
   return Object.freeze({ rows: Object.freeze(rows) });
@@ -157,7 +148,7 @@ export function runHistoricalReplay(
  * the "candidate set" we evaluate the holdout row against.
  */
 function buildCandidateSetsByTaskType(
-  train: readonly HistoricalReplayExecution[],
+  train: readonly HistoricalReplayExecution[]
 ): Map<string, readonly string[]> {
   const sets = new Map<string, Set<string>>();
   for (const t of train) {
@@ -179,8 +170,11 @@ function buildCandidateSetsByTaskType(
 // ─── Profile lookup ─────────────────────────────────────────────────────
 
 function buildProfileIndex(
-  history: HistoricalContributionResult,
-): Map<string, import('../contribution/model-task-performance-profile').ModelTaskPerformanceProfile> {
+  history: HistoricalContributionResult
+): Map<
+  string,
+  import('../contribution/model-task-performance-profile').ModelTaskPerformanceProfile
+> {
   const out = new Map<
     string,
     import('../contribution/model-task-performance-profile').ModelTaskPerformanceProfile
@@ -196,7 +190,7 @@ function buildProfileIndex(
 function buildContributionAwareScores(
   modelIds: readonly string[],
   holdout: HistoricalReplayExecution,
-  profiles: ReturnType<typeof buildProfileIndex>,
+  profiles: ReturnType<typeof buildProfileIndex>
 ): ContributionAwareScore[] {
   const out: ContributionAwareScore[] = [];
   for (const modelId of modelIds) {
@@ -224,7 +218,7 @@ function estimateCostForModel(
   profile:
     | import('../contribution/model-task-performance-profile').ModelTaskPerformanceProfile
     | undefined,
-  holdout: HistoricalReplayExecution,
+  holdout: HistoricalReplayExecution
 ): number {
   if (profile && profile.costMean > 0) return profile.costMean;
   // Fallback: use the holdout's observed cost split across its models.
@@ -242,7 +236,7 @@ function estimateCostForModel(
  */
 function deriveModalityFromHistory(
   modelId: string,
-  holdout: HistoricalReplayExecution,
+  holdout: HistoricalReplayExecution
 ): 'text' | 'image' | 'audio' | 'video' | 'mixed' {
   return holdout.modality ?? 'text';
 }
@@ -258,7 +252,7 @@ interface BaselineSlot {
 }
 
 function buildBaselineIndex(
-  train: readonly HistoricalReplayExecution[],
+  train: readonly HistoricalReplayExecution[]
 ): Map<string, BaselineSlot> {
   // Group single-strategy executions by task_type.
   const singlesByTask = new Map<string, HistoricalReplayExecution[]>();
@@ -278,8 +272,7 @@ function buildBaselineIndex(
       .map((e) => ({ j: e.judgeScore as number, c: e.costUsd ?? 0 }));
     if (judges.length === 0) continue;
     // best single = highest judge mean
-    const meanJudge =
-      judges.reduce((s, x) => s + x.j, 0) / judges.length;
+    const meanJudge = judges.reduce((s, x) => s + x.j, 0) / judges.length;
     const meanCost = judges.reduce((s, x) => s + x.c, 0) / judges.length;
     // cheapest good = cheapest cost among those with judge >= meanJudge
     const goodOnes = judges.filter((x) => x.j >= meanJudge);
@@ -295,7 +288,7 @@ function buildBaselineIndex(
         cheapestGoodSingleJudge: cheapestGood.j,
         cheapestGoodSingleCost: cheapestGood.c,
         comparableExecutions: judges.length,
-      }),
+      })
     );
   }
   return out;
@@ -303,7 +296,7 @@ function buildBaselineIndex(
 
 function buildRowBaseline(
   holdout: HistoricalReplayExecution,
-  index: Map<string, BaselineSlot>,
+  index: Map<string, BaselineSlot>
 ): ReplayBaseline {
   const slot = index.get(holdout.taskType);
   return Object.freeze({
@@ -313,10 +306,8 @@ function buildRowBaseline(
     singleCostUsd: slot?.bestSingleCost ?? 0.02,
     singleBudgetJudge: slot?.cheapestGoodSingleJudge,
     singleBudgetCostUsd: slot?.cheapestGoodSingleCost,
-    actualHistoricalJudge:
-      typeof holdout.judgeScore === 'number' ? holdout.judgeScore : undefined,
-    actualHistoricalCostUsd:
-      typeof holdout.costUsd === 'number' ? holdout.costUsd : undefined,
+    actualHistoricalJudge: typeof holdout.judgeScore === 'number' ? holdout.judgeScore : undefined,
+    actualHistoricalCostUsd: typeof holdout.costUsd === 'number' ? holdout.costUsd : undefined,
     comparableExecutions: slot?.comparableExecutions ?? 0,
   });
 }
@@ -324,14 +315,13 @@ function buildRowBaseline(
 // ─── Selector projections ──────────────────────────────────────────────
 
 function pickStructuralNaive(
-  scores: readonly ContributionAwareScore[],
+  scores: readonly ContributionAwareScore[]
 ): readonly ContributionAwareScore[] {
   // Naive: sort by expectedJudge desc, take top 2.
   // Treats ALL candidates as eligible (no harm or modality filter).
   const sorted = [...scores].sort((a, b) => {
     if (b.expectedJudge !== a.expectedJudge) return b.expectedJudge - a.expectedJudge;
-    if (a.estimatedCostUsd !== b.estimatedCostUsd)
-      return a.estimatedCostUsd - b.estimatedCostUsd;
+    if (a.estimatedCostUsd !== b.estimatedCostUsd) return a.estimatedCostUsd - b.estimatedCostUsd;
     return a.modelId < b.modelId ? -1 : a.modelId > b.modelId ? 1 : 0;
   });
   return sorted.slice(0, 2);
@@ -339,18 +329,12 @@ function pickStructuralNaive(
 
 function structuralProjection(
   picked: readonly ContributionAwareScore[],
-  scores: readonly ContributionAwareScore[],
+  scores: readonly ContributionAwareScore[]
 ): SelectorProjection {
   void scores;
   const ids = picked.map((c) => c.modelId);
-  const expectedJudge =
-    picked.length === 0
-      ? 0
-      : Math.max(...picked.map((c) => c.expectedJudge));
-  const expectedCostUsd = picked.reduce(
-    (s, c) => s + c.estimatedCostUsd,
-    0,
-  );
+  const expectedJudge = picked.length === 0 ? 0 : Math.max(...picked.map((c) => c.expectedJudge));
+  const expectedCostUsd = picked.reduce((s, c) => s + c.estimatedCostUsd, 0);
   return Object.freeze({
     selectorId: 'structural_naive',
     selectedModelIds: Object.freeze(ids),
@@ -372,9 +356,7 @@ function ensemblePlanToProjection(plan: EnsemblePlan): SelectorProjection {
   });
 }
 
-function actualHistoricalProjection(
-  h: HistoricalReplayExecution,
-): SelectorProjection {
+function actualHistoricalProjection(h: HistoricalReplayExecution): SelectorProjection {
   return Object.freeze({
     selectorId: 'actual_historical',
     selectedModelIds: Object.freeze(Array.from(h.modelsUsed)),
@@ -387,7 +369,7 @@ function actualHistoricalProjection(
 
 function singleTopProjection(
   h: HistoricalReplayExecution,
-  baseline: ReplayBaseline,
+  baseline: ReplayBaseline
 ): SelectorProjection {
   return Object.freeze({
     selectorId: 'single_top',
@@ -401,7 +383,7 @@ function singleTopProjection(
 
 function singleBudgetProjection(
   h: HistoricalReplayExecution,
-  baseline: ReplayBaseline,
+  baseline: ReplayBaseline
 ): SelectorProjection {
   return Object.freeze({
     selectorId: 'single_budget',
@@ -418,7 +400,7 @@ function singleBudgetProjection(
 function detectHarmfulAvoidance(
   scores: readonly ContributionAwareScore[],
   structural: readonly ContributionAwareScore[],
-  pareto: SelectorProjection,
+  pareto: SelectorProjection
 ): boolean {
   const paretoSelected = new Set(pareto.selectedModelIds);
   // A "harmful avoidance" happens when the structural pick included a
@@ -434,12 +416,11 @@ function detectHarmfulAvoidance(
 
 function detectModalityAvoidance(
   scores: readonly ContributionAwareScore[],
-  pareto: SelectorProjection,
+  pareto: SelectorProjection
 ): boolean {
   const paretoSelected = new Set(pareto.selectedModelIds);
   for (const s of scores) {
-    const isMismatch =
-      s.rejectionReasons.indexOf('modality_mismatch') !== -1;
+    const isMismatch = s.rejectionReasons.indexOf('modality_mismatch') !== -1;
     if (isMismatch && !paretoSelected.has(s.modelId)) return true;
   }
   return false;

@@ -104,7 +104,7 @@ describe('liftToSnapshot', () => {
   it('lifts an error result with the message', () => {
     const snapshot = liftToSnapshot(
       { kind: 'error', message: 'connection refused', latencyMs: 12 },
-      FAKE_HEURISTIC,
+      FAKE_HEURISTIC
     );
 
     expect(snapshot.kind).toBe('error');
@@ -150,8 +150,8 @@ describe('runEnsembleInShadow.onShadowResult', () => {
           latencyBreakdown: { totalMs: 1, tierLatencies: [] },
           requestId: 'test-rq',
         }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
     );
     const hook = vi.fn<(s: ShadowEnsembleSnapshot) => void>();
 
@@ -177,7 +177,7 @@ describe('runEnsembleInShadow.onShadowResult', () => {
 
   it('invokes the hook with a timeout snapshot on AbortError', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(
-      Object.assign(new Error('aborted'), { name: 'AbortError' }),
+      Object.assign(new Error('aborted'), { name: 'AbortError' })
     );
     const hook = vi.fn<(s: ShadowEnsembleSnapshot) => void>();
 
@@ -204,8 +204,8 @@ describe('runEnsembleInShadow.onShadowResult', () => {
           latencyBreakdown: { totalMs: 1, tierLatencies: [] },
           requestId: 'test-rq',
         }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
     );
     const hook = vi.fn<(s: ShadowEnsembleSnapshot) => void>().mockImplementation(() => {
       throw new Error('strategy bug');
@@ -222,7 +222,7 @@ describe('runEnsembleInShadow.onShadowResult', () => {
           fallbackOnError: true,
         },
         onShadowResult: hook,
-      }),
+      })
     ).resolves.not.toThrow();
 
     expect(hook).toHaveBeenCalledOnce();

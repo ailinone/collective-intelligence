@@ -27,7 +27,10 @@ import {
   type RoleSelectionPolicySnapshot,
 } from '@/core/orchestration/strategies/consensus-plan-fingerprint';
 import type { ConsensusExecutionPlan } from '@/core/orchestration/strategies/consensus-execution-planner';
-import { makeCandidate, makeModel } from '@/core/orchestration/model-selection/__tests__/role-resolver.fixtures';
+import {
+  makeCandidate,
+  makeModel,
+} from '@/core/orchestration/model-selection/__tests__/role-resolver.fixtures';
 
 function makePlan(): ConsensusExecutionPlan {
   return {
@@ -37,9 +40,18 @@ function makePlan(): ConsensusExecutionPlan {
       makeCandidate({ id: 'voter-a', model: makeModel({ id: 'voter-a', provider: 'prov-a' }) }),
       makeCandidate({ id: 'voter-b', model: makeModel({ id: 'voter-b', provider: 'prov-b' }) }),
     ],
-    synthesizer: makeCandidate({ id: 'synth-1', model: makeModel({ id: 'synth-1', provider: 'prov-synth' }) }),
-    judge: makeCandidate({ id: 'judge-1', model: makeModel({ id: 'judge-1', provider: 'prov-judge' }) }),
-    fallbackSingle: makeCandidate({ id: 'fb-1', model: makeModel({ id: 'fb-1', provider: 'prov-fb' }) }),
+    synthesizer: makeCandidate({
+      id: 'synth-1',
+      model: makeModel({ id: 'synth-1', provider: 'prov-synth' }),
+    }),
+    judge: makeCandidate({
+      id: 'judge-1',
+      model: makeModel({ id: 'judge-1', provider: 'prov-judge' }),
+    }),
+    fallbackSingle: makeCandidate({
+      id: 'fb-1',
+      model: makeModel({ id: 'fb-1', provider: 'prov-fb' }),
+    }),
     roleSelectionTrace: [],
     executable: true,
     blockers: [],
@@ -59,11 +71,15 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('same roleSelectionPolicy → same planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
@@ -72,12 +88,19 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('different synthesizerPolicyVersion → DIFFERENT planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
-    const policyB: RoleSelectionPolicySnapshot = { ...policyA, synthesizerPolicyVersion: '01C.1B-J1H:NEW_POLICY' };
+    const policyB: RoleSelectionPolicySnapshot = {
+      ...policyA,
+      synthesizerPolicyVersion: '01C.1B-J1H:NEW_POLICY',
+    };
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyB,
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -86,12 +109,19 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('different synthesizerCandidatePoolHash → DIFFERENT planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
-    const policyB: RoleSelectionPolicySnapshot = { ...policyA, synthesizerCandidatePoolHash: 'xyz98765' };
+    const policyB: RoleSelectionPolicySnapshot = {
+      ...policyA,
+      synthesizerCandidatePoolHash: 'xyz98765',
+    };
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyB,
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -100,12 +130,16 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('different qualityFloor → DIFFERENT planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
     const policyB: RoleSelectionPolicySnapshot = { ...policyA, synthesizerQualityFloor: 0.7 };
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyB,
     });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -114,10 +148,14 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('omitted roleSelectionPolicy → EMPTY default in snapshot (stable shape)', () => {
     const plan = makePlan();
     const snap1 = buildSanitizedPlanSnapshot({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
     });
     const snap2 = buildSanitizedPlanSnapshot({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
     });
     expect(snap1.roleSelectionPolicy).toEqual(snap2.roleSelectionPolicy);
     expect(snap1.roleSelectionPolicy.includedInPlanFingerprint).toBe(false);
@@ -128,10 +166,14 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('omitted policy vs explicit empty policy → SAME planFingerprint', () => {
     const plan = makePlan();
     const fOmitted = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
     });
     const fEmpty = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: {
         synthesizerPolicyVersion: '',
         synthesizerCandidatePoolHash: '',
@@ -148,10 +190,14 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('omitted vs populated → DIFFERENT planFingerprint (any populated policy must differ from default)', () => {
     const plan = makePlan();
     const fOmitted = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
     });
     const fPopulated = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       roleSelectionPolicy: policyA,
     });
     expect(fOmitted.planFingerprint).not.toBe(fPopulated.planFingerprint);
@@ -160,8 +206,15 @@ describe('01C.1B-J1G-R0 §10.4 — role-selection parity in planFingerprint', ()
   it('snapshot field shape is stable: roleSelectionPolicy exposed exactly 7 keys (J2 added 3)', () => {
     const plan = makePlan();
     const snap = buildSanitizedPlanSnapshot({
-      plan, strict: true, roleSpecificRetrieval: true,
-      roleSelectionPolicy: { ...policyA, qualitySnapshotVersion: '', qualitySnapshotHash: '', qualitySnapshotEntryCount: 0 },
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
+      roleSelectionPolicy: {
+        ...policyA,
+        qualitySnapshotVersion: '',
+        qualitySnapshotHash: '',
+        qualitySnapshotEntryCount: 0,
+      },
     });
     const keys = Object.keys(snap.roleSelectionPolicy).sort();
     expect(keys).toEqual([

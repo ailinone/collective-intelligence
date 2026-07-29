@@ -55,7 +55,10 @@ const CATALOG = [
   row('xai/grok-4-fast-non-reasoning', 'Grok 4 Fast', 'xai', 2_000_000),
   row('xai/grok-3', 'Grok 3', 'xai', 131_072),
   // Non-chat row sharing a flagship name — must be structurally excluded.
-  { ...row('openai/gpt-5.4-vision-only', 'GPT-5.4 Vision', 'openai', 400_000), capabilities: ['vision'] },
+  {
+    ...row('openai/gpt-5.4-vision-only', 'GPT-5.4 Vision', 'openai', 400_000),
+    capabilities: ['vision'],
+  },
 ];
 
 function row(id: string, displayName: string, provider: string, contextWindow: number) {
@@ -100,7 +103,9 @@ beforeEach(async () => {
   // the next test body runs (a fire-and-forget re-mock races the test start).
   const { prisma } = await import('@/database/client');
   (prisma.model.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve(CATALOG));
+  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation(() =>
+    Promise.resolve(CATALOG)
+  );
 });
 
 afterEach(() => {
@@ -135,7 +140,7 @@ describe('resolveFrontierModels — flagship election', () => {
     ];
     const { prisma } = await import('@/database/client');
     (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
-      Promise.resolve([...CATALOG, ...extra]),
+      Promise.resolve([...CATALOG, ...extra])
     );
 
     const picked = await resolveFrontierModels();
@@ -166,7 +171,7 @@ describe('resolveFrontierModels — flagship election', () => {
     const fork = row('King3Djbl/mythos-9b-unhinged', 'Mythos 9B Unhinged', 'huggingface', 8_192);
     const { prisma } = await import('@/database/client');
     (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
-      Promise.resolve([...CATALOG, fork]),
+      Promise.resolve([...CATALOG, fork])
     );
 
     const picked = await resolveFrontierModels();
@@ -257,9 +262,8 @@ describe('buildC3FrontierComparison — config structure', () => {
   });
 
   it('runs the full verifiable subset plus a stratified sample of the same suite', async () => {
-    const { buildC3FrontierComparison, VERIFIABLE_TASK_INDICES } = await import(
-      '../c3-experiment-configs'
-    );
+    const { buildC3FrontierComparison, VERIFIABLE_TASK_INDICES } =
+      await import('../c3-experiment-configs');
     const config = await buildC3FrontierComparison();
 
     for (const idx of VERIFIABLE_TASK_INDICES) {
@@ -298,9 +302,8 @@ describe('buildC3FrontierComparison — config structure', () => {
     // already have 2 full reps on 116-125), exactly the three collective
     // arms, exactly the verifiable tasks, and a budget whose per-arm bucket
     // (maxBudget / #arms) clears the observed worst case (~$4/arm).
-    const { buildC3FrontierHaTopup, VERIFIABLE_TASK_INDICES } = await import(
-      '../c3-experiment-configs'
-    );
+    const { buildC3FrontierHaTopup, VERIFIABLE_TASK_INDICES } =
+      await import('../c3-experiment-configs');
     const config = buildC3FrontierHaTopup();
 
     expect(config.modes.every((m) => m.mode === 'collective')).toBe(true);
@@ -319,18 +322,21 @@ describe('buildC3FrontierComparison — config structure', () => {
     try {
       const { prisma } = await import('@/database/client');
       const ollamaRow = {
-        id: 'qwen3:8b', displayName: 'Qwen3 8B (VPS)', contextWindow: 32768,
-        inputCostPer1k: 0, capabilities: ['chat'], provider: { name: 'ollama' },
+        id: 'qwen3:8b',
+        displayName: 'Qwen3 8B (VPS)',
+        contextWindow: 32768,
+        inputCostPer1k: 0,
+        capabilities: ['chat'],
+        provider: { name: 'ollama' },
       };
       const cheap1 = row('openai/gpt-4o-mini', 'GPT-4o mini', 'openai', 128000);
       const cheap2 = row('anthropic/claude-haiku', 'Claude Haiku', 'anthropic', 200000);
       (prisma.model.findMany as ReturnType<typeof vi.fn>)
-        .mockImplementationOnce(() => Promise.resolve([ollamaRow]))      // resolveOwnModels
+        .mockImplementationOnce(() => Promise.resolve([ollamaRow])) // resolveOwnModels
         .mockImplementationOnce(() => Promise.resolve([cheap1, cheap2])); // resolveBudgetModels
 
-      const { buildC3HbMixedMiniRun, VERIFIABLE_TASK_INDICES } = await import(
-        '../c3-experiment-configs'
-      );
+      const { buildC3HbMixedMiniRun, VERIFIABLE_TASK_INDICES } =
+        await import('../c3-experiment-configs');
       const config = await buildC3HbMixedMiniRun();
 
       const singles = config.modes.filter((m) => m.mode === 'single-model');
@@ -345,7 +351,9 @@ describe('buildC3FrontierComparison — config structure', () => {
       ]);
       for (const f of forced) {
         expect((f as { forcedModelPool: string[] }).forcedModelPool).toEqual([
-          'qwen3:8b', 'openai/gpt-4o-mini', 'anthropic/claude-haiku',
+          'qwen3:8b',
+          'openai/gpt-4o-mini',
+          'anthropic/claude-haiku',
         ]);
       }
       for (const idx of VERIFIABLE_TASK_INDICES) {

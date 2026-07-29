@@ -78,7 +78,10 @@ export function buildRouteKey(executionProvider: string, modelFamily: string | n
 /**
  * Parse a route key back into its components.
  */
-export function parseRouteKey(routeKey: string): { executionProvider: string; modelFamily: string | null } {
+export function parseRouteKey(routeKey: string): {
+  executionProvider: string;
+  modelFamily: string | null;
+} {
   const parts = routeKey.split(':');
   if (parts.length === 1) {
     return { executionProvider: parts[0], modelFamily: null };
@@ -101,13 +104,13 @@ export function extractModelFamily(modelId: string): string | null {
   // Normalize common prefixes
   const FAMILY_ALIASES: Record<string, string> = {
     'meta-llama': 'meta',
-    'mistralai': 'mistral',
-    'cohere': 'cohere',
-    'qwen': 'qwen',
-    'google': 'google',
+    mistralai: 'mistral',
+    cohere: 'cohere',
+    qwen: 'qwen',
+    google: 'google',
     'deepseek-ai': 'deepseek',
-    'microsoft': 'microsoft',
-    'nvidia': 'nvidia',
+    microsoft: 'microsoft',
+    nvidia: 'nvidia',
   };
   return FAMILY_ALIASES[prefix] ?? prefix;
 }
@@ -126,11 +129,7 @@ export function deserializeSnapshot(json: string): OperabilitySnapshot | null {
     // a full OperabilitySnapshot. This keeps the type-system honest about
     // the upstream JSON.parse returning `unknown`.
     const parsed: unknown = JSON.parse(json);
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      !('routes' in parsed)
-    ) {
+    if (!parsed || typeof parsed !== 'object' || !('routes' in parsed)) {
       return null;
     }
     return parsed as OperabilitySnapshot;
@@ -144,8 +143,15 @@ export function deserializeSnapshot(json: string): OperabilitySnapshot | null {
  */
 export function createEmptySnapshot(): OperabilitySnapshot {
   const emptyStates: Record<OperabilityState, number> = {
-    healthy: 0, degraded: 0, recovering: 0, no_credits: 0,
-    rate_limited: 0, auth_failed: 0, temporarily_unavailable: 0, dead: 0, unknown: 0,
+    healthy: 0,
+    degraded: 0,
+    recovering: 0,
+    no_credits: 0,
+    rate_limited: 0,
+    auth_failed: 0,
+    temporarily_unavailable: 0,
+    dead: 0,
+    unknown: 0,
   };
   return {
     version: SNAPSHOT_VERSION,
@@ -173,17 +179,25 @@ export function isExternalRoute(record: RouteOperabilityRecord): boolean {
 
 /** Get all usable external routes from a snapshot */
 export function getUsableExternalRoutes(snapshot: OperabilitySnapshot): RouteOperabilityRecord[] {
-  return Object.values(snapshot.routes).filter(r => isExternalRoute(r) && isRouteUsable(r));
+  return Object.values(snapshot.routes).filter((r) => isExternalRoute(r) && isRouteUsable(r));
 }
 
 /** Get all routes for a specific execution provider */
-export function getRoutesForProvider(snapshot: OperabilitySnapshot, executionProvider: string): RouteOperabilityRecord[] {
+export function getRoutesForProvider(
+  snapshot: OperabilitySnapshot,
+  executionProvider: string
+): RouteOperabilityRecord[] {
   const ep = executionProvider.toLowerCase();
-  return Object.values(snapshot.routes).filter(r => r.executionProvider === ep);
+  return Object.values(snapshot.routes).filter((r) => r.executionProvider === ep);
 }
 
 /** Get all routes serving a specific model family */
-export function getRoutesForModelFamily(snapshot: OperabilitySnapshot, modelFamily: string): RouteOperabilityRecord[] {
+export function getRoutesForModelFamily(
+  snapshot: OperabilitySnapshot,
+  modelFamily: string
+): RouteOperabilityRecord[] {
   const mf = modelFamily.toLowerCase();
-  return Object.values(snapshot.routes).filter(r => r.modelFamily === mf || r.executionProvider === mf);
+  return Object.values(snapshot.routes).filter(
+    (r) => r.modelFamily === mf || r.executionProvider === mf
+  );
 }

@@ -56,9 +56,7 @@ describe('routing-config — blocked modes', () => {
   });
 
   it('BLOCKED_REASON literal equals expected sentinel', () => {
-    expect(BLOCKED_REASON).toBe(
-      'blocked_until_c3_completed_and_semantic_index_available',
-    );
+    expect(BLOCKED_REASON).toBe('blocked_until_c3_completed_and_semantic_index_available');
   });
 });
 

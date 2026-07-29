@@ -17,9 +17,18 @@ import { resolve } from 'node:path';
 import { isC3BudgetExecutionLocked } from '@/core/experiment/c3-budget-authorization-gate-contract';
 
 const safe = {
-  dryRunFalseAuthorized: false, billableProviderCallsAuthorized: false, c3ExecutionAuthorized: false,
-  effectiveAuthorization: false, approvalStatus: 'not_approved', providerCallExecuted: false,
-  providerCallsExecuted: 0, modelProbesExecuted: 0, providerProbesExecuted: 0, cost_usd: 0, totalCostUsd: 0, usage: { total_tokens: 0 },
+  dryRunFalseAuthorized: false,
+  billableProviderCallsAuthorized: false,
+  c3ExecutionAuthorized: false,
+  effectiveAuthorization: false,
+  approvalStatus: 'not_approved',
+  providerCallExecuted: false,
+  providerCallsExecuted: 0,
+  modelProbesExecuted: 0,
+  providerProbesExecuted: 0,
+  cost_usd: 0,
+  totalCostUsd: 0,
+  usage: { total_tokens: 0 },
 };
 
 describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — anti-execution', () => {
@@ -30,14 +39,27 @@ describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — anti-execution', () => {
     expect(isC3BudgetExecutionLocked({ ...safe, approvalStatus: 'approved' })).toBe(false);
     expect(isC3BudgetExecutionLocked({ ...safe, effectiveAuthorization: true })).toBe(false);
     expect(isC3BudgetExecutionLocked({ ...safe, c3ExecutionAuthorized: true })).toBe(false);
-    expect(isC3BudgetExecutionLocked({ ...safe, billableProviderCallsAuthorized: true })).toBe(false);
+    expect(isC3BudgetExecutionLocked({ ...safe, billableProviderCallsAuthorized: true })).toBe(
+      false
+    );
     expect(isC3BudgetExecutionLocked({ ...safe, cost_usd: 0.0001 })).toBe(false);
     expect(isC3BudgetExecutionLocked({ ...safe, usage: { total_tokens: 1 } })).toBe(false);
   });
 
-  const names = ['input-lock', 'budget-policy', 'allowlist', 'kill-switch', 'approval-envelope', 'negative-case', 'anti-execution', 'final'];
+  const names = [
+    'input-lock',
+    'budget-policy',
+    'allowlist',
+    'kill-switch',
+    'approval-envelope',
+    'negative-case',
+    'anti-execution',
+    'final',
+  ];
   const artifacts = names
-    .map((n) => resolve(process.cwd(), 'tmp', `01c1b-c3-budget-authorization-gate-${n}-validator.json`))
+    .map((n) =>
+      resolve(process.cwd(), 'tmp', `01c1b-c3-budget-authorization-gate-${n}-validator.json`)
+    )
     .filter((p) => existsSync(p))
     .map((p) => JSON.parse(readFileSync(p, 'utf8')));
   const maybe = artifacts.length === names.length ? describe : describe.skip;

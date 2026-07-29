@@ -31,7 +31,9 @@ interface FakeRow {
   oldest: Date | null;
 }
 
-function makeDb(rows: FakeRow[]): { $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<FakeRow[]> } {
+function makeDb(rows: FakeRow[]): {
+  $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<FakeRow[]>;
+} {
   return {
     $queryRaw: async () => rows,
   };

@@ -24,23 +24,44 @@ import {
 
 function base(): C3ParityCanonicalSnapshot {
   return {
-    planId: 'p1', taskId: 'T1', strategyId: 'single', baselineId: null,
+    planId: 'p1',
+    taskId: 'T1',
+    strategyId: 'single',
+    baselineId: null,
     candidates: [
-      { candidateId: 'c1', providerId: 'prov1', modelId: 'm1', candidateClass: 'catalog_candidate', modelProbeStatus: 'not_model_probe_validated', requiresModelProbeBeforeBillableExecution: true, selectedExecutableModel: false, providerRouteCreated: false },
+      {
+        candidateId: 'c1',
+        providerId: 'prov1',
+        modelId: 'm1',
+        candidateClass: 'catalog_candidate',
+        modelProbeStatus: 'not_model_probe_validated',
+        requiresModelProbeBeforeBillableExecution: true,
+        selectedExecutableModel: false,
+        providerRouteCreated: false,
+      },
     ],
     unresolvedCatalogCandidates: ['c1'],
-    fanout: 1, fanoutCap: 4,
+    fanout: 1,
+    fanoutCap: 4,
     roles: [{ role: 'responder', candidateRef: 'c1', phase: 'direct_answer' }],
     budgetPolicyKey: '{"x":1}',
     provenanceRequiredFields: ['taskId', 'strategyId', 'planFingerprint'],
     provenanceComplete: true,
     hiddenFallbackDetected: false,
-    planFingerprint: 'pf_abc', promptFingerprint: 'pp_abc',
-    runtimeResolvedStrategy: 'single', runtimeTaskType: 'T1', runtimePlanFingerprint: 'pf_run',
-    runtimeProviderCallExecuted: false, runtimeCostUsd: 0, runtimeUsageTotalTokens: 0,
+    planFingerprint: 'pf_abc',
+    promptFingerprint: 'pp_abc',
+    runtimeResolvedStrategy: 'single',
+    runtimeTaskType: 'T1',
+    runtimePlanFingerprint: 'pf_run',
+    runtimeProviderCallExecuted: false,
+    runtimeCostUsd: 0,
+    runtimeUsageTotalTokens: 0,
   };
 }
-function driftDetected(mutate: (s: C3ParityCanonicalSnapshot) => void, reason: C3ParityDriftReason) {
+function driftDetected(
+  mutate: (s: C3ParityCanonicalSnapshot) => void,
+  reason: C3ParityDriftReason
+) {
   const approved = base();
   const runtime = base();
   mutate(runtime);
@@ -50,26 +71,85 @@ function driftDetected(mutate: (s: C3ParityCanonicalSnapshot) => void, reason: C
 }
 
 describe('01C.1B-C3-DRYRUN-PARITY-GATE — negative drift detection', () => {
-  it('case 29: candidate_added', () => driftDetected((s) => s.candidates.push({ ...s.candidates[0]!, candidateId: 'extra' }), 'candidate_added'));
-  it('case 30: candidate_removed', () => driftDetected((s) => { s.candidates.pop(); }, 'candidate_removed'));
-  it('case 31: provider_changed', () => driftDetected((s) => { s.candidates[0]!.providerId = 'rogue'; }, 'provider_changed'));
-  it('case 32: model_changed', () => driftDetected((s) => { s.candidates[0]!.modelId = 'rogue'; }, 'model_changed'));
-  it('candidate_class_changed', () => driftDetected((s) => { s.candidates[0]!.candidateClass = 'model_probe_validated'; }, 'candidate_class_changed'));
-  it('model_probe_status_changed', () => driftDetected((s) => { s.candidates[0]!.modelProbeStatus = 'rogue'; }, 'model_probe_status_changed'));
-  it('case 33: fanout_changed', () => driftDetected((s) => { s.fanout = 9; }, 'fanout_changed'));
-  it('fanout_cap_changed', () => driftDetected((s) => { s.fanoutCap = 9; }, 'fanout_cap_changed'));
-  it('case 34: role_changed', () => driftDetected((s) => { s.roles[0]!.role = 'rogue'; }, 'role_changed'));
-  it('budget_policy_changed', () => driftDetected((s) => { s.budgetPolicyKey = 'rogue'; }, 'budget_policy_changed'));
-  it('case 35: fallback_inserted', () => driftDetected((s) => { s.hiddenFallbackDetected = true; }, 'fallback_inserted'));
-  it('provenance_required_field_removed', () => driftDetected((s) => { s.provenanceRequiredFields = s.provenanceRequiredFields.slice(1); }, 'provenance_required_field_removed'));
-  it('case 38: provenance_complete_false', () => driftDetected((s) => { s.provenanceComplete = false; }, 'provenance_complete_false'));
-  it('case 36: plan_fingerprint_mismatch', () => driftDetected((s) => { s.planFingerprint = 'rogue'; }, 'plan_fingerprint_mismatch'));
-  it('case 37: prompt_fingerprint_mismatch', () => driftDetected((s) => { s.promptFingerprint = 'rogue'; }, 'prompt_fingerprint_mismatch'));
-  it('approved_plan_fingerprint_mismatch', () => driftDetected((s) => { s.runtimePlanFingerprint = 'rogue'; }, 'approved_plan_fingerprint_mismatch'));
-  it('case 39: selected_executable_model_true', () => driftDetected((s) => { s.candidates[0]!.selectedExecutableModel = true; }, 'selected_executable_model_true'));
-  it('case 40: provider_route_created_true', () => driftDetected((s) => { s.candidates[0]!.providerRouteCreated = true; }, 'provider_route_created_true'));
+  it('case 29: candidate_added', () =>
+    driftDetected(
+      (s) => s.candidates.push({ ...s.candidates[0]!, candidateId: 'extra' }),
+      'candidate_added'
+    ));
+  it('case 30: candidate_removed', () =>
+    driftDetected((s) => {
+      s.candidates.pop();
+    }, 'candidate_removed'));
+  it('case 31: provider_changed', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.providerId = 'rogue';
+    }, 'provider_changed'));
+  it('case 32: model_changed', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.modelId = 'rogue';
+    }, 'model_changed'));
+  it('candidate_class_changed', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.candidateClass = 'model_probe_validated';
+    }, 'candidate_class_changed'));
+  it('model_probe_status_changed', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.modelProbeStatus = 'rogue';
+    }, 'model_probe_status_changed'));
+  it('case 33: fanout_changed', () =>
+    driftDetected((s) => {
+      s.fanout = 9;
+    }, 'fanout_changed'));
+  it('fanout_cap_changed', () =>
+    driftDetected((s) => {
+      s.fanoutCap = 9;
+    }, 'fanout_cap_changed'));
+  it('case 34: role_changed', () =>
+    driftDetected((s) => {
+      s.roles[0]!.role = 'rogue';
+    }, 'role_changed'));
+  it('budget_policy_changed', () =>
+    driftDetected((s) => {
+      s.budgetPolicyKey = 'rogue';
+    }, 'budget_policy_changed'));
+  it('case 35: fallback_inserted', () =>
+    driftDetected((s) => {
+      s.hiddenFallbackDetected = true;
+    }, 'fallback_inserted'));
+  it('provenance_required_field_removed', () =>
+    driftDetected((s) => {
+      s.provenanceRequiredFields = s.provenanceRequiredFields.slice(1);
+    }, 'provenance_required_field_removed'));
+  it('case 38: provenance_complete_false', () =>
+    driftDetected((s) => {
+      s.provenanceComplete = false;
+    }, 'provenance_complete_false'));
+  it('case 36: plan_fingerprint_mismatch', () =>
+    driftDetected((s) => {
+      s.planFingerprint = 'rogue';
+    }, 'plan_fingerprint_mismatch'));
+  it('case 37: prompt_fingerprint_mismatch', () =>
+    driftDetected((s) => {
+      s.promptFingerprint = 'rogue';
+    }, 'prompt_fingerprint_mismatch'));
+  it('approved_plan_fingerprint_mismatch', () =>
+    driftDetected((s) => {
+      s.runtimePlanFingerprint = 'rogue';
+    }, 'approved_plan_fingerprint_mismatch'));
+  it('case 39: selected_executable_model_true', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.selectedExecutableModel = true;
+    }, 'selected_executable_model_true'));
+  it('case 40: provider_route_created_true', () =>
+    driftDetected((s) => {
+      s.candidates[0]!.providerRouteCreated = true;
+    }, 'provider_route_created_true'));
 
-  const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-parity-gate-negative-drift-responses.json');
+  const ART = resolve(
+    process.cwd(),
+    'tmp',
+    '01c1b-c3-dryrun-parity-gate-negative-drift-responses.json'
+  );
   const nr = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
   const maybe = nr ? describe : describe.skip;
   maybe('generated negative-drift responses (local verification)', () => {

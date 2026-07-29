@@ -130,9 +130,7 @@ describe('splitSystemFromMessages', () => {
   });
 
   it('produces empty system[] when no system messages present', () => {
-    const { system, messages } = splitSystemFromMessages([
-      { role: 'user', content: 'Hi' },
-    ]);
+    const { system, messages } = splitSystemFromMessages([{ role: 'user', content: 'Hi' }]);
     expect(system).toEqual([]);
     expect(messages).toHaveLength(1);
   });
@@ -158,9 +156,9 @@ describe('convertMessageToConverse', () => {
   it('falls through non-user/assistant roles to user (safest default)', () => {
     // 'tool' role isn't a Converse role — we downgrade to user rather than
     // drop the message (losing context is worse than a role mismatch).
-    expect(
-      convertMessageToConverse({ role: 'tool' as unknown as 'user', content: 'out' }),
-    ).toEqual({ role: 'user', content: [{ text: 'out' }] });
+    expect(convertMessageToConverse({ role: 'tool' as unknown as 'user', content: 'out' })).toEqual(
+      { role: 'user', content: [{ text: 'out' }] }
+    );
   });
 
   it('maps text-parts array content to multiple Converse text blocks', () => {
@@ -177,9 +175,7 @@ describe('convertMessageToConverse', () => {
   it('drops image_url parts with an empty stub (vision deferred to follow-up)', () => {
     const msg = convertMessageToConverse({
       role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: 'https://x/y.png' } },
-      ] as unknown as string,
+      content: [{ type: 'image_url', image_url: { url: 'https://x/y.png' } }] as unknown as string,
     });
     // No image support in this pack — result is a single empty text block
     // rather than crashing or sending a malformed image payload.
@@ -198,7 +194,7 @@ describe('buildInferenceConfig', () => {
         max_tokens: 512,
         temperature: 0.3,
         top_p: 0.9,
-      }),
+      })
     ).toEqual({ maxTokens: 512, temperature: 0.3, topP: 0.9 });
   });
 
@@ -213,9 +209,9 @@ describe('buildInferenceConfig', () => {
   });
 
   it('passes array stop sequences through unchanged', () => {
-    expect(
-      buildInferenceConfig({ model: 'm', messages: [], stop: ['<END>', 'STOP'] }),
-    ).toEqual({ stopSequences: ['<END>', 'STOP'] });
+    expect(buildInferenceConfig({ model: 'm', messages: [], stop: ['<END>', 'STOP'] })).toEqual({
+      stopSequences: ['<END>', 'STOP'],
+    });
   });
 });
 
@@ -247,9 +243,7 @@ describe('convertTools', () => {
   });
 
   it('defaults missing parameters to empty object schema', () => {
-    const tools = convertTools([
-      { type: 'function', function: { name: 'no_args' } },
-    ]);
+    const tools = convertTools([{ type: 'function', function: { name: 'no_args' } }]);
     expect(tools[0].toolSpec?.inputSchema).toEqual({ json: {} });
   });
 });
@@ -266,7 +260,7 @@ describe('parseConverseResponse', () => {
         stopReason: 'end_turn',
         usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
       } as unknown as Parameters<typeof parseConverseResponse>[0],
-      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'anthropic.claude-3-5-sonnet-20241022-v2:0'
     );
     expect(chat.choices[0].message.content).toBe('Hello world');
     expect(chat.choices[0].finish_reason).toBe('stop');
@@ -288,7 +282,7 @@ describe('parseConverseResponse', () => {
           },
         },
       } as unknown as Parameters<typeof parseConverseResponse>[0],
-      'm',
+      'm'
     );
     expect(chat.choices[0].message.content).toBe('Part A. Part B.');
   });
@@ -296,7 +290,7 @@ describe('parseConverseResponse', () => {
   it('handles empty response (no crash, empty content, null finish_reason)', () => {
     const chat = parseConverseResponse(
       {} as unknown as Parameters<typeof parseConverseResponse>[0],
-      'm',
+      'm'
     );
     expect(chat.choices[0].message.content).toBe('');
     expect(chat.choices[0].finish_reason).toBe(null);
@@ -378,15 +372,15 @@ describe('AWSBedrockAdapter — construction', () => {
   });
 
   it('throws when neither config nor env provides accessKeyId', () => {
-    expect(
-      () => new AWSBedrockAdapter({ apiKey: '', secretAccessKey: 's' }),
-    ).toThrow(/accessKeyId/);
+    expect(() => new AWSBedrockAdapter({ apiKey: '', secretAccessKey: 's' })).toThrow(
+      /accessKeyId/
+    );
   });
 
   it('throws when secretAccessKey is missing', () => {
-    expect(
-      () => new AWSBedrockAdapter({ apiKey: 'k', accessKeyId: 'k' }),
-    ).toThrow(/secretAccessKey/);
+    expect(() => new AWSBedrockAdapter({ apiKey: 'k', accessKeyId: 'k' })).toThrow(
+      /secretAccessKey/
+    );
   });
 });
 
@@ -424,9 +418,7 @@ describe('AWSBedrockAdapter — chatCompletion integration', () => {
     // ConverseCommand wraps input — the mock class exposes it directly
     expect(command.input.modelId).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
     expect(command.input.system).toEqual([{ text: 'Be concise.' }]);
-    expect(command.input.messages).toEqual([
-      { role: 'user', content: [{ text: 'Hello' }] },
-    ]);
+    expect(command.input.messages).toEqual([{ role: 'user', content: [{ text: 'Hello' }] }]);
     expect(command.input.inferenceConfig).toEqual({ maxTokens: 100, temperature: 0.5 });
 
     // Response should be OAI-shaped
@@ -462,21 +454,21 @@ describe('AWSBedrockAdapter — normalizeModelName', () => {
   it('strips aws-bedrock/ prefix', () => {
     const a = new AWSBedrockAdapter({ apiKey: 'k', accessKeyId: 'k', secretAccessKey: 's' });
     expect(a.normalizeModelName('aws-bedrock/anthropic.claude-3-opus-20240229-v1:0')).toBe(
-      'anthropic.claude-3-opus-20240229-v1:0',
+      'anthropic.claude-3-opus-20240229-v1:0'
     );
   });
 
   it('strips bedrock/ prefix (accepts both spellings)', () => {
     const a = new AWSBedrockAdapter({ apiKey: 'k', accessKeyId: 'k', secretAccessKey: 's' });
     expect(a.normalizeModelName('bedrock/amazon.titan-text-express-v1')).toBe(
-      'amazon.titan-text-express-v1',
+      'amazon.titan-text-express-v1'
     );
   });
 
   it('passes through already-normalized model ids unchanged', () => {
     const a = new AWSBedrockAdapter({ apiKey: 'k', accessKeyId: 'k', secretAccessKey: 's' });
     expect(a.normalizeModelName('meta.llama3-1-70b-instruct-v1:0')).toBe(
-      'meta.llama3-1-70b-instruct-v1:0',
+      'meta.llama3-1-70b-instruct-v1:0'
     );
   });
 });
@@ -518,25 +510,34 @@ describe('AWSBedrockAdapter — unsupported capabilities throw', () => {
 
   it('throws on imageEdit', async () => {
     await expect(
-      adapter.imageEdit(dummyModel, {} as unknown as import('@/types/model-client').ImageEditRequest),
+      adapter.imageEdit(
+        dummyModel,
+        {} as unknown as import('@/types/model-client').ImageEditRequest
+      )
     ).rejects.toThrow(/imageEdit/);
   });
 
   it('throws on imageVariation', async () => {
     await expect(
-      adapter.imageVariation(dummyModel, {} as unknown as import('@/types/model-client').ImageVariationRequest),
+      adapter.imageVariation(
+        dummyModel,
+        {} as unknown as import('@/types/model-client').ImageVariationRequest
+      )
     ).rejects.toThrow(/imageVariation/);
   });
 
   it('throws on moderate with guardrails hint', async () => {
     await expect(
-      adapter.moderate(dummyModel, {} as unknown as import('@/types/model-client').ModerationRequest),
+      adapter.moderate(
+        dummyModel,
+        {} as unknown as import('@/types/model-client').ModerationRequest
+      )
     ).rejects.toThrow(/guardrails/);
   });
 
   it('throws on generateEmbeddings with follow-up hint', async () => {
     await expect(
-      adapter.generateEmbeddings({} as unknown as import('@/types').EmbeddingRequest),
+      adapter.generateEmbeddings({} as unknown as import('@/types').EmbeddingRequest)
     ).rejects.toThrow(/embeddings pack/);
   });
 });

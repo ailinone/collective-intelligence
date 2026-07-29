@@ -72,11 +72,17 @@ export class AgenticStrategy extends BaseStrategy {
     const startTime = Date.now();
     return Promise.race([
       this.executeCore(request, context, startTime),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Agentic timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Agentic timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)
+      ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 1) throw new Error('Agentic strategy requires at least 1 model');
 
@@ -86,14 +92,18 @@ export class AgenticStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Agentic: requested model not in operational pool — falling back to quality-sorted planner',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Agentic: requested model not in operational pool — falling back to quality-sorted planner'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     // Single-candidate-bail bug fix: walk `sorted` to find a planner with
     // an operational adapter rather than hard-failing on sorted[0]. A
@@ -123,17 +133,21 @@ export class AgenticStrategy extends BaseStrategy {
     if (!plannerAdapter) throw new Error('No operational planner in candidate pool');
     const executor = planner; // Same model plans and executes
     const executions: ModelExecution[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
 
-    this.emitObserverEvent(context, { type: 'phase_start', models: [planner.name || planner.id], summary: 'Agentic: planning workflow.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [planner.name || planner.id],
+      summary: 'Agentic: planning workflow.',
+    });
 
     // Phase 1: Plan the workflow
     const planReq: ChatRequest = {
       ...request,
-      messages: [
-        { role: 'system', content: PROMPTS.agenticPlanner },
-        ...request.messages,
-      ],
+      messages: [{ role: 'system', content: PROMPTS.agenticPlanner }, ...request.messages],
       response_format: { type: 'json_object' },
       max_tokens: 2000,
       temperature: 0.2,
@@ -142,7 +156,13 @@ export class AgenticStrategy extends BaseStrategy {
     // planner call itself fails (rate-limit, 5xx, timeout). Adapter-null
     // failover above (walk-through-sorted) handles the structural case
     // where the highest-quality model has no operational adapter at all.
-    const planExec = await this.executeModelWithRetry(plannerAdapter, planner, planReq, 'planner', context);
+    const planExec = await this.executeModelWithRetry(
+      plannerAdapter,
+      planner,
+      planReq,
+      'planner',
+      context
+    );
     executions.push(planExec);
 
     // Parse workflow
@@ -155,12 +175,16 @@ export class AgenticStrategy extends BaseStrategy {
         const parsed: unknown = JSON.parse(content);
         const rawSteps: unknown[] = Array.isArray(parsed)
           ? parsed
-          : (typeof parsed === 'object' && parsed !== null && Array.isArray((parsed as { steps?: unknown }).steps)
-              ? (parsed as { steps: unknown[] }).steps
-              : []);
+          : typeof parsed === 'object' &&
+              parsed !== null &&
+              Array.isArray((parsed as { steps?: unknown }).steps)
+            ? (parsed as { steps: unknown[] }).steps
+            : [];
         steps = rawSteps.filter(
           (s): s is WorkflowStep =>
-            typeof s === 'object' && s !== null && typeof (s as { name?: unknown }).name === 'string',
+            typeof s === 'object' &&
+            s !== null &&
+            typeof (s as { name?: unknown }).name === 'string'
         );
       }
     } catch {
@@ -169,7 +193,12 @@ export class AgenticStrategy extends BaseStrategy {
 
     if (steps.length === 0) {
       // Fallback: direct execution without workflow
-      const directExec = await this.executeModelWithTools(plannerAdapter, planner, request, 'primary');
+      const directExec = await this.executeModelWithTools(
+        plannerAdapter,
+        planner,
+        request,
+        'primary'
+      );
       executions.push(directExec);
       return {
         finalResponse: directExec.response,
@@ -185,7 +214,9 @@ export class AgenticStrategy extends BaseStrategy {
     if (steps.length > MAX_STEPS) steps = steps.slice(0, MAX_STEPS);
 
     this.emitObserverEvent(context, {
-      type: 'round_complete', round: 1, totalRounds: steps.length + 2,
+      type: 'round_complete',
+      round: 1,
+      totalRounds: steps.length + 2,
       summary: `Workflow planned: ${steps.length} steps.`,
     });
 
@@ -198,7 +229,9 @@ export class AgenticStrategy extends BaseStrategy {
     while (completed.size < steps.length && iteration < steps.length + 1) {
       iteration++;
 
-      const ready = steps.filter(s => !completed.has(s.id) && s.depends_on.every(d => completed.has(d)));
+      const ready = steps.filter(
+        (s) => !completed.has(s.id) && s.depends_on.every((d) => completed.has(d))
+      );
       if (ready.length === 0) break;
 
       for (const step of ready) {
@@ -221,10 +254,16 @@ export class AgenticStrategy extends BaseStrategy {
           try {
             const { executeToolForStrategy } = await import('@/services/strategy-tool-executor');
             const toolResult = await executeToolForStrategy(
-              { id: step.id, type: 'function', function: { name: step.tool, arguments: JSON.stringify(resolvedArgs) } },
-              log,
+              {
+                id: step.id,
+                type: 'function',
+                function: { name: step.tool, arguments: JSON.stringify(resolvedArgs) },
+              },
+              log
             );
-            const output = toolResult.success ? (toolResult.output || '') : (toolResult.error || 'Tool failed');
+            const output = toolResult.success
+              ? toolResult.output || ''
+              : toolResult.error || 'Tool failed';
             stepResults.set(step.id, output);
             lastOutput = output;
           } catch (err) {
@@ -249,7 +288,13 @@ export class AgenticStrategy extends BaseStrategy {
             ? await this.executeModelWithTools(plannerAdapter, executor, llmReq, 'executor')
             : reasoningEnabled
               ? await this.executeModelWithReasoning(plannerAdapter, executor, llmReq, 'executor')
-              : await this.executeModelWithRetry(plannerAdapter, executor, llmReq, 'executor', context);
+              : await this.executeModelWithRetry(
+                  plannerAdapter,
+                  executor,
+                  llmReq,
+                  'executor',
+                  context
+                );
           executions.push(exec);
 
           const output = exec.response?.choices?.[0]?.message?.content;
@@ -265,11 +310,14 @@ export class AgenticStrategy extends BaseStrategy {
         type: 'round_complete',
         round: iteration + 1,
         totalRounds: steps.length + 2,
-        summary: `Step ${iteration}: ${ready.map(s => `${s.type}:${s.tool || 'llm'}`).join(', ')} — ${completed.size}/${steps.length} complete.`,
+        summary: `Step ${iteration}: ${ready.map((s) => `${s.type}:${s.tool || 'llm'}`).join(', ')} — ${completed.size}/${steps.length} complete.`,
       });
     }
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Agentic workflow complete: ${completed.size} steps executed.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Agentic workflow complete: ${completed.size} steps executed.`,
+    });
 
     // Build final response from last step output
     const finalResponse: ChatResponse = {
@@ -277,12 +325,17 @@ export class AgenticStrategy extends BaseStrategy {
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
       model: executor.name || 'agentic',
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content: lastOutput || 'Workflow completed but produced no output.' },
-        finish_reason: 'stop',
-        logprobs: null,
-      }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: lastOutput || 'Workflow completed but produced no output.',
+          },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
     };
 
     return {
@@ -295,10 +348,20 @@ export class AgenticStrategy extends BaseStrategy {
         strategy: 'agentic',
         stepsPlanned: steps.length,
         stepsCompleted: completed.size,
-        stepTypes: steps.map(s => s.type),
+        stepTypes: steps.map((s) => s.type),
         stepResults: Object.fromEntries(stepResults),
-        ...(this.isReasoningEnabled(request) && executions.some(e => e.reasoning)
-          ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && executions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -311,10 +374,18 @@ export class AgenticStrategy extends BaseStrategy {
   // last in topological order. That step may be a tool_call (not an LLM
   // generation at all), so there is no fixed "final synthesis call" to
   // stream tokens from until planning + execution finish.
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
-    this.emitObserverEvent(context, { type: 'phase_start', summary: 'Agentic: planning and executing workflow.' });
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: 'Agentic: planning and executing workflow.',
+    });
     yield this.progressChunk('Planning workflow...', 0, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 

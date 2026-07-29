@@ -166,7 +166,8 @@ export function initializeErrorTracking(): void {
 
       if (event.contexts) {
         for (const key of Object.keys(event.contexts)) {
-          event.contexts[key] = scrubValueDeep(event.contexts[key]) as Record<string, unknown> | undefined;
+          event.contexts[key] = scrubValueDeep(event.contexts[key]) as
+            Record<string, unknown> | undefined;
         }
       }
 
@@ -239,29 +240,32 @@ export function captureException(error: unknown, context?: Record<string, unknow
     let statusCode: number | undefined;
     let errorCode: string | undefined;
     let errorType = 'Error';
-    
+
     if (typeof error === 'object' && error !== null) {
       const statusCodeDescriptor = Object.getOwnPropertyDescriptor(error, 'statusCode');
       if (statusCodeDescriptor && typeof statusCodeDescriptor.value === 'number') {
         statusCode = statusCodeDescriptor.value;
       }
-      
+
       const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
       if (codeDescriptor && typeof codeDescriptor.value === 'string') {
         errorCode = codeDescriptor.value;
       }
-      
+
       // Extract constructor name safely
       if ('constructor' in error && error.constructor && typeof error.constructor === 'object') {
-        const constructorNameDescriptor = Object.getOwnPropertyDescriptor(error.constructor, 'name');
+        const constructorNameDescriptor = Object.getOwnPropertyDescriptor(
+          error.constructor,
+          'name'
+        );
         if (constructorNameDescriptor && typeof constructorNameDescriptor.value === 'string') {
           errorType = constructorNameDescriptor.value;
         }
       }
     }
-    
+
     Sentry.captureException(error, {
-      level: (statusCode && statusCode >= 500) ? 'error' : 'warning',
+      level: statusCode && statusCode >= 500 ? 'error' : 'warning',
       tags: {
         error_type: errorType,
         error_code: errorCode || 'unknown',

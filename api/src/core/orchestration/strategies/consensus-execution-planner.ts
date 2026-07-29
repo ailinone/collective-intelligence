@@ -55,7 +55,8 @@ export interface ConsensusPlanPoolSummary {
   readonly routersConsidered: number;
   readonly distinctProvidersConsidered: number;
   /** Strategy 01C.0.3 — operability source for this pool view. */
-  readonly operabilitySnapshotSource?: 'metadata_only' | 'non_billable_probe' | 'hub_cache' | 'unknown';
+  readonly operabilitySnapshotSource?:
+    'metadata_only' | 'non_billable_probe' | 'hub_cache' | 'unknown';
   /** Strategy 01C.0.3 — true when at least one provider in the pool
    *  had a successful non-billable probe applied. False when the pool
    *  uses pure hub_cache / metadata_only. Operators MUST set this to
@@ -98,10 +99,34 @@ export interface ConsensusExecutionPlan {
   };
   /** 01C.1B-J1C §13 — per-role readiness summary derived from selections. */
   readonly criticalRoleReadiness?: {
-    readonly participant: { readonly role: 'participant'; readonly selectedCount: number; readonly targetCount: number; readonly blocked: boolean; readonly firstBlocker: string | null };
-    readonly synthesizer: { readonly role: 'synthesizer'; readonly selectedCount: number; readonly targetCount: number; readonly blocked: boolean; readonly firstBlocker: string | null };
-    readonly judge: { readonly role: 'judge'; readonly selectedCount: number; readonly targetCount: number; readonly blocked: boolean; readonly firstBlocker: string | null };
-    readonly fallback: { readonly role: 'fallback'; readonly selectedCount: number; readonly targetCount: number; readonly blocked: boolean; readonly firstBlocker: string | null };
+    readonly participant: {
+      readonly role: 'participant';
+      readonly selectedCount: number;
+      readonly targetCount: number;
+      readonly blocked: boolean;
+      readonly firstBlocker: string | null;
+    };
+    readonly synthesizer: {
+      readonly role: 'synthesizer';
+      readonly selectedCount: number;
+      readonly targetCount: number;
+      readonly blocked: boolean;
+      readonly firstBlocker: string | null;
+    };
+    readonly judge: {
+      readonly role: 'judge';
+      readonly selectedCount: number;
+      readonly targetCount: number;
+      readonly blocked: boolean;
+      readonly firstBlocker: string | null;
+    };
+    readonly fallback: {
+      readonly role: 'fallback';
+      readonly selectedCount: number;
+      readonly targetCount: number;
+      readonly blocked: boolean;
+      readonly firstBlocker: string | null;
+    };
   };
   /** 01C.1B-J1C §13 — readiness summary (all-roles-selected + blocked-roles + total). */
   readonly routeReadinessSummary?: {
@@ -234,7 +259,8 @@ export interface RoleCandidateStats {
   readonly eligibleAfterOperabilityFilter: number;
   readonly selectedCount: number;
   readonly rejectionReasonCounts: Readonly<Record<string, number>>;
-  readonly policyTier?: 'strict' | 'structured_output_unknown_allowed' | 'context_8k_fallback' | 'unknown';
+  readonly policyTier?:
+    'strict' | 'structured_output_unknown_allowed' | 'context_8k_fallback' | 'unknown';
   readonly degradationReason?: string;
 }
 
@@ -252,13 +278,10 @@ export class ConsensusExecutionPlanner {
     // usage-sorted generic pool rarely surfaces ≥16k+structured-output
     // candidates (proven in 01C.1B-J audit: 677 strict-eligible models
     // exist in the full 18,563-model chat-capable catalog).
-    const participantPool =
-      input.roleSpecificPools?.participant ?? input.candidatePool;
-    const synthesizerPool =
-      input.roleSpecificPools?.synthesizer ?? input.candidatePool;
+    const participantPool = input.roleSpecificPools?.participant ?? input.candidatePool;
+    const synthesizerPool = input.roleSpecificPools?.synthesizer ?? input.candidatePool;
     const judgePool = input.roleSpecificPools?.judge ?? input.candidatePool;
-    const fallbackPool =
-      input.roleSpecificPools?.fallback ?? input.candidatePool;
+    const fallbackPool = input.roleSpecificPools?.fallback ?? input.candidatePool;
 
     // 1. Participants — multi-model, provider-diverse.
     const participantsResult = await this.resolver.resolve({
@@ -273,13 +296,12 @@ export class ConsensusExecutionPlanner {
       // 01C.1B-J2-E-R2: thread the multi-source quality snapshot so the
       // participant scorer can use task-aware quality (when populated).
       modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+      contextPolicy: input.contextPolicy,
+      qualityPolicy: input.qualityPolicy,
     });
     traces.push(participantsResult);
     if (participantsResult.selected.length < 3) {
-      blockers.push(
-        `insufficient_participants:got=${participantsResult.selected.length},need>=3`,
-      );
+      blockers.push(`insufficient_participants:got=${participantsResult.selected.length},need>=3`);
     }
 
     const participantIds = participantsResult.selected.map((c) => c.model.id);
@@ -304,7 +326,8 @@ export class ConsensusExecutionPlanner {
       // quality routing. Pass the snapshot here so the scorer rejects the
       // J1G manual-bump anti-pattern in the runtime path.
       modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+      contextPolicy: input.contextPolicy,
+      qualityPolicy: input.qualityPolicy,
     });
     if (synthesizerResult.selected.length === 0) {
       synthesizerResult = await this.resolver.resolve({
@@ -314,7 +337,8 @@ export class ConsensusExecutionPlanner {
         candidatePool: synthesizerPool,
         constraints: { ...input.synthesizerConstraints },
         modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+        contextPolicy: input.contextPolicy,
+        qualityPolicy: input.qualityPolicy,
       });
     }
     traces.push(synthesizerResult);
@@ -347,7 +371,8 @@ export class ConsensusExecutionPlanner {
         excludeModelIds: judgeExcludeIds,
       },
       modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+      contextPolicy: input.contextPolicy,
+      qualityPolicy: input.qualityPolicy,
       judgeEligibilityPolicy: input.judgeEligibilityPolicy,
     });
     let judgeReusedFromPriorRole = false;
@@ -369,7 +394,8 @@ export class ConsensusExecutionPlanner {
           excludeModelIds: input.judgeConstraints?.excludeModelIds ?? [],
         },
         modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+        contextPolicy: input.contextPolicy,
+        qualityPolicy: input.qualityPolicy,
         judgeEligibilityPolicy: input.judgeEligibilityPolicy,
       });
       if (retry.selected.length > 0) {
@@ -416,7 +442,8 @@ export class ConsensusExecutionPlanner {
           excludeModelIds: judgeExcludeIds,
         },
         modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-        contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+        contextPolicy: input.contextPolicy,
+        qualityPolicy: input.qualityPolicy,
         judgeEligibilityPolicy: input.judgeEligibilityPolicy,
       });
       if (expandedRetry.selected.length > 0) {
@@ -436,7 +463,8 @@ export class ConsensusExecutionPlanner {
             excludeModelIds: input.judgeConstraints?.excludeModelIds ?? [],
           },
           modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-          contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+          contextPolicy: input.contextPolicy,
+          qualityPolicy: input.qualityPolicy,
           judgeEligibilityPolicy: input.judgeEligibilityPolicy,
         });
         if (expandedReuseRetry.selected.length > 0) {
@@ -464,7 +492,8 @@ export class ConsensusExecutionPlanner {
       candidatePool: fallbackPool,
       constraints: { ...input.fallbackConstraints },
       modelQualityCalibrationSnapshot: input.modelQualityCalibrationSnapshot,
-      contextPolicy: input.contextPolicy, qualityPolicy: input.qualityPolicy,
+      contextPolicy: input.contextPolicy,
+      qualityPolicy: input.qualityPolicy,
     });
     traces.push(fallbackResult);
     if (fallbackResult.selected.length === 0) {
@@ -500,7 +529,7 @@ export class ConsensusExecutionPlanner {
       pool: readonly ModelCandidate[],
       result: ModelRoleResolutionResult,
       tierOverride?: RoleCandidateStats['policyTier'],
-      degradationReason?: string,
+      degradationReason?: string
     ): RoleCandidateStats => {
       const reasons: Record<string, number> = {};
       for (const r of result.rejected ?? []) {
@@ -514,8 +543,10 @@ export class ConsensusExecutionPlanner {
         sourceUniverseCount: pool.length,
         eligibleBeforeFilters: pool.length,
         eligibleAfterCapabilityFilter: stageCounts.capability ?? pool.length,
-        eligibleAfterContextFilter: stageCounts.context_window ?? stageCounts.capability ?? pool.length,
-        eligibleAfterStructuredOutputFilter: stageCounts.role_specific ?? stageCounts.context_window ?? pool.length,
+        eligibleAfterContextFilter:
+          stageCounts.context_window ?? stageCounts.capability ?? pool.length,
+        eligibleAfterStructuredOutputFilter:
+          stageCounts.role_specific ?? stageCounts.context_window ?? pool.length,
         eligibleAfterCostFilter: stageCounts.cost ?? pool.length,
         eligibleAfterOperabilityFilter:
           (stageCounts.health ?? pool.length) +
@@ -535,7 +566,7 @@ export class ConsensusExecutionPlanner {
         judgePool,
         judgeResult,
         'strict',
-        judgeReusedFromPriorRole ? 'judge_reused_from_participants_or_synthesizer' : undefined,
+        judgeReusedFromPriorRole ? 'judge_reused_from_participants_or_synthesizer' : undefined
       ),
       fallbackSingle: buildStats('fallback_single', fallbackPool, fallbackResult),
     };
@@ -546,11 +577,20 @@ export class ConsensusExecutionPlanner {
     // structure with per-role counts derived from the resolved
     // selections. The shape is additive — existing consumers that
     // only read `blockers`/`executable` are unaffected.
-    const blockersByRole: Record<'participant' | 'synthesizer' | 'judge' | 'fallback', readonly string[]> = {
-      participant: blockers.filter((b) => b.startsWith('insufficient_participants') || b.startsWith('no_eligible_participant')),
-      synthesizer: blockers.filter((b) => b.startsWith('no_eligible_synthesizer') || b.includes('synthesizer')),
+    const blockersByRole: Record<
+      'participant' | 'synthesizer' | 'judge' | 'fallback',
+      readonly string[]
+    > = {
+      participant: blockers.filter(
+        (b) => b.startsWith('insufficient_participants') || b.startsWith('no_eligible_participant')
+      ),
+      synthesizer: blockers.filter(
+        (b) => b.startsWith('no_eligible_synthesizer') || b.includes('synthesizer')
+      ),
       judge: blockers.filter((b) => b.startsWith('no_eligible_judge') || b.includes('judge')),
-      fallback: blockers.filter((b) => b.startsWith('no_eligible_fallback') || b.includes('fallback')),
+      fallback: blockers.filter(
+        (b) => b.startsWith('no_eligible_fallback') || b.includes('fallback')
+      ),
     };
     const criticalRoleReadiness = {
       participant: {
@@ -643,9 +683,7 @@ export class ConsensusExecutionPlanner {
  * scripts to surface "did the planner have anywhere to choose from?"
  * without a separate audit run.
  */
-export function summarizePool(
-  pool: readonly ModelCandidate[],
-): ConsensusPlanPoolSummary {
+export function summarizePool(pool: readonly ModelCandidate[]): ConsensusPlanPoolSummary {
   const providers = new Set<string>();
   let usableProviderCount = 0;
   let usableModelCount = 0;
@@ -657,7 +695,17 @@ export function summarizePool(
   let routersConsidered = 0;
 
   // Distinct providers indexed by id; first observation wins.
-  const seenProvider = new Map<string, { healthy: boolean; hasCredits: boolean; rateLimited: boolean; isLocal: boolean; isAgg: boolean; isRouter: boolean }>();
+  const seenProvider = new Map<
+    string,
+    {
+      healthy: boolean;
+      hasCredits: boolean;
+      rateLimited: boolean;
+      isLocal: boolean;
+      isAgg: boolean;
+      isRouter: boolean;
+    }
+  >();
   const AGGREGATOR_HINTS = ['aihub', 'openrouter', 'eden', 'cometapi'];
   const ROUTER_HINTS = ['router'];
   for (const c of pool) {

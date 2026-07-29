@@ -21,7 +21,11 @@ describe('resolveAnswerChecker', () => {
     expect(ci('  paris ')).toBe(true);
     expect(ci('PARIS')).toBe(true);
     expect(ci('London')).toBe(false);
-    const cs = resolveAnswerChecker({ kind: 'string_equals', expected: 'Paris', caseSensitive: true })!;
+    const cs = resolveAnswerChecker({
+      kind: 'string_equals',
+      expected: 'Paris',
+      caseSensitive: true,
+    })!;
     expect(cs('paris')).toBe(false);
     expect(cs('Paris')).toBe(true);
   });
@@ -54,7 +58,11 @@ describe('resolveAnswerChecker', () => {
   });
 
   it('string_equals: punctuation strip respects caseSensitive', () => {
-    const cs = resolveAnswerChecker({ kind: 'string_equals', expected: 'Paris', caseSensitive: true })!;
+    const cs = resolveAnswerChecker({
+      kind: 'string_equals',
+      expected: 'Paris',
+      caseSensitive: true,
+    })!;
     expect(cs('Paris.')).toBe(true);
     expect(cs('paris.')).toBe(false);
   });
@@ -122,7 +130,9 @@ describe('resolveAnswerChecker', () => {
     expect(resolveAnswerChecker(undefined)).toBeNull();
     expect(resolveAnswerChecker(null)).toBeNull();
     expect(resolveAnswerChecker({ kind: 'numeric_equals', expected: Number.NaN })).toBeNull();
-    expect(resolveAnswerChecker({ kind: 'numeric_equals', expected: 'x' } as unknown as AnswerCheckSpec)).toBeNull();
+    expect(
+      resolveAnswerChecker({ kind: 'numeric_equals', expected: 'x' } as unknown as AnswerCheckSpec)
+    ).toBeNull();
     expect(resolveAnswerChecker({ kind: 'contains_all', needles: [] })).toBeNull();
     expect(resolveAnswerChecker({ kind: 'one_of', accepted: [] })).toBeNull();
     // expected/accepted that normalize to nothing would match any punctuation-only

@@ -61,10 +61,7 @@ import type { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { logger } from '@/utils/logger';
 
-import {
-  parseTraceEnvelope,
-  type TraceEnvelope,
-} from '@/broadcast/domain/trace-envelope';
+import { parseTraceEnvelope, type TraceEnvelope } from '@/broadcast/domain/trace-envelope';
 import { narrowAs } from '@/utils/type-guards';
 import { broadcastMetrics } from '@/broadcast/infrastructure/metrics/broadcast-metrics';
 
@@ -85,7 +82,7 @@ export type OutboxPrismaRunner = Pick<
 export class OutboxEnvelopeTooLargeError extends Error {
   constructor(bytes: number, envelopeId: string) {
     super(
-      `TraceEnvelope ${envelopeId} is ${bytes} bytes, exceeds OUTBOX_MAX_JSON_BYTES=${OUTBOX_MAX_JSON_BYTES}`,
+      `TraceEnvelope ${envelopeId} is ${bytes} bytes, exceeds OUTBOX_MAX_JSON_BYTES=${OUTBOX_MAX_JSON_BYTES}`
     );
     this.name = 'OutboxEnvelopeTooLargeError';
   }
@@ -114,10 +111,7 @@ export interface BroadcastOutboxWriter {
    *                  see ADR-014). There is no default: forgetting to pass
    *                  a tx used to silently produce dual-write bugs.
    */
-  write(
-    envelope: TraceEnvelope,
-    tx: OutboxPrismaRunner,
-  ): Promise<BroadcastOutboxWriteResult>;
+  write(envelope: TraceEnvelope, tx: OutboxPrismaRunner): Promise<BroadcastOutboxWriteResult>;
 }
 
 // ─── Implementation ──────────────────────────────────────────────────────
@@ -125,7 +119,7 @@ export interface BroadcastOutboxWriter {
 export class DefaultBroadcastOutboxWriter implements BroadcastOutboxWriter {
   async write(
     envelope: TraceEnvelope,
-    tx: OutboxPrismaRunner,
+    tx: OutboxPrismaRunner
   ): Promise<BroadcastOutboxWriteResult> {
     // Trust boundary: parse before insert so invalid envelopes never reach the DB.
     const validated = parseTraceEnvelope(envelope);
@@ -172,7 +166,7 @@ export class DefaultBroadcastOutboxWriter implements BroadcastOutboxWriter {
             requestId: validated.requestId,
             organizationId: validated.tenant.organizationId,
           },
-          'Trace envelope already staged for this requestId — no-op',
+          'Trace envelope already staged for this requestId — no-op'
         );
         return {
           envelopeId: validated.envelopeId,
@@ -194,7 +188,7 @@ export class DefaultBroadcastOutboxWriter implements BroadcastOutboxWriter {
         resolutionScope: validated.tenant.resolutionScope,
         bytes,
       },
-      'Trace envelope staged in outbox',
+      'Trace envelope staged in outbox'
     );
 
     return {

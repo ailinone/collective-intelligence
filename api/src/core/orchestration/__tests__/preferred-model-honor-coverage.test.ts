@@ -239,7 +239,7 @@ function listStrategyFiles(): string[] {
 const STRATEGY_FILES = listStrategyFiles();
 
 const STRATEGY_SOURCES = new Map<string, string>(
-  STRATEGY_FILES.map((f) => [f, readFileSync(join(STRATEGIES_DIR, f), 'utf8')]),
+  STRATEGY_FILES.map((f) => [f, readFileSync(join(STRATEGIES_DIR, f), 'utf8')])
 );
 
 // ──────────────────────────────────────────────────────────────────────
@@ -248,14 +248,13 @@ const STRATEGY_SOURCES = new Map<string, string>(
 
 describe('Preferred-model honor coverage matrix', () => {
   it('every strategy file is classified into exactly one bucket', () => {
-    const allDeclared = new Set<string>([
-      ...HELPER_HONORS,
-      ...DIRECT_READ_HONORS,
-      ...PENDING,
-    ]);
+    const allDeclared = new Set<string>([...HELPER_HONORS, ...DIRECT_READ_HONORS, ...PENDING]);
 
     const orphans = STRATEGY_FILES.filter((f) => !allDeclared.has(f));
-    expect(orphans, 'Strategy files not classified — add to HELPER_HONORS, DIRECT_READ_HONORS, or PENDING').toEqual([]);
+    expect(
+      orphans,
+      'Strategy files not classified — add to HELPER_HONORS, DIRECT_READ_HONORS, or PENDING'
+    ).toEqual([]);
 
     // Reverse: declared buckets must reference real files.
     const phantom = [...allDeclared].filter((f) => !STRATEGY_SOURCES.has(f));
@@ -305,7 +304,8 @@ describe('Preferred-model honor coverage matrix', () => {
       if (!usesDirectRead(source)) {
         violators.push({
           file,
-          reason: 'in DIRECT_READ_HONORS but missing getUserSpecifiedModelFlag import or userSpecifiedModel && request.model branch',
+          reason:
+            'in DIRECT_READ_HONORS but missing getUserSpecifiedModelFlag import or userSpecifiedModel && request.model branch',
         });
       }
     }

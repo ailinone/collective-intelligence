@@ -75,7 +75,7 @@ function classifyLatency(routes: readonly ProviderModelRoute[]): LatencyClass {
 
 function aggregateCapabilities(
   canonical: CanonicalModel,
-  offerings: readonly ModelProviderOffering[],
+  offerings: readonly ModelProviderOffering[]
 ): readonly string[] {
   const set = new Set<string>();
   // Canonical's normalised set wins.
@@ -116,7 +116,7 @@ function maxContextWindow(routes: readonly ProviderModelRoute[]): number | undef
  * to compute embedding ids).
  */
 export function buildModelCapabilityDocument(
-  input: ModelCapabilityDocumentBuilderInput,
+  input: ModelCapabilityDocumentBuilderInput
 ): ModelCapabilityDocument {
   const { canonical, offerings, routes } = input;
 
@@ -140,10 +140,7 @@ export function buildModelCapabilityDocument(
 
   // Text representation. Structured, label-prefixed, alphabetised so
   // it is BYTE-IDENTICAL across runs for the same input.
-  const lines: string[] = [
-    `canonical:${canonical.canonicalModelId}`,
-    `family:${canonical.family}`,
-  ];
+  const lines: string[] = [`canonical:${canonical.canonicalModelId}`, `family:${canonical.family}`];
   if (canonical.version) lines.push(`version:${canonical.version}`);
   lines.push(`lifecycle:${canonical.lifecycle}`);
   lines.push(`owner:${canonical.owner}`);
@@ -160,9 +157,10 @@ export function buildModelCapabilityDocument(
   lines.push(`freshness:${canonical.freshnessScore.toFixed(2)}`);
 
   const text = lines.join(' ');
-  const title = canonical.family && canonical.version
-    ? `${canonical.family} ${canonical.version} (${canonical.canonicalModelId})`
-    : canonical.canonicalModelId;
+  const title =
+    canonical.family && canonical.version
+      ? `${canonical.family} ${canonical.version} (${canonical.canonicalModelId})`
+      : canonical.canonicalModelId;
 
   return {
     canonicalModelId: canonical.canonicalModelId,

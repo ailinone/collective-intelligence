@@ -9,13 +9,13 @@
 
 /**
  * Load Secrets into Environment
- * 
+ *
  * This module loads critical secrets from GCP Secret Manager
  * and injects them into process.env BEFORE config validation.
- * 
+ *
  * This allows the existing config system to work without refactoring,
  * while still using GCP Secret Manager as the source of truth.
- * 
+ *
  * Call order:
  * 1. initializeSecretsManager()
  * 2. loadSecretsIntoEnv() ← This file
@@ -129,7 +129,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // region (e.g. us-west-2) or via cross-region inference profiles without
   // baking these into the docker image.
   { envVar: 'AWS_BEDROCK_REGION', secretKeys: ['aws-bedrock-region'] },
-  { envVar: 'AWS_BEDROCK_INFERENCE_PROFILE_ARN', secretKeys: ['aws-bedrock-inference-profile-arn'] },
+  {
+    envVar: 'AWS_BEDROCK_INFERENCE_PROFILE_ARN',
+    secretKeys: ['aws-bedrock-inference-profile-arn'],
+  },
   // Batch 8.1: SageMaker endpoint routing. A deploy can point this adapter
   // at a specific deployed endpoint via a secret rather than baking the
   // endpoint name into the image. The region override lets the adapter
@@ -166,7 +169,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // Batch 6 — enterprise hyperscaler gateways (2026-04-22).
   // Azure OpenAI already has API_KEY/ENDPOINT/DEPLOYMENT wired above;
   // these fill in the remaining URL-template parameters.
-  { envVar: 'AZURE_OPENAI_RESOURCE_NAME', secretKeys: ['azure-openai-resource-name', 'azure-openai-resource'] },
+  {
+    envVar: 'AZURE_OPENAI_RESOURCE_NAME',
+    secretKeys: ['azure-openai-resource-name', 'azure-openai-resource'],
+  },
   { envVar: 'AZURE_OPENAI_API_VERSION', secretKeys: ['azure-openai-api-version'] },
   // Gemini OAI-compat shares the API key with the native `google` provider.
   // Two env-var aliases: GEMINI_API_KEY (canonical upstream) and
@@ -188,7 +194,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // stayed broken. Moved `vertex-key` first since it's the only one
   // confirmed live-working; the others remain as fallbacks if it's ever
   // rotated out.
-  { envVar: 'GEMINI_API_KEY', secretKeys: ['vertex-key', 'gemini-key', 'google-ai-studio-key', 'google-key'] },
+  {
+    envVar: 'GEMINI_API_KEY',
+    secretKeys: ['vertex-key', 'gemini-key', 'google-ai-studio-key', 'google-key'],
+  },
   // GitHub Models uses a GitHub PAT. Operators typically already have this
   // in env (it's the same PAT used for gh CLI); the GCP path is a fallback
   // for service accounts that need isolated tokens.
@@ -223,17 +232,29 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // each secretKeys array is the preferred upstream-convention name; any
   // follow-up entries are fallbacks for historical or legacy aliases.
   { envVar: 'ARCEE_API_KEY', secretKeys: ['arcee-api-key', 'arcee-key'] },
-  { envVar: 'ATLASCLOUD_API_KEY', secretKeys: ['atlascloud-key', 'atlascloud-api-key', 'atlas-cloud-key'] },
+  {
+    envVar: 'ATLASCLOUD_API_KEY',
+    secretKeys: ['atlascloud-key', 'atlascloud-api-key', 'atlas-cloud-key'],
+  },
   { envVar: 'AVIAN_API_KEY', secretKeys: ['avian-key', 'avian-api-key', 'avian-io-key'] },
   // Qianfan (Baidu) v2 bce-v3 bearer. Distinct from the legacy v1 AK+SK
   // material in ERNIE_API_KEY / ERNIE_SECRET_KEY / BAIDU_BASE_URL above —
   // both mappings are intentionally kept so an operator can populate either
   // path (v1 OAuth or v2 bearer) depending on which runtime surface is
   // used. The canonical catalog row `qianfan` reads QIANFAN_API_KEY only.
-  { envVar: 'QIANFAN_API_KEY', secretKeys: ['qianfan-key', 'qianfan-api-key', 'baidu-qianfan-key'] },
+  {
+    envVar: 'QIANFAN_API_KEY',
+    secretKeys: ['qianfan-key', 'qianfan-api-key', 'baidu-qianfan-key'],
+  },
   { envVar: 'GMI_API_KEY', secretKeys: ['gmi-key', 'gmi-api-key', 'gmicloud-key'] },
-  { envVar: 'INFERMATIC_API_KEY', secretKeys: ['infermatic-api-key', 'infermatic-key', 'totalgpt-key'] },
-  { envVar: 'INFLECTION_API_KEY', secretKeys: ['inflection-key', 'inflection-api-key', 'inflection-ai-key'] },
+  {
+    envVar: 'INFERMATIC_API_KEY',
+    secretKeys: ['infermatic-api-key', 'infermatic-key', 'totalgpt-key'],
+  },
+  {
+    envVar: 'INFLECTION_API_KEY',
+    secretKeys: ['inflection-key', 'inflection-api-key', 'inflection-ai-key'],
+  },
   // Mancer (tagged contentPolicyClass=uncensored in catalog; per the universal
   // "habilitado e nunca censurado" policy from Phase 4b, 2026-04-28, the
   // catalog row is fully admitted to routing — the tag is informational so
@@ -243,9 +264,15 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // PHALA_API_KEY as the canonical env var (see apiKeyEnvVarOverrideReason
   // in catalog row `phala`). Legacy `redpill-*` secret names are accepted
   // as fallbacks so an operator storing under either convention works.
-  { envVar: 'PHALA_API_KEY', secretKeys: ['phala-key', 'phala-api-key', 'redpill-key', 'redpill-api-key'] },
+  {
+    envVar: 'PHALA_API_KEY',
+    secretKeys: ['phala-key', 'phala-api-key', 'redpill-key', 'redpill-api-key'],
+  },
   { envVar: 'RELACE_API_KEY', secretKeys: ['relace-key', 'relace-api-key'] },
-  { envVar: 'SILICONFLOW_API_KEY', secretKeys: ['siliconflow-api-key', 'siliconflow-key', 'silicon-flow-key'] },
+  {
+    envVar: 'SILICONFLOW_API_KEY',
+    secretKeys: ['siliconflow-api-key', 'siliconflow-key', 'silicon-flow-key'],
+  },
   { envVar: 'STEPFUN_API_KEY', secretKeys: ['stepfun-api-key', 'stepfun-key', 'step-key'] },
   // Venice (tagged contentPolicyClass=uncensored in catalog). Same Phase-4b
   // treatment as Mancer — admitted, never censored, with the tag as the
@@ -267,7 +294,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // HUGGINGFACE_API_KEY); the catalog row's apiKeyEnvVar matches. Primary
   // GCP secret name follows the upstream convention; legacy huggingface-*
   // aliases accepted for operators who stored it under the provider slug.
-  { envVar: 'HF_TOKEN', secretKeys: ['huggingface-api-key', 'huggingface-token', 'hf-token', 'huggingface-key'] },
+  {
+    envVar: 'HF_TOKEN',
+    secretKeys: ['huggingface-api-key', 'huggingface-token', 'hf-token', 'huggingface-key'],
+  },
   // Cloudflare Workers AI — requires BOTH api-token AND account-id. The
   // CloudflareWorkersAIAdapter factory (default-adapter-factories.ts line
   // 229-246) reads CLOUDFLARE_ACCOUNT_ID from env and substitutes it into
@@ -276,13 +306,31 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // Side-car is wired here as a separate tuple because it's not an auth
   // credential — it's a URL parameter — so it doesn't belong in
   // ENV_VAR_TO_PROVIDER or LLM_PROVIDER_ENV_VARS below.
-  { envVar: 'CLOUDFLARE_API_TOKEN', secretKeys: ['cloudflare-workers-ai-api-key', 'cloudflare-workers-ai-token', 'cloudflare-api-token', 'cloudflare-workers-ai-key'] },
-  { envVar: 'CLOUDFLARE_ACCOUNT_ID', secretKeys: ['cloudflare-workers-ai-id', 'cloudflare-account-id', 'cloudflare-workers-ai-account-id'] },
+  {
+    envVar: 'CLOUDFLARE_API_TOKEN',
+    secretKeys: [
+      'cloudflare-workers-ai-api-key',
+      'cloudflare-workers-ai-token',
+      'cloudflare-api-token',
+      'cloudflare-workers-ai-key',
+    ],
+  },
+  {
+    envVar: 'CLOUDFLARE_ACCOUNT_ID',
+    secretKeys: [
+      'cloudflare-workers-ai-id',
+      'cloudflare-account-id',
+      'cloudflare-workers-ai-account-id',
+    ],
+  },
   { envVar: 'PERPLEXITY_API_KEY', secretKeys: ['perplexity-api-key', 'perplexity-key'] },
   // Fireworks AI — note the catalog providerId is `fireworks-ai` (hyphenated)
   // but upstream brand/docs spell it "Fireworks" (no suffix). Four fallbacks
   // cover both conventions + api-key suffix variant.
-  { envVar: 'FIREWORKS_AI_API_KEY', secretKeys: ['fireworks-ai-api-key', 'fireworks-ai-key', 'fireworks-key', 'fireworks-api-key'] },
+  {
+    envVar: 'FIREWORKS_AI_API_KEY',
+    secretKeys: ['fireworks-ai-api-key', 'fireworks-ai-key', 'fireworks-key', 'fireworks-api-key'],
+  },
   { envVar: 'SAMBANOVA_API_KEY', secretKeys: ['sambanova-api-key', 'sambanova-key'] },
   // Replicate — flagged by the sublote-e1-runtime-wiring invariant as a
   // pre-existing gap. `replicate` has been in CONSOLIDATION_MATRIX
@@ -312,7 +360,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // here too but are intentionally absent from LLM_PROVIDER_ENV_VARS below
   // because their presence does NOT count toward the "at least one LLM
   // key present" boot-mode gate.
-  { envVar: 'TOGETHERAI_API_KEY', secretKeys: ['togetherai-api-key', 'togetherai-key', 'together-key', 'together-api-key'] },
+  {
+    envVar: 'TOGETHERAI_API_KEY',
+    secretKeys: ['togetherai-api-key', 'togetherai-key', 'together-key', 'together-api-key'],
+  },
   { envVar: 'ANYSCALE_API_KEY', secretKeys: ['anyscale-api-key', 'anyscale-key'] },
   { envVar: 'HYPERBOLIC_API_KEY', secretKeys: ['hyperbolic-api-key', 'hyperbolic-key'] },
   { envVar: 'CHUTES_API_KEY', secretKeys: ['chutes-api-key', 'chutes-key', 'chutes-ai-key'] },
@@ -320,29 +371,47 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'NEBIUS_API_KEY', secretKeys: ['nebius-key', 'nebius-api-key'] },
   // Lambda Cloud canonical provider slug is `lambda-ai`; brand is
   // "Lambda" (without -ai). Both spellings tried as fallbacks.
-  { envVar: 'LAMBDA_AI_API_KEY', secretKeys: ['lambda-ai-key', 'lambda-key', 'lambda-cloud-key', 'lambda-ai-api-key'] },
+  {
+    envVar: 'LAMBDA_AI_API_KEY',
+    secretKeys: ['lambda-ai-key', 'lambda-key', 'lambda-cloud-key', 'lambda-ai-api-key'],
+  },
   { envVar: 'SCALEWAY_API_KEY', secretKeys: ['scaleway-key', 'scaleway-api-key'] },
-  { envVar: 'SYNTHETIC_API_KEY', secretKeys: ['synthetic-key', 'synthetic-api-key', 'synthetic-ai-key'] },
+  {
+    envVar: 'SYNTHETIC_API_KEY',
+    secretKeys: ['synthetic-key', 'synthetic-api-key', 'synthetic-ai-key'],
+  },
   { envVar: 'MORPH_API_KEY', secretKeys: ['morph-key', 'morph-api-key', 'morph-llm-key'] },
   // Z.ai (catalog providerId = `zai`). Upstream domain z.ai resolves to
   // bigmodel.cn — the GLM family operator. Legacy spelling z-ai accepted.
   { envVar: 'ZAI_API_KEY', secretKeys: ['zai-key', 'zai-api-key', 'z-ai-key', 'glm-key'] },
-  { envVar: 'XIAOMI_MIMO_API_KEY', secretKeys: ['xiaomi-mimo-key', 'mimo-key', 'xiaomi-mimo-api-key'] },
+  {
+    envVar: 'XIAOMI_MIMO_API_KEY',
+    secretKeys: ['xiaomi-mimo-key', 'mimo-key', 'xiaomi-mimo-api-key'],
+  },
   // v0 (Vercel) — code-gen LLM. The catalog providerId is `v0` (one
   // character) so the env var name is `V0_API_KEY` not `V0AI_API_KEY`.
   { envVar: 'V0_API_KEY', secretKeys: ['v0-key', 'v0-api-key', 'vercel-v0-key'] },
   // Vercel AI Gateway — DIFFERENT from v0 above (gateway over many LLMs).
   // The canonical secret name follows the catalog providerId.
-  { envVar: 'VERCEL_AI_GATEWAY_API_KEY', secretKeys: ['vercel-ai-gateway-key', 'vercel-ai-gateway-api-key', 'vercel-gateway-key'] },
+  {
+    envVar: 'VERCEL_AI_GATEWAY_API_KEY',
+    secretKeys: ['vercel-ai-gateway-key', 'vercel-ai-gateway-api-key', 'vercel-gateway-key'],
+  },
   // Volcano (Volcengine — ByteDance). Canonical slug `volcano`; brand
   // includes Volcengine + Doubao + Ark. Multiple aliases accepted.
-  { envVar: 'VOLCANO_API_KEY', secretKeys: ['volcano-key', 'volcano-api-key', 'volcengine-key', 'doubao-key', 'ark-key'] },
+  {
+    envVar: 'VOLCANO_API_KEY',
+    secretKeys: ['volcano-key', 'volcano-api-key', 'volcengine-key', 'doubao-key', 'ark-key'],
+  },
   // IBM watsonx — note the env var is `WATSONX_APIKEY` (no underscore
   // between API and KEY) to match IBM's canonical SDK convention.
   // Side-car env vars (WATSONX_PROJECT_ID, WATSONX_URL) are wired below
   // because they're documented in the catalog row's `extraEnvVars` and
   // adapter requires them at runtime.
-  { envVar: 'WATSONX_APIKEY', secretKeys: ['watsonx-apikey', 'watsonx-key', 'watsonx-api-key', 'ibm-watsonx-key'] },
+  {
+    envVar: 'WATSONX_APIKEY',
+    secretKeys: ['watsonx-apikey', 'watsonx-key', 'watsonx-api-key', 'ibm-watsonx-key'],
+  },
   { envVar: 'WATSONX_PROJECT_ID', secretKeys: ['watsonx-project-id', 'ibm-watsonx-project-id'] },
   { envVar: 'WATSONX_URL', secretKeys: ['watsonx-url', 'ibm-watsonx-url'] },
   // Snowflake Cortex — uses Personal Access Token (PAT), not an API key.
@@ -362,7 +431,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // SapAiCoreAdapter. Wiring all four together so a single provisioning
   // round closes the loop.
   { envVar: 'SAP_AI_CORE_CLIENT_ID', secretKeys: ['sap-ai-core-client-id', 'sap-client-id'] },
-  { envVar: 'SAP_AI_CORE_CLIENT_SECRET', secretKeys: ['sap-ai-core-client-secret', 'sap-client-secret'] },
+  {
+    envVar: 'SAP_AI_CORE_CLIENT_SECRET',
+    secretKeys: ['sap-ai-core-client-secret', 'sap-client-secret'],
+  },
   { envVar: 'SAP_AI_CORE_AUTH_URL', secretKeys: ['sap-ai-core-auth-url', 'sap-auth-url'] },
   { envVar: 'SAP_AI_CORE_BASE_URL', secretKeys: ['sap-ai-core-base-url', 'sap-base-url'] },
   // W&B Inference side-car — WANDB_API_KEY (auth) is already wired in
@@ -371,7 +443,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'WANDB_PROJECT', secretKeys: ['wandb-project', 'wandb-project-slug'] },
   // Image-only providers (no LLM gate participation, see comment below).
   // bfl auth header is `x-key` (not Bearer) — see catalog `authHeaderName`.
-  { envVar: 'BFL_API_KEY', secretKeys: ['bfl-key', 'bfl-api-key', 'flux-key', 'black-forest-labs-key'] },
+  {
+    envVar: 'BFL_API_KEY',
+    secretKeys: ['bfl-key', 'bfl-api-key', 'flux-key', 'black-forest-labs-key'],
+  },
   { envVar: 'RECRAFT_API_KEY', secretKeys: ['recraft-key', 'recraft-api-key'] },
   { envVar: 'RUNWAYML_API_KEY', secretKeys: ['runwayml-key', 'runwayml-api-key', 'runway-key'] },
   { envVar: 'TOPAZ_API_KEY', secretKeys: ['topaz-key', 'topaz-api-key', 'topaz-labs-key'] },
@@ -783,10 +858,10 @@ const SELF_HOSTED_ENV_VARS = [
 
 /**
  * Load critical secrets from GCP into process.env
- * 
+ *
  * This function is called AFTER SecretsManager initialization
  * and BEFORE config validation.
- * 
+ *
  * It loads secrets from GCP and injects them into process.env,
  * allowing the existing config system to work without modification.
  */
@@ -822,8 +897,7 @@ export async function loadSecretsIntoEnv(): Promise<void> {
   const gcpPrimaryEnv = (process.env.SECRETS_PROVIDER_PRIMARY || '').trim().toLowerCase() === 'gcp';
   const explicitAuthoritative = (process.env.SECRETS_GCP_AUTHORITATIVE || '').trim().toLowerCase();
   const gcpAuthoritative =
-    explicitAuthoritative === 'true' ||
-    (explicitAuthoritative !== 'false' && gcpPrimaryEnv);
+    explicitAuthoritative === 'true' || (explicitAuthoritative !== 'false' && gcpPrimaryEnv);
 
   // Tests already use TEST_USE_REAL_API_KEYS=true to force GCP fetches even
   // when local mocks are present. The two flags are independent triggers
@@ -892,18 +966,21 @@ export async function loadSecretsIntoEnv(): Promise<void> {
       if (defaultValue !== undefined) {
         // Use default value on error if provided
         process.env[envVar] = defaultValue;
-        log.warn({ envVar, secretKey, defaultValue, error: getErrorMessage(error) }, 'Failed to load secret, using default value');
+        log.warn(
+          { envVar, secretKey, defaultValue, error: getErrorMessage(error) },
+          'Failed to load secret, using default value'
+        );
         skipped++;
       } else if (required) {
         const errorMsg = getErrorMessage(error);
-        log.error(
-          { envVar, secretKey, error: errorMsg },
-          'Failed to load required secret'
-        );
+        log.error({ envVar, secretKey, error: errorMsg }, 'Failed to load required secret');
         failed++;
         throw new Error(`Failed to load required secret ${secretKey}: ${errorMsg}`);
       } else {
-        log.warn({ envVar, secretKey, error: getErrorMessage(error) }, 'Failed to load optional secret');
+        log.warn(
+          { envVar, secretKey, error: getErrorMessage(error) },
+          'Failed to load optional secret'
+        );
         skipped++;
       }
     }
@@ -919,13 +996,14 @@ export async function loadSecretsIntoEnv(): Promise<void> {
   // If TEST_USE_REAL_API_KEYS=true, force load from GCP even if mock keys exist
   // Always replace mock keys with real keys from GCP when available
   // (reuses forceLoadRealKeys defined above)
-  
+
   for (const { envVar, secretKeys } of PROVIDER_SECRETS) {
     const existingValue = process.env[envVar];
     const providerName = ENV_VAR_TO_PROVIDER[envVar];
 
     // Check if existing value looks like a mock key
-    const isMockKey = existingValue && (existingValue.includes('mock') || existingValue.includes('test-'));
+    const isMockKey =
+      existingValue && (existingValue.includes('mock') || existingValue.includes('test-'));
 
     // Skip if real key already exists, UNLESS:
     //  - we're in GCP-authoritative mode (operator declared GCP as source of truth), OR
@@ -936,7 +1014,12 @@ export async function loadSecretsIntoEnv(): Promise<void> {
     if (existingValue && !authoritativeFetch && !isMockKey) {
       // Record as loaded from env
       if (providerName) {
-        providerKeyStatusMap.set(providerName, { loaded: true, source: 'env', timestamp: new Date(), envVar });
+        providerKeyStatusMap.set(providerName, {
+          loaded: true,
+          source: 'env',
+          timestamp: new Date(),
+          envVar,
+        });
       }
       skipped++;
       continue;
@@ -952,13 +1035,23 @@ export async function loadSecretsIntoEnv(): Promise<void> {
           if (candidateValue) {
             loadedSecretValue = candidateValue;
             resolvedSecretKey = candidateKey;
-            log.debug({ envVar, secretKey: candidateKey, valueLen: candidateValue.length }, 'Secret loaded from GCP');
+            log.debug(
+              { envVar, secretKey: candidateKey, valueLen: candidateValue.length },
+              'Secret loaded from GCP'
+            );
             break;
           } else {
             log.debug({ envVar, secretKey: candidateKey }, 'Secret returned empty/null from GCP');
           }
         } catch (loadErr) {
-          log.warn({ envVar, secretKey: candidateKey, error: loadErr instanceof Error ? loadErr.message : String(loadErr) }, 'Failed to load secret from GCP');
+          log.warn(
+            {
+              envVar,
+              secretKey: candidateKey,
+              error: loadErr instanceof Error ? loadErr.message : String(loadErr),
+            },
+            'Failed to load secret from GCP'
+          );
           continue;
         }
       }
@@ -974,29 +1067,29 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         let sanitizedValue = isPemKey
           ? value
               .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, '') // Strip control chars EXCEPT \n (0x0A) and \r (0x0D)
-              .replace(/[\u200B-\u200D\uFEFF]/g, '')              // Remove zero-width spaces
+              .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width spaces
               .trim()
           : value
-              .replace(/[\x00-\x1F\x7F]/g, '')                    // Strip ALL control characters
-              .replace(/[\u200B-\u200D\uFEFF]/g, '')              // Remove zero-width spaces
+              .replace(/[\x00-\x1F\x7F]/g, '') // Strip ALL control characters
+              .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width spaces
               .trim();
-        
+
         // Log detailed debugging information if sanitization changed the value
         if (sanitizedValue !== value) {
           const removedChars = value.length - sanitizedValue.length;
           sanitizedKeys++;
           log.debug(
-            { 
-              envVar, 
+            {
+              envVar,
               secretKey: resolvedSecretKey,
-              originalLength: value.length, 
+              originalLength: value.length,
               sanitizedLength: sanitizedValue.length,
-              removedChars
+              removedChars,
             },
             'API key contained invalid characters and was sanitized'
           );
         }
-        
+
         // Always replace mock keys with real keys
         const wasReplaced = !!existingValue;
         const wasOverwriteOfRealValue =
@@ -1014,7 +1107,8 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         // Deep validation: check exact match, type, and length
         const isValidMatch = readBackValue === sanitizedValue;
         const isValidType = typeof readBackValue === 'string';
-        const isValidLength = readBackValue !== undefined && readBackValue.length === sanitizedValue.length;
+        const isValidLength =
+          readBackValue !== undefined && readBackValue.length === sanitizedValue.length;
 
         if (!isValidMatch || !isValidType || !isValidLength) {
           log.error(
@@ -1044,7 +1138,12 @@ export async function loadSecretsIntoEnv(): Promise<void> {
           providerSecretsLoaded++;
           // Record successful load
           if (providerName) {
-            providerKeyStatusMap.set(providerName, { loaded: true, source: 'gcp', timestamp: new Date(), envVar });
+            providerKeyStatusMap.set(providerName, {
+              loaded: true,
+              source: 'gcp',
+              timestamp: new Date(),
+              envVar,
+            });
           }
         }
       } else {
@@ -1058,7 +1157,12 @@ export async function loadSecretsIntoEnv(): Promise<void> {
           // Authoritative-mode GCP miss with real env value already set:
           // the env value is still in process.env, so report source=env.
           if (providerName) {
-            providerKeyStatusMap.set(providerName, { loaded: true, source: 'env', timestamp: new Date(), envVar });
+            providerKeyStatusMap.set(providerName, {
+              loaded: true,
+              source: 'env',
+              timestamp: new Date(),
+              envVar,
+            });
           }
           log.debug(
             { envVar, secretKeys },
@@ -1073,7 +1177,12 @@ export async function loadSecretsIntoEnv(): Promise<void> {
           }
           // Record as not loaded (no GCP value, no usable env value)
           if (providerName) {
-            providerKeyStatusMap.set(providerName, { loaded: false, source: 'none', timestamp: new Date(), envVar });
+            providerKeyStatusMap.set(providerName, {
+              loaded: false,
+              source: 'none',
+              timestamp: new Date(),
+              envVar,
+            });
           }
         }
         skipped++;
@@ -1101,7 +1210,12 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         }
         // Record failure
         if (providerName) {
-          providerKeyStatusMap.set(providerName, { loaded: false, source: 'none', timestamp: new Date(), envVar });
+          providerKeyStatusMap.set(providerName, {
+            loaded: false,
+            source: 'none',
+            timestamp: new Date(),
+            envVar,
+          });
         }
         skipped++;
       }
@@ -1126,7 +1240,11 @@ export async function loadSecretsIntoEnv(): Promise<void> {
   for (const { canonical, alias } of ENV_ALIASES) {
     const canonicalValue = process.env[canonical];
     const aliasValue = process.env[alias];
-    if ((canonicalValue == null || canonicalValue.trim() === '') && aliasValue && aliasValue.trim() !== '') {
+    if (
+      (canonicalValue == null || canonicalValue.trim() === '') &&
+      aliasValue &&
+      aliasValue.trim() !== ''
+    ) {
       process.env[canonical] = aliasValue;
       log.info({ canonical, alias }, 'Promoted alias env var to canonical name');
     }
@@ -1152,7 +1270,8 @@ export async function loadSecretsIntoEnv(): Promise<void> {
 
   // Opt-out for strict production deployments that must never run in
   // degraded mode. Default: allow degraded boot (safer than crash loops).
-  const allowDegradedBoot = (process.env.ALLOW_DEGRADED_BOOT || 'true').trim().toLowerCase() !== 'false';
+  const allowDegradedBoot =
+    (process.env.ALLOW_DEGRADED_BOOT || 'true').trim().toLowerCase() !== 'false';
 
   if (gcpFailFast && !hasAnyLlmProviderKey) {
     if (hasAnySelfHostedFallback && allowDegradedBoot) {
@@ -1166,8 +1285,8 @@ export async function loadSecretsIntoEnv(): Promise<void> {
           docs: 'docs/hardening/last-resort-policy',
         },
         '⚠️ DEGRADED BOOT: zero external LLM credentials, but self-hosted fallback is available. ' +
-        'Server will start in last-resort mode. Requests will be tagged excluded_from_benchmark. ' +
-        'Fix ADC/GCP credentials to restore full operation.'
+          'Server will start in last-resort mode. Requests will be tagged excluded_from_benchmark. ' +
+          'Fix ADC/GCP credentials to restore full operation.'
       );
       // Intentionally fall through — boot continues
     } else {
@@ -1188,7 +1307,7 @@ export async function loadSecretsIntoEnv(): Promise<void> {
       );
       throw new Error(
         `${message} Verify GCP Secret Manager access (ADC/Workload Identity) and secret names/prefix, ` +
-        `or set OLLAMA_URL for degraded self-hosted boot, or run 'gcloud auth application-default login' if local.`
+          `or set OLLAMA_URL for degraded self-hosted boot, or run 'gcloud auth application-default login' if local.`
       );
     }
   }

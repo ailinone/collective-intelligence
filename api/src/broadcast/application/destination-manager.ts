@@ -41,9 +41,7 @@ import {
   type EncryptedBlob,
   type TenantRef,
 } from '@/broadcast/infrastructure/encryption';
-import type {
-  DestinationType,
-} from '@/broadcast/infrastructure/destinations/destination-adapter';
+import type { DestinationType } from '@/broadcast/infrastructure/destinations/destination-adapter';
 import { validateDestinationConfig } from './destination-config-schemas';
 
 const log = logger.child({ component: 'destination-manager' });
@@ -137,8 +135,10 @@ export class DestinationManager {
   }
 
   async create(
-    input: CreateDestinationInput,
-  ): Promise<{ ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }> {
+    input: CreateDestinationInput
+  ): Promise<
+    { ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }
+  > {
     const validation = validateDestinationConfig(input.destinationType, input.config);
     if (!validation.ok) {
       return { ok: false, error: { code: 'invalid_config', message: validation.error } };
@@ -201,7 +201,7 @@ export class DestinationManager {
         tenantId: row.tenantId,
         destinationType: row.destinationType,
       },
-      'broadcast destination created',
+      'broadcast destination created'
     );
 
     return { ok: true, destination: toDto(row) };
@@ -221,8 +221,10 @@ export class DestinationManager {
 
   async getById(
     scope: TenantScope,
-    id: string,
-  ): Promise<{ ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }> {
+    id: string
+  ): Promise<
+    { ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }
+  > {
     const row = await this.db.broadcastDestination.findFirst({
       where: {
         id,
@@ -238,8 +240,10 @@ export class DestinationManager {
   async update(
     scope: TenantScope,
     id: string,
-    patch: UpdateDestinationInput,
-  ): Promise<{ ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }> {
+    patch: UpdateDestinationInput
+  ): Promise<
+    { ok: true; destination: DestinationDto } | { ok: false; error: DestinationManagerError }
+  > {
     const existing = await this.db.broadcastDestination.findFirst({
       where: {
         id,
@@ -283,7 +287,7 @@ export class DestinationManager {
     if (patch.config !== undefined) {
       const validation = validateDestinationConfig(
         existing.destinationType as DestinationType,
-        patch.config,
+        patch.config
       );
       if (!validation.ok) {
         return { ok: false, error: { code: 'invalid_config', message: validation.error } };
@@ -315,7 +319,7 @@ export class DestinationManager {
 
   async delete(
     scope: TenantScope,
-    id: string,
+    id: string
   ): Promise<{ ok: true } | { ok: false; error: DestinationManagerError }> {
     const existing = await this.db.broadcastDestination.findFirst({
       where: {
@@ -342,7 +346,7 @@ export class DestinationManager {
 
     log.info(
       { destinationId: id, tenantType: scope.tenantType, tenantId: scope.tenantId },
-      'broadcast destination soft-deleted',
+      'broadcast destination soft-deleted'
     );
 
     return { ok: true };
@@ -354,11 +358,8 @@ export class DestinationManager {
    */
   async decryptConfig<T extends object = Record<string, unknown>>(
     scope: TenantScope,
-    id: string,
-  ): Promise<
-    | { ok: true; config: T }
-    | { ok: false; error: DestinationManagerError }
-  > {
+    id: string
+  ): Promise<{ ok: true; config: T } | { ok: false; error: DestinationManagerError }> {
     const row = await this.db.broadcastDestination.findFirst({
       where: {
         id,
@@ -415,8 +416,8 @@ function toDto(row: {
       typeof row.samplingRate === 'string'
         ? Number(row.samplingRate)
         : typeof row.samplingRate === 'number'
-        ? row.samplingRate
-        : Number((row.samplingRate as { toString(): string }).toString()),
+          ? row.samplingRate
+          : Number((row.samplingRate as { toString(): string }).toString()),
     privacyMode: row.privacyMode,
     privacyCustomFields: Array.isArray(row.privacyCustomFields)
       ? (row.privacyCustomFields as string[])

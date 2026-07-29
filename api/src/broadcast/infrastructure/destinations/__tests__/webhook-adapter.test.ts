@@ -90,7 +90,7 @@ interface CapturedRequest {
 }
 
 function startTestServer(
-  handler: (req: IncomingMessage, res: ServerResponse, captured: CapturedRequest) => void,
+  handler: (req: IncomingMessage, res: ServerResponse, captured: CapturedRequest) => void
 ): Promise<{ server: Server; port: number; calls: CapturedRequest[] }> {
   const calls: CapturedRequest[] = [];
   const server = createServer((req, res) => {
@@ -101,7 +101,7 @@ function startTestServer(
         method: req.method ?? 'GET',
         url: req.url ?? '/',
         headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)]),
+          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)])
         ),
         body,
       };
@@ -180,7 +180,7 @@ describe('WebhookDestinationAdapter — success path', () => {
           customHeaders: {
             'X-My-Tenant': 'acme',
             'Content-Type': 'text/evil', // reserved — should be dropped
-            'Host': 'attacker.com',        // reserved — should be dropped
+            Host: 'attacker.com', // reserved — should be dropped
           },
         },
       });
@@ -316,7 +316,7 @@ describe('WebhookDestinationAdapter — timeout', () => {
     try {
       const adapter = new WebhookDestinationAdapter();
       const outcome = await adapter.send(
-        makeCtx(`http://127.0.0.1:${port}/slow`, { timeoutMs: 200 }),
+        makeCtx(`http://127.0.0.1:${port}/slow`, { timeoutMs: 200 })
       );
       expect(outcome.kind).toBe('retryable');
       expect(outcome.errorClass).toBe('timeout');
@@ -346,8 +346,6 @@ describe('signRequest + verifyV1Signature — round-trip', () => {
     const headers = signRequest(body, { secret: 'k', signatureScheme: 'v1' }, 1_700_000_000_000);
     const sig = headers['X-Webhook-Signature']!;
     // 10 minutes later, with 5-minute tolerance
-    expect(
-      verifyV1Signature(body, sig, 'k', 300, 1_700_000_000_000 + 10 * 60_000),
-    ).toBe(false);
+    expect(verifyV1Signature(body, sig, 'k', 300, 1_700_000_000_000 + 10 * 60_000)).toBe(false);
   });
 });

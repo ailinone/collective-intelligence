@@ -59,7 +59,11 @@ describe('01C.1B-J1G-R0 §10.1 — synthesizer runtime wiring', () => {
   it('uses hybrid scorer when role=synthesizer (low-coverage high-quality loses to high-coverage acceptable-quality)', async () => {
     // Two candidates from different families — old: single provider, high quality;
     // new: multi-provider, slightly lower quality.
-    const oldHighQ = makeCandidate({ id: 'claude-3.7-sonnet-stale', providerId: 'anthropic', quality: 0.9 });
+    const oldHighQ = makeCandidate({
+      id: 'claude-3.7-sonnet-stale',
+      providerId: 'anthropic',
+      quality: 0.9,
+    });
     const newMultiP = [
       makeCandidate({ id: 'claude-opus-4', providerId: 'anthropic' }),
       makeCandidate({ id: 'claude-opus-4', providerId: 'openrouter' }),
@@ -71,7 +75,10 @@ describe('01C.1B-J1G-R0 §10.1 — synthesizer runtime wiring', () => {
       makeCandidate({ id: 'claude-opus-4', providerId: 'heliconeai' }),
       makeCandidate({ id: 'claude-opus-4', providerId: 'aihubmix' }),
       makeCandidate({ id: 'claude-opus-4', providerId: 'requesty' }),
-    ].map((c) => ({ ...c, model: { ...c.model, performance: { ...c.model.performance, quality: 0.8 } } as never }));
+    ].map((c) => ({
+      ...c,
+      model: { ...c.model, performance: { ...c.model.performance, quality: 0.8 } } as never,
+    }));
     const pool = [oldHighQ, ...newMultiP];
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({
@@ -87,7 +94,11 @@ describe('01C.1B-J1G-R0 §10.1 — synthesizer runtime wiring', () => {
   });
 
   it('legacy scorer still used for non-synthesizer roles (participant)', async () => {
-    const oldHighQ = makeCandidate({ id: 'claude-3.7-sonnet-stale', providerId: 'anthropic', quality: 0.9 });
+    const oldHighQ = makeCandidate({
+      id: 'claude-3.7-sonnet-stale',
+      providerId: 'anthropic',
+      quality: 0.9,
+    });
     const newMultiP = makeCandidate({ id: 'gpt-4o', providerId: 'openai', quality: 0.8 });
     const resolver = new ModelRoleResolver({});
     const result = await resolver.resolve({

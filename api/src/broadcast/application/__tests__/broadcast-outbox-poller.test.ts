@@ -117,7 +117,7 @@ function makeMockDb(rows: OutboxFixtureRow[]) {
     $queryRaw: vi.fn(async () =>
       rows
         .filter((r) => !claimedIds.has(r.envelope_id) && r.drained_at === null)
-        .map((r) => ({ envelope_id: r.envelope_id, envelope: r.envelope })),
+        .map((r) => ({ envelope_id: r.envelope_id, envelope: r.envelope }))
     ),
     $executeRaw: vi.fn(async (strings: { raw?: readonly string[] }, ...values: unknown[]) => {
       const sql = (strings.raw ?? []).join(' ');
@@ -140,9 +140,7 @@ function makeMockDb(rows: OutboxFixtureRow[]) {
   const reclaimedIds = new Set<string>();
 
   const db = {
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) =>
-      fn(tx),
-    ),
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, _opts?: unknown) => fn(tx)),
     $executeRaw: vi.fn(async (strings: { raw?: readonly string[] }, ...values: unknown[]) => {
       const sql = (strings.raw ?? []).join(' ');
       if (/destinations_resolved_count\s*=\s*data\.resolved_count/i.test(sql)) {
@@ -159,7 +157,7 @@ function makeMockDb(rows: OutboxFixtureRow[]) {
         const ids = values[0] as string[];
         for (const id of ids) {
           const row = rows.find(
-            (r) => r.envelope_id === id && r.destinations_resolved_count === null,
+            (r) => r.envelope_id === id && r.destinations_resolved_count === null
           );
           if (row) {
             row.drained_at = null;
@@ -254,7 +252,11 @@ describe('BroadcastOutboxPoller — fan-out to multiple destinations', () => {
         destinations_resolved_count: null,
       },
     ]);
-    const dests = [makeDestination('webhook'), makeDestination('langfuse'), makeDestination('datadog')];
+    const dests = [
+      makeDestination('webhook'),
+      makeDestination('langfuse'),
+      makeDestination('datadog'),
+    ];
     const resolver: DestinationResolver = {
       resolveForEnvelope: vi.fn(async () => dests),
     };

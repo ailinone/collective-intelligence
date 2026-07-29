@@ -51,23 +51,28 @@ function parseExpiresIn(expiresIn: string | number | undefined): number {
   if (!expiresIn || typeof expiresIn !== 'string') {
     return 86400; // Default 24 hours
   }
-  
+
   const match = expiresIn.match(/^(\d+)([smhd])$/);
   if (!match) {
     // Try to parse as pure number
     const num = parseInt(expiresIn, 10);
     return isNaN(num) ? 86400 : num;
   }
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2];
-  
+
   switch (unit) {
-    case 's': return value;
-    case 'm': return value * 60;
-    case 'h': return value * 3600;
-    case 'd': return value * 86400;
-    default: return 86400;
+    case 's':
+      return value;
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 3600;
+    case 'd':
+      return value * 86400;
+    default:
+      return 86400;
   }
 }
 
@@ -146,10 +151,7 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
-      server.log.error(
-        { error: errorMessage, stack: errorStack },
-        'Email challenge request error'
-      );
+      server.log.error({ error: errorMessage, stack: errorStack }, 'Email challenge request error');
       return reply.code(500).send({
         error: 'Internal server error',
       });
@@ -230,18 +232,19 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
 
       if (!result.success) {
         // Check if error is about duplicate email
-        const isDuplicateEmail = result.error?.toLowerCase().includes('already') || 
-                                  result.error?.toLowerCase().includes('duplicate') ||
-                                  result.error?.toLowerCase().includes('registered');
-        
+        const isDuplicateEmail =
+          result.error?.toLowerCase().includes('already') ||
+          result.error?.toLowerCase().includes('duplicate') ||
+          result.error?.toLowerCase().includes('registered');
+
         // Check if error is about password
         const isPasswordError = result.error?.toLowerCase().includes('password');
-        
+
         return reply.code(isDuplicateEmail ? 409 : 400).send({
           success: false,
-          error: isDuplicateEmail 
-            ? 'Email already exists' 
-            : isPasswordError 
+          error: isDuplicateEmail
+            ? 'Email already exists'
+            : isPasswordError
               ? result.error || 'Password validation failed'
               : 'Registration Failed',
           message: result.error,
@@ -340,131 +343,135 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
             message: 'Request body must be an object',
           });
         }
-        
+
         const body = request.body as
           | { challengeId: string; code: string; rememberDevice?: boolean }
           | { email: string; password: string };
 
-      // Login with email code (challenge)
-      if ('challengeId' in body && 'code' in body) {
-        const command = new LoginWithCodeCommand(body.challengeId, body.code);
-        const result = await loginWithCodeHandler.execute(command);
+        // Login with email code (challenge)
+        if ('challengeId' in body && 'code' in body) {
+          const command = new LoginWithCodeCommand(body.challengeId, body.code);
+          const result = await loginWithCodeHandler.execute(command);
 
-        if (!result.success) {
-          return reply.code(401).send({
-            success: false,
-            error: 'Authentication Failed',
-            message: result.error,
+          if (!result.success) {
+            return reply.code(401).send({
+              success: false,
+              error: 'Authentication Failed',
+              message: result.error,
+            });
+          }
+
+          // Return full result including tokens in the format expected by CLI
+          return reply.send({
+            success: result.success,
+            loginMode: 'email_code' as const,
+            user: result.userId
+              ? {
+                  id: result.userId,
+                  email: result.email || '',
+                  name: result.email || '', // Use email as name if not available
+                  organizationId: result.organizationId || '',
+                  roles: result.roles || [],
+                }
+              : undefined,
+            tokens: result.accessToken
+              ? {
+                  accessToken: result.accessToken,
+                  refreshToken: result.refreshToken || '',
+                  expiresIn: parseExpiresIn(result.expiresIn), // Convert string "24h" to seconds
+                }
+              : undefined,
           });
         }
 
-        // Return full result including tokens in the format expected by CLI
-        return reply.send({
-          success: result.success,
-          loginMode: 'email_code' as const,
-          user: result.userId
-            ? {
-                id: result.userId,
-                email: result.email || '',
-                name: result.email || '', // Use email as name if not available
-                organizationId: result.organizationId || '',
-                roles: result.roles || [],
-              }
-            : undefined,
-          tokens: result.accessToken
-            ? {
-                accessToken: result.accessToken,
-                refreshToken: result.refreshToken || '',
-                expiresIn: parseExpiresIn(result.expiresIn), // Convert string "24h" to seconds
-              }
-            : undefined,
+        // Login with email/password
+        if ('email' in body && 'password' in body) {
+          // Validate email is a string (prevent NoSQL injection)
+          if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+            return reply.code(400).send({
+              success: false,
+              error: 'Invalid Request',
+              message: 'Email and password must be strings',
+            });
+          }
+
+          const command = new LoginUserCommand(body.email, body.password);
+          const result = await loginHandler.execute(command);
+
+          if (!result.success) {
+            // Use handler error message directly for authentication errors
+            const errorMessage = result.error || 'Authentication Failed';
+            // Check if error is about account status (suspended, not active)
+            const isAccountStatusError =
+              errorMessage.toLowerCase().includes('suspended') ||
+              errorMessage.toLowerCase().includes('not active') ||
+              errorMessage.toLowerCase().includes('account is');
+
+            return reply.code(isAccountStatusError ? 403 : 401).send({
+              success: false,
+              error: errorMessage,
+              message: errorMessage,
+            });
+          }
+
+          // Generate tokens after successful login
+          if (result.userId && result.organizationId && result.email) {
+            const userRoles = await getUserRoles(result.userId, result.organizationId);
+
+            const tokens = await authService.generateTokens({
+              userId: result.userId,
+              organizationId: result.organizationId,
+              email: result.email,
+              roles:
+                result.roles && result.roles.length > 0 ? result.roles : [result.role || 'user'],
+            });
+
+            // Ensure all values are serializable (strings, numbers, arrays)
+            const responseBody = {
+              success: true,
+              user: {
+                id: String(result.userId),
+                email: String(result.email),
+                organizationId: String(result.organizationId),
+                roles:
+                  Array.isArray(userRoles) && userRoles.length > 0
+                    ? userRoles.map((r) => String(r))
+                    : Array.isArray(result.roles) && result.roles.length > 0
+                      ? result.roles.map((r) => String(r))
+                      : [String(result.role || 'user')],
+              },
+              tokens: {
+                accessToken: String(tokens.accessToken),
+                refreshToken: String(tokens.refreshToken),
+                expiresIn: parseExpiresIn(tokens.expiresIn), // Convert string "24h" to seconds
+              },
+            };
+            return reply.send(responseBody);
+          }
+
+          return reply.code(500).send({
+            success: false,
+            error: 'Internal server error',
+            message: 'Login succeeded but tokens could not be generated',
+          });
+        }
+
+        return reply.code(400).send({
+          success: false,
+          error: 'InvalidRequest',
+          message: 'Unsupported login payload.',
         });
-      }
-
-      // Login with email/password
-      if ('email' in body && 'password' in body) {
-        // Validate email is a string (prevent NoSQL injection)
-        if (typeof body.email !== 'string' || typeof body.password !== 'string') {
-          return reply.code(400).send({
-            success: false,
-            error: 'Invalid Request',
-            message: 'Email and password must be strings',
-          });
-        }
-        
-        const command = new LoginUserCommand(body.email, body.password);
-        const result = await loginHandler.execute(command);
-
-        if (!result.success) {
-          // Use handler error message directly for authentication errors
-          const errorMessage = result.error || 'Authentication Failed';
-          // Check if error is about account status (suspended, not active)
-          const isAccountStatusError = errorMessage.toLowerCase().includes('suspended') || 
-                                       errorMessage.toLowerCase().includes('not active') ||
-                                       errorMessage.toLowerCase().includes('account is');
-          
-          return reply.code(isAccountStatusError ? 403 : 401).send({
-            success: false,
-            error: errorMessage,
-            message: errorMessage,
-          });
-        }
-
-        // Generate tokens after successful login
-        if (result.userId && result.organizationId && result.email) {
-          const userRoles = await getUserRoles(result.userId, result.organizationId);
-          
-          const tokens = await authService.generateTokens({
-            userId: result.userId,
-            organizationId: result.organizationId,
-            email: result.email,
-            roles: result.roles && result.roles.length > 0 ? result.roles : [result.role || 'user'],
-          });
-
-          // Ensure all values are serializable (strings, numbers, arrays)
-          const responseBody = {
-            success: true,
-            user: {
-              id: String(result.userId),
-              email: String(result.email),
-              organizationId: String(result.organizationId),
-              roles: Array.isArray(userRoles) && userRoles.length > 0 
-                ? userRoles.map(r => String(r))
-                : Array.isArray(result.roles) && result.roles.length > 0
-                  ? result.roles.map(r => String(r))
-                  : [String(result.role || 'user')],
-            },
-            tokens: {
-              accessToken: String(tokens.accessToken),
-              refreshToken: String(tokens.refreshToken),
-              expiresIn: parseExpiresIn(tokens.expiresIn), // Convert string "24h" to seconds
-            },
-          };
-          return reply.send(responseBody);
-        }
-
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        server.log.error({ error: errorMessage }, 'Login request error');
         return reply.code(500).send({
           success: false,
           error: 'Internal server error',
-          message: 'Login succeeded but tokens could not be generated',
+          message: errorMessage,
         });
       }
-
-      return reply.code(400).send({
-        success: false,
-        error: 'InvalidRequest',
-        message: 'Unsupported login payload.',
-      });
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      server.log.error({ error: errorMessage }, 'Login request error');
-      return reply.code(500).send({
-        success: false,
-        error: 'Internal server error',
-        message: errorMessage,
-      });
     }
-  });
+  );
 
   /**
    * POST /v1/auth/login-with-code
@@ -588,7 +595,7 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
             errorText.includes('attempts')
               ? 401
               : 401;
-          
+
           return reply.code(statusCode).send({
             success: false,
             error: result.error || 'Code verification failed',
@@ -678,7 +685,8 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
         });
       }
 
-      const refreshToken = typeof bodyObject.refreshToken === 'string' ? bodyObject.refreshToken : '';
+      const refreshToken =
+        typeof bodyObject.refreshToken === 'string' ? bodyObject.refreshToken : '';
       if (!refreshToken) {
         return reply.code(400).send({
           success: false,
@@ -689,14 +697,14 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
 
       const result = await authService.refreshToken(refreshToken);
 
-        if (!result.success) {
-          return reply.code(401).send({
-            success: false,
-            error: 'Invalid Token',
-            message: result.error,
-            loginMode: result.loginMode,
-          });
-        }
+      if (!result.success) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Invalid Token',
+          message: result.error,
+          loginMode: result.loginMode,
+        });
+      }
 
       return result;
     } catch (error: unknown) {
@@ -724,8 +732,13 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
         // Type guard for user from request
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
-        
-        if (!user || typeof user !== 'object' || !('userId' in user) || typeof user.userId !== 'string') {
+
+        if (
+          !user ||
+          typeof user !== 'object' ||
+          !('userId' in user) ||
+          typeof user.userId !== 'string'
+        ) {
           return reply.code(401).send({
             success: false,
             error: 'Unauthorized',
@@ -803,15 +816,20 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
         // Type guard for user from request
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
-        
-        if (!user || typeof user !== 'object' || !('userId' in user) || typeof user.userId !== 'string') {
+
+        if (
+          !user ||
+          typeof user !== 'object' ||
+          !('userId' in user) ||
+          typeof user.userId !== 'string'
+        ) {
           return reply.code(401).send({
             success: false,
             error: 'Unauthorized',
             message: 'User not authenticated',
           });
         }
-        
+
         const bodyObject = getJsonBodyObject(request.body);
         if (!bodyObject) {
           return reply.code(400).send({
@@ -869,15 +887,20 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
         // Type guard for user from request
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
-        
-        if (!user || typeof user !== 'object' || !('userId' in user) || typeof user.userId !== 'string') {
+
+        if (
+          !user ||
+          typeof user !== 'object' ||
+          !('userId' in user) ||
+          typeof user.userId !== 'string'
+        ) {
           return reply.code(401).send({
             success: false,
             error: 'Unauthorized',
             message: 'User not authenticated',
           });
         }
-        
+
         const { id } = request.params as { id: string };
 
         const success = await authService.revokeApiKey(id, user.userId);

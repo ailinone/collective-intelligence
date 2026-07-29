@@ -89,10 +89,10 @@ export interface ColdStartPolicyResult {
 
 /** Minimum model requirements per strategy (mirrors BaseStrategy.minModels). */
 const STRATEGY_MIN_MODELS: Record<ColdStartStrategyName, number> = {
-  'single': 1,
+  single: 1,
   'cost-cascade': 2,
-  'debate': 3,
-  'consensus': 3,
+  debate: 3,
+  consensus: 3,
 };
 
 /**
@@ -119,7 +119,12 @@ export function selectColdStartStrategy(input: ColdStartPolicyInput): ColdStartP
   }
 
   // Rule 4: Complex analytical task types → ensemble reasoning
-  const complexTaskTypes: TaskType[] = ['analysis', 'reasoning', 'decision-making', 'document-understanding'];
+  const complexTaskTypes: TaskType[] = [
+    'analysis',
+    'reasoning',
+    'decision-making',
+    'document-understanding',
+  ];
   if (taskType !== null && taskType !== undefined && complexTaskTypes.includes(taskType)) {
     return makeResult('consensus', 'complex_task_type', modelsAvailable);
   }
@@ -138,7 +143,7 @@ export function selectColdStartStrategy(input: ColdStartPolicyInput): ColdStartP
 function makeResult(
   strategy: ColdStartStrategyName,
   reason: ColdStartDecisionReason,
-  modelsAvailable: number,
+  modelsAvailable: number
 ): ColdStartPolicyResult {
   const minRequired = STRATEGY_MIN_MODELS[strategy];
   return {
@@ -157,7 +162,12 @@ function makeResult(
  */
 export function extractColdStartInput(
   request: ChatRequest,
-  context: { taskType?: TaskType | null; qualityTarget?: number; preferSpeed?: boolean; models?: { id: string }[] },
+  context: {
+    taskType?: TaskType | null;
+    qualityTarget?: number;
+    preferSpeed?: boolean;
+    models?: { id: string }[];
+  }
 ): ColdStartPolicyInput {
   return {
     maxCostUsd: request.max_cost ?? null,
@@ -202,7 +212,7 @@ export const COLD_START_CANONICAL_SCENARIOS: ReadonlyArray<{
     id: 'quality_high',
     input: { qualityTarget: 0.95, taskType: 'analysis', modelsAvailable: 3 },
     expectedStrategy: 'consensus',
-    expectedReason: 'quality_target_high',  // Rule 2 fires before Rule 4
+    expectedReason: 'quality_target_high', // Rule 2 fires before Rule 4
   },
   {
     id: 'math_reasoning',
@@ -226,6 +236,6 @@ export const COLD_START_CANONICAL_SCENARIOS: ReadonlyArray<{
     id: 'complex_analysis',
     input: { qualityTarget: 0.9, taskType: 'decision-making', modelsAvailable: 3 },
     expectedStrategy: 'consensus',
-    expectedReason: 'quality_target_high',  // Rule 2 fires before Rule 4
+    expectedReason: 'quality_target_high', // Rule 2 fires before Rule 4
   },
 ] as const;

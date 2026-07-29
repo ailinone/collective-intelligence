@@ -35,10 +35,30 @@ describe('Evaluator contracts', () => {
         fallback: 0.1,
         synthesis: 0.9,
       });
-      const a = await ev.evaluate({ task: {}, output: 'x'.repeat(100), modelId: 'voter-a', strategyName: 'consensus' });
-      const b = await ev.evaluate({ task: {}, output: 'x'.repeat(100), modelId: 'voter-b', strategyName: 'consensus' });
-      const c = await ev.evaluate({ task: {}, output: 'x'.repeat(100), modelId: 'voter-z', strategyName: 'consensus' });
-      const s = await ev.evaluate({ task: {}, output: 'x'.repeat(100), role: 'synthesis', strategyName: 'consensus' });
+      const a = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(100),
+        modelId: 'voter-a',
+        strategyName: 'consensus',
+      });
+      const b = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(100),
+        modelId: 'voter-b',
+        strategyName: 'consensus',
+      });
+      const c = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(100),
+        modelId: 'voter-z',
+        strategyName: 'consensus',
+      });
+      const s = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(100),
+        role: 'synthesis',
+        strategyName: 'consensus',
+      });
       expect(a.score).toBe(0.77);
       expect(b.score).toBe(0.42);
       expect(c.score).toBe(0.1);
@@ -48,8 +68,11 @@ describe('Evaluator contracts', () => {
     it('returns verdict="fail" when executionFailed=true regardless of score', async () => {
       const ev = new MockStrategyOutputEvaluator({ fallback: 0.9 });
       const r = await ev.evaluate({
-        task: {}, output: '', modelId: 'voter-a',
-        executionFailed: true, strategyName: 'consensus',
+        task: {},
+        output: '',
+        modelId: 'voter-a',
+        executionFailed: true,
+        strategyName: 'consensus',
       });
       expect(r.verdict).toBe('fail');
       expect(r.structural.executionError).toBe(true);
@@ -80,7 +103,12 @@ describe('Evaluator contracts', () => {
       const ev = new StructuralOutputEvaluator();
       const empty = await ev.evaluate({ task: {}, output: '', strategyName: 'consensus' });
       const short = await ev.evaluate({ task: {}, output: 'tiny', strategyName: 'consensus' });
-      const failed = await ev.evaluate({ task: {}, output: 'x'.repeat(100), executionFailed: true, strategyName: 'consensus' });
+      const failed = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(100),
+        executionFailed: true,
+        strategyName: 'consensus',
+      });
       expect(empty.verdict).toBe('fail');
       expect(short.verdict).toBe('fail');
       expect(failed.verdict).toBe('fail');
@@ -113,7 +141,8 @@ describe('Evaluator contracts', () => {
       });
       const withoutCode = await ev.evaluate({
         task: { expectedFormat: 'code' },
-        output: 'I will explain the function but I am NOT going to put it in a code block, just prose like this.',
+        output:
+          'I will explain the function but I am NOT going to put it in a code block, just prose like this.',
         strategyName: 'consensus',
       });
       expect(withCode.structural.codeBlockPresent).toBe(true);
@@ -138,9 +167,18 @@ describe('Evaluator contracts', () => {
 
     it('emits verdict="fail" on executionFailed or empty, "unknown" otherwise', async () => {
       const ev = new UnavailableStrategyOutputEvaluator();
-      const failed = await ev.evaluate({ task: {}, output: '', executionFailed: true, strategyName: 'consensus' });
+      const failed = await ev.evaluate({
+        task: {},
+        output: '',
+        executionFailed: true,
+        strategyName: 'consensus',
+      });
       const empty = await ev.evaluate({ task: {}, output: '', strategyName: 'consensus' });
-      const ok = await ev.evaluate({ task: {}, output: 'plausible answer with enough characters to pass the implicit nonEmpty check', strategyName: 'consensus' });
+      const ok = await ev.evaluate({
+        task: {},
+        output: 'plausible answer with enough characters to pass the implicit nonEmpty check',
+        strategyName: 'consensus',
+      });
       expect(failed.verdict).toBe('fail');
       expect(empty.verdict).toBe('fail');
       expect(ok.verdict).toBe('uncertain');
@@ -161,8 +199,16 @@ describe('Evaluator contracts', () => {
 
     it('length-bracket math is deterministic', async () => {
       const ev = new HeuristicTestOnlyEvaluator();
-      const r1 = await ev.evaluate({ task: {}, output: 'x'.repeat(120), strategyName: 'consensus' });
-      const r2 = await ev.evaluate({ task: {}, output: 'x'.repeat(120), strategyName: 'consensus' });
+      const r1 = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(120),
+        strategyName: 'consensus',
+      });
+      const r2 = await ev.evaluate({
+        task: {},
+        output: 'x'.repeat(120),
+        strategyName: 'consensus',
+      });
       expect(r1.score).toBe(r2.score);
     });
 

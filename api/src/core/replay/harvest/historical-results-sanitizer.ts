@@ -117,9 +117,7 @@ export function sanitiseRow(raw: HistoricalRawRow): SanitiseResult {
   });
 }
 
-export function sanitiseRows(
-  rows: readonly HistoricalRawRow[],
-): {
+export function sanitiseRows(rows: readonly HistoricalRawRow[]): {
   readonly sanitised: readonly SanitisedRow[];
   readonly droppedKeyCounts: Readonly<Record<string, number>>;
 } {

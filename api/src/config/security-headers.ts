@@ -226,7 +226,8 @@ export const CUSTOM_SECURITY_HEADERS = {
   // modified source is your own §13 obligation.
   // --------------------------------------------------------------------
   'X-License': 'AGPL-3.0-or-later',
-  'X-Source-Code': process.env.AGPL_SOURCE_URL || 'https://github.com/ailinone/collective-intelligence',
+  'X-Source-Code':
+    process.env.AGPL_SOURCE_URL || 'https://github.com/ailinone/collective-intelligence',
   'X-Copyright': '(C) 2026 Ailin One, Inc.',
 };
 

@@ -31,7 +31,7 @@ import { inferModelCapabilities } from '@/services/model-capability-inference';
 function applyInferenceFallback(
   modelId: string,
   metadata: Record<string, unknown>,
-  extractorOutput: ModelCapability[],
+  extractorOutput: ModelCapability[]
 ): ModelCapability[] {
   return extractorOutput.length > 0
     ? extractorOutput
@@ -72,7 +72,9 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
         return modelsFromApi;
       }
 
-      this.log.warn('Vertex AI API returned zero models - returning empty list (100% dynamic discovery)');
+      this.log.warn(
+        'Vertex AI API returned zero models - returning empty list (100% dynamic discovery)'
+      );
       return [];
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -125,13 +127,13 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
         const { getErrorMessage, extractErrorCodeFromObject } = await import('@/utils/type-guards');
         const errorMessage = getErrorMessage(error);
         const errorCode = extractErrorCodeFromObject(error);
-        
+
         // Safely extract stderr from error object
         let stderr: unknown;
         if (typeof error === 'object' && error !== null && 'stderr' in error) {
           stderr = error.stderr;
         }
-        
+
         const errorDetails = {
           message: errorMessage,
           code: errorCode,
@@ -165,15 +167,15 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
       );
     }
 
-    const payload = (await response.json()) as { 
+    const payload = (await response.json()) as {
       models?: Array<Record<string, unknown>>;
       publishers?: Array<{ name: string; displayName?: string }>;
     };
-    
+
     // If we got publishers (Model Garden), fetch models from each publisher
     if (payload.publishers && Array.isArray(payload.publishers)) {
       const allModels: ProviderModel[] = [];
-      
+
       for (const publisher of payload.publishers) {
         try {
           // Fetch models from this publisher
@@ -181,7 +183,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
           const publisherModelsEndpoint = new URL(
             `https://aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.location || 'us-central1'}/publishers/${publisherName}/models`
           );
-          
+
           const publisherResponse = await fetch(publisherModelsEndpoint.toString(), {
             method: 'GET',
             headers: {
@@ -189,9 +191,11 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
               'Content-Type': 'application/json',
             },
           });
-          
+
           if (publisherResponse.ok) {
-            const publisherData = await publisherResponse.json() as { models?: Array<Record<string, unknown>> };
+            const publisherData = (await publisherResponse.json()) as {
+              models?: Array<Record<string, unknown>>;
+            };
             if (publisherData.models && Array.isArray(publisherData.models)) {
               const converted = publisherData.models
                 .map((model) => this.convertVertexAIModel(model, publisherName))
@@ -203,13 +207,16 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
           this.log.warn({ publisher, error }, 'Failed to fetch models from publisher');
         }
       }
-      
+
       if (allModels.length > 0) {
-        this.log.info({ models: allModels.length, publishers: payload.publishers.length }, 'Successfully fetched foundation models from Vertex AI Model Garden');
+        this.log.info(
+          { models: allModels.length, publishers: payload.publishers.length },
+          'Successfully fetched foundation models from Vertex AI Model Garden'
+        );
         return allModels;
       }
     }
-    
+
     // Fallback: if no publishers, try direct models endpoint (Google AI Studio)
     const models = payload.models ?? [];
 
@@ -287,17 +294,15 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
       }
 
       // Extract model ID (format: publishers/google/models/gemini-1.5-pro or just gemini-1.5-pro)
-      const modelId = modelName.includes('/') 
-        ? modelName.split('/').pop() || modelName
-        : modelName;
-      
+      const modelId = modelName.includes('/') ? modelName.split('/').pop() || modelName : modelName;
+
       const baseName = modelId.replace('models/', '');
       const supportedMethods = this.extractSupportedMethods(model);
       const extractorOutput = this.extractCapabilitiesFromModelName(baseName, supportedMethods);
       const capabilities = applyInferenceFallback(
         baseName,
         { supportedMethods, description: model.description, displayName: model.displayName },
-        extractorOutput,
+        extractorOutput
       );
       const { contextWindow, maxOutputTokens, pricing } = this.estimateVertexModelSpecs(baseName);
 
@@ -331,14 +336,12 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
   /**
    * Convert Google AI Studio model to our ProviderModel format
    */
-  private convertGoogleAIModel(
-    model: {
-      name?: string;
-      displayName?: string;
-      description?: string;
-      [key: string]: unknown;
-    }
-  ): ProviderModel | null {
+  private convertGoogleAIModel(model: {
+    name?: string;
+    displayName?: string;
+    description?: string;
+    [key: string]: unknown;
+  }): ProviderModel | null {
     try {
       const modelName = typeof model.name === 'string' ? model.name : '';
       if (!modelName) {
@@ -351,7 +354,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
       const capabilities = applyInferenceFallback(
         baseName,
         { supportedMethods, description: model.description, displayName: model.displayName },
-        extractorOutput,
+        extractorOutput
       );
       const { contextWindow, maxOutputTokens, pricing } = this.estimateVertexModelSpecs(baseName);
 
@@ -392,11 +395,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
    * Extract provider methods when available.
    */
   private extractSupportedMethods(model: Record<string, unknown>): string[] {
-    const candidates = [
-      model.supportedGenerationMethods,
-      model.supportedMethods,
-      model.methods,
-    ];
+    const candidates = [model.supportedGenerationMethods, model.supportedMethods, model.methods];
 
     for (const candidate of candidates) {
       if (!Array.isArray(candidate)) {
@@ -481,8 +480,7 @@ export class VertexAIModelFetcher extends BaseProviderModelFetcher {
       capabilities.add('streaming');
     }
 
-    const hasGenerativeCapability =
-      capabilities.has('chat') || capabilities.has('text_generation');
+    const hasGenerativeCapability = capabilities.has('chat') || capabilities.has('text_generation');
 
     if (
       hasGenerativeCapability &&

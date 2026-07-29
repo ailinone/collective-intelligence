@@ -41,7 +41,14 @@ describe('01C.1B-C3-DRYRUN-PARITY-GATE — snapshots + sentry', () => {
       expect(sentry.patchedPrimitives.length).toBeGreaterThanOrEqual(7);
     });
     it('every runtime snapshot is execution-locked', () => {
-      expect(runtime.snapshots.every((s: any) => s.snapshot.runtimeProviderCallExecuted === false && s.snapshot.runtimeCostUsd === 0 && s.snapshot.runtimeUsageTotalTokens === 0)).toBe(true);
+      expect(
+        runtime.snapshots.every(
+          (s: any) =>
+            s.snapshot.runtimeProviderCallExecuted === false &&
+            s.snapshot.runtimeCostUsd === 0 &&
+            s.snapshot.runtimeUsageTotalTokens === 0
+        )
+      ).toBe(true);
     });
   });
 });

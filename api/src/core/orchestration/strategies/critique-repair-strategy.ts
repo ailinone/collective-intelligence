@@ -97,7 +97,7 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       minModels: 2,
       maxModels: 3,
       estimatedCostMultiplier: 3.0,
-      estimatedQualityBoost: 0.30,
+      estimatedQualityBoost: 0.3,
       estimatedDurationMultiplier: 3.0,
       suitableFor: ['code-generation', 'documentation', 'analysis', 'refactoring', 'creative'],
     };
@@ -123,13 +123,13 @@ export class CritiqueRepairStrategy extends BaseStrategy {
           requestedModel: preference.requestedId,
           poolSize: models.length,
         },
-        'Critique-repair: requested model not in operational pool — falling back to quality-sorted generator',
+        'Critique-repair: requested model not in operational pool — falling back to quality-sorted generator'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     // Generator and critic MUST be different models — the adversarial
     // review property collapses if both slots map to the same provider.
@@ -203,7 +203,7 @@ export class CritiqueRepairStrategy extends BaseStrategy {
 
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: [generator, critic].map(m => m.name || m.id),
+      models: [generator, critic].map((m) => m.name || m.id),
       summary: `Critique-Repair loop: target quality ${(qualityTarget * 100).toFixed(0)}%, max ${MAX_ITERATIONS} iterations.`,
     });
 
@@ -212,13 +212,30 @@ export class CritiqueRepairStrategy extends BaseStrategy {
     // then external critic further refines. Tool-aware if request has tools.
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     let genExec = hasTools
-      ? await this.executeModelWithTools(genAdapter, generator, this.withPeerReviewPrompt(request), 'primary')
-      : await this.selfCritiqueLoop(genAdapter, generator, this.withPeerReviewPrompt(request), 'primary', qualityTarget);
+      ? await this.executeModelWithTools(
+          genAdapter,
+          generator,
+          this.withPeerReviewPrompt(request),
+          'primary'
+        )
+      : await this.selfCritiqueLoop(
+          genAdapter,
+          generator,
+          this.withPeerReviewPrompt(request),
+          'primary',
+          qualityTarget
+        );
 
     // Fallback if initial generation failed (provider error, etc.)
     if (!genExec.success) {
       this.log.warn({ model: generator.name }, 'Generator failed, trying fallback');
-      genExec = await this.executeModelWithRetry(genAdapter, generator, this.withPeerReviewPrompt(request), 'primary', context);
+      genExec = await this.executeModelWithRetry(
+        genAdapter,
+        generator,
+        this.withPeerReviewPrompt(request),
+        'primary',
+        context
+      );
     }
     executions.push(genExec);
 
@@ -275,7 +292,13 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       // Critique the CURRENT best via the shared critic path (runCritique) —
       // the same path used to re-score a repair below, so the pre/post-repair
       // scores are directly comparable.
-      const { critique, exec: critiqueExec } = await this.runCritique(currentContent, request, criticAdapter, critic, context);
+      const { critique, exec: critiqueExec } = await this.runCritique(
+        currentContent,
+        request,
+        criticAdapter,
+        critic,
+        context
+      );
       executions.push(critiqueExec);
 
       scoreHistory.push(critique.qualityScore);
@@ -291,53 +314,93 @@ export class CritiqueRepairStrategy extends BaseStrategy {
         bestContent = currentContent;
       }
 
-      log.info({
-        iteration,
-        qualityScore: critique.qualityScore,
-        criticalIssues: critique.issues.filter(i => i.severity === 'CRITICAL').length,
-        majorIssues: critique.issues.filter(i => i.severity === 'MAJOR').length,
-        target: qualityTarget,
-      }, 'Critique iteration complete');
+      log.info(
+        {
+          iteration,
+          qualityScore: critique.qualityScore,
+          criticalIssues: critique.issues.filter((i) => i.severity === 'CRITICAL').length,
+          majorIssues: critique.issues.filter((i) => i.severity === 'MAJOR').length,
+          target: qualityTarget,
+        },
+        'Critique iteration complete'
+      );
 
       // Check stopping criteria
       if (critique.qualityScore >= qualityTarget) {
-        log.info({ iteration, score: critique.qualityScore, target: qualityTarget }, 'Quality target met');
-        this.emitObserverEvent(context, { type: 'quality_assessment', summary: `Quality target met: ${(critique.qualityScore * 100).toFixed(0)}% >= ${(qualityTarget * 100).toFixed(0)}%.` });
+        log.info(
+          { iteration, score: critique.qualityScore, target: qualityTarget },
+          'Quality target met'
+        );
+        this.emitObserverEvent(context, {
+          type: 'quality_assessment',
+          summary: `Quality target met: ${(critique.qualityScore * 100).toFixed(0)}% >= ${(qualityTarget * 100).toFixed(0)}%.`,
+        });
         break;
       }
 
-      if (critique.issues.filter(i => i.severity === 'CRITICAL' || i.severity === 'MAJOR').length === 0) {
-        log.info({ iteration, score: critique.qualityScore }, 'No critical/major issues, accepting');
-        this.emitObserverEvent(context, { type: 'quality_assessment', summary: `No critical issues remaining. Score: ${(critique.qualityScore * 100).toFixed(0)}%.` });
+      if (
+        critique.issues.filter((i) => i.severity === 'CRITICAL' || i.severity === 'MAJOR')
+          .length === 0
+      ) {
+        log.info(
+          { iteration, score: critique.qualityScore },
+          'No critical/major issues, accepting'
+        );
+        this.emitObserverEvent(context, {
+          type: 'quality_assessment',
+          summary: `No critical issues remaining. Score: ${(critique.qualityScore * 100).toFixed(0)}%.`,
+        });
         break;
       }
 
       // Plateau detection
       if (scoreHistory.length >= 2) {
-        const delta = Math.abs(scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]);
+        const delta = Math.abs(
+          scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]
+        );
         if (delta < PLATEAU_EPSILON) {
-          log.info({ iteration, delta, epsilon: PLATEAU_EPSILON }, 'Quality plateau detected, stopping');
-          this.emitObserverEvent(context, { type: 'quality_assessment', summary: `Quality plateau detected (delta ${delta.toFixed(3)} < ${PLATEAU_EPSILON}). Accepting best version.` });
+          log.info(
+            { iteration, delta, epsilon: PLATEAU_EPSILON },
+            'Quality plateau detected, stopping'
+          );
+          this.emitObserverEvent(context, {
+            type: 'quality_assessment',
+            summary: `Quality plateau detected (delta ${delta.toFixed(3)} < ${PLATEAU_EPSILON}). Accepting best version.`,
+          });
           break;
         }
       }
 
       if (iteration >= MAX_ITERATIONS) {
-        this.emitObserverEvent(context, { type: 'quality_assessment', summary: `Max iterations (${MAX_ITERATIONS}) reached. Best score: ${(bestScore * 100).toFixed(0)}%.` });
+        this.emitObserverEvent(context, {
+          type: 'quality_assessment',
+          summary: `Max iterations (${MAX_ITERATIONS}) reached. Best score: ${(bestScore * 100).toFixed(0)}%.`,
+        });
         break;
       }
 
       // Repair: fix specific issues
       const issuesText = critique.issues
-        .filter(i => i.severity === 'CRITICAL' || i.severity === 'MAJOR')
-        .map((i, idx) => `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n   Fix: ${i.suggested_fix}`)
+        .filter((i) => i.severity === 'CRITICAL' || i.severity === 'MAJOR')
+        .map(
+          (i, idx) =>
+            `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n   Fix: ${i.suggested_fix}`
+        )
         .join('\n');
 
       const repairReq: ChatRequest = {
         ...request,
         messages: [
           { role: 'system', content: PROMPTS.critiqueRepairer },
-          { role: 'user', content: `ORIGINAL REQUEST:\n${request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n')}\n\nCURRENT RESPONSE:\n${currentContent}\n\nISSUES TO FIX:\n${issuesText}\n\nProduce the COMPLETE fixed version.` },
+          {
+            role: 'user',
+            content: `ORIGINAL REQUEST:\n${request.messages
+              .filter((m) => m.role === 'user')
+              .map((m) => (typeof m.content === 'string' ? m.content : ''))
+              .join(
+                '\n'
+              )}\n\nCURRENT RESPONSE:\n${currentContent}\n\nISSUES TO FIX:\n${issuesText}\n\nProduce the COMPLETE fixed version.`,
+          },
         ],
       };
       // Default branch uses executeModelWithRetry for cross-provider
@@ -371,14 +434,19 @@ export class CritiqueRepairStrategy extends BaseStrategy {
           if (preName !== null && repairedName !== preName) {
             log.info(
               { iteration, from: preName, to: repairedName },
-              'Repair discarded: primary function renamed/removed — keeping current best',
+              'Repair discarded: primary function renamed/removed — keeping current best'
             );
           } else {
             // Re-score the repair via the SAME critic path as the pre-repair
             // score above, so the two are directly comparable. Used by both the
             // verifier-blind fallback and the oracle-free improvement gate.
-            const { critique: repairedCritique, exec: reScoreExec } =
-              await this.runCritique(repaired, request, criticAdapter, critic, context);
+            const { critique: repairedCritique, exec: reScoreExec } = await this.runCritique(
+              repaired,
+              request,
+              criticAdapter,
+              critic,
+              context
+            );
             executions.push(reScoreExec);
             const repairedScore = repairedCritique.qualityScore;
 
@@ -414,12 +482,12 @@ export class CritiqueRepairStrategy extends BaseStrategy {
               bestScore = repairedScore;
               log.info(
                 { iteration, preRepairScore, repairedScore },
-                'Repair accepted: strictly beats current best',
+                'Repair accepted: strictly beats current best'
               );
             } else {
               log.info(
                 { iteration, preRepairScore, repairedScore },
-                'Repair discarded: does not beat current best — keeping it',
+                'Repair discarded: does not beat current best — keeping it'
               );
             }
           }
@@ -427,10 +495,21 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       }
     }
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Critique-Repair complete. Final score: ${(bestScore * 100).toFixed(0)}%, ${scoreHistory.length} iterations.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Critique-Repair complete. Final score: ${(bestScore * 100).toFixed(0)}%, ${scoreHistory.length} iterations.`,
+    });
 
     const reasoningTraces = reasoningEnabled
-      ? executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens }))
+      ? executions
+          .filter((e) => e.reasoning)
+          .map((e) => ({
+            model_id: e.modelId,
+            model_name: e.modelName,
+            role: e.role,
+            reasoning: e.reasoning,
+            reasoning_tokens: e.reasoningTokens,
+          }))
       : undefined;
 
     return {
@@ -446,7 +525,10 @@ export class CritiqueRepairStrategy extends BaseStrategy {
         scoreHistory,
         finalScore: bestScore,
         qualityTarget,
-        plateauDetected: scoreHistory.length >= 2 && Math.abs(scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]) < PLATEAU_EPSILON,
+        plateauDetected:
+          scoreHistory.length >= 2 &&
+          Math.abs(scoreHistory[scoreHistory.length - 1] - scoreHistory[scoreHistory.length - 2]) <
+            PLATEAU_EPSILON,
         ...(reasoningTraces?.length ? { reasoning_traces: reasoningTraces } : {}),
       },
     };
@@ -466,19 +548,31 @@ export class CritiqueRepairStrategy extends BaseStrategy {
     request: ChatRequest,
     criticAdapter: ProviderAdapter,
     critic: Model,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<{ critique: CritiqueResult; exec: ModelExecution }> {
     const critiqueReq: ChatRequest = {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.critiqueEvaluator },
-        { role: 'user', content: `ORIGINAL REQUEST:\n${request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n')}\n\nRESPONSE TO EVALUATE:\n${content}` },
+        {
+          role: 'user',
+          content: `ORIGINAL REQUEST:\n${request.messages
+            .filter((m) => m.role === 'user')
+            .map((m) => (typeof m.content === 'string' ? m.content : ''))
+            .join('\n')}\n\nRESPONSE TO EVALUATE:\n${content}`,
+        },
       ],
       response_format: { type: 'json_object' },
       max_tokens: 1000,
       temperature: 0.1,
     };
-    const exec = await this.executeModelWithRetry(criticAdapter, critic, critiqueReq, 'critic', context);
+    const exec = await this.executeModelWithRetry(
+      criticAdapter,
+      critic,
+      critiqueReq,
+      'critic',
+      context
+    );
 
     // Parse critique. JSON.parse returns `unknown` — narrow each accessed
     // field, fall back to defaults if shape doesn't match.
@@ -495,7 +589,7 @@ export class CritiqueRepairStrategy extends BaseStrategy {
             (issue): issue is CritiqueResult['issues'][number] =>
               typeof issue === 'object' &&
               issue !== null &&
-              typeof (issue as { severity?: unknown }).severity === 'string',
+              typeof (issue as { severity?: unknown }).severity === 'string'
           );
           critique = { qualityScore, issues };
         }
@@ -515,16 +609,24 @@ export class CritiqueRepairStrategy extends BaseStrategy {
   // tokens for an answer the loop later discards in favor of an earlier
   // draft, and already-sent tokens can't be un-sent. Progress chunks
   // still stream per-iteration so the client sees activity.
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 2) throw new Error('Critique-Repair requires at least 2 models');
     // Pin/sort/adapter resolution happens inside execute() below.
     // Stream wrapper only owns observer-event progress + final yield.
     const qualityTarget = context.qualityTarget || DEFAULT_QUALITY_TARGET;
 
-    this.emitObserverEvent(context, { type: 'phase_start', summary: `Critique-Repair: target ${(qualityTarget * 100).toFixed(0)}%.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      summary: `Critique-Repair: target ${(qualityTarget * 100).toFixed(0)}%.`,
+    });
     yield this.progressChunk('Generating initial response...', 0, MAX_ITERATIONS + 1);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -532,7 +634,11 @@ export class CritiqueRepairStrategy extends BaseStrategy {
     const result = await this.execute(request, context);
     const iterations = (result.metadata as { iterations?: number }).iterations ?? 1;
 
-    yield this.progressChunk(`${iterations} iteration(s) complete, score: ${((result.qualityScore ?? 0) * 100).toFixed(0)}%`, iterations, MAX_ITERATIONS + 1);
+    yield this.progressChunk(
+      `${iterations} iteration(s) complete, score: ${((result.qualityScore ?? 0) * 100).toFixed(0)}%`,
+      iterations,
+      MAX_ITERATIONS + 1
+    );
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Yield the best response directly. Streaming-helper resolution

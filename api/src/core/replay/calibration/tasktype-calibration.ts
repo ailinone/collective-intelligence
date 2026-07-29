@@ -49,7 +49,7 @@ export interface BuildTaskTypeCalibrationInput {
 }
 
 export function buildTaskTypeCalibration(
-  input: BuildTaskTypeCalibrationInput,
+  input: BuildTaskTypeCalibrationInput
 ): readonly TaskTypeCalibrationRecord[] {
   const buckets = new Map<string, ReplayRowResult[]>();
   for (const r of input.rows) {
@@ -77,7 +77,7 @@ export function buildTaskTypeCalibration(
       sampleCountHoldout,
       expectedError,
       successRate,
-      input.policy,
+      input.policy
     );
     out.push(
       Object.freeze({
@@ -91,7 +91,7 @@ export function buildTaskTypeCalibration(
         approvedForCollective: decision.status === 'approved',
         status: decision.status,
         reason: decision.reason,
-      }),
+      })
     );
   }
   return Object.freeze(out);
@@ -103,7 +103,7 @@ function decideTaskType(
   sampleCountHoldout: number,
   expectedError: number,
   successRate: number,
-  policy: CalibrationPolicy,
+  policy: CalibrationPolicy
 ): { status: TaskTypeCalibrationRecord['status']; reason: string } {
   // Insufficient data short-circuits everything.
   if (

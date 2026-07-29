@@ -148,12 +148,14 @@ function makeChatResponse(content: string): ChatResponse {
 function makeExecutor(
   response: ChatResponse,
   cost = 0.01,
-  durationMs = 250,
+  durationMs = 250
 ): (request: ChatRequest) => Promise<CoordinatorExecutionResult> {
   return async (_request: ChatRequest) => ({ response, cost, durationMs });
 }
 
-function makeFailingExecutor(error: Error): (request: ChatRequest) => Promise<CoordinatorExecutionResult> {
+function makeFailingExecutor(
+  error: Error
+): (request: ChatRequest) => Promise<CoordinatorExecutionResult> {
   return async (_request: ChatRequest) => {
     throw error;
   };
@@ -161,7 +163,7 @@ function makeFailingExecutor(error: Error): (request: ChatRequest) => Promise<Co
 
 function makeSlowExecutor(
   response: ChatResponse,
-  delayMs: number,
+  delayMs: number
 ): (request: ChatRequest) => Promise<CoordinatorExecutionResult> {
   return async (_request: ChatRequest) =>
     new Promise<CoordinatorExecutionResult>((resolve) => {
@@ -191,15 +193,29 @@ describe('selectCoordinatorModel', () => {
   });
 
   it('prefers higher quality over lower quality', () => {
-    const low = makeModel({ id: 'low', performance: { latencyMs: 1, throughput: 1, quality: 0.3, reliability: 0.9 } });
-    const high = makeModel({ id: 'high', performance: { latencyMs: 1, throughput: 1, quality: 0.95, reliability: 0.9 } });
+    const low = makeModel({
+      id: 'low',
+      performance: { latencyMs: 1, throughput: 1, quality: 0.3, reliability: 0.9 },
+    });
+    const high = makeModel({
+      id: 'high',
+      performance: { latencyMs: 1, throughput: 1, quality: 0.95, reliability: 0.9 },
+    });
     const chosen = selectCoordinatorModel([], [low, high]);
     expect(chosen?.id).toBe('high');
   });
 
   it('breaks ties with cheaper input cost', () => {
-    const a = makeModel({ id: 'cheap', inputCostPer1k: 0.001, performance: { latencyMs: 1, throughput: 1, quality: 0.8, reliability: 0.9 } });
-    const b = makeModel({ id: 'expensive', inputCostPer1k: 0.10, performance: { latencyMs: 1, throughput: 1, quality: 0.8, reliability: 0.9 } });
+    const a = makeModel({
+      id: 'cheap',
+      inputCostPer1k: 0.001,
+      performance: { latencyMs: 1, throughput: 1, quality: 0.8, reliability: 0.9 },
+    });
+    const b = makeModel({
+      id: 'expensive',
+      inputCostPer1k: 0.1,
+      performance: { latencyMs: 1, throughput: 1, quality: 0.8, reliability: 0.9 },
+    });
     const chosen = selectCoordinatorModel([], [a, b]);
     expect(chosen?.id).toBe('cheap');
   });
@@ -389,13 +405,15 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody), 0.005, 200),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(result.nextState.round).toBe(1);
-    expect(Object.keys(result.nextState.variables)).toEqual(expect.arrayContaining(['risk', 'coverage']));
+    expect(Object.keys(result.nextState.variables)).toEqual(
+      expect.arrayContaining(['risk', 'coverage'])
+    );
     expect(result.nextState.variables.risk.value).toBe('low');
     expect(result.nextState.variables.coverage.confidence).toBeCloseTo(0.85);
     expect(result.dominantSignals).toContain('risk');
@@ -410,10 +428,10 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody)),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     // The numeric aggregator's empty-signals path returns `insufficient_valid_signals`.
     expect(result.stopReason).toBe('insufficient_valid_signals');
@@ -428,10 +446,10 @@ describe('synthesizeViaCoordinator', () => {
       makeFailingExecutor(new Error('coordinator unreachable')),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     // numeric aggregator advanced the round normally
     expect(result.nextState.round).toBe(1);
@@ -450,10 +468,10 @@ describe('synthesizeViaCoordinator', () => {
       makeSlowExecutor(makeChatResponse(validResponseBody), 200),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 50,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(result.nextState.round).toBe(1);
     expect(Object.keys(result.nextState.variables)).toEqual(['risk']);
@@ -471,7 +489,7 @@ describe('synthesizeViaCoordinator', () => {
         maxSynthesisCostUsd: 0.05,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(result.nextState.round).toBe(1);
     expect(Object.keys(result.nextState.variables)).toEqual(['risk']);
@@ -486,10 +504,10 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse('not json at all'), 0.005, 200),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(result.nextState.round).toBe(1);
     // numeric path produced the 'risk' variable, NOT 'coverage' from the bad synthesis
@@ -506,13 +524,13 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody), 0.025, 250),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     // signal.metrics.estimatedCost = 0.005, synthesis = 0.025 → 0.03
-    expect(result.nextState.totalCostUsd).toBeCloseTo(0.030, 5);
+    expect(result.nextState.totalCostUsd).toBeCloseTo(0.03, 5);
   });
 
   it('propagates critical-risk sensitivities into nextState.risks', async () => {
@@ -535,10 +553,10 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody)),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(result.nextState.risks.some((r) => r.severity === 'critical')).toBe(true);
   });
@@ -547,8 +565,16 @@ describe('synthesizeViaCoordinator', () => {
     // Round 1: agent-a says approve, agent-b says reject.
     let state = createInitialState('run-flip', 'sensitivity-consensus', defaultLimits(0.5));
     const round1Signals = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'y', confidence: 0.7 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'reject', value: 'n', confidence: 0.7 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'y', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'reject', value: 'n', confidence: 0.7 },
+      }),
     ];
     const r1 = await synthesizeViaCoordinator(
       round1Signals,
@@ -556,17 +582,25 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody)),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     state = r1.nextState;
 
     // Round 2: agent-a flips to reject, agent-b stays. flipRate = 1/2 = 0.5
     const round2Signals = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'reject', value: 'n', confidence: 0.8 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'reject', value: 'n', confidence: 0.8 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'reject', value: 'n', confidence: 0.8 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'reject', value: 'n', confidence: 0.8 },
+      }),
     ];
     const r2 = await synthesizeViaCoordinator(
       round2Signals,
@@ -574,10 +608,10 @@ describe('synthesizeViaCoordinator', () => {
       makeExecutor(makeChatResponse(validResponseBody)),
       {
         coordinatorModelId: 'coord-test',
-        maxSynthesisCostUsd: 0.10,
+        maxSynthesisCostUsd: 0.1,
         timeoutMs: 5000,
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
     expect(r2.nextState.convergence.decisionFlipRate).toBeCloseTo(0.5);
   });

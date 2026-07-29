@@ -80,8 +80,10 @@ export async function recordOutcome(input: ExecutionOutcomeInput): Promise<void>
       ON CONFLICT (decision_trace_id) DO NOTHING
     `;
   } catch (err) {
-    log.warn({ error: String(err), decisionTraceId: input.decisionTraceId },
-      'Failed to record execution outcome');
+    log.warn(
+      { error: String(err), decisionTraceId: input.decisionTraceId },
+      'Failed to record execution outcome'
+    );
   }
 }
 
@@ -95,29 +97,33 @@ export async function getRecentOutcomes(params: {
   complexity?: string;
   since: Date;
   limit?: number;
-}): Promise<Array<{
-  decisionTraceId: string;
-  strategy: string;
-  latencyMs: number;
-  costUsd: number;
-  success: boolean;
-  qualityScore: number | null;
-  createdAt: Date;
-}>> {
+}): Promise<
+  Array<{
+    decisionTraceId: string;
+    strategy: string;
+    latencyMs: number;
+    costUsd: number;
+    success: boolean;
+    qualityScore: number | null;
+    createdAt: Date;
+  }>
+> {
   try {
     const conditions: string[] = [`created_at >= '${params.since.toISOString()}'`];
     if (params.strategy) conditions.push(`strategy = '${params.strategy}'`);
 
     // Use parameterized raw query for safety
-    const rows = await prisma.$queryRaw<Array<{
-      decision_trace_id: string;
-      strategy: string;
-      latency_ms: number;
-      cost_usd: number;
-      success: boolean;
-      quality_score: number | null;
-      created_at: Date;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        decision_trace_id: string;
+        strategy: string;
+        latency_ms: number;
+        cost_usd: number;
+        success: boolean;
+        quality_score: number | null;
+        created_at: Date;
+      }>
+    >`
       SELECT decision_trace_id, strategy, latency_ms, cost_usd, success, quality_score, created_at
       FROM execution_outcomes
       WHERE created_at >= ${params.since}
@@ -126,7 +132,7 @@ export async function getRecentOutcomes(params: {
       LIMIT ${params.limit ?? 1000}
     `;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       decisionTraceId: r.decision_trace_id,
       strategy: r.strategy,
       latencyMs: r.latency_ms,
@@ -162,16 +168,18 @@ export async function getAggregatedMetrics(params: {
   qualityStddev: number;
 } | null> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      sample_size: bigint;
-      avg_quality: number | null;
-      avg_latency_ms: number | null;
-      avg_cost_usd: number | null;
-      success_rate: number | null;
-      quality_p10: number | null;
-      quality_p90: number | null;
-      quality_stddev: number | null;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        sample_size: bigint;
+        avg_quality: number | null;
+        avg_latency_ms: number | null;
+        avg_cost_usd: number | null;
+        success_rate: number | null;
+        quality_p10: number | null;
+        quality_p90: number | null;
+        quality_stddev: number | null;
+      }>
+    >`
       SELECT
         COUNT(*) as sample_size,
         AVG(quality_score) as avg_quality,

@@ -142,9 +142,8 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
       modelId.includes('audio');
     const isOpenAIReasoningFamily = /^o\d/.test(modelId);
     const isLegacyCompletionModel =
-      ['babbage', 'davinci', 'curie', 'ada', 'instruct'].some((hint) =>
-        modelId.includes(hint)
-      ) || /-(001|002)$/.test(modelId);
+      ['babbage', 'davinci', 'curie', 'ada', 'instruct'].some((hint) => modelId.includes(hint)) ||
+      /-(001|002)$/.test(modelId);
     const likelyChatModel =
       modelId.includes('gpt') || modelId.includes('chatgpt') || isOpenAIReasoningFamily;
 
@@ -182,8 +181,12 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
     }
 
     // Reasoning/thinking - check for reasoning-related keywords (generic)
-    if (modelId.includes('reasoning') || modelId.includes('thinking') || 
-        modelId.includes('deep-research') || isOpenAIReasoningFamily) {
+    if (
+      modelId.includes('reasoning') ||
+      modelId.includes('thinking') ||
+      modelId.includes('deep-research') ||
+      isOpenAIReasoningFamily
+    ) {
       // Match 'o' followed by number at start (o1, o2, o3, o4, etc.) - generic pattern
       capabilities.push('reasoning', 'thinking_mode');
     }
@@ -225,7 +228,7 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
    */
   private extractFamily(modelId: string): string {
     const normalized = modelId.toLowerCase();
-    
+
     // Use generic patterns that work for any model family
     // Extract prefix pattern (e.g., "gpt", "o", "dall", "whisper", "tts")
     const match = normalized.match(/^([a-z]+(?:-\d+)?(?:\.\d+)?)/);
@@ -234,16 +237,16 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
       // Format prefix to title case for display
       return prefix
         .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
     }
-    
+
     // Fallback: try to extract first meaningful segment
     const segments = normalized.split('-');
     if (segments.length > 0 && segments[0]) {
       return segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
     }
-    
+
     return 'Unknown';
   }
 
@@ -269,14 +272,18 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
 
     // Premium/pro models - typically have larger context windows
     const isPremium = id.includes('pro') || id.includes('turbo') || id.includes('max');
-    
+
     // Fast/lightweight models - typically smaller context windows
-    const isFast = id.includes('mini') || id.includes('nano') || id.includes('lite') || id.includes('flash');
-    
+    const isFast =
+      id.includes('mini') || id.includes('nano') || id.includes('lite') || id.includes('flash');
+
     // Reasoning models - detected via generic patterns
-    const isReasoning = id.includes('reasoning') || id.includes('thinking') || 
-                       id.includes('deep-research') || id.match(/^o\d/);
-    
+    const isReasoning =
+      id.includes('reasoning') ||
+      id.includes('thinking') ||
+      id.includes('deep-research') ||
+      id.match(/^o\d/);
+
     // Audio/image models - typically have different specs
     const isAudio = id.includes('tts') || id.includes('whisper') || id.includes('audio');
     const isImage = id.includes('image') || id.includes('dall');
@@ -291,7 +298,7 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         pricing: { inputCostPer1M: 15.0, outputCostPer1M: 60.0, currency: 'USD' },
       };
     }
-    
+
     if (isReasoning) {
       // Reasoning models - large context, medium cost
       return {
@@ -300,7 +307,7 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         pricing: { inputCostPer1M: 15.0, outputCostPer1M: 60.0, currency: 'USD' },
       };
     }
-    
+
     if (isFast) {
       // Fast models - smaller context, lower cost
       return {
@@ -309,7 +316,7 @@ export class OpenAIModelFetcher extends BaseProviderModelFetcher {
         pricing: { inputCostPer1M: 0.5, outputCostPer1M: 1.5, currency: 'USD' },
       };
     }
-    
+
     if (isAudio || isImage || isEmbedding) {
       // Specialized models - conservative defaults
       return {

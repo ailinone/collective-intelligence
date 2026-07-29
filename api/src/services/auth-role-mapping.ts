@@ -22,4 +22,3 @@ export function normalizeFederatedRole(role: string): string {
   };
   return map[normalized] ?? 'viewer';
 }
-

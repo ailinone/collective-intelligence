@@ -61,8 +61,13 @@ function evaluateCodeUnitTest(
     functionName: string;
     cases: ReadonlyArray<{ input: unknown; expected: unknown }>;
     partialCredit: boolean;
-  },
-): { codingScore: number; instructionFollowingScore: number; structuredOutputScore: number; notes: string[] } {
+  }
+): {
+  codingScore: number;
+  instructionFollowingScore: number;
+  structuredOutputScore: number;
+  notes: string[];
+} {
   const notes: string[] = [];
   // Strip markdown fences if present
   let code = output.trim();
@@ -73,7 +78,9 @@ function evaluateCodeUnitTest(
   }
 
   // Check function presence
-  const funcPattern = new RegExp(`(?:function\\s+${rubric.functionName}|const\\s+${rubric.functionName}\\s*=)`);
+  const funcPattern = new RegExp(
+    `(?:function\\s+${rubric.functionName}|const\\s+${rubric.functionName}\\s*=)`
+  );
   if (!funcPattern.test(code)) {
     notes.push(`function_not_found: ${rubric.functionName}`);
     return { codingScore: 0, instructionFollowingScore: 0.2, structuredOutputScore: 0.2, notes };
@@ -105,7 +112,7 @@ function evaluateCodeUnitTest(
   notes.push(`unit_tests: ${passed}/${rubric.cases.length}`);
 
   return {
-    codingScore: rubric.partialCredit ? codingScore : (codingScore === 1 ? 1 : 0),
+    codingScore: rubric.partialCredit ? codingScore : codingScore === 1 ? 1 : 0,
     instructionFollowingScore: 1.0, // output was code, format respected
     structuredOutputScore: fenceMatch ? 0.8 : 1.0, // penalize fence (instruction said "ONLY function code")
     notes,
@@ -120,10 +127,19 @@ function evaluateStructuredBullets(
     maxWordsPerBullet: number;
     mustMentionTerms: readonly (readonly string[])[];
     partialCredit: boolean;
-  },
-): { synthesisScore: number; instructionFollowingScore: number; structuredOutputScore: number; notes: string[] } {
+  }
+): {
+  synthesisScore: number;
+  instructionFollowingScore: number;
+  structuredOutputScore: number;
+  notes: string[];
+} {
   const notes: string[] = [];
-  const lines = output.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = output
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   const bullets = lines.filter((l) => l.startsWith(rubric.bulletPrefix));
 
   const countMatch = bullets.length === rubric.expectedBulletCount;
@@ -156,10 +172,17 @@ function evaluateJsonSchema(
   output: string,
   rubric: {
     requiredKeys: readonly string[];
-    expectedValues: Readonly<Record<string, { kind: string; value?: unknown; values?: readonly unknown[] }>>;
+    expectedValues: Readonly<
+      Record<string, { kind: string; value?: unknown; values?: readonly unknown[] }>
+    >;
     partialCredit: boolean;
-  },
-): { structuredOutputScore: number; instructionFollowingScore: number; factualityScore: number; notes: string[] } {
+  }
+): {
+  structuredOutputScore: number;
+  instructionFollowingScore: number;
+  factualityScore: number;
+  notes: string[];
+} {
   const notes: string[] = [];
 
   // Strip markdown fences if present
@@ -197,13 +220,17 @@ function evaluateJsonSchema(
     if (val === undefined) continue;
     if (check.kind === 'exactNumber' && val === check.value) valueScore += 1;
     else if (check.kind === 'stringContains' && typeof val === 'string') {
-      const hits = (check.values ?? []).filter((v) => val.toLowerCase().includes(String(v).toLowerCase()));
+      const hits = (check.values ?? []).filter((v) =>
+        val.toLowerCase().includes(String(v).toLowerCase())
+      );
       if (hits.length === (check.values?.length ?? 0)) valueScore += 1;
       else if (hits.length > 0) valueScore += 0.5;
     } else if (check.kind === 'arrayContainsAll' && Array.isArray(val)) {
       const needed = check.values ?? [];
       const valLower = val.map((x) => String(x).toLowerCase());
-      const hits = needed.filter((n) => valLower.some((vl) => vl.includes(String(n).toLowerCase())));
+      const hits = needed.filter((n) =>
+        valLower.some((vl) => vl.includes(String(n).toLowerCase()))
+      );
       if (hits.length === needed.length) valueScore += 1;
       else valueScore += hits.length / needed.length;
     }
@@ -226,8 +253,13 @@ function evaluateSingleLetterChoice(
     correctLetter: string;
     mustMentionInReasoning: readonly string[];
     partialCredit: boolean;
-  },
-): { reasoningScore: number; instructionFollowingScore: number; factualityScore: number; notes: string[] } {
+  }
+): {
+  reasoningScore: number;
+  instructionFollowingScore: number;
+  factualityScore: number;
+  notes: string[];
+} {
   const notes: string[] = [];
   // Extract first standalone letter A/B/C from output
   const letterMatch = output.match(/\b([A-C])\b/);
@@ -238,11 +270,13 @@ function evaluateSingleLetterChoice(
   notes.push(`letter_correct: ${correct}`);
 
   const lowerOutput = output.toLowerCase();
-  const mentioned = rubric.mustMentionInReasoning.filter((t) => lowerOutput.includes(t.toLowerCase()));
+  const mentioned = rubric.mustMentionInReasoning.filter((t) =>
+    lowerOutput.includes(t.toLowerCase())
+  );
   notes.push(`reasoning_terms: ${mentioned.length}/${rubric.mustMentionInReasoning.length}`);
 
   return {
-    reasoningScore: correct ? (mentioned.length / rubric.mustMentionInReasoning.length) : 0,
+    reasoningScore: correct ? mentioned.length / rubric.mustMentionInReasoning.length : 0,
     instructionFollowingScore: letter ? 1.0 : 0.2,
     factualityScore: correct ? 1.0 : 0.0,
     notes,
@@ -255,7 +289,7 @@ function evaluateTwoLineBugFix(
     bugKeywords: readonly string[];
     fixKeywords: readonly string[];
     partialCredit: boolean;
-  },
+  }
 ): { codingScore: number; reasoningScore: number; structuredOutputScore: number; notes: string[] } {
   const notes: string[] = [];
   const lower = output.toLowerCase();
@@ -265,7 +299,9 @@ function evaluateTwoLineBugFix(
 
   const bugMatches = rubric.bugKeywords.filter((k) => lower.includes(k.toLowerCase()));
   const fixMatches = rubric.fixKeywords.filter((k) => lower.includes(k.toLowerCase()));
-  notes.push(`bug_keywords: ${bugMatches.length}/${rubric.bugKeywords.length}, fix_keywords: ${fixMatches.length}/${rubric.fixKeywords.length}`);
+  notes.push(
+    `bug_keywords: ${bugMatches.length}/${rubric.bugKeywords.length}, fix_keywords: ${fixMatches.length}/${rubric.fixKeywords.length}`
+  );
 
   const bugScore = Math.min(1, bugMatches.length / 2); // need 2+ keywords for full
   const fixScore = Math.min(1, fixMatches.length / 2);

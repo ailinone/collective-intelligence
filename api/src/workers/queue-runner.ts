@@ -37,9 +37,8 @@ async function bootstrapWorker(): Promise<void> {
 
     // Initialize secrets manager
     logger.info('Initializing Secrets Manager...');
-    const { initializeSecretsManager, shutdownSecretsManager } = await import(
-      '@/config/secrets-manager.js'
-    );
+    const { initializeSecretsManager, shutdownSecretsManager } =
+      await import('@/config/secrets-manager.js');
     await initializeSecretsManager(config.secrets);
     logger.info('✅ Secrets Manager initialized');
 
@@ -145,18 +144,16 @@ async function bootstrapWorker(): Promise<void> {
 
     // Initialize provider registry
     logger.info('Initializing provider registry...');
-    const { initializeProviderRegistry, setProviderRegistry } = await import(
-      '@/providers/provider-registry.js'
-    );
+    const { initializeProviderRegistry, setProviderRegistry } =
+      await import('@/providers/provider-registry.js');
     const providerRegistry = await initializeProviderRegistry(config.providers);
     setProviderRegistry(providerRegistry);
     logger.info('✅ Provider registry initialized');
 
     // Initialize orchestration engine
     logger.info('Initializing orchestration engine...');
-    const { OrchestrationEngine, setOrchestrationEngine } = await import(
-      '@/core/orchestration/orchestration-engine.js'
-    );
+    const { OrchestrationEngine, setOrchestrationEngine } =
+      await import('@/core/orchestration/orchestration-engine.js');
     const orchestrationEngine = new OrchestrationEngine({
       providerRegistry,
       defaultStrategy: config.orchestration.defaultStrategy,
@@ -190,15 +187,15 @@ async function bootstrapWorker(): Promise<void> {
     logger.info('Starting BullMQ workers...');
     const { setupChatRequestWorkers } = await import('./chat-request-worker.js');
     await setupChatRequestWorkers(orchestrationEngine);
-    
+
     // Start batch worker
     const { setupBatchWorker } = await import('./batch-worker.js');
     await setupBatchWorker();
-    
+
     // Start thread run worker (Assistants API)
     const { setupThreadRunWorkers } = await import('./thread-run-worker.js');
     await setupThreadRunWorkers(orchestrationEngine);
-    
+
     logger.info('✅ BullMQ workers running (chat, batch, thread-runs)');
 
     // R1 fix: Start outbox poller in worker process too (ADR-001)
@@ -206,7 +203,8 @@ async function bootstrapWorker(): Promise<void> {
       const { startOutboxPoller } = await import('@/infrastructure/events/outbox-poller.js');
       const { initializeDIContainer } = await import('@/di/container.js');
       initializeDIContainer();
-      const { setupEventSubscriptions, getEventBus } = await import('@/infrastructure/events/event-subscriptions.js');
+      const { setupEventSubscriptions, getEventBus } =
+        await import('@/infrastructure/events/event-subscriptions.js');
       setupEventSubscriptions();
       await startOutboxPoller(getEventBus());
       logger.info('✅ Outbox poller started in worker process');
@@ -216,7 +214,8 @@ async function bootstrapWorker(): Promise<void> {
 
     // R2 fix: Start scheduled tasks worker (ADR-002)
     try {
-      const { registerScheduledJobs, startScheduledTasksWorker } = await import('@/jobs/register-scheduled-jobs.js');
+      const { registerScheduledJobs, startScheduledTasksWorker } =
+        await import('@/jobs/register-scheduled-jobs.js');
       await registerScheduledJobs();
       await startScheduledTasksWorker();
       logger.info('✅ Scheduled tasks worker started');
@@ -227,17 +226,32 @@ async function bootstrapWorker(): Promise<void> {
     const shutdown = async (signal: NodeJS.Signals) => {
       logger.info({ signal }, 'Received shutdown signal');
       // R5 fix: Shutdown remediation infrastructure
-      try { const { stopOutboxPoller } = await import('@/infrastructure/events/outbox-poller.js'); await stopOutboxPoller(); } catch { /* non-fatal */ }
-      try { const { shutdownDLQManager } = await import('@/queue/dlq-manager.js'); await shutdownDLQManager(); } catch { /* non-fatal */ }
-      try { const { shutdownScheduledTasks } = await import('@/jobs/register-scheduled-jobs.js'); await shutdownScheduledTasks(); } catch { /* non-fatal */ }
+      try {
+        const { stopOutboxPoller } = await import('@/infrastructure/events/outbox-poller.js');
+        await stopOutboxPoller();
+      } catch {
+        /* non-fatal */
+      }
+      try {
+        const { shutdownDLQManager } = await import('@/queue/dlq-manager.js');
+        await shutdownDLQManager();
+      } catch {
+        /* non-fatal */
+      }
+      try {
+        const { shutdownScheduledTasks } = await import('@/jobs/register-scheduled-jobs.js');
+        await shutdownScheduledTasks();
+      } catch {
+        /* non-fatal */
+      }
 
       const { requestQueueService } = await import('@/services/request-queue-service.js');
       await requestQueueService.stopWorkers();
-      
+
       // Stop batch worker
       const { stopBatchWorker } = await import('./batch-worker.js');
       await stopBatchWorker();
-      
+
       // Stop thread run worker
       const { stopThreadRunWorkers } = await import('./thread-run-worker.js');
       await stopThreadRunWorkers();

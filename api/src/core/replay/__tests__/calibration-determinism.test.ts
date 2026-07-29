@@ -17,10 +17,7 @@ import {
   computeGlobalMean,
   learnTaskTypeOffsets,
 } from '../calibration/calibrated-expected-judge-estimator';
-import {
-  pickBestEstimator,
-  type TrainEvalDatum,
-} from '../calibration/expected-judge-calibrator';
+import { pickBestEstimator, type TrainEvalDatum } from '../calibration/expected-judge-calibrator';
 import { harvestHistoricalResults } from '../harvest/historical-results-harvester';
 import { computeCalibrationMetrics } from '../calibration/calibration-metrics';
 import { runHistoricalReplay } from '../historical-replay-runner';
@@ -52,8 +49,24 @@ function adapt(e: HistoricalReplayExecution): HistoricalExecution {
 describe('calibration — determinism', () => {
   it('harvest pipeline is deterministic', () => {
     const raw: HistoricalRawRow[] = [
-      { id: 'e1', experiment_id: 'exp1', task_type: 'code', models_used: ['m'], judge_score: 0.7, cost_usd: 0.02, success: true },
-      { id: 'e2', experiment_id: 'exp1', task_type: 'code', models_used: ['m'], judge_score: 0.6, cost_usd: 0.02, success: true },
+      {
+        id: 'e1',
+        experiment_id: 'exp1',
+        task_type: 'code',
+        models_used: ['m'],
+        judge_score: 0.7,
+        cost_usd: 0.02,
+        success: true,
+      },
+      {
+        id: 'e2',
+        experiment_id: 'exp1',
+        task_type: 'code',
+        models_used: ['m'],
+        judge_score: 0.6,
+        cost_usd: 0.02,
+        success: true,
+      },
     ];
     const a = JSON.stringify(harvestHistoricalResults(raw));
     const b = JSON.stringify(harvestHistoricalResults(raw));
@@ -110,7 +123,9 @@ describe('calibration — determinism', () => {
       const sel = pickBestEstimator(data);
       const offsets = learnTaskTypeOffsets(data);
       const globalMean = computeGlobalMean(data);
-      void sel; void offsets; void globalMean;
+      void sel;
+      void offsets;
+      void globalMean;
       const replay = runHistoricalReplay({
         train: split.train,
         holdout: split.holdout,

@@ -24,10 +24,7 @@ const metricsServiceName = process.env.SERVICE_NAME || process.env.OTEL_SERVICE_
  * Helper function to get or create a metric
  * Prevents duplicate registration errors when module is reloaded (e.g., in tests)
  */
-function getOrCreateMetric<T extends promClient.Metric>(
-  name: string,
-  createFn: () => T
-): T {
+function getOrCreateMetric<T extends promClient.Metric>(name: string, createFn: () => T): T {
   const existing = promClient.register.getSingleMetric(name);
   if (existing) {
     return existing as T;
@@ -51,9 +48,12 @@ export function initializeMetrics(): void {
   }
 
   // Check if default metrics are already being collected
-  const existingDefaultMetrics = promClient.register.getMetricsAsArray().find(
-    (metric) => metric.name.startsWith('ailin_dev_process_') || metric.name.startsWith('ailin_dev_nodejs_')
-  );
+  const existingDefaultMetrics = promClient.register
+    .getMetricsAsArray()
+    .find(
+      (metric) =>
+        metric.name.startsWith('ailin_dev_process_') || metric.name.startsWith('ailin_dev_nodejs_')
+    );
 
   if (!existingDefaultMetrics) {
     // Enable default metrics (CPU, memory, event loop, etc) only if not already collected.
@@ -639,7 +639,7 @@ function resolveRoutePath(request: FastifyRequest): string {
   const routeOptions = (request as { routeOptions?: { url?: string } }).routeOptions;
   const context = (request as { context?: { config?: { url?: string } } }).context;
   const url = request.url;
-  
+
   return (
     routerPath ||
     routeOptions?.url ||
@@ -703,7 +703,10 @@ class PerformanceProfilerImpl implements PerformanceProfiler {
       const durationSeconds = durationMs / 1000;
 
       // Record to Prometheus metrics
-      llmRequestDuration.observe({ provider: 'internal', model: name, status: 'success' }, durationSeconds);
+      llmRequestDuration.observe(
+        { provider: 'internal', model: name, status: 'success' },
+        durationSeconds
+      );
 
       // Log slow operations (>1s)
       if (durationMs > 1000) {
@@ -717,7 +720,10 @@ class PerformanceProfilerImpl implements PerformanceProfiler {
     } catch (error) {
       const endTime = process.hrtime.bigint();
       const durationSeconds = Number(endTime - startTime) / 1_000_000_000;
-      llmRequestDuration.observe({ provider: 'internal', model: name, status: 'error' }, durationSeconds);
+      llmRequestDuration.observe(
+        { provider: 'internal', model: name, status: 'error' },
+        durationSeconds
+      );
       llmRequestErrors.inc({ provider: 'internal', model: name, error_type: 'execution_error' });
       throw error;
     }
@@ -731,7 +737,10 @@ class PerformanceProfilerImpl implements PerformanceProfiler {
       const durationMs = Number(endTime - startTime) / 1_000_000;
       const durationSeconds = durationMs / 1000;
 
-      llmRequestDuration.observe({ provider: 'internal', model: name, status: 'success' }, durationSeconds);
+      llmRequestDuration.observe(
+        { provider: 'internal', model: name, status: 'success' },
+        durationSeconds
+      );
 
       if (durationMs > 1000) {
         this.log.warn(
@@ -744,7 +753,10 @@ class PerformanceProfilerImpl implements PerformanceProfiler {
     } catch (error) {
       const endTime = process.hrtime.bigint();
       const durationSeconds = Number(endTime - startTime) / 1_000_000_000;
-      llmRequestDuration.observe({ provider: 'internal', model: name, status: 'error' }, durationSeconds);
+      llmRequestDuration.observe(
+        { provider: 'internal', model: name, status: 'error' },
+        durationSeconds
+      );
       llmRequestErrors.inc({ provider: 'internal', model: name, error_type: 'execution_error' });
       throw error;
     }

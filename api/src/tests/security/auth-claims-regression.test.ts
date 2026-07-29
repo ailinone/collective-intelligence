@@ -12,8 +12,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://ailin_dev:ailin_dev_password@localhost:5433/ailin_dev';
+  process.env.DATABASE_URL || 'postgresql://ailin_dev:ailin_dev_password@localhost:5433/ailin_dev';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-claims-regression';
 
 type AuthServiceInstance = {

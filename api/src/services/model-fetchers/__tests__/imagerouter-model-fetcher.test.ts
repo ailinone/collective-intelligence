@@ -47,7 +47,10 @@ describe('imagerouter-model-fetcher', () => {
       })
     );
 
-    const fetcher = new ImageRouterModelFetcher('imagerouter-live-key', 'https://api.imagerouter.io');
+    const fetcher = new ImageRouterModelFetcher(
+      'imagerouter-live-key',
+      'https://api.imagerouter.io'
+    );
     const models = await fetcher.getModels();
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -68,4 +71,3 @@ describe('imagerouter-model-fetcher', () => {
     expect(models).toEqual([]);
   });
 });
-

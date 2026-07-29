@@ -11,10 +11,7 @@
  * 01C.1B-F — LiveChatOperabilityStore unit coverage.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  LiveChatOperabilityStore,
-  buildLiveStateKey,
-} from '../live-chat-operability-state';
+import { LiveChatOperabilityStore, buildLiveStateKey } from '../live-chat-operability-state';
 import { classifyProviderError } from '../../orchestration/failures/provider-error-classifier';
 
 describe('LiveChatOperabilityStore', () => {
@@ -127,9 +124,9 @@ describe('LiveChatOperabilityStore', () => {
   });
 
   it('isEligibleForCriticalRole returns false when route absent', () => {
-    expect(
-      store.isEligibleForCriticalRole({ providerId: 'x', routeId: 'x', modelId: 'm' }),
-    ).toBe(false);
+    expect(store.isEligibleForCriticalRole({ providerId: 'x', routeId: 'x', modelId: 'm' })).toBe(
+      false
+    );
   });
 
   it('isEligibleForCriticalRole returns true after successful record', () => {
@@ -145,7 +142,7 @@ describe('LiveChatOperabilityStore', () => {
         providerId: 'deepinfra',
         routeId: 'deepinfra',
         modelId: 'Qwen',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -156,8 +153,20 @@ describe('LiveChatOperabilityStore', () => {
   });
 
   it('snapshot returns all known states', () => {
-    store.record({ providerId: 'p1', routeId: 'r1', modelId: 'm1', ok: true, source: 'direct_chat_probe' });
-    store.record({ providerId: 'p2', routeId: 'r2', modelId: 'm2', ok: true, source: 'execution_feedback' });
+    store.record({
+      providerId: 'p1',
+      routeId: 'r1',
+      modelId: 'm1',
+      ok: true,
+      source: 'direct_chat_probe',
+    });
+    store.record({
+      providerId: 'p2',
+      routeId: 'r2',
+      modelId: 'm2',
+      ok: true,
+      source: 'execution_feedback',
+    });
     expect(store.snapshot()).toHaveLength(2);
   });
 });

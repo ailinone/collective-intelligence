@@ -48,7 +48,12 @@ import { SensitivityConsensusStrategy } from './strategies/sensitivity-consensus
 import { TriRoleCollectiveStrategy } from './strategies/tri-role-collective-strategy';
 import { resolveAilinAlias, applyAliasToRequest } from './ailin-alias-resolver';
 import { getROIEstimator } from '@/core/validation/c3/roi-estimator';
-import { ObserverService, createNoOpObserverFeed, buildObserverChunk, buildInlineNarrationChunk } from './observer/observer-service';
+import {
+  ObserverService,
+  createNoOpObserverFeed,
+  buildObserverChunk,
+  buildInlineNarrationChunk,
+} from './observer/observer-service';
 import type { ObserverFeed } from './observer/observer-types';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import { getErrorMessage } from '@/utils/type-guards';
@@ -89,7 +94,12 @@ import { getQualityScorer } from '@/core/quality/quality-scorer';
 import { getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
 import { getSemanticCache } from '@/core/cache/semantic-cache';
 import { isCacheEnabled } from '@/cache/cache-runtime-state';
-import { recordStrategyExecution, recordTriage, recordModelSelection, recordSpeculativeSelectionOutcome } from '@/observability/ci-metrics';
+import {
+  recordStrategyExecution,
+  recordTriage,
+  recordModelSelection,
+  recordSpeculativeSelectionOutcome,
+} from '@/observability/ci-metrics';
 import { getMemoryContextService } from '@/core/memory/memory-context-service';
 import { errorLearningSystem } from '@/core/learning/error-learning-system';
 import { triageLearningSystem } from './triage-learning-system.js';
@@ -105,18 +115,21 @@ import { triageCalibrator } from '@/core/learning/triage-calibrator';
 import { knowledgeGraphService } from '@/core/learning/knowledge-graph-service';
 import { inferCapabilities, type CapabilityInferenceResult } from './capability-inference.js';
 import { modelPerformanceTracker } from '@/core/selection/model-performance-tracker';
-import { getAdaptiveQualityTarget, refreshAllProfiles } from '@/core/quality/adaptive-quality-targets';
+import {
+  getAdaptiveQualityTarget,
+  refreshAllProfiles,
+} from '@/core/quality/adaptive-quality-targets';
 import {
   createAblationFlags,
   ALL_ABLATION_COMPONENTS,
   type AblationComponent,
 } from '@/core/validation/c3/ablation-config';
-import { getBestFromFrontier, loadFrontiersFromOutcomes } from '@/core/learning/pareto-champion-challenger';
-import { injectExecutionSystemPrompt } from './execution-system-prompt';
 import {
-  injectPeerReviewPrompt,
-  shouldInjectPeerReviewPrompt,
-} from './prompts/peer-review-prompt';
+  getBestFromFrontier,
+  loadFrontiersFromOutcomes,
+} from '@/core/learning/pareto-champion-challenger';
+import { injectExecutionSystemPrompt } from './execution-system-prompt';
+import { injectPeerReviewPrompt, shouldInjectPeerReviewPrompt } from './prompts/peer-review-prompt';
 import { recordOutcome } from '@/core/evaluation/outcome-measurement';
 import { shouldRunShadowEval, recordShadowEvaluation } from '@/core/evaluation/shadow-evaluation';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
@@ -197,7 +210,9 @@ const TRIAGE_RECOMMENDABLE_TOOL_SCHEMAS: Record<string, Record<string, unknown>>
   },
   analyze_image: {
     type: 'object',
-    properties: { image_url: { type: 'string', description: 'URL or path of the image to analyze' } },
+    properties: {
+      image_url: { type: 'string', description: 'URL or path of the image to analyze' },
+    },
     required: ['image_url'],
   },
   // Review fix: the executor requires `filePath` — see read_file note above.
@@ -224,7 +239,10 @@ const AUDIO_GEN_CAPS = new Set(['audio_generation', 'text_to_speech', 'tts']);
  * adding a new format (docx/xlsx/pdf/pptx/zip/code) — no other code changes
  * needed in `detectMediaGenerationModality` itself.
  */
-const FILE_GEN_FORMAT_CAPS: Record<string, 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code'> = {
+const FILE_GEN_FORMAT_CAPS: Record<
+  string,
+  'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code'
+> = {
   csv_generation: 'csv',
   json_generation: 'json',
   markdown_generation: 'markdown',
@@ -266,7 +284,9 @@ export function detectMediaGenerationModality(
 /** Resolves the specific file format a file-generation stage should render,
  *  from the same requiredCapabilities strings `detectMediaGenerationModality`
  *  already inspected. */
-export function detectFileGenerationFormat(requiredCapabilities: string[]): 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code' {
+export function detectFileGenerationFormat(
+  requiredCapabilities: string[]
+): 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code' {
   for (const cap of requiredCapabilities) {
     const format = FILE_GEN_FORMAT_CAPS[cap];
     if (format) return format;
@@ -304,7 +324,7 @@ export class OrchestrationEngine {
     };
 
     this.providerRegistry = config.providerRegistry;
-    
+
     // Log provider registry status at engine initialization
     const providerNamesAtInit = this.providerRegistry.getProviderNames();
     this.log.info(
@@ -315,7 +335,7 @@ export class OrchestrationEngine {
       },
       'OrchestrationEngine initialized with provider registry'
     );
-    
+
     this.feedbackLoop = new RealtimeFeedbackLoop();
 
     // Register available strategies (1-16) - ALL IMPLEMENTED ✅
@@ -378,24 +398,37 @@ export class OrchestrationEngine {
     // Eagerly seed the Thompson Sampling bandit from strategy_weights table.
     // This runs async but fires immediately so the bandit has data before
     // the first request arrives (typical startup has > 1s before first request).
-    strategyBandit.seedFromDB().catch((err) =>
-      this.log.warn({ error: getErrorMessage(err) }, 'Bandit DB seed failed on startup')
-    );
+    strategyBandit
+      .seedFromDB()
+      .catch((err) =>
+        this.log.warn({ error: getErrorMessage(err) }, 'Bandit DB seed failed on startup')
+      );
 
     // OI-06: Seed configuration archive from DB (same data, different indexing)
-    configurationArchive.seedFromDB().catch((err) =>
-      this.log.warn({ error: getErrorMessage(err) }, 'Configuration archive DB seed failed on startup')
-    );
+    configurationArchive
+      .seedFromDB()
+      .catch((err) =>
+        this.log.warn(
+          { error: getErrorMessage(err) },
+          'Configuration archive DB seed failed on startup'
+        )
+      );
 
     // OI-08: Pre-warm adaptive quality target profiles from strategy_weights
     refreshAllProfiles().catch((err) =>
-      this.log.warn({ error: getErrorMessage(err) }, 'Adaptive quality target profile refresh failed on startup')
+      this.log.warn(
+        { error: getErrorMessage(err) },
+        'Adaptive quality target profile refresh failed on startup'
+      )
     );
 
     // OI-09: Restore Pareto frontiers from recent execution outcomes
     // Without this, the Pareto gate is dark until the nightly benchmark runs.
     loadFrontiersFromOutcomes().catch((err) =>
-      this.log.warn({ error: getErrorMessage(err) }, 'Pareto frontier restoration failed on startup')
+      this.log.warn(
+        { error: getErrorMessage(err) },
+        'Pareto frontier restoration failed on startup'
+      )
     );
 
     // Pre-warm the COMMON selection shapes (general chat + streaming, single AND
@@ -497,7 +530,10 @@ export class OrchestrationEngine {
     // Triage models are now selected dynamically per-request based on capabilities
     // This method is kept for backwards compatibility and pre-warming cache
     if (this.config.triageModel) {
-      this.log.debug({ triageModel: this.config.triageModel }, 'Using configured triage model (will be used if available, otherwise dynamic selection applies)');
+      this.log.debug(
+        { triageModel: this.config.triageModel },
+        'Using configured triage model (will be used if available, otherwise dynamic selection applies)'
+      );
       return;
     }
 
@@ -505,7 +541,7 @@ export class OrchestrationEngine {
     try {
       const { getDynamicModelSelector } = await import('../selection/dynamic-model-selector.js');
       const selector = getDynamicModelSelector();
-      
+
       // Pre-warm cache by selecting a triage model (selection is still per-request based on capabilities)
       const selectedModels = await selector.selectModels(
         null,
@@ -529,17 +565,20 @@ export class OrchestrationEngine {
       if (selectedModels.length > 0) {
         const triageModel = selectedModels[0].model.name;
         this.log.info(
-          { 
-            triageModel, 
+          {
+            triageModel,
             modelId: selectedModels[0].model.id,
             provider: selectedModels[0].model.provider,
-            note: 'Model selection is now per-request based on capabilities'
-          }, 
+            note: 'Model selection is now per-request based on capabilities',
+          },
           'Pre-selected triage model for caching (dynamic selection still applies per-request)'
         );
       }
     } catch (error) {
-      this.log.warn({ error }, 'Pre-selection of triage model failed, dynamic per-request selection will handle it');
+      this.log.warn(
+        { error },
+        'Pre-selection of triage model failed, dynamic per-request selection will handle it'
+      );
     }
   }
 
@@ -663,8 +702,7 @@ export class OrchestrationEngine {
       request = applyAliasToRequest(request, aliasProfile);
     }
 
-    const strategyInput =
-      typeof request.strategy === 'string' ? request.strategy : undefined;
+    const strategyInput = typeof request.strategy === 'string' ? request.strategy : undefined;
     const resolvedExecutionStrategy = resolveExecutionStrategy(strategyInput);
     if (resolvedExecutionStrategy && request.strategy !== resolvedExecutionStrategy) {
       request.strategy = resolvedExecutionStrategy;
@@ -675,8 +713,7 @@ export class OrchestrationEngine {
       mapExecutionToCanonical(
         (resolvedExecutionStrategy ??
           (typeof request.strategy === 'string' ? request.strategy : undefined)) as
-          | ExecutionStrategyName
-          | undefined
+          ExecutionStrategyName | undefined
       );
 
     const requestId = nanoid();
@@ -686,1527 +723,1707 @@ export class OrchestrationEngine {
     // Wrap entire orchestration in a span for distributed tracing
     return tracer.startActiveSpan(
       'orchestration.execute',
-      { attributes: { 'request.id': requestId, 'org.id': organizationId, 'request.strategy': String(request.strategy ?? 'auto') } },
-      async (orchestrationSpan) => {
-    this.log.info(
       {
-        requestId,
-        organizationId,
-        userId,
-        requestedModel: request.model,
-        requestedStrategy: request.strategy,
-        taskType: request.task_type,
+        attributes: {
+          'request.id': requestId,
+          'org.id': organizationId,
+          'request.strategy': String(request.strategy ?? 'auto'),
+        },
       },
-      'Starting orchestration'
-    );
-
-    // Start reasoning transparency trace
-    this.reasoningTransparency.startTrace(requestId, request);
-
-    const CACHEABLE_STRATEGIES = new Set<string | undefined>(['dynamic', 'single', 'parallel', 'consensus', 'quality_multipass', 'debate']);
-    const allowSemanticCache = CACHEABLE_STRATEGIES.has(requestedCanonicalStrategy) && !request.no_cache;
-
-    // LAT-2 (2026-06-11): kick off the semantic-memory lookup concurrently
-    // with the semantic-cache lookup — independent reads that were previously
-    // serialized (each can cost an embedding round-trip). On a cache hit the
-    // memory result is simply abandoned (read-only; no side effects beyond
-    // its own metrics); on a miss the pre-execution path pays
-    // max(cache, memory) instead of cache + memory.
-    // Gated by MEMORY_CONTEXT_ENABLED — when the embedding provider is
-    // unreachable (HF API 404, no local embedder), buildContext blocks on
-    // retry-and-fallback before yielding a zero-vector match; the env gate
-    // lets local/dev environments skip the round-trip entirely.
-    type MemoryContextResult = Awaited<ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>>;
-    const memoryContextPromise: Promise<MemoryContextResult | null> =
-      process.env.MEMORY_CONTEXT_ENABLED !== 'false'
-        ? getMemoryContextService()
-            .buildContext(request, organizationId, userId, { maxMemories: 5, minSimilarity: 0.7 })
-            .catch((memoryError: unknown) => {
-              this.log.warn(
-                { error: getErrorMessage(memoryError) },
-                'Failed to enrich request with memory context'
-              );
-              return null;
-            })
-        : Promise.resolve(null);
-
-    // Check semantic cache for similar requests (if enabled)
-    if (allowSemanticCache && isCacheEnabled() && !request.stream) {
-      try {
-        const semanticCache = getSemanticCache();
-        const cacheResult = await semanticCache.lookup({
-          request,
-          organizationId,
-        });
-
-        if (cacheResult) {
-          const cachedAilinMetadata = cacheResult.entry.response.ailin_metadata as
-            | {
-                resolved_strategy?: string;
-                resolved_model?: string;
-                final_decider_model_id?: string;
-                final_decider_model_name?: string;
-                final_decider_role?: string;
-                fallback_chain?: unknown;
-              }
-            | undefined;
-          const resolvedCachedStrategy =
-            canonicalizeStrategyInput(cachedAilinMetadata?.resolved_strategy) ||
-            requestedCanonicalStrategy ||
-            'dynamic';
-          const resolvedCachedModel =
-            typeof cachedAilinMetadata?.resolved_model === 'string' &&
-            cachedAilinMetadata.resolved_model.length > 0
-              ? cachedAilinMetadata.resolved_model
-              : cacheResult.entry.response.model;
-          const finalDeciderModelId =
-            typeof cachedAilinMetadata?.final_decider_model_id === 'string' &&
-            cachedAilinMetadata.final_decider_model_id.length > 0
-              ? cachedAilinMetadata.final_decider_model_id
-              : typeof cacheResult.entry.response.model === 'string' &&
-                  cacheResult.entry.response.model.length > 0
-                ? cacheResult.entry.response.model
-                : undefined;
-          const finalDeciderModelName =
-            typeof cachedAilinMetadata?.final_decider_model_name === 'string' &&
-            cachedAilinMetadata.final_decider_model_name.length > 0
-              ? cachedAilinMetadata.final_decider_model_name
-              : resolvedCachedModel;
-          const finalDeciderRole =
-            typeof cachedAilinMetadata?.final_decider_role === 'string' &&
-            cachedAilinMetadata.final_decider_role.length > 0
-              ? cachedAilinMetadata.final_decider_role
-              : 'cache';
-          const fallbackChain = Array.isArray(cachedAilinMetadata?.fallback_chain)
-            ? cachedAilinMetadata.fallback_chain.filter(
-                (value): value is string => typeof value === 'string' && value.length > 0
-              )
-            : [];
-
-          this.log.info(
-            {
-              requestId,
-              cacheHit: true,
-              isExactMatch: cacheResult.isExactMatch,
-              similarity: cacheResult.similarity,
-            },
-            'Semantic cache hit - returning cached response'
-          );
-
-          // Record cache hit (fire-and-forget — a Redis bump must not delay
-          // the already-resolved cached response)
-          void semanticCache.recordHit(cacheResult.entry.id).catch(() => {});
-
-          // Complete transparency trace with cache hit info
-          this.reasoningTransparency.completeTrace(requestId);
-
-          return {
-            finalResponse: cacheResult.entry.response,
-            strategyUsed: 'cached' as ExecutionStrategyName,
-            modelsUsed: [],
-            totalDuration: Date.now() - startTime,
-            totalCost: 0, // No cost for cached response
-            qualityScore: 0.9, // Assume high quality for cached
-            metadata: {
-              cacheHit: true,
-              cacheEntryId: cacheResult.entry.id,
-              cacheSimilarity: cacheResult.similarity,
-              isExactMatch: cacheResult.isExactMatch,
-              resolved_strategy: resolvedCachedStrategy,
-              resolved_model: resolvedCachedModel,
-              final_decider_model_id: finalDeciderModelId,
-              final_decider_model_name: finalDeciderModelName,
-              final_decider_role: finalDeciderRole,
-              fallback_chain:
-                fallbackChain.length > 0
-                  ? fallbackChain
-                  : resolvedCachedModel
-                    ? [resolvedCachedModel]
-                    : [],
-            },
-          };
-        }
-      } catch (cacheError) {
-        this.log.warn(
-          { error: getErrorMessage(cacheError) },
-          'Semantic cache lookup failed, continuing without cache'
-        );
-      }
-    }
-
-    // Enrich request with semantic memory context (lookup started above,
-    // concurrently with the semantic-cache check — LAT-2).
-    let enrichedRequest = request;
-    const memoryContext = await memoryContextPromise;
-    if (memoryContext?.hasContext) {
-      enrichedRequest = getMemoryContextService().enrichRequest(request, memoryContext);
-      this.log.debug(
-        {
-          requestId,
-          memoriesUsed: memoryContext.memories.length,
-        },
-        'Request enriched with semantic memory context'
-      );
-    }
-
-    let context = await this.buildContext(enrichedRequest, organizationId, userId, requestId);
-    let triageDecision = context.triage;
-
-    // LAT-3: tell strategies the engine already ran the memory search for
-    // this request — strategy-level enrichWithMemories() must not repeat the
-    // embedding + pgvector lookup (which would also duplicate the injected
-    // memory block in the prompt).
-    if (enrichedRequest !== request) {
-      context.memoryEnriched = true;
-    }
-
-    const autoStrategyRequested = !request.strategy || request.strategy === 'auto';
-    const shouldRunTriage = this.shouldRunTriage(request, context);
-
-    // C3 P0.2: Skip triage when ablated — use default strategy selection
-    if (this.triageService && autoStrategyRequested && shouldRunTriage && !context.ablationFlags?.disabled?.has('triage')) {
-      try {
-        triageDecision = await this.triageService.triage(
-          request, context,
-          context.capabilityInference,
-          context.models,
-        );
-        if (triageDecision) {
-          // ── Confidence Gate: reject low-confidence triage decisions ──────
-          // Data shows that triage with confidence < 0.4 produces unreliable
-          // routing. Fall back to heuristics for low-confidence decisions.
-          const MIN_TRIAGE_CONFIDENCE = Number(process.env.MIN_TRIAGE_CONFIDENCE ?? 0.4);
-          if ((triageDecision.confidence ?? 0) < MIN_TRIAGE_CONFIDENCE) {
-            this.log.warn({
-              requestId,
-              triageConfidence: triageDecision.confidence,
-              threshold: MIN_TRIAGE_CONFIDENCE,
-              intent: triageDecision.intent,
-            }, 'Triage confidence below threshold — falling back to heuristic routing');
-            // Keep intent/complexity from triage but discard everything that
-            // steers routing. Review fix: `route` must be cleared here too —
-            // before, a decision the gate itself judged unreliable could
-            // still force the direct_response fast-path (single model) for a
-            // possibly complex request via applyTriageRoute below.
-            triageDecision = {
-              ...triageDecision,
-              recommendedStrategy: undefined,
-              executionPlan: undefined,
-              route: undefined,
-              confidence: triageDecision.confidence,
-            };
-          }
-
-          // ── OI-07: Apply triage calibration corrections ─────────────────
-          const promptTotalLength = request.messages
-            .map(m => typeof m.content === 'string' ? m.content.length : 0)
-            .reduce((a, b) => a + b, 0);
-          const triageCorrections = triageCalibrator.applyCorrections({
-            predictedTaskType: triageDecision.intent || 'general',
-            predictedComplexity: triageDecision.complexity || 'medium',
-            promptLength: promptTotalLength,
-            hasTools: !!(request.tools && request.tools.length > 0),
-            messageCount: request.messages.length,
-          });
-          if (triageCorrections) {
-            this.log.info({
-              requestId,
-              original: { intent: triageDecision.intent, complexity: triageDecision.complexity },
-              corrected: { intent: triageCorrections.correctedTaskType, complexity: triageCorrections.correctedComplexity },
-              rules: triageCorrections.rulesApplied,
-            }, 'Triage calibrator applied corrections (OI-07)');
-            triageDecision = {
-              ...triageDecision,
-              intent: triageCorrections.correctedTaskType as TriageDecision['intent'],
-              complexity: triageCorrections.correctedComplexity as 'low' | 'medium' | 'high',
-            };
-          }
-
-          // ── Route: trivial-message fast path (see TriageDecision.route) ──
-          triageDecision = this.applyTriageRoute(triageDecision!, request);
-
-          // ── Layer 2: Apply semantic execution plan from triage LLM ──────
-          const plan = triageDecision!.executionPlan;
-          // After OI-07 corrections, triageDecision is guaranteed non-null here
-          const correctedTriage = triageDecision!;
-          context = {
-            ...context,
-            triage: correctedTriage,
-            taskType: this.applyTriageTaskType(request, context.taskType, correctedTriage),
-            executionPlan: plan,
-            // Cascade: client (Layer 1) > triage (Layer 2) > inference (Layer 3)
-            preferSpeed: request.prefer_speed ?? plan?.preferSpeed ?? context.preferSpeed,
-            qualityTarget: request.quality_target ?? plan?.qualityTarget ?? context.qualityTarget,
-            requiredCapabilities: request.ailin_constraints?.requiredCapabilities?.length
-              ? request.ailin_constraints.requiredCapabilities
-              : this.mergeCapabilities(plan?.requiredCapabilities, context.requiredCapabilities),
-          };
-
-          // Apply inferred max_tokens if client didn't specify
-          if (request.max_tokens === undefined && plan?.maxTokens) {
-            request.max_tokens = plan.maxTokens;
-            this.log.debug(
-              { requestId, inferredMaxTokens: plan.maxTokens, source: 'triage-plan' },
-              'Applied semantically inferred max_tokens from triage execution plan'
-            );
-          }
-
-          // Propagate reasoning recommendation from triage to request constraints
-          // Only if user didn't explicitly set enable_reasoning
-          if (plan?.enableReasoning && request.ailin_constraints?.enable_reasoning === undefined) {
-            request.ailin_constraints = {
-              ...(request.ailin_constraints || {}),
-              enable_reasoning: true,
-            };
-            this.log.debug(
-              { requestId, source: 'triage-plan' },
-              'Triage recommended enable_reasoning for high-complexity task',
-            );
-          }
-
-          await this.applyPreferredModels(request, context, correctedTriage);
-
-          // Record triage in transparency trace
-          this.reasoningTransparency.recordTriage(requestId, {
-            intent: correctedTriage.intent || 'unknown',
-            complexity: correctedTriage.complexity || 'medium',
-            priority: correctedTriage.priority || 'normal',
-            confidence: correctedTriage.confidence || 0.5,
-          });
-
-          // Record triage metrics
-          recordTriage({
-            intent: correctedTriage.intent || 'unknown',
-            complexity: correctedTriage.complexity || 'medium',
-            confidence: correctedTriage.confidence || 0.5,
-            durationMs: 0,
-            source: 'llm',
-          });
-        }
-      } catch (error) {
-        this.log.error(
-          { error, requestId },
-          'Triage service failed; continuing without triage hints'
-        );
-      }
-    } else if (this.triageService && autoStrategyRequested) {
-      this.log.debug(
-        {
-          requestId,
-          taskType: context.taskType,
-          contextSize: context.contextSize,
-          preferSpeed: context.preferSpeed,
-        },
-        'Skipping triage for latency-optimized auto request'
-      );
-    }
-
-    try {
-      // ── Multi-stage execution: if triage produced a multi-stage plan, execute stages sequentially ──
-      const plan = context.executionPlan;
-      // Review fix: a single-stage plan whose one stage is MEDIA GENERATION
-      // must also route through executeMultiStagePlan — that is the only
-      // path that invokes the CapabilityInvoker for a real artifact. With
-      // the old `> 1` gate, "generate an image of a cat" (1-stage
-      // image_generation plan) fell into the single-stage chat path and
-      // produced prose describing the image instead of the image itself.
-      const hasMultiStagePlan = plan && (
-        plan.stages.length > 1 ||
-        (plan.stages.length === 1 && detectMediaGenerationModality(plan.stages[0].requiredCapabilities) !== null)
-      );
-
-      let result: OrchestrationResult;
-      // C4 fix: selectionSource is request-scoped (local variable), NOT an instance field.
-      // This prevents race conditions where concurrent requests overwrite each other's
-      // selection source, corrupting audit data and learning system attribution.
-      let selectionSource = 'unknown';
-
-      if (hasMultiStagePlan) {
+      async (orchestrationSpan) => {
         this.log.info(
           {
             requestId,
-            stageCount: plan.stages.length,
-            modelCount: plan.modelCount,
-            topStrategy: plan.strategy,
+            organizationId,
+            userId,
+            requestedModel: request.model,
+            requestedStrategy: request.strategy,
+            taskType: request.task_type,
           },
-          'Executing multi-stage triage plan (collective intelligence pipeline)'
-        );
-        selectionSource = 'multi-stage';
-        // Review fix: the multi-stage path received the raw request —
-        // precisely when triage produced a rich plan WITH recommendedTools,
-        // the tools were never attached. Same wrapper as the single-stage
-        // and streaming paths.
-        result = await this.executeMultiStagePlan(
-          this.applyRecommendedTools(request, context), context, plan, requestId,
-        );
-      } else {
-        // ── Single-stage: use standard strategy selection and execution ──
-        const selection = this.selectStrategy(request, context);
-        const strategy = selection.strategy;
-        selectionSource = selection.selectionSource;
-
-        this.log.info(
-          {
-            requestId,
-            selectedStrategy: strategy.getMetadata().name,
-            availableModels: context.models.length,
-          },
-          'Strategy selected'
+          'Starting orchestration'
         );
 
-        writeDecisionAudit({
-          requestId,
-          organizationId,
-          taskType: context.taskType || 'general',
-          complexity: this.estimateComplexity(request),
-          requestedStrategy: request.strategy && request.strategy !== 'auto' ? request.strategy : null,
-          triageIntent: triageDecision?.intent ?? null,
-          triageComplexity: triageDecision?.complexity ?? null,
-          triageConfidence: triageDecision?.confidence ?? null,
-          triageRecommendedStrategy: triageDecision?.recommendedStrategy ?? null,
-          strategyScores: {},
-          selectedStrategy: strategy.getMetadata().name,
-          selectionReason: selectionSource,
-          modelsConsidered: context.models.map((m) => m.id),
-          modelsSelected: [],
-          decisionSource: selectionSource,
-          decisionConfidence: triageDecision?.confidence ?? undefined,
-        });
+        // Start reasoning transparency trace
+        this.reasoningTransparency.startTrace(requestId, request);
 
-        this.injectProviderRegistry(strategy);
+        const CACHEABLE_STRATEGIES = new Set<string | undefined>([
+          'dynamic',
+          'single',
+          'parallel',
+          'consensus',
+          'quality_multipass',
+          'debate',
+        ]);
+        const allowSemanticCache =
+          CACHEABLE_STRATEGIES.has(requestedCanonicalStrategy) && !request.no_cache;
 
-        const strategyName = strategy.getMetadata().name;
-        const requestedMaxTokens =
-          typeof request.max_tokens === 'number' ? request.max_tokens : undefined;
+        // LAT-2 (2026-06-11): kick off the semantic-memory lookup concurrently
+        // with the semantic-cache lookup — independent reads that were previously
+        // serialized (each can cost an embedding round-trip). On a cache hit the
+        // memory result is simply abandoned (read-only; no side effects beyond
+        // its own metrics); on a miss the pre-execution path pays
+        // max(cache, memory) instead of cache + memory.
+        // Gated by MEMORY_CONTEXT_ENABLED — when the embedding provider is
+        // unreachable (HF API 404, no local embedder), buildContext blocks on
+        // retry-and-fallback before yielding a zero-vector match; the env gate
+        // lets local/dev environments skip the round-trip entirely.
+        type MemoryContextResult = Awaited<
+          ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>
+        >;
+        const memoryContextPromise: Promise<MemoryContextResult | null> =
+          process.env.MEMORY_CONTEXT_ENABLED !== 'false'
+            ? getMemoryContextService()
+                .buildContext(request, organizationId, userId, {
+                  maxMemories: 5,
+                  minSimilarity: 0.7,
+                })
+                .catch((memoryError: unknown) => {
+                  this.log.warn(
+                    { error: getErrorMessage(memoryError) },
+                    'Failed to enrich request with memory context'
+                  );
+                  return null;
+                })
+            : Promise.resolve(null);
 
-        // ── OI-08: Adaptive Quality Targets ─────────────────────────────
-        // Replace static 0.85 with difficulty-aware target from historical data.
-        // The adaptive system considers (taskType, complexity) niche performance
-        // to set an appropriate target — easy tasks get lower targets (save compute),
-        // hard tasks get higher targets (invest in quality).
-        const adaptiveTarget = await getAdaptiveQualityTarget(
-          context.taskType || 'general',
-          this.estimateComplexity(request),
-          typeof context.qualityTarget === 'number' ? context.qualityTarget : undefined,
-        );
-        const qualityTarget = adaptiveTarget.target;
-
-        if (adaptiveTarget.source === 'learned') {
-          this.log.debug({
-            requestId,
-            qualityTarget,
-            adaptiveSource: adaptiveTarget.source,
-            confidence: adaptiveTarget.confidence,
-            historicalAvg: adaptiveTarget.historicalAvg,
-            historicalP90: adaptiveTarget.historicalP90,
-            suggestedIterations: adaptiveTarget.suggestedMinIterations,
-          }, 'Using learned adaptive quality target (OI-08)');
-        }
-
-        const latencySensitiveRequest =
-          context.preferSpeed ||
-          (requestedMaxTokens !== undefined && requestedMaxTokens <= 320);
-        const highDeliberationStrategy =
-          strategyName === 'debate' || strategyName === 'quality-multipass';
-
-        // OI-08: Use adaptive iteration suggestion when available
-        const adaptiveMinIterations = adaptiveTarget.suggestedMinIterations;
-        const allowMultiIterationFeedback =
-          (highDeliberationStrategy || adaptiveMinIterations >= 2) &&
-          !latencySensitiveRequest &&
-          qualityTarget >= 0.88 &&
-          (requestedMaxTokens === undefined || requestedMaxTokens > 512);
-
-        // B (2026-06-29, latency-safe): `allowMultiIterationFeedback` is the
-        // explicit opt-in for re-generation (requires qualityTarget>=0.88 / a
-        // high-deliberation strategy). The else-branch could still leak the
-        // adaptive suggestion (>=2) into default chat, doubling latency for a
-        // typically-marginal gain. When ORCHESTRATION_FEEDBACK_LATENCY_SAFE is
-        // set, cap non-opted-in requests to a single pass — still runs the
-        // validation + auto-fix pass, just no re-generation. Default off:
-        // behaviour unchanged unless the flag is flipped (reversible A/B).
-        const feedbackLatencySafe = process.env.ORCHESTRATION_FEEDBACK_LATENCY_SAFE === 'true';
-        const feedbackMaxIterations = allowMultiIterationFeedback
-          ? Math.min(this.config.maxFeedbackIterations ?? adaptiveMinIterations, 3)
-          : feedbackLatencySafe
-            ? 1
-            : Math.max(1, adaptiveMinIterations <= 1 ? 1 : adaptiveMinIterations);
-        const feedbackQualityThreshold = allowMultiIterationFeedback
-          ? qualityTarget
-          : Math.min(qualityTarget, 0.82);
-
-        // ── OI-10: Compute archive escalation strategy ──────────────────
-        // Pre-resolve an alternative strategy from the archive in case the
-        // primary strategy fails to meet quality after all feedback iterations.
-        let escalationStrategy: typeof strategy | undefined;
-        let escalationReason: string | undefined;
-        if (!latencySensitiveRequest) {
-          const alternatives = configurationArchive.getAlternatives(
-            context.taskType || 'general',
-            this.estimateComplexity(request),
-          );
-          // Pick the quality-dimension elite if it's different from the current strategy
-          const qualityElite = alternatives.find(
-            (a) => a.dimension === 'quality' && a.elite.strategy !== strategyName,
-          );
-          const fallbackElite = qualityElite ??
-            alternatives.find((a) => a.elite.strategy !== strategyName);
-          if (fallbackElite) {
-            const altStrategy = this.strategies.get(fallbackElite.elite.strategy as ExecutionStrategyName);
-            if (altStrategy && altStrategy.isSuitable(request, context)) {
-              this.injectProviderRegistry(altStrategy);
-              escalationStrategy = altStrategy;
-              escalationReason = `archive-${fallbackElite.dimension}-elite (fitness: ${fallbackElite.elite.fitness.toFixed(3)})`;
-            }
-          }
-        }
-
-        // ── SOTA System Prompt Injection ──────────────────────────────
-        // Inject a platform-aware system prompt so execution models understand
-        // the system's capabilities (tools, image gen, web search, etc.) and
-        // their role in the collective intelligence strategy. Only injected
-        // when no user/triage system message exists.
-        //
-        // R11: propagate the authoritative collective-strategy flag from the
-        // strategy's own metadata so the builder no longer relies on a hardcoded
-        // Set that missed several real collective strategies (debate, consensus,
-        // blind-debate, expert-panel, war-room, ...). BaseStrategy.getMetadata().minModels
-        // is the single source of truth for multi-model strategies.
-        context.isCollectiveStrategy = (strategy.getMetadata().minModels ?? 1) > 1;
-        injectExecutionSystemPrompt(request, context);
-
-        // ── Social Facilitation Prompt ────────────────────────────────
-        // For collective strategies (multi-model), inform models that their work
-        // will be peer-reviewed. Empirical evidence shows this improves
-        // performance on well-practiced tasks.
-        //
-        // Lote 2 refactor: the decision + injection logic is now centralized in
-        // `peer-review-prompt.ts` so a future A/B benchmark can toggle the
-        // behavior via `AILIN_PEER_REVIEW_MODE` without touching the engine.
-        // Default runtime behavior is IDENTICAL to Lote 1 — the helper resolves
-        // `mode='on'` unless the legacy `DISABLE_FACILITATION_PROMPT=true` is
-        // set or the new env opts out explicitly.
-        if (
-          shouldInjectPeerReviewPrompt({
-            isCollectiveStrategy: context.isCollectiveStrategy === true,
-            request,
-          })
-        ) {
-          // LAT-3 completion: keep `enrichedRequest` (the memory-enriched
-          // variant) in lockstep. Before this, injecting peer-review only
-          // into `request` forked the two variables — the confidence-gate
-          // branch below (built from `request`) silently DROPPED the
-          // engine-injected memory block, and the else-branch (built from
-          // `enrichedRequest`) silently dropped the peer-review prompt.
-          const requestBeforePeerReview = request;
-          request = injectPeerReviewPrompt(request);
-          enrichedRequest = enrichedRequest === requestBeforePeerReview
-            ? request
-            : injectPeerReviewPrompt(enrichedRequest);
-        }
-
-        // ── Confidence-Gated Continuation (OI-04) ──────────────────────
-        // Compute-allocation principle: systems should "think longer" on
-        // harder problems. If feedback loop is disabled OR single-iteration,
-        // we still execute once and check: if quality is below a confidence
-        // gate, trigger one refinement.
-        const confidenceGateEnabled = this.config.enableFeedbackLoop !== false;
-        const confidenceGateThreshold = qualityTarget * 0.85; // 85% of target
-
-        // A-fix (2026-06-11): if strategy execution THROWS — e.g. a collective
-        // throwing "All parallel executions failed" when every fanned-out provider
-        // returns 401/402/empty — synthesize an EMPTY OrchestrationResult instead of
-        // letting the throw escape to a 500. The shared post-execution pipeline below
-        // (recoverEmptyFinalResponse) then re-selects funded candidates (anthropic,
-        // etc.), so the request routes around the dead gateways.
-        const buildExecThrewResult = (err: unknown): OrchestrationResult => ({
-          strategyUsed: strategy.getMetadata().name,
-          modelsUsed: [],
-          finalResponse: {
-            id: `exec-threw-${Date.now()}`,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: 'auto',
-            choices: [{
-              index: 0,
-              message: { role: 'assistant', content: '' },
-              finish_reason: 'stop',
-              logprobs: null,
-            }],
-          },
-          totalCost: 0,
-          totalDuration: 0,
-          qualityScore: 0,
-          metadata: { strategy_execution_threw: true, strategy_execution_error: getErrorMessage(err) },
-        });
-
-        if (confidenceGateEnabled) {
-          // C3 P0.2: Skip memory enrichment when ablated.
-          // Review fix: this branch is the DEFAULT production path
-          // (enableFeedbackLoop defaults on) and was missed when
-          // applyRecommendedTools was wired into the else-branch and the
-          // streaming path — triage-recommended tools never reached the
-          // strategy here.
-          // LAT-3 completion: base on enrichedRequest (NOT the raw request),
-          // exactly like the else-branch — when the engine already ran the
-          // memory search (context.memoryEnriched), enrichWithMemories
-          // short-circuits and returns its INPUT unchanged, so passing the
-          // raw `request` here dropped the engine-injected memory block on
-          // the default path (memory never reached the models).
-          const memRequest = this.applyRecommendedTools(
-            context.ablationFlags?.disabled?.has('memory')
-              ? request
-              : await strategy.enrichWithMemories(enrichedRequest, context),
-            context,
-          );
-          // C3 P0.2: Skip feedback loop when ablated (single attempt)
-          const ablatedFeedbackIterations = context.ablationFlags?.disabled?.has('feedback-loop')
-            ? 1
-            : feedbackMaxIterations;
+        // Check semantic cache for similar requests (if enabled)
+        if (allowSemanticCache && isCacheEnabled() && !request.stream) {
           try {
-            result = await this.feedbackLoop.executeWithFeedback(strategy, memRequest, context, {
-              qualityThreshold: feedbackQualityThreshold,
-              maxIterations: ablatedFeedbackIterations,
-              allowAutoFix: !context.ablationFlags?.disabled?.has('feedback-loop'),
-              escalationStrategy,
-              escalationReason,
+            const semanticCache = getSemanticCache();
+            const cacheResult = await semanticCache.lookup({
+              request,
+              organizationId,
             });
-          } catch (execErr) {
-            this.log.error(
-              { requestId, strategy: strategy.getMetadata().name, error: getErrorMessage(execErr) },
-              'Strategy execution threw — synthesizing empty result so cross-provider recovery can run'
-            );
-            result = buildExecThrewResult(execErr);
-          }
 
-          // Dynamic deliberation: number of refinement rounds determined by:
-          // 1. Triage recommendation (max_deliberation_rounds)
-          // 2. Quality score after initial execution (confidence gate)
-          // 3. Latency sensitivity (skip if user needs speed)
-          const triageRounds = context.executionPlan?.maxDeliberationRounds;
-          const maxRefinementRounds = triageRounds ?? (
-            !latencySensitiveRequest && feedbackMaxIterations <= 1 ? 1 : 0
-          );
+            if (cacheResult) {
+              const cachedAilinMetadata = cacheResult.entry.response.ailin_metadata as
+                | {
+                    resolved_strategy?: string;
+                    resolved_model?: string;
+                    final_decider_model_id?: string;
+                    final_decider_model_name?: string;
+                    final_decider_role?: string;
+                    fallback_chain?: unknown;
+                  }
+                | undefined;
+              const resolvedCachedStrategy =
+                canonicalizeStrategyInput(cachedAilinMetadata?.resolved_strategy) ||
+                requestedCanonicalStrategy ||
+                'dynamic';
+              const resolvedCachedModel =
+                typeof cachedAilinMetadata?.resolved_model === 'string' &&
+                cachedAilinMetadata.resolved_model.length > 0
+                  ? cachedAilinMetadata.resolved_model
+                  : cacheResult.entry.response.model;
+              const finalDeciderModelId =
+                typeof cachedAilinMetadata?.final_decider_model_id === 'string' &&
+                cachedAilinMetadata.final_decider_model_id.length > 0
+                  ? cachedAilinMetadata.final_decider_model_id
+                  : typeof cacheResult.entry.response.model === 'string' &&
+                      cacheResult.entry.response.model.length > 0
+                    ? cacheResult.entry.response.model
+                    : undefined;
+              const finalDeciderModelName =
+                typeof cachedAilinMetadata?.final_decider_model_name === 'string' &&
+                cachedAilinMetadata.final_decider_model_name.length > 0
+                  ? cachedAilinMetadata.final_decider_model_name
+                  : resolvedCachedModel;
+              const finalDeciderRole =
+                typeof cachedAilinMetadata?.final_decider_role === 'string' &&
+                cachedAilinMetadata.final_decider_role.length > 0
+                  ? cachedAilinMetadata.final_decider_role
+                  : 'cache';
+              const fallbackChain = Array.isArray(cachedAilinMetadata?.fallback_chain)
+                ? cachedAilinMetadata.fallback_chain.filter(
+                    (value): value is string => typeof value === 'string' && value.length > 0
+                  )
+                : [];
 
-          if (
-            maxRefinementRounds > 0 &&
-            !latencySensitiveRequest &&
-            // B (2026-06-29): in latency-safe mode the confidence-gate refinement
-            // is also a re-generation pass — keep it only for opted-in requests.
-            (!feedbackLatencySafe || allowMultiIterationFeedback) &&
-            result.qualityScore !== undefined &&
-            result.qualityScore < confidenceGateThreshold &&
-            result.qualityScore > 0.2 // Don't retry complete failures
-          ) {
-            this.log.info({
-              requestId,
-              qualityScore: result.qualityScore,
-              confidenceGate: confidenceGateThreshold,
-              qualityTarget,
-              maxRefinementRounds,
-              source: triageRounds !== undefined ? 'triage' : 'default',
-            }, 'Confidence gate triggered — executing refinement pass(es)');
+              this.log.info(
+                {
+                  requestId,
+                  cacheHit: true,
+                  isExactMatch: cacheResult.isExactMatch,
+                  similarity: cacheResult.similarity,
+                },
+                'Semantic cache hit - returning cached response'
+              );
 
-            const refinementResult = await this.feedbackLoop.executeWithFeedback(
-              strategy, request, context, {
-                qualityThreshold: qualityTarget,
-                maxIterations: maxRefinementRounds,
-                allowAutoFix: true,
-              }
-            );
+              // Record cache hit (fire-and-forget — a Redis bump must not delay
+              // the already-resolved cached response)
+              void semanticCache.recordHit(cacheResult.entry.id).catch(() => {});
 
-            // Keep the better result
-            if ((refinementResult.qualityScore ?? 0) > (result.qualityScore ?? 0)) {
-              result = refinementResult;
-              result.metadata = {
-                ...result.metadata,
-                confidence_gate: {
-                  triggered: true,
-                  originalScore: result.qualityScore,
-                  refinedScore: refinementResult.qualityScore,
+              // Complete transparency trace with cache hit info
+              this.reasoningTransparency.completeTrace(requestId);
+
+              return {
+                finalResponse: cacheResult.entry.response,
+                strategyUsed: 'cached' as ExecutionStrategyName,
+                modelsUsed: [],
+                totalDuration: Date.now() - startTime,
+                totalCost: 0, // No cost for cached response
+                qualityScore: 0.9, // Assume high quality for cached
+                metadata: {
+                  cacheHit: true,
+                  cacheEntryId: cacheResult.entry.id,
+                  cacheSimilarity: cacheResult.similarity,
+                  isExactMatch: cacheResult.isExactMatch,
+                  resolved_strategy: resolvedCachedStrategy,
+                  resolved_model: resolvedCachedModel,
+                  final_decider_model_id: finalDeciderModelId,
+                  final_decider_model_name: finalDeciderModelName,
+                  final_decider_role: finalDeciderRole,
+                  fallback_chain:
+                    fallbackChain.length > 0
+                      ? fallbackChain
+                      : resolvedCachedModel
+                        ? [resolvedCachedModel]
+                        : [],
                 },
               };
             }
-          }
-        } else {
-          // ── Observer wiring ──
-          // If enable_observer=true, instantiate ObserverService with a local reasoning model.
-          // The observer narrates the collective process in real-time via SSE chunks.
-          // Narration is default-ON: undefined/true both enable it; only an
-          // explicit enable_observer:false opts out. OBSERVER_DEFAULT_ENABLED=false
-          // is the global kill-switch (flip on the running stack, no redeploy).
-          const observerEnabled =
-            process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
-            request.ailin_constraints?.enable_observer !== false;
-          let observerFeed = createNoOpObserverFeed();
-          if (observerEnabled) {
-            const language = ObserverService.extractUserSample(request.messages);
-            const observer = new ObserverService(
-              { enabled: true, language },
-              strategy.getMetadata().name,
-            );
-            if (observer.isActive()) {
-              observerFeed = observer;
-            }
-          }
-          // Inject observer feed into strategy context for event emission.
-          // `observerFeed` is a runtime-attached field; single structural cast
-          // (NOT `as unknown as`) is the proper way to express "I know this
-          // object accepts this extra field at runtime".
-          (context as { observerFeed?: typeof observerFeed }).observerFeed = observerFeed;
-
-          // NOTE: cross-modal capability access is provided via `context.invoker`
-          // (built once per request in buildContext(), see createCapabilityInvoker
-          // call there). It used to ALSO be written onto the shared `strategy`
-          // singleton as `strategy.capabilityInvoker` here — a mutable field on an
-          // object reused across every concurrent request for this strategy name,
-          // racy under concurrent load (request A's invoker could be overwritten by
-          // request B's before A read it) and never actually read by any strategy.
-          // Removed rather than fixed in place: `context.invoker` is already the
-          // correct, request-scoped mechanism.
-
-          // Memory enrichment: search for relevant memories and inject as context.
-          // Base on enrichedRequest (NOT the original request): when the engine
-          // already ran the memory search (context.memoryEnriched), enrichWith-
-          // Memories short-circuits and returns its input unchanged — passing
-          // the original `request` there DISCARDED the engine-injected memory
-          // block entirely on the non-streaming path (memory never reached the
-          // models). enrichedRequest === request when nothing was enriched, so
-          // the no-memory path is unchanged.
-          // C3 P0.2: Skip when memory is ablated
-          const memoryEnrichedRequest = this.applyRecommendedTools(
-            context.ablationFlags?.disabled?.has('memory')
-              ? request
-              : await strategy.enrichWithMemories(enrichedRequest, context),
-            context,
-          );
-
-          // Inject Strategy Leader for adaptive supervision
-          // Leader removed — strategies call executeModel() directly
-
-          try {
-            result = await strategy.execute(memoryEnrichedRequest, context);
-          } catch (execErr) {
-            this.log.error(
-              { requestId, strategy: strategy.getMetadata().name, error: getErrorMessage(execErr) },
-              'Strategy execution threw — synthesizing empty result so cross-provider recovery can run'
-            );
-            result = buildExecThrewResult(execErr);
-          }
-
-          // Memory recording: store high-quality results for future retrieval
-          strategy.recordExecution(context, result).catch(() => {}); // fire-and-forget
-
-          // Record degradation metadata if strategy was degraded pre-dispatch
-          if (context.degradation?.isDegraded) {
-            result.metadata = {
-              ...result.metadata,
-              strategy_requested: context.degradation.originalStrategy,
-              strategy_executed: context.degradation.executedStrategy,
-              degradation_path: context.degradation.degradationPath,
-              degradation_reason: context.degradation.degradationReason,
-              degradation_depth: context.degradation.degradationDepth,
-            };
-          }
-
-          // Attach observer narrations to result metadata
-          const narrations = observerFeed.getNarrations();
-          if (narrations.length > 0) {
-            result.metadata = {
-              ...result.metadata,
-              observer_narrations: narrations.map(n => ({
-                event: n.event.type,
-                narration: n.narration,
-                reasoning: n.reasoning,
-                duration_ms: n.durationMs,
-              })),
-            };
-          }
-        }
-      }
-
-      // ── Shared post-execution pipeline (quality, learning, cache) ──
-      // Attach decision source to metadata for downstream auditability
-      // C4 fix: uses request-scoped selectionSource, not shared instance field
-      result.metadata = { ...result.metadata, decision_source: selectionSource };
-      result.finalResponse = this.ensureResponseUsage(result.finalResponse);
-      result = await this.recoverEmptyFinalResponse(result, request, context, requestId);
-      result.finalResponse = this.ensureResponseUsage(result.finalResponse);
-
-      // ── Response Depth Check (data-driven: <500 tokens → Q=0.196 avg) ──
-      // Insight: short responses (<500 tokens) for medium/high complexity tasks
-      // score near-zero. If response is suspiciously short, log a warning.
-      // This informs the quality scorer and learning systems.
-      const responseTokens = result.finalResponse.usage?.completion_tokens ?? 0;
-      const MIN_DEPTH_TOKENS = Number(process.env.MIN_RESPONSE_DEPTH_TOKENS ?? 300);
-      if (responseTokens > 0 && responseTokens < MIN_DEPTH_TOKENS && context.taskType !== 'caching') {
-        this.log.warn({
-          requestId,
-          strategy: result.strategyUsed,
-          responseTokens,
-          minDepth: MIN_DEPTH_TOKENS,
-          taskType: context.taskType,
-        }, 'Response may be insufficiently thorough (below minimum depth threshold)');
-        result.metadata = { ...result.metadata, depth_warning: true, response_tokens: responseTokens };
-      }
-
-      if (!this.hasUsableAssistantResponse(result.finalResponse)) {
-        this.log.warn({ requestId }, 'Orchestration produced empty response after fallback attempts — returning degraded response');
-        const degradedResponse: ChatResponse = {
-          id: `degraded-${Date.now()}`,
-          object: 'chat.completion',
-          created: Math.floor(Date.now() / 1000),
-          model: 'auto',
-          choices: [{
-            index: 0,
-            message: { role: 'assistant', content: '[DEGRADED] All execution attempts failed. No response produced.' },
-            finish_reason: 'stop',
-            logprobs: null,
-          }],
-          // Explicit zeroed usage — without this, callers that read
-          // `usage?.total_tokens ?? 0` can't distinguish "no usage reported"
-          // from "no usage block at all", and a 200 OK + non-empty content +
-          // absent usage silently reads as an ordinary free/cached success.
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-        };
-        result.finalResponse = degradedResponse;
-        result.qualityScore = 0;
-        result.metadata = { ...result.metadata, degraded: true, degraded_reason: 'empty_response_after_fallback' };
-      }
-
-      const totalDuration = Date.now() - startTime;
-
-      // C3 P0.4: Scoring policy and policy-aware score — hoisted for use in
-      // learning guard. Typed as the resolved-promise shape of
-      // `calculatePolicyAwareScore` (the only producer); using `Awaited<...>`
-      // avoids hand-duplicating the inline type and keeps the two in lockstep.
-      const scoringPolicy = context.scoringPolicy ?? 'learning';
-      // `typeof this.x` is invalid in a type-position alias (TS2304: `this`
-      // isn't bound at the type level inside a method body). Reach the
-      // method through the class index signature instead so the alias stays
-      // in lockstep with `calculatePolicyAwareScore`'s actual return type.
-      type PolicyAwareScore = Awaited<
-        ReturnType<OrchestrationEngine['qualityScorer']['calculatePolicyAwareScore']>
-      >;
-      let policyAwareScore: PolicyAwareScore | null = null;
-
-      // ── LAT-1 (2026-06-11): defer the LLM judge + learning tail off the
-      //    response path for the default 'learning' policy. The judge (1-5s) and
-      //    its dependent learning/stores run in __finalize() via setImmediate; the
-      //    response returns immediately with a fast heuristic-preliminary score.
-      //    'benchmark'/'observability'/sync_judge keep the original sync behavior.
-      //    Ops escape hatch: LEARNING_JUDGE_SYNC=true restores the blocking judge
-      //    fleet-wide without an API change.
-      const deferLearning =
-        scoringPolicy === 'learning' &&
-        context.syncJudge !== true &&
-        process.env.LEARNING_JUDGE_SYNC !== 'true';
-      if (deferLearning) {
-        // Fold the already-known triage cost synchronously so the response cost is
-        // correct; the judge cost is added asynchronously via the billing top-up.
-        const prelimTriageCost = context.triage?.costUsd ?? triageDecision?.costUsd ?? 0;
-        if (prelimTriageCost > 0) result.totalCost += prelimTriageCost;
-        // Degraded responses keep qualityScore=0 and omit the quality block, to
-        // match the pre-deferral contract; non-degraded responses surface a fast
-        // heuristic-preliminary score (the real judge overwrites it in __finalize).
-        // We intentionally do NOT call modelPerformanceTracker.updateQualityOnly
-        // here — the deferred judge feeds the rolling-quality EMA exactly once.
-        const isDegraded = result.metadata?.degraded === true;
-        let prelimQuality: Record<string, unknown> | undefined;
-        if (!isDegraded) {
-          const prelimExec =
-            result.modelsUsed.find((e) => e.success && e.role === 'primary') ||
-            result.modelsUsed.find((e) => e.success) ||
-            result.modelsUsed[0];
-          const prelim = this.qualityScorer.calculateScore(result.finalResponse, context, prelimExec);
-          result.qualityScore = prelim.overall;
-          prelimQuality = {
-            score: prelim.overall,
-            dimensions: prelim.dimensions,
-            confidence: prelim.confidence,
-            reasoning: prelim.reasoning ?? [],
-            method: prelim.method,
-            policy: scoringPolicy,
-            preliminary: true,
-          };
-        }
-        result.metadata = {
-          ...result.metadata,
-          ...(prelimQuality ? { quality: prelimQuality } : {}),
-          __judgeDeferred: true,
-          __triageCostFolded: prelimTriageCost > 0,
-          cost_breakdown: {
-            ...(typeof result.metadata?.cost_breakdown === 'object' && result.metadata?.cost_breakdown !== null
-              ? (result.metadata.cost_breakdown as Record<string, unknown>)
-              : {}),
-            triage_cost_usd: prelimTriageCost,
-            judge_cost_usd: 0,
-            // The real judge cost is billed asynchronously; the response total is
-            // preliminary (exact when the judge is free, the default prod config).
-            judge_cost_pending: true,
-          },
-        };
-      }
-
-      // __finalize: the judge + learning tail. Awaited inline for sync policies;
-      // fired via setImmediate (deferred) for the default 'learning' policy.
-      const __finalize = async (): Promise<void> => {
-      // Ensure quality scoring metadata is present
-      if (deferLearning || result.qualityScore === undefined || result.metadata?.quality === undefined) {
-        const primaryExecution =
-          result.modelsUsed.find((exec) => exec.success && exec.role === 'primary') ||
-          result.modelsUsed.find((exec) => exec.success) ||
-          result.modelsUsed[0];
-
-        // C3 P0.4: Policy-aware scoring
-        // Uses the hoisted scoringPolicy and policyAwareScore from outer scope.
-        let qualityScore: import('@/core/quality/quality-scorer').QualityScore;
-
-        if (scoringPolicy === 'observability') {
-          // Fast path: heuristic only, NOT used for learning
-          qualityScore = this.qualityScorer.calculateScore(result.finalResponse, context, primaryExecution);
-        } else {
-          // 'learning' or 'benchmark': LLM-Judge MANDATORY. On the deferred
-          // path (deferLearning) this whole block runs inside the
-          // post-response __finalize, so the judge round-trip never blocks
-          // the client; on the sync path ('benchmark' / sync_judge /
-          // LEARNING_JUDGE_SYNC=true) it is awaited inline so experiments
-          // get the judged score and judge cost attributed on the response
-          // itself (C3 cost integrity).
-          const pas = await this.qualityScorer.calculatePolicyAwareScore(
-            result.finalResponse,
-            context,
-            primaryExecution,
-            scoringPolicy as 'learning' | 'benchmark',
-            { originalRequest: request }
-          );
-          policyAwareScore = pas;
-
-          // C3 A.3: Record scoring pair for reward hacking detection
-          if (pas.heuristicScore != null && pas.judgeScore != null) {
-            try {
-              const { getRewardHackingDetector } = await import('@/core/validation/c3/reward-hacking-detector.js');
-              const content = result.finalResponse?.choices?.[0]?.message?.content;
-              const contentStr = typeof content === 'string' ? content : '';
-              getRewardHackingDetector().record({
-                heuristicScore: pas.heuristicScore,
-                judgeScore: pas.judgeScore,
-                tokenCount: result.modelsUsed.reduce((s, m) => s + (m.response?.usage?.total_tokens ?? 0), 0),
-                headingsCount: (contentStr.match(/^#{1,6}\s/gm) || []).length,
-                codeBlocksCount: Math.floor((contentStr.match(/```/g) || []).length / 2),
-                contentLength: contentStr.length,
-              });
-            } catch { /* non-blocking */ }
-          }
-
-          qualityScore = {
-            overall: pas.overall,
-            // `pas.dimensions` is already `QualityDimensions` (same source of
-            // truth: quality-scorer.ts). The previous `as unknown as` cast was
-            // unnecessary obfuscation — the types match directly.
-            dimensions: pas.dimensions,
-            confidence: pas.confidence,
-            reasoning: pas.reasoning ?? [],
-            method: pas.method === 'hybrid' ? 'llm-judge' : pas.method,
-          };
-          // Tag the result metadata with scoring policy details
-          // Typed via OrchestrationInternalMetadata — no Record cast needed.
-          result.metadata.__scoringPolicy = scoringPolicy;
-          result.metadata.__judgeFailed = pas.judgeFailed ?? false;
-          result.metadata.__validForLearning = !pas.judgeFailed && pas.confidence >= 0.3;
-        }
-
-        result.qualityScore = qualityScore.overall;
-        result.metadata = {
-          ...result.metadata,
-          quality: {
-            score: qualityScore.overall,
-            dimensions: qualityScore.dimensions,
-            confidence: qualityScore.confidence,
-            reasoning: qualityScore.reasoning,
-            method: qualityScore.method,
-            heuristicScore: policyAwareScore?.heuristicScore,
-            judgeScore: policyAwareScore?.judgeScore,
-            policy: scoringPolicy,
-          },
-        };
-
-        // Refine ModelPerformanceTracker with the actual quality score
-        // (base-strategy records 0.8 placeholder; this updates with real value).
-        // Uses updateQualityOnly() so provider reliability stats are NOT
-        // double-counted — base-strategy.ts already recorded the execution
-        // with the real execution provider (the adapter name).
-        for (const exec of result.modelsUsed) {
-          if (exec.success) {
-            modelPerformanceTracker.updateQualityOnly(exec.modelId, qualityScore.overall);
-          }
-        }
-      }
-
-      // C3 P1.1: Measure diversity for multi-model strategies (non-blocking)
-      if (result.modelsUsed.length > 1) {
-        import('@/core/validation/c3/independence-test.js')
-          .then(({ getIndependenceTestService }) => {
-            const service = getIndependenceTestService();
-            const outputs = result.modelsUsed
-              .filter(exec => exec.success && exec.response?.choices?.[0])
-              .map(exec => ({
-                modelId: exec.modelId,
-                provider: this.inferProviderFromModelId(exec.modelId),
-                content: safeResponseContent(exec.response),
-                role: exec.role,
-                round: 1,
-              }));
-            if (outputs.length >= 2) {
-              service.measureDiversity(
-                outputs,
-                result.strategyUsed,
-                context.taskType || 'general',
-                this.estimateComplexity(request)
-              ).catch(() => {});
-            }
-          })
-          .catch(() => {});
-      }
-
-      // ── Cost-accounting integrity (TIER 0): fold in billable sub-calls that
-      //    are not part of the strategy's modelsUsed accounting ──────────────
-      // The strategy's `result.totalCost` covers its own model executions
-      // (including the consensus synthesizer, now tracked there). Two further
-      // billable LLM sub-calls happen OUTSIDE the strategy and were previously
-      // dropped from the reported cost:
-      //   COST #4 — triage (pre-strategy classification LLM call)
-      //   COST #5 — LLM judge / quality scorer (post-strategy scoring call)
-      // Add both to the request total and surface them as distinct line items
-      // so the C3 cost thesis can be measured against the true request cost.
-      // Missing values are treated as 0 (heuristic triage / no-judge paths).
-      const triageCostUsd = context.triage?.costUsd ?? triageDecision?.costUsd ?? 0;
-      const judgeCostUsd = policyAwareScore?.judgeCostUsd ?? 0;
-      // LAT-1: in the deferred path the triage cost was already folded into
-      // result.totalCost synchronously (and the response already shows it), so
-      // only fold the judge cost here to avoid double-counting in the persisted
-      // execution-outcome row. The judge cost is added to the bill via the
-      // top-up at the end of __finalize.
-      const triageAlreadyFolded = result.metadata?.__triageCostFolded === true;
-      const auxiliaryCostUsd =
-        (triageAlreadyFolded ? 0 : (triageCostUsd > 0 ? triageCostUsd : 0)) +
-        (judgeCostUsd > 0 ? judgeCostUsd : 0);
-      if (auxiliaryCostUsd > 0) {
-        result.totalCost += auxiliaryCostUsd;
-      }
-      // Always emit the breakdown (even when 0) so downstream consumers have a
-      // stable cost-accounting shape to read.
-      result.metadata = {
-        ...result.metadata,
-        cost_breakdown: {
-          ...(typeof result.metadata?.cost_breakdown === 'object' && result.metadata?.cost_breakdown !== null
-            ? result.metadata.cost_breakdown as Record<string, unknown>
-            : {}),
-          triage_cost_usd: triageCostUsd,
-          judge_cost_usd: judgeCostUsd,
-        },
-      };
-
-      this.log.info(
-        {
-          requestId,
-          strategy: result.strategyUsed,
-          duration: totalDuration,
-          cost: result.totalCost,
-          modelsUsed: result.modelsUsed.length,
-          qualityScore: result.qualityScore,
-        },
-        'Orchestration completed successfully'
-      );
-
-      // Store response in semantic cache for future similar requests
-      // Use a lower threshold for short factual answers (< 150 tokens) since they score
-      // 0.53-0.57 by design (no elaboration) but are highly cacheable (always identical)
-      const totalTokens = result.finalResponse.usage?.total_tokens ?? 0;
-      const cacheStoreThreshold = totalTokens > 0 && totalTokens < 150 ? 0.5 : 0.65;
-      if (isCacheEnabled() && !request.stream && result.qualityScore && result.qualityScore >= cacheStoreThreshold) {
-        // C3 latency fix (2026-06-11): fire-and-forget. The LLM response is already complete; storing
-        // it in the semantic cache (which generates an embedding) must NOT delay the response to the
-        // caller. Run it in the background, best-effort — errors are logged, never surfaced/awaited.
-        const semanticCache = getSemanticCache();
-        void semanticCache
-          .store({
-            request,
-            response: result.finalResponse,
-            organizationId,
-            metadata: {
-              tokensSaved: result.finalResponse.usage?.total_tokens || 0,
-              costSaved: result.totalCost,
-            },
-          })
-          .then(() => {
-            this.log.debug({ requestId }, 'Response stored in semantic cache');
-          })
-          .catch((cacheError) => {
+          } catch (cacheError) {
             this.log.warn(
               { error: getErrorMessage(cacheError) },
-              'Failed to store in semantic cache (non-blocking)'
+              'Semantic cache lookup failed, continuing without cache'
             );
-          });
-      }
-
-      // Store high-quality interactions as procedural memory.
-      // LAT-1: fire-and-forget (embedding + pgvector insert) and — because
-      // this runs inside __finalize, after the judge — the ≥0.85 gate uses
-      // the judged score, never the preliminary heuristic one.
-      if (result.qualityScore !== undefined) {
-        void this.storeProceduralMemory({
-          result,
-          request,
-          context,
-          organizationId,
-          userId,
-          qualityScore: result.qualityScore,
-        });
-      }
-
-      // Record CI metrics
-      recordStrategyExecution({
-        strategy: result.strategyUsed,
-        taskType: context.taskType || 'general',
-        status: 'success',
-        durationMs: totalDuration,
-        qualityScore: result.qualityScore,
-        costUsd: result.totalCost,
-      });
-
-      // OBS-04: record the model-selection decision (which model was chosen and
-      // why). Emits `ci_model_selection_total{model, task_type, selection_reason}`
-      // — previously defined but never recorded, so the model-selection alerts
-      // and dashboards had no data. Labels are bounded: `model` is the primary
-      // executed model from the catalog and `selection_reason` is the same
-      // bounded decision source written to the decision audit (heuristic /
-      // triage / bandit / archive / pareto / explicit / fallback / multi-stage).
-      // No per-request or prompt-derived labels are used.
-      const primarySelectedModel =
-        result.modelsUsed.find((execution) => execution.success)?.modelId ??
-        result.modelsUsed[0]?.modelId;
-      if (primarySelectedModel) {
-        recordModelSelection({
-          model: primarySelectedModel,
-          taskType: context.taskType || 'general',
-          selectionReason:
-            (typeof result.metadata?.decision_source === 'string'
-              ? result.metadata.decision_source
-              : selectionSource) || 'unknown',
-        });
-      }
-
-      // Record execution and quality in transparency trace
-      this.reasoningTransparency.recordExecution(requestId, result);
-      if (result.qualityScore !== undefined) {
-        const qualityMetadata = result.metadata?.quality as { dimensions?: Record<string, number> } | undefined;
-        this.reasoningTransparency.recordQuality(requestId, {
-          score: result.qualityScore,
-          dimensions: qualityMetadata?.dimensions || ({} as Record<string, number>),
-          threshold: context.qualityTarget || 0.7,
-        });
-      }
-      this.reasoningTransparency.completeTrace(requestId);
-
-      // Update knowledge graph edges (non-blocking)
-      // C3 P0.2: Skip KG update when ablated
-      if (!context.ablationFlags?.disabled?.has('knowledge-graph'))
-      knowledgeGraphService.recordExecution({
-        strategy: result.strategyUsed,
-        taskType: context.taskType || 'general',
-        modelIds: result.modelsUsed.filter((e) => e.success).map((e) => e.modelId),
-        qualityScore: result.qualityScore ?? 0,
-      }).catch((err) => this.log.warn({ error: getErrorMessage(err) }, 'Knowledge graph recording failed'));
-
-      // Update learning systems (non-blocking, in-memory)
-      // C3 P0.4: Only feed learning systems when the score is judge-validated
-      // (the judge ran above — synchronously for benchmark/sync_judge, inside
-      // the deferred __finalize for the production 'learning' policy).
-      // Observability: heuristic-only scores are NEVER valid for learning.
-      // (Fixes an inverted legacy condition that let heuristic scores feed
-      // the bandit whenever scoringPolicy === 'observability'.)
-      const scoreValidForLearning = policyAwareScore
-        ? !policyAwareScore.judgeFailed &&
-          policyAwareScore.confidence >= 0.3 &&
-          policyAwareScore.policy !== 'observability'
-        : false;
-      // Freeze learning when the caller asked (experiment 'frozen' phase). The
-      // runner set an X-Experiment-Freeze-Learning HEADER that no server code
-      // read — so learning kept updating during the supposedly-frozen phase,
-      // silently violating the experiment's own methodology. Honor the body flag.
-      const learningFrozen = request.freeze_learning === true;
-      if (result.qualityScore !== undefined && scoreValidForLearning && learningFrozen) {
-        this.log.debug(
-          { requestId, strategy: result.strategyUsed },
-          'Learning frozen for this request (freeze_learning=true) — skipping bandit/learning updates',
-        );
-      }
-      if (result.qualityScore !== undefined && scoreValidForLearning && !learningFrozen) {
-        this.applyLearningUpdates({
-          result,
-          context,
-          request,
-          triageDecision,
-          totalDuration,
-          qualityScore: result.qualityScore,
-        });
-      } else if (result.qualityScore !== undefined && !scoreValidForLearning) {
-        // C3 P0.4: Score exists but is invalid for learning (judge failed or observability-only)
-        this.log.warn(
-          {
-            requestId,
-            strategy: result.strategyUsed,
-            qualityScore: result.qualityScore,
-            policy: scoringPolicy,
-            judgeFailed: policyAwareScore?.judgeFailed,
-          },
-          'Skipping learning update — score not valid for learning (LLM-Judge failed or observability-only policy)'
-        );
-      }
-
-      // Record learning insight (async, non-blocking, with timeout guard)
-      const LEARNING_TIMEOUT_MS = 5_000;
-      Promise.race([
-        autoLearningSystem.learn(result, {
-          type:
-            request.task_type ||
-            (this.isTaskType(triageDecision?.intent) ? triageDecision?.intent : 'general'),
-          complexity: this.estimateComplexity(request),
-          contextSize: this.estimateContextSize(request.messages),
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Learning timeout')), LEARNING_TIMEOUT_MS)
-        ),
-      ]).catch((err) => this.log.warn({ error: getErrorMessage(err) }, 'Learning insight failed or timed out'));
-
-      // ── Closed-Loop: Record execution outcome ────────────────────────
-      // Persists the measured result linked to the decision trace (requestId).
-      // This is the foundation for regret calculation, drift detection, and
-      // learning validation — proving the system actually improves.
-      const qualityMeta = result.metadata?.quality as { dimensions?: Record<string, number> } | undefined;
-      recordOutcome({
-        decisionTraceId: requestId,
-        strategy: result.strategyUsed,
-        startedAt: new Date(Date.now() - totalDuration),
-        finishedAt: new Date(),
-        latencyMs: totalDuration,
-        costUsd: result.totalCost,
-        totalTokens: result.modelsUsed.reduce(
-          (sum, m) => sum + (m.response?.usage?.total_tokens ?? 0), 0,
-        ),
-        success: (result.qualityScore ?? 0) > 0,
-        failureReason: result.modelsUsed.find(m => !m.success)?.error,
-        retries: (result.metadata?.feedback_iterations as Array<unknown>)?.length ?? 0,
-        fallbackUsed: false,
-        escalationUsed: !!result.metadata?.escalation,
-        qualityScore: result.qualityScore ?? null,
-        qualityDimensions: qualityMeta?.dimensions,
-        feedbackIterations: (result.metadata?.feedback_summary as { totalIterations?: number })?.totalIterations ?? 1,
-        modelsUsed: result.modelsUsed.filter(e => e.success).map(e => e.modelId),
-        observedMetrics: {
-          strategyUsed: result.strategyUsed,
-          taskType: context.taskType || 'general',
-          complexity: this.estimateComplexity(request),
-        },
-      }).catch((err) => this.log.warn({ error: getErrorMessage(err) }, 'Outcome measurement recording failed'));
-
-      // ── Closed-Loop: Shadow evaluation (async, non-blocking) ─────────
-      // For a fraction of requests, execute an alternative strategy and compare.
-      // This produces regret data for competitive benchmarking.
-      // C3 P0.2: Skip shadow evaluation when ablated
-      if (shouldRunShadowEval() && result.qualityScore !== undefined && !context.ablationFlags?.disabled?.has('shadow')) {
-        const chosenStrategy = result.strategyUsed;
-        const taskType = context.taskType || 'general';
-        const complexity = this.estimateComplexity(request);
-        const alternatives = configurationArchive.getAlternatives(taskType, complexity);
-        const shadowCandidate = alternatives.find(a => a.elite.strategy !== chosenStrategy);
-
-        if (shadowCandidate) {
-          const shadowStrategyObj = this.strategies.get(shadowCandidate.elite.strategy as ExecutionStrategyName);
-          if (shadowStrategyObj && shadowStrategyObj.isSuitable(request, context)) {
-            // Execute shadow strategy asynchronously — never blocks the response
-            setImmediate(async () => {
-              try {
-                this.injectProviderRegistry(shadowStrategyObj);
-                const shadowStart = Date.now();
-                const shadowResult = await shadowStrategyObj.execute(request, context);
-                const shadowDuration = Date.now() - shadowStart;
-
-                const primaryExec = shadowResult.modelsUsed.find(e => e.success) ?? shadowResult.modelsUsed[0];
-                const shadowQuality = this.qualityScorer.calculateScore(
-                  shadowResult.finalResponse, context, primaryExec,
-                );
-
-                const qualityRegret = Math.max(0, shadowQuality.overall - (result.qualityScore ?? 0));
-                const winnerStrategy = qualityRegret > 0.02
-                  ? shadowCandidate.elite.strategy : chosenStrategy;
-
-                await recordShadowEvaluation(
-                  {
-                    decisionTraceId: requestId,
-                    taskType,
-                    complexity,
-                    chosenStrategy,
-                    chosenQuality: result.qualityScore ?? 0,
-                    chosenLatencyMs: totalDuration,
-                    chosenCostUsd: result.totalCost,
-                  },
-                  {
-                    shadowStrategy: shadowCandidate.elite.strategy,
-                    shadowQuality: shadowQuality.overall,
-                    shadowLatencyMs: shadowDuration,
-                    shadowCostUsd: shadowResult.totalCost,
-                    qualityRegret,
-                    winnerStrategy,
-                  },
-                );
-              } catch (err) {
-                this.log.debug({ error: getErrorMessage(err) }, 'Shadow evaluation failed (non-fatal)');
-              }
-            });
           }
         }
-      }
 
-      // Record provider/model reliability signals for error-aware learning
-      for (const execution of result.modelsUsed) {
-        const provider = this.inferProviderFromModelId(execution.modelId);
-        if (execution.success) {
-          errorLearningSystem.recordSuccess(
-            provider,
-            execution.modelName,
-            context.taskType,
-            result.strategyUsed,
-            execution.durationMs
+        // Enrich request with semantic memory context (lookup started above,
+        // concurrently with the semantic-cache check — LAT-2).
+        let enrichedRequest = request;
+        const memoryContext = await memoryContextPromise;
+        if (memoryContext?.hasContext) {
+          enrichedRequest = getMemoryContextService().enrichRequest(request, memoryContext);
+          this.log.debug(
+            {
+              requestId,
+              memoriesUsed: memoryContext.memories.length,
+            },
+            'Request enriched with semantic memory context'
           );
-        } else {
-          errorLearningSystem.recordError({
-            provider,
-            model: execution.modelName,
-            errorType: this.classifyErrorForLearning(execution.error),
-            taskType: context.taskType,
-            strategy: result.strategyUsed,
-            recovered: true,
-            recoveryStrategy: result.strategyUsed,
-            latencyMs: execution.durationMs,
-          });
         }
-      }
 
-      // Record triage learning outcome (async, non-blocking)
-      // This helps the system learn which triage strategies work best for different request patterns
-      if (triageDecision) {
-        // Get triage model info from decision metadata (added by triage service)
-        const triageDecisionWithMetadata = triageDecision as TriageDecision & { 
-          _metadata?: { triageModel?: { id: string; name: string } } 
-        };
-        const triageModelInfo = triageDecisionWithMetadata._metadata?.triageModel;
-        
-        // Extract prompt characteristics for learning
-        const promptText = request.messages
-          .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
-          .join(' ')
-          .toLowerCase();
-        const promptCharacteristics = {
-          urgency: /urgent|asap|immediately|quick|fast|hurry|deadline/gi.test(promptText),
-          costSensitive: /budget|cheap|cost.{0,40}effective|low.{0,40}cost/gi.test(promptText),
-          qualityCritical: /quality|accurate|precise|best.{0,40}result|high.{0,40}quality/gi.test(promptText),
-          messageCount: request.messages.length,
-          hasTools: !!(request.tools && request.tools.length > 0),
-        };
-        
-        // Get triage strategy used (from request or config)
-        const triageStrategyUsed = request.triageStrategy || this.config.triageStrategy || 'balanced';
-        
-        try {
-          triageLearningSystem.recordOutcome({
-            triageStrategy: triageStrategyUsed,
-            triageModelId: triageModelInfo?.id || 'unknown',
-            triageModelName: triageModelInfo?.name || 'unknown',
-            taskType: this.isTaskType(triageDecision.intent) ? triageDecision.intent : 'general',
-            complexity: triageDecision.complexity || 'medium',
-            contextSize: this.estimateContextSize(request.messages),
-            promptCharacteristics,
-            intent: triageDecision.intent || 'unknown',
-            confidence: triageDecision.confidence || 0.5,
-            executionStrategy: result.strategyUsed,
-            executionSuccess: result.qualityScore !== undefined && result.qualityScore > 0,
-            executionQuality: result.qualityScore || 0,
-            executionCost: result.totalCost,
-            executionLatency: result.totalDuration,
-          });
-        } catch (error: unknown) {
-          this.log.error({ error }, 'Failed to record triage learning outcome');
+        let context = await this.buildContext(enrichedRequest, organizationId, userId, requestId);
+        let triageDecision = context.triage;
+
+        // LAT-3: tell strategies the engine already ran the memory search for
+        // this request — strategy-level enrichWithMemories() must not repeat the
+        // embedding + pgvector lookup (which would also duplicate the injected
+        // memory block in the prompt).
+        if (enrichedRequest !== request) {
+          context.memoryEnriched = true;
         }
-      }
 
-      // ── LAT-1: judge-cost billing top-up (deferred path only) ──────────────
-      // The synchronous response already billed strategy+triage. Add ONLY the
-      // judge cost here as a COST-ONLY quota delta: requests:0 (the request was
-      // already counted by the main bill) and NO applyBillingProfile pass (the
-      // flat-fee/minimum-charge are per-request and were already applied) — using
-      // trackChatUsage here would double-count the request and re-apply the
-      // flat fee. No-op when the judge resolved to a free model.
-      if (deferLearning) {
-        const deferredJudgeCost = policyAwareScore?.judgeCostUsd ?? 0;
-        if (deferredJudgeCost > 0 && organizationId) {
+        const autoStrategyRequested = !request.strategy || request.strategy === 'auto';
+        const shouldRunTriage = this.shouldRunTriage(request, context);
+
+        // C3 P0.2: Skip triage when ablated — use default strategy selection
+        if (
+          this.triageService &&
+          autoStrategyRequested &&
+          shouldRunTriage &&
+          !context.ablationFlags?.disabled?.has('triage')
+        ) {
           try {
-            const { recordQuotaUsage } = await import('@/services/quota-service.js');
-            await recordQuotaUsage(organizationId, {
-              organizationId,
-              userId,
-              operation: { requests: 0, tokens: 0, cost: deferredJudgeCost },
-            });
-          } catch (billErr) {
-            this.log.warn({ error: getErrorMessage(billErr), requestId }, 'Deferred judge-cost billing top-up failed');
+            triageDecision = await this.triageService.triage(
+              request,
+              context,
+              context.capabilityInference,
+              context.models
+            );
+            if (triageDecision) {
+              // ── Confidence Gate: reject low-confidence triage decisions ──────
+              // Data shows that triage with confidence < 0.4 produces unreliable
+              // routing. Fall back to heuristics for low-confidence decisions.
+              const MIN_TRIAGE_CONFIDENCE = Number(process.env.MIN_TRIAGE_CONFIDENCE ?? 0.4);
+              if ((triageDecision.confidence ?? 0) < MIN_TRIAGE_CONFIDENCE) {
+                this.log.warn(
+                  {
+                    requestId,
+                    triageConfidence: triageDecision.confidence,
+                    threshold: MIN_TRIAGE_CONFIDENCE,
+                    intent: triageDecision.intent,
+                  },
+                  'Triage confidence below threshold — falling back to heuristic routing'
+                );
+                // Keep intent/complexity from triage but discard everything that
+                // steers routing. Review fix: `route` must be cleared here too —
+                // before, a decision the gate itself judged unreliable could
+                // still force the direct_response fast-path (single model) for a
+                // possibly complex request via applyTriageRoute below.
+                triageDecision = {
+                  ...triageDecision,
+                  recommendedStrategy: undefined,
+                  executionPlan: undefined,
+                  route: undefined,
+                  confidence: triageDecision.confidence,
+                };
+              }
+
+              // ── OI-07: Apply triage calibration corrections ─────────────────
+              const promptTotalLength = request.messages
+                .map((m) => (typeof m.content === 'string' ? m.content.length : 0))
+                .reduce((a, b) => a + b, 0);
+              const triageCorrections = triageCalibrator.applyCorrections({
+                predictedTaskType: triageDecision.intent || 'general',
+                predictedComplexity: triageDecision.complexity || 'medium',
+                promptLength: promptTotalLength,
+                hasTools: !!(request.tools && request.tools.length > 0),
+                messageCount: request.messages.length,
+              });
+              if (triageCorrections) {
+                this.log.info(
+                  {
+                    requestId,
+                    original: {
+                      intent: triageDecision.intent,
+                      complexity: triageDecision.complexity,
+                    },
+                    corrected: {
+                      intent: triageCorrections.correctedTaskType,
+                      complexity: triageCorrections.correctedComplexity,
+                    },
+                    rules: triageCorrections.rulesApplied,
+                  },
+                  'Triage calibrator applied corrections (OI-07)'
+                );
+                triageDecision = {
+                  ...triageDecision,
+                  intent: triageCorrections.correctedTaskType as TriageDecision['intent'],
+                  complexity: triageCorrections.correctedComplexity as 'low' | 'medium' | 'high',
+                };
+              }
+
+              // ── Route: trivial-message fast path (see TriageDecision.route) ──
+              triageDecision = this.applyTriageRoute(triageDecision!, request);
+
+              // ── Layer 2: Apply semantic execution plan from triage LLM ──────
+              const plan = triageDecision!.executionPlan;
+              // After OI-07 corrections, triageDecision is guaranteed non-null here
+              const correctedTriage = triageDecision!;
+              context = {
+                ...context,
+                triage: correctedTriage,
+                taskType: this.applyTriageTaskType(request, context.taskType, correctedTriage),
+                executionPlan: plan,
+                // Cascade: client (Layer 1) > triage (Layer 2) > inference (Layer 3)
+                preferSpeed: request.prefer_speed ?? plan?.preferSpeed ?? context.preferSpeed,
+                qualityTarget:
+                  request.quality_target ?? plan?.qualityTarget ?? context.qualityTarget,
+                requiredCapabilities: request.ailin_constraints?.requiredCapabilities?.length
+                  ? request.ailin_constraints.requiredCapabilities
+                  : this.mergeCapabilities(
+                      plan?.requiredCapabilities,
+                      context.requiredCapabilities
+                    ),
+              };
+
+              // Apply inferred max_tokens if client didn't specify
+              if (request.max_tokens === undefined && plan?.maxTokens) {
+                request.max_tokens = plan.maxTokens;
+                this.log.debug(
+                  { requestId, inferredMaxTokens: plan.maxTokens, source: 'triage-plan' },
+                  'Applied semantically inferred max_tokens from triage execution plan'
+                );
+              }
+
+              // Propagate reasoning recommendation from triage to request constraints
+              // Only if user didn't explicitly set enable_reasoning
+              if (
+                plan?.enableReasoning &&
+                request.ailin_constraints?.enable_reasoning === undefined
+              ) {
+                request.ailin_constraints = {
+                  ...(request.ailin_constraints || {}),
+                  enable_reasoning: true,
+                };
+                this.log.debug(
+                  { requestId, source: 'triage-plan' },
+                  'Triage recommended enable_reasoning for high-complexity task'
+                );
+              }
+
+              await this.applyPreferredModels(request, context, correctedTriage);
+
+              // Record triage in transparency trace
+              this.reasoningTransparency.recordTriage(requestId, {
+                intent: correctedTriage.intent || 'unknown',
+                complexity: correctedTriage.complexity || 'medium',
+                priority: correctedTriage.priority || 'normal',
+                confidence: correctedTriage.confidence || 0.5,
+              });
+
+              // Record triage metrics
+              recordTriage({
+                intent: correctedTriage.intent || 'unknown',
+                complexity: correctedTriage.complexity || 'medium',
+                confidence: correctedTriage.confidence || 0.5,
+                durationMs: 0,
+                source: 'llm',
+              });
+            }
+          } catch (error) {
+            this.log.error(
+              { error, requestId },
+              'Triage service failed; continuing without triage hints'
+            );
           }
-        } else if (deferredJudgeCost > 0) {
-          // Paid judge but no org to bill — surface so under-collection is visible.
-          this.log.warn({ requestId, deferredJudgeCost }, 'Deferred judge cost not billed (no organizationId)');
+        } else if (this.triageService && autoStrategyRequested) {
+          this.log.debug(
+            {
+              requestId,
+              taskType: context.taskType,
+              contextSize: context.contextSize,
+              preferSpeed: context.preferSpeed,
+            },
+            'Skipping triage for latency-optimized auto request'
+          );
+        }
+
+        try {
+          // ── Multi-stage execution: if triage produced a multi-stage plan, execute stages sequentially ──
+          const plan = context.executionPlan;
+          // Review fix: a single-stage plan whose one stage is MEDIA GENERATION
+          // must also route through executeMultiStagePlan — that is the only
+          // path that invokes the CapabilityInvoker for a real artifact. With
+          // the old `> 1` gate, "generate an image of a cat" (1-stage
+          // image_generation plan) fell into the single-stage chat path and
+          // produced prose describing the image instead of the image itself.
+          const hasMultiStagePlan =
+            plan &&
+            (plan.stages.length > 1 ||
+              (plan.stages.length === 1 &&
+                detectMediaGenerationModality(plan.stages[0].requiredCapabilities) !== null));
+
+          let result: OrchestrationResult;
+          // C4 fix: selectionSource is request-scoped (local variable), NOT an instance field.
+          // This prevents race conditions where concurrent requests overwrite each other's
+          // selection source, corrupting audit data and learning system attribution.
+          let selectionSource = 'unknown';
+
+          if (hasMultiStagePlan) {
+            this.log.info(
+              {
+                requestId,
+                stageCount: plan.stages.length,
+                modelCount: plan.modelCount,
+                topStrategy: plan.strategy,
+              },
+              'Executing multi-stage triage plan (collective intelligence pipeline)'
+            );
+            selectionSource = 'multi-stage';
+            // Review fix: the multi-stage path received the raw request —
+            // precisely when triage produced a rich plan WITH recommendedTools,
+            // the tools were never attached. Same wrapper as the single-stage
+            // and streaming paths.
+            result = await this.executeMultiStagePlan(
+              this.applyRecommendedTools(request, context),
+              context,
+              plan,
+              requestId
+            );
+          } else {
+            // ── Single-stage: use standard strategy selection and execution ──
+            const selection = this.selectStrategy(request, context);
+            const strategy = selection.strategy;
+            selectionSource = selection.selectionSource;
+
+            this.log.info(
+              {
+                requestId,
+                selectedStrategy: strategy.getMetadata().name,
+                availableModels: context.models.length,
+              },
+              'Strategy selected'
+            );
+
+            writeDecisionAudit({
+              requestId,
+              organizationId,
+              taskType: context.taskType || 'general',
+              complexity: this.estimateComplexity(request),
+              requestedStrategy:
+                request.strategy && request.strategy !== 'auto' ? request.strategy : null,
+              triageIntent: triageDecision?.intent ?? null,
+              triageComplexity: triageDecision?.complexity ?? null,
+              triageConfidence: triageDecision?.confidence ?? null,
+              triageRecommendedStrategy: triageDecision?.recommendedStrategy ?? null,
+              strategyScores: {},
+              selectedStrategy: strategy.getMetadata().name,
+              selectionReason: selectionSource,
+              modelsConsidered: context.models.map((m) => m.id),
+              modelsSelected: [],
+              decisionSource: selectionSource,
+              decisionConfidence: triageDecision?.confidence ?? undefined,
+            });
+
+            this.injectProviderRegistry(strategy);
+
+            const strategyName = strategy.getMetadata().name;
+            const requestedMaxTokens =
+              typeof request.max_tokens === 'number' ? request.max_tokens : undefined;
+
+            // ── OI-08: Adaptive Quality Targets ─────────────────────────────
+            // Replace static 0.85 with difficulty-aware target from historical data.
+            // The adaptive system considers (taskType, complexity) niche performance
+            // to set an appropriate target — easy tasks get lower targets (save compute),
+            // hard tasks get higher targets (invest in quality).
+            const adaptiveTarget = await getAdaptiveQualityTarget(
+              context.taskType || 'general',
+              this.estimateComplexity(request),
+              typeof context.qualityTarget === 'number' ? context.qualityTarget : undefined
+            );
+            const qualityTarget = adaptiveTarget.target;
+
+            if (adaptiveTarget.source === 'learned') {
+              this.log.debug(
+                {
+                  requestId,
+                  qualityTarget,
+                  adaptiveSource: adaptiveTarget.source,
+                  confidence: adaptiveTarget.confidence,
+                  historicalAvg: adaptiveTarget.historicalAvg,
+                  historicalP90: adaptiveTarget.historicalP90,
+                  suggestedIterations: adaptiveTarget.suggestedMinIterations,
+                },
+                'Using learned adaptive quality target (OI-08)'
+              );
+            }
+
+            const latencySensitiveRequest =
+              context.preferSpeed ||
+              (requestedMaxTokens !== undefined && requestedMaxTokens <= 320);
+            const highDeliberationStrategy =
+              strategyName === 'debate' || strategyName === 'quality-multipass';
+
+            // OI-08: Use adaptive iteration suggestion when available
+            const adaptiveMinIterations = adaptiveTarget.suggestedMinIterations;
+            const allowMultiIterationFeedback =
+              (highDeliberationStrategy || adaptiveMinIterations >= 2) &&
+              !latencySensitiveRequest &&
+              qualityTarget >= 0.88 &&
+              (requestedMaxTokens === undefined || requestedMaxTokens > 512);
+
+            // B (2026-06-29, latency-safe): `allowMultiIterationFeedback` is the
+            // explicit opt-in for re-generation (requires qualityTarget>=0.88 / a
+            // high-deliberation strategy). The else-branch could still leak the
+            // adaptive suggestion (>=2) into default chat, doubling latency for a
+            // typically-marginal gain. When ORCHESTRATION_FEEDBACK_LATENCY_SAFE is
+            // set, cap non-opted-in requests to a single pass — still runs the
+            // validation + auto-fix pass, just no re-generation. Default off:
+            // behaviour unchanged unless the flag is flipped (reversible A/B).
+            const feedbackLatencySafe = process.env.ORCHESTRATION_FEEDBACK_LATENCY_SAFE === 'true';
+            const feedbackMaxIterations = allowMultiIterationFeedback
+              ? Math.min(this.config.maxFeedbackIterations ?? adaptiveMinIterations, 3)
+              : feedbackLatencySafe
+                ? 1
+                : Math.max(1, adaptiveMinIterations <= 1 ? 1 : adaptiveMinIterations);
+            const feedbackQualityThreshold = allowMultiIterationFeedback
+              ? qualityTarget
+              : Math.min(qualityTarget, 0.82);
+
+            // ── OI-10: Compute archive escalation strategy ──────────────────
+            // Pre-resolve an alternative strategy from the archive in case the
+            // primary strategy fails to meet quality after all feedback iterations.
+            let escalationStrategy: typeof strategy | undefined;
+            let escalationReason: string | undefined;
+            if (!latencySensitiveRequest) {
+              const alternatives = configurationArchive.getAlternatives(
+                context.taskType || 'general',
+                this.estimateComplexity(request)
+              );
+              // Pick the quality-dimension elite if it's different from the current strategy
+              const qualityElite = alternatives.find(
+                (a) => a.dimension === 'quality' && a.elite.strategy !== strategyName
+              );
+              const fallbackElite =
+                qualityElite ?? alternatives.find((a) => a.elite.strategy !== strategyName);
+              if (fallbackElite) {
+                const altStrategy = this.strategies.get(
+                  fallbackElite.elite.strategy as ExecutionStrategyName
+                );
+                if (altStrategy && altStrategy.isSuitable(request, context)) {
+                  this.injectProviderRegistry(altStrategy);
+                  escalationStrategy = altStrategy;
+                  escalationReason = `archive-${fallbackElite.dimension}-elite (fitness: ${fallbackElite.elite.fitness.toFixed(3)})`;
+                }
+              }
+            }
+
+            // ── SOTA System Prompt Injection ──────────────────────────────
+            // Inject a platform-aware system prompt so execution models understand
+            // the system's capabilities (tools, image gen, web search, etc.) and
+            // their role in the collective intelligence strategy. Only injected
+            // when no user/triage system message exists.
+            //
+            // R11: propagate the authoritative collective-strategy flag from the
+            // strategy's own metadata so the builder no longer relies on a hardcoded
+            // Set that missed several real collective strategies (debate, consensus,
+            // blind-debate, expert-panel, war-room, ...). BaseStrategy.getMetadata().minModels
+            // is the single source of truth for multi-model strategies.
+            context.isCollectiveStrategy = (strategy.getMetadata().minModels ?? 1) > 1;
+            injectExecutionSystemPrompt(request, context);
+
+            // ── Social Facilitation Prompt ────────────────────────────────
+            // For collective strategies (multi-model), inform models that their work
+            // will be peer-reviewed. Empirical evidence shows this improves
+            // performance on well-practiced tasks.
+            //
+            // Lote 2 refactor: the decision + injection logic is now centralized in
+            // `peer-review-prompt.ts` so a future A/B benchmark can toggle the
+            // behavior via `AILIN_PEER_REVIEW_MODE` without touching the engine.
+            // Default runtime behavior is IDENTICAL to Lote 1 — the helper resolves
+            // `mode='on'` unless the legacy `DISABLE_FACILITATION_PROMPT=true` is
+            // set or the new env opts out explicitly.
+            if (
+              shouldInjectPeerReviewPrompt({
+                isCollectiveStrategy: context.isCollectiveStrategy === true,
+                request,
+              })
+            ) {
+              // LAT-3 completion: keep `enrichedRequest` (the memory-enriched
+              // variant) in lockstep. Before this, injecting peer-review only
+              // into `request` forked the two variables — the confidence-gate
+              // branch below (built from `request`) silently DROPPED the
+              // engine-injected memory block, and the else-branch (built from
+              // `enrichedRequest`) silently dropped the peer-review prompt.
+              const requestBeforePeerReview = request;
+              request = injectPeerReviewPrompt(request);
+              enrichedRequest =
+                enrichedRequest === requestBeforePeerReview
+                  ? request
+                  : injectPeerReviewPrompt(enrichedRequest);
+            }
+
+            // ── Confidence-Gated Continuation (OI-04) ──────────────────────
+            // Compute-allocation principle: systems should "think longer" on
+            // harder problems. If feedback loop is disabled OR single-iteration,
+            // we still execute once and check: if quality is below a confidence
+            // gate, trigger one refinement.
+            const confidenceGateEnabled = this.config.enableFeedbackLoop !== false;
+            const confidenceGateThreshold = qualityTarget * 0.85; // 85% of target
+
+            // A-fix (2026-06-11): if strategy execution THROWS — e.g. a collective
+            // throwing "All parallel executions failed" when every fanned-out provider
+            // returns 401/402/empty — synthesize an EMPTY OrchestrationResult instead of
+            // letting the throw escape to a 500. The shared post-execution pipeline below
+            // (recoverEmptyFinalResponse) then re-selects funded candidates (anthropic,
+            // etc.), so the request routes around the dead gateways.
+            const buildExecThrewResult = (err: unknown): OrchestrationResult => ({
+              strategyUsed: strategy.getMetadata().name,
+              modelsUsed: [],
+              finalResponse: {
+                id: `exec-threw-${Date.now()}`,
+                object: 'chat.completion',
+                created: Math.floor(Date.now() / 1000),
+                model: 'auto',
+                choices: [
+                  {
+                    index: 0,
+                    message: { role: 'assistant', content: '' },
+                    finish_reason: 'stop',
+                    logprobs: null,
+                  },
+                ],
+              },
+              totalCost: 0,
+              totalDuration: 0,
+              qualityScore: 0,
+              metadata: {
+                strategy_execution_threw: true,
+                strategy_execution_error: getErrorMessage(err),
+              },
+            });
+
+            if (confidenceGateEnabled) {
+              // C3 P0.2: Skip memory enrichment when ablated.
+              // Review fix: this branch is the DEFAULT production path
+              // (enableFeedbackLoop defaults on) and was missed when
+              // applyRecommendedTools was wired into the else-branch and the
+              // streaming path — triage-recommended tools never reached the
+              // strategy here.
+              // LAT-3 completion: base on enrichedRequest (NOT the raw request),
+              // exactly like the else-branch — when the engine already ran the
+              // memory search (context.memoryEnriched), enrichWithMemories
+              // short-circuits and returns its INPUT unchanged, so passing the
+              // raw `request` here dropped the engine-injected memory block on
+              // the default path (memory never reached the models).
+              const memRequest = this.applyRecommendedTools(
+                context.ablationFlags?.disabled?.has('memory')
+                  ? request
+                  : await strategy.enrichWithMemories(enrichedRequest, context),
+                context
+              );
+              // C3 P0.2: Skip feedback loop when ablated (single attempt)
+              const ablatedFeedbackIterations = context.ablationFlags?.disabled?.has(
+                'feedback-loop'
+              )
+                ? 1
+                : feedbackMaxIterations;
+              try {
+                result = await this.feedbackLoop.executeWithFeedback(
+                  strategy,
+                  memRequest,
+                  context,
+                  {
+                    qualityThreshold: feedbackQualityThreshold,
+                    maxIterations: ablatedFeedbackIterations,
+                    allowAutoFix: !context.ablationFlags?.disabled?.has('feedback-loop'),
+                    escalationStrategy,
+                    escalationReason,
+                  }
+                );
+              } catch (execErr) {
+                this.log.error(
+                  {
+                    requestId,
+                    strategy: strategy.getMetadata().name,
+                    error: getErrorMessage(execErr),
+                  },
+                  'Strategy execution threw — synthesizing empty result so cross-provider recovery can run'
+                );
+                result = buildExecThrewResult(execErr);
+              }
+
+              // Dynamic deliberation: number of refinement rounds determined by:
+              // 1. Triage recommendation (max_deliberation_rounds)
+              // 2. Quality score after initial execution (confidence gate)
+              // 3. Latency sensitivity (skip if user needs speed)
+              const triageRounds = context.executionPlan?.maxDeliberationRounds;
+              const maxRefinementRounds =
+                triageRounds ?? (!latencySensitiveRequest && feedbackMaxIterations <= 1 ? 1 : 0);
+
+              if (
+                maxRefinementRounds > 0 &&
+                !latencySensitiveRequest &&
+                // B (2026-06-29): in latency-safe mode the confidence-gate refinement
+                // is also a re-generation pass — keep it only for opted-in requests.
+                (!feedbackLatencySafe || allowMultiIterationFeedback) &&
+                result.qualityScore !== undefined &&
+                result.qualityScore < confidenceGateThreshold &&
+                result.qualityScore > 0.2 // Don't retry complete failures
+              ) {
+                this.log.info(
+                  {
+                    requestId,
+                    qualityScore: result.qualityScore,
+                    confidenceGate: confidenceGateThreshold,
+                    qualityTarget,
+                    maxRefinementRounds,
+                    source: triageRounds !== undefined ? 'triage' : 'default',
+                  },
+                  'Confidence gate triggered — executing refinement pass(es)'
+                );
+
+                const refinementResult = await this.feedbackLoop.executeWithFeedback(
+                  strategy,
+                  request,
+                  context,
+                  {
+                    qualityThreshold: qualityTarget,
+                    maxIterations: maxRefinementRounds,
+                    allowAutoFix: true,
+                  }
+                );
+
+                // Keep the better result
+                if ((refinementResult.qualityScore ?? 0) > (result.qualityScore ?? 0)) {
+                  result = refinementResult;
+                  result.metadata = {
+                    ...result.metadata,
+                    confidence_gate: {
+                      triggered: true,
+                      originalScore: result.qualityScore,
+                      refinedScore: refinementResult.qualityScore,
+                    },
+                  };
+                }
+              }
+            } else {
+              // ── Observer wiring ──
+              // If enable_observer=true, instantiate ObserverService with a local reasoning model.
+              // The observer narrates the collective process in real-time via SSE chunks.
+              // Narration is default-ON: undefined/true both enable it; only an
+              // explicit enable_observer:false opts out. OBSERVER_DEFAULT_ENABLED=false
+              // is the global kill-switch (flip on the running stack, no redeploy).
+              const observerEnabled =
+                process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
+                request.ailin_constraints?.enable_observer !== false;
+              let observerFeed = createNoOpObserverFeed();
+              if (observerEnabled) {
+                const language = ObserverService.extractUserSample(request.messages);
+                const observer = new ObserverService(
+                  { enabled: true, language },
+                  strategy.getMetadata().name
+                );
+                if (observer.isActive()) {
+                  observerFeed = observer;
+                }
+              }
+              // Inject observer feed into strategy context for event emission.
+              // `observerFeed` is a runtime-attached field; single structural cast
+              // (NOT `as unknown as`) is the proper way to express "I know this
+              // object accepts this extra field at runtime".
+              (context as { observerFeed?: typeof observerFeed }).observerFeed = observerFeed;
+
+              // NOTE: cross-modal capability access is provided via `context.invoker`
+              // (built once per request in buildContext(), see createCapabilityInvoker
+              // call there). It used to ALSO be written onto the shared `strategy`
+              // singleton as `strategy.capabilityInvoker` here — a mutable field on an
+              // object reused across every concurrent request for this strategy name,
+              // racy under concurrent load (request A's invoker could be overwritten by
+              // request B's before A read it) and never actually read by any strategy.
+              // Removed rather than fixed in place: `context.invoker` is already the
+              // correct, request-scoped mechanism.
+
+              // Memory enrichment: search for relevant memories and inject as context.
+              // Base on enrichedRequest (NOT the original request): when the engine
+              // already ran the memory search (context.memoryEnriched), enrichWith-
+              // Memories short-circuits and returns its input unchanged — passing
+              // the original `request` there DISCARDED the engine-injected memory
+              // block entirely on the non-streaming path (memory never reached the
+              // models). enrichedRequest === request when nothing was enriched, so
+              // the no-memory path is unchanged.
+              // C3 P0.2: Skip when memory is ablated
+              const memoryEnrichedRequest = this.applyRecommendedTools(
+                context.ablationFlags?.disabled?.has('memory')
+                  ? request
+                  : await strategy.enrichWithMemories(enrichedRequest, context),
+                context
+              );
+
+              // Inject Strategy Leader for adaptive supervision
+              // Leader removed — strategies call executeModel() directly
+
+              try {
+                result = await strategy.execute(memoryEnrichedRequest, context);
+              } catch (execErr) {
+                this.log.error(
+                  {
+                    requestId,
+                    strategy: strategy.getMetadata().name,
+                    error: getErrorMessage(execErr),
+                  },
+                  'Strategy execution threw — synthesizing empty result so cross-provider recovery can run'
+                );
+                result = buildExecThrewResult(execErr);
+              }
+
+              // Memory recording: store high-quality results for future retrieval
+              strategy.recordExecution(context, result).catch(() => {}); // fire-and-forget
+
+              // Record degradation metadata if strategy was degraded pre-dispatch
+              if (context.degradation?.isDegraded) {
+                result.metadata = {
+                  ...result.metadata,
+                  strategy_requested: context.degradation.originalStrategy,
+                  strategy_executed: context.degradation.executedStrategy,
+                  degradation_path: context.degradation.degradationPath,
+                  degradation_reason: context.degradation.degradationReason,
+                  degradation_depth: context.degradation.degradationDepth,
+                };
+              }
+
+              // Attach observer narrations to result metadata
+              const narrations = observerFeed.getNarrations();
+              if (narrations.length > 0) {
+                result.metadata = {
+                  ...result.metadata,
+                  observer_narrations: narrations.map((n) => ({
+                    event: n.event.type,
+                    narration: n.narration,
+                    reasoning: n.reasoning,
+                    duration_ms: n.durationMs,
+                  })),
+                };
+              }
+            }
+          }
+
+          // ── Shared post-execution pipeline (quality, learning, cache) ──
+          // Attach decision source to metadata for downstream auditability
+          // C4 fix: uses request-scoped selectionSource, not shared instance field
+          result.metadata = { ...result.metadata, decision_source: selectionSource };
+          result.finalResponse = this.ensureResponseUsage(result.finalResponse);
+          result = await this.recoverEmptyFinalResponse(result, request, context, requestId);
+          result.finalResponse = this.ensureResponseUsage(result.finalResponse);
+
+          // ── Response Depth Check (data-driven: <500 tokens → Q=0.196 avg) ──
+          // Insight: short responses (<500 tokens) for medium/high complexity tasks
+          // score near-zero. If response is suspiciously short, log a warning.
+          // This informs the quality scorer and learning systems.
+          const responseTokens = result.finalResponse.usage?.completion_tokens ?? 0;
+          const MIN_DEPTH_TOKENS = Number(process.env.MIN_RESPONSE_DEPTH_TOKENS ?? 300);
+          if (
+            responseTokens > 0 &&
+            responseTokens < MIN_DEPTH_TOKENS &&
+            context.taskType !== 'caching'
+          ) {
+            this.log.warn(
+              {
+                requestId,
+                strategy: result.strategyUsed,
+                responseTokens,
+                minDepth: MIN_DEPTH_TOKENS,
+                taskType: context.taskType,
+              },
+              'Response may be insufficiently thorough (below minimum depth threshold)'
+            );
+            result.metadata = {
+              ...result.metadata,
+              depth_warning: true,
+              response_tokens: responseTokens,
+            };
+          }
+
+          if (!this.hasUsableAssistantResponse(result.finalResponse)) {
+            this.log.warn(
+              { requestId },
+              'Orchestration produced empty response after fallback attempts — returning degraded response'
+            );
+            const degradedResponse: ChatResponse = {
+              id: `degraded-${Date.now()}`,
+              object: 'chat.completion',
+              created: Math.floor(Date.now() / 1000),
+              model: 'auto',
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: 'assistant',
+                    content: '[DEGRADED] All execution attempts failed. No response produced.',
+                  },
+                  finish_reason: 'stop',
+                  logprobs: null,
+                },
+              ],
+              // Explicit zeroed usage — without this, callers that read
+              // `usage?.total_tokens ?? 0` can't distinguish "no usage reported"
+              // from "no usage block at all", and a 200 OK + non-empty content +
+              // absent usage silently reads as an ordinary free/cached success.
+              usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+            };
+            result.finalResponse = degradedResponse;
+            result.qualityScore = 0;
+            result.metadata = {
+              ...result.metadata,
+              degraded: true,
+              degraded_reason: 'empty_response_after_fallback',
+            };
+          }
+
+          const totalDuration = Date.now() - startTime;
+
+          // C3 P0.4: Scoring policy and policy-aware score — hoisted for use in
+          // learning guard. Typed as the resolved-promise shape of
+          // `calculatePolicyAwareScore` (the only producer); using `Awaited<...>`
+          // avoids hand-duplicating the inline type and keeps the two in lockstep.
+          const scoringPolicy = context.scoringPolicy ?? 'learning';
+          // `typeof this.x` is invalid in a type-position alias (TS2304: `this`
+          // isn't bound at the type level inside a method body). Reach the
+          // method through the class index signature instead so the alias stays
+          // in lockstep with `calculatePolicyAwareScore`'s actual return type.
+          type PolicyAwareScore = Awaited<
+            ReturnType<OrchestrationEngine['qualityScorer']['calculatePolicyAwareScore']>
+          >;
+          let policyAwareScore: PolicyAwareScore | null = null;
+
+          // ── LAT-1 (2026-06-11): defer the LLM judge + learning tail off the
+          //    response path for the default 'learning' policy. The judge (1-5s) and
+          //    its dependent learning/stores run in __finalize() via setImmediate; the
+          //    response returns immediately with a fast heuristic-preliminary score.
+          //    'benchmark'/'observability'/sync_judge keep the original sync behavior.
+          //    Ops escape hatch: LEARNING_JUDGE_SYNC=true restores the blocking judge
+          //    fleet-wide without an API change.
+          const deferLearning =
+            scoringPolicy === 'learning' &&
+            context.syncJudge !== true &&
+            process.env.LEARNING_JUDGE_SYNC !== 'true';
+          if (deferLearning) {
+            // Fold the already-known triage cost synchronously so the response cost is
+            // correct; the judge cost is added asynchronously via the billing top-up.
+            const prelimTriageCost = context.triage?.costUsd ?? triageDecision?.costUsd ?? 0;
+            if (prelimTriageCost > 0) result.totalCost += prelimTriageCost;
+            // Degraded responses keep qualityScore=0 and omit the quality block, to
+            // match the pre-deferral contract; non-degraded responses surface a fast
+            // heuristic-preliminary score (the real judge overwrites it in __finalize).
+            // We intentionally do NOT call modelPerformanceTracker.updateQualityOnly
+            // here — the deferred judge feeds the rolling-quality EMA exactly once.
+            const isDegraded = result.metadata?.degraded === true;
+            let prelimQuality: Record<string, unknown> | undefined;
+            if (!isDegraded) {
+              const prelimExec =
+                result.modelsUsed.find((e) => e.success && e.role === 'primary') ||
+                result.modelsUsed.find((e) => e.success) ||
+                result.modelsUsed[0];
+              const prelim = this.qualityScorer.calculateScore(
+                result.finalResponse,
+                context,
+                prelimExec
+              );
+              result.qualityScore = prelim.overall;
+              prelimQuality = {
+                score: prelim.overall,
+                dimensions: prelim.dimensions,
+                confidence: prelim.confidence,
+                reasoning: prelim.reasoning ?? [],
+                method: prelim.method,
+                policy: scoringPolicy,
+                preliminary: true,
+              };
+            }
+            result.metadata = {
+              ...result.metadata,
+              ...(prelimQuality ? { quality: prelimQuality } : {}),
+              __judgeDeferred: true,
+              __triageCostFolded: prelimTriageCost > 0,
+              cost_breakdown: {
+                ...(typeof result.metadata?.cost_breakdown === 'object' &&
+                result.metadata?.cost_breakdown !== null
+                  ? (result.metadata.cost_breakdown as Record<string, unknown>)
+                  : {}),
+                triage_cost_usd: prelimTriageCost,
+                judge_cost_usd: 0,
+                // The real judge cost is billed asynchronously; the response total is
+                // preliminary (exact when the judge is free, the default prod config).
+                judge_cost_pending: true,
+              },
+            };
+          }
+
+          // __finalize: the judge + learning tail. Awaited inline for sync policies;
+          // fired via setImmediate (deferred) for the default 'learning' policy.
+          const __finalize = async (): Promise<void> => {
+            // Ensure quality scoring metadata is present
+            if (
+              deferLearning ||
+              result.qualityScore === undefined ||
+              result.metadata?.quality === undefined
+            ) {
+              const primaryExecution =
+                result.modelsUsed.find((exec) => exec.success && exec.role === 'primary') ||
+                result.modelsUsed.find((exec) => exec.success) ||
+                result.modelsUsed[0];
+
+              // C3 P0.4: Policy-aware scoring
+              // Uses the hoisted scoringPolicy and policyAwareScore from outer scope.
+              let qualityScore: import('@/core/quality/quality-scorer').QualityScore;
+
+              if (scoringPolicy === 'observability') {
+                // Fast path: heuristic only, NOT used for learning
+                qualityScore = this.qualityScorer.calculateScore(
+                  result.finalResponse,
+                  context,
+                  primaryExecution
+                );
+              } else {
+                // 'learning' or 'benchmark': LLM-Judge MANDATORY. On the deferred
+                // path (deferLearning) this whole block runs inside the
+                // post-response __finalize, so the judge round-trip never blocks
+                // the client; on the sync path ('benchmark' / sync_judge /
+                // LEARNING_JUDGE_SYNC=true) it is awaited inline so experiments
+                // get the judged score and judge cost attributed on the response
+                // itself (C3 cost integrity).
+                const pas = await this.qualityScorer.calculatePolicyAwareScore(
+                  result.finalResponse,
+                  context,
+                  primaryExecution,
+                  scoringPolicy as 'learning' | 'benchmark',
+                  { originalRequest: request }
+                );
+                policyAwareScore = pas;
+
+                // C3 A.3: Record scoring pair for reward hacking detection
+                if (pas.heuristicScore != null && pas.judgeScore != null) {
+                  try {
+                    const { getRewardHackingDetector } =
+                      await import('@/core/validation/c3/reward-hacking-detector.js');
+                    const content = result.finalResponse?.choices?.[0]?.message?.content;
+                    const contentStr = typeof content === 'string' ? content : '';
+                    getRewardHackingDetector().record({
+                      heuristicScore: pas.heuristicScore,
+                      judgeScore: pas.judgeScore,
+                      tokenCount: result.modelsUsed.reduce(
+                        (s, m) => s + (m.response?.usage?.total_tokens ?? 0),
+                        0
+                      ),
+                      headingsCount: (contentStr.match(/^#{1,6}\s/gm) || []).length,
+                      codeBlocksCount: Math.floor((contentStr.match(/```/g) || []).length / 2),
+                      contentLength: contentStr.length,
+                    });
+                  } catch {
+                    /* non-blocking */
+                  }
+                }
+
+                qualityScore = {
+                  overall: pas.overall,
+                  // `pas.dimensions` is already `QualityDimensions` (same source of
+                  // truth: quality-scorer.ts). The previous `as unknown as` cast was
+                  // unnecessary obfuscation — the types match directly.
+                  dimensions: pas.dimensions,
+                  confidence: pas.confidence,
+                  reasoning: pas.reasoning ?? [],
+                  method: pas.method === 'hybrid' ? 'llm-judge' : pas.method,
+                };
+                // Tag the result metadata with scoring policy details
+                // Typed via OrchestrationInternalMetadata — no Record cast needed.
+                result.metadata.__scoringPolicy = scoringPolicy;
+                result.metadata.__judgeFailed = pas.judgeFailed ?? false;
+                result.metadata.__validForLearning = !pas.judgeFailed && pas.confidence >= 0.3;
+              }
+
+              result.qualityScore = qualityScore.overall;
+              result.metadata = {
+                ...result.metadata,
+                quality: {
+                  score: qualityScore.overall,
+                  dimensions: qualityScore.dimensions,
+                  confidence: qualityScore.confidence,
+                  reasoning: qualityScore.reasoning,
+                  method: qualityScore.method,
+                  heuristicScore: policyAwareScore?.heuristicScore,
+                  judgeScore: policyAwareScore?.judgeScore,
+                  policy: scoringPolicy,
+                },
+              };
+
+              // Refine ModelPerformanceTracker with the actual quality score
+              // (base-strategy records 0.8 placeholder; this updates with real value).
+              // Uses updateQualityOnly() so provider reliability stats are NOT
+              // double-counted — base-strategy.ts already recorded the execution
+              // with the real execution provider (the adapter name).
+              for (const exec of result.modelsUsed) {
+                if (exec.success) {
+                  modelPerformanceTracker.updateQualityOnly(exec.modelId, qualityScore.overall);
+                }
+              }
+            }
+
+            // C3 P1.1: Measure diversity for multi-model strategies (non-blocking)
+            if (result.modelsUsed.length > 1) {
+              import('@/core/validation/c3/independence-test.js')
+                .then(({ getIndependenceTestService }) => {
+                  const service = getIndependenceTestService();
+                  const outputs = result.modelsUsed
+                    .filter((exec) => exec.success && exec.response?.choices?.[0])
+                    .map((exec) => ({
+                      modelId: exec.modelId,
+                      provider: this.inferProviderFromModelId(exec.modelId),
+                      content: safeResponseContent(exec.response),
+                      role: exec.role,
+                      round: 1,
+                    }));
+                  if (outputs.length >= 2) {
+                    service
+                      .measureDiversity(
+                        outputs,
+                        result.strategyUsed,
+                        context.taskType || 'general',
+                        this.estimateComplexity(request)
+                      )
+                      .catch(() => {});
+                  }
+                })
+                .catch(() => {});
+            }
+
+            // ── Cost-accounting integrity (TIER 0): fold in billable sub-calls that
+            //    are not part of the strategy's modelsUsed accounting ──────────────
+            // The strategy's `result.totalCost` covers its own model executions
+            // (including the consensus synthesizer, now tracked there). Two further
+            // billable LLM sub-calls happen OUTSIDE the strategy and were previously
+            // dropped from the reported cost:
+            //   COST #4 — triage (pre-strategy classification LLM call)
+            //   COST #5 — LLM judge / quality scorer (post-strategy scoring call)
+            // Add both to the request total and surface them as distinct line items
+            // so the C3 cost thesis can be measured against the true request cost.
+            // Missing values are treated as 0 (heuristic triage / no-judge paths).
+            const triageCostUsd = context.triage?.costUsd ?? triageDecision?.costUsd ?? 0;
+            const judgeCostUsd = policyAwareScore?.judgeCostUsd ?? 0;
+            // LAT-1: in the deferred path the triage cost was already folded into
+            // result.totalCost synchronously (and the response already shows it), so
+            // only fold the judge cost here to avoid double-counting in the persisted
+            // execution-outcome row. The judge cost is added to the bill via the
+            // top-up at the end of __finalize.
+            const triageAlreadyFolded = result.metadata?.__triageCostFolded === true;
+            const auxiliaryCostUsd =
+              (triageAlreadyFolded ? 0 : triageCostUsd > 0 ? triageCostUsd : 0) +
+              (judgeCostUsd > 0 ? judgeCostUsd : 0);
+            if (auxiliaryCostUsd > 0) {
+              result.totalCost += auxiliaryCostUsd;
+            }
+            // Always emit the breakdown (even when 0) so downstream consumers have a
+            // stable cost-accounting shape to read.
+            result.metadata = {
+              ...result.metadata,
+              cost_breakdown: {
+                ...(typeof result.metadata?.cost_breakdown === 'object' &&
+                result.metadata?.cost_breakdown !== null
+                  ? (result.metadata.cost_breakdown as Record<string, unknown>)
+                  : {}),
+                triage_cost_usd: triageCostUsd,
+                judge_cost_usd: judgeCostUsd,
+              },
+            };
+
+            this.log.info(
+              {
+                requestId,
+                strategy: result.strategyUsed,
+                duration: totalDuration,
+                cost: result.totalCost,
+                modelsUsed: result.modelsUsed.length,
+                qualityScore: result.qualityScore,
+              },
+              'Orchestration completed successfully'
+            );
+
+            // Store response in semantic cache for future similar requests
+            // Use a lower threshold for short factual answers (< 150 tokens) since they score
+            // 0.53-0.57 by design (no elaboration) but are highly cacheable (always identical)
+            const totalTokens = result.finalResponse.usage?.total_tokens ?? 0;
+            const cacheStoreThreshold = totalTokens > 0 && totalTokens < 150 ? 0.5 : 0.65;
+            if (
+              isCacheEnabled() &&
+              !request.stream &&
+              result.qualityScore &&
+              result.qualityScore >= cacheStoreThreshold
+            ) {
+              // C3 latency fix (2026-06-11): fire-and-forget. The LLM response is already complete; storing
+              // it in the semantic cache (which generates an embedding) must NOT delay the response to the
+              // caller. Run it in the background, best-effort — errors are logged, never surfaced/awaited.
+              const semanticCache = getSemanticCache();
+              void semanticCache
+                .store({
+                  request,
+                  response: result.finalResponse,
+                  organizationId,
+                  metadata: {
+                    tokensSaved: result.finalResponse.usage?.total_tokens || 0,
+                    costSaved: result.totalCost,
+                  },
+                })
+                .then(() => {
+                  this.log.debug({ requestId }, 'Response stored in semantic cache');
+                })
+                .catch((cacheError) => {
+                  this.log.warn(
+                    { error: getErrorMessage(cacheError) },
+                    'Failed to store in semantic cache (non-blocking)'
+                  );
+                });
+            }
+
+            // Store high-quality interactions as procedural memory.
+            // LAT-1: fire-and-forget (embedding + pgvector insert) and — because
+            // this runs inside __finalize, after the judge — the ≥0.85 gate uses
+            // the judged score, never the preliminary heuristic one.
+            if (result.qualityScore !== undefined) {
+              void this.storeProceduralMemory({
+                result,
+                request,
+                context,
+                organizationId,
+                userId,
+                qualityScore: result.qualityScore,
+              });
+            }
+
+            // Record CI metrics
+            recordStrategyExecution({
+              strategy: result.strategyUsed,
+              taskType: context.taskType || 'general',
+              status: 'success',
+              durationMs: totalDuration,
+              qualityScore: result.qualityScore,
+              costUsd: result.totalCost,
+            });
+
+            // OBS-04: record the model-selection decision (which model was chosen and
+            // why). Emits `ci_model_selection_total{model, task_type, selection_reason}`
+            // — previously defined but never recorded, so the model-selection alerts
+            // and dashboards had no data. Labels are bounded: `model` is the primary
+            // executed model from the catalog and `selection_reason` is the same
+            // bounded decision source written to the decision audit (heuristic /
+            // triage / bandit / archive / pareto / explicit / fallback / multi-stage).
+            // No per-request or prompt-derived labels are used.
+            const primarySelectedModel =
+              result.modelsUsed.find((execution) => execution.success)?.modelId ??
+              result.modelsUsed[0]?.modelId;
+            if (primarySelectedModel) {
+              recordModelSelection({
+                model: primarySelectedModel,
+                taskType: context.taskType || 'general',
+                selectionReason:
+                  (typeof result.metadata?.decision_source === 'string'
+                    ? result.metadata.decision_source
+                    : selectionSource) || 'unknown',
+              });
+            }
+
+            // Record execution and quality in transparency trace
+            this.reasoningTransparency.recordExecution(requestId, result);
+            if (result.qualityScore !== undefined) {
+              const qualityMetadata = result.metadata?.quality as
+                { dimensions?: Record<string, number> } | undefined;
+              this.reasoningTransparency.recordQuality(requestId, {
+                score: result.qualityScore,
+                dimensions: qualityMetadata?.dimensions || ({} as Record<string, number>),
+                threshold: context.qualityTarget || 0.7,
+              });
+            }
+            this.reasoningTransparency.completeTrace(requestId);
+
+            // Update knowledge graph edges (non-blocking)
+            // C3 P0.2: Skip KG update when ablated
+            if (!context.ablationFlags?.disabled?.has('knowledge-graph'))
+              knowledgeGraphService
+                .recordExecution({
+                  strategy: result.strategyUsed,
+                  taskType: context.taskType || 'general',
+                  modelIds: result.modelsUsed.filter((e) => e.success).map((e) => e.modelId),
+                  qualityScore: result.qualityScore ?? 0,
+                })
+                .catch((err) =>
+                  this.log.warn({ error: getErrorMessage(err) }, 'Knowledge graph recording failed')
+                );
+
+            // Update learning systems (non-blocking, in-memory)
+            // C3 P0.4: Only feed learning systems when the score is judge-validated
+            // (the judge ran above — synchronously for benchmark/sync_judge, inside
+            // the deferred __finalize for the production 'learning' policy).
+            // Observability: heuristic-only scores are NEVER valid for learning.
+            // (Fixes an inverted legacy condition that let heuristic scores feed
+            // the bandit whenever scoringPolicy === 'observability'.)
+            const scoreValidForLearning = policyAwareScore
+              ? !policyAwareScore.judgeFailed &&
+                policyAwareScore.confidence >= 0.3 &&
+                policyAwareScore.policy !== 'observability'
+              : false;
+            // Freeze learning when the caller asked (experiment 'frozen' phase). The
+            // runner set an X-Experiment-Freeze-Learning HEADER that no server code
+            // read — so learning kept updating during the supposedly-frozen phase,
+            // silently violating the experiment's own methodology. Honor the body flag.
+            const learningFrozen = request.freeze_learning === true;
+            if (result.qualityScore !== undefined && scoreValidForLearning && learningFrozen) {
+              this.log.debug(
+                { requestId, strategy: result.strategyUsed },
+                'Learning frozen for this request (freeze_learning=true) — skipping bandit/learning updates'
+              );
+            }
+            if (result.qualityScore !== undefined && scoreValidForLearning && !learningFrozen) {
+              this.applyLearningUpdates({
+                result,
+                context,
+                request,
+                triageDecision,
+                totalDuration,
+                qualityScore: result.qualityScore,
+              });
+            } else if (result.qualityScore !== undefined && !scoreValidForLearning) {
+              // C3 P0.4: Score exists but is invalid for learning (judge failed or observability-only)
+              this.log.warn(
+                {
+                  requestId,
+                  strategy: result.strategyUsed,
+                  qualityScore: result.qualityScore,
+                  policy: scoringPolicy,
+                  judgeFailed: policyAwareScore?.judgeFailed,
+                },
+                'Skipping learning update — score not valid for learning (LLM-Judge failed or observability-only policy)'
+              );
+            }
+
+            // Record learning insight (async, non-blocking, with timeout guard)
+            const LEARNING_TIMEOUT_MS = 5_000;
+            Promise.race([
+              autoLearningSystem.learn(result, {
+                type:
+                  request.task_type ||
+                  (this.isTaskType(triageDecision?.intent) ? triageDecision?.intent : 'general'),
+                complexity: this.estimateComplexity(request),
+                contextSize: this.estimateContextSize(request.messages),
+              }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Learning timeout')), LEARNING_TIMEOUT_MS)
+              ),
+            ]).catch((err) =>
+              this.log.warn({ error: getErrorMessage(err) }, 'Learning insight failed or timed out')
+            );
+
+            // ── Closed-Loop: Record execution outcome ────────────────────────
+            // Persists the measured result linked to the decision trace (requestId).
+            // This is the foundation for regret calculation, drift detection, and
+            // learning validation — proving the system actually improves.
+            const qualityMeta = result.metadata?.quality as
+              { dimensions?: Record<string, number> } | undefined;
+            recordOutcome({
+              decisionTraceId: requestId,
+              strategy: result.strategyUsed,
+              startedAt: new Date(Date.now() - totalDuration),
+              finishedAt: new Date(),
+              latencyMs: totalDuration,
+              costUsd: result.totalCost,
+              totalTokens: result.modelsUsed.reduce(
+                (sum, m) => sum + (m.response?.usage?.total_tokens ?? 0),
+                0
+              ),
+              success: (result.qualityScore ?? 0) > 0,
+              failureReason: result.modelsUsed.find((m) => !m.success)?.error,
+              retries: (result.metadata?.feedback_iterations as Array<unknown>)?.length ?? 0,
+              fallbackUsed: false,
+              escalationUsed: !!result.metadata?.escalation,
+              qualityScore: result.qualityScore ?? null,
+              qualityDimensions: qualityMeta?.dimensions,
+              feedbackIterations:
+                (result.metadata?.feedback_summary as { totalIterations?: number })
+                  ?.totalIterations ?? 1,
+              modelsUsed: result.modelsUsed.filter((e) => e.success).map((e) => e.modelId),
+              observedMetrics: {
+                strategyUsed: result.strategyUsed,
+                taskType: context.taskType || 'general',
+                complexity: this.estimateComplexity(request),
+              },
+            }).catch((err) =>
+              this.log.warn({ error: getErrorMessage(err) }, 'Outcome measurement recording failed')
+            );
+
+            // ── Closed-Loop: Shadow evaluation (async, non-blocking) ─────────
+            // For a fraction of requests, execute an alternative strategy and compare.
+            // This produces regret data for competitive benchmarking.
+            // C3 P0.2: Skip shadow evaluation when ablated
+            if (
+              shouldRunShadowEval() &&
+              result.qualityScore !== undefined &&
+              !context.ablationFlags?.disabled?.has('shadow')
+            ) {
+              const chosenStrategy = result.strategyUsed;
+              const taskType = context.taskType || 'general';
+              const complexity = this.estimateComplexity(request);
+              const alternatives = configurationArchive.getAlternatives(taskType, complexity);
+              const shadowCandidate = alternatives.find((a) => a.elite.strategy !== chosenStrategy);
+
+              if (shadowCandidate) {
+                const shadowStrategyObj = this.strategies.get(
+                  shadowCandidate.elite.strategy as ExecutionStrategyName
+                );
+                if (shadowStrategyObj && shadowStrategyObj.isSuitable(request, context)) {
+                  // Execute shadow strategy asynchronously — never blocks the response
+                  setImmediate(async () => {
+                    try {
+                      this.injectProviderRegistry(shadowStrategyObj);
+                      const shadowStart = Date.now();
+                      const shadowResult = await shadowStrategyObj.execute(request, context);
+                      const shadowDuration = Date.now() - shadowStart;
+
+                      const primaryExec =
+                        shadowResult.modelsUsed.find((e) => e.success) ??
+                        shadowResult.modelsUsed[0];
+                      const shadowQuality = this.qualityScorer.calculateScore(
+                        shadowResult.finalResponse,
+                        context,
+                        primaryExec
+                      );
+
+                      const qualityRegret = Math.max(
+                        0,
+                        shadowQuality.overall - (result.qualityScore ?? 0)
+                      );
+                      const winnerStrategy =
+                        qualityRegret > 0.02 ? shadowCandidate.elite.strategy : chosenStrategy;
+
+                      await recordShadowEvaluation(
+                        {
+                          decisionTraceId: requestId,
+                          taskType,
+                          complexity,
+                          chosenStrategy,
+                          chosenQuality: result.qualityScore ?? 0,
+                          chosenLatencyMs: totalDuration,
+                          chosenCostUsd: result.totalCost,
+                        },
+                        {
+                          shadowStrategy: shadowCandidate.elite.strategy,
+                          shadowQuality: shadowQuality.overall,
+                          shadowLatencyMs: shadowDuration,
+                          shadowCostUsd: shadowResult.totalCost,
+                          qualityRegret,
+                          winnerStrategy,
+                        }
+                      );
+                    } catch (err) {
+                      this.log.debug(
+                        { error: getErrorMessage(err) },
+                        'Shadow evaluation failed (non-fatal)'
+                      );
+                    }
+                  });
+                }
+              }
+            }
+
+            // Record provider/model reliability signals for error-aware learning
+            for (const execution of result.modelsUsed) {
+              const provider = this.inferProviderFromModelId(execution.modelId);
+              if (execution.success) {
+                errorLearningSystem.recordSuccess(
+                  provider,
+                  execution.modelName,
+                  context.taskType,
+                  result.strategyUsed,
+                  execution.durationMs
+                );
+              } else {
+                errorLearningSystem.recordError({
+                  provider,
+                  model: execution.modelName,
+                  errorType: this.classifyErrorForLearning(execution.error),
+                  taskType: context.taskType,
+                  strategy: result.strategyUsed,
+                  recovered: true,
+                  recoveryStrategy: result.strategyUsed,
+                  latencyMs: execution.durationMs,
+                });
+              }
+            }
+
+            // Record triage learning outcome (async, non-blocking)
+            // This helps the system learn which triage strategies work best for different request patterns
+            if (triageDecision) {
+              // Get triage model info from decision metadata (added by triage service)
+              const triageDecisionWithMetadata = triageDecision as TriageDecision & {
+                _metadata?: { triageModel?: { id: string; name: string } };
+              };
+              const triageModelInfo = triageDecisionWithMetadata._metadata?.triageModel;
+
+              // Extract prompt characteristics for learning
+              const promptText = request.messages
+                .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+                .join(' ')
+                .toLowerCase();
+              const promptCharacteristics = {
+                urgency: /urgent|asap|immediately|quick|fast|hurry|deadline/gi.test(promptText),
+                costSensitive: /budget|cheap|cost.{0,40}effective|low.{0,40}cost/gi.test(
+                  promptText
+                ),
+                qualityCritical:
+                  /quality|accurate|precise|best.{0,40}result|high.{0,40}quality/gi.test(
+                    promptText
+                  ),
+                messageCount: request.messages.length,
+                hasTools: !!(request.tools && request.tools.length > 0),
+              };
+
+              // Get triage strategy used (from request or config)
+              const triageStrategyUsed =
+                request.triageStrategy || this.config.triageStrategy || 'balanced';
+
+              try {
+                triageLearningSystem.recordOutcome({
+                  triageStrategy: triageStrategyUsed,
+                  triageModelId: triageModelInfo?.id || 'unknown',
+                  triageModelName: triageModelInfo?.name || 'unknown',
+                  taskType: this.isTaskType(triageDecision.intent)
+                    ? triageDecision.intent
+                    : 'general',
+                  complexity: triageDecision.complexity || 'medium',
+                  contextSize: this.estimateContextSize(request.messages),
+                  promptCharacteristics,
+                  intent: triageDecision.intent || 'unknown',
+                  confidence: triageDecision.confidence || 0.5,
+                  executionStrategy: result.strategyUsed,
+                  executionSuccess: result.qualityScore !== undefined && result.qualityScore > 0,
+                  executionQuality: result.qualityScore || 0,
+                  executionCost: result.totalCost,
+                  executionLatency: result.totalDuration,
+                });
+              } catch (error: unknown) {
+                this.log.error({ error }, 'Failed to record triage learning outcome');
+              }
+            }
+
+            // ── LAT-1: judge-cost billing top-up (deferred path only) ──────────────
+            // The synchronous response already billed strategy+triage. Add ONLY the
+            // judge cost here as a COST-ONLY quota delta: requests:0 (the request was
+            // already counted by the main bill) and NO applyBillingProfile pass (the
+            // flat-fee/minimum-charge are per-request and were already applied) — using
+            // trackChatUsage here would double-count the request and re-apply the
+            // flat fee. No-op when the judge resolved to a free model.
+            if (deferLearning) {
+              const deferredJudgeCost = policyAwareScore?.judgeCostUsd ?? 0;
+              if (deferredJudgeCost > 0 && organizationId) {
+                try {
+                  const { recordQuotaUsage } = await import('@/services/quota-service.js');
+                  await recordQuotaUsage(organizationId, {
+                    organizationId,
+                    userId,
+                    operation: { requests: 0, tokens: 0, cost: deferredJudgeCost },
+                  });
+                } catch (billErr) {
+                  this.log.warn(
+                    { error: getErrorMessage(billErr), requestId },
+                    'Deferred judge-cost billing top-up failed'
+                  );
+                }
+              } else if (deferredJudgeCost > 0) {
+                // Paid judge but no org to bill — surface so under-collection is visible.
+                this.log.warn(
+                  { requestId, deferredJudgeCost },
+                  'Deferred judge cost not billed (no organizationId)'
+                );
+              }
+            }
+          }; // ── end __finalize ──
+
+          if (deferLearning) {
+            // Off the response path — the heuristic-preliminary score already went out.
+            setImmediate(() => {
+              void __finalize().catch((e) =>
+                this.log.warn(
+                  { error: getErrorMessage(e), requestId },
+                  'Deferred judge/learning finalize failed'
+                )
+              );
+            });
+          } else {
+            await __finalize();
+          }
+
+          const resolvedStrategy = mapExecutionToCanonical(result.strategyUsed);
+          const fallbackChain = Array.from(
+            new Set(
+              result.modelsUsed
+                .map((execution) => execution.modelName)
+                .filter((name): name is string => Boolean(name))
+            )
+          );
+          const finalDecider = this.resolveFinalDecider(result);
+          const resolvedModel =
+            finalDecider.modelName ??
+            result.modelsUsed.find((execution) => execution.success)?.modelName ??
+            result.modelsUsed[0]?.modelName ??
+            result.finalResponse.model;
+          const finalResponseModel =
+            finalDecider.modelId ??
+            (typeof result.finalResponse.model === 'string' && result.finalResponse.model.length > 0
+              ? result.finalResponse.model
+              : undefined);
+          const finalResponseForReturn =
+            finalResponseModel && result.finalResponse.model !== finalResponseModel
+              ? {
+                  ...result.finalResponse,
+                  model: finalResponseModel,
+                }
+              : result.finalResponse;
+          const finalDeciderModelId = finalDecider.modelId ?? finalResponseModel;
+          const finalDeciderModelName = finalDecider.modelName ?? resolvedModel;
+
+          orchestrationSpan.setAttribute('orchestration.strategy', result.strategyUsed);
+          orchestrationSpan.setAttribute('orchestration.quality', result.qualityScore ?? 0);
+          orchestrationSpan.setAttribute('orchestration.cost_usd', result.totalCost);
+          orchestrationSpan.setAttribute('orchestration.models_used', result.modelsUsed.length);
+          orchestrationSpan.setStatus({ code: SpanStatusCode.OK });
+
+          // OrchestrationInternalMetadata keys are engine-internal bookkeeping —
+          // strip them at the public boundary so no downstream consumer (or a
+          // future careless spread) can ever surface them. The ORIGINAL
+          // result.metadata keeps them: the deferred __finalize reads/writes that
+          // object after this copy is returned (the two diverge by design).
+          // Pinned by internal-metadata-contract.test.ts.
+          const {
+            __scoringPolicy: _internalScoringPolicy,
+            __judgeFailed: _internalJudgeFailed,
+            __validForLearning: _internalValidForLearning,
+            __judgeDeferred: _internalJudgeDeferred,
+            __triageCostFolded: _internalTriageCostFolded,
+            ...publicMetadata
+          } = result.metadata;
+
+          return {
+            ...result,
+            metadata: {
+              ...publicMetadata,
+              triage: triageDecision,
+              requested_strategy: requestedCanonicalStrategy,
+              resolved_strategy: resolvedStrategy,
+              resolved_model: resolvedModel,
+              final_decider_model_id: finalDeciderModelId,
+              final_decider_model_name: finalDeciderModelName,
+              final_decider_role: finalDecider.role,
+              fallback_chain: fallbackChain,
+            },
+            triage: triageDecision,
+            finalResponse: {
+              ...finalResponseForReturn,
+              ailin_metadata: finalResponseForReturn.ailin_metadata
+                ? {
+                    ...finalResponseForReturn.ailin_metadata,
+                    resolved_strategy: resolvedStrategy,
+                    resolved_model: resolvedModel,
+                    final_decider_model_id: finalDeciderModelId,
+                    final_decider_model_name: finalDeciderModelName,
+                    final_decider_role: finalDecider.role,
+                    fallback_chain: fallbackChain,
+                    triage_intent: triageDecision?.intent,
+                    triage_complexity: triageDecision?.complexity,
+                    triage_strategy: triageDecision?.recommendedStrategy,
+                    // F5-META: propagate structured dynamic prompting metadata
+                    // to the API response so clients can audit which variant/slot
+                    // config produced the response. Only set when non-empty.
+                    ...(finalDecider.promptVariantId
+                      ? { prompt_variant: finalDecider.promptVariantId }
+                      : {}),
+                    ...(finalDecider.promptSlotHash
+                      ? { prompt_slot_hash: finalDecider.promptSlotHash }
+                      : {}),
+                  }
+                : undefined,
+            },
+          };
+        } catch (error) {
+          const totalDuration = Date.now() - startTime;
+
+          this.log.error(
+            {
+              requestId,
+              error,
+              duration: totalDuration,
+            },
+            'Orchestration failed'
+          );
+
+          orchestrationSpan.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: getErrorMessage(error),
+          });
+
+          errorLearningSystem.recordError({
+            provider: this.inferProviderFromModelId(
+              typeof request.model === 'string' ? request.model : undefined
+            ),
+            model:
+              typeof request.model === 'string' && request.model.trim().length > 0
+                ? request.model
+                : 'auto',
+            errorType: this.classifyErrorForLearning(error),
+            taskType: context.taskType,
+            strategy:
+              typeof request.strategy === 'string' && request.strategy.trim().length > 0
+                ? request.strategy
+                : 'auto',
+            recovered: false,
+            latencyMs: totalDuration,
+          });
+
+          throw error;
+        } finally {
+          orchestrationSpan.end();
         }
       }
-      }; // ── end __finalize ──
-
-      if (deferLearning) {
-        // Off the response path — the heuristic-preliminary score already went out.
-        setImmediate(() => {
-          void __finalize().catch((e) =>
-            this.log.warn({ error: getErrorMessage(e), requestId }, 'Deferred judge/learning finalize failed'),
-          );
-        });
-      } else {
-        await __finalize();
-      }
-
-      const resolvedStrategy = mapExecutionToCanonical(result.strategyUsed);
-      const fallbackChain = Array.from(
-        new Set(
-          result.modelsUsed
-            .map((execution) => execution.modelName)
-            .filter((name): name is string => Boolean(name))
-        )
-      );
-      const finalDecider = this.resolveFinalDecider(result);
-      const resolvedModel =
-        finalDecider.modelName ??
-        result.modelsUsed.find((execution) => execution.success)?.modelName ??
-        result.modelsUsed[0]?.modelName ??
-        result.finalResponse.model;
-      const finalResponseModel =
-        finalDecider.modelId ??
-        (typeof result.finalResponse.model === 'string' && result.finalResponse.model.length > 0
-          ? result.finalResponse.model
-          : undefined);
-      const finalResponseForReturn =
-        finalResponseModel && result.finalResponse.model !== finalResponseModel
-          ? {
-              ...result.finalResponse,
-              model: finalResponseModel,
-            }
-          : result.finalResponse;
-      const finalDeciderModelId = finalDecider.modelId ?? finalResponseModel;
-      const finalDeciderModelName = finalDecider.modelName ?? resolvedModel;
-
-      orchestrationSpan.setAttribute('orchestration.strategy', result.strategyUsed);
-      orchestrationSpan.setAttribute('orchestration.quality', result.qualityScore ?? 0);
-      orchestrationSpan.setAttribute('orchestration.cost_usd', result.totalCost);
-      orchestrationSpan.setAttribute('orchestration.models_used', result.modelsUsed.length);
-      orchestrationSpan.setStatus({ code: SpanStatusCode.OK });
-
-      // OrchestrationInternalMetadata keys are engine-internal bookkeeping —
-      // strip them at the public boundary so no downstream consumer (or a
-      // future careless spread) can ever surface them. The ORIGINAL
-      // result.metadata keeps them: the deferred __finalize reads/writes that
-      // object after this copy is returned (the two diverge by design).
-      // Pinned by internal-metadata-contract.test.ts.
-      const {
-        __scoringPolicy: _internalScoringPolicy,
-        __judgeFailed: _internalJudgeFailed,
-        __validForLearning: _internalValidForLearning,
-        __judgeDeferred: _internalJudgeDeferred,
-        __triageCostFolded: _internalTriageCostFolded,
-        ...publicMetadata
-      } = result.metadata;
-
-      return {
-        ...result,
-        metadata: {
-          ...publicMetadata,
-          triage: triageDecision,
-          requested_strategy: requestedCanonicalStrategy,
-          resolved_strategy: resolvedStrategy,
-          resolved_model: resolvedModel,
-          final_decider_model_id: finalDeciderModelId,
-          final_decider_model_name: finalDeciderModelName,
-          final_decider_role: finalDecider.role,
-          fallback_chain: fallbackChain,
-        },
-        triage: triageDecision,
-        finalResponse: {
-          ...finalResponseForReturn,
-          ailin_metadata: finalResponseForReturn.ailin_metadata
-            ? {
-                ...finalResponseForReturn.ailin_metadata,
-                resolved_strategy: resolvedStrategy,
-                resolved_model: resolvedModel,
-                final_decider_model_id: finalDeciderModelId,
-                final_decider_model_name: finalDeciderModelName,
-                final_decider_role: finalDecider.role,
-                fallback_chain: fallbackChain,
-                triage_intent: triageDecision?.intent,
-                triage_complexity: triageDecision?.complexity,
-                triage_strategy: triageDecision?.recommendedStrategy,
-                // F5-META: propagate structured dynamic prompting metadata
-                // to the API response so clients can audit which variant/slot
-                // config produced the response. Only set when non-empty.
-                ...(finalDecider.promptVariantId
-                  ? { prompt_variant: finalDecider.promptVariantId }
-                  : {}),
-                ...(finalDecider.promptSlotHash
-                  ? { prompt_slot_hash: finalDecider.promptSlotHash }
-                  : {}),
-              }
-            : undefined,
-        },
-      };
-    } catch (error) {
-      const totalDuration = Date.now() - startTime;
-
-      this.log.error(
-        {
-          requestId,
-          error,
-          duration: totalDuration,
-        },
-        'Orchestration failed'
-      );
-
-      orchestrationSpan.setStatus({ code: SpanStatusCode.ERROR, message: getErrorMessage(error) });
-
-      errorLearningSystem.recordError({
-        provider: this.inferProviderFromModelId(
-          typeof request.model === 'string' ? request.model : undefined
-        ),
-        model:
-          typeof request.model === 'string' && request.model.trim().length > 0
-            ? request.model
-            : 'auto',
-        errorType: this.classifyErrorForLearning(error),
-        taskType: context.taskType,
-        strategy:
-          typeof request.strategy === 'string' && request.strategy.trim().length > 0
-            ? request.strategy
-            : 'auto',
-        recovered: false,
-        latencyMs: totalDuration,
-      });
-
-      throw error;
-    } finally {
-      orchestrationSpan.end();
-    }
-    }); // end tracer.startActiveSpan
+    ); // end tracer.startActiveSpan
   }
 
   /**
@@ -2249,7 +2466,8 @@ export class OrchestrationEngine {
         latencyMs: totalDuration,
         success: qualityScore > 0,
         totalTokens: result.modelsUsed.reduce(
-          (sum, m) => sum + (m.response?.usage?.total_tokens ?? 0), 0
+          (sum, m) => sum + (m.response?.usage?.total_tokens ?? 0),
+          0
         ),
       });
     }
@@ -2273,7 +2491,9 @@ export class OrchestrationEngine {
     // OI-07: Record triage observation for calibration
     if (triageDecision) {
       triageCalibrator.recordObservation({
-        predictedTaskType: this.isTaskType(triageDecision.intent) ? triageDecision.intent : 'general',
+        predictedTaskType: this.isTaskType(triageDecision.intent)
+          ? triageDecision.intent
+          : 'general',
         predictedComplexity: triageDecision.complexity || 'medium',
         predictedStrategy: triageDecision.recommendedStrategy,
         triageConfidence: triageDecision.confidence || 0.5,
@@ -2283,7 +2503,7 @@ export class OrchestrationEngine {
         actualSuccess: qualityScore > 0,
         executedStrategy: result.strategyUsed,
         promptLength: request.messages
-          .map(m => typeof m.content === 'string' ? m.content.length : 0)
+          .map((m) => (typeof m.content === 'string' ? m.content.length : 0))
           .reduce((a, b) => a + b, 0),
         hasTools: !!(request.tools && request.tools.length > 0),
         messageCount: request.messages.length,
@@ -2409,8 +2629,7 @@ export class OrchestrationEngine {
 
     let triageDecision = context.triage;
 
-    const autoStrategyRequested =
-      !planningRequest.strategy || planningRequest.strategy === 'auto';
+    const autoStrategyRequested = !planningRequest.strategy || planningRequest.strategy === 'auto';
     // Latency budget (2026-07-13): this SSE single-model path never consumes
     // the triage executionPlan (the plan here is always one model streaming),
     // so triage only contributes taskType/preferredModels — a modest gain
@@ -2435,12 +2654,17 @@ export class OrchestrationEngine {
       strategy,
       planningRequest,
       context,
-      requestId,
+      requestId
     );
 
     if (this.triageService && autoStrategyRequested && shouldRunTriage) {
       try {
-        triageDecision = await this.triageService.triage(planningRequest, context, context.capabilityInference, context.models);
+        triageDecision = await this.triageService.triage(
+          planningRequest,
+          context,
+          context.capabilityInference,
+          context.models
+        );
         if (triageDecision) {
           triageDecision = this.applyTriageRoute(triageDecision, planningRequest);
           context = {
@@ -2542,12 +2766,14 @@ export class OrchestrationEngine {
       object: 'chat.completion.chunk' as const,
       created: Math.floor(Date.now() / 1000),
       model: 'observer',
-      choices: [{
-        index: 0,
-        delta: { role: 'assistant' as const, content: '' },
-        finish_reason: null,
-        logprobs: null,
-      }],
+      choices: [
+        {
+          index: 0,
+          delta: { role: 'assistant' as const, content: '' },
+          finish_reason: null,
+          logprobs: null,
+        },
+      ],
       ailin_metadata: {
         type: 'observer',
         event: 'request_received',
@@ -2567,7 +2793,9 @@ export class OrchestrationEngine {
     // pattern already used in execute() (LAT-2), adapted for the
     // streaming path (which has no semantic-cache step to pair it with,
     // so it's raced directly against buildContext instead).
-    type MemoryContextResult = Awaited<ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>>;
+    type MemoryContextResult = Awaited<
+      ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>
+    >;
     const memoryContextPromise: Promise<MemoryContextResult | null> =
       process.env.MEMORY_CONTEXT_ENABLED !== 'false'
         ? getMemoryContextService()
@@ -2595,10 +2823,14 @@ export class OrchestrationEngine {
     const singleStrategyForSpeculation =
       singleStrategyCandidate instanceof SingleModelStrategy ? singleStrategyCandidate : undefined;
     if (singleStrategyForSpeculation) this.injectProviderRegistry(singleStrategyForSpeculation);
-    const speculativeSelectionPromise =
-      singleStrategyForSpeculation
-        ? this.resolveSpeculativeSingleSelection(singleStrategyForSpeculation, request, context, requestId)
-        : Promise.resolve(null);
+    const speculativeSelectionPromise = singleStrategyForSpeculation
+      ? this.resolveSpeculativeSingleSelection(
+          singleStrategyForSpeculation,
+          request,
+          context,
+          requestId
+        )
+      : Promise.resolve(null);
 
     const streamMemoryContext = await memoryContextPromise;
     let memRequestFromMemory = request;
@@ -2613,7 +2845,12 @@ export class OrchestrationEngine {
 
     if (this.triageService && autoStrategyRequested && shouldRunTriage) {
       try {
-        triageDecision = await this.triageService.triage(request, context, context.capabilityInference, context.models);
+        triageDecision = await this.triageService.triage(
+          request,
+          context,
+          context.capabilityInference,
+          context.models
+        );
         if (triageDecision) {
           triageDecision = this.applyTriageRoute(triageDecision, request);
         }
@@ -2657,7 +2894,10 @@ export class OrchestrationEngine {
           // speculative call resolved — re-derive, but request.model is now
           // concrete so this hits selectBestModel()'s cheap exact-match path,
           // not another full DynamicModelSelector pass.
-          const repinned = await singleStrategyForSpeculation.planStreaming(request, enrichedContext);
+          const repinned = await singleStrategyForSpeculation.planStreaming(
+            request,
+            enrichedContext
+          );
           if (repinned) {
             finalSelection = repinned;
             outcome = 'repinned';
@@ -2695,7 +2935,7 @@ export class OrchestrationEngine {
     if (streamObserverEnabled && (strategy.getMetadata().minModels ?? 1) > 1) {
       const observer = new ObserverService(
         { enabled: true, language: ObserverService.extractUserSample(request.messages) },
-        strategy.getMetadata().name,
+        strategy.getMetadata().name
       );
       if (observer.isActive()) {
         streamObserverFeed = observer;
@@ -2721,7 +2961,8 @@ export class OrchestrationEngine {
         });
       }
     }
-    (enrichedContext as { observerFeed?: typeof streamObserverFeed }).observerFeed = streamObserverFeed;
+    (enrichedContext as { observerFeed?: typeof streamObserverFeed }).observerFeed =
+      streamObserverFeed;
 
     // NOTE: see the analogous comment in execute() — cross-modal capability
     // access comes from `enrichedContext.invoker` (request-scoped, built in
@@ -2742,7 +2983,7 @@ export class OrchestrationEngine {
         : enrichedContext.memoryEnriched
           ? memRequestFromMemory
           : await strategy.enrichWithMemories(request, enrichedContext),
-      enrichedContext,
+      enrichedContext
     );
 
     // Leader removed — strategies call executeModel() directly
@@ -2757,7 +2998,7 @@ export class OrchestrationEngine {
         strategy.executeStream(memRequest, enrichedContext),
         streamObserverFeed,
         undefined,
-        inlineNarration,
+        inlineNarration
       );
     } else {
       // Non-streaming strategy (e.g. consensus — its executeStream is disabled
@@ -2779,7 +3020,7 @@ export class OrchestrationEngine {
         })(),
         streamObserverFeed,
         undefined,
-        inlineNarration,
+        inlineNarration
       );
       const result = await execPromise;
       strategy.recordExecution(enrichedContext, result).catch(() => {});
@@ -2806,7 +3047,7 @@ export class OrchestrationEngine {
     strategyStream: AsyncGenerator<ChatResponse, void, unknown>,
     feed: ObserverFeed,
     pollMs = 400,
-    inlineFirstNarration = false,
+    inlineFirstNarration = false
   ): AsyncGenerator<ChatResponse, void, unknown> {
     if (!feed.isActive()) {
       yield* strategyStream;
@@ -2874,7 +3115,8 @@ export class OrchestrationEngine {
           type: 'phase_start',
           timestamp: now,
           strategy: '',
-          summary: 'The collective is still working on your answer — the analysts are reasoning through it.',
+          summary:
+            'The collective is still working on your answer — the analysts are reasoning through it.',
         });
         lastHeartbeatAt = now;
       }
@@ -2883,9 +3125,11 @@ export class OrchestrationEngine {
           (r) => ({ tag: 'chunk' as const, r }),
           // Type the rejection as `unknown` (not the default `any`) so folding it
           // into the object is not an unsafe assignment; it is only re-thrown below.
-          (e: unknown) => ({ tag: 'error' as const, e }),
+          (e: unknown) => ({ tag: 'error' as const, e })
         ),
-        new Promise<{ tag: 'tick' }>((resolve) => setTimeout(() => resolve({ tag: 'tick' }), pollMs)),
+        new Promise<{ tag: 'tick' }>((resolve) =>
+          setTimeout(() => resolve({ tag: 'tick' }), pollMs)
+        ),
       ]);
 
       if (raced.tag === 'tick') {
@@ -2979,7 +3223,7 @@ export class OrchestrationEngine {
     strategy: SingleModelStrategy,
     request: ChatRequest,
     context: OrchestrationContext,
-    requestId: string,
+    requestId: string
   ): Promise<{ model: Model; adapter: ProviderAdapter } | null> {
     try {
       return await strategy.planStreaming({ ...request }, context);
@@ -3043,9 +3287,10 @@ export class OrchestrationEngine {
     // a server-filesystem tool (read_file, write_file, grep_search, ...) to
     // a request whose client never asked for tools.
     const safeNames = new Set(
-      toolRegistry.listStrategyTools()
+      toolRegistry
+        .listStrategyTools()
         .map((t) => t.name)
-        .filter((name) => TRIAGE_RECOMMENDABLE_TOOLS.has(name)),
+        .filter((name) => TRIAGE_RECOMMENDABLE_TOOLS.has(name))
     );
     const tools: Tool[] = [];
     for (const name of recommended) {
@@ -3165,7 +3410,9 @@ export class OrchestrationEngine {
             ? message.content
             : Array.isArray(message.content)
               ? message.content
-                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && 'text' in p)
+                  .filter(
+                    (p): p is { type: 'text'; text: string } => p.type === 'text' && 'text' in p
+                  )
                   .map((p) => p.text)
                   .join(' ')
               : '';
@@ -3207,7 +3454,8 @@ export class OrchestrationEngine {
 
     // ✅ FIX: Check if model was explicitly specified by user
     // Use type-safe helper instead of type casting
-    const { getUserSpecifiedModelFlag, getTaskType: _getTaskType } = await chatRequestExtendedImport;
+    const { getUserSpecifiedModelFlag, getTaskType: _getTaskType } =
+      await chatRequestExtendedImport;
     const userSpecifiedModel = getUserSpecifiedModelFlag(request);
 
     // Caminho-C Q2 closure: capture the user-specified model BEFORE we
@@ -3267,7 +3515,9 @@ export class OrchestrationEngine {
       // falls through to DynamicModelSelector, which substitutes an
       // unrelated external model. Auto-routing (no pin) is unaffected.
       allModels = await getChatEligibleModels({
-        allowSelfHostedModelIds: preferredModelFromRequest ? [preferredModelFromRequest] : undefined,
+        allowSelfHostedModelIds: preferredModelFromRequest
+          ? [preferredModelFromRequest]
+          : undefined,
       });
     } catch {
       allModels = await this.providerRegistry.getAllModels();
@@ -3337,7 +3587,8 @@ export class OrchestrationEngine {
     const runtimeConstraints = request.ailin_constraints;
     if (runtimeConstraints) {
       const requiredCapabilities =
-        runtimeConstraints.requiredCapabilities && runtimeConstraints.requiredCapabilities.length > 0
+        runtimeConstraints.requiredCapabilities &&
+        runtimeConstraints.requiredCapabilities.length > 0
           ? Array.from(new Set(runtimeConstraints.requiredCapabilities))
           : undefined;
       const preferredProviders =
@@ -3462,7 +3713,9 @@ export class OrchestrationEngine {
       const { getCentralModelDiscoveryService } = await centralModelDiscoveryImport;
       const discovery = await getCentralModelDiscoveryService();
       discovery.enrichModelsWithBalanceStatus(constrainedModels);
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
 
     // ✅ VALIDATION: Log model count and verify we have expected models
     const modelsByProvider = this.groupModelsByProvider(constrainedModels);
@@ -3472,7 +3725,7 @@ export class OrchestrationEngine {
         totalModels: constrainedModels.length,
         modelsByProvider,
         userSpecifiedModel,
-        modelInRequest: !!(request.model),
+        modelInRequest: !!request.model,
       },
       'Context built with all available models for orchestration'
     );
@@ -3503,9 +3756,10 @@ export class OrchestrationEngine {
     // Map inference results to orchestration parameters
     const inferredTaskType = this.mapInferredTaskType(capabilityInference.taskType);
     const inferredCapabilities = this.mapInferredCapabilities(capabilityInference);
-    const inferredPreferSpeed = capabilityInference.complexity === 'simple'
-      && capabilityInference.costSensitivity === 'high'
-      && capabilityInference.contextNeeds === 'short';
+    const inferredPreferSpeed =
+      capabilityInference.complexity === 'simple' &&
+      capabilityInference.costSensitivity === 'high' &&
+      capabilityInference.contextNeeds === 'short';
 
     // ── Cascade: client-explicit (Layer 1) > inference (Layer 3) ──────
     // Layer 2 (triage LLM) is applied later after triage runs
@@ -3568,12 +3822,8 @@ export class OrchestrationEngine {
       maxInputCostPer1k: runtimeConstraints?.maxInputCostPer1k,
       maxOutputCostPer1k: runtimeConstraints?.maxOutputCostPer1k,
       maxAverageCostPer1k: runtimeConstraints?.maxAverageCostPer1k,
-      preferredModelIds: preferredModelFromRequest
-        ? [preferredModelFromRequest]
-        : undefined,
-      semanticQuery: semanticQuery && semanticQuery !== 'Unknown task'
-        ? semanticQuery
-        : undefined,
+      preferredModelIds: preferredModelFromRequest ? [preferredModelFromRequest] : undefined,
+      semanticQuery: semanticQuery && semanticQuery !== 'Unknown task' ? semanticQuery : undefined,
       capabilityInference,
       // C3: Ablation flags from experiment runner. `createAblationFlags` is
       // imported at module scope (see imports block); the previous inline
@@ -3584,11 +3834,13 @@ export class OrchestrationEngine {
         ? createAblationFlags(
             request.ablation_disable.filter((c): c is AblationComponent =>
               ALL_ABLATION_COMPONENTS.includes(c as AblationComponent)
-            ),
+            )
           )
         : undefined,
       // C3: Scoring policy override
-      scoringPolicy: (request.scoring_policy as import('@/core/validation/c3/scoring-policy').ScoringPolicy) ?? undefined,
+      scoringPolicy:
+        (request.scoring_policy as import('@/core/validation/c3/scoring-policy').ScoringPolicy) ??
+        undefined,
       // LAT-1: opt-in to synchronous judge/learning (default defers for 'learning')
       syncJudge: request.sync_judge === true,
       // Best-of-N (#2): objective verifier + tie-break, resolved above from the
@@ -3608,7 +3860,10 @@ export class OrchestrationEngine {
         { ImagesOrchestrationService },
         { FileGenerationService },
       ] = await Promise.all([
-        audioOrchestrationImport, translationServiceImport, videoOrchestrationImport, imagesOrchestrationImport,
+        audioOrchestrationImport,
+        translationServiceImport,
+        videoOrchestrationImport,
+        imagesOrchestrationImport,
         fileGenerationServiceImport,
       ]);
 
@@ -3682,17 +3937,39 @@ export class OrchestrationEngine {
     const caps: ModelCapability[] = [];
     for (const rc of inference.requiredCapabilities) {
       switch (rc) {
-        case 'tool_use': caps.push('tool_use'); break;
-        case 'code_execution': caps.push('code_generation'); break;
-        case 'math_reasoning': caps.push('reasoning'); break;
-        case 'multilingual': caps.push('chat'); break;
-        case 'groundedness': caps.push('web_search'); break;
-        case 'long_context': caps.push('chat'); break;
-        case 'safety_critical': caps.push('reasoning'); break;
-        case 'image_generation': caps.push('image_generation'); break;
-        case 'vision': caps.push('vision', 'multimodal'); break;
-        case 'audio_generation': caps.push('audio_generation', 'text_to_speech'); break;
-        case 'video_generation': caps.push('video_generation'); break;
+        case 'tool_use':
+          caps.push('tool_use');
+          break;
+        case 'code_execution':
+          caps.push('code_generation');
+          break;
+        case 'math_reasoning':
+          caps.push('reasoning');
+          break;
+        case 'multilingual':
+          caps.push('chat');
+          break;
+        case 'groundedness':
+          caps.push('web_search');
+          break;
+        case 'long_context':
+          caps.push('chat');
+          break;
+        case 'safety_critical':
+          caps.push('reasoning');
+          break;
+        case 'image_generation':
+          caps.push('image_generation');
+          break;
+        case 'vision':
+          caps.push('vision', 'multimodal');
+          break;
+        case 'audio_generation':
+          caps.push('audio_generation', 'text_to_speech');
+          break;
+        case 'video_generation':
+          caps.push('video_generation');
+          break;
       }
     }
     // Deduplicate
@@ -3717,7 +3994,7 @@ export class OrchestrationEngine {
     originalRequest: ChatRequest,
     context: OrchestrationContext,
     plan: TriageExecutionPlan,
-    requestId: string,
+    requestId: string
   ): Promise<OrchestrationResult> {
     const allModelExecutions: import('@/types').ModelExecution[] = [];
     const artifacts: AilinArtifact[] = [];
@@ -3759,7 +4036,12 @@ export class OrchestrationEngine {
         // entry per plan stage, so `i` would be the wrong pointer whenever
         // text stages precede this one).
         const outcome = await this.executeMediaGenerationStage(
-          mediaModality, stage, i, artifacts.length, context, accumulatedContext,
+          mediaModality,
+          stage,
+          i,
+          artifacts.length,
+          context,
+          accumulatedContext
         );
         if (outcome.execution) allModelExecutions.push(outcome.execution);
         totalCost += outcome.cost;
@@ -3770,7 +4052,13 @@ export class OrchestrationEngine {
         accumulatedContext += `\n\n### Stage "${stage.name}" output (${mediaModality} generation):\n${outcome.summaryText}`;
         lastStageResponse = outcome.syntheticResponse;
         this.log.info(
-          { requestId, stage: i + 1, stageName: stage.name, modality: mediaModality, success: !outcome.artifact?.error },
+          {
+            requestId,
+            stage: i + 1,
+            stageName: stage.name,
+            modality: mediaModality,
+            success: !outcome.artifact?.error,
+          },
           `Media-generation stage "${stage.name}" completed`
         );
         continue;
@@ -3779,7 +4067,10 @@ export class OrchestrationEngine {
       // Resolve the strategy for this stage
       const stageStrategy = this.strategies.get(stage.strategy) || this.strategies.get('single');
       if (!stageStrategy) {
-        this.log.error({ stage: stage.name, strategy: stage.strategy }, 'Stage strategy not found, skipping stage');
+        this.log.error(
+          { stage: stage.name, strategy: stage.strategy },
+          'Stage strategy not found, skipping stage'
+        );
         continue;
       }
       this.injectProviderRegistry(stageStrategy);
@@ -3816,27 +4107,31 @@ export class OrchestrationEngine {
       };
 
       // Filter context models to those matching stage capability requirements
-      const stageCapabilities = stage.requiredCapabilities
-        .filter(isModelCapability) as ModelCapability[];
-      const stageModels = stageCapabilities.length > 0
-        ? context.models.filter((m) =>
-            stageCapabilities.every((cap) => m.capabilities.includes(cap))
-          )
-        : context.models;
+      const stageCapabilities = stage.requiredCapabilities.filter(
+        isModelCapability
+      ) as ModelCapability[];
+      const stageModels =
+        stageCapabilities.length > 0
+          ? context.models.filter((m) =>
+              stageCapabilities.every((cap) => m.capabilities.includes(cap))
+            )
+          : context.models;
 
       // If no models match stage capabilities exactly, use all models (graceful degradation)
       const effectiveModels = stageModels.length > 0 ? stageModels : context.models;
 
       // Build stage context with quality target from roles
-      const stageQualityTarget = stage.modelRoles.length > 0
-        ? Math.max(...stage.modelRoles.map((r) => r.qualityTarget))
-        : plan.qualityTarget;
+      const stageQualityTarget =
+        stage.modelRoles.length > 0
+          ? Math.max(...stage.modelRoles.map((r) => r.qualityTarget))
+          : plan.qualityTarget;
 
       const stageContext: OrchestrationContext = {
         ...context,
         models: effectiveModels,
         qualityTarget: stageQualityTarget,
-        requiredCapabilities: stageCapabilities.length > 0 ? stageCapabilities : context.requiredCapabilities,
+        requiredCapabilities:
+          stageCapabilities.length > 0 ? stageCapabilities : context.requiredCapabilities,
       };
 
       try {
@@ -3923,7 +4218,10 @@ export class OrchestrationEngine {
               totalCost += contResult.totalCost;
             }
           } catch (contError) {
-            this.log.warn({ requestId, error: getErrorMessage(contError) }, 'Continuation loop failed');
+            this.log.warn(
+              { requestId, error: getErrorMessage(contError) },
+              'Continuation loop failed'
+            );
           }
         }
       }
@@ -3935,10 +4233,10 @@ export class OrchestrationEngine {
     // threw — the all-stages-failed case for plans containing media stages
     // is surfaced via metadata.degraded below instead.
     if (!lastStageResponse) {
-      throw Object.assign(
-        new Error('Multi-stage pipeline produced no response from any stage'),
-        { statusCode: 503, code: 'multi_stage_empty_response' }
-      );
+      throw Object.assign(new Error('Multi-stage pipeline produced no response from any stage'), {
+        statusCode: 503,
+        code: 'multi_stage_empty_response',
+      });
     }
 
     const totalDuration = Date.now() - stageStartTime;
@@ -3958,7 +4256,9 @@ export class OrchestrationEngine {
         stagesExecuted: plan.stages.length,
         mediaStagesExecuted: artifacts.length,
         stageNames: plan.stages.map((s) => s.name),
-        ...(anyStageSucceeded ? {} : { degraded: true, degraded_reason: 'multi_stage_all_stages_failed' }),
+        ...(anyStageSucceeded
+          ? {}
+          : { degraded: true, degraded_reason: 'multi_stage_all_stages_failed' }),
         plan: {
           strategy: plan.strategy,
           modelCount: plan.modelCount,
@@ -3981,7 +4281,7 @@ export class OrchestrationEngine {
     stageIndex: number,
     artifactIndex: number,
     context: OrchestrationContext,
-    accumulatedContext: string,
+    accumulatedContext: string
   ): Promise<{
     artifact?: AilinArtifact;
     execution?: import('@/types').ModelExecution;
@@ -3989,12 +4289,20 @@ export class OrchestrationEngine {
     summaryText: string;
     syntheticResponse: ChatResponse;
   }> {
-    const prompt = stage.generationPrompt?.trim()
-      || this.deriveGenerationPromptFallback(stage, accumulatedContext);
+    const prompt =
+      stage.generationPrompt?.trim() ||
+      this.deriveGenerationPromptFallback(stage, accumulatedContext);
     const startedAt = Date.now();
 
     if (!context.invoker) {
-      return this.mediaStageFailure(modality, stage, stageIndex, 'Capability invoker unavailable in this context', startedAt, prompt);
+      return this.mediaStageFailure(
+        modality,
+        stage,
+        stageIndex,
+        'Capability invoker unavailable in this context',
+        startedAt,
+        prompt
+      );
     }
 
     try {
@@ -4002,41 +4310,86 @@ export class OrchestrationEngine {
         const result = await context.invoker.generateImage({ prompt });
         const first = result.images[0];
         if (!first || (!first.url && !first.b64_json)) {
-          return this.mediaStageFailure(modality, stage, stageIndex, 'Image provider returned no image', startedAt, prompt);
+          return this.mediaStageFailure(
+            modality,
+            stage,
+            stageIndex,
+            'Image provider returned no image',
+            startedAt,
+            prompt
+          );
         }
-        return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
-          url: first.url,
-          b64Json: first.b64_json,
-          revisedPrompt: first.revised_prompt,
-          provider: result.provider,
-          model: result.model,
-        });
+        return this.mediaStageSuccess(
+          modality,
+          stage,
+          stageIndex,
+          artifactIndex,
+          startedAt,
+          prompt,
+          {
+            url: first.url,
+            b64Json: first.b64_json,
+            revisedPrompt: first.revised_prompt,
+            provider: result.provider,
+            model: result.model,
+          }
+        );
       }
       if (modality === 'video') {
         const result = await context.invoker.generateVideo({ prompt, responseFormat: 'url' });
         const first = result.videos[0];
         if (!first || (!first.url && !first.b64_json)) {
-          return this.mediaStageFailure(modality, stage, stageIndex, 'Video provider returned no video', startedAt, prompt);
+          return this.mediaStageFailure(
+            modality,
+            stage,
+            stageIndex,
+            'Video provider returned no video',
+            startedAt,
+            prompt
+          );
         }
-        return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
-          url: first.url,
-          b64Json: first.b64_json,
-          provider: result.provider,
-          model: result.model,
-        });
+        return this.mediaStageSuccess(
+          modality,
+          stage,
+          stageIndex,
+          artifactIndex,
+          startedAt,
+          prompt,
+          {
+            url: first.url,
+            b64Json: first.b64_json,
+            provider: result.provider,
+            model: result.model,
+          }
+        );
       }
       if (modality === 'file') {
         const format = detectFileGenerationFormat(stage.requiredCapabilities);
         const result = await context.invoker.generateFile({ format, prompt });
         if (!result.buffer || result.buffer.length === 0) {
-          return this.mediaStageFailure(modality, stage, stageIndex, `File generator returned an empty ${format} file`, startedAt, prompt);
+          return this.mediaStageFailure(
+            modality,
+            stage,
+            stageIndex,
+            `File generator returned an empty ${format} file`,
+            startedAt,
+            prompt
+          );
         }
-        return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
-          b64Json: result.buffer.toString('base64'),
-          mimeType: result.mimeType,
-          filename: result.filename,
-          model: result.model,
-        });
+        return this.mediaStageSuccess(
+          modality,
+          stage,
+          stageIndex,
+          artifactIndex,
+          startedAt,
+          prompt,
+          {
+            b64Json: result.buffer.toString('base64'),
+            mimeType: result.mimeType,
+            filename: result.filename,
+            model: result.model,
+          }
+        );
       }
       // audio — reuse the invoker's existing synthesize() (TTS).
       // Review fix: the invoker coerces a non-Buffer result to
@@ -4046,7 +4399,14 @@ export class OrchestrationEngine {
       // artifact whose b64_json is an empty string.
       const result = await context.invoker.synthesize(prompt);
       if (result.audioBuffer.length === 0) {
-        return this.mediaStageFailure(modality, stage, stageIndex, 'Audio provider returned no audio', startedAt, prompt);
+        return this.mediaStageFailure(
+          modality,
+          stage,
+          stageIndex,
+          'Audio provider returned no audio',
+          startedAt,
+          prompt
+        );
       }
       return this.mediaStageSuccess(modality, stage, stageIndex, artifactIndex, startedAt, prompt, {
         b64Json: result.audioBuffer.toString('base64'),
@@ -4055,7 +4415,14 @@ export class OrchestrationEngine {
         model: result.model,
       });
     } catch (err) {
-      return this.mediaStageFailure(modality, stage, stageIndex, getErrorMessage(err), startedAt, prompt);
+      return this.mediaStageFailure(
+        modality,
+        stage,
+        stageIndex,
+        getErrorMessage(err),
+        startedAt,
+        prompt
+      );
     }
   }
 
@@ -4074,7 +4441,7 @@ export class OrchestrationEngine {
     stage: TriageStage,
     model: string | undefined,
     contentText: string,
-    url: string | undefined,
+    url: string | undefined
   ): ChatResponse {
     const content = url ? `${contentText}\n${url}` : contentText;
     return {
@@ -4082,12 +4449,14 @@ export class OrchestrationEngine {
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
       model: model || 'media-generator',
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content },
-        finish_reason: 'stop',
-        logprobs: null,
-      }],
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
     };
   }
 
@@ -4098,8 +4467,22 @@ export class OrchestrationEngine {
     artifactIndex: number,
     startedAt: number,
     prompt: string,
-    data: { url?: string; b64Json?: string; revisedPrompt?: string; mimeType?: string; filename?: string; provider?: string; model?: string },
-  ): { artifact: AilinArtifact; execution: import('@/types').ModelExecution; cost: number; summaryText: string; syntheticResponse: ChatResponse } {
+    data: {
+      url?: string;
+      b64Json?: string;
+      revisedPrompt?: string;
+      mimeType?: string;
+      filename?: string;
+      provider?: string;
+      model?: string;
+    }
+  ): {
+    artifact: AilinArtifact;
+    execution: import('@/types').ModelExecution;
+    cost: number;
+    summaryText: string;
+    syntheticResponse: ChatResponse;
+  } {
     // Size cap (review follow-up, 2026-07-13): inline base64 media flows
     // into the HTTP response AND the semantic cache (memory + 2 Redis
     // layers) with no bound — a provider that ignores responseFormat:'url'
@@ -4109,9 +4492,12 @@ export class OrchestrationEngine {
     const maxB64Chars = Number(process.env.ARTIFACT_MAX_B64_CHARS) || 13_500_000;
     if (data.b64Json && data.b64Json.length > maxB64Chars && !data.url) {
       return this.mediaStageFailure(
-        modality, stage, stageIndex,
+        modality,
+        stage,
+        stageIndex,
         `Generated ${modality} too large for inline delivery (${Math.round(data.b64Json.length / 1_000_000)}MB base64 > cap) and the provider returned no URL`,
-        startedAt, prompt,
+        startedAt,
+        prompt
       );
     }
     // With a URL present, drop only the oversized inline copy — the URL
@@ -4138,7 +4524,10 @@ export class OrchestrationEngine {
     // one, `artifacts[stageIndex]` would point past the end of the array.
     const summaryText = `${modality} generated successfully — see ailin_metadata.artifacts[${artifactIndex}].`;
     const syntheticResponse = this.buildMediaSyntheticResponse(
-      stage, data.model, `[${modality} generated — see ailin_metadata.artifacts[${artifactIndex}]]`, data.url,
+      stage,
+      data.model,
+      `[${modality} generated — see ailin_metadata.artifacts[${artifactIndex}]]`,
+      data.url
     );
     const execution: import('@/types').ModelExecution = {
       modelId: data.model || 'unknown',
@@ -4160,8 +4549,14 @@ export class OrchestrationEngine {
     stageIndex: number,
     reason: string,
     startedAt: number,
-    prompt: string,
-  ): { artifact: AilinArtifact; execution: import('@/types').ModelExecution; cost: number; summaryText: string; syntheticResponse: ChatResponse } {
+    prompt: string
+  ): {
+    artifact: AilinArtifact;
+    execution: import('@/types').ModelExecution;
+    cost: number;
+    summaryText: string;
+    syntheticResponse: ChatResponse;
+  } {
     const durationMs = Date.now() - startedAt;
     const artifact: AilinArtifact = {
       modality,
@@ -4172,7 +4567,10 @@ export class OrchestrationEngine {
     };
     const summaryText = `Stage "${stage.name}" (${modality} generation) FAILED: ${reason}. Do not claim this artifact exists in your response.`;
     const syntheticResponse = this.buildMediaSyntheticResponse(
-      stage, undefined, `[${modality} generation failed: ${reason}]`, undefined,
+      stage,
+      undefined,
+      `[${modality} generation failed: ${reason}]`,
+      undefined
     );
     const execution: import('@/types').ModelExecution = {
       modelId: 'unknown',
@@ -4190,7 +4588,7 @@ export class OrchestrationEngine {
 
   private mergeCapabilities(
     triageCapabilities: string[] | undefined,
-    inferenceCapabilities: ModelCapability[] | undefined,
+    inferenceCapabilities: ModelCapability[] | undefined
   ): ModelCapability[] | undefined {
     if (!triageCapabilities?.length && !inferenceCapabilities?.length) return undefined;
     const merged = new Set<string>([
@@ -4214,12 +4612,9 @@ export class OrchestrationEngine {
 
   private isChatGenerationCapableModel(model: Model): boolean {
     const capabilities = new Set(model.capabilities || []);
-    const hasChatTextCapability =
-      capabilities.has('chat') || capabilities.has('text_generation');
-    const hasEmbeddingCapability =
-      capabilities.has('embedding') || capabilities.has('embeddings');
-    const isCompletionsOnly =
-      capabilities.has('completions') && !hasChatTextCapability;
+    const hasChatTextCapability = capabilities.has('chat') || capabilities.has('text_generation');
+    const hasEmbeddingCapability = capabilities.has('embedding') || capabilities.has('embeddings');
+    const isCompletionsOnly = capabilities.has('completions') && !hasChatTextCapability;
     if (!hasChatTextCapability || isCompletionsOnly || hasEmbeddingCapability) {
       return false;
     }
@@ -4284,8 +4679,7 @@ export class OrchestrationEngine {
       'audio-preview',
     ].some((signal) => normalizedName.includes(signal));
     const providerName = (model.provider || '').toLowerCase();
-    const isOpenAIFamily =
-      providerName === 'openai' || normalizedName.includes('openai/');
+    const isOpenAIFamily = providerName === 'openai' || normalizedName.includes('openai/');
     const hasCompletionOnlyNameSignal =
       /-(001|002)\b/.test(normalizedName) ||
       (isOpenAIFamily &&
@@ -4302,8 +4696,7 @@ export class OrchestrationEngine {
   private ensureResponseUsage(response: ChatResponse): ChatResponse {
     const promptTokens = response.usage?.prompt_tokens ?? 0;
     const completionTokens = response.usage?.completion_tokens ?? 0;
-    const totalTokens =
-      response.usage?.total_tokens ?? promptTokens + completionTokens;
+    const totalTokens = response.usage?.total_tokens ?? promptTokens + completionTokens;
 
     return {
       ...response,
@@ -4368,8 +4761,7 @@ export class OrchestrationEngine {
 
     const successfulExisting = result.modelsUsed.find(
       (execution) =>
-        execution.success === true &&
-        this.hasUsableAssistantResponse(execution.response)
+        execution.success === true && this.hasUsableAssistantResponse(execution.response)
     );
     if (successfulExisting) {
       this.log.warn(
@@ -4407,7 +4799,10 @@ export class OrchestrationEngine {
         {
           taskType: context.taskType,
           complexity: context.triage?.complexity || 'medium',
-          contextSize: Math.max(context.contextSize || this.estimateContextSize(request.messages), 256),
+          contextSize: Math.max(
+            context.contextSize || this.estimateContextSize(request.messages),
+            256
+          ),
           preferSpeed: true,
           maxCost: context.maxCost,
           qualityTarget: context.qualityTarget,
@@ -4536,7 +4931,10 @@ export class OrchestrationEngine {
    *             benchmark v4 validates them.
    * Explicit user strategies are always honored.
    */
-  private selectStrategy(request: ChatRequest, context: OrchestrationContext): { strategy: BaseStrategy; selectionSource: string } {
+  private selectStrategy(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): { strategy: BaseStrategy; selectionSource: string } {
     const selection = this.selectStrategyCore(request, context);
     if (selection.selectionSource === 'explicit') return selection;
 
@@ -4589,7 +4987,10 @@ export class OrchestrationEngine {
    * to prevent race conditions under concurrent requests (C4 fix — ADR Phase 3).
    * NEVER use a shared instance field for per-request state.
    */
-  private selectStrategyCore(request: ChatRequest, context: OrchestrationContext): { strategy: BaseStrategy; selectionSource: string } {
+  private selectStrategyCore(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): { strategy: BaseStrategy; selectionSource: string } {
     // If strategy explicitly requested, use it
     if (request.strategy && request.strategy !== 'auto') {
       const requestedStrategy = request.strategy as ExecutionStrategyName;
@@ -4636,10 +5037,13 @@ export class OrchestrationEngine {
         return { strategy, selectionSource: 'explicit' };
       }
 
-      throw Object.assign(new Error(`Requested strategy "${requestedStrategy}" is not registered.`), {
-        statusCode: 400,
-        code: 'invalid_strategy',
-      });
+      throw Object.assign(
+        new Error(`Requested strategy "${requestedStrategy}" is not registered.`),
+        {
+          statusCode: 400,
+          code: 'invalid_strategy',
+        }
+      );
     }
 
     if (context.triage?.recommendedStrategy) {
@@ -4670,13 +5074,16 @@ export class OrchestrationEngine {
     if (archiveRec) {
       const archiveStrategy = this.strategies.get(archiveRec.strategy as ExecutionStrategyName);
       if (archiveStrategy && archiveStrategy.isSuitable(request, context)) {
-        this.log.debug({
-          requestId: context.requestId,
-          selectedStrategy: archiveRec.strategy,
-          fitness: archiveRec.fitness.toFixed(4),
-          dimension: archiveRec.dimension,
-          source: 'configuration-archive',
-        }, 'Strategy selected from quality-diversity configuration archive');
+        this.log.debug(
+          {
+            requestId: context.requestId,
+            selectedStrategy: archiveRec.strategy,
+            fitness: archiveRec.fitness.toFixed(4),
+            dimension: archiveRec.dimension,
+            source: 'configuration-archive',
+          },
+          'Strategy selected from quality-diversity configuration archive'
+        );
         return { strategy: archiveStrategy, selectionSource: 'archive' };
       }
     }
@@ -4686,7 +5093,11 @@ export class OrchestrationEngine {
     // preference axis. Unlike the archive (single dimension), the Pareto frontier
     // considers multi-objective trade-offs and returns non-dominated strategies.
     const preferenceMap: Record<string, 'quality' | 'cost' | 'speed' | 'balanced'> = {
-      'speed': 'speed', 'cost': 'cost', 'quality': 'quality', 'balanced': 'balanced', 'adaptive': 'quality',
+      speed: 'speed',
+      cost: 'cost',
+      quality: 'quality',
+      balanced: 'balanced',
+      adaptive: 'quality',
     };
     const paretoPreference = preferenceMap[triagePreference] ?? 'balanced';
     // C3 P0.2: Skip Pareto when ablated
@@ -4696,14 +5107,17 @@ export class OrchestrationEngine {
     if (paretoCandidate) {
       const paretoStrategy = this.strategies.get(paretoCandidate.strategy as ExecutionStrategyName);
       if (paretoStrategy && paretoStrategy.isSuitable(request, context)) {
-        this.log.debug({
-          requestId: context.requestId,
-          selectedStrategy: paretoCandidate.strategy,
-          quality: paretoCandidate.objectives.quality.toFixed(4),
-          successRate: paretoCandidate.objectives.successRate.toFixed(4),
-          preference: paretoPreference,
-          source: 'pareto-frontier',
-        }, 'Strategy selected from Pareto frontier (OI-09)');
+        this.log.debug(
+          {
+            requestId: context.requestId,
+            selectedStrategy: paretoCandidate.strategy,
+            quality: paretoCandidate.objectives.quality.toFixed(4),
+            successRate: paretoCandidate.objectives.successRate.toFixed(4),
+            preference: paretoPreference,
+            source: 'pareto-frontier',
+          },
+          'Strategy selected from Pareto frontier (OI-09)'
+        );
         return { strategy: paretoStrategy, selectionSource: 'pareto' };
       }
     }
@@ -4735,7 +5149,11 @@ export class OrchestrationEngine {
       : strategyBandit.selectStrategy(taskType, complexity, candidateNames);
     if (banditResult) {
       const banditStrategy = this.strategies.get(banditResult.strategy as ExecutionStrategyName);
-      const banditHasConfidence = strategyBandit.hasConfidence(taskType, complexity, banditResult.strategy);
+      const banditHasConfidence = strategyBandit.hasConfidence(
+        taskType,
+        complexity,
+        banditResult.strategy
+      );
       if (banditStrategy && banditHasConfidence) {
         this.log.debug(
           {
@@ -4774,9 +5192,7 @@ export class OrchestrationEngine {
   /**
    * Detect task type from request
    */
-  private resolveFinalDecider(
-    result: OrchestrationResult
-  ): {
+  private resolveFinalDecider(result: OrchestrationResult): {
     modelId?: string;
     modelName?: string;
     role?: string;
@@ -4922,10 +5338,7 @@ export class OrchestrationEngine {
    * skip it blind. See `TriageDecision.route` consumption at the 3 call
    * sites of this method.
    */
-  private shouldRunTriage(
-    request: ChatRequest,
-    context: OrchestrationContext
-  ): boolean {
+  private shouldRunTriage(request: ChatRequest, context: OrchestrationContext): boolean {
     void request;
     void context;
     return true;
@@ -4940,10 +5353,16 @@ export class OrchestrationEngine {
     // The method is optional and will be injected here
     // Using object property assignment with type-safe approach
     type StrategyWithAdapter = BaseStrategy & {
-      getAdapterForModel?: (model: Model, context: OrchestrationContext) => Promise<ProviderAdapter | null>;
+      getAdapterForModel?: (
+        model: Model,
+        context: OrchestrationContext
+      ) => Promise<ProviderAdapter | null>;
     };
     const strategyWithAdapter = strategy as StrategyWithAdapter;
-    strategyWithAdapter.getAdapterForModel = async (model: Model, context: OrchestrationContext): Promise<ProviderAdapter | null> => {
+    strategyWithAdapter.getAdapterForModel = async (
+      model: Model,
+      context: OrchestrationContext
+    ): Promise<ProviderAdapter | null> => {
       // Pass preferredProviders from context to ensure model resolves to the correct provider
       // (critical for multi-provider models like mistral-small-latest which exists under both aihubmix and mistral).
       // Camada 2: fall back to the model's OWN provider so a model the selector chose under
@@ -5028,13 +5447,16 @@ export class OrchestrationEngine {
 
     const modality = request.modality;
 
-    this.log.info({
-      requestId,
-      modality,
-      model: request.model,
-      alias: aliasProfile ? request.model : undefined,
-      organizationId: request.organizationId,
-    }, 'Unified process() entry');
+    this.log.info(
+      {
+        requestId,
+        modality,
+        model: request.model,
+        alias: aliasProfile ? request.model : undefined,
+        organizationId: request.organizationId,
+      },
+      'Unified process() entry'
+    );
 
     switch (modality) {
       case 'chat':
@@ -5100,7 +5522,7 @@ export class OrchestrationEngine {
     request: UnifiedRequest & { modality: 'chat' },
     requestId: string,
     startTime: number,
-    aliasProfile: ReturnType<typeof resolveAilinAlias>,
+    aliasProfile: ReturnType<typeof resolveAilinAlias>
   ): Promise<UnifiedChatResult> {
     const chatRequest = { ...request.chatRequest };
 
@@ -5109,22 +5531,21 @@ export class OrchestrationEngine {
       chatRequest.ailin_alias = request.model;
     }
 
-    const result = await this.execute(
-      chatRequest,
-      request.organizationId,
-      request.userId,
-    );
+    const result = await this.execute(chatRequest, request.organizationId, request.userId);
 
     const durationMs = Date.now() - startTime;
 
     // Extract winning model info from result
-    const winnerModel = result.modelsUsed.find(m => m.success);
+    const winnerModel = result.modelsUsed.find((m) => m.success);
 
     return {
       modality: 'chat',
       strategyUsed: result.strategyUsed,
       modelUsed: winnerModel?.modelName || result.finalResponse.model || 'unknown',
-      provider: (result.metadata?.winnerProvider as string) || winnerModel?.modelId?.split('/')[0] || 'unknown',
+      provider:
+        (result.metadata?.winnerProvider as string) ||
+        winnerModel?.modelId?.split('/')[0] ||
+        'unknown',
       durationMs,
       cost: result.totalCost,
       metadata: result.metadata,
@@ -5136,14 +5557,16 @@ export class OrchestrationEngine {
     request: UnifiedRequest & { modality: 'stt' },
     requestId: string,
     startTime: number,
-    aliasProfile: ReturnType<typeof resolveAilinAlias>,
+    aliasProfile: ReturnType<typeof resolveAilinAlias>
   ): Promise<UnifiedSTTResult> {
     const { AudioOrchestrationService } = await import('@/services/audio-orchestration-service.js');
     const audioService = new AudioOrchestrationService();
 
     const model = aliasProfile
-      ? undefined  // Let alias resolution inside AudioOrchestrationService handle it
-      : (request.model === 'auto' ? undefined : request.model);
+      ? undefined // Let alias resolution inside AudioOrchestrationService handle it
+      : request.model === 'auto'
+        ? undefined
+        : request.model;
 
     const result = await audioService.transcribeAudio({
       audioBuffer: request.audioBuffer,
@@ -5190,10 +5613,10 @@ export class OrchestrationEngine {
     request: UnifiedRequest & { modality: 'tts' },
     requestId: string,
     startTime: number,
-    aliasProfile: ReturnType<typeof resolveAilinAlias>,
+    aliasProfile: ReturnType<typeof resolveAilinAlias>
   ): Promise<UnifiedTTSResult> {
     const validFormats = ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'] as const;
-    type AudioFormat = typeof validFormats[number];
+    type AudioFormat = (typeof validFormats)[number];
     const format: AudioFormat = validFormats.includes(request.format as AudioFormat)
       ? (request.format as AudioFormat)
       : 'mp3';
@@ -5201,9 +5624,7 @@ export class OrchestrationEngine {
     const { AudioOrchestrationService } = await import('@/services/audio-orchestration-service.js');
     const audioService = new AudioOrchestrationService();
 
-    const model = aliasProfile
-      ? undefined
-      : (request.model === 'auto' ? undefined : request.model);
+    const model = aliasProfile ? undefined : request.model === 'auto' ? undefined : request.model;
 
     const result = await audioService.synthesizeSpeech({
       text: request.input,
@@ -5240,7 +5661,7 @@ export class OrchestrationEngine {
   private async processTranslationModality(
     request: UnifiedRequest & { modality: 'translation' },
     requestId: string,
-    startTime: number,
+    startTime: number
   ): Promise<UnifiedTranslationResult> {
     const { getTranslationService } = await import('@/services/translation-service.js');
     const translationService = getTranslationService();
@@ -5256,15 +5677,24 @@ export class OrchestrationEngine {
     const preferQuality = (aliasProfile?.quality_target ?? 0) >= 0.9;
     const strategy = preferQuality ? 'llm-quality' : 'nllb-speed';
 
-    this.log.info({
-      requestId,
-      alias: request.model,
-      strategy,
-      qualityTarget: aliasProfile?.quality_target,
-      preferSpeed: aliasProfile?.prefer_speed,
-    }, 'Translation: alias-driven strategy selection');
+    this.log.info(
+      {
+        requestId,
+        alias: request.model,
+        strategy,
+        qualityTarget: aliasProfile?.quality_target,
+        preferSpeed: aliasProfile?.prefer_speed,
+      },
+      'Translation: alias-driven strategy selection'
+    );
 
-    let result: { translatedText: string; sourceLang: string; targetLang: string; latencyMs: number; model: string };
+    let result: {
+      translatedText: string;
+      sourceLang: string;
+      targetLang: string;
+      latencyMs: number;
+      model: string;
+    };
 
     if (preferQuality) {
       // Quality mode: use LLM for nuanced, context-aware translation
@@ -5275,14 +5705,14 @@ export class OrchestrationEngine {
       result = await translationService.translateText(
         request.text,
         request.sourceLang || 'en',
-        request.targetLang,
+        request.targetLang
       );
     } else {
       // Speed mode (default): NLLB CTranslate2 int8 (~130ms), LLM fallback
       result = await translationService.translateText(
         request.text,
         request.sourceLang || 'en',
-        request.targetLang,
+        request.targetLang
       );
     }
 

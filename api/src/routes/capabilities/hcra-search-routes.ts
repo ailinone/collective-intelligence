@@ -94,9 +94,9 @@ async function getUniverseSignals(): Promise<UniverseCache> {
     return universeCache;
   }
   const runner = (sql: string) =>
-    prisma.$queryRawUnsafe<{ exists?: boolean; max?: Date | string | null }[]>(sql).then(
-      (rows) => ({ rows: rows as { exists: boolean; max: Date | string | null }[] }),
-    );
+    prisma
+      .$queryRawUnsafe<{ exists?: boolean; max?: Date | string | null }[]>(sql)
+      .then((rows) => ({ rows: rows as { exists: boolean; max: Date | string | null }[] }));
   const columnExists = await hasLifecycleColumn(runner);
   const classifierAt = columnExists ? await getClassifierLastEvaluatedAt(runner) : null;
   universeCache = { columnExists, classifierAt, refreshedAt: now };
@@ -104,7 +104,7 @@ async function getUniverseSignals(): Promise<UniverseCache> {
 }
 
 async function resolveUniverseForRequest(
-  requested: string | undefined,
+  requested: string | undefined
 ): Promise<UniverseResolution> {
   const { columnExists, classifierAt } = await getUniverseSignals();
   return resolveUniverseWhere({
@@ -195,7 +195,7 @@ function toVectorLiteral(vector: number[]): string {
  */
 function reciprocalRankFusion(
   rankings: ReadonlyArray<readonly string[]>,
-  k = RRF_K,
+  k = RRF_K
 ): Map<string, number> {
   const fused = new Map<string, number>();
   for (const ranking of rankings) {
@@ -213,7 +213,7 @@ function reciprocalRankFusion(
 async function searchOntologyLexical(
   query: string,
   category: string | undefined,
-  limit: number,
+  limit: number
 ): Promise<OntologySearchRow[]> {
   // pg_trgm `similarity` over the joined haystack. Cheap because the table
   // is ~60 rows today and growing slowly.
@@ -249,7 +249,7 @@ async function searchOntologyLexical(
 async function searchOntologyVector(
   vector: number[],
   category: string | undefined,
-  limit: number,
+  limit: number
 ): Promise<OntologySearchVecRow[]> {
   const literal = toVectorLiteral(vector);
   const params: unknown[] = [literal, limit];
@@ -275,7 +275,7 @@ async function fetchOntologyByUris(uris: string[]): Promise<Map<string, Ontology
             0::real AS lex_score
      FROM capability_ontology
      WHERE uri = ANY($1::text[])`,
-    uris,
+    uris
   );
   return new Map(rows.map((r) => [r.uri, r]));
 }
@@ -356,137 +356,159 @@ export default async function hcraSearchRoutes(fastify: FastifyInstance): Promis
     // call — expensive, authorization-gated reads. Route-scoped (not the
     // global per-identity budget) so it adds a real ceiling here without
     // double-spending the global token bucket. See route-rate-limit.ts.
-    gated.addHook('preHandler', createRouteRateLimit('hcra-search', { capacity: 120, refillRate: 2 }));
+    gated.addHook(
+      'preHandler',
+      createRouteRateLimit('hcra-search', { capacity: 120, refillRate: 2 })
+    );
 
     // GET /v1/hcra/capabilities?q=...&category=...&limit=...&offset=...&mode=hybrid|lexical|vector
     gated.get('/v1/hcra/capabilities', async (req, reply) => {
-    const q = (req.query as Record<string, string | undefined>)?.q?.trim();
-    const category = (req.query as Record<string, string | undefined>)?.category?.trim();
-    const limit = clampLimit((req.query as Record<string, unknown>)?.limit);
-    const offset = clampOffset((req.query as Record<string, unknown>)?.offset);
-    const requestedMode = ((req.query as Record<string, string | undefined>)?.mode ?? 'hybrid').toLowerCase();
+      const q = (req.query as Record<string, string | undefined>)?.q?.trim();
+      const category = (req.query as Record<string, string | undefined>)?.category?.trim();
+      const limit = clampLimit((req.query as Record<string, unknown>)?.limit);
+      const offset = clampOffset((req.query as Record<string, unknown>)?.offset);
+      const requestedMode = (
+        (req.query as Record<string, string | undefined>)?.mode ?? 'hybrid'
+      ).toLowerCase();
 
-    if (category && !['modality', 'task', 'safety', 'language', 'tool', 'meta'].includes(category)) {
-      return reply.code(400).send({ error: 'invalid_category', allowed: ['modality', 'task', 'safety', 'language', 'tool', 'meta'] });
-    }
-
-    if (!q) {
-      // No query → simple paginated list, ordered by category then label.
-      const params: unknown[] = [limit, offset];
-      let where = `status = 'active'`;
-      if (category) {
-        params.push(category);
-        where += ` AND category = $${params.length}`;
+      if (
+        category &&
+        !['modality', 'task', 'safety', 'language', 'tool', 'meta'].includes(category)
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error: 'invalid_category',
+            allowed: ['modality', 'task', 'safety', 'language', 'tool', 'meta'],
+          });
       }
-      const rows = await prisma.$queryRawUnsafe<OntologySearchRow[]>(
-        `SELECT uri, preferred_label, description, synonyms, broader, narrower, category, status,
+
+      if (!q) {
+        // No query → simple paginated list, ordered by category then label.
+        const params: unknown[] = [limit, offset];
+        let where = `status = 'active'`;
+        if (category) {
+          params.push(category);
+          where += ` AND category = $${params.length}`;
+        }
+        const rows = await prisma.$queryRawUnsafe<OntologySearchRow[]>(
+          `SELECT uri, preferred_label, description, synonyms, broader, narrower, category, status,
                 0::real AS lex_score
          FROM capability_ontology
          WHERE ${where}
          ORDER BY category, preferred_label
          LIMIT $1 OFFSET $2`,
-        ...params,
-      );
-      return reply.send({
-        query: { q: null, category: category ?? null, mode: 'list' },
-        results: rows.map((r) => ({
-          uri: r.uri,
-          preferredLabel: r.preferred_label,
-          description: r.description,
-          synonyms: r.synonyms,
-          broader: r.broader,
-          narrower: r.narrower,
-          category: r.category,
-          status: r.status,
-          score: null,
-        })),
-        pagination: { limit, offset, hasMore: rows.length === limit },
-      });
-    }
+          ...params
+        );
+        return reply.send({
+          query: { q: null, category: category ?? null, mode: 'list' },
+          results: rows.map((r) => ({
+            uri: r.uri,
+            preferredLabel: r.preferred_label,
+            description: r.description,
+            synonyms: r.synonyms,
+            broader: r.broader,
+            narrower: r.narrower,
+            category: r.category,
+            status: r.status,
+            score: null,
+          })),
+          pagination: { limit, offset, hasMore: rows.length === limit },
+        });
+      }
 
-    // Run lexical first (cheap, always available).
-    const lexical = await searchOntologyLexical(q, category, Math.max(limit * 2, 50));
-    let vector: OntologySearchVecRow[] = [];
-    let vectorReady = false;
-    let mode: 'hybrid' | 'lexical' | 'vector' = 'lexical';
+      // Run lexical first (cheap, always available).
+      const lexical = await searchOntologyLexical(q, category, Math.max(limit * 2, 50));
+      let vector: OntologySearchVecRow[] = [];
+      let vectorReady = false;
+      let mode: 'hybrid' | 'lexical' | 'vector' = 'lexical';
 
-    if (requestedMode !== 'lexical') {
-      const embedder = tryGetEmbedder();
-      if (embedder) {
-        try {
-          const { vectors } = await embedder.embed({ inputs: [q] });
-          vector = await searchOntologyVector(vectors[0]!, category, Math.max(limit * 2, 50));
-          vectorReady = vector.length > 0;
-          mode = vectorReady ? (requestedMode === 'vector' ? 'vector' : 'hybrid') : 'lexical';
-        } catch (err) {
-          log.warn({ error: err instanceof Error ? err.message : String(err), q }, 'Vector recall failed; falling back to lexical');
+      if (requestedMode !== 'lexical') {
+        const embedder = tryGetEmbedder();
+        if (embedder) {
+          try {
+            const { vectors } = await embedder.embed({ inputs: [q] });
+            vector = await searchOntologyVector(vectors[0]!, category, Math.max(limit * 2, 50));
+            vectorReady = vector.length > 0;
+            mode = vectorReady ? (requestedMode === 'vector' ? 'vector' : 'hybrid') : 'lexical';
+          } catch (err) {
+            log.warn(
+              { error: err instanceof Error ? err.message : String(err), q },
+              'Vector recall failed; falling back to lexical'
+            );
+          }
         }
       }
-    }
 
-    let orderedUris: string[];
-    const scoreMap = new Map<string, { lex?: number; vecDist?: number; rrf?: number }>();
-    for (const row of lexical) {
-      scoreMap.set(row.uri, { lex: row.lex_score });
-    }
-    for (const row of vector) {
-      const cur = scoreMap.get(row.uri) ?? {};
-      cur.vecDist = row.vec_distance;
-      scoreMap.set(row.uri, cur);
-    }
-
-    if (mode === 'hybrid' && vectorReady) {
-      const lexRanking = lexical.map((r) => r.uri);
-      const vecRanking = vector.map((r) => r.uri);
-      const fused = reciprocalRankFusion([lexRanking, vecRanking]);
-      for (const [uri, rrf] of fused.entries()) {
-        const cur = scoreMap.get(uri) ?? {};
-        cur.rrf = rrf;
-        scoreMap.set(uri, cur);
+      let orderedUris: string[];
+      const scoreMap = new Map<string, { lex?: number; vecDist?: number; rrf?: number }>();
+      for (const row of lexical) {
+        scoreMap.set(row.uri, { lex: row.lex_score });
       }
-      orderedUris = [...fused.entries()].sort((a, b) => b[1] - a[1]).map(([uri]) => uri);
-    } else if (mode === 'vector') {
-      orderedUris = vector.map((r) => r.uri);
-    } else {
-      orderedUris = lexical.map((r) => r.uri);
-    }
+      for (const row of vector) {
+        const cur = scoreMap.get(row.uri) ?? {};
+        cur.vecDist = row.vec_distance;
+        scoreMap.set(row.uri, cur);
+      }
 
-    const sliced = orderedUris.slice(offset, offset + limit);
-    const detail = await fetchOntologyByUris(sliced);
+      if (mode === 'hybrid' && vectorReady) {
+        const lexRanking = lexical.map((r) => r.uri);
+        const vecRanking = vector.map((r) => r.uri);
+        const fused = reciprocalRankFusion([lexRanking, vecRanking]);
+        for (const [uri, rrf] of fused.entries()) {
+          const cur = scoreMap.get(uri) ?? {};
+          cur.rrf = rrf;
+          scoreMap.set(uri, cur);
+        }
+        orderedUris = [...fused.entries()].sort((a, b) => b[1] - a[1]).map(([uri]) => uri);
+      } else if (mode === 'vector') {
+        orderedUris = vector.map((r) => r.uri);
+      } else {
+        orderedUris = lexical.map((r) => r.uri);
+      }
 
-    return reply.send({
-      query: { q, category: category ?? null, mode },
-      results: sliced.map((uri) => {
-        const d = detail.get(uri);
-        const s = scoreMap.get(uri) ?? {};
-        return d ? {
-          uri: d.uri,
-          preferredLabel: d.preferred_label,
-          description: d.description,
-          synonyms: d.synonyms,
-          broader: d.broader,
-          narrower: d.narrower,
-          category: d.category,
-          status: d.status,
-          score: { lex: s.lex ?? null, vecDistance: s.vecDist ?? null, rrf: s.rrf ?? null },
-        } : null;
-      }).filter(Boolean),
-      pagination: { limit, offset, hasMore: orderedUris.length > offset + limit },
+      const sliced = orderedUris.slice(offset, offset + limit);
+      const detail = await fetchOntologyByUris(sliced);
+
+      return reply.send({
+        query: { q, category: category ?? null, mode },
+        results: sliced
+          .map((uri) => {
+            const d = detail.get(uri);
+            const s = scoreMap.get(uri) ?? {};
+            return d
+              ? {
+                  uri: d.uri,
+                  preferredLabel: d.preferred_label,
+                  description: d.description,
+                  synonyms: d.synonyms,
+                  broader: d.broader,
+                  narrower: d.narrower,
+                  category: d.category,
+                  status: d.status,
+                  score: { lex: s.lex ?? null, vecDistance: s.vecDist ?? null, rrf: s.rrf ?? null },
+                }
+              : null;
+          })
+          .filter(Boolean),
+        pagination: { limit, offset, hasMore: orderedUris.length > offset + limit },
+      });
     });
-  });
 
-  // GET /v1/hcra/capabilities/expand?term=visao
-  // Returns canonical URIs whose synonyms/labels match the term.
+    // GET /v1/hcra/capabilities/expand?term=visao
+    // Returns canonical URIs whose synonyms/labels match the term.
     gated.get('/v1/hcra/capabilities/expand', async (req, reply) => {
-    const term = (req.query as Record<string, string | undefined>)?.term?.trim();
-    if (!term) return reply.code(400).send({ error: 'missing_term' });
+      const term = (req.query as Record<string, string | undefined>)?.term?.trim();
+      if (!term) return reply.code(400).send({ error: 'missing_term' });
 
-    // First try direct legacy slug → URI mapping. Fast path for callers
-    // migrating from the legacy union.
-    const direct = LEGACY_CAPABILITY_TO_URI[term.toLowerCase()];
+      // First try direct legacy slug → URI mapping. Fast path for callers
+      // migrating from the legacy union.
+      const direct = LEGACY_CAPABILITY_TO_URI[term.toLowerCase()];
 
-    const rows = await prisma.$queryRawUnsafe<{ uri: string; preferred_label: string; match_kind: string }[]>(
-      `SELECT uri, preferred_label,
+      const rows = await prisma.$queryRawUnsafe<
+        { uri: string; preferred_label: string; match_kind: string }[]
+      >(
+        `SELECT uri, preferred_label,
               CASE
                 WHEN preferred_label ILIKE $1 THEN 'preferred_label'
                 WHEN $1 = ANY(synonyms) THEN 'synonym_exact'
@@ -503,188 +525,227 @@ export default async function hcraSearchRoutes(fastify: FastifyInstance): Promis
        ORDER BY (CASE WHEN preferred_label ILIKE $1 THEN 0 WHEN $1 = ANY(synonyms) THEN 1 ELSE 2 END),
                 preferred_label
        LIMIT 20`,
-      term,                                  // exact ILIKE
-      term.toLowerCase(),                    // similarity comparison value
-    );
+        term, // exact ILIKE
+        term.toLowerCase() // similarity comparison value
+      );
 
-    return reply.send({
-      term,
-      directMatch: direct ? { uri: direct, source: 'legacy_enum' } : null,
-      candidates: rows.map((r) => ({ uri: r.uri, preferredLabel: r.preferred_label, matchKind: r.match_kind })),
+      return reply.send({
+        term,
+        directMatch: direct ? { uri: direct, source: 'legacy_enum' } : null,
+        candidates: rows.map((r) => ({
+          uri: r.uri,
+          preferredLabel: r.preferred_label,
+          matchKind: r.match_kind,
+        })),
+      });
     });
-  });
 
-  // GET /v1/hcra/capabilities/facets — quick aggregates for dashboards
-  //
-  // Universe-aware: the `models` aggregates honour `?universe=live|historical`
-  // (default comes from HCRA_DEFAULT_UNIVERSE env). The `capability_ontology`
-  // aggregates keep their own `status='active'` filter — that's ADR-022
-  // ontology lifecycle, not ADR-023 inventory freshness.
+    // GET /v1/hcra/capabilities/facets — quick aggregates for dashboards
+    //
+    // Universe-aware: the `models` aggregates honour `?universe=live|historical`
+    // (default comes from HCRA_DEFAULT_UNIVERSE env). The `capability_ontology`
+    // aggregates keep their own `status='active'` filter — that's ADR-022
+    // ontology lifecycle, not ADR-023 inventory freshness.
     gated.get('/v1/hcra/capabilities/facets', async (req, reply) => {
-    const requested = (req.query as Record<string, string | undefined>)?.universe;
-    const universe = await resolveUniverseForRequest(requested);
+      const requested = (req.query as Record<string, string | undefined>)?.universe;
+      const universe = await resolveUniverseForRequest(requested);
 
-    const [byCategory, sourceDist, modelCoverage, embeddingCoverage] = await Promise.all([
-      prisma.$queryRawUnsafe<{ category: string; count: bigint }[]>(
-        `SELECT category, COUNT(*)::bigint AS count
-         FROM capability_ontology WHERE status = 'active' GROUP BY category ORDER BY category`,
-      ),
-      prisma.$queryRawUnsafe<{ source: string; count: bigint }[]>(
-        `SELECT source, COUNT(*)::bigint AS count
+      const [byCategory, sourceDist, modelCoverage, embeddingCoverage] = await Promise.all([
+        prisma.$queryRawUnsafe<{ category: string; count: bigint }[]>(
+          `SELECT category, COUNT(*)::bigint AS count
+         FROM capability_ontology WHERE status = 'active' GROUP BY category ORDER BY category`
+        ),
+        prisma.$queryRawUnsafe<{ source: string; count: bigint }[]>(
+          `SELECT source, COUNT(*)::bigint AS count
          FROM model_capability_assertions
-         WHERE superseded_at IS NULL GROUP BY source ORDER BY source`,
-      ),
-      prisma.$queryRawUnsafe<{ models_with_uris: bigint; models_total: bigint }[]>(
-        `SELECT
+         WHERE superseded_at IS NULL GROUP BY source ORDER BY source`
+        ),
+        prisma.$queryRawUnsafe<{ models_with_uris: bigint; models_total: bigint }[]>(
+          `SELECT
            COUNT(*) FILTER (WHERE array_length(capability_uris, 1) > 0)::bigint AS models_with_uris,
            COUNT(*)::bigint AS models_total
-         FROM models WHERE ${universe.sql}`,
-      ),
-      prisma.$queryRawUnsafe<{ ontology_total: bigint; ontology_emb: bigint; models_total: bigint; models_emb: bigint }[]>(
-        `SELECT
+         FROM models WHERE ${universe.sql}`
+        ),
+        prisma.$queryRawUnsafe<
+          {
+            ontology_total: bigint;
+            ontology_emb: bigint;
+            models_total: bigint;
+            models_emb: bigint;
+          }[]
+        >(
+          `SELECT
            (SELECT COUNT(*)::bigint FROM capability_ontology WHERE status = 'active') AS ontology_total,
            (SELECT COUNT(*)::bigint FROM capability_ontology WHERE status = 'active' AND embedding IS NOT NULL) AS ontology_emb,
            (SELECT COUNT(*)::bigint FROM models WHERE ${universe.sql}) AS models_total,
-           (SELECT COUNT(*)::bigint FROM models WHERE ${universe.sql} AND embedding IS NOT NULL) AS models_emb`,
-      ),
-    ]);
+           (SELECT COUNT(*)::bigint FROM models WHERE ${universe.sql} AND embedding IS NOT NULL) AS models_emb`
+        ),
+      ]);
 
-    if (universe.warning) {
-      log.warn({ warning: universe.warning, requested }, 'HCRA universe fell back to historical');
-    }
+      if (universe.warning) {
+        log.warn({ warning: universe.warning, requested }, 'HCRA universe fell back to historical');
+      }
 
-    const cov = embeddingCoverage[0]!;
-    return reply.send({
-      universe: universe.mode,
-      ...(universe.warning ? { warning: universe.warning } : {}),
-      ontologyByCategory: byCategory.map((r) => ({ category: r.category, count: Number(r.count) })),
-      assertionsBySource: sourceDist.map((r) => ({ source: r.source, count: Number(r.count) })),
-      modelCoverage: {
-        modelsWithCapabilityUris: Number(modelCoverage[0]!.models_with_uris),
-        modelsTotal: Number(modelCoverage[0]!.models_total),
-      },
-      embeddingCoverage: {
-        ontology: { total: Number(cov.ontology_total), embedded: Number(cov.ontology_emb) },
-        models: { total: Number(cov.models_total),   embedded: Number(cov.models_emb) },
-      },
+      const cov = embeddingCoverage[0]!;
+      return reply.send({
+        universe: universe.mode,
+        ...(universe.warning ? { warning: universe.warning } : {}),
+        ontologyByCategory: byCategory.map((r) => ({
+          category: r.category,
+          count: Number(r.count),
+        })),
+        assertionsBySource: sourceDist.map((r) => ({ source: r.source, count: Number(r.count) })),
+        modelCoverage: {
+          modelsWithCapabilityUris: Number(modelCoverage[0]!.models_with_uris),
+          modelsTotal: Number(modelCoverage[0]!.models_total),
+        },
+        embeddingCoverage: {
+          ontology: { total: Number(cov.ontology_total), embedded: Number(cov.ontology_emb) },
+          models: { total: Number(cov.models_total), embedded: Number(cov.models_emb) },
+        },
+      });
     });
-  });
 
-  // GET /v1/hcra/capabilities/:uri  — explicit lookup with broader/narrower
+    // GET /v1/hcra/capabilities/:uri  — explicit lookup with broader/narrower
     gated.get<{ Params: { uri: string } }>('/v1/hcra/capabilities/*', async (req, reply) => {
-    // Fastify wildcard captures everything after the prefix as `*`.
-    const path = (req.params as Record<string, string>)['*'];
-    const uri = decodeURIComponent(path ?? '');
-    if (!isUri(uri)) {
-      return reply.code(400).send({ error: 'invalid_uri', expectedPattern: URI_PATTERN.source });
-    }
-    const rows = await prisma.$queryRawUnsafe<OntologyFullRow[]>(
-      `SELECT uri, schema_version, preferred_label, description, synonyms,
+      // Fastify wildcard captures everything after the prefix as `*`.
+      const path = (req.params as Record<string, string>)['*'];
+      const uri = decodeURIComponent(path ?? '');
+      if (!isUri(uri)) {
+        return reply.code(400).send({ error: 'invalid_uri', expectedPattern: URI_PATTERN.source });
+      }
+      const rows = await prisma.$queryRawUnsafe<OntologyFullRow[]>(
+        `SELECT uri, schema_version, preferred_label, description, synonyms,
               broader, narrower, category, status,
               embedding_model, embedding_updated_at
        FROM capability_ontology WHERE uri = $1`,
-      uri,
-    );
-    if (rows.length === 0) return reply.code(404).send({ error: 'not_found', uri });
-    const r = rows[0]!;
-    return reply.send({
-      uri: r.uri,
-      schemaVersion: r.schema_version,
-      preferredLabel: r.preferred_label,
-      description: r.description,
-      synonyms: r.synonyms,
-      broader: r.broader,
-      narrower: r.narrower,
-      category: r.category,
-      status: r.status,
-      embedding: {
-        model: r.embedding_model,
-        updatedAt: r.embedding_updated_at,
-      },
+        uri
+      );
+      if (rows.length === 0) return reply.code(404).send({ error: 'not_found', uri });
+      const r = rows[0]!;
+      return reply.send({
+        uri: r.uri,
+        schemaVersion: r.schema_version,
+        preferredLabel: r.preferred_label,
+        description: r.description,
+        synonyms: r.synonyms,
+        broader: r.broader,
+        narrower: r.narrower,
+        category: r.category,
+        status: r.status,
+        embedding: {
+          model: r.embedding_model,
+          updatedAt: r.embedding_updated_at,
+        },
+      });
     });
-  });
 
-  // GET /v1/hcra/models?capabilityUri=...&q=...&minConfidence=0.5&source=provider-declared&provider=openai&limit=20&universe=live|historical
+    // GET /v1/hcra/models?capabilityUri=...&q=...&minConfidence=0.5&source=provider-declared&provider=openai&limit=20&universe=live|historical
     gated.get('/v1/hcra/models', async (req, reply) => {
-    const q       = (req.query as Record<string, string | undefined>)?.q?.trim();
-    const capUri  = (req.query as Record<string, string | undefined>)?.capabilityUri?.trim();
-    const provider = (req.query as Record<string, string | undefined>)?.provider?.trim();
-    const sourceFilter = (req.query as Record<string, string | undefined>)?.source?.trim();
-    const requestedUniverse = (req.query as Record<string, string | undefined>)?.universe;
-    const minConf = Number((req.query as Record<string, string | undefined>)?.minConfidence ?? 0);
-    const limit   = clampLimit((req.query as Record<string, unknown>)?.limit);
-    const offset  = clampOffset((req.query as Record<string, unknown>)?.offset);
+      const q = (req.query as Record<string, string | undefined>)?.q?.trim();
+      const capUri = (req.query as Record<string, string | undefined>)?.capabilityUri?.trim();
+      const provider = (req.query as Record<string, string | undefined>)?.provider?.trim();
+      const sourceFilter = (req.query as Record<string, string | undefined>)?.source?.trim();
+      const requestedUniverse = (req.query as Record<string, string | undefined>)?.universe;
+      const minConf = Number((req.query as Record<string, string | undefined>)?.minConfidence ?? 0);
+      const limit = clampLimit((req.query as Record<string, unknown>)?.limit);
+      const offset = clampOffset((req.query as Record<string, unknown>)?.offset);
 
-    if (capUri && !isUri(capUri)) {
-      return reply.code(400).send({ error: 'invalid_capability_uri' });
-    }
-    if (sourceFilter && !['provider-declared', 'helicone-oracle', 'modality-derived', 'parameter-derived', 'name-regex', 'llm-extracted', 'operator-override'].includes(sourceFilter)) {
-      return reply.code(400).send({ error: 'invalid_source' });
-    }
-
-    const universe = await resolveUniverseForRequest(requestedUniverse);
-    if (universe.warning) {
-      log.warn({ warning: universe.warning, requested: requestedUniverse }, 'HCRA model search universe fell back');
-    }
-
-    const params: unknown[] = [];
-    // Universe fragment ("status = 'active' [AND lifecycle_status = 'active']")
-    // uses unqualified column names. Since `models m` is the only table in
-    // this FROM clause, Postgres resolves them against `m` unambiguously.
-    const where: string[] = [universe.sql];
-
-    if (capUri) {
-      params.push(capUri);
-      const capUriParam = params.length;
-      where.push(`$${capUriParam} = ANY(m.capability_uris)`);
-      if (minConf > 0) {
-        params.push(minConf);
-        where.push(`COALESCE((m.capability_confidence->>$${capUriParam})::float, 0) >= $${params.length}`);
+      if (capUri && !isUri(capUri)) {
+        return reply.code(400).send({ error: 'invalid_capability_uri' });
       }
-      if (sourceFilter) {
-        params.push(sourceFilter);
-        where.push(`m.capability_sources @> jsonb_build_object($${capUriParam}::text, jsonb_build_array($${params.length}::text))`);
+      if (
+        sourceFilter &&
+        ![
+          'provider-declared',
+          'helicone-oracle',
+          'modality-derived',
+          'parameter-derived',
+          'name-regex',
+          'llm-extracted',
+          'operator-override',
+        ].includes(sourceFilter)
+      ) {
+        return reply.code(400).send({ error: 'invalid_source' });
       }
-    }
-    if (provider) {
-      params.push(provider);
-      where.push(`m.provider_id = $${params.length}`);
-    }
 
-    let orderClause = `m.id`;
-    let scoreCol = `0::real AS match_score`;
+      const universe = await resolveUniverseForRequest(requestedUniverse);
+      if (universe.warning) {
+        log.warn(
+          { warning: universe.warning, requested: requestedUniverse },
+          'HCRA model search universe fell back'
+        );
+      }
 
-    if (q) {
-      // Prefer vector recall on models if embeddings exist; else trgm on id/name.
-      const embedder = tryGetEmbedder();
-      if (embedder) {
-        try {
-          const { vectors } = await embedder.embed({ inputs: [q] });
-          params.push(toVectorLiteral(vectors[0]!));
-          scoreCol = `(m.embedding <=> $${params.length}::vector) AS match_score`;
-          orderClause = `m.embedding <=> $${params.length}::vector`;
-          where.push(`m.embedding IS NOT NULL`);
-        } catch (err) {
-          log.warn({ err: err instanceof Error ? err.message : String(err) }, 'Vector model search failed; falling back to trigram');
+      const params: unknown[] = [];
+      // Universe fragment ("status = 'active' [AND lifecycle_status = 'active']")
+      // uses unqualified column names. Since `models m` is the only table in
+      // this FROM clause, Postgres resolves them against `m` unambiguously.
+      const where: string[] = [universe.sql];
+
+      if (capUri) {
+        params.push(capUri);
+        const capUriParam = params.length;
+        where.push(`$${capUriParam} = ANY(m.capability_uris)`);
+        if (minConf > 0) {
+          params.push(minConf);
+          where.push(
+            `COALESCE((m.capability_confidence->>$${capUriParam})::float, 0) >= $${params.length}`
+          );
+        }
+        if (sourceFilter) {
+          params.push(sourceFilter);
+          where.push(
+            `m.capability_sources @> jsonb_build_object($${capUriParam}::text, jsonb_build_array($${params.length}::text))`
+          );
+        }
+      }
+      if (provider) {
+        params.push(provider);
+        where.push(`m.provider_id = $${params.length}`);
+      }
+
+      let orderClause = `m.id`;
+      let scoreCol = `0::real AS match_score`;
+
+      if (q) {
+        // Prefer vector recall on models if embeddings exist; else trgm on id/name.
+        const embedder = tryGetEmbedder();
+        if (embedder) {
+          try {
+            const { vectors } = await embedder.embed({ inputs: [q] });
+            params.push(toVectorLiteral(vectors[0]!));
+            scoreCol = `(m.embedding <=> $${params.length}::vector) AS match_score`;
+            orderClause = `m.embedding <=> $${params.length}::vector`;
+            where.push(`m.embedding IS NOT NULL`);
+          } catch (err) {
+            log.warn(
+              { err: err instanceof Error ? err.message : String(err) },
+              'Vector model search failed; falling back to trigram'
+            );
+            params.push(q.toLowerCase());
+            scoreCol = `GREATEST(similarity(m.id, $${params.length}), similarity(m.display_name, $${params.length})) AS match_score`;
+            orderClause = `match_score DESC`;
+            where.push(
+              `(similarity(m.id, $${params.length}) > 0.1 OR similarity(m.display_name, $${params.length}) > 0.1)`
+            );
+          }
+        } else {
           params.push(q.toLowerCase());
           scoreCol = `GREATEST(similarity(m.id, $${params.length}), similarity(m.display_name, $${params.length})) AS match_score`;
           orderClause = `match_score DESC`;
-          where.push(`(similarity(m.id, $${params.length}) > 0.1 OR similarity(m.display_name, $${params.length}) > 0.1)`);
+          where.push(
+            `(similarity(m.id, $${params.length}) > 0.1 OR similarity(m.display_name, $${params.length}) > 0.1)`
+          );
         }
-      } else {
-        params.push(q.toLowerCase());
-        scoreCol = `GREATEST(similarity(m.id, $${params.length}), similarity(m.display_name, $${params.length})) AS match_score`;
-        orderClause = `match_score DESC`;
-        where.push(`(similarity(m.id, $${params.length}) > 0.1 OR similarity(m.display_name, $${params.length}) > 0.1)`);
       }
-    }
 
-    params.push(limit);
-    const limitParam = params.length;
-    params.push(offset);
-    const offsetParam = params.length;
+      params.push(limit);
+      const limitParam = params.length;
+      params.push(offset);
+      const offsetParam = params.length;
 
-    const sql = `
+      const sql = `
       SELECT m.uid, m.id, m.display_name, m.provider_id,
              m.capability_uris, m.capability_confidence, m.capability_sources, m.status,
              ${scoreCol}
@@ -693,31 +754,39 @@ export default async function hcraSearchRoutes(fastify: FastifyInstance): Promis
       ORDER BY ${orderClause}
       LIMIT $${limitParam} OFFSET $${offsetParam}
     `;
-    const rows = await prisma.$queryRawUnsafe<ModelSearchRow[]>(sql, ...params);
+      const rows = await prisma.$queryRawUnsafe<ModelSearchRow[]>(sql, ...params);
 
-    return reply.send({
-      query: { q: q ?? null, capabilityUri: capUri ?? null, provider: provider ?? null, source: sourceFilter ?? null, minConfidence: minConf || null },
-      universe: universe.mode,
-      ...(universe.warning ? { warning: universe.warning } : {}),
-      results: rows.map((r) => ({
-        uid: r.uid,
-        id: r.id,
-        displayName: r.display_name,
-        provider: r.provider_id,
-        capabilityUris: r.capability_uris,
-        capabilityConfidence: r.capability_confidence,
-        capabilitySources: r.capability_sources,
-        score: r.match_score,
-        ...(capUri ? {
-          targetCapability: {
-            uri: capUri,
-            confidence: r.capability_confidence?.[capUri] ?? null,
-            sources: r.capability_sources?.[capUri] ?? [],
-          },
-        } : {}),
-      })),
-      pagination: { limit, offset, hasMore: rows.length === limit },
-    });
+      return reply.send({
+        query: {
+          q: q ?? null,
+          capabilityUri: capUri ?? null,
+          provider: provider ?? null,
+          source: sourceFilter ?? null,
+          minConfidence: minConf || null,
+        },
+        universe: universe.mode,
+        ...(universe.warning ? { warning: universe.warning } : {}),
+        results: rows.map((r) => ({
+          uid: r.uid,
+          id: r.id,
+          displayName: r.display_name,
+          provider: r.provider_id,
+          capabilityUris: r.capability_uris,
+          capabilityConfidence: r.capability_confidence,
+          capabilitySources: r.capability_sources,
+          score: r.match_score,
+          ...(capUri
+            ? {
+                targetCapability: {
+                  uri: capUri,
+                  confidence: r.capability_confidence?.[capUri] ?? null,
+                  sources: r.capability_sources?.[capUri] ?? [],
+                },
+              }
+            : {}),
+        })),
+        pagination: { limit, offset, hasMore: rows.length === limit },
+      });
     });
   }); // end of `await fastify.register(async (gated) => { ... })` — auth boundary
 

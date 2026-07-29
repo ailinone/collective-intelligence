@@ -10,10 +10,10 @@
 /**
  * Nonce Routes
  * Provides nonces for replay attack protection on sensitive operations
- * 
+ *
  * Endpoints:
  * - GET /v1/nonce - Generate a new nonce
- * 
+ *
  * Security:
  * - Requires authentication
  * - Rate limited to prevent abuse
@@ -83,10 +83,10 @@ Nonces are valid for 5 minutes and can only be used once.`,
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const extendedRequest = request as ExtendedFastifyRequest;
-        
+
         // Generate nonce
         const nonce = generateNonce();
-        
+
         // Store nonce with metadata
         const stored = await storeNonce(nonce, {
           user_id: extendedRequest.userId,
@@ -94,17 +94,17 @@ Nonces are valid for 5 minutes and can only be used once.`,
           ip: request.ip,
           user_agent: request.headers['user-agent'],
         });
-        
+
         if (!stored) {
           return reply.code(503).send({
             error: 'Service Unavailable',
             message: 'Unable to generate nonce at this time',
           });
         }
-        
+
         const ttlSeconds = parseInt(process.env.NONCE_TTL_SECONDS || '300', 10);
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-        
+
         return reply.send({
           nonce,
           expires_at: expiresAt.toISOString(),
@@ -113,7 +113,7 @@ Nonces are valid for 5 minutes and can only be used once.`,
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         server.log.error({ error: errorMessage }, 'Error generating nonce');
-        
+
         return reply.code(500).send({
           error: 'Internal Server Error',
           message: 'Failed to generate nonce',

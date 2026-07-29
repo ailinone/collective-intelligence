@@ -156,7 +156,8 @@ describe('01C.1B-J2 §11 — Model quality evaluator', () => {
 
   describe('jsonSchema', () => {
     it('high score for valid JSON with correct values', () => {
-      const output = '{"name": "Maria Silva", "age": 28, "skills": ["TypeScript", "Python", "PostgreSQL"]}';
+      const output =
+        '{"name": "Maria Silva", "age": 28, "skills": ["TypeScript", "Python", "PostgreSQL"]}';
       const r = evaluateTaskOutput(jsonTask, output);
       expect(r.score).toBeGreaterThan(0.8);
     });
@@ -181,16 +182,20 @@ describe('01C.1B-J2 §11 — Model quality evaluator', () => {
 
     it('penalizes markdown fences (instruction said no markdown)', () => {
       const noFenceOutput = '{"name": "Maria", "age": 28, "skills": ["TypeScript"]}';
-      const withFenceOutput = '```json\n{"name": "Maria", "age": 28, "skills": ["TypeScript"]}\n```';
+      const withFenceOutput =
+        '```json\n{"name": "Maria", "age": 28, "skills": ["TypeScript"]}\n```';
       const r1 = evaluateTaskOutput(jsonTask, noFenceOutput);
       const r2 = evaluateTaskOutput(jsonTask, withFenceOutput);
-      expect(r1.dimensionScores.instruction_following).toBeGreaterThan(r2.dimensionScores.instruction_following);
+      expect(r1.dimensionScores.instruction_following).toBeGreaterThan(
+        r2.dimensionScores.instruction_following
+      );
     });
   });
 
   describe('singleLetterChoice', () => {
     it('high score for correct letter with reasoning terms', () => {
-      const output = 'B. This option satisfies the latency constraint (150ms < 200ms), supports tool use, and has acceptable cost.';
+      const output =
+        'B. This option satisfies the latency constraint (150ms < 200ms), supports tool use, and has acceptable cost.';
       const r = evaluateTaskOutput(letterTask, output);
       expect(r.score).toBeGreaterThan(0.7);
       expect(r.dimensionScores.reasoning).toBeGreaterThan(0);

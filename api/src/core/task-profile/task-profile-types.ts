@@ -67,13 +67,7 @@ export type StrategyHint =
 // ─── Attachment ─────────────────────────────────────────────────────────
 
 export type AttachmentKind =
-  | 'image'
-  | 'audio'
-  | 'video'
-  | 'document'
-  | 'spreadsheet'
-  | 'code'
-  | 'unknown';
+  'image' | 'audio' | 'video' | 'document' | 'spreadsheet' | 'code' | 'unknown';
 
 export interface AttachmentInfo {
   readonly kind: AttachmentKind;

@@ -15,8 +15,12 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  isC3PlaceholderForBudget, isC3HfWildcard,
-  C3_ALLOWLIST_MIN_PROVIDERS, C3_ALLOWLIST_MAX_PROVIDERS, C3_ALLOWLIST_MIN_MODELS, C3_ALLOWLIST_MAX_MODELS,
+  isC3PlaceholderForBudget,
+  isC3HfWildcard,
+  C3_ALLOWLIST_MIN_PROVIDERS,
+  C3_ALLOWLIST_MAX_PROVIDERS,
+  C3_ALLOWLIST_MIN_MODELS,
+  C3_ALLOWLIST_MAX_MODELS,
 } from '@/core/experiment/c3-budget-authorization-gate-contract';
 
 const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-budget-authorization-gate-allowlist.json');
@@ -41,7 +45,9 @@ describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — allowlist', () => {
   maybe('generated allowlist (local verification)', () => {
     it('case 8: only model_probe_validated entries', () => {
       expect(allowlist.onlyModelProbeValidated).toBe(true);
-      expect(allowlist.entries.every((e: any) => e.candidateClass === 'model_probe_validated')).toBe(true);
+      expect(
+        allowlist.entries.every((e: any) => e.candidateClass === 'model_probe_validated')
+      ).toBe(true);
     });
     it('case 9: excludes placeholders', () => {
       expect(allowlist.excludesPlaceholders).toBe(true);
@@ -58,7 +64,9 @@ describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — allowlist', () => {
       expect(allowlist.providers.length).toBeLessThanOrEqual(2);
       expect(allowlist.models.length).toBeGreaterThanOrEqual(1);
       expect(allowlist.models.length).toBeLessThanOrEqual(2);
-      expect(allowlist.entries.every((e: any) => e.requiresModelProbeBeforeBillableExecution === false)).toBe(true);
+      expect(
+        allowlist.entries.every((e: any) => e.requiresModelProbeBeforeBillableExecution === false)
+      ).toBe(true);
     });
   });
 });

@@ -179,4 +179,3 @@ export function stopCollectiveIntelligenceReflectionJob(): void {
   }
   log.info('Collective intelligence reflection and decay jobs stopped');
 }
-

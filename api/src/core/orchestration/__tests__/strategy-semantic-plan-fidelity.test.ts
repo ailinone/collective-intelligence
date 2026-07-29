@@ -45,11 +45,22 @@ const REQ = {
 
 function getPlan(strategyName: string, registered = true) {
   const result = buildPlanOnlyResult(
-    strategyName, 'explicit', 'request-flag', REQ, CTX, null, 0.85,
-    { registered },
+    strategyName,
+    'explicit',
+    'request-flag',
+    REQ,
+    CTX,
+    null,
+    0.85,
+    { registered }
   );
   return (result.metadata as Record<string, unknown>)['executionPlan'] as {
-    steps: Array<{ stepId: string; action: string; providerCallPlanned: boolean; providerCallExecuted: boolean }>;
+    steps: Array<{
+      stepId: string;
+      action: string;
+      providerCallPlanned: boolean;
+      providerCallExecuted: boolean;
+    }>;
     planNote: string;
   };
 }
@@ -65,8 +76,8 @@ describe('01C.1B-SM-R4 §13a — single strategy fidelity', () => {
   });
 
   it('has no synthesis step', () => {
-    const actions = getPlan('single').steps.map(s => s.action);
-    expect(actions.every(a => !a.includes('synthesize'))).toBe(true);
+    const actions = getPlan('single').steps.map((s) => s.action);
+    expect(actions.every((a) => !a.includes('synthesize'))).toBe(true);
   });
 
   it('providerCallPlanned=true in live semantics', () => {
@@ -124,13 +135,13 @@ describe('01C.1B-SM-R4 §13a — multi-step strategy fidelity (STEP_ROLES 2-tier
     });
 
     it(`${strategy}: all actions carry the strategy prefix`, () => {
-      const actions = getPlan(strategy).steps.map(s => s.action);
-      expect(actions.every(a => a.startsWith(strategy + '/'))).toBe(true);
+      const actions = getPlan(strategy).steps.map((s) => s.action);
+      expect(actions.every((a) => a.startsWith(strategy + '/'))).toBe(true);
     });
 
     it(`${strategy}: no providerCallExecuted in any step`, () => {
       const steps = getPlan(strategy).steps;
-      expect(steps.every(s => s.providerCallExecuted === false)).toBe(true);
+      expect(steps.every((s) => s.providerCallExecuted === false)).toBe(true);
     });
   }
 });
@@ -142,13 +153,13 @@ describe('01C.1B-SM-R6 §13a — multi-step strategy fidelity (semantic template
     });
 
     it(`${strategy}: all actions carry the strategy prefix`, () => {
-      const actions = getPlan(strategy).steps.map(s => s.action);
-      expect(actions.every(a => a.startsWith(strategy + '/'))).toBe(true);
+      const actions = getPlan(strategy).steps.map((s) => s.action);
+      expect(actions.every((a) => a.startsWith(strategy + '/'))).toBe(true);
     });
 
     it(`${strategy}: no providerCallExecuted in any step`, () => {
       const steps = getPlan(strategy).steps;
-      expect(steps.every(s => s.providerCallExecuted === false)).toBe(true);
+      expect(steps.every((s) => s.providerCallExecuted === false)).toBe(true);
     });
   }
 
@@ -191,19 +202,27 @@ describe('01C.1B-SM-R4 §13a — unregistered strategy plan', () => {
 
 // ── No generic skeletons ──────────────────────────────────────────────────────
 describe('01C.1B-SM-R4 §13a — no generic skeleton actions', () => {
-  const ALL_STRATEGIES = ['single', 'cost-cascade', 'consensus', 'debate', 'quality-multipass', 'critique-repair', 'expert-panel'];
+  const ALL_STRATEGIES = [
+    'single',
+    'cost-cascade',
+    'consensus',
+    'debate',
+    'quality-multipass',
+    'critique-repair',
+    'expert-panel',
+  ];
 
   it('no strategy has action "execute" without a prefix', () => {
     for (const strategy of ALL_STRATEGIES) {
-      const actions = getPlan(strategy).steps.map(s => s.action);
-      expect(actions.every(a => a !== 'execute' && a !== 'synthesize')).toBe(true);
+      const actions = getPlan(strategy).steps.map((s) => s.action);
+      expect(actions.every((a) => a !== 'execute' && a !== 'synthesize')).toBe(true);
     }
   });
 
   it('all actions contain a / separator (strategy/verb format)', () => {
     for (const strategy of ALL_STRATEGIES) {
-      const actions = getPlan(strategy).steps.map(s => s.action);
-      expect(actions.every(a => a.includes('/'))).toBe(true);
+      const actions = getPlan(strategy).steps.map((s) => s.action);
+      expect(actions.every((a) => a.includes('/'))).toBe(true);
     }
   });
 });

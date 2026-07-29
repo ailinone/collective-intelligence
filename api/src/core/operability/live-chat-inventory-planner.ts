@@ -77,7 +77,8 @@ export interface PlannedProbe {
   readonly secretAvailable: boolean;
   readonly providerSpecAvailable: boolean;
   readonly probeEligible: boolean;
-  readonly selectionReason: 'top_quality' | 'largest_context' | 'lowest_cost' | 'json_capable' | 'family_diversity';
+  readonly selectionReason:
+    'top_quality' | 'largest_context' | 'lowest_cost' | 'json_capable' | 'family_diversity';
 }
 
 export interface SkippedProvider {
@@ -149,7 +150,7 @@ function modelRankingScore(m: Model): number {
 
 function pickTopForProvider(
   rows: readonly Model[],
-  modelsPerProvider: number,
+  modelsPerProvider: number
 ): readonly { model: Model; reason: PlannedProbe['selectionReason'] }[] {
   if (rows.length === 0) return [];
   // Rank for top_quality
@@ -175,7 +176,9 @@ function pickTopForProvider(
 
   // Lowest cost — pick a different model when possible.
   const byCost = [...rows].sort(
-    (a, b) => (a.inputCostPer1k ?? Number.POSITIVE_INFINITY) - (b.inputCostPer1k ?? Number.POSITIVE_INFINITY),
+    (a, b) =>
+      (a.inputCostPer1k ?? Number.POSITIVE_INFINITY) -
+      (b.inputCostPer1k ?? Number.POSITIVE_INFINITY)
   );
   for (const m of byCost) {
     if (out.length >= modelsPerProvider) break;
@@ -203,7 +206,9 @@ function pickTopForProvider(
   // Optional 5th: family diversity — different family from picks so far.
   if (out.length < modelsPerProvider) {
     const pickedFamilies = new Set(
-      out.map((p) => deriveCanonicalModelIdentity({ apiModelId: p.model.id }).family).filter(Boolean) as string[],
+      out
+        .map((p) => deriveCanonicalModelIdentity({ apiModelId: p.model.id }).family)
+        .filter(Boolean) as string[]
     );
     for (const m of ranked) {
       if (out.length >= modelsPerProvider) break;
@@ -284,8 +289,7 @@ export function buildInventoryPlan(input: InventoryPlannerInput): LiveChatInvent
     for (const { model, reason } of picks) {
       // Enforce per-route cap (worst-case projected)
       if (plannedProbes.length >= maxTotalEndpointProbes) break;
-      const projectedCostUsd =
-        (plannedProbes.length + 1) * perProbeWorstCaseCostUsd;
+      const projectedCostUsd = (plannedProbes.length + 1) * perProbeWorstCaseCostUsd;
       if (projectedCostUsd > maxTotalCostUsd) break;
       const canonical = deriveCanonicalModelIdentity({
         apiModelId: model.id,

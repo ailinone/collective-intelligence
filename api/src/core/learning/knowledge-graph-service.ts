@@ -45,11 +45,11 @@ import { logger } from '@/utils/logger';
 const log = logger.child({ component: 'knowledge-graph' });
 
 export type EdgeType =
-  | 'model_task'       // model → task:X (production quality)
-  | 'model_model'      // model → model (complementary pairs)
-  | 'strategy_model'   // strategy:X → model (strategy-model affinity)
-  | 'strategy_task'    // strategy:X → task:X (strategy-task effectiveness from benchmarks)
-  | 'benchmark_task'   // benchmark:X → task:X (benchmark coverage & quality)
+  | 'model_task' // model → task:X (production quality)
+  | 'model_model' // model → model (complementary pairs)
+  | 'strategy_model' // strategy:X → model (strategy-model affinity)
+  | 'strategy_task' // strategy:X → task:X (strategy-task effectiveness from benchmarks)
+  | 'benchmark_task' // benchmark:X → task:X (benchmark coverage & quality)
   | 'archive_strategy'; // archive:X → strategy:X (archive elite designation)
 
 interface KnowledgeEdge {
@@ -264,13 +264,15 @@ class KnowledgeGraphService {
    * This allows the graph to answer: "Which strategies have been proven
    * effective for this task type through controlled benchmarks?"
    */
-  async recordBenchmarkResults(results: Array<{
-    taskType: string;
-    strategy: string;
-    qualityScore: number;
-    complexity: string;
-    modelIds?: string[];
-  }>): Promise<void> {
+  async recordBenchmarkResults(
+    results: Array<{
+      taskType: string;
+      strategy: string;
+      qualityScore: number;
+      complexity: string;
+      modelIds?: string[];
+    }>
+  ): Promise<void> {
     if (results.length === 0) return;
 
     try {
@@ -323,8 +325,10 @@ class KnowledgeGraphService {
         `;
       }
 
-      log.info({ resultCount: results.length, edgeCount: edges.length },
-        'Benchmark results recorded in knowledge graph (OI-11)');
+      log.info(
+        { resultCount: results.length, edgeCount: edges.length },
+        'Benchmark results recorded in knowledge graph (OI-11)'
+      );
     } catch (err) {
       log.warn({ error: String(err) }, 'Knowledge graph benchmark recording failed (OI-11)');
     }
@@ -335,14 +339,16 @@ class KnowledgeGraphService {
    * Creates archive:dimension → strategy edges to track which strategies
    * are archive elites and in which optimization dimensions.
    */
-  async recordArchiveElites(elites: Array<{
-    taskType: string;
-    complexity: string;
-    dimension: string;
-    strategy: string;
-    fitness: number;
-    avgQuality: number;
-  }>): Promise<void> {
+  async recordArchiveElites(
+    elites: Array<{
+      taskType: string;
+      complexity: string;
+      dimension: string;
+      strategy: string;
+      fitness: number;
+      avgQuality: number;
+    }>
+  ): Promise<void> {
     if (elites.length === 0) return;
 
     try {
@@ -382,8 +388,10 @@ class KnowledgeGraphService {
         `;
       }
 
-      log.info({ eliteCount: elites.length, edgeCount: edges.length },
-        'Archive elites recorded in knowledge graph (OI-11)');
+      log.info(
+        { eliteCount: elites.length, edgeCount: edges.length },
+        'Archive elites recorded in knowledge graph (OI-11)'
+      );
     } catch (err) {
       log.warn({ error: String(err) }, 'Knowledge graph archive recording failed (OI-11)');
     }
@@ -452,9 +460,7 @@ class KnowledgeGraphService {
         weightedSum += row.avg_weight * count;
       }
 
-      const nodeCount = await prisma.$queryRaw<
-        Array<{ count: bigint }>
-      >`
+      const nodeCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(DISTINCT node_id) as count
         FROM (
           SELECT source_id as node_id FROM knowledge_edges

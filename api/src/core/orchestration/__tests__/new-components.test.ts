@@ -32,7 +32,9 @@ describe('StrategyBandit', () => {
   });
 
   it('selectStrategy returns null for empty candidates', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -43,13 +45,19 @@ describe('StrategyBandit', () => {
   });
 
   it('selectStrategy returns a strategy from candidates', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
     }));
     const { strategyBandit } = await import('@/core/learning/strategy-bandit');
-    const result = strategyBandit.selectStrategy('code-generation', 'medium', ['single', 'debate', 'consensus']);
+    const result = strategyBandit.selectStrategy('code-generation', 'medium', [
+      'single',
+      'debate',
+      'consensus',
+    ]);
     expect(result).not.toBeNull();
     expect(['single', 'debate', 'consensus']).toContain(result!.strategy);
     expect(result!.sampledScore).toBeGreaterThanOrEqual(0);
@@ -57,7 +65,9 @@ describe('StrategyBandit', () => {
   });
 
   it('update increases alpha for high quality', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -67,14 +77,21 @@ describe('StrategyBandit', () => {
     // Before update, get initial observation count
     const before = strategyBandit.getObservationCount('test', 'low', 'debate');
 
-    strategyBandit.update({ taskType: 'test', complexity: 'low', strategy: 'debate', qualityScore: 0.9 });
+    strategyBandit.update({
+      taskType: 'test',
+      complexity: 'low',
+      strategy: 'debate',
+      qualityScore: 0.9,
+    });
 
     const after = strategyBandit.getObservationCount('test', 'low', 'debate');
     expect(after).toBe(before + 1);
   });
 
   it('update increases beta for low quality', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -82,14 +99,21 @@ describe('StrategyBandit', () => {
     const { strategyBandit } = await import('@/core/learning/strategy-bandit');
 
     // Record a failure
-    strategyBandit.update({ taskType: 'test2', complexity: 'high', strategy: 'parallel', qualityScore: 0.2 });
+    strategyBandit.update({
+      taskType: 'test2',
+      complexity: 'high',
+      strategy: 'parallel',
+      qualityScore: 0.2,
+    });
     const rates = strategyBandit.getWinRates('test2', 'high', ['parallel']);
     // With Beta(1, 2), mean should be < 0.5
     expect(rates['parallel']).toBeLessThan(0.5);
   });
 
   it('hasConfidence returns false with insufficient observations', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -141,10 +165,24 @@ describe('ModelPerformanceTracker', () => {
 
     // 3 success, 2 failures
     for (let i = 0; i < 3; i++) {
-      modelPerformanceTracker.record({ modelId: 'err-model', provider: 'p', qualityScore: 0.8, latencyMs: 200, success: true, costUsd: 0.01 });
+      modelPerformanceTracker.record({
+        modelId: 'err-model',
+        provider: 'p',
+        qualityScore: 0.8,
+        latencyMs: 200,
+        success: true,
+        costUsd: 0.01,
+      });
     }
     for (let i = 0; i < 2; i++) {
-      modelPerformanceTracker.record({ modelId: 'err-model', provider: 'p', qualityScore: 0, latencyMs: 100, success: false, costUsd: 0 });
+      modelPerformanceTracker.record({
+        modelId: 'err-model',
+        provider: 'p',
+        qualityScore: 0,
+        latencyMs: 100,
+        success: false,
+        costUsd: 0,
+      });
     }
 
     const score = modelPerformanceTracker.getDynamicScore('err-model');
@@ -157,7 +195,14 @@ describe('ModelPerformanceTracker', () => {
 
     // Record enough samples
     for (let i = 0; i < 10; i++) {
-      modelPerformanceTracker.record({ modelId: 'enrich-model', provider: 'p', qualityScore: 0.95, latencyMs: 300, success: true, costUsd: 0.01 });
+      modelPerformanceTracker.record({
+        modelId: 'enrich-model',
+        provider: 'p',
+        qualityScore: 0.95,
+        latencyMs: 300,
+        success: true,
+        costUsd: 0.01,
+      });
     }
 
     const model = { id: 'enrich-model', performance: { quality: 0.5 } };
@@ -171,7 +216,14 @@ describe('ModelPerformanceTracker', () => {
     vi.doMock('@/database/client', () => ({ prisma: { $executeRaw: vi.fn() } }));
     const { modelPerformanceTracker } = await import('@/core/selection/model-performance-tracker');
 
-    modelPerformanceTracker.record({ modelId: 'few-samples', provider: 'p', qualityScore: 0.9, latencyMs: 200, success: true, costUsd: 0.01 });
+    modelPerformanceTracker.record({
+      modelId: 'few-samples',
+      provider: 'p',
+      qualityScore: 0.9,
+      latencyMs: 200,
+      success: true,
+      costUsd: 0.01,
+    });
     const model = { id: 'few-samples', performance: { quality: 0.5 } };
     const result = modelPerformanceTracker.applyToModel(model);
     expect(result).toBe(model); // Same reference — unchanged
@@ -187,7 +239,9 @@ describe('StrategyBandit — extended', () => {
   });
 
   it('partial update for mid-range quality (between thresholds)', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -195,7 +249,12 @@ describe('StrategyBandit — extended', () => {
     const { strategyBandit } = await import('@/core/learning/strategy-bandit');
 
     // Quality 0.60 is between FAILURE_THRESHOLD (0.50) and SUCCESS_THRESHOLD (0.75)
-    strategyBandit.update({ taskType: 'mid', complexity: 'low', strategy: 'single', qualityScore: 0.60 });
+    strategyBandit.update({
+      taskType: 'mid',
+      complexity: 'low',
+      strategy: 'single',
+      qualityScore: 0.6,
+    });
     const obs = strategyBandit.getObservationCount('mid', 'low', 'single');
     expect(obs).toBe(1); // Partial update still counts as 1 observation
 
@@ -206,7 +265,9 @@ describe('StrategyBandit — extended', () => {
   });
 
   it('hasConfidence returns true after enough observations', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -214,13 +275,20 @@ describe('StrategyBandit — extended', () => {
     const { strategyBandit } = await import('@/core/learning/strategy-bandit');
 
     for (let i = 0; i < 6; i++) {
-      strategyBandit.update({ taskType: 'conf', complexity: 'high', strategy: 'debate', qualityScore: 0.85 });
+      strategyBandit.update({
+        taskType: 'conf',
+        complexity: 'high',
+        strategy: 'debate',
+        qualityScore: 0.85,
+      });
     }
     expect(strategyBandit.hasConfidence('conf', 'high', 'debate')).toBe(true);
   });
 
   it('getWinRates returns correct means', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -229,14 +297,21 @@ describe('StrategyBandit — extended', () => {
 
     // 10 successes → Alpha ~11, Beta ~1 → mean ~0.916
     for (let i = 0; i < 10; i++) {
-      strategyBandit.update({ taskType: 'wr', complexity: 'low', strategy: 'quality-multipass', qualityScore: 0.90 });
+      strategyBandit.update({
+        taskType: 'wr',
+        complexity: 'low',
+        strategy: 'quality-multipass',
+        qualityScore: 0.9,
+      });
     }
     const rates = strategyBandit.getWinRates('wr', 'low', ['quality-multipass']);
     expect(rates['quality-multipass']).toBeGreaterThan(0.8);
   });
 
   it('prefers high-alpha strategy in selection over many runs', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -245,8 +320,18 @@ describe('StrategyBandit — extended', () => {
 
     // Train 'good' with high quality, 'bad' with low quality
     for (let i = 0; i < 20; i++) {
-      strategyBandit.update({ taskType: 'pref', complexity: 'high', strategy: 'good', qualityScore: 0.95 });
-      strategyBandit.update({ taskType: 'pref', complexity: 'high', strategy: 'bad', qualityScore: 0.10 });
+      strategyBandit.update({
+        taskType: 'pref',
+        complexity: 'high',
+        strategy: 'good',
+        qualityScore: 0.95,
+      });
+      strategyBandit.update({
+        taskType: 'pref',
+        complexity: 'high',
+        strategy: 'bad',
+        qualityScore: 0.1,
+      });
     }
 
     // Run selection many times — 'good' should win majority
@@ -291,8 +376,22 @@ describe('ModelPerformanceTracker — extended', () => {
     const { modelPerformanceTracker } = await import('@/core/selection/model-performance-tracker');
 
     for (let i = 0; i < 5; i++) {
-      modelPerformanceTracker.record({ modelId: 'model-a', provider: 'p', qualityScore: 0.8, latencyMs: 100, success: true, costUsd: 0.01 });
-      modelPerformanceTracker.record({ modelId: 'model-b', provider: 'p', qualityScore: 0.6, latencyMs: 300, success: true, costUsd: 0.02 });
+      modelPerformanceTracker.record({
+        modelId: 'model-a',
+        provider: 'p',
+        qualityScore: 0.8,
+        latencyMs: 100,
+        success: true,
+        costUsd: 0.01,
+      });
+      modelPerformanceTracker.record({
+        modelId: 'model-b',
+        provider: 'p',
+        qualityScore: 0.6,
+        latencyMs: 300,
+        success: true,
+        costUsd: 0.02,
+      });
     }
 
     const scores = modelPerformanceTracker.getScores(['model-a', 'model-b', 'nonexistent']);
@@ -308,13 +407,27 @@ describe('ModelPerformanceTracker — extended', () => {
 
     // Start with high quality
     for (let i = 0; i < 10; i++) {
-      modelPerformanceTracker.record({ modelId: 'decay-test', provider: 'p', qualityScore: 0.95, latencyMs: 200, success: true, costUsd: 0.01 });
+      modelPerformanceTracker.record({
+        modelId: 'decay-test',
+        provider: 'p',
+        qualityScore: 0.95,
+        latencyMs: 200,
+        success: true,
+        costUsd: 0.01,
+      });
     }
     const before = modelPerformanceTracker.getDynamicScore('decay-test')!.rollingQuality;
 
     // Add failures
     for (let i = 0; i < 5; i++) {
-      modelPerformanceTracker.record({ modelId: 'decay-test', provider: 'p', qualityScore: 0, latencyMs: 50, success: false, costUsd: 0 });
+      modelPerformanceTracker.record({
+        modelId: 'decay-test',
+        provider: 'p',
+        qualityScore: 0,
+        latencyMs: 50,
+        success: false,
+        costUsd: 0,
+      });
     }
     const after = modelPerformanceTracker.getDynamicScore('decay-test')!.rollingQuality;
 
@@ -326,7 +439,14 @@ describe('ModelPerformanceTracker — extended', () => {
     const { modelPerformanceTracker } = await import('@/core/selection/model-performance-tracker');
 
     for (let i = 0; i < 5; i++) {
-      modelPerformanceTracker.record({ modelId: 'cost-test', provider: 'p', qualityScore: 0.8, latencyMs: 200, success: true, costUsd: 0.05 });
+      modelPerformanceTracker.record({
+        modelId: 'cost-test',
+        provider: 'p',
+        qualityScore: 0.8,
+        latencyMs: 200,
+        success: true,
+        costUsd: 0.05,
+      });
     }
     const score = modelPerformanceTracker.getDynamicScore('cost-test');
     expect(score!.costEfficiency).toBeGreaterThan(0);

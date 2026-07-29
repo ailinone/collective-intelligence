@@ -151,16 +151,18 @@ export async function runSmartCanary(req: SmartCanaryRequest): Promise<SmartCana
       buckets: buckets.size,
       canariesToProbe: reps.length,
     },
-    'Smart canary starting',
+    'Smart canary starting'
   );
 
   // 2. Fire all canaries in parallel, with one retry each for transient failures.
-  const results = await Promise.all(reps.map((arm) => executeSingleCanaryWithRetry(arm, req, opts)));
+  const results = await Promise.all(
+    reps.map((arm) => executeSingleCanaryWithRetry(arm, req, opts))
+  );
 
   // 3. Compute gates
   const successful = results.filter((r) => r.success);
   const distinctHealthyProviders = new Set(
-    successful.map((r) => r.providerId).filter((p): p is string => p !== null),
+    successful.map((r) => r.providerId).filter((p): p is string => p !== null)
   ).size;
 
   const distinctPolicyKindsCovered = [
@@ -168,7 +170,7 @@ export async function runSmartCanary(req: SmartCanaryRequest): Promise<SmartCana
   ] as ArmEvaluationPolicy['kind'][];
 
   const authFailures = results.filter(
-    (r) => r.errorClass === 'auth_failed' || r.httpStatus === 401,
+    (r) => r.errorClass === 'auth_failed' || r.httpStatus === 401
   );
   const authOk = authFailures.length === 0;
   if (!authOk) {
@@ -178,26 +180,26 @@ export async function runSmartCanary(req: SmartCanaryRequest): Promise<SmartCana
   const minProvidersHealthyMet = distinctHealthyProviders >= opts.minProvidersHealthy;
   if (!minProvidersHealthyMet) {
     diagnostics.push(
-      `only ${distinctHealthyProviders} distinct healthy providers, need ≥${opts.minProvidersHealthy}`,
+      `only ${distinctHealthyProviders} distinct healthy providers, need ≥${opts.minProvidersHealthy}`
     );
   }
 
   const modeCoverageMet = distinctPolicyKindsCovered.length >= opts.minPolicyKindsCovered;
   if (!modeCoverageMet) {
     diagnostics.push(
-      `only ${distinctPolicyKindsCovered.length} policy kinds covered, need ≥${opts.minPolicyKindsCovered}`,
+      `only ${distinctPolicyKindsCovered.length} policy kinds covered, need ≥${opts.minPolicyKindsCovered}`
     );
   }
 
   // For strict baselines: each one MUST have its declared provider succeed —
   // any cross-provider fallback at canary time is a red flag.
   const strictBaselineFailures = results.filter(
-    (r) => r.policyKind === 'strict_baseline_identity' && !r.success,
+    (r) => r.policyKind === 'strict_baseline_identity' && !r.success
   );
   const noStrictBaselineCrossFallback = true; // we can only detect cross-fallback at exec time, not canary
   if (strictBaselineFailures.length > 0) {
     diagnostics.push(
-      `${strictBaselineFailures.length} strict baseline canaries failed — these arms will be skipped`,
+      `${strictBaselineFailures.length} strict baseline canaries failed — these arms will be skipped`
     );
   }
 
@@ -240,7 +242,7 @@ export async function runSmartCanary(req: SmartCanaryRequest): Promise<SmartCana
       successful: successful.length,
       total: results.length,
     },
-    `Smart canary ${passed ? 'PASSED' : 'FAILED'}`,
+    `Smart canary ${passed ? 'PASSED' : 'FAILED'}`
   );
 
   return result;
@@ -248,7 +250,9 @@ export async function runSmartCanary(req: SmartCanaryRequest): Promise<SmartCana
 
 // ─── Stratification ────────────────────────────────────────────────────────
 
-function stratifyArms(arms: ReadonlyArray<ResolvedExperimentArm>): Map<string, ResolvedExperimentArm> {
+function stratifyArms(
+  arms: ReadonlyArray<ResolvedExperimentArm>
+): Map<string, ResolvedExperimentArm> {
   const buckets = new Map<string, ResolvedExperimentArm>();
   for (const arm of arms) {
     // Stratification key: (policyKind, declaredProviderId or '*',
@@ -278,8 +282,7 @@ function extractResolvedProvider(responseText: string): string | null {
   try {
     const j = JSON.parse(responseText) as Record<string, unknown>;
     const md = (j.ailin_metadata ?? j.metadata ?? {}) as Record<string, unknown>;
-    const direct =
-      md.executionProvider ?? md.provider ?? md.resolved_provider ?? md.providerId;
+    const direct = md.executionProvider ?? md.provider ?? md.resolved_provider ?? md.providerId;
     if (typeof direct === 'string' && direct.trim()) return direct.trim().toLowerCase();
     const resolvedModel = (md.resolved_model ?? j.model) as unknown;
     if (typeof resolvedModel === 'string' && resolvedModel.trim()) {
@@ -295,7 +298,7 @@ function extractResolvedProvider(responseText: string): string | null {
 async function executeSingleCanary(
   arm: ResolvedExperimentArm,
   req: SmartCanaryRequest,
-  opts: typeof DEFAULT_OPTS,
+  opts: typeof DEFAULT_OPTS
 ): Promise<SingleCanaryResult> {
   const startMs = Date.now();
   const controller = new AbortController();
@@ -327,7 +330,7 @@ async function executeSingleCanary(
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': req.bearerToken,
-        'Authorization': `Bearer ${req.bearerToken}`,
+        Authorization: `Bearer ${req.bearerToken}`,
         'x-operational-mode': 'experiment',
         'x-experiment-id': req.experimentId,
         'x-experiment-arm-id': arm.armId,
@@ -400,7 +403,7 @@ async function executeSingleCanary(
 async function executeSingleCanaryWithRetry(
   arm: ResolvedExperimentArm,
   req: SmartCanaryRequest,
-  opts: typeof DEFAULT_OPTS,
+  opts: typeof DEFAULT_OPTS
 ): Promise<SingleCanaryResult> {
   const first = await executeSingleCanary(arm, req, opts);
   if (first.success) return first;

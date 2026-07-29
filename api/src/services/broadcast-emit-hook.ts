@@ -100,7 +100,7 @@ export function emitBroadcastTrace(args: BroadcastEmitHookArgs): void {
       // try block.
       log.debug(
         { err: err instanceof Error ? err.message : String(err), requestId: args.requestId },
-        'broadcast emit hook error — user request unaffected',
+        'broadcast emit hook error — user request unaffected'
       );
     }
   })();

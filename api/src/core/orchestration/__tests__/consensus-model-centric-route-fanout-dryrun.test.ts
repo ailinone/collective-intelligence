@@ -36,13 +36,17 @@ import {
 describe('01C.1B-J1R2 — name normalizer', () => {
   it('strips vendor prefixes and lowercases', () => {
     expect(normalizeLogicalModelId('meta/llama-3.2-11b')).toBe('llama-3.2-11b');
-    expect(normalizeLogicalModelId('meta-llama/Llama-3.2-11B-Vision-Instruct')).toBe('llama-3.2-11b-vision');
+    expect(normalizeLogicalModelId('meta-llama/Llama-3.2-11B-Vision-Instruct')).toBe(
+      'llama-3.2-11b-vision'
+    );
     expect(normalizeLogicalModelId('google/gemma-3-4b-it')).toBe('gemma-3-4b');
     expect(normalizeLogicalModelId('gemma-3-4b-it')).toBe('gemma-3-4b');
   });
 
   it('compareModelIds returns alias for known safe-tail extensions', () => {
-    expect(compareModelIds('meta/llama-3.2-11b', 'meta-llama/Llama-3.2-11B-Vision-Instruct')).toBe('alias');
+    expect(compareModelIds('meta/llama-3.2-11b', 'meta-llama/Llama-3.2-11B-Vision-Instruct')).toBe(
+      'alias'
+    );
   });
 
   it('compareModelIds returns exact for identical strings', () => {
@@ -71,10 +75,34 @@ describe('01C.1B-J1R2 — name normalizer', () => {
 describe('01C.1B-J1R2 — lookupServingProvidersFromCatalog', () => {
   it('returns chat-capable rows across providers (gemma fixture)', async () => {
     const fixtureRows: CatalogRow[] = [
-      { providerId: '1', providerName: 'aiml', modelId: 'a1', name: 'gemma-3-4b-it', capabilities: ['chat', 'text_generation'] },
-      { providerId: '2', providerName: 'deepinfra', modelId: 'a2', name: 'google/gemma-3-4b-it', capabilities: ['chat'] },
-      { providerId: '3', providerName: 'openrouter', modelId: 'a3', name: 'google/gemma-3-4b-it', capabilities: ['chat'] },
-      { providerId: '4', providerName: 'huggingface', modelId: 'a4', name: 'google/gemma-3-4b-it-qat-q4_0-unquantized', capabilities: ['chat'] },
+      {
+        providerId: '1',
+        providerName: 'aiml',
+        modelId: 'a1',
+        name: 'gemma-3-4b-it',
+        capabilities: ['chat', 'text_generation'],
+      },
+      {
+        providerId: '2',
+        providerName: 'deepinfra',
+        modelId: 'a2',
+        name: 'google/gemma-3-4b-it',
+        capabilities: ['chat'],
+      },
+      {
+        providerId: '3',
+        providerName: 'openrouter',
+        modelId: 'a3',
+        name: 'google/gemma-3-4b-it',
+        capabilities: ['chat'],
+      },
+      {
+        providerId: '4',
+        providerName: 'huggingface',
+        modelId: 'a4',
+        name: 'google/gemma-3-4b-it-qat-q4_0-unquantized',
+        capabilities: ['chat'],
+      },
     ];
     const lookupCatalogRows = vi.fn().mockResolvedValue(fixtureRows);
     const result = await lookupServingProvidersFromCatalog({
@@ -93,8 +121,20 @@ describe('01C.1B-J1R2 — lookupServingProvidersFromCatalog', () => {
 
   it('embedding-only row is filtered out when capability=chat', async () => {
     const fixtureRows: CatalogRow[] = [
-      { providerId: '1', providerName: 'cohere', modelId: 'e1', name: 'gemma-3-4b-it', capabilities: ['embedding'] },
-      { providerId: '2', providerName: 'aiml', modelId: 'a1', name: 'gemma-3-4b-it', capabilities: ['chat'] },
+      {
+        providerId: '1',
+        providerName: 'cohere',
+        modelId: 'e1',
+        name: 'gemma-3-4b-it',
+        capabilities: ['embedding'],
+      },
+      {
+        providerId: '2',
+        providerName: 'aiml',
+        modelId: 'a1',
+        name: 'gemma-3-4b-it',
+        capabilities: ['chat'],
+      },
     ];
     const result = await lookupServingProvidersFromCatalog({
       logicalModelId: 'gemma-3-4b-it',
@@ -108,11 +148,29 @@ describe('01C.1B-J1R2 — lookupServingProvidersFromCatalog', () => {
   it('confidence order: exact > normalized > alias', async () => {
     const fixtureRows: CatalogRow[] = [
       // alias (tail extension)
-      { providerId: '1', providerName: 'deepinfra', modelId: 'd1', name: 'meta-llama/Llama-3.2-11B-Vision-Instruct', capabilities: ['chat'] },
+      {
+        providerId: '1',
+        providerName: 'deepinfra',
+        modelId: 'd1',
+        name: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        capabilities: ['chat'],
+      },
       // normalized (vendor-prefix drift)
-      { providerId: '2', providerName: 'nvidia', modelId: 'n1', name: 'meta/llama-3.2-11b', capabilities: ['chat'] },
+      {
+        providerId: '2',
+        providerName: 'nvidia',
+        modelId: 'n1',
+        name: 'meta/llama-3.2-11b',
+        capabilities: ['chat'],
+      },
       // exact match
-      { providerId: '3', providerName: 'vercel-ai-gateway', modelId: 'v1', name: 'meta/llama-3.2-11b', capabilities: ['chat'] },
+      {
+        providerId: '3',
+        providerName: 'vercel-ai-gateway',
+        modelId: 'v1',
+        name: 'meta/llama-3.2-11b',
+        capabilities: ['chat'],
+      },
     ];
     const result = await lookupServingProvidersFromCatalog({
       logicalModelId: 'meta/llama-3.2-11b',
@@ -140,8 +198,20 @@ describe('01C.1B-J1R2 — lookupServingProvidersFromCatalog', () => {
 
   it('dedupes by providerName+name (same row repeated)', async () => {
     const fixtureRows: CatalogRow[] = [
-      { providerId: '1', providerName: 'aiml', modelId: 'a1', name: 'gemma-3-4b-it', capabilities: ['chat'] },
-      { providerId: '1', providerName: 'aiml', modelId: 'a1', name: 'gemma-3-4b-it', capabilities: ['chat'] }, // dup
+      {
+        providerId: '1',
+        providerName: 'aiml',
+        modelId: 'a1',
+        name: 'gemma-3-4b-it',
+        capabilities: ['chat'],
+      },
+      {
+        providerId: '1',
+        providerName: 'aiml',
+        modelId: 'a1',
+        name: 'gemma-3-4b-it',
+        capabilities: ['chat'],
+      }, // dup
     ];
     const result = await lookupServingProvidersFromCatalog({
       logicalModelId: 'gemma-3-4b-it',

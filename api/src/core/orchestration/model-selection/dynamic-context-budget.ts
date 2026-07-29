@@ -49,11 +49,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type ConsensusRole =
-  | 'participant'
-  | 'synthesizer'
-  | 'judge'
-  | 'fallback'
-  | 'fallback_single';
+  'participant' | 'synthesizer' | 'judge' | 'fallback' | 'fallback_single';
 
 export interface DynamicContextBudgetInput {
   readonly role: ConsensusRole;
@@ -127,13 +123,13 @@ export function estimateTokensForText(input: string): number {
  * Determinism: identical inputs → identical output. No I/O.
  */
 export function computeDynamicContextBudget(
-  input: DynamicContextBudgetInput,
+  input: DynamicContextBudgetInput
 ): DynamicContextBudget {
   // Enforce safety floors
   const safetyMarginRatio = Math.max(MIN_SAFETY_MARGIN_RATIO, input.safetyMarginRatio);
   const absoluteSafetyMarginTokens = Math.max(
     MIN_ABSOLUTE_SAFETY_MARGIN_TOKENS,
-    nonNeg(input.absoluteSafetyMarginTokens),
+    nonNeg(input.absoluteSafetyMarginTokens)
   );
 
   // Normalize inputs
@@ -214,7 +210,7 @@ export function computeDynamicContextBudget(
 
   const safetyMarginTokens = Math.max(
     absoluteSafetyMarginTokens,
-    Math.ceil(requiredInputTokens * safetyMarginRatio),
+    Math.ceil(requiredInputTokens * safetyMarginRatio)
   );
 
   const minContextWindow = requiredInputTokens + safetyMarginTokens;

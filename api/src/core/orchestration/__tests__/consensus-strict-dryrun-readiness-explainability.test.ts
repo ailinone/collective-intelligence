@@ -29,10 +29,16 @@ import type { ConsensusExecutionPlan } from '@/core/orchestration/strategies/con
 // A pure projection: given a flat blockers array, group it by role.
 function projectBlockersByRole(blockers: readonly string[]) {
   return {
-    participant: blockers.filter((b) => b.startsWith('insufficient_participants') || b.startsWith('no_eligible_participant')),
-    synthesizer: blockers.filter((b) => b.startsWith('no_eligible_synthesizer') || b.includes('synthesizer')),
+    participant: blockers.filter(
+      (b) => b.startsWith('insufficient_participants') || b.startsWith('no_eligible_participant')
+    ),
+    synthesizer: blockers.filter(
+      (b) => b.startsWith('no_eligible_synthesizer') || b.includes('synthesizer')
+    ),
     judge: blockers.filter((b) => b.startsWith('no_eligible_judge') || b.includes('judge')),
-    fallback: blockers.filter((b) => b.startsWith('no_eligible_fallback') || b.includes('fallback')),
+    fallback: blockers.filter(
+      (b) => b.startsWith('no_eligible_fallback') || b.includes('fallback')
+    ),
   };
 }
 
@@ -62,16 +68,42 @@ describe('01C.1B-J1C §13 — strict dry-run explainability', () => {
   it('criticalRoleReadiness exposes selectedCount / targetCount / blocked / firstBlocker', () => {
     const fakePlan: Pick<ConsensusExecutionPlan, 'criticalRoleReadiness'> = {
       criticalRoleReadiness: {
-        participant: { role: 'participant', selectedCount: 0, targetCount: 3, blocked: true, firstBlocker: 'insufficient_participants:got=0,need>=3' },
-        synthesizer: { role: 'synthesizer', selectedCount: 0, targetCount: 1, blocked: true, firstBlocker: 'no_eligible_synthesizer' },
-        judge: { role: 'judge', selectedCount: 0, targetCount: 1, blocked: true, firstBlocker: 'no_eligible_judge' },
-        fallback: { role: 'fallback', selectedCount: 0, targetCount: 1, blocked: true, firstBlocker: 'no_eligible_fallback_single' },
+        participant: {
+          role: 'participant',
+          selectedCount: 0,
+          targetCount: 3,
+          blocked: true,
+          firstBlocker: 'insufficient_participants:got=0,need>=3',
+        },
+        synthesizer: {
+          role: 'synthesizer',
+          selectedCount: 0,
+          targetCount: 1,
+          blocked: true,
+          firstBlocker: 'no_eligible_synthesizer',
+        },
+        judge: {
+          role: 'judge',
+          selectedCount: 0,
+          targetCount: 1,
+          blocked: true,
+          firstBlocker: 'no_eligible_judge',
+        },
+        fallback: {
+          role: 'fallback',
+          selectedCount: 0,
+          targetCount: 1,
+          blocked: true,
+          firstBlocker: 'no_eligible_fallback_single',
+        },
       },
     };
     expect(fakePlan.criticalRoleReadiness?.participant.selectedCount).toBe(0);
     expect(fakePlan.criticalRoleReadiness?.participant.targetCount).toBe(3);
     expect(fakePlan.criticalRoleReadiness?.participant.blocked).toBe(true);
-    expect(fakePlan.criticalRoleReadiness?.synthesizer.firstBlocker).toBe('no_eligible_synthesizer');
+    expect(fakePlan.criticalRoleReadiness?.synthesizer.firstBlocker).toBe(
+      'no_eligible_synthesizer'
+    );
   });
 
   it('routeReadinessSummary derives allRolesSelected from per-role counts', () => {
@@ -100,12 +132,41 @@ describe('01C.1B-J1C §13 — strict dry-run explainability', () => {
   it('explainability surfaces NEVER include raw prompt text or secrets', () => {
     const fakePlan = {
       blockers: ['insufficient_participants:got=0,need>=3'],
-      blockersByRole: { participant: ['insufficient_participants:got=0,need>=3'], synthesizer: [], judge: [], fallback: [] },
+      blockersByRole: {
+        participant: ['insufficient_participants:got=0,need>=3'],
+        synthesizer: [],
+        judge: [],
+        fallback: [],
+      },
       criticalRoleReadiness: {
-        participant: { role: 'participant', selectedCount: 0, targetCount: 3, blocked: true, firstBlocker: 'insufficient_participants:got=0,need>=3' },
-        synthesizer: { role: 'synthesizer', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
-        judge: { role: 'judge', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
-        fallback: { role: 'fallback', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
+        participant: {
+          role: 'participant',
+          selectedCount: 0,
+          targetCount: 3,
+          blocked: true,
+          firstBlocker: 'insufficient_participants:got=0,need>=3',
+        },
+        synthesizer: {
+          role: 'synthesizer',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
+        judge: {
+          role: 'judge',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
+        fallback: {
+          role: 'fallback',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
       },
     };
     const json = JSON.stringify(fakePlan);
@@ -120,10 +181,34 @@ describe('01C.1B-J1C §13 — strict dry-run explainability', () => {
     const fakePlan: Partial<ConsensusExecutionPlan> = {
       blockersByRole: { participant: [], synthesizer: [], judge: [], fallback: [] },
       criticalRoleReadiness: {
-        participant: { role: 'participant', selectedCount: 3, targetCount: 3, blocked: false, firstBlocker: null },
-        synthesizer: { role: 'synthesizer', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
-        judge: { role: 'judge', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
-        fallback: { role: 'fallback', selectedCount: 1, targetCount: 1, blocked: false, firstBlocker: null },
+        participant: {
+          role: 'participant',
+          selectedCount: 3,
+          targetCount: 3,
+          blocked: false,
+          firstBlocker: null,
+        },
+        synthesizer: {
+          role: 'synthesizer',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
+        judge: {
+          role: 'judge',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
+        fallback: {
+          role: 'fallback',
+          selectedCount: 1,
+          targetCount: 1,
+          blocked: false,
+          firstBlocker: null,
+        },
       },
       routeReadinessSummary: { allRolesSelected: true, blockedRoles: [], totalBlockers: 0 },
     };

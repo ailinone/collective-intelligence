@@ -130,7 +130,7 @@ describe('VectorStoresService.createVectorStoreFile — real ingest', () => {
     // The background ingest still runs and persists status=completed + chunk_count.
     await vi.waitFor(() => {
       const updateArg = mocks.prisma.vectorStoreFile.update.mock.calls.find(
-        (c) => c[0].data?.status === 'completed',
+        (c) => c[0].data?.status === 'completed'
       );
       expect(updateArg?.[0].data.chunkCount).toBe(3);
     });
@@ -158,7 +158,7 @@ describe('VectorStoresService.createVectorStoreFile — real ingest', () => {
 
     await vi.waitFor(() => {
       const failedUpdate = mocks.prisma.vectorStoreFile.update.mock.calls.find(
-        (c) => c[0].data?.status === 'failed',
+        (c) => c[0].data?.status === 'failed'
       );
       expect(failedUpdate).toBeDefined();
       expect(failedUpdate?.[0].data.lastError).toContain('embedder exploded');
@@ -176,8 +176,24 @@ describe('VectorStoresService.searchVectorStore', () => {
   it('returns OpenAI-shaped, score-ordered results and threads top_k + org', async () => {
     mocks.prisma.vectorStore.findFirst.mockResolvedValue({ id: 'vs_1', organizationId: 'org-1' });
     mocks.search.mockResolvedValue([
-      { id: 'c1', fileId: 'f1', vectorStoreFileId: 'vsf1', chunkIndex: 0, content: 'top hit', score: 0.95, metadata: { filename: 'a.txt' } },
-      { id: 'c2', fileId: 'f1', vectorStoreFileId: 'vsf1', chunkIndex: 1, content: 'second', score: 0.5, metadata: {} },
+      {
+        id: 'c1',
+        fileId: 'f1',
+        vectorStoreFileId: 'vsf1',
+        chunkIndex: 0,
+        content: 'top hit',
+        score: 0.95,
+        metadata: { filename: 'a.txt' },
+      },
+      {
+        id: 'c2',
+        fileId: 'f1',
+        vectorStoreFileId: 'vsf1',
+        chunkIndex: 1,
+        content: 'second',
+        score: 0.5,
+        metadata: {},
+      },
     ]);
 
     const res = await makeService().searchVectorStore({
@@ -212,7 +228,7 @@ describe('VectorStoresService.searchVectorStore', () => {
         query: 'q',
         userContext: otherOrg,
         requestId: 'req-2',
-      }),
+      })
     ).rejects.toThrow(/not found/i);
 
     // The org filter was applied in the lookup.
@@ -231,7 +247,7 @@ describe('VectorStoresService.searchVectorStore', () => {
         query: '   ',
         userContext,
         requestId: 'req-1',
-      }),
+      })
     ).rejects.toThrow(/query is required/i);
     expect(mocks.search).not.toHaveBeenCalled();
   });

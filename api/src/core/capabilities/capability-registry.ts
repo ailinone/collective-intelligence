@@ -11,11 +11,7 @@ import type { ModelCapability } from '@/types';
 import { MODEL_CAPABILITIES, isModelCapability } from '@/types';
 
 export type CapabilityExecutionMode =
-  | 'proxy_route'
-  | 'orchestration'
-  | 'native_adapter'
-  | 'tool_pipeline'
-  | 'sandbox_workflow';
+  'proxy_route' | 'orchestration' | 'native_adapter' | 'tool_pipeline' | 'sandbox_workflow';
 
 export interface CapabilityExecutionPlan {
   id: ModelCapability;

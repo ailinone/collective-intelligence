@@ -34,7 +34,7 @@ describe('01C.1B-C3-DRYRUN-RUNTIME-GATE — anti-execution', () => {
           providerProbesExecuted: 0,
           cost_usd: 0,
           usage: { total_tokens: 0 },
-        }),
+        })
       ).toBe(true);
     });
   });

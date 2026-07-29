@@ -15,7 +15,10 @@ import {
   getVerifiableTaskIndices,
   HARD_VERIFIABLE_TASK_TYPE,
 } from '../experiment-suite';
-import { resolveAnswerChecker, type AnswerCheckSpec } from '@/core/orchestration/verification/answer-check-resolver';
+import {
+  resolveAnswerChecker,
+  type AnswerCheckSpec,
+} from '@/core/orchestration/verification/answer-check-resolver';
 
 const hard = EXPERIMENT_SUITE.filter((t) => t.taskType === HARD_VERIFIABLE_TASK_TYPE);
 
@@ -34,14 +37,14 @@ describe('hard verifiable tier (146-155) — H-A calibration', () => {
   it('every answer accepts the correct value and rejects a common slip (verified vs script)', () => {
     // [index, correctAnswer, aPlausibleWrongAnswer]
     const cases: Array<[number, string, string]> = [
-      [146, '925', '711'],      // long mod recurrence (stopped early)
-      [147, '5543', '5560'],    // interest+withdrawal (rounding/step slip)
-      [148, '401', '467'],      // inclusion-exclusion (forgot the "not 7" step)
-      [149, '84', '120'],       // compositions (used C(10,3) — allowed 0)
-      [150, '26738', '12118'],  // reverse depreciation (multiplied not divided)
-      [151, '100', '80'],       // work-rate stages
-      [153, '34', '36'],        // grid paths (returned the through-center count)
-      [155, '204', '84'],       // increasing OR decreasing (forgot decreasing/0)
+      [146, '925', '711'], // long mod recurrence (stopped early)
+      [147, '5543', '5560'], // interest+withdrawal (rounding/step slip)
+      [148, '401', '467'], // inclusion-exclusion (forgot the "not 7" step)
+      [149, '84', '120'], // compositions (used C(10,3) — allowed 0)
+      [150, '26738', '12118'], // reverse depreciation (multiplied not divided)
+      [151, '100', '80'], // work-rate stages
+      [153, '34', '36'], // grid paths (returned the through-center count)
+      [155, '204', '84'], // increasing OR decreasing (forgot decreasing/0)
     ];
     for (const [index, right, wrong] of cases) {
       const t = EXPERIMENT_SUITE.find((x) => x.index === index)!;

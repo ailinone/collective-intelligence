@@ -34,7 +34,7 @@ describe('getRunnableTextTaskIndices (review TS-02)', () => {
 
   it('excludes every compositor-strategy task (unimplemented → mislabeled attribution)', () => {
     const compositor = EXPERIMENT_SUITE.filter(
-      (t) => t.strategy === 'compositor' || t.queueType === 'compositor',
+      (t) => t.strategy === 'compositor' || t.queueType === 'compositor'
     );
     expect(compositor.length).toBeGreaterThan(0); // sanity: the suite has them
     for (const t of compositor) expect(runnable.has(t.index)).toBe(false);
@@ -42,7 +42,7 @@ describe('getRunnableTextTaskIndices (review TS-02)', () => {
 
   it('excludes multimodal tasks that reference an attachment the suite never populates', () => {
     const payloadless = EXPERIMENT_SUITE.filter(
-      (t) => t.modality && t.modality !== 'chat' && !t.audioUrl && !t.imageUrl,
+      (t) => t.modality && t.modality !== 'chat' && !t.audioUrl && !t.imageUrl
     );
     for (const t of payloadless) expect(runnable.has(t.index)).toBe(false);
   });
@@ -58,7 +58,11 @@ describe('getRunnableTextTaskIndices (review TS-02)', () => {
 });
 
 describe('shouldApplyTaskStrategyOverride (review F11)', () => {
-  const singleModel: ModeConfig = { mode: 'single-model', modelId: 'gpt-5.4', displayName: 'gpt-5.4' };
+  const singleModel: ModeConfig = {
+    mode: 'single-model',
+    modelId: 'gpt-5.4',
+    displayName: 'gpt-5.4',
+  };
   const singleBudget: ModeConfig = { mode: 'single-budget', modelId: 'mini', displayName: 'mini' };
   const consensus: ModeConfig = { mode: 'collective', strategy: 'consensus' as never };
   const adaptive: ModeConfig = { mode: 'adaptive' };

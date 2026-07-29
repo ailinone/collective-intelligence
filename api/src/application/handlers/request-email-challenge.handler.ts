@@ -50,7 +50,10 @@ export class RequestEmailChallengeHandler {
         loginMode: result.loginMode,
         challengeId: result.challengeId,
         expiresAt: result.expiresAt instanceof Date ? result.expiresAt.getTime() : result.expiresAt,
-        cooldownExpiresAt: result.cooldownExpiresAt instanceof Date ? result.cooldownExpiresAt.getTime() : result.cooldownExpiresAt,
+        cooldownExpiresAt:
+          result.cooldownExpiresAt instanceof Date
+            ? result.cooldownExpiresAt.getTime()
+            : result.cooldownExpiresAt,
         message: result.message,
       };
     } catch (error: unknown) {

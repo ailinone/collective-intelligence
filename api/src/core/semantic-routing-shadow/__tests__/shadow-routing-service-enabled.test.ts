@@ -35,7 +35,11 @@ const input: ShadowRoutingInput = Object.freeze({
     actualProvider: 'anthropic',
     actualStrategy: 'single',
   },
-  profilerInput: { requestId: 'r-enabled-1', approximateInputTokens: 200, taskTypeHint: 'code-generation' },
+  profilerInput: {
+    requestId: 'r-enabled-1',
+    approximateInputTokens: 200,
+    taskTypeHint: 'code-generation',
+  },
   metadata: { source: 'chat', timestamp: '2026-05-12T20:00:00Z' },
 });
 

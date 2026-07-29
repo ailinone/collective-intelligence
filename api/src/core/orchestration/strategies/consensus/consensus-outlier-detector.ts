@@ -63,10 +63,7 @@ export function detectOutlier(input: OutlierDetectionInput): OutlierDetectionRes
   if (input.evaluation.verdict === 'fail') {
     return { outlier: true, outlierReason: 'evaluator_fail_verdict' };
   }
-  if (
-    input.evaluation.score !== undefined &&
-    input.evaluation.score < SCORE_OUTLIER_THRESHOLD
-  ) {
+  if (input.evaluation.score !== undefined && input.evaluation.score < SCORE_OUTLIER_THRESHOLD) {
     return { outlier: true, outlierReason: 'score_below_threshold' };
   }
   return { outlier: false };

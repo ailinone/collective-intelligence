@@ -17,9 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { buildInventoryPlan } from '@/core/operability/live-chat-inventory-planner';
 import type { Model, ModelCapability } from '@/types';
 
-function mkModel(
-  overrides: Partial<Model> & Pick<Model, 'id' | 'provider'>,
-): Model {
+function mkModel(overrides: Partial<Model> & Pick<Model, 'id' | 'provider'>): Model {
   return {
     providerId: overrides.provider,
     name: overrides.id,
@@ -39,7 +37,11 @@ function mkModel(
 describe('01C.1B-J1D-R4B §8 — buildInventoryPlan', () => {
   it('selects up to N models per provider (default 3)', () => {
     const catalog = [
-      mkModel({ id: 'a-1', provider: 'a', performance: { latencyMs: 100, throughput: 1, quality: 0.95, reliability: 1 } as never }),
+      mkModel({
+        id: 'a-1',
+        provider: 'a',
+        performance: { latencyMs: 100, throughput: 1, quality: 0.95, reliability: 1 } as never,
+      }),
       mkModel({ id: 'a-2', provider: 'a', contextWindow: 200_000 }),
       mkModel({ id: 'a-3', provider: 'a', inputCostPer1k: 0.00001 }),
       mkModel({ id: 'a-4', provider: 'a' }),
@@ -218,7 +220,7 @@ describe('01C.1B-J1D-R4B §8 — buildInventoryPlan', () => {
     const r2 = buildInventoryPlan(args);
     expect(r1.summary).toEqual(r2.summary);
     expect(r1.plannedProbes.map((p) => p.apiModelId)).toEqual(
-      r2.plannedProbes.map((p) => p.apiModelId),
+      r2.plannedProbes.map((p) => p.apiModelId)
     );
   });
 

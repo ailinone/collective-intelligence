@@ -82,13 +82,13 @@ describe('strategies shadow-wire architectural invariant', () => {
 
       it('imports buildEnsembleRequest from ensemble-coordinator-client', () => {
         expect(source).toMatch(
-          /import\s+\{[^}]*buildEnsembleRequest[^}]*\}\s+from\s+['"]@\/core\/coordination\/ensemble-coordinator-client['"]/,
+          /import\s+\{[^}]*buildEnsembleRequest[^}]*\}\s+from\s+['"]@\/core\/coordination\/ensemble-coordinator-client['"]/
         );
       });
 
       it('imports runEnsembleInShadow from ensemble-coordinator-shadow', () => {
         expect(source).toMatch(
-          /import\s+\{[^}]*runEnsembleInShadow[^}]*\}\s+from\s+['"]@\/core\/coordination\/ensemble-coordinator-shadow['"]/,
+          /import\s+\{[^}]*runEnsembleInShadow[^}]*\}\s+from\s+['"]@\/core\/coordination\/ensemble-coordinator-shadow['"]/
         );
       });
 
@@ -96,7 +96,7 @@ describe('strategies shadow-wire architectural invariant', () => {
         // Allows any whitespace/newlines between args. The order is
         // fixed: strategy, decisionType, context.
         const pattern = new RegExp(
-          `buildEnsembleRequest\\s*\\(\\s*['"]${exp.strategyId}['"]\\s*,\\s*['"]${exp.decisionType}['"]`,
+          `buildEnsembleRequest\\s*\\(\\s*['"]${exp.strategyId}['"]\\s*,\\s*['"]${exp.decisionType}['"]`
         );
         expect(source).toMatch(pattern);
       });
@@ -114,9 +114,7 @@ describe('strategies shadow-wire architectural invariant', () => {
         // errors internally, but the strategy's .catch is the final
         // safety net so an unhandled rejection from a future refactor
         // can't bubble to the request path.
-        expect(source).toMatch(
-          /void\s+runEnsembleInShadow\s*\([\s\S]*?\)\s*\.catch\s*\(/,
-        );
+        expect(source).toMatch(/void\s+runEnsembleInShadow\s*\([\s\S]*?\)\s*\.catch\s*\(/);
       });
 
       it('passes heuristicDecisionForComparison so divergence is computed', () => {
@@ -132,7 +130,7 @@ describe('strategies shadow-wire architectural invariant', () => {
       const importPaths = EXPECTED.map((exp) => {
         const source = readStrategy(exp.path);
         const match = source.match(
-          /from\s+['"](@\/core\/coordination\/ensemble-coordinator-client)['"]/,
+          /from\s+['"](@\/core\/coordination\/ensemble-coordinator-client)['"]/
         );
         return match?.[1];
       });
@@ -145,7 +143,7 @@ describe('strategies shadow-wire architectural invariant', () => {
       const importPaths = EXPECTED.map((exp) => {
         const source = readStrategy(exp.path);
         const match = source.match(
-          /from\s+['"](@\/core\/coordination\/ensemble-coordinator-shadow)['"]/,
+          /from\s+['"](@\/core\/coordination\/ensemble-coordinator-shadow)['"]/
         );
         return match?.[1];
       });
@@ -168,10 +166,9 @@ describe('strategies shadow-wire architectural invariant', () => {
       for (const fileName of PERSISTING_STRATEGIES) {
         const path = `src/core/orchestration/strategies/${fileName}`;
         const source = readStrategy(path);
-        expect(
-          source,
-          `${fileName} should import ShadowEnsembleSnapshot`,
-        ).toMatch(/ShadowEnsembleSnapshot/);
+        expect(source, `${fileName} should import ShadowEnsembleSnapshot`).toMatch(
+          /ShadowEnsembleSnapshot/
+        );
       }
     });
 

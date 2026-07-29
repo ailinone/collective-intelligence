@@ -28,7 +28,8 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
       schema: {
         tags: ['Orchestration'],
         summary: 'List orchestration strategies',
-        description: 'Returns a list of all available orchestration strategies with their descriptions and capabilities',
+        description:
+          'Returns a list of all available orchestration strategies with their descriptions and capabilities',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         response: {
           200: {
@@ -91,7 +92,8 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
           {
             name: 'single',
             displayName: 'Single Model',
-            description: 'Uses a single model for the request. Fast and cost-effective for simple tasks.',
+            description:
+              'Uses a single model for the request. Fast and cost-effective for simple tasks.',
             aliases: [],
             executionStrategy: 'single',
             useCases: ['Simple Q&A', 'Basic text generation', 'Low latency requirements'],
@@ -146,7 +148,8 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
           {
             name: 'parallel',
             displayName: 'Parallel',
-            description: 'Sends the request to multiple models simultaneously and returns the first response.',
+            description:
+              'Sends the request to multiple models simultaneously and returns the first response.',
             aliases: [],
             executionStrategy: 'parallel',
             useCases: ['High availability', 'Latency optimization', 'Fault tolerance'],
@@ -171,7 +174,11 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
             description: 'Multi-turn debate between models before synthesis.',
             aliases: [],
             executionStrategy: 'debate',
-            useCases: ['Counterfactual analysis', 'Critical decision support', 'High-stakes reasoning'],
+            useCases: [
+              'Counterfactual analysis',
+              'Critical decision support',
+              'High-stakes reasoning',
+            ],
             costProfile: 'high',
             qualityProfile: 'quality',
             modelsUsed: 'multiple',
@@ -208,4 +215,3 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
     }
   );
 }
-

@@ -120,7 +120,9 @@ describe('DeepSeek adapter — REL-02 resilience wiring', () => {
       await expect(adapter.chatCompletion(CHAT_REQUEST)).rejects.toThrow();
     }
 
-    expect((await distributedCircuitBreakerManager.getBreaker(DEEPSEEK_BREAKER).getStats()).state).toBe('OPEN');
+    expect(
+      (await distributedCircuitBreakerManager.getBreaker(DEEPSEEK_BREAKER).getStats()).state
+    ).toBe('OPEN');
     // Isolation: the other provider's breaker is untouched.
     expect((await siblingBreaker.getStats()).state).toBe('CLOSED');
   });

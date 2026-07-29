@@ -38,11 +38,14 @@ import {
 // the REAL aggregator runs, LLM synthesis fails, and the fallback concatenation
 // breaks the SENTINEL_SYNTHESIS asserts.
 vi.mock('@/core/aggregation/response-aggregator', async () =>
-  (await import('./consensus-module-mocks')).responseAggregatorModuleMock());
+  (await import('./consensus-module-mocks')).responseAggregatorModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-shadow', async () =>
-  (await import('./consensus-module-mocks')).ensembleShadowModuleMock());
+  (await import('./consensus-module-mocks')).ensembleShadowModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-client', async () =>
-  (await import('./consensus-module-mocks')).ensembleClientModuleMock());
+  (await import('./consensus-module-mocks')).ensembleClientModuleMock()
+);
 
 // Long enough to clear the outlier length threshold.
 const pad = 'Detailed reasoning about the task, long enough to clear the outlier threshold. ';

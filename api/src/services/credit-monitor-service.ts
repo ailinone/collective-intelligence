@@ -64,9 +64,7 @@ export class CreditMonitorService {
     if (this.probeIntervalHandle) return;
 
     this.probeIntervalHandle = setInterval(() => {
-      this.probeAll().catch(err =>
-        log.warn({ error: String(err) }, 'Credit probe cycle failed')
-      );
+      this.probeAll().catch((err) => log.warn({ error: String(err) }, 'Credit probe cycle failed'));
     }, this.probeIntervalMs);
     this.probeIntervalHandle.unref();
 
@@ -187,7 +185,10 @@ export class CreditMonitorService {
             stateChanges++;
             if (hasCredits) {
               this.noCreditsSet.delete(normalized);
-              log.info({ provider: normalized, balance: result.balance }, 'Provider credit RESTORED');
+              log.info(
+                { provider: normalized, balance: result.balance },
+                'Provider credit RESTORED'
+              );
             } else {
               this.noCreditsSet.add(normalized);
               log.warn({ provider: normalized }, 'Provider credit EXHAUSTED (detected by probe)');
@@ -219,17 +220,28 @@ export class CreditMonitorService {
    */
   private async propagateToDiscovery(providerId: string, hasCredits: boolean): Promise<void> {
     try {
-      const { getCentralModelDiscoveryService } = await import('@/services/central-model-discovery-service');
+      const { getCentralModelDiscoveryService } =
+        await import('@/services/central-model-discovery-service');
       const discovery = await getCentralModelDiscoveryService();
       if (hasCredits) {
         // Restore credit status in discovery service's balance map
         // This clears the no-credits mark so models become eligible again
-        if (typeof (narrowAs<Record<string, unknown>>(discovery)).providerBalanceStatus === 'object') {
-          const balanceMap = (narrowAs<{ providerBalanceStatus: Map<string, { hasCredits: boolean; balance?: number; currency?: string }> }>(discovery)).providerBalanceStatus;
+        if (
+          typeof narrowAs<Record<string, unknown>>(discovery).providerBalanceStatus === 'object'
+        ) {
+          const balanceMap = narrowAs<{
+            providerBalanceStatus: Map<
+              string,
+              { hasCredits: boolean; balance?: number; currency?: string }
+            >;
+          }>(discovery).providerBalanceStatus;
           balanceMap.set(providerId, { hasCredits: true, balance: undefined, currency: undefined });
           log.info({ provider: providerId }, 'Credit restored — discovery balance status updated');
         } else {
-          log.info({ provider: providerId }, 'Credit restored — discovery will update on next enrichment');
+          log.info(
+            { provider: providerId },
+            'Credit restored — discovery will update on next enrichment'
+          );
         }
       } else {
         if (typeof discovery.markProviderNoCredits === 'function') {

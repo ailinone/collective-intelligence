@@ -117,15 +117,16 @@ export async function runMetadataBackfillNow(): Promise<BackfillStats> {
           ${cursor ? 'AND uid > $1' : ''}
           ORDER BY uid ASC
           LIMIT ${BATCH_SIZE}`,
-        ...(cursor ? [cursor] : []),
+        ...(cursor ? [cursor] : [])
       );
 
     if (batch.length === 0) break;
 
     for (const row of batch) {
-      const meta = (row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
-        ? (row.metadata as Record<string, unknown>)
-        : {});
+      const meta =
+        row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+          ? (row.metadata as Record<string, unknown>)
+          : {};
       const caps = Array.isArray(row.capabilities)
         ? (row.capabilities as unknown[]).filter((c): c is string => typeof c === 'string')
         : [];

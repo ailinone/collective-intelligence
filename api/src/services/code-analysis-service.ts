@@ -9,7 +9,7 @@
 
 /**
  * Code Analysis Service
- * 
+ *
  * Processes and stores code analysis results from CLI
  * Supports:
  * - Symbol storage and retrieval
@@ -33,7 +33,17 @@ const log = logger.child({ component: 'code-analysis-service' });
 export interface SymbolPayload {
   name: string;
   qualifiedName?: string;
-  type: 'function' | 'method' | 'class' | 'variable' | 'interface' | 'enum' | 'constant' | 'type' | 'import' | 'export';
+  type:
+    | 'function'
+    | 'method'
+    | 'class'
+    | 'variable'
+    | 'interface'
+    | 'enum'
+    | 'constant'
+    | 'type'
+    | 'import'
+    | 'export';
   kind?: string;
   startLine: number;
   endLine: number;
@@ -53,7 +63,8 @@ export interface DependencyPayload {
   targetFilePath?: string;
   sourceSymbolName?: string;
   targetSymbolName?: string;
-  dependencyType: 'import' | 'export' | 'call' | 'inherit' | 'implement' | 'reference' | 'type_reference';
+  dependencyType:
+    'import' | 'export' | 'call' | 'inherit' | 'implement' | 'reference' | 'type_reference';
   importPath?: string;
   isExternal?: boolean;
   isDynamic?: boolean;
@@ -152,33 +163,32 @@ async function processIncrementalSync(
   const indexingService = new IncrementalIndexingService();
 
   // Get checkpoint state
-  const checkpoint = await indexingService.getOrCreateCheckpoint(
-    projectId,
-    branch || 'default'
-  );
+  const checkpoint = await indexingService.getOrCreateCheckpoint(projectId, branch || 'default');
 
   // Detect changed files
   const changes = indexingService.detectChangedFiles(
     checkpoint,
-    incomingFiles.map(f => ({ filePath: f.filePath, checksum: f.checksum }))
+    incomingFiles.map((f) => ({ filePath: f.filePath, checksum: f.checksum }))
   );
 
-  log.info({
-    projectId,
-    new: changes.newFiles.length,
-    modified: changes.modifiedFiles.length,
-    deleted: changes.deletedFiles.length,
-    unchanged: changes.unchangedFiles.length,
-    changeRate: changes.changeRate.toFixed(2),
-  }, 'Incremental sync change detection');
+  log.info(
+    {
+      projectId,
+      new: changes.newFiles.length,
+      modified: changes.modifiedFiles.length,
+      deleted: changes.deletedFiles.length,
+      unchanged: changes.unchangedFiles.length,
+      changeRate: changes.changeRate.toFixed(2),
+    },
+    'Incremental sync change detection'
+  );
 
   let symbolsCreated = 0;
   let dependenciesCreated = 0;
 
   // Process new and modified files only
-  const filesToProcess = incomingFiles.filter(f =>
-    changes.newFiles.includes(f.filePath) ||
-    changes.modifiedFiles.includes(f.filePath)
+  const filesToProcess = incomingFiles.filter(
+    (f) => changes.newFiles.includes(f.filePath) || changes.modifiedFiles.includes(f.filePath)
   );
 
   for (const fileAnalysis of filesToProcess) {
@@ -199,11 +209,8 @@ async function processIncrementalSync(
       // Delete dependencies
       await tx.codebaseDependency.deleteMany({
         where: {
-          OR: [
-            { sourceFileId: file.id },
-            { targetFileId: file.id }
-          ]
-        }
+          OR: [{ sourceFileId: file.id }, { targetFileId: file.id }],
+        },
       });
 
       log.debug({ projectId, filePath: deletedPath }, 'Cleaned up deleted file');
@@ -212,12 +219,12 @@ async function processIncrementalSync(
 
   // Update checkpoint with new file hashes
   const newFileHashes = new Map(checkpoint.fileHashes);
-  incomingFiles.forEach(f => {
+  incomingFiles.forEach((f) => {
     newFileHashes.set(f.filePath, f.checksum);
   });
 
   // Remove deleted files from hashes
-  changes.deletedFiles.forEach(deletedPath => {
+  changes.deletedFiles.forEach((deletedPath) => {
     newFileHashes.delete(deletedPath);
   });
 
@@ -251,13 +258,18 @@ This function was duplicated. Using the newer version below.
 /**
  * Validate analysis payload before processing
  */
-function validateAnalysisPayload(
-  request: AnalysisSyncRequest
-): { valid: boolean; errors: string[] } {
+function validateAnalysisPayload(request: AnalysisSyncRequest): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors: string[] = [];
 
   // Validate projectId
-  if (!request.projectId || typeof request.projectId !== 'string' || request.projectId.trim().length === 0) {
+  if (
+    !request.projectId ||
+    typeof request.projectId !== 'string' ||
+    request.projectId.trim().length === 0
+  ) {
     errors.push('projectId is required and must be a non-empty string');
   }
 
@@ -284,12 +296,18 @@ function validateAnalysisPayload(
       const prefix = `files[${i}]`;
 
       // Required fields
-      if (!file.filePath || typeof file.filePath !== 'string' || file.filePath.trim().length === 0) {
+      if (
+        !file.filePath ||
+        typeof file.filePath !== 'string' ||
+        file.filePath.trim().length === 0
+      ) {
         errors.push(`${prefix}.filePath is required and must be a non-empty string`);
       }
 
       if (!file.checksum || typeof file.checksum !== 'string' || file.checksum.length !== 64) {
-        errors.push(`${prefix}.checksum is required and must be a valid SHA-256 hash (64 characters)`);
+        errors.push(
+          `${prefix}.checksum is required and must be a valid SHA-256 hash (64 characters)`
+        );
       }
 
       if (typeof file.lineCount !== 'number' || file.lineCount < 0) {
@@ -321,16 +339,27 @@ function validateAnalysisPayload(
           }
 
           // Optional fields validation
-          if (symbol.startColumn !== undefined && (typeof symbol.startColumn !== 'number' || symbol.startColumn < 0)) {
+          if (
+            symbol.startColumn !== undefined &&
+            (typeof symbol.startColumn !== 'number' || symbol.startColumn < 0)
+          ) {
             errors.push(`${symbolPrefix}.startColumn must be a non-negative number if provided`);
           }
 
-          if (symbol.endColumn !== undefined && (typeof symbol.endColumn !== 'number' || symbol.endColumn < 0)) {
+          if (
+            symbol.endColumn !== undefined &&
+            (typeof symbol.endColumn !== 'number' || symbol.endColumn < 0)
+          ) {
             errors.push(`${symbolPrefix}.endColumn must be a non-negative number if provided`);
           }
 
-          if (symbol.visibility !== undefined && !['public', 'private', 'protected', 'internal'].includes(symbol.visibility)) {
-            errors.push(`${symbolPrefix}.visibility must be one of: public, private, protected, internal`);
+          if (
+            symbol.visibility !== undefined &&
+            !['public', 'private', 'protected', 'internal'].includes(symbol.visibility)
+          ) {
+            errors.push(
+              `${symbolPrefix}.visibility must be one of: public, private, protected, internal`
+            );
           }
 
           if (symbol.isAsync !== undefined && typeof symbol.isAsync !== 'boolean') {
@@ -355,8 +384,21 @@ function validateAnalysisPayload(
           const dep = file.dependencies[j];
           const depPrefix = `${prefix}.dependencies[${j}]`;
 
-          if (!dep.dependencyType || !['import', 'export', 'call', 'inherit', 'implement', 'reference', 'type_reference'].includes(dep.dependencyType)) {
-            errors.push(`${depPrefix}.dependencyType is required and must be one of: import, export, call, inherit, implement, reference, type_reference`);
+          if (
+            !dep.dependencyType ||
+            ![
+              'import',
+              'export',
+              'call',
+              'inherit',
+              'implement',
+              'reference',
+              'type_reference',
+            ].includes(dep.dependencyType)
+          ) {
+            errors.push(
+              `${depPrefix}.dependencyType is required and must be one of: import, export, call, inherit, implement, reference, type_reference`
+            );
           }
 
           if (dep.isExternal !== undefined && typeof dep.isExternal !== 'boolean') {
@@ -393,17 +435,19 @@ export async function syncCodeAnalysis(
   // Validate payload first
   const validation = validateAnalysisPayload(request);
   if (!validation.valid) {
-    log.warn({
-      organizationId,
-      projectId: request.projectId,
-      errors: validation.errors,
-    }, 'Invalid code analysis payload');
+    log.warn(
+      {
+        organizationId,
+        projectId: request.projectId,
+        errors: validation.errors,
+      },
+      'Invalid code analysis payload'
+    );
 
     // Use ValidationError so route handlers can map to HTTP 400 instead of 500.
-    throw new ValidationError(
-      `Invalid payload: ${validation.errors.join(', ')}`,
-      { errors: validation.errors }
-    );
+    throw new ValidationError(`Invalid payload: ${validation.errors.join(', ')}`, {
+      errors: validation.errors,
+    });
   }
 
   // Decide processing mode
@@ -411,20 +455,28 @@ export async function syncCodeAnalysis(
 
   if (useAsync && options.worker) {
     // Process asynchronously
-    log.info({
-      organizationId,
-      projectId: request.projectId,
-      fileCount: request.files.length,
-      isIncremental: request.isIncremental,
-    }, 'Enqueueing analysis for async processing');
+    log.info(
+      {
+        organizationId,
+        projectId: request.projectId,
+        fileCount: request.files.length,
+        isIncremental: request.isIncremental,
+      },
+      'Enqueueing analysis for async processing'
+    );
 
     // Type guard: check if worker has enqueueAnalysis method.
     // The structural narrow gives us the function but its return is
     // `unknown` until we cast it explicitly.
-    if (typeof options.worker === 'object' && options.worker !== null && 'enqueueAnalysis' in options.worker && typeof options.worker.enqueueAnalysis === 'function') {
+    if (
+      typeof options.worker === 'object' &&
+      options.worker !== null &&
+      'enqueueAnalysis' in options.worker &&
+      typeof options.worker.enqueueAnalysis === 'function'
+    ) {
       const enqueue = options.worker.enqueueAnalysis as (
         orgId: string,
-        req: typeof request,
+        req: typeof request
       ) => Promise<string>;
       const jobId: string = await enqueue(organizationId, request);
 
@@ -446,13 +498,16 @@ export async function syncCodeAnalysis(
   let symbolsCreated = 0;
   let dependenciesCreated = 0;
 
-  log.info({
-    organizationId,
-    projectId: request.projectId,
-    branch: request.branch,
-    fileCount: request.files.length,
-    isIncremental: request.isIncremental,
-  }, 'Processing code analysis sync synchronously');
+  log.info(
+    {
+      organizationId,
+      projectId: request.projectId,
+      branch: request.branch,
+      fileCount: request.files.length,
+      isIncremental: request.isIncremental,
+    },
+    'Processing code analysis sync synchronously'
+  );
 
   // Find project
   const project = await prisma.codebaseProject.findFirst({
@@ -468,7 +523,11 @@ export async function syncCodeAnalysis(
   }
 
   // Get or create checkpoint
-  const checkpoint = await getOrCreateCheckpoint(project.id, request.branch || 'default', request.commitSha);
+  const checkpoint = await getOrCreateCheckpoint(
+    project.id,
+    request.branch || 'default',
+    request.commitSha
+  );
 
   try {
     // Update checkpoint status
@@ -491,13 +550,16 @@ export async function syncCodeAnalysis(
       dependenciesCreated = result.dependenciesCreated;
     } else {
       // Full sync - process all files
-      await prisma.$transaction(async (tx) => {
-        for (const fileAnalysis of request.files) {
-          const result = await processFileAnalysis(tx, project.id, fileAnalysis, warnings);
-          symbolsCreated += result.symbolsCreated;
-          dependenciesCreated += result.dependenciesCreated;
-        }
-      }, { timeout: 120000 }); // 2 minute timeout for large batches
+      await prisma.$transaction(
+        async (tx) => {
+          for (const fileAnalysis of request.files) {
+            const result = await processFileAnalysis(tx, project.id, fileAnalysis, warnings);
+            symbolsCreated += result.symbolsCreated;
+            dependenciesCreated += result.dependenciesCreated;
+          }
+        },
+        { timeout: 120000 }
+      ); // 2 minute timeout for large batches
 
       // Update checkpoint with results for full sync
       await prisma.codebaseCheckpoint.update({
@@ -508,25 +570,31 @@ export async function syncCodeAnalysis(
           fileCount: request.files.length,
           symbolCount: symbolsCreated,
           dependencyCount: dependenciesCreated,
-          fileHashes: request.files.reduce((acc, f) => {
-            acc[f.filePath] = f.checksum;
-            return acc;
-          }, {} as Record<string, string>),
+          fileHashes: request.files.reduce(
+            (acc, f) => {
+              acc[f.filePath] = f.checksum;
+              return acc;
+            },
+            {} as Record<string, string>
+          ),
         },
       });
     }
 
-    const filesProcessed = request.isIncremental ?
-      request.files.length : // For incremental, this is the number of files sent (may be less than total)
-      request.files.length;   // For full sync, this is all files
+    const filesProcessed = request.isIncremental
+      ? request.files.length // For incremental, this is the number of files sent (may be less than total)
+      : request.files.length; // For full sync, this is all files
 
-    log.info({
-      projectId: project.id,
-      filesProcessed,
-      symbolsCreated,
-      dependenciesCreated,
-      isIncremental: request.isIncremental,
-    }, 'Code analysis sync completed');
+    log.info(
+      {
+        projectId: project.id,
+        filesProcessed,
+        symbolsCreated,
+        dependenciesCreated,
+        isIncremental: request.isIncremental,
+      },
+      'Code analysis sync completed'
+    );
 
     return {
       success: true,
@@ -702,12 +770,15 @@ export async function semanticSearch(
 ): Promise<SemanticSearchResult[]> {
   const limit = Math.min(Math.max(options.limit || 20, 1), 100);
 
-  log.debug({
-    organizationId: options.organizationId,
-    projectId: options.projectId,
-    query: options.query,
-    limit,
-  }, 'Executing semantic search');
+  log.debug(
+    {
+      organizationId: options.organizationId,
+      projectId: options.projectId,
+      query: options.query,
+      limit,
+    },
+    'Executing semantic search'
+  );
 
   // Find project
   const project = await prisma.codebaseProject.findFirst({
@@ -723,14 +794,16 @@ export async function semanticSearch(
   }
 
   // Use raw query for advanced search with full-text and trigram
-  const results = await prisma.$queryRaw<Array<{
-    file_id: string;
-    file_path: string;
-    content_snippet: string | null;
-    symbol_matches: unknown;
-    relevance_score: number;
-    match_type: string;
-  }>>`
+  const results = await prisma.$queryRaw<
+    Array<{
+      file_id: string;
+      file_path: string;
+      content_snippet: string | null;
+      symbol_matches: unknown;
+      relevance_score: number;
+      match_type: string;
+    }>
+  >`
     SELECT * FROM search_codebase_semantic(
       ${project.id}::uuid,
       ${options.query}::text,
@@ -742,8 +815,8 @@ export async function semanticSearch(
     fileId: row.file_id,
     filePath: row.file_path,
     contentSnippet: row.content_snippet || undefined,
-    symbolMatches: Array.isArray(row.symbol_matches) 
-      ? (row.symbol_matches as Array<{ name: string; type: string; line: number }>).map(s => ({
+    symbolMatches: Array.isArray(row.symbol_matches)
+      ? (row.symbol_matches as Array<{ name: string; type: string; line: number }>).map((s) => ({
           name: s.name,
           type: s.type,
           line: s.line,
@@ -777,16 +850,18 @@ export async function findSymbolReferences(
     return [];
   }
 
-  const results = await prisma.$queryRaw<Array<{
-    symbol_id: string;
-    file_path: string;
-    symbol_name: string;
-    symbol_type: string;
-    start_line: number;
-    end_line: number;
-    is_definition: boolean;
-    reference_count: bigint;
-  }>>`
+  const results = await prisma.$queryRaw<
+    Array<{
+      symbol_id: string;
+      file_path: string;
+      symbol_name: string;
+      symbol_type: string;
+      start_line: number;
+      end_line: number;
+      is_definition: boolean;
+      reference_count: bigint;
+    }>
+  >`
     SELECT * FROM find_symbol_references(
       ${project.id}::uuid,
       ${symbolName}::text,
@@ -828,13 +903,15 @@ export async function getDependencyGraph(
     return [];
   }
 
-  const results = await prisma.$queryRaw<Array<{
-    source_file: string;
-    target_file: string;
-    dependency_type: string;
-    import_path: string | null;
-    depth: number;
-  }>>`
+  const results = await prisma.$queryRaw<
+    Array<{
+      source_file: string;
+      target_file: string;
+      dependency_type: string;
+      import_path: string | null;
+      depth: number;
+    }>
+  >`
     SELECT * FROM get_dependency_graph(
       ${project.id}::uuid,
       ${filePath || null}::text,
@@ -859,15 +936,17 @@ export async function getFileSymbols(
   projectId: string,
   filePath: string,
   branch?: string
-): Promise<Array<{
-  id: string;
-  name: string;
-  type: string;
-  startLine: number;
-  endLine: number;
-  signature?: string;
-  isExported: boolean;
-}>> {
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    type: string;
+    startLine: number;
+    endLine: number;
+    signature?: string;
+    isExported: boolean;
+  }>
+> {
   const file = await prisma.codebaseFile.findFirst({
     where: {
       project: {
@@ -1022,4 +1101,3 @@ export async function getProjectStats(
     symbolTypeDistribution,
   };
 }
-

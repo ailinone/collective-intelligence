@@ -31,8 +31,10 @@ requestAnimationFrame(loop);
 </script></body></html>
 \`\`\``;
 
-const BROKEN_PROSE = 'Here is how you could build it: first set up a canvas, then add physics. (No code provided.)';
-const PARTIAL_NO_LOOP = '<canvas id="c"></canvas><script>const ctx = c.getContext("2d"); ctx.fillRect(0,0,10,10);</script>';
+const BROKEN_PROSE =
+  'Here is how you could build it: first set up a canvas, then add physics. (No code provided.)';
+const PARTIAL_NO_LOOP =
+  '<canvas id="c"></canvas><script>const ctx = c.getContext("2d"); ctx.fillRect(0,0,10,10);</script>';
 // Passes the binary structural floor (all three needles present) but is a stub —
 // the truncated/barely-passing artefact the first-passer defect used to serve.
 const TRUNCATED_PASSER =
@@ -68,13 +70,13 @@ describe('best-of-N with scope=full (code artefacts)', () => {
 describe('selectWithVerification with scope=full', () => {
   it('overrides a broken synthesis to the working voter', () => {
     const r = selectWithVerification({
-      synthesisText: BROKEN_PROSE,          // synthesis came out broken
+      synthesisText: BROKEN_PROSE, // synthesis came out broken
       candidateTexts: [PARTIAL_NO_LOOP, WORKING],
       checker,
       scope: 'full',
     });
     expect(r.decision).toBe('override_to_voter');
-    expect(r.voterIndex).toBe(1);           // the WORKING voter
+    expect(r.voterIndex).toBe(1); // the WORKING voter
     expect(r.synthesisVerified).toBe(false);
   });
 
@@ -161,7 +163,7 @@ const COMPLETION_SIGNALS = ['</html>', '</script>'] as const;
 // shape a maxTokens clip produces: all three needles present, no closing tag.
 const CLIPPED = WORKING.slice(
   0,
-  WORKING.lastIndexOf('requestAnimationFrame(loop);') + 'requestAnimationFrame(loop);'.length,
+  WORKING.lastIndexOf('requestAnimationFrame(loop);') + 'requestAnimationFrame(loop);'.length
 );
 
 // Prose that merely NAMES the three APIs — passes contains_all, is not a file.

@@ -72,9 +72,24 @@ export function looksLikeAliasMismatch(input: AliasMismatchInput): boolean {
     // Single-prefix providers that DO accept prefix (hub-style): vercel-ai-gateway,
     // openrouter, edenai, aihubmix, etc. Native providers do NOT accept prefix.
     const NATIVE_PROVIDERS_REJECTING_PREFIX = new Set([
-      'openai', 'anthropic', 'google', 'xai', 'mistral', 'cohere', 'deepseek',
-      'fireworks-ai', 'huggingface', 'nvidia', 'sambanova', 'togetherai',
-      'cerebras', 'groq', 'perplexity', 'replicate', 'inworld', 'azure-openai',
+      'openai',
+      'anthropic',
+      'google',
+      'xai',
+      'mistral',
+      'cohere',
+      'deepseek',
+      'fireworks-ai',
+      'huggingface',
+      'nvidia',
+      'sambanova',
+      'togetherai',
+      'cerebras',
+      'groq',
+      'perplexity',
+      'replicate',
+      'inworld',
+      'azure-openai',
     ]);
     if (NATIVE_PROVIDERS_REJECTING_PREFIX.has(providerId)) return true;
   }
@@ -91,15 +106,24 @@ export function looksLikeAliasMismatch(input: AliasMismatchInput): boolean {
       if (input.discoveredModelIds.some((d) => d.toLowerCase() === bare)) return true;
     }
     // Also try removing the `<providerId>-` infix.
-    const stripped = modelId.replace(new RegExp(`^${providerId}[/-]`), '').replace(new RegExp(`^${providerId}-`), '');
-    if (stripped !== modelId && input.discoveredModelIds.some((d) => d.toLowerCase() === stripped.toLowerCase())) {
+    const stripped = modelId
+      .replace(new RegExp(`^${providerId}[/-]`), '')
+      .replace(new RegExp(`^${providerId}-`), '');
+    if (
+      stripped !== modelId &&
+      input.discoveredModelIds.some((d) => d.toLowerCase() === stripped.toLowerCase())
+    ) {
       return true;
     }
   }
 
   // Signal 5 — error message indicates exact string mismatch.
   const err = (input.errorMessage ?? '').toLowerCase();
-  if (err.includes('model not found') || err.includes('no provider supports') || err.includes('model_not_supported')) {
+  if (
+    err.includes('model not found') ||
+    err.includes('no provider supports') ||
+    err.includes('model_not_supported')
+  ) {
     // The error mentions the model wasn't found. If the catalog id has
     // any structural oddity (slash, double prefix), it's likely alias.
     if (modelId.includes('/')) return true;

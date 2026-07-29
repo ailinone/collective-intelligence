@@ -22,7 +22,7 @@ import { resolve } from 'node:path';
 function manifestBoundaryViolations(
   plan: { selectedCandidates: { candidateId: string; providerId: string }[] },
   allowedCandidateIds: Set<string>,
-  allowedProviderIds: Set<string>,
+  allowedProviderIds: Set<string>
 ): string[] {
   const v: string[] = [];
   for (const c of plan.selectedCandidates) {
@@ -31,9 +31,15 @@ function manifestBoundaryViolations(
   }
   return v;
 }
-const fanoutViolation = (plan: { fanout: number; fanoutCap: number }) => plan.fanout > plan.fanoutCap;
-const judgeSynthViolation = (policy: { fixedJudgeUsed?: boolean; fixedSynthesizerUsed?: boolean; sameModelSelectedReason?: unknown }) =>
-  policy.fixedJudgeUsed === true || (policy.fixedSynthesizerUsed === true && !policy.sameModelSelectedReason);
+const fanoutViolation = (plan: { fanout: number; fanoutCap: number }) =>
+  plan.fanout > plan.fanoutCap;
+const judgeSynthViolation = (policy: {
+  fixedJudgeUsed?: boolean;
+  fixedSynthesizerUsed?: boolean;
+  sameModelSelectedReason?: unknown;
+}) =>
+  policy.fixedJudgeUsed === true ||
+  (policy.fixedSynthesizerUsed === true && !policy.sameModelSelectedReason);
 
 const ANTI_EXEC_PATTERNS: [string, RegExp][] = [
   ['dryRunFalse', /"dryRun"\s*:\s*false|dryRun=false/i],
@@ -41,22 +47,37 @@ const ANTI_EXEC_PATTERNS: [string, RegExp][] = [
   ['c3ExecutionAuthorizedTrue', /"c3ExecutionAuthorized"\s*:\s*true/i],
   ['costPositive', /"cost_usd"\s*:\s*(?!0(?:\.0+)?(?:[,}\s\]]|$))[0-9.]+/i],
 ];
-const antiExecScan = (text: string) => ANTI_EXEC_PATTERNS.filter(([, re]) => re.test(text)).map(([n]) => n);
+const antiExecScan = (text: string) =>
+  ANTI_EXEC_PATTERNS.filter(([, re]) => re.test(text)).map(([n]) => n);
 
 describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — safety gates', () => {
   describe('manifest boundary', () => {
     const allowedC = new Set(['cand_a']);
     const allowedP = new Set(['prov_a']);
     it('case 16: blocks a provider outside the manifest', () => {
-      const v = manifestBoundaryViolations({ selectedCandidates: [{ candidateId: 'cand_a', providerId: 'rogue' }] }, allowedC, allowedP);
+      const v = manifestBoundaryViolations(
+        { selectedCandidates: [{ candidateId: 'cand_a', providerId: 'rogue' }] },
+        allowedC,
+        allowedP
+      );
       expect(v).toContain('provider_outside_manifest');
     });
     it('case 17: blocks a candidate outside the manifest', () => {
-      const v = manifestBoundaryViolations({ selectedCandidates: [{ candidateId: 'rogue', providerId: 'prov_a' }] }, allowedC, allowedP);
+      const v = manifestBoundaryViolations(
+        { selectedCandidates: [{ candidateId: 'rogue', providerId: 'prov_a' }] },
+        allowedC,
+        allowedP
+      );
       expect(v).toContain('candidate_outside_manifest');
     });
     it('passes an in-manifest candidate', () => {
-      expect(manifestBoundaryViolations({ selectedCandidates: [{ candidateId: 'cand_a', providerId: 'prov_a' }] }, allowedC, allowedP)).toEqual([]);
+      expect(
+        manifestBoundaryViolations(
+          { selectedCandidates: [{ candidateId: 'cand_a', providerId: 'prov_a' }] },
+          allowedC,
+          allowedP
+        )
+      ).toEqual([]);
     });
   });
 
@@ -74,7 +95,12 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — safety gates', () => {
     });
     it('case 21: fixed synthesizer without justification fails; with reason passes', () => {
       expect(judgeSynthViolation({ fixedSynthesizerUsed: true })).toBe(true);
-      expect(judgeSynthViolation({ fixedSynthesizerUsed: true, sameModelSelectedReason: 'best reasoning prior, score breakdown attached' })).toBe(false);
+      expect(
+        judgeSynthViolation({
+          fixedSynthesizerUsed: true,
+          sameModelSelectedReason: 'best reasoning prior, score breakdown attached',
+        })
+      ).toBe(false);
     });
   });
 
@@ -90,14 +116,25 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — safety gates', () => {
       expect(antiExecScan(JSON.stringify({ dryRun: false }))).toContain('dryRunFalse');
     });
     it('case 28: flags providerCallExecuted=true', () => {
-      expect(antiExecScan(JSON.stringify({ providerCallExecuted: true }))).toContain('providerCallExecutedTrue');
+      expect(antiExecScan(JSON.stringify({ providerCallExecuted: true }))).toContain(
+        'providerCallExecutedTrue'
+      );
     });
     it('case 29: flags cost_usd > 0; ignores cost_usd = 0', () => {
       expect(antiExecScan(JSON.stringify({ cost_usd: 0.0001 }))).toContain('costPositive');
       expect(antiExecScan(JSON.stringify({ cost_usd: 0 }))).not.toContain('costPositive');
     });
     it('a clean plan-only record yields no findings', () => {
-      expect(antiExecScan(JSON.stringify({ dryRun: true, planOnly: true, c3ExecutionAuthorized: false, cost_usd: 0 }))).toEqual([]);
+      expect(
+        antiExecScan(
+          JSON.stringify({
+            dryRun: true,
+            planOnly: true,
+            c3ExecutionAuthorized: false,
+            cost_usd: 0,
+          })
+        )
+      ).toEqual([]);
     });
   });
 
@@ -113,7 +150,9 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — safety gates', () => {
     'final',
   ];
   const artifacts = names
-    .map((n) => resolve(process.cwd(), 'tmp', `01c1b-c3-dryrun-plan-validation-${n}-validator.json`))
+    .map((n) =>
+      resolve(process.cwd(), 'tmp', `01c1b-c3-dryrun-plan-validation-${n}-validator.json`)
+    )
     .filter((p) => existsSync(p))
     .map((p) => JSON.parse(readFileSync(p, 'utf8')));
   const maybe = artifacts.length === names.length ? describe : describe.skip;

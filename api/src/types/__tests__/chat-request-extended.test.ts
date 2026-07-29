@@ -43,4 +43,3 @@ describe('chat-request-extended', () => {
     expect(getUserSpecifiedModelFlag(request)).toBe(false);
   });
 });
-

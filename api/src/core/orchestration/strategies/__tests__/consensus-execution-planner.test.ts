@@ -81,9 +81,33 @@ describe('ConsensusExecutionPlanner', () => {
   it('records blocker when no JSON-capable judge exists', async () => {
     const planner = new ConsensusExecutionPlanner(new ModelRoleResolver());
     const noJudgePool = [
-      makeCandidate({ id: 'p1', model: makeModel({ id: 'p1', provider: 'p1', capabilities: ['chat', 'text_generation'] as ModelCapability[], contextWindow: 128000 }) }),
-      makeCandidate({ id: 'p2', model: makeModel({ id: 'p2', provider: 'p2', capabilities: ['chat', 'text_generation'] as ModelCapability[], contextWindow: 128000 }) }),
-      makeCandidate({ id: 'p3', model: makeModel({ id: 'p3', provider: 'p3', capabilities: ['chat', 'text_generation'] as ModelCapability[], contextWindow: 128000 }) }),
+      makeCandidate({
+        id: 'p1',
+        model: makeModel({
+          id: 'p1',
+          provider: 'p1',
+          capabilities: ['chat', 'text_generation'] as ModelCapability[],
+          contextWindow: 128000,
+        }),
+      }),
+      makeCandidate({
+        id: 'p2',
+        model: makeModel({
+          id: 'p2',
+          provider: 'p2',
+          capabilities: ['chat', 'text_generation'] as ModelCapability[],
+          contextWindow: 128000,
+        }),
+      }),
+      makeCandidate({
+        id: 'p3',
+        model: makeModel({
+          id: 'p3',
+          provider: 'p3',
+          capabilities: ['chat', 'text_generation'] as ModelCapability[],
+          contextWindow: 128000,
+        }),
+      }),
     ];
     const plan = await planner.plan({
       taskProfile: { taskType: 'analysis' },

@@ -10,13 +10,13 @@
 /**
  * Moderations API Routes
  * OpenAI-compatible content moderation endpoints
- * 
+ *
  * Features:
  * - Multi-provider orchestration (OpenAI Moderation, Google Safety, Azure Content Safety, etc.)
  * - Dynamic model selection based on capabilities
  * - Detects hate, harassment, self-harm, sexual, violence, etc.
  * - Multi-language support
- * 
+ *
  * NO HARDCODED MODELS - All model selection is dynamic via capabilities
  */
 
@@ -49,10 +49,7 @@ const log = logger.child({ module: 'moderations-routes' });
 // ============================================
 
 const ModerationRequestSchema = z.object({
-  input: z.union([
-    z.string(),
-    z.array(z.string()),
-  ]),
+  input: z.union([z.string(), z.array(z.string())]),
   model: z.string().optional().default('auto'), // 'auto' triggers dynamic selection
   // Optional per-tenant custom policy. When set, the policy is loaded (org-scoped)
   // and its thresholds / custom categories are layered on top of the base result.
@@ -116,37 +113,41 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
     schema: {
       tags: ['Moderations'],
       summary: 'Classify content for policy violations',
-      description: 'Classifies if text violates content policy using multi-provider orchestration. Automatically selects the best moderation model based on language and content type.',
+      description:
+        'Classifies if text violates content policy using multi-provider orchestration. Automatically selects the best moderation model based on language and content type.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
         required: ['input'],
         properties: {
-          input: { 
+          input: {
             anyOf: [
-              { 
+              {
                 type: 'string',
                 description: 'Single text string to classify for policy violations',
               },
-              { 
-                type: 'array', 
-                items: { 
+              {
+                type: 'array',
+                items: {
                   type: 'string',
                   description: 'Text string in the array',
                 },
                 description: 'Array of text strings to classify (batch moderation)',
               },
             ],
-            description: 'Text to classify for policy violations. Can be a single string or array of strings for batch processing.',
+            description:
+              'Text to classify for policy violations. Can be a single string or array of strings for batch processing.',
           },
           model: {
             type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across multiple moderation providers.',
+            description:
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across multiple moderation providers.',
           },
           policy_id: {
             type: 'string',
-            description: 'Optional ID of a custom per-tenant moderation policy (created via POST /v1/moderations/policies). When set, the policy thresholds and custom categories are layered on top of the base result. Omit for the default OpenAI-style behavior.',
+            description:
+              'Optional ID of a custom per-tenant moderation policy (created via POST /v1/moderations/policies). When set, the policy thresholds and custom categories are layered on top of the base result. Omit for the default OpenAI-style behavior.',
           },
         },
       },
@@ -170,12 +171,14 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
                   flagged: { type: 'boolean', description: 'Whether content was flagged' },
                   blocked: {
                     type: 'boolean',
-                    description: "Present only when a policy with action='block' flagged the content. Signals the caller MUST reject it.",
+                    description:
+                      "Present only when a policy with action='block' flagged the content. Signals the caller MUST reject it.",
                   },
                   policy_triggered: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Category keys re-flagged by the applied custom policy (threshold re-flags + custom-category matches). Present only when a policy_id was applied.',
+                    description:
+                      'Category keys re-flagged by the applied custom policy (threshold re-flags + custom-category matches). Present only when a policy_id was applied.',
                   },
                   categories: {
                     type: 'object',
@@ -217,7 +220,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
             _ailin: {
               type: 'object',
               additionalProperties: true,
-              description: 'Ailin diagnostics: provider used, duration, and the applied policy (when a policy_id was supplied).',
+              description:
+                'Ailin diagnostics: provider used, duration, and the applied policy (when a policy_id was supplied).',
             },
           },
         },
@@ -228,9 +232,15 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_input", "empty_input")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_input", "empty_input")',
+                },
               },
             },
           },
@@ -256,7 +266,10 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -270,7 +283,10 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -283,7 +299,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
     handler: async (request: FastifyRequest<{ Body: ModerationRequest }>, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;
-      const userContext: OrchestrationContext = extendedRequest.userContext || createOrchestrationContext(request);
+      const userContext: OrchestrationContext =
+        extendedRequest.userContext || createOrchestrationContext(request);
 
       log.info({ requestId, model: request.body.model }, 'Moderation request received');
 
@@ -349,15 +366,16 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
           },
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Moderation request failed';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'moderation_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ requestId, error: errorMessage }, 'Moderation request failed');
-        
+
         return reply.code(statusCode).send({
           error: {
             message: errorMessage,
@@ -388,11 +406,17 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
           type: 'object',
           required: ['name'],
           properties: {
-            name: { type: 'string', minLength: 1, maxLength: 120, description: 'Unique policy name within the organization.' },
+            name: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 120,
+              description: 'Unique policy name within the organization.',
+            },
             thresholds: {
               type: 'object',
               additionalProperties: { type: 'number', minimum: 0, maximum: 1 },
-              description: 'Map of category key -> threshold in [0,1]. A base score >= threshold re-flags that category.',
+              description:
+                'Map of category key -> threshold in [0,1]. A base score >= threshold re-flags that category.',
             },
             customCategories: {
               type: 'array',
@@ -405,7 +429,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
                   description: { type: 'string' },
                 },
               },
-              description: 'Org-defined categories matched against the input text via case-insensitive keywords.',
+              description:
+                'Org-defined categories matched against the input text via case-insensitive keywords.',
             },
             action: { type: 'string', enum: ['flag', 'block'], default: 'flag' },
             enabled: { type: 'boolean', default: true },
@@ -418,7 +443,11 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       const organizationId = resolveOrganizationId(request);
       if (!organizationId) {
         return reply.code(401).send({
-          error: { message: 'Authentication required.', type: 'authentication_error', code: 'unauthorized' },
+          error: {
+            message: 'Authentication required.',
+            type: 'authentication_error',
+            code: 'unauthorized',
+          },
         });
       }
 
@@ -435,7 +464,12 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
 
       const result = await createPolicy(organizationId, parsed.data);
       if (!result.ok) {
-        const status = result.code === 'name_conflict' ? 409 : result.code === 'organization_not_found' ? 404 : 400;
+        const status =
+          result.code === 'name_conflict'
+            ? 409
+            : result.code === 'organization_not_found'
+              ? 404
+              : 400;
         return reply.code(status).send({
           error: { message: result.message, type: 'invalid_request_error', code: result.code },
         });
@@ -451,7 +485,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       schema: {
         tags: ['Moderations'],
         summary: 'List custom moderation policies',
-        description: "Lists all moderation policies belonging to the caller's organization (newest-first).",
+        description:
+          "Lists all moderation policies belonging to the caller's organization (newest-first).",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
       preHandler: policyPreHandler,
@@ -460,7 +495,11 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       const organizationId = resolveOrganizationId(request);
       if (!organizationId) {
         return reply.code(401).send({
-          error: { message: 'Authentication required.', type: 'authentication_error', code: 'unauthorized' },
+          error: {
+            message: 'Authentication required.',
+            type: 'authentication_error',
+            code: 'unauthorized',
+          },
         });
       }
       const policies = await listPolicies(organizationId);
@@ -475,7 +514,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       schema: {
         tags: ['Moderations'],
         summary: 'Get a custom moderation policy',
-        description: "Fetches one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.",
+        description:
+          "Fetches one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         params: {
           type: 'object',
@@ -489,13 +529,21 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       const organizationId = resolveOrganizationId(request);
       if (!organizationId) {
         return reply.code(401).send({
-          error: { message: 'Authentication required.', type: 'authentication_error', code: 'unauthorized' },
+          error: {
+            message: 'Authentication required.',
+            type: 'authentication_error',
+            code: 'unauthorized',
+          },
         });
       }
       const policy = await getPolicy(organizationId, request.params.id);
       if (!policy) {
         return reply.code(404).send({
-          error: { message: 'Moderation policy not found.', type: 'not_found_error', code: 'policy_not_found' },
+          error: {
+            message: 'Moderation policy not found.',
+            type: 'not_found_error',
+            code: 'policy_not_found',
+          },
         });
       }
       return reply.send({ policy });
@@ -509,7 +557,8 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       schema: {
         tags: ['Moderations'],
         summary: 'Delete a custom moderation policy',
-        description: "Deletes one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.",
+        description:
+          "Deletes one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         params: {
           type: 'object',
@@ -523,16 +572,28 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
       const organizationId = resolveOrganizationId(request);
       if (!organizationId) {
         return reply.code(401).send({
-          error: { message: 'Authentication required.', type: 'authentication_error', code: 'unauthorized' },
+          error: {
+            message: 'Authentication required.',
+            type: 'authentication_error',
+            code: 'unauthorized',
+          },
         });
       }
       const deleted = await deletePolicy(organizationId, request.params.id);
       if (!deleted) {
         return reply.code(404).send({
-          error: { message: 'Moderation policy not found.', type: 'not_found_error', code: 'policy_not_found' },
+          error: {
+            message: 'Moderation policy not found.',
+            type: 'not_found_error',
+            code: 'policy_not_found',
+          },
         });
       }
-      return reply.send({ id: request.params.id, deleted: true, object: 'moderation.policy.deleted' });
+      return reply.send({
+        id: request.params.id,
+        deleted: true,
+        object: 'moderation.policy.deleted',
+      });
     }
   );
 

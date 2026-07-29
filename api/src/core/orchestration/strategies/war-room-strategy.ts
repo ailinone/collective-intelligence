@@ -78,7 +78,7 @@ export class WarRoomStrategy extends BaseStrategy {
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality || 0.8) - (a.performance?.quality || 0.8),
+      (a, b) => (b.performance?.quality || 0.8) - (a.performance?.quality || 0.8)
     );
     const commander = sorted[0];
     const synthesizer = sorted.length > 1 ? sorted[1] : sorted[0];
@@ -86,7 +86,11 @@ export class WarRoomStrategy extends BaseStrategy {
     const specialistPool = sorted.slice(1).slice(0, 5);
 
     // Phase 1: Decompose
-    this.emitObserverEvent(context, { type: 'phase_start', models: sorted.slice(0, 4).map(m => m.name || m.id), summary: `War room: commander + ${specialistPool.length} specialists + critic + synthesizer.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: sorted.slice(0, 4).map((m) => m.name || m.id),
+      summary: `War room: commander + ${specialistPool.length} specialists + critic + synthesizer.`,
+    });
     yield this.progressChunk('Commander decomposing task into sub-tasks...', 1, 5);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -99,22 +103,45 @@ export class WarRoomStrategy extends BaseStrategy {
     }
 
     // Phase 2: Specialists
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: `Commander decomposed into ${subTasks.length} sub-tasks.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: `Commander decomposed into ${subTasks.length} sub-tasks.`,
+    });
     yield this.progressChunk(`Executing ${subTasks.length} specialists in parallel...`, 2, 5);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
-    const specialistResults = await this.executeSpecialists(request, subTasks, specialistPool, context);
+    const specialistResults = await this.executeSpecialists(
+      request,
+      subTasks,
+      specialistPool,
+      context
+    );
 
     // Phase 3: Critique
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: `${specialistResults.length} specialists done. Critic reviewing.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 4,
+      summary: `${specialistResults.length} specialists done. Critic reviewing.`,
+    });
     yield this.progressChunk('Critic reviewing specialist outputs...', 3, 5);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     await this.critique(request, subTasks, specialistResults, critic, context);
 
     // Phase 4: Stream synthesis token-by-token
-    this.emitObserverEvent(context, { type: 'round_complete', round: 3, totalRounds: 4, summary: 'Critique done. Synthesizing.' });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizer producing final response.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 3,
+      totalRounds: 4,
+      summary: 'Critique done. Synthesizing.',
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizer producing final response.',
+    });
     yield this.progressChunk('Synthesizing final response...', 4, 5);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -140,8 +167,7 @@ export class WarRoomStrategy extends BaseStrategy {
       messages: [
         {
           role: 'system' as const,
-          content:
-            PROMPTS.warRoomSynthesizer,
+          content: PROMPTS.warRoomSynthesizer,
         },
         {
           role: 'user' as const,
@@ -156,8 +182,10 @@ export class WarRoomStrategy extends BaseStrategy {
     // through the fallback-chain helper (first-chunk + idle deadlines, other
     // war-room executors as fallback synthesizers, graceful degrade instead of
     // a hard stream failure).
-    const fallbackCandidates: Array<{ adapter: import('@/providers/base/provider-adapter').ProviderAdapter; model: Model }> =
-      [{ adapter: synthAdapter, model: synthesizer }];
+    const fallbackCandidates: Array<{
+      adapter: import('@/providers/base/provider-adapter').ProviderAdapter;
+      model: Model;
+    }> = [{ adapter: synthAdapter, model: synthesizer }];
     if (this.getAdapterForModel) {
       const extraModels = [critic, ...specialistPool].filter((m) => m.id !== synthesizer.id);
       const seen = new Set([synthesizer.id]);
@@ -167,16 +195,19 @@ export class WarRoomStrategy extends BaseStrategy {
         try {
           const adapter = await this.getAdapterForModel(m, context);
           if (adapter) fallbackCandidates.push({ adapter, model: m });
-        } catch { /* skip unavailable candidate */ }
+        } catch {
+          /* skip unavailable candidate */
+        }
       }
     }
-    yield* this.streamSynthesisWithFallback(
-      synthesisRequest,
-      fallbackCandidates,
-      () => specialistSummary.slice(0, 4000),
+    yield* this.streamSynthesisWithFallback(synthesisRequest, fallbackCandidates, () =>
+      specialistSummary.slice(0, 4000)
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'War room synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'War room synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
@@ -185,7 +216,9 @@ export class WarRoomStrategy extends BaseStrategy {
     const models = this.getEligibleModels(context);
 
     if (models.length < this.getMetadata().minModels!) {
-      throw new Error(`War Room requires at least ${this.getMetadata().minModels} models (${models.length} available)`);
+      throw new Error(
+        `War Room requires at least ${this.getMetadata().minModels} models (${models.length} available)`
+      );
     }
 
     // Select roles: commander (highest quality), specialists (diverse), critic, synthesizer
@@ -193,14 +226,18 @@ export class WarRoomStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       this.log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'War room: requested model not in operational pool — falling back to quality-sorted commander',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'War room: requested model not in operational pool — falling back to quality-sorted commander'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality || 0.8) - (a.performance?.quality || 0.8),
+      (a, b) => (b.performance?.quality || 0.8) - (a.performance?.quality || 0.8)
     );
     const commander = sorted[0];
     const synthesizer = sorted.length > 1 ? sorted[1] : sorted[0];
@@ -210,7 +247,11 @@ export class WarRoomStrategy extends BaseStrategy {
     const allExecutions: ModelExecution[] = [];
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: sorted.slice(0, 4).map(m => m.name || m.id), summary: `War room: commander decomposes, ${specialistPool.length} specialists, 1 critic, 1 synthesizer.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: sorted.slice(0, 4).map((m) => m.name || m.id),
+      summary: `War room: commander decomposes, ${specialistPool.length} specialists, 1 critic, 1 synthesizer.`,
+    });
 
     // === Phase 1: Commander decomposes the task ===
     const decomposition = await this.decompose(request, commander, context);
@@ -231,22 +272,39 @@ export class WarRoomStrategy extends BaseStrategy {
     }
 
     // Observer: decomposition complete
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 4, summary: `Commander decomposed into ${subTasks.length} sub-tasks. Specialists executing.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 4,
+      summary: `Commander decomposed into ${subTasks.length} sub-tasks. Specialists executing.`,
+    });
 
     // === Phase 2: Assign and execute specialists in parallel ===
     const specialistResults = await this.executeSpecialists(
-      request, subTasks, specialistPool, context
+      request,
+      subTasks,
+      specialistPool,
+      context
     );
     for (const sr of specialistResults) {
       allExecutions.push(sr.execution);
     }
 
     // Observer: specialists done
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 4, summary: `${specialistResults.length} specialists completed. Critic reviewing.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 4,
+      summary: `${specialistResults.length} specialists completed. Critic reviewing.`,
+    });
 
     // === Phase 3: Critique pass ===
     const critiqueExecution = await this.critique(
-      request, subTasks, specialistResults, critic, context
+      request,
+      subTasks,
+      specialistResults,
+      critic,
+      context
     );
     allExecutions.push(critiqueExecution);
 
@@ -256,10 +314,16 @@ export class WarRoomStrategy extends BaseStrategy {
     if (process.env.WAR_ROOM_ENABLE_REWORK !== 'false' && critiqueExecution.success) {
       const critiqueContent = critiqueExecution.response?.choices?.[0]?.message?.content;
       const critiqueText = typeof critiqueContent === 'string' ? critiqueContent : '';
-      if (critiqueText.length > 50) { // Only rework if critique has substance
-        this.log.info({ subTasks: subTasks.length }, 'War-room: rework phase — specialists refining based on critique');
+      if (critiqueText.length > 50) {
+        // Only rework if critique has substance
+        this.log.info(
+          { subTasks: subTasks.length },
+          'War-room: rework phase — specialists refining based on critique'
+        );
         const reworkPromises = specialistResults.map(async (sr, i) => {
-          const specialist = sr.execution.modelId ? specialistPool.find(m => m.id === sr.execution.modelId) : specialistPool[i % specialistPool.length];
+          const specialist = sr.execution.modelId
+            ? specialistPool.find((m) => m.id === sr.execution.modelId)
+            : specialistPool[i % specialistPool.length];
           if (!specialist || !this.getAdapterForModel) return sr;
           try {
             const adapter = await this.getAdapterForModel(specialist, context);
@@ -280,13 +344,20 @@ export class WarRoomStrategy extends BaseStrategy {
                 },
               ],
             };
-            const reworkExec = await this.executeSingleModel(specialist, reworkRequest, 'reworker' as ModelRole, context);
+            const reworkExec = await this.executeSingleModel(
+              specialist,
+              reworkRequest,
+              'reworker' as ModelRole,
+              context
+            );
             allExecutions.push(reworkExec);
             if (reworkExec.success) {
               return { subTask: sr.subTask, execution: reworkExec }; // Replace with improved version
             }
             return sr; // Keep original if rework failed
-          } catch { return sr; }
+          } catch {
+            return sr;
+          }
         });
         const reworked = await Promise.all(reworkPromises);
         // Replace specialistResults with reworked versions where successful
@@ -297,17 +368,33 @@ export class WarRoomStrategy extends BaseStrategy {
     }
 
     // Observer: critique + rework done
-    this.emitObserverEvent(context, { type: 'round_complete', round: 3, totalRounds: 4, summary: 'Critique and rework phases complete. Synthesizer producing final response.' });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizer merging specialist outputs with critique feedback.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 3,
+      totalRounds: 4,
+      summary: 'Critique and rework phases complete. Synthesizer producing final response.',
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizer merging specialist outputs with critique feedback.',
+    });
 
     // === Phase 4: Synthesize final response ===
     const synthesisExecution = await this.synthesize(
-      request, subTasks, specialistResults, critiqueExecution, synthesizer, context
+      request,
+      subTasks,
+      specialistResults,
+      critiqueExecution,
+      synthesizer,
+      context
     );
     allExecutions.push(synthesisExecution);
 
     // Observer: synthesis complete
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `War room complete. ${allExecutions.length} total model calls across 4 phases.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `War room complete. ${allExecutions.length} total model calls across 4 phases.`,
+    });
 
     const totalCost = allExecutions.reduce((s, e) => s + e.cost, 0);
     const duration = Date.now() - startTime;
@@ -327,7 +414,17 @@ export class WarRoomStrategy extends BaseStrategy {
         criticModel: critic.id,
         synthesizerModel: synthesizer.id,
         ...(this.isReasoningEnabled(request)
-          ? { reasoning_traces: allExecutions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+          ? {
+              reasoning_traces: allExecutions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -357,7 +454,12 @@ export class WarRoomStrategy extends BaseStrategy {
       max_tokens: 1000,
     };
 
-    const execution = await this.executeSingleModel(commander, decomposeRequest, 'coordinator' as ModelRole, context);
+    const execution = await this.executeSingleModel(
+      commander,
+      decomposeRequest,
+      'coordinator' as ModelRole,
+      context
+    );
 
     // Parse sub-tasks from commander response
     const contentStr = safeResponseContent(execution.response);
@@ -393,7 +495,11 @@ export class WarRoomStrategy extends BaseStrategy {
   ): Promise<Array<{ subTask: string; execution: ModelExecution }>> {
     const tasks = subTasks.map((subTask, i) => {
       const specialist = specialists[i % specialists.length]; // Round-robin
-      const specialistPrompt = this.withReasoningPrompt(PROMPTS.warRoomSpecialist(subTask), originalRequest, specialist);
+      const specialistPrompt = this.withReasoningPrompt(
+        PROMPTS.warRoomSpecialist(subTask),
+        originalRequest,
+        specialist
+      );
       const specialistRequest: ChatRequest = {
         ...originalRequest,
         messages: [
@@ -412,13 +518,21 @@ export class WarRoomStrategy extends BaseStrategy {
 
     const results = await Promise.allSettled(
       tasks.map(async (t) => {
-        const execution = await this.executeSingleModel(t.specialist, t.request, 'secondary' as ModelRole, context);
+        const execution = await this.executeSingleModel(
+          t.specialist,
+          t.request,
+          'secondary' as ModelRole,
+          context
+        );
         return { subTask: t.subTask, execution };
       })
     );
 
     return results
-      .filter((r): r is PromiseFulfilledResult<{ subTask: string; execution: ModelExecution }> => r.status === 'fulfilled')
+      .filter(
+        (r): r is PromiseFulfilledResult<{ subTask: string; execution: ModelExecution }> =>
+          r.status === 'fulfilled'
+      )
       .map((r) => r.value)
       .filter((r) => r.execution.success);
   }
@@ -442,8 +556,7 @@ export class WarRoomStrategy extends BaseStrategy {
       messages: [
         {
           role: 'system' as const,
-          content:
-            PROMPTS.warRoomCritic,
+          content: PROMPTS.warRoomCritic,
         },
         {
           role: 'user' as const,
@@ -474,7 +587,7 @@ export class WarRoomStrategy extends BaseStrategy {
     const critiqueText = safeResponseContent(critiqueExecution.response);
 
     // Include reasoning traces from specialists so synthesizer can see HOW they reasoned
-    const allSpecialistExecutions = specialistResults.map(r => r.execution);
+    const allSpecialistExecutions = specialistResults.map((r) => r.execution);
     const reasoningTraces = this.isReasoningEnabled(originalRequest)
       ? this.formatReasoningForSynthesizer(allSpecialistExecutions)
       : '';

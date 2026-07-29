@@ -34,7 +34,11 @@ import {
 import { mergeQualitySnapshots } from '@/core/orchestration/quality-benchmark/merge-quality-snapshots';
 import type { ModelCandidate } from '@/core/orchestration/model-selection/model-role-types';
 
-function mkCandidate(opts: { modelId: string; providerId: string; quality?: number }): ModelCandidate {
+function mkCandidate(opts: {
+  modelId: string;
+  providerId: string;
+  quality?: number;
+}): ModelCandidate {
   return {
     model: {
       id: opts.modelId,
@@ -47,14 +51,22 @@ function mkCandidate(opts: { modelId: string; providerId: string; quality?: numb
       outputCostPer1k: 0.003,
       capabilities: ['chat', 'text_generation', 'reasoning', 'instruction_following'] as never,
       status: 'active',
-      performance: { latencyMs: 800, throughput: 100, quality: opts.quality ?? 0.9, reliability: 0.9 },
+      performance: {
+        latencyMs: 800,
+        throughput: 100,
+        quality: opts.quality ?? 0.9,
+        reliability: 0.9,
+      },
       metadata: {},
       providerName: opts.providerId,
       providerStatus: 'active',
     } as never,
     providerId: opts.providerId,
     estimatedCostPerCallUsd: 0.005,
-    hasCredits: true, providerHealthy: true, rateLimited: false, isLocal: false,
+    hasCredits: true,
+    providerHealthy: true,
+    rateLimited: false,
+    isLocal: false,
   };
 }
 
@@ -80,8 +92,16 @@ describe('01C.1B-J2-C-R4 §17 — manual/catalog fallback guard', () => {
     // Pool: model-low-cat has catalog q=0.9 (J1G manual bump), no external data.
     //       model-real-bench has catalog q=0.5 (lower!) but EXTERNAL benchmark q=0.95.
     // The fix means: model-real-bench MUST win.
-    const candCatalogBumped = mkCandidate({ modelId: 'model-catalog-bumped', providerId: 'p1', quality: 0.9 });
-    const candRealBench = mkCandidate({ modelId: 'model-real-bench', providerId: 'p2', quality: 0.5 });
+    const candCatalogBumped = mkCandidate({
+      modelId: 'model-catalog-bumped',
+      providerId: 'p1',
+      quality: 0.9,
+    });
+    const candRealBench = mkCandidate({
+      modelId: 'model-real-bench',
+      providerId: 'p2',
+      quality: 0.5,
+    });
 
     const snapshot = mkSnapshot([
       mkEntry({
@@ -144,8 +164,8 @@ describe('01C.1B-J2-C-R4 §17 — manual/catalog fallback guard', () => {
         canonicalModelId: 'x',
         qualityScore: 0.6,
         sourceScores: [
-          { source: 'manual', score: 0.99, confidence: 'high' },     // operator manual bump
-          { source: 'benchlm', score: 0.6, confidence: 'high' },      // real benchmark
+          { source: 'manual', score: 0.99, confidence: 'high' }, // operator manual bump
+          { source: 'benchlm', score: 0.6, confidence: 'high' }, // real benchmark
         ],
         qualityScoreSources: ['benchlm', 'manual'],
       }),
@@ -166,9 +186,7 @@ describe('01C.1B-J2-C-R4 §17 — manual/catalog fallback guard', () => {
         qualityScore: 0.7,
         qualityScoreSource: 'manual_legacy',
         qualityConfidence: 'medium',
-        sourceScores: [
-          { source: 'manual', score: 0.7, confidence: 'medium' },
-        ],
+        sourceScores: [{ source: 'manual', score: 0.7, confidence: 'medium' }],
         qualityScoreSources: ['manual'],
       }),
     ]);

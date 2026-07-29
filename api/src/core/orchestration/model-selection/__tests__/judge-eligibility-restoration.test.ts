@@ -126,9 +126,7 @@ describe('01C.1B-J1D-R4D — judge eligibility restoration (resolver path)', () 
     // fixture-b qualify; fixture-c (backfill-only) is rejected; fixture-d
     // (no evidence) is rejected; fixture-e (weak) is rejected.
     expect(result.selected.length).toBe(1);
-    expect(result.rejected.map((r) => r.modelId)).toContain(
-      'opaque/no-capability-but-backfilled',
-    );
+    expect(result.rejected.map((r) => r.modelId)).toContain('opaque/no-capability-but-backfilled');
     expect(result.rejected.map((r) => r.modelId)).toContain('opaque/no-evidence');
     expect(result.rejected.map((r) => r.modelId)).toContain('opaque/weak-only');
   });
@@ -161,7 +159,7 @@ describe('01C.1B-J1D-R4D — judge eligibility restoration (resolver path)', () 
     // unselected if ranking puts it behind a or b, but that doesn't
     // mean rejection — `rejected` only carries filter failures.)
     const cRejection = result.rejected.find(
-      (r) => r.modelId === 'opaque/no-capability-but-backfilled',
+      (r) => r.modelId === 'opaque/no-capability-but-backfilled'
     );
     if (cRejection) {
       expect(cRejection.reason).not.toMatch(/json_output/);
@@ -170,7 +168,7 @@ describe('01C.1B-J1D-R4D — judge eligibility restoration (resolver path)', () 
     // structured-output reasons — only d and e get json_output rejections.
     const jsonRejections = result.rejected.filter((r) => /json_output/.test(r.reason));
     expect(jsonRejections.map((r) => r.modelId).sort()).toEqual(
-      ['opaque/no-evidence', 'opaque/weak-only'].sort(),
+      ['opaque/no-evidence', 'opaque/weak-only'].sort()
     );
   });
 
@@ -278,7 +276,7 @@ describe('01C.1B-J1D-R4D — judge eligibility restoration (resolver path)', () 
     });
     // With normalization OFF: backfill is ignored, only legacy capabilities count.
     const cRejection = result.rejected.find(
-      (r) => r.modelId === 'opaque/no-capability-but-backfilled',
+      (r) => r.modelId === 'opaque/no-capability-but-backfilled'
     );
     expect(cRejection?.reason).toBe('json_output_not_supported');
   });

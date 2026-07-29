@@ -11,11 +11,7 @@
  * Trace builder helpers. Re-exports the trace type so consumers don't
  * have to dig into model-role-types for it.
  */
-import type {
-  FilterStage,
-  ModelRoleSelectionTrace,
-  StrategyModelRole,
-} from './model-role-types';
+import type { FilterStage, ModelRoleSelectionTrace, StrategyModelRole } from './model-role-types';
 
 export type { FilterStage, ModelRoleSelectionTrace } from './model-role-types';
 

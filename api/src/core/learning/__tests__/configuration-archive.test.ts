@@ -55,10 +55,10 @@ async function createArchive() {
   }));
   vi.mock('@/utils/logger', () => ({
     logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
       child: () => ({
         info: vi.fn(),
         debug: vi.fn(),
@@ -114,8 +114,16 @@ describe('ConfigurationArchive', () => {
 
     it('replaces elite when new config has higher fitness', async () => {
       const archive = await createArchive();
-      archive.tryInsert('code-generation', 'medium', makeConfig({ strategy: 'single', avgQuality: 0.7 }));
-      const result = archive.tryInsert('code-generation', 'medium', makeConfig({ strategy: 'debate', avgQuality: 0.95 }));
+      archive.tryInsert(
+        'code-generation',
+        'medium',
+        makeConfig({ strategy: 'single', avgQuality: 0.7 })
+      );
+      const result = archive.tryInsert(
+        'code-generation',
+        'medium',
+        makeConfig({ strategy: 'debate', avgQuality: 0.95 })
+      );
       expect(result.inserted).toBe(true);
 
       // The quality elite should now be 'debate'
@@ -126,8 +134,16 @@ describe('ConfigurationArchive', () => {
 
     it('rejects config when existing elite has higher fitness', async () => {
       const archive = await createArchive();
-      archive.tryInsert('code-generation', 'medium', makeConfig({ strategy: 'debate', avgQuality: 0.95 }));
-      const result = archive.tryInsert('code-generation', 'medium', makeConfig({ strategy: 'single', avgQuality: 0.5 }));
+      archive.tryInsert(
+        'code-generation',
+        'medium',
+        makeConfig({ strategy: 'debate', avgQuality: 0.95 })
+      );
+      const result = archive.tryInsert(
+        'code-generation',
+        'medium',
+        makeConfig({ strategy: 'single', avgQuality: 0.5 })
+      );
       // May still insert in some dimensions (e.g., cost-efficient if cost is better)
       // but quality dimension should remain 'debate'
       const elite = archive.getElite('code-generation', 'medium', 'quality');
@@ -136,11 +152,9 @@ describe('ConfigurationArchive', () => {
 
     it('respects excludeDimensions option', async () => {
       const archive = await createArchive();
-      const result = archive.tryInsert(
-        'code-generation', 'medium',
-        makeConfig(),
-        { excludeDimensions: ['speed', 'quality-per-token'] },
-      );
+      const result = archive.tryInsert('code-generation', 'medium', makeConfig(), {
+        excludeDimensions: ['speed', 'quality-per-token'],
+      });
       expect(result.cellsUpdated).not.toContain('speed');
       expect(result.cellsUpdated).not.toContain('quality-per-token');
       // But other dimensions should be populated
@@ -196,8 +210,26 @@ describe('ConfigurationArchive', () => {
     it('ingests multiple results and returns insertion counts', async () => {
       const archive = await createArchive();
       const result = archive.ingestBenchmarkResults([
-        { taskType: 'code-generation', complexity: 'medium', strategy: 'single', avgQuality: 0.8, avgCost: 0.01, avgLatency: 1500, successRate: 0.9, sampleCount: 10 },
-        { taskType: 'code-generation', complexity: 'high', strategy: 'debate', avgQuality: 0.9, avgCost: 0.05, avgLatency: 5000, successRate: 0.85, sampleCount: 8 },
+        {
+          taskType: 'code-generation',
+          complexity: 'medium',
+          strategy: 'single',
+          avgQuality: 0.8,
+          avgCost: 0.01,
+          avgLatency: 1500,
+          successRate: 0.9,
+          sampleCount: 10,
+        },
+        {
+          taskType: 'code-generation',
+          complexity: 'high',
+          strategy: 'debate',
+          avgQuality: 0.9,
+          avgCost: 0.05,
+          avgLatency: 5000,
+          successRate: 0.85,
+          sampleCount: 8,
+        },
       ]);
       expect(result.totalInserted).toBeGreaterThanOrEqual(1);
       expect(result.cellsUpdated).toBeGreaterThan(0);
@@ -206,7 +238,16 @@ describe('ConfigurationArchive', () => {
     it('excludes quality-per-token when avgTokens not provided', async () => {
       const archive = await createArchive();
       archive.ingestBenchmarkResults([
-        { taskType: 'analysis', complexity: 'low', strategy: 'single', avgQuality: 0.8, avgCost: 0.01, avgLatency: 1000, successRate: 0.95, sampleCount: 10 },
+        {
+          taskType: 'analysis',
+          complexity: 'low',
+          strategy: 'single',
+          avgQuality: 0.8,
+          avgCost: 0.01,
+          avgLatency: 1000,
+          successRate: 0.95,
+          sampleCount: 10,
+        },
       ]);
       // quality-per-token should be null since no token data
       expect(archive.getElite('analysis', 'low', 'quality-per-token')).toBeNull();
@@ -235,7 +276,11 @@ describe('ConfigurationArchive', () => {
     it('updates existing elite via EMA', async () => {
       const archive = await createArchive();
       // First: create an elite with sampleCount >= MIN_SAMPLES
-      archive.tryInsert('code-generation', 'medium', makeConfig({ strategy: 'single', avgQuality: 0.80 }));
+      archive.tryInsert(
+        'code-generation',
+        'medium',
+        makeConfig({ strategy: 'single', avgQuality: 0.8 })
+      );
       const before = archive.getElite('code-generation', 'medium', 'quality');
       expect(before).not.toBeNull();
       const qualityBefore = before!.avgQuality;

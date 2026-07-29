@@ -424,7 +424,8 @@ export class ApiKeyEntity {
       previousKeyId: this.props.previousKeyId ?? null,
       nextKeyId: this.props.nextKeyId ?? null,
       autoRotate: this.props.autoRotate,
-      rotationIntervalDays: this.props.rotationIntervalDays !== undefined ? this.props.rotationIntervalDays : null,
+      rotationIntervalDays:
+        this.props.rotationIntervalDays !== undefined ? this.props.rotationIntervalDays : null,
       gracePeriodDays: this.props.gracePeriodDays,
       ipWhitelist: this.props.ipWhitelist,
       permissions: this.props.permissions ?? null,

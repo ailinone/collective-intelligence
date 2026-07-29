@@ -86,14 +86,21 @@ export function validatePreDispatch(ctx: PreDispatchContext): PreDispatchResult 
     ...summary.recovering,
     ...summary.degraded,
     ...summary.unknown,
-  ].filter(p => !hub.isSelfHostedProvider(p)); // exclude self-hosted from primary check
+  ].filter((p) => !hub.isSelfHostedProvider(p)); // exclude self-hosted from primary check
 
   const noCreditsProviders = summary.no_credits;
 
   // Check 1: Pool size vs strategy minimum
   if (ctx.chatEligiblePoolSize < ctx.strategyMinModels) {
     const detail = `Pool has ${ctx.chatEligiblePoolSize} chat-eligible models, strategy "${ctx.strategyName}" requires ${ctx.strategyMinModels}`;
-    log.warn({ strategy: ctx.strategyName, poolSize: ctx.chatEligiblePoolSize, minModels: ctx.strategyMinModels }, detail);
+    log.warn(
+      {
+        strategy: ctx.strategyName,
+        poolSize: ctx.chatEligiblePoolSize,
+        minModels: ctx.strategyMinModels,
+      },
+      detail
+    );
     return {
       canProceed: false,
       skipReason: 'pool_too_small',
@@ -108,10 +115,16 @@ export function validatePreDispatch(ctx: PreDispatchContext): PreDispatchResult 
   // Check 2: Any usable external providers?
   if (usableProviders.length === 0) {
     // Check if ALL are no-credits vs some other failure
-    const allExternal = [...summary.healthy, ...summary.recovering, ...summary.degraded,
-      ...summary.unknown, ...summary.no_credits, ...summary.rate_limited,
-      ...summary.auth_failed, ...summary.temporarily_unavailable]
-      .filter(p => !hub.isSelfHostedProvider(p));
+    const allExternal = [
+      ...summary.healthy,
+      ...summary.recovering,
+      ...summary.degraded,
+      ...summary.unknown,
+      ...summary.no_credits,
+      ...summary.rate_limited,
+      ...summary.auth_failed,
+      ...summary.temporarily_unavailable,
+    ].filter((p) => !hub.isSelfHostedProvider(p));
 
     if (noCreditsProviders.length > 0 && noCreditsProviders.length >= allExternal.length * 0.8) {
       return {
@@ -167,7 +180,7 @@ export function validatePreDispatch(ctx: PreDispatchContext): PreDispatchResult 
  */
 export function validatePreDispatchWithPool(
   ctx: PreDispatchContext,
-  poolResult: import('@/core/pool/pool-types').PoolResult,
+  poolResult: import('@/core/pool/pool-types').PoolResult
 ): PreDispatchResult {
   // Delegate to base validator with pool size from PoolResult
   const baseResult = validatePreDispatch({
@@ -178,8 +191,8 @@ export function validatePreDispatchWithPool(
   if (!baseResult.canProceed) {
     // Enrich with pool stage details
     const stageDetail = poolResult.stages
-      .filter(s => s.outputCount < s.inputCount)
-      .map(s => {
+      .filter((s) => s.outputCount < s.inputCount)
+      .map((s) => {
         const topReasons = Object.entries(s.droppedReasons)
           .sort(([, a], [, b]) => b - a)
           .slice(0, 3)
@@ -198,11 +211,14 @@ export function validatePreDispatchWithPool(
   // Diversity check: if all models come from one provider, flag it
   if (poolResult.providerDiversity <= 1 && poolResult.poolSize >= 2) {
     // Only warn, don't block — single-provider is better than nothing
-    log.warn({
-      strategy: ctx.strategyName,
-      poolSize: poolResult.poolSize,
-      providers: poolResult.providerDiversity,
-    }, 'Pool has low provider diversity — all models from single provider');
+    log.warn(
+      {
+        strategy: ctx.strategyName,
+        poolSize: poolResult.poolSize,
+        providers: poolResult.providerDiversity,
+      },
+      'Pool has low provider diversity — all models from single provider'
+    );
   }
 
   return baseResult;
@@ -216,8 +232,12 @@ export function isEcosystemOperational(): { operational: boolean; reason?: strin
   const hub = getProviderOperabilityHub();
   const summary = hub.getSummary();
 
-  const usable = [...summary.healthy, ...summary.recovering, ...summary.degraded, ...summary.unknown]
-    .filter(p => !hub.isSelfHostedProvider(p));
+  const usable = [
+    ...summary.healthy,
+    ...summary.recovering,
+    ...summary.degraded,
+    ...summary.unknown,
+  ].filter((p) => !hub.isSelfHostedProvider(p));
 
   if (usable.length === 0) {
     return {

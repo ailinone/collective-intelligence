@@ -64,10 +64,10 @@ interface HfInferenceProviderMapping {
 const PIPELINE_TAG_TO_CAPABILITIES: Record<string, ModelCapability[]> = {
   'text-generation': ['chat', 'completions'],
   'text2text-generation': ['chat', 'completions'],
-  'conversational': ['chat'],
+  conversational: ['chat'],
   'question-answering': ['chat'],
-  'summarization': ['chat'],
-  'translation': ['chat'],
+  summarization: ['chat'],
+  translation: ['chat'],
   'fill-mask': ['completions'],
   'feature-extraction': ['embedding'],
   'sentence-similarity': ['embedding'],
@@ -100,7 +100,7 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     baseUrl = 'https://huggingface.co/api/models',
     maxModels = Number(process.env.HF_HUB_DISCOVERY_MAX_MODELS || '60000'),
     pageSize = Number(process.env.HF_HUB_DISCOVERY_PAGE_SIZE || '1000'),
-    requestTimeoutMs = Number(process.env.HF_HUB_DISCOVERY_TIMEOUT_MS || '15000'),
+    requestTimeoutMs = Number(process.env.HF_HUB_DISCOVERY_TIMEOUT_MS || '15000')
   ) {
     super();
     this.token = token && token.length > 0 ? token : undefined;
@@ -142,7 +142,7 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
         if (!response.ok) {
           this.log.warn(
             { status: response.status, url: nextUrl, page: pages },
-            'HF Hub API non-OK response, stopping pagination',
+            'HF Hub API non-OK response, stopping pagination'
           );
           break;
         }
@@ -161,8 +161,13 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
       }
 
       this.log.info(
-        { models: out.length, pages, durationMs: Date.now() - start, capped: out.length >= this.maxModels },
-        'HF Hub discovery completed',
+        {
+          models: out.length,
+          pages,
+          durationMs: Date.now() - start,
+          capped: out.length >= this.maxModels,
+        },
+        'HF Hub discovery completed'
       );
       return out;
     } catch (error) {
@@ -196,16 +201,23 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     // status:'live' providers prove the model is callable NOW via the HF router
     // (`<id>:<provider>`). No live provider ⇒ not serverless_callable, so it stays
     // out of the hot path (prove-before-advertise — no static assumption).
-    const mapping = Array.isArray(model.inferenceProviderMapping) ? model.inferenceProviderMapping : [];
+    const mapping = Array.isArray(model.inferenceProviderMapping)
+      ? model.inferenceProviderMapping
+      : [];
     const liveProviders = mapping.filter((p) => p.status === 'live');
     const serverlessCallable = liveProviders.length > 0;
     // Best live provider = lowest input price (cost-aware), else first.
     const bestProvider = liveProviders
       .slice()
-      .sort((a, b) =>
-        (a.providerDetails?.pricing?.input ?? Number.POSITIVE_INFINITY) -
-        (b.providerDetails?.pricing?.input ?? Number.POSITIVE_INFINITY))[0];
-    const contextLength = liveProviders.reduce((mx, p) => Math.max(mx, p.providerDetails?.context_length ?? 0), 0);
+      .sort(
+        (a, b) =>
+          (a.providerDetails?.pricing?.input ?? Number.POSITIVE_INFINITY) -
+          (b.providerDetails?.pricing?.input ?? Number.POSITIVE_INFINITY)
+      )[0];
+    const contextLength = liveProviders.reduce(
+      (mx, p) => Math.max(mx, p.providerDetails?.context_length ?? 0),
+      0
+    );
     const inputPrice = bestProvider?.providerDetails?.pricing?.input;
     const outputPrice = bestProvider?.providerDetails?.pricing?.output;
     const hasPricing = typeof inputPrice === 'number' || typeof outputPrice === 'number';
@@ -255,7 +267,9 @@ export class HfHubModelFetcher extends BaseProviderModelFetcher {
     //    tags in the list response), but the provider mapping always carries the
     //    real task (conversational, text-to-image, automatic-speech-recognition, …).
     //    The old `return ['chat']` default mislabeled all ~60k of them as chat.
-    const mapping = Array.isArray(model.inferenceProviderMapping) ? model.inferenceProviderMapping : [];
+    const mapping = Array.isArray(model.inferenceProviderMapping)
+      ? model.inferenceProviderMapping
+      : [];
     const caps = new Set<ModelCapability>();
     for (const p of mapping) {
       if (p.status !== 'live' || !p.task) continue;

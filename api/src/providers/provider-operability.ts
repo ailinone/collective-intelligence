@@ -50,7 +50,10 @@ function getModelMetadata(model: Model): Record<string, unknown> {
 
 function normalizeProviderName(value: string | undefined): string | undefined {
   if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-');
   if (!normalized) return undefined;
 
   const aliases: Record<string, string> = {
@@ -103,7 +106,9 @@ function normalizeProviderName(value: string | undefined): string | undefined {
 }
 
 function readMetadataProvider(metadata: Record<string, unknown>, key: string): string | undefined {
-  return normalizeProviderName(typeof metadata[key] === 'string' ? (metadata[key] as string) : undefined);
+  return normalizeProviderName(
+    typeof metadata[key] === 'string' ? (metadata[key] as string) : undefined
+  );
 }
 
 function readMetadataProviderList(
@@ -148,7 +153,10 @@ function uniqueProviders(candidates: Array<string | undefined>): string[] {
   return ordered;
 }
 
-export function resolveModelOperability(model: Model, lookupAdapter: AdapterLookup): ModelOperability {
+export function resolveModelOperability(
+  model: Model,
+  lookupAdapter: AdapterLookup
+): ModelOperability {
   const metadata = getModelMetadata(model);
   const modelProvider = normalizeProviderName(model.provider) ?? 'unknown';
   const providerId = normalizeProviderName(model.providerId);
@@ -261,8 +269,8 @@ export function isAdapterMethodOverridden(
   adapter: ProviderAdapter,
   methodName: AdapterMethodName
 ): boolean {
-  const method = (narrowAs<Record<string, unknown>>(adapter))[methodName];
-  const baseMethod = (narrowAs<Record<string, unknown>>(ProviderAdapter.prototype))[methodName];
+  const method = narrowAs<Record<string, unknown>>(adapter)[methodName];
+  const baseMethod = narrowAs<Record<string, unknown>>(ProviderAdapter.prototype)[methodName];
   return typeof method === 'function' && method !== baseMethod;
 }
 

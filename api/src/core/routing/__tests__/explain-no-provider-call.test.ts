@@ -28,12 +28,10 @@ let fetchCalls = 0;
 beforeEach(() => {
   fetchCalls = 0;
   originalFetch = globalThis.fetch;
-  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(
-    () => {
-      fetchCalls += 1;
-      throw new Error('explain MUST NOT call fetch');
-    },
-  ) as unknown as typeof globalThis.fetch;
+  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(() => {
+    fetchCalls += 1;
+    throw new Error('explain MUST NOT call fetch');
+  }) as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
@@ -48,7 +46,7 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
     const registry = buildFixtureRegistry();
     const result = await explainRouting(
       { canonicalModelId: 'anthropic:claude-opus-4-7' },
-      { registry },
+      { registry }
     );
     expect(fetchCalls).toBe(0);
     expect(result.resolvedKind).toBe('canonical');
@@ -61,7 +59,7 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
     const registry = buildFixtureRegistry();
     const result = await explainRouting(
       { offeringId: 'uid-anthropic-claude-opus-4-7' },
-      { registry },
+      { registry }
     );
     expect(result.resolvedKind).toBe('offering');
     expect(result.canonical?.canonicalModelId).toBe('anthropic:claude-opus-4-7');
@@ -78,10 +76,7 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
 
   it('returns not_found for unknown ids', async () => {
     const registry = buildFixtureRegistry();
-    const result = await explainRouting(
-      { canonicalModelId: 'does-not-exist' },
-      { registry },
-    );
+    const result = await explainRouting({ canonicalModelId: 'does-not-exist' }, { registry });
     expect(result.resolvedKind).toBe('not_found');
     expect(result.canonical).toBeNull();
     expect(result.offerings).toEqual([]);
@@ -103,7 +98,7 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
         offeringId: 'uid-anthropic-claude-opus-4-7',
         canonicalModelId: 'anthropic:claude-opus-4-7',
       },
-      { registry },
+      { registry }
     );
     // When all three are provided, routeId resolves first.
     expect(result.resolvedKind).toBe('route');
@@ -113,14 +108,14 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
     const registry = buildFixtureRegistry();
     const offeringResult = await explainRouting(
       { offeringId: 'uid-anthropic-claude-opus-4-7' },
-      { registry },
+      { registry }
     );
     const canonicalResult = await explainRouting(
       { canonicalModelId: 'anthropic:claude-opus-4-7' },
-      { registry },
+      { registry }
     );
     expect(offeringResult.canonical?.canonicalModelId).toBe(
-      canonicalResult.canonical?.canonicalModelId,
+      canonicalResult.canonical?.canonicalModelId
     );
   });
 
@@ -128,7 +123,7 @@ describe('explain handler — does NOT call providers, DB, Redis, TEI', () => {
     const registry = buildFixtureRegistry();
     const result = await explainRouting(
       { canonicalModelId: 'anthropic:claude-opus-4-7' },
-      { registry },
+      { registry }
     );
     expect(result.note).toContain('MVP 3');
     expect(result.note.toLowerCase()).toContain('structural');

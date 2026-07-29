@@ -68,7 +68,7 @@ function parseArgs(): Args {
   let secretsSource: Args['secretsSource'] = 'env-only';
   let loadCatalog = false;
   let fullRegistry = false;
-  let maxCostUsd = 0.10;
+  let maxCostUsd = 0.1;
   let contextMin = 16000;
   let requireStructuredOutput = true;
   let includeLegacyCapabilities = true;
@@ -89,9 +89,12 @@ function parseArgs(): Args {
       if (next === 'gcp-secret-manager') secretsSource = 'gcp-secret-manager';
     } else if (a === '--max-cost-usd') maxCostUsd = Number(argv[++i] ?? '0.10');
     else if (a === '--context-min') contextMin = Number(argv[++i] ?? '16000');
-    else if (a === '--require-structured-output') requireStructuredOutput = (argv[++i] ?? 'true') === 'true';
-    else if (a === '--include-legacy-capabilities') includeLegacyCapabilities = (argv[++i] ?? 'true') === 'true';
-    else if (a === '--include-capability-uris') includeCapabilityUris = (argv[++i] ?? 'true') === 'true';
+    else if (a === '--require-structured-output')
+      requireStructuredOutput = (argv[++i] ?? 'true') === 'true';
+    else if (a === '--include-legacy-capabilities')
+      includeLegacyCapabilities = (argv[++i] ?? 'true') === 'true';
+    else if (a === '--include-capability-uris')
+      includeCapabilityUris = (argv[++i] ?? 'true') === 'true';
     else if (a === '--explain-rejections') explainRejections = (argv[++i] ?? 'true') === 'true';
     else if (a === '--max-top-candidates') maxTopCandidates = Number(argv[++i] ?? '20');
     else if (a === '--prompt-tokens') judgePromptTokens = Number(argv[++i] ?? '1500');
@@ -128,7 +131,7 @@ async function bootstrap(args: Args): Promise<{ secretsSource: string; loaded: b
       await loadProviderCatalog();
     } catch (err) {
       process.stderr.write(
-        `loadProviderCatalog failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `loadProviderCatalog failed: ${err instanceof Error ? err.message : String(err)}\n`
       );
     }
   }
@@ -149,7 +152,8 @@ interface CapabilityProbe {
   readonly hasFunctionCalling: boolean;
   readonly hasToolUse: boolean;
   readonly hasAnyStructuredOutput: boolean;
-  readonly structuredOutputSource: 'capabilities_legacy' | 'capability_uris' | 'metadata' | 'unknown';
+  readonly structuredOutputSource:
+    'capabilities_legacy' | 'capability_uris' | 'metadata' | 'unknown';
   readonly capabilitySource: 'capability_uris' | 'capabilities_legacy' | 'metadata' | 'unknown';
 }
 
@@ -174,11 +178,11 @@ function probeCapabilities(model: Model, args: Args): CapabilityProbe {
 
   const legacyHas = (c: string) => includeLegacy && legacyCaps.includes(c);
   const urisHas = (cap: string) =>
-    includeUris &&
-    capUris.some((u) => u === cap || u.endsWith(`/${cap}`) || u.endsWith(`:${cap}`));
+    includeUris && capUris.some((u) => u === cap || u.endsWith(`/${cap}`) || u.endsWith(`:${cap}`));
 
   const hasChat = legacyHas('chat') || urisHas('chat') || urisHas('text_generation');
-  const hasJsonMode = legacyHas('json_mode') || urisHas('json_mode') || urisHas('structured_output');
+  const hasJsonMode =
+    legacyHas('json_mode') || urisHas('json_mode') || urisHas('structured_output');
   const hasFunctionCalling = legacyHas('function_calling') || urisHas('function_calling');
   const hasToolUse = legacyHas('tool_use') || urisHas('tool_use') || urisHas('tools');
   const hasAnyStructuredOutput = hasJsonMode || hasFunctionCalling || hasToolUse;
@@ -187,7 +191,13 @@ function probeCapabilities(model: Model, args: Args): CapabilityProbe {
   if (hasJsonMode || hasFunctionCalling || hasToolUse) {
     if (legacyHas('json_mode') || legacyHas('function_calling') || legacyHas('tool_use')) {
       structuredOutputSource = 'capabilities_legacy';
-    } else if (urisHas('json_mode') || urisHas('function_calling') || urisHas('tool_use') || urisHas('structured_output') || urisHas('tools')) {
+    } else if (
+      urisHas('json_mode') ||
+      urisHas('function_calling') ||
+      urisHas('tool_use') ||
+      urisHas('structured_output') ||
+      urisHas('tools')
+    ) {
       structuredOutputSource = 'capability_uris';
     }
   }
@@ -222,9 +232,7 @@ function probeCost(model: Model, args: Args): CostProbe {
   }
   const promptTokens = args.judgePromptTokens;
   const completionTokens = args.judgeCompletionTokens;
-  const cost =
-    ((input ?? 0) * promptTokens) / 1000 +
-    ((output ?? 0) * completionTokens) / 1000;
+  const cost = ((input ?? 0) * promptTokens) / 1000 + ((output ?? 0) * completionTokens) / 1000;
   return {
     estimatedCostUsd: Math.max(0, cost),
     pricingSource: 'catalog',
@@ -289,7 +297,10 @@ interface ModelAudit {
   readonly score: number;
 }
 
-function judgeRejections(audit: Omit<ModelAudit, 'rejections' | 'score'>, args: Args): RejectionReason[] {
+function judgeRejections(
+  audit: Omit<ModelAudit, 'rejections' | 'score'>,
+  args: Args
+): RejectionReason[] {
   const r: RejectionReason[] = [];
   if (!audit.caps.hasChat) r.push('not_chat_capable');
   if ((audit.model.contextWindow ?? 0) < args.contextMin) r.push('context_window_too_small');
@@ -301,7 +312,11 @@ function judgeRejections(audit: Omit<ModelAudit, 'rejections' | 'score'>, args: 
   } else if (audit.cost.estimatedCostUsd > args.maxCostUsd) {
     r.push('cost_over_budget');
   }
-  if (audit.op.state === 'auth_failed' || audit.op.state === 'no_credits' || audit.op.state === 'rate_limited') {
+  if (
+    audit.op.state === 'auth_failed' ||
+    audit.op.state === 'no_credits' ||
+    audit.op.state === 'rate_limited'
+  ) {
     r.push('provider_not_usable');
   }
   return r;
@@ -316,9 +331,7 @@ function scoreCandidate(audit: ModelAudit): number {
   const perf = audit.model.performance ?? {};
   const quality = typeof perf.quality === 'number' ? perf.quality : 0.5;
   const reliability = typeof perf.reliability === 'number' ? perf.reliability : 0.5;
-  const costRatio = audit.cost.withPricing
-    ? Math.min(1, audit.cost.estimatedCostUsd / 0.10)
-    : 0.5;
+  const costRatio = audit.cost.withPricing ? Math.min(1, audit.cost.estimatedCostUsd / 0.1) : 0.5;
   const ctxBonus = Math.min(1, (audit.model.contextWindow ?? 0) / 64000);
   return quality * 1.0 + reliability * 0.7 + (1 - costRatio) * 0.6 + ctxBonus * 0.3;
 }
@@ -353,7 +366,7 @@ async function main(): Promise<void> {
         const rejections = judgeRejections(partial, args);
         const score = scoreCandidate({ ...partial, rejections, score: 0 });
         return { ...partial, rejections, score };
-      }),
+      })
     );
     chatCapableModels.push(...enriched);
   }
@@ -407,7 +420,17 @@ async function main(): Promise<void> {
     } else {
       pricing.missingPricing++;
     }
-    operability[a.op.state === 'auth_failed' ? 'authFailed' : a.op.state === 'no_credits' ? 'noCredits' : a.op.state === 'rate_limited' ? 'rateLimited' : a.op.state === 'usable' ? 'usable' : 'unknown']++;
+    operability[
+      a.op.state === 'auth_failed'
+        ? 'authFailed'
+        : a.op.state === 'no_credits'
+          ? 'noCredits'
+          : a.op.state === 'rate_limited'
+            ? 'rateLimited'
+            : a.op.state === 'usable'
+              ? 'usable'
+              : 'unknown'
+    ]++;
   }
 
   // ── Eligibility tiers ──────────────────────────────────────────────
@@ -416,9 +439,7 @@ async function main(): Promise<void> {
   // operability would have rejected. Tier used to estimate how many
   // judges become eligible once provider auth/credits sort out.
   const withoutOperability = chatCapableOnly.filter((a) => {
-    const nonOpRejections = a.rejections.filter(
-      (r) => r !== 'provider_not_usable',
-    );
+    const nonOpRejections = a.rejections.filter((r) => r !== 'provider_not_usable');
     return nonOpRejections.length === 0;
   });
   // structured-output-unknown variant: relax the structured output rejection
@@ -426,8 +447,7 @@ async function main(): Promise<void> {
   // array at all — we cannot prove it lacks json mode).
   const withUnknownStructuredOutputAllowed = chatCapableOnly.filter((a) => {
     const onlyStructuredMissing =
-      a.rejections.includes('json_output_not_supported') &&
-      a.caps.capabilitySource === 'unknown';
+      a.rejections.includes('json_output_not_supported') && a.caps.capabilitySource === 'unknown';
     if (!onlyStructuredMissing) return false;
     const others = a.rejections.filter((r) => r !== 'json_output_not_supported');
     return others.length === 0;
@@ -515,6 +535,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`ERROR: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.stderr.write(
+    `ERROR: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
+  );
   process.exit(1);
 });

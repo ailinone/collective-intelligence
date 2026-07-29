@@ -47,12 +47,7 @@ import type { CoordinationSignal } from './coordination-types';
 
 // ─── Public types ───────────────────────────────────────────────────────
 
-export const TOPOLOGY_KINDS = [
-  'fully_connected',
-  'ring',
-  'small_world',
-  'sparse_random',
-] as const;
+export const TOPOLOGY_KINDS = ['fully_connected', 'ring', 'small_world', 'sparse_random'] as const;
 export type TopologyKind = (typeof TOPOLOGY_KINDS)[number];
 
 /**
@@ -119,7 +114,7 @@ function uniqueAgents(agents: ReadonlyArray<string>): string[] {
 
 function buildAdjacencyMap(
   agents: ReadonlyArray<string>,
-  edges: Iterable<readonly [string, string]>,
+  edges: Iterable<readonly [string, string]>
 ): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const a of agents) map.set(a, []);
@@ -138,7 +133,7 @@ function fromAdjacency(
   kind: TopologyKind,
   symmetric: boolean,
   agents: ReadonlyArray<string>,
-  adjacency: Map<string, string[]>,
+  adjacency: Map<string, string[]>
 ): CollectiveTopology {
   const stableAgents = [...agents];
   const frozen = new Map<string, readonly string[]>();
@@ -160,13 +155,14 @@ function fromAdjacency(
  * Every agent neighbors every other. This is the default behavior of
  * the coordination layer prior to F2.2.
  */
-export function createFullyConnectedTopology(
-  agents: ReadonlyArray<string>,
-): CollectiveTopology {
+export function createFullyConnectedTopology(agents: ReadonlyArray<string>): CollectiveTopology {
   const stable = uniqueAgents(agents);
   const adjacency = new Map<string, string[]>();
   for (const a of stable) {
-    adjacency.set(a, stable.filter((b) => b !== a));
+    adjacency.set(
+      a,
+      stable.filter((b) => b !== a)
+    );
   }
   return fromAdjacency('fully_connected', true, stable, adjacency);
 }
@@ -178,9 +174,7 @@ export function createFullyConnectedTopology(
  * with wrap-around. Topology of degree 2 (3 with k=2 mode, but we keep
  * the canonical k=2 / wrap form here — see SmallWorld for k>2 rings).
  */
-export function createRingTopology(
-  agents: ReadonlyArray<string>,
-): CollectiveTopology {
+export function createRingTopology(agents: ReadonlyArray<string>): CollectiveTopology {
   const stable = uniqueAgents(agents);
   const n = stable.length;
   const adjacency = new Map<string, string[]>();
@@ -229,12 +223,12 @@ export interface SmallWorldOptions {
  */
 export function createSmallWorldTopology(
   agents: ReadonlyArray<string>,
-  options: SmallWorldOptions = {},
+  options: SmallWorldOptions = {}
 ): CollectiveTopology {
   const stable = uniqueAgents(agents);
   const n = stable.length;
   const k = Math.max(1, Math.min(Math.floor((n - 1) / 2), options.k ?? 2));
-  const rewireProbability = Math.max(0, Math.min(1, options.rewireProbability ?? 0.10));
+  const rewireProbability = Math.max(0, Math.min(1, options.rewireProbability ?? 0.1));
   const rng = new LCG(options.seed ?? 0);
 
   if (n <= 2) {
@@ -330,11 +324,11 @@ export interface SparseRandomOptions {
  */
 export function createSparseRandomTopology(
   agents: ReadonlyArray<string>,
-  options: SparseRandomOptions = {},
+  options: SparseRandomOptions = {}
 ): CollectiveTopology {
   const stable = uniqueAgents(agents);
   const n = stable.length;
-  const p = Math.max(0, Math.min(1, options.edgeProbability ?? 0.30));
+  const p = Math.max(0, Math.min(1, options.edgeProbability ?? 0.3));
   const rng = new LCG(options.seed ?? 0);
   const ensureConnected = options.ensureConnected !== false;
 
@@ -413,7 +407,7 @@ export function createTopology(opts: TopologyFactoryOptions): CollectiveTopology
 export function filterSignalsForViewer(
   signals: ReadonlyArray<CoordinationSignal>,
   viewerAgentId: string,
-  topology: CollectiveTopology,
+  topology: CollectiveTopology
 ): CoordinationSignal[] {
   if (topology.kind === 'fully_connected') return [...signals];
   const neighbors = new Set(topology.getNeighbors(viewerAgentId));

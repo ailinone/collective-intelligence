@@ -43,10 +43,10 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
     const { registry } = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     const got = registry.getModelSnapshots();
     const deprecatedInput = LEGACY_MODELS_FIXTURE.filter(
-      (m) => m.status === 'deprecated' || m.lifecycleStatus === 'deprecated',
+      (m) => m.status === 'deprecated' || m.lifecycleStatus === 'deprecated'
     );
     const deprecatedOutput = got.filter(
-      (m) => m.status === 'deprecated' || m.lifecycleStatus === 'deprecated',
+      (m) => m.status === 'deprecated' || m.lifecycleStatus === 'deprecated'
     );
     expect(deprecatedInput.length).toBeGreaterThan(0);
     expect(deprecatedOutput.length).toBe(deprecatedInput.length);
@@ -56,11 +56,9 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
     const { registry } = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     const got = registry.getModelSnapshots();
     const localInput = LEGACY_MODELS_FIXTURE.filter(
-      (m) => m.providerId === 'ollama' || m.providerId === 'vllm',
+      (m) => m.providerId === 'ollama' || m.providerId === 'vllm'
     );
-    const localOutput = got.filter(
-      (m) => m.providerId === 'ollama' || m.providerId === 'vllm',
-    );
+    const localOutput = got.filter((m) => m.providerId === 'ollama' || m.providerId === 'vllm');
     expect(localInput.length).toBeGreaterThan(0);
     expect(localOutput.length).toBe(localInput.length);
   });
@@ -70,15 +68,11 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
     const got = registry.getModelSnapshots();
     const aggInput = LEGACY_MODELS_FIXTURE.filter(
       (m) =>
-        m.providerId === 'aihubmix' ||
-        m.providerId === 'openrouter' ||
-        m.providerId === 'cometapi',
+        m.providerId === 'aihubmix' || m.providerId === 'openrouter' || m.providerId === 'cometapi'
     );
     const aggOutput = got.filter(
       (m) =>
-        m.providerId === 'aihubmix' ||
-        m.providerId === 'openrouter' ||
-        m.providerId === 'cometapi',
+        m.providerId === 'aihubmix' || m.providerId === 'openrouter' || m.providerId === 'cometapi'
     );
     expect(aggInput.length).toBeGreaterThan(0);
     expect(aggOutput.length).toBe(aggInput.length);
@@ -87,17 +81,11 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
   it('non-chat (embedding / image) rows are NOT dropped', () => {
     const { registry } = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     const got = registry.getModelSnapshots();
-    const nonChatInput = LEGACY_MODELS_FIXTURE.filter(
-      (m) =>
-        (m.capabilityUris ?? []).some(
-          (c) => c === 'embedding' || c === 'image_generation',
-        ),
+    const nonChatInput = LEGACY_MODELS_FIXTURE.filter((m) =>
+      (m.capabilityUris ?? []).some((c) => c === 'embedding' || c === 'image_generation')
     );
-    const nonChatOutput = got.filter(
-      (m) =>
-        (m.capabilityUris ?? []).some(
-          (c) => c === 'embedding' || c === 'image_generation',
-        ),
+    const nonChatOutput = got.filter((m) =>
+      (m.capabilityUris ?? []).some((c) => c === 'embedding' || c === 'image_generation')
     );
     expect(nonChatInput.length).toBeGreaterThan(0);
     expect(nonChatOutput.length).toBe(nonChatInput.length);
@@ -106,12 +94,8 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
   it('rows without ANY capability declared are NOT dropped', () => {
     const { registry } = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     const got = registry.getModelSnapshots();
-    const noCapsInput = LEGACY_MODELS_FIXTURE.filter(
-      (m) => !m.capabilityUris && !m.capabilities,
-    );
-    const noCapsOutput = got.filter(
-      (m) => !m.capabilityUris && !m.capabilities,
-    );
+    const noCapsInput = LEGACY_MODELS_FIXTURE.filter((m) => !m.capabilityUris && !m.capabilities);
+    const noCapsOutput = got.filter((m) => !m.capabilityUris && !m.capabilities);
     expect(noCapsInput.length).toBeGreaterThan(0);
     expect(noCapsOutput.length).toBe(noCapsInput.length);
   });
@@ -122,12 +106,12 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
     const noPriceInput = LEGACY_MODELS_FIXTURE.filter(
       (m) =>
         (m.inputCostPer1k === null || m.inputCostPer1k === undefined) &&
-        (m.outputCostPer1k === null || m.outputCostPer1k === undefined),
+        (m.outputCostPer1k === null || m.outputCostPer1k === undefined)
     );
     const noPriceOutput = got.filter(
       (m) =>
         (m.inputCostPer1k === null || m.inputCostPer1k === undefined) &&
-        (m.outputCostPer1k === null || m.outputCostPer1k === undefined),
+        (m.outputCostPer1k === null || m.outputCostPer1k === undefined)
     );
     expect(noPriceInput.length).toBeGreaterThan(0);
     expect(noPriceOutput.length).toBe(noPriceInput.length);
@@ -136,9 +120,7 @@ describe('registry_cache no-filter-drift — every input row survives', () => {
   it('preview lifecycle rows are NOT dropped', () => {
     const { registry } = buildRuntimeModelRegistry({ models: LEGACY_MODELS_FIXTURE });
     const got = registry.getModelSnapshots();
-    const previewInput = LEGACY_MODELS_FIXTURE.filter(
-      (m) => m.lifecycleStatus === 'preview',
-    );
+    const previewInput = LEGACY_MODELS_FIXTURE.filter((m) => m.lifecycleStatus === 'preview');
     const previewOutput = got.filter((m) => m.lifecycleStatus === 'preview');
     expect(previewInput.length).toBeGreaterThan(0);
     expect(previewOutput.length).toBe(previewInput.length);

@@ -31,10 +31,7 @@
 import type { HistoricalReplayExecution } from '../historical-replay-types';
 import { dedupeRows } from './historical-results-deduper';
 import { normaliseRows } from './historical-results-normalizer';
-import {
-  classifyRows,
-  type QualityGateResult,
-} from './historical-results-quality-gate';
+import { classifyRows, type QualityGateResult } from './historical-results-quality-gate';
 import { sanitiseRows } from './historical-results-sanitizer';
 import {
   FORBIDDEN_RAW_FIELDS,
@@ -45,9 +42,7 @@ import {
   type NormalisedRow,
 } from './historical-results-schema';
 
-export function harvestHistoricalResults(
-  raw: readonly HistoricalRawRow[],
-): HarvestResult {
+export function harvestHistoricalResults(raw: readonly HistoricalRawRow[]): HarvestResult {
   // Stage 1 — sanitise.
   const { sanitised } = sanitiseRows(raw);
 
@@ -97,14 +92,8 @@ export function harvestHistoricalResults(
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function normalisedRowToReplayExecution(
-  row: NormalisedRow,
-): HistoricalReplayExecution | null {
-  if (
-    row.judgeScoreNormalized === null ||
-    row.costUsd === null ||
-    !row.taskType
-  ) {
+function normalisedRowToReplayExecution(row: NormalisedRow): HistoricalReplayExecution | null {
+  if (row.judgeScoreNormalized === null || row.costUsd === null || !row.taskType) {
     return null;
   }
   const strategy = row.effectiveStrategy ?? row.strategy ?? 'unknown';

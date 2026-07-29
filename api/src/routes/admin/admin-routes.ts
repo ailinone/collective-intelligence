@@ -9,9 +9,9 @@
 
 /**
  * Admin Routes
- * 
+ *
  * Admin-only endpoints for user and organization management
- * 
+ *
  * Endpoints:
  * - GET /v1/admin/users - List all users (admin only, alias for /v1/users)
  * - DELETE /v1/admin/users/:id - Delete user (admin only, alias for /v1/users/:id)
@@ -114,7 +114,11 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
             message: 'User not authenticated',
           });
         }
-        const query = request.query as { page?: number; limit?: number; status?: 'active' | 'suspended' | 'inactive' };
+        const query = request.query as {
+          page?: number;
+          limit?: number;
+          status?: 'active' | 'suspended' | 'inactive';
+        };
         const { page = 1, limit = 20, status } = query;
         const organizationId = user.organizationId as string;
 
@@ -164,7 +168,7 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
           message: 'Failed to retrieve users',
         });
       }
-    },
+    }
   );
 
   /**
@@ -175,7 +179,11 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
   server.delete(
     '/v1/admin/users/:id',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('users:role_assign')],
+      preHandler: [
+        authenticate,
+        requireRole('admin', 'owner'),
+        requirePermission('users:role_assign'),
+      ],
       schema: {
         tags: ['Admin'],
         description: 'Delete a user (admin only)',
@@ -258,10 +266,10 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
 
         // Prevent self-deletion
         // Type guard to safely access userId
-        const currentUserId = 
-          typeof user === 'object' && 
-          user !== null && 
-          'userId' in user && 
+        const currentUserId =
+          typeof user === 'object' &&
+          user !== null &&
+          'userId' in user &&
           typeof user.userId === 'string'
             ? user.userId
             : undefined;
@@ -297,9 +305,8 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
           message: 'Failed to delete user',
         });
       }
-    },
+    }
   );
 
   logger.info('Admin routes registered');
 }
-

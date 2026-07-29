@@ -16,15 +16,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { scoreHistoricalContribution } from '../historical-contribution-scorer';
-import {
-  FX,
-  HISTORICAL_EXECUTIONS_FIXTURE,
-} from './fixtures/historical-executions.fixture';
+import { FX, HISTORICAL_EXECUTIONS_FIXTURE } from './fixtures/historical-executions.fixture';
 
 function findProfile(
   profiles: ReturnType<typeof scoreHistoricalContribution>['modelProfiles'],
   modelId: string,
-  taskType: string,
+  taskType: string
 ): ReturnType<typeof scoreHistoricalContribution>['modelProfiles'][number] | undefined {
   return profiles.find((p) => p.modelId === modelId && p.taskType === taskType);
 }
@@ -51,7 +48,7 @@ describe('scoreHistoricalContribution — global baselines', () => {
   it('singleBudget baselines reflect cheap-fast single rows', () => {
     expect(result.globalBaselines.singleBudgetJudgeMean).toBeGreaterThan(0);
     expect(result.globalBaselines.singleBudgetCostMean).toBeLessThan(
-      result.globalBaselines.singleModelCostMean,
+      result.globalBaselines.singleModelCostMean
     );
   });
 });
@@ -115,7 +112,7 @@ describe('scoreHistoricalContribution — pair profiles', () => {
     const pair = result.pairProfiles.find(
       (p) =>
         (p.modelA === FX.PAIR_WINNER_X && p.modelB === FX.PAIR_WINNER_Y) ||
-        (p.modelA === FX.PAIR_WINNER_Y && p.modelB === FX.PAIR_WINNER_X),
+        (p.modelA === FX.PAIR_WINNER_Y && p.modelB === FX.PAIR_WINNER_X)
     );
     expect(pair, 'expected pair winner profile').toBeDefined();
     expect(pair!.judgeMean).toBeGreaterThan(0.8);
@@ -126,7 +123,7 @@ describe('scoreHistoricalContribution — pair profiles', () => {
     const pair = result.pairProfiles.find(
       (p) =>
         (p.modelA === FX.PAIR_LOSER_P && p.modelB === FX.PAIR_LOSER_Q) ||
-        (p.modelA === FX.PAIR_LOSER_Q && p.modelB === FX.PAIR_LOSER_P),
+        (p.modelA === FX.PAIR_LOSER_Q && p.modelB === FX.PAIR_LOSER_P)
     );
     expect(pair, 'expected pair loser profile').toBeDefined();
     expect(pair!.judgeMean).toBeLessThan(0.3);

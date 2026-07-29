@@ -58,7 +58,7 @@ describe('sampling-decision — complete sessions', () => {
     const sessionId = 'multi-turn-conversation';
     // 50 hypothetical requests in one session
     const decisions = Array.from({ length: 50 }, (_, i) =>
-      shouldSample(destinationId, sessionId, 0.5),
+      shouldSample(destinationId, sessionId, 0.5)
     );
     expect(new Set(decisions).size).toBe(1);
   });

@@ -25,11 +25,29 @@ import type { ExperimentExecutionResult } from '../experiment-types';
 
 function row(over: Partial<ExperimentExecutionResult>): ExperimentExecutionResult {
   return {
-    experimentId: 'exp', taskIndex: 0, repetition: 1, executionMode: 'single-model',
-    strategy: 'single', model: 'gpt-5.4', taskType: HARD_VERIFIABLE_TASK_TYPE, complexity: 'high',
-    domain: 'tech', prompt: 'p', qualityScore: 0.8, costUsd: 0.01, latencyMs: 1000, totalTokens: 500,
-    success: true, modelsUsed: ['gpt-5.4'], judgeScore: 0.8, judgeRubric: 'r', faithfulnessScore: null,
-    instructionFollowingScore: null, failureMode: null, phase: 'frozen', responseSummary: 'm',
+    experimentId: 'exp',
+    taskIndex: 0,
+    repetition: 1,
+    executionMode: 'single-model',
+    strategy: 'single',
+    model: 'gpt-5.4',
+    taskType: HARD_VERIFIABLE_TASK_TYPE,
+    complexity: 'high',
+    domain: 'tech',
+    prompt: 'p',
+    qualityScore: 0.8,
+    costUsd: 0.01,
+    latencyMs: 1000,
+    totalTokens: 500,
+    success: true,
+    modelsUsed: ['gpt-5.4'],
+    judgeScore: 0.8,
+    judgeRubric: 'r',
+    faithfulnessScore: null,
+    instructionFollowingScore: null,
+    failureMode: null,
+    phase: 'frozen',
+    responseSummary: 'm',
     ...over,
   };
 }
@@ -39,25 +57,55 @@ describe('STAT-1 — armed consensus vs BEST single (not mean-of-all)', () => {
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [146, 147]) {
       // Two singles per task: a strong frontier (0.90) and a weak per-provider (0.30).
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.90 }));
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'weak', qualityScore: 0.30 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.9 })
+      );
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'weak', qualityScore: 0.3 })
+      );
       // Armed consensus at 0.80: beats the MEAN single (0.60) but not the BEST (0.90).
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.80 }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.8,
+        })
+      );
     }
     const report = generateSegmentedBenchmarkReport('exp', results);
     const haHard = report.confirmatory.find((f) => f.regime === 'ha-hard')!;
     expect(haHard.verdict).toBe('NO_ADVANTAGE');
-    expect(haHard.pairedDeltaMean).toBeCloseTo(-0.10, 5); // 0.80 - 0.90
+    expect(haHard.pairedDeltaMean).toBeCloseTo(-0.1, 5); // 0.80 - 0.90
   });
 
   it('ignores non-armed collective strategies (blind-debate is the control, not the thesis)', () => {
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [146, 147]) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.60 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.6 })
+      );
       // A blind-debate collective scoring high must NOT count toward the confirmatory verdict.
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'blind-debate', model: null, qualityScore: 0.99 }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'blind-debate',
+          model: null,
+          qualityScore: 0.99,
+        })
+      );
       // The ARMED consensus is the only collective the verdict considers — and it ties.
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.61 }));
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.61,
+        })
+      );
     }
     const report = generateSegmentedBenchmarkReport('exp', results);
     const haHard = report.confirmatory.find((f) => f.regime === 'ha-hard')!;
@@ -70,18 +118,47 @@ describe('STAT-2 — failed/warmup rows excluded from the verdict', () => {
   it('a failed row (success=false, qualityScore 0) does not drag the collective down', () => {
     const results: ExperimentExecutionResult[] = [];
     for (const ti of [146, 147, 148]) {
-      results.push(row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.50 }));
-      results.push(row({ taskIndex: ti, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0.90 }));
+      results.push(
+        row({ taskIndex: ti, executionMode: 'single-model', model: 'frontier', qualityScore: 0.5 })
+      );
+      results.push(
+        row({
+          taskIndex: ti,
+          executionMode: 'collective',
+          strategy: 'consensus',
+          model: null,
+          qualityScore: 0.9,
+        })
+      );
     }
     // Contaminating rows: a FAILED collective (0) and a WARMUP collective (0) —
     // if counted, they would erase the win.
-    results.push(row({ taskIndex: 146, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0, success: false, failureMode: 'timeout' }));
-    results.push(row({ taskIndex: 147, executionMode: 'collective', strategy: 'consensus', model: null, qualityScore: 0, phase: 'warmup' }));
+    results.push(
+      row({
+        taskIndex: 146,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0,
+        success: false,
+        failureMode: 'timeout',
+      })
+    );
+    results.push(
+      row({
+        taskIndex: 147,
+        executionMode: 'collective',
+        strategy: 'consensus',
+        model: null,
+        qualityScore: 0,
+        phase: 'warmup',
+      })
+    );
 
     const report = generateSegmentedBenchmarkReport('exp', results);
     const haHard = report.confirmatory.find((f) => f.regime === 'ha-hard')!;
     expect(haHard.verdict).toBe('COLLECTIVE_WINS');
-    expect(haHard.pairedDeltaMean).toBeCloseTo(0.40, 5); // 0.90 - 0.50, uncontaminated
+    expect(haHard.pairedDeltaMean).toBeCloseTo(0.4, 5); // 0.90 - 0.50, uncontaminated
   });
 });
 

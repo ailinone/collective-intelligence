@@ -23,9 +23,17 @@
  * API: https://api.palabra.ai
  */
 
-import { ProviderAdapter, type ProviderConfig, type HealthCheckResult } from '@/providers/base/provider-adapter';
+import {
+  ProviderAdapter,
+  type ProviderConfig,
+  type HealthCheckResult,
+} from '@/providers/base/provider-adapter';
 import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
-import type { ModerationResponse, ImageEditResponse, ImageVariationResponse } from '@/types/model-client';
+import type {
+  ModerationResponse,
+  ImageEditResponse,
+  ImageVariationResponse,
+} from '@/types/model-client';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ provider: 'palabraai' });
@@ -65,8 +73,8 @@ export class PalabraAIAdapter extends ProviderAdapter {
 
   private authHeaders(): Record<string, string> {
     return {
-      'ClientId': this.clientId,
-      'ClientSecret': this.clientSecret,
+      ClientId: this.clientId,
+      ClientSecret: this.clientSecret,
       'Content-Type': 'application/json',
     };
   }
@@ -106,7 +114,7 @@ export class PalabraAIAdapter extends ProviderAdapter {
         return res;
       }, 'create translation session');
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         data: {
           id: string;
           webrtc_url: string;
@@ -129,7 +137,7 @@ export class PalabraAIAdapter extends ProviderAdapter {
               detectable_languages: [],
               sentence_splitter: { enabled: req.sentenceSplitterEnabled ?? true },
             },
-            translations: req.targetLanguages.map(lang => ({
+            translations: req.targetLanguages.map((lang) => ({
               target_language: lang,
               translate_partial_transcriptions: req.translatePartialTranscriptions ?? false,
               speech_generation: {
@@ -155,16 +163,22 @@ export class PalabraAIAdapter extends ProviderAdapter {
         languages: { source: req.sourceLanguage, targets: req.targetLanguages },
       };
 
-      log.info({
-        latency: Date.now() - start,
-        sessionId: session.sessionId,
-        source: req.sourceLanguage,
-        targets: req.targetLanguages,
-      }, 'Palabra translation session created');
+      log.info(
+        {
+          latency: Date.now() - start,
+          sessionId: session.sessionId,
+          source: req.sourceLanguage,
+          targets: req.targetLanguages,
+        },
+        'Palabra translation session created'
+      );
 
       return session;
     } catch (error) {
-      log.error({ error: error instanceof Error ? error.message : String(error) }, 'Palabra session creation failed');
+      log.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Palabra session creation failed'
+      );
       throw error;
     }
   }
@@ -189,7 +203,10 @@ export class PalabraAIAdapter extends ProviderAdapter {
       });
       log.info({ sessionId }, 'Palabra session deleted');
     } catch (error) {
-      log.warn({ sessionId, error: error instanceof Error ? error.message : String(error) }, 'Session deletion failed');
+      log.warn(
+        { sessionId, error: error instanceof Error ? error.message : String(error) },
+        'Session deletion failed'
+      );
     }
   }
 
@@ -197,7 +214,9 @@ export class PalabraAIAdapter extends ProviderAdapter {
 
   async getProvider(): Promise<Provider> {
     return {
-      id: 'palabraai', name: 'palabraai', displayName: 'Palabra.ai',
+      id: 'palabraai',
+      name: 'palabraai',
+      displayName: 'Palabra.ai',
       status: 'active',
       health: { status: 'healthy', lastCheck: new Date() },
       models: [],
@@ -205,17 +224,28 @@ export class PalabraAIAdapter extends ProviderAdapter {
   }
 
   async getModels(): Promise<Model[]> {
-    const perf: import('@/types').ModelPerformance = { latencyMs: 200, throughput: 0, quality: 0.9, reliability: 0.95 };
-    return [{
-      id: 'palabraai/realtime-translation',
-      providerId: 'palabraai', provider: 'palabraai',
-      name: 'realtime-translation',
-      displayName: 'Palabra.ai Real-time Translation (70+ languages)',
-      contextWindow: 0, maxOutputTokens: 0,
-      inputCostPer1k: 0, outputCostPer1k: 0,
-      status: 'active', performance: perf,
-      capabilities: ['speech_to_text', 'text_to_speech', 'streaming'],
-    }];
+    const perf: import('@/types').ModelPerformance = {
+      latencyMs: 200,
+      throughput: 0,
+      quality: 0.9,
+      reliability: 0.95,
+    };
+    return [
+      {
+        id: 'palabraai/realtime-translation',
+        providerId: 'palabraai',
+        provider: 'palabraai',
+        name: 'realtime-translation',
+        displayName: 'Palabra.ai Real-time Translation (70+ languages)',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        inputCostPer1k: 0,
+        outputCostPer1k: 0,
+        status: 'active',
+        performance: perf,
+        capabilities: ['speech_to_text', 'text_to_speech', 'streaming'],
+      },
+    ];
   }
 
   async healthCheck(): Promise<HealthCheckResult> {
@@ -232,13 +262,36 @@ export class PalabraAIAdapter extends ProviderAdapter {
   }
 
   // ── Not Supported ──────────────────
-  async chatCompletion(): Promise<ChatResponse> { throw new Error('Palabra.ai: translation-only'); }
+  async chatCompletion(): Promise<ChatResponse> {
+    throw new Error('Palabra.ai: translation-only');
+  }
+
   // eslint-disable-next-line require-yield -- translation-only provider; this generator never yields.
-  async *chatCompletionStream(): AsyncGenerator<ChatResponse> { throw new Error('Palabra.ai: translation-only'); }
-  async generateEmbeddings(): Promise<EmbeddingResponse> { throw new Error('Not supported'); }
-  calculateCost(): number { return 0; }
-  normalizeModelName(name: string): string { return name; }
-  async moderate(): Promise<ModerationResponse> { throw new Error('Not supported'); }
-  async imageEdit(): Promise<ImageEditResponse> { throw new Error('Not supported'); }
-  async imageVariation(): Promise<ImageVariationResponse> { throw new Error('Not supported'); }
+  async *chatCompletionStream(): AsyncGenerator<ChatResponse> {
+    throw new Error('Palabra.ai: translation-only');
+  }
+
+  async generateEmbeddings(): Promise<EmbeddingResponse> {
+    throw new Error('Not supported');
+  }
+
+  calculateCost(): number {
+    return 0;
+  }
+
+  normalizeModelName(name: string): string {
+    return name;
+  }
+
+  async moderate(): Promise<ModerationResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageEdit(): Promise<ImageEditResponse> {
+    throw new Error('Not supported');
+  }
+
+  async imageVariation(): Promise<ImageVariationResponse> {
+    throw new Error('Not supported');
+  }
 }

@@ -95,10 +95,16 @@ describe('consensus real-artifact contract (offline regression)', () => {
 
     // Top-level
     expect(a.strategyName).toBe('consensus');
-    expect(['consensus', 'consensus_fallback_best_individual', 'consensus_degraded_best_individual']).toContain(a.effectiveStrategyId);
+    expect([
+      'consensus',
+      'consensus_fallback_best_individual',
+      'consensus_degraded_best_individual',
+    ]).toContain(a.effectiveStrategyId);
     expect(typeof a.scoringMode).toBe('string');
     expect(typeof a.evaluatorId).toBe('string');
-    expect(['fully_validated', 'structurally_validated_only', 'unavailable']).toContain(a.validationStatus);
+    expect(['fully_validated', 'structurally_validated_only', 'unavailable']).toContain(
+      a.validationStatus
+    );
 
     // Participants
     expect(a.participantOutputs.length).toBeGreaterThanOrEqual(2);

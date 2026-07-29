@@ -42,15 +42,19 @@ const MIN_REQUEST = {
 const DETECTION_PATH = 'request-flag' as const;
 
 // SM-R3 strategy matrix — (strategyId | null) for each canonical name
-const STRATEGY_MATRIX: Array<{ canonical: string; strategyId: string | null; registered: boolean }> = [
-  { canonical: 'single',          strategyId: 'single',           registered: true  },
-  { canonical: 'fast',            strategyId: null,               registered: false },
-  { canonical: 'cost-cascade',    strategyId: 'cost-cascade',     registered: true  },
+const STRATEGY_MATRIX: Array<{
+  canonical: string;
+  strategyId: string | null;
+  registered: boolean;
+}> = [
+  { canonical: 'single', strategyId: 'single', registered: true },
+  { canonical: 'fast', strategyId: null, registered: false },
+  { canonical: 'cost-cascade', strategyId: 'cost-cascade', registered: true },
   { canonical: 'quality-multipass', strategyId: 'quality-multipass', registered: true },
-  { canonical: 'critique-repair', strategyId: 'critique-repair',  registered: true  },
-  { canonical: 'debate',          strategyId: 'debate',           registered: true  },
-  { canonical: 'expert-panel',    strategyId: 'expert-panel',     registered: true  },
-  { canonical: 'consensus',       strategyId: 'consensus',        registered: true  },
+  { canonical: 'critique-repair', strategyId: 'critique-repair', registered: true },
+  { canonical: 'debate', strategyId: 'debate', registered: true },
+  { canonical: 'expert-panel', strategyId: 'expert-panel', registered: true },
+  { canonical: 'consensus', strategyId: 'consensus', registered: true },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,7 +71,7 @@ function buildResult(strategyId: string, registered: boolean) {
       registered,
       blockers: registered ? [] : [`BLOCKED_BY_MISSING_STRATEGY_REGISTRY:${strategyId}`],
       missingCapabilities: registered ? [] : [`strategy:${strategyId}`],
-    },
+    }
   );
 }
 
@@ -105,7 +109,7 @@ describe('01C.1B-SM-R3 §12a — strategy strict dry-run expansion', () => {
   });
 
   describe('executable strategies: registered strategies are executable', () => {
-    const executables = STRATEGY_MATRIX.filter(s => s.registered);
+    const executables = STRATEGY_MATRIX.filter((s) => s.registered);
     it(`has ${executables.length} executable strategies (≥3 required)`, () => {
       expect(executables.length).toBeGreaterThanOrEqual(3);
     });
@@ -141,7 +145,7 @@ describe('01C.1B-SM-R3 §12a — strategy strict dry-run expansion', () => {
       const meta = result.metadata as Record<string, unknown>;
       const caps = meta['missingCapabilities'] as string[];
       expect(Array.isArray(caps)).toBe(true);
-      expect(caps.some(c => c.includes('fast'))).toBe(true);
+      expect(caps.some((c) => c.includes('fast'))).toBe(true);
     });
 
     it('[fast] still returns HTTP-safe result (plan_only=true)', () => {
@@ -184,13 +188,11 @@ describe('01C.1B-SM-R3 §12a — strategy strict dry-run expansion', () => {
     });
 
     it('different strategies produce different fingerprints', () => {
-      const fingerprints = STRATEGY_MATRIX
-        .filter(s => s.registered)
-        .map(s => {
-          const result = buildResult(s.strategyId!, true);
-          const meta = result.metadata as Record<string, unknown>;
-          return meta['planFingerprint'] as string;
-        });
+      const fingerprints = STRATEGY_MATRIX.filter((s) => s.registered).map((s) => {
+        const result = buildResult(s.strategyId!, true);
+        const meta = result.metadata as Record<string, unknown>;
+        return meta['planFingerprint'] as string;
+      });
       const unique = new Set(fingerprints);
       // All registered strategies should have unique fingerprints
       expect(unique.size).toBe(fingerprints.length);

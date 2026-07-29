@@ -27,8 +27,21 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-function row(id: string, displayName: string, provider: string, contextWindow: number, inputCostPer1k: number) {
-  return { id, displayName, contextWindow, inputCostPer1k, capabilities: ['chat'], provider: { name: provider } };
+function row(
+  id: string,
+  displayName: string,
+  provider: string,
+  contextWindow: number,
+  inputCostPer1k: number
+) {
+  return {
+    id,
+    displayName,
+    contextWindow,
+    inputCostPer1k,
+    capabilities: ['chat'],
+    provider: { name: provider },
+  };
 }
 
 // openai: a cheap, huge-context sibling would win resolveTopTierModels' own
@@ -55,7 +68,8 @@ vi.mock('@/database/client', () => ({
       // c3-frontier-comparison.test.ts's mock).
       findMany: vi.fn().mockImplementation((args: { where?: { provider?: { name?: string } } }) => {
         const providerName = args?.where?.provider?.name;
-        if (providerName) return Promise.resolve(CATALOG.filter((r) => r.provider.name === providerName));
+        if (providerName)
+          return Promise.resolve(CATALOG.filter((r) => r.provider.name === providerName));
         return Promise.resolve(CATALOG);
       }),
     },
@@ -77,12 +91,18 @@ beforeEach(async () => {
   // mockImplementation, so re-assert it (awaited) before each test body runs —
   // same fix needed in c3-resolver-owner-guard.test.ts.
   const { prisma } = await import('@/database/client');
-  (prisma.provider.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([{ name: 'openai' }, { name: 'xai' }]);
-  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation((args: { where?: { provider?: { name?: string } } }) => {
-    const providerName = args?.where?.provider?.name;
-    if (providerName) return Promise.resolve(CATALOG.filter((r) => r.provider.name === providerName));
-    return Promise.resolve(CATALOG);
-  });
+  (prisma.provider.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+    { name: 'openai' },
+    { name: 'xai' },
+  ]);
+  (prisma.model.findMany as ReturnType<typeof vi.fn>).mockImplementation(
+    (args: { where?: { provider?: { name?: string } } }) => {
+      const providerName = args?.where?.provider?.name;
+      if (providerName)
+        return Promise.resolve(CATALOG.filter((r) => r.provider.name === providerName));
+      return Promise.resolve(CATALOG);
+    }
+  );
 });
 
 describe('resolveBenchmarkSingles — frontier flagships alongside full breadth (2026-07-16)', () => {

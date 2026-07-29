@@ -10,14 +10,14 @@
 /**
  * Fine-tuning Service
  * Manages fine-tuning jobs across multiple providers
- * 
+ *
  * Features:
  * - Multi-provider orchestration (OpenAI, Google Gemini, etc.)
  * - Job lifecycle management
  * - Event streaming
  * - Checkpoint management
  * - Metrics tracking
- * 
+ *
  * NO HARDCODED - Provider selection based on base model availability
  * REAL IMPLEMENTATION - Integrates with OpenAI/Gemini fine-tuning APIs
  */
@@ -28,7 +28,10 @@ import { nanoid } from 'nanoid';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { ModelRepository } from '@/services/model-repository';
 import { FilesService } from '@/services/files-service';
-import { toPrismaJsonValue, toPrismaNullableJsonValue } from '@/services/assistants-service-helpers';
+import {
+  toPrismaJsonValue,
+  toPrismaNullableJsonValue,
+} from '@/services/assistants-service-helpers';
 import { Prisma } from '@/generated/prisma/index.js';
 import type {
   CreateFineTuningJobRequest,
@@ -97,9 +100,7 @@ function toGoogleTuningBaseModel(modelName: string): string {
  * Returns an empty array if no usable examples are found; the caller decides
  * how to surface that.
  */
-function parseTrainingFileToGoogleExamples(
-  raw: string
-): GoogleTuningExample[] {
+function parseTrainingFileToGoogleExamples(raw: string): GoogleTuningExample[] {
   const examples: GoogleTuningExample[] = [];
   const lines = raw.split('\n');
 
@@ -140,9 +141,7 @@ function parseTrainingFileToGoogleExamples(
             ? message.content
             : Array.isArray(message.content)
               ? (message.content as Array<Record<string, unknown>>)
-                  .map((part) =>
-                    typeof part.text === 'string' ? part.text : ''
-                  )
+                  .map((part) => (typeof part.text === 'string' ? part.text : ''))
                   .join('')
               : '';
 
@@ -212,16 +211,12 @@ function extractGoogleTunedModelName(operation: {
  * Build normalized FineTuningEvents from Gemini tuning snapshots. Snapshots
  * are the closest analogue to OpenAI's training events (per-step metrics).
  */
-function googleSnapshotsToEvents(
-  snapshots: GoogleTuningSnapshot[] | undefined
-): FineTuningEvent[] {
+function googleSnapshotsToEvents(snapshots: GoogleTuningSnapshot[] | undefined): FineTuningEvent[] {
   if (!Array.isArray(snapshots)) return [];
   return snapshots.map((snapshot, index): FineTuningEvent => {
     const step = typeof snapshot.step === 'number' ? snapshot.step : index;
-    const loss =
-      typeof snapshot.meanLoss === 'number' ? snapshot.meanLoss : undefined;
-    const epoch =
-      typeof snapshot.epoch === 'number' ? snapshot.epoch : undefined;
+    const loss = typeof snapshot.meanLoss === 'number' ? snapshot.meanLoss : undefined;
+    const epoch = typeof snapshot.epoch === 'number' ? snapshot.epoch : undefined;
     const message =
       loss !== undefined
         ? `Step ${step}${epoch !== undefined ? ` (epoch ${epoch})` : ''}: mean_loss=${loss}`
@@ -325,9 +320,7 @@ interface OpenAIFineTuningEventsListResponse {
 /**
  * Map OpenAI status string to FineTuningJob status
  */
-function mapOpenAIStatusToFineTuningStatus(
-  status: string
-): FineTuningJob['status'] {
+function mapOpenAIStatusToFineTuningStatus(status: string): FineTuningJob['status'] {
   const validStatuses: FineTuningJob['status'][] = [
     'validating_files',
     'queued',
@@ -365,20 +358,18 @@ function isValidWandbIntegration(integration: unknown): integration is OpenAIJob
  * structured data. Underscore prefix marks intent (kept for future use,
  * not dead code).
  */
-function _mapOpenAIIntegrations(
-  integrations: unknown
-): FineTuningIntegration[] | undefined {
+function _mapOpenAIIntegrations(integrations: unknown): FineTuningIntegration[] | undefined {
   if (!integrations || !Array.isArray(integrations)) {
     return undefined;
   }
-  
+
   const validIntegrations: FineTuningIntegration[] = [];
-  
+
   for (const integration of integrations) {
     if (!isValidWandbIntegration(integration)) {
       continue;
     }
-    
+
     if (integration.type === 'wandb' && integration.wandb) {
       validIntegrations.push({
         type: 'wandb',
@@ -395,7 +386,7 @@ function _mapOpenAIIntegrations(
       });
     }
   }
-  
+
   return validIntegrations.length > 0 ? validIntegrations : undefined;
 }
 
@@ -484,16 +475,18 @@ export class FineTuningService {
     finishedAt: Date | null;
   }): FineTuningJob {
     // Parse hyperparameters from JSON
-    const hyperparams = typeof dbJob.hyperparameters === 'object' && dbJob.hyperparameters !== null
-      ? dbJob.hyperparameters as Record<string, unknown>
-      : {};
-    
+    const hyperparams =
+      typeof dbJob.hyperparameters === 'object' && dbJob.hyperparameters !== null
+        ? (dbJob.hyperparameters as Record<string, unknown>)
+        : {};
+
     const hyperparameters: FineTuningHyperparameters = {
       n_epochs: typeof hyperparams.n_epochs === 'number' ? hyperparams.n_epochs : 'auto',
       batch_size: typeof hyperparams.batch_size === 'number' ? hyperparams.batch_size : 'auto',
-      learning_rate_multiplier: typeof hyperparams.learning_rate_multiplier === 'number' 
-        ? hyperparams.learning_rate_multiplier 
-        : 'auto',
+      learning_rate_multiplier:
+        typeof hyperparams.learning_rate_multiplier === 'number'
+          ? hyperparams.learning_rate_multiplier
+          : 'auto',
     };
 
     // Parse integrations from JSON
@@ -535,8 +528,18 @@ export class FineTuningService {
    * REAL IMPLEMENTATION - Integrates with OpenAI/Gemini fine-tuning APIs
    */
   async createJob(options: CreateFineTuningJobRequest): Promise<FineTuningJob> {
-    const { training_file, validation_file, model, hyperparameters, suffix, integrations, seed, userContext, requestId } = options;
-    
+    const {
+      training_file,
+      validation_file,
+      model,
+      hyperparameters,
+      suffix,
+      integrations,
+      seed,
+      userContext,
+      requestId,
+    } = options;
+
     const jobId = `ftjob-${nanoid(24)}`;
     // `createdAt` previously captured here was unused — the DB row's
     // `createdAt` (auto-set) is the authoritative timestamp.
@@ -564,7 +567,9 @@ export class FineTuningService {
         });
 
         if (validationFile.purpose !== 'fine-tune') {
-          throw new Error(`Validation file purpose must be "fine-tune", got "${validationFile.purpose}"`);
+          throw new Error(
+            `Validation file purpose must be "fine-tune", got "${validationFile.purpose}"`
+          );
         }
       }
 
@@ -592,7 +597,7 @@ export class FineTuningService {
       if (selectedModel.provider === 'openai' && adapter instanceof OpenAIAdapter) {
         // Access OpenAI client from adapter using public method
         const openaiClient = adapter.getClient();
-        
+
         if (!openaiClient.fineTuning || !openaiClient.fineTuning.jobs) {
           throw new Error('OpenAI client does not support fine-tuning API');
         }
@@ -602,24 +607,45 @@ export class FineTuningService {
           training_file: training_file,
           validation_file: validation_file || undefined,
           model: model,
-          hyperparameters: hyperparameters ? {
-            n_epochs: hyperparameters.n_epochs === 'auto' ? undefined : (typeof hyperparameters.n_epochs === 'number' ? hyperparameters.n_epochs : undefined),
-            batch_size: hyperparameters.batch_size === 'auto' ? undefined : (typeof hyperparameters.batch_size === 'number' ? hyperparameters.batch_size : undefined),
-            learning_rate_multiplier: hyperparameters.learning_rate_multiplier === 'auto' ? undefined : (typeof hyperparameters.learning_rate_multiplier === 'number' ? hyperparameters.learning_rate_multiplier : undefined),
-          } : undefined,
+          hyperparameters: hyperparameters
+            ? {
+                n_epochs:
+                  hyperparameters.n_epochs === 'auto'
+                    ? undefined
+                    : typeof hyperparameters.n_epochs === 'number'
+                      ? hyperparameters.n_epochs
+                      : undefined,
+                batch_size:
+                  hyperparameters.batch_size === 'auto'
+                    ? undefined
+                    : typeof hyperparameters.batch_size === 'number'
+                      ? hyperparameters.batch_size
+                      : undefined,
+                learning_rate_multiplier:
+                  hyperparameters.learning_rate_multiplier === 'auto'
+                    ? undefined
+                    : typeof hyperparameters.learning_rate_multiplier === 'number'
+                      ? hyperparameters.learning_rate_multiplier
+                      : undefined,
+              }
+            : undefined,
           suffix: suffix || undefined,
-          integrations: integrations ? integrations.filter((integration) => integration.type === 'wandb' && integration.wandb).map((integration) => ({
-            type: 'wandb' as const,
-            wandb: {
-              project: integration.wandb!.project,
-              name: integration.wandb!.name,
-              entity: integration.wandb!.entity,
-              tags: integration.wandb!.tags,
-            },
-          })) : undefined,
+          integrations: integrations
+            ? integrations
+                .filter((integration) => integration.type === 'wandb' && integration.wandb)
+                .map((integration) => ({
+                  type: 'wandb' as const,
+                  wandb: {
+                    project: integration.wandb!.project,
+                    name: integration.wandb!.name,
+                    entity: integration.wandb!.entity,
+                    tags: integration.wandb!.tags,
+                  },
+                }))
+            : undefined,
           seed: seed || undefined,
         });
-        
+
         // Type guard to validate OpenAI job response structure
         const isValidOpenAIJob = (job: unknown): job is OpenAIFineTuningJob => {
           if (!job || typeof job !== 'object') return false;
@@ -632,21 +658,30 @@ export class FineTuningService {
             typeof j.status === 'string'
           );
         };
-        
+
         if (!isValidOpenAIJob(openaiJobResponse)) {
           throw new Error('Invalid response from OpenAI fine-tuning jobs.create API');
         }
-        
+
         const openaiJob: OpenAIFineTuningJob = openaiJobResponse;
 
         // Step 5: Store job metadata in database
         const jobStatus = mapOpenAIStatusToFineTuningStatus(openaiJob.status);
         const hyperparams: Record<string, unknown> = {
-          n_epochs: typeof openaiJob.hyperparameters.n_epochs === 'number' ? openaiJob.hyperparameters.n_epochs : 'auto',
-          batch_size: typeof openaiJob.hyperparameters.batch_size === 'number' ? openaiJob.hyperparameters.batch_size : 'auto',
-          learning_rate_multiplier: typeof openaiJob.hyperparameters.learning_rate_multiplier === 'number' ? openaiJob.hyperparameters.learning_rate_multiplier : 'auto',
+          n_epochs:
+            typeof openaiJob.hyperparameters.n_epochs === 'number'
+              ? openaiJob.hyperparameters.n_epochs
+              : 'auto',
+          batch_size:
+            typeof openaiJob.hyperparameters.batch_size === 'number'
+              ? openaiJob.hyperparameters.batch_size
+              : 'auto',
+          learning_rate_multiplier:
+            typeof openaiJob.hyperparameters.learning_rate_multiplier === 'number'
+              ? openaiJob.hyperparameters.learning_rate_multiplier
+              : 'auto',
         };
-        
+
         const createData: {
           id: string;
           organizationId: string;
@@ -691,8 +726,11 @@ export class FineTuningService {
         const dbJob = await prisma.fineTuningJob.create({
           data: createData,
         });
-        
-        log.info({ requestId, jobId: dbJob.id, openaiJobId: openaiJob.id }, 'Fine-tuning job created and persisted in database');
+
+        log.info(
+          { requestId, jobId: dbJob.id, openaiJobId: openaiJob.id },
+          'Fine-tuning job created and persisted in database'
+        );
 
         return this.mapDbJobToApiJob(dbJob);
       } else if (selectedModel.provider === 'google') {
@@ -733,9 +771,7 @@ export class FineTuningService {
 
         const tunedModelName = extractGoogleTunedModelName(operation);
         if (!tunedModelName) {
-          throw new Error(
-            'Google tuning API did not return a tunedModel resource name'
-          );
+          throw new Error('Google tuning API did not return a tunedModel resource name');
         }
 
         // Normalize the lifecycle: a freshly-created tuning op is queued/running.
@@ -743,18 +779,13 @@ export class FineTuningService {
         const normalizedStatus = operation.done
           ? mapGoogleStateToNormalizedStatus(responseState)
           : mapGoogleStateToNormalizedStatus(responseState ?? 'STATE_UNSPECIFIED');
-        const fineTunedModel =
-          normalizedStatus === 'succeeded' ? tunedModelName : null;
+        const fineTunedModel = normalizedStatus === 'succeeded' ? tunedModelName : null;
 
         const hyperparametersJson: Record<string, unknown> = {
           n_epochs:
-            typeof hyperparameters?.n_epochs === 'number'
-              ? hyperparameters.n_epochs
-              : 'auto',
+            typeof hyperparameters?.n_epochs === 'number' ? hyperparameters.n_epochs : 'auto',
           batch_size:
-            typeof hyperparameters?.batch_size === 'number'
-              ? hyperparameters.batch_size
-              : 'auto',
+            typeof hyperparameters?.batch_size === 'number' ? hyperparameters.batch_size : 'auto',
           learning_rate_multiplier:
             typeof hyperparameters?.learning_rate_multiplier === 'number'
               ? hyperparameters.learning_rate_multiplier
@@ -937,18 +968,14 @@ export class FineTuningService {
   } | null> {
     try {
       const googleClient = this.getGoogleFineTuningClient();
-      const tunedModel: GoogleTunedModel =
-        await googleClient.getTunedModel(providerJobId);
+      const tunedModel: GoogleTunedModel = await googleClient.getTunedModel(providerJobId);
 
       const normalizedStatus = mapGoogleStateToNormalizedStatus(tunedModel.state);
       const isTerminal = ['succeeded', 'failed'].includes(normalizedStatus);
       const fineTunedModel =
-        normalizedStatus === 'succeeded'
-          ? tunedModel.name || providerJobId
-          : null;
+        normalizedStatus === 'succeeded' ? tunedModel.name || providerJobId : null;
       const completeTime = tunedModel.tuningTask?.completeTime;
-      const finishedAt =
-        isTerminal && completeTime ? new Date(completeTime) : null;
+      const finishedAt = isTerminal && completeTime ? new Date(completeTime) : null;
 
       const updated = await prisma.fineTuningJob.update({
         where: { id: jobId },
@@ -1018,10 +1045,10 @@ export class FineTuningService {
 
       if (dbJob.provider === 'openai' && adapter instanceof OpenAIAdapter) {
         const openaiClient = adapter.getClient();
-        
+
         if (openaiClient.fineTuning && openaiClient.fineTuning.jobs) {
           const openaiJobResponse = await openaiClient.fineTuning.jobs.cancel(dbJob.providerJobId);
-          
+
           // Type guard to validate OpenAI job response structure
           const isValidOpenAIJob = (job: unknown): job is OpenAIFineTuningJob => {
             if (!job || typeof job !== 'object') return false;
@@ -1034,11 +1061,11 @@ export class FineTuningService {
               typeof j.status === 'string'
             );
           };
-          
+
           if (!isValidOpenAIJob(openaiJobResponse)) {
             throw new Error('Invalid response from OpenAI fine-tuning jobs.cancel API');
           }
-          
+
           const openaiJob: OpenAIFineTuningJob = openaiJobResponse;
           const jobStatus = mapOpenAIStatusToFineTuningStatus(openaiJob.status);
 
@@ -1086,7 +1113,7 @@ export class FineTuningService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, jobId, error: errorMessage }, 'Cancel fine-tuning job failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Fine-tuning job ${jobId} not found`);
       }
@@ -1109,9 +1136,7 @@ export class FineTuningService {
       if (dbJob && dbJob.provider === 'google') {
         const googleClient = this.getGoogleFineTuningClient();
         const tunedModel = await googleClient.getTunedModel(dbJob.providerJobId);
-        const events = googleSnapshotsToEvents(
-          tunedModel.tuningTask?.snapshots
-        );
+        const events = googleSnapshotsToEvents(tunedModel.tuningTask?.snapshots);
         return { events, has_more: false };
       }
 
@@ -1121,7 +1146,7 @@ export class FineTuningService {
 
       if (openaiAdapter instanceof OpenAIAdapter) {
         const openaiClient = openaiAdapter.getClient();
-        
+
         if (openaiClient.fineTuning && openaiClient.fineTuning.jobs) {
           // Build query params - OpenAI SDK doesn't support 'before' directly
           const queryParams: { limit?: number; after?: string } = {};
@@ -1132,37 +1157,48 @@ export class FineTuningService {
             queryParams.after = after;
           }
           // Note: 'before' is not supported in OpenAI SDK JobListEventsParams
-          const openaiEventsResponse = await openaiClient.fineTuning.jobs.listEvents(jobId, queryParams);
-          
+          const openaiEventsResponse = await openaiClient.fineTuning.jobs.listEvents(
+            jobId,
+            queryParams
+          );
+
           // Type guard to validate OpenAI events response structure
-          const isValidOpenAIEventsListResponse = (response: unknown): response is OpenAIFineTuningEventsListResponse => {
+          const isValidOpenAIEventsListResponse = (
+            response: unknown
+          ): response is OpenAIFineTuningEventsListResponse => {
             if (!response || typeof response !== 'object') return false;
             const r = response as Record<string, unknown>;
             if (!Array.isArray(r.data)) return false;
             if (typeof r.has_more !== 'boolean') return false;
             return true;
           };
-          
+
           if (!isValidOpenAIEventsListResponse(openaiEventsResponse)) {
             throw new Error('Invalid response from OpenAI fine-tuning jobs.listEvents API');
           }
-          
+
           const openaiEvents: OpenAIFineTuningEventsListResponse = openaiEventsResponse;
 
           const events: FineTuningEvent[] = openaiEvents.data.map((event): FineTuningEvent => {
             // Validate level is one of the expected values
             const validLevels: Array<'info' | 'warn' | 'error'> = ['info', 'warn', 'error'];
-            const level: 'info' | 'warn' | 'error' = 
-              validLevels.includes(event.level as 'info' | 'warn' | 'error')
-                ? (event.level as 'info' | 'warn' | 'error')
-                : 'info';
-            
+            const level: 'info' | 'warn' | 'error' = validLevels.includes(
+              event.level as 'info' | 'warn' | 'error'
+            )
+              ? (event.level as 'info' | 'warn' | 'error')
+              : 'info';
+
             // Validate data is an object (not array, not null)
             let eventData: Record<string, unknown> | undefined = undefined;
-            if (event.data && typeof event.data === 'object' && !Array.isArray(event.data) && event.data !== null) {
+            if (
+              event.data &&
+              typeof event.data === 'object' &&
+              !Array.isArray(event.data) &&
+              event.data !== null
+            ) {
               eventData = event.data as Record<string, unknown>;
             }
-            
+
             return {
               id: event.id,
               object: 'fine_tuning.job.event',
@@ -1185,7 +1221,9 @@ export class FineTuningService {
     }
   }
 
-  async listCheckpoints(options: ListFineTuningCheckpointsRequest): Promise<ListFineTuningCheckpointsResponse> {
+  async listCheckpoints(
+    options: ListFineTuningCheckpointsRequest
+  ): Promise<ListFineTuningCheckpointsResponse> {
     const { jobId, limit = 20, after, before, userContext, requestId } = options;
 
     log.info({ requestId, jobId, limit, after, before }, 'Listing fine-tuning checkpoints');
@@ -1213,8 +1251,12 @@ export class FineTuningService {
 
       if (openaiAdapter instanceof OpenAIAdapter) {
         const openaiClient = openaiAdapter.getClient();
-        
-        if (openaiClient.fineTuning && openaiClient.fineTuning.jobs && openaiClient.fineTuning.jobs.checkpoints) {
+
+        if (
+          openaiClient.fineTuning &&
+          openaiClient.fineTuning.jobs &&
+          openaiClient.fineTuning.jobs.checkpoints
+        ) {
           // Build query params - OpenAI SDK doesn't support 'before' directly
           const queryParams: { limit?: number; after?: string } = {};
           if (limit) {
@@ -1224,7 +1266,10 @@ export class FineTuningService {
             queryParams.after = after;
           }
           // Note: 'before' is not supported in OpenAI SDK checkpoint list params
-          const openaiCheckpoints = await openaiClient.fineTuning.jobs.checkpoints.list(jobId, queryParams) as {
+          const openaiCheckpoints = (await openaiClient.fineTuning.jobs.checkpoints.list(
+            jobId,
+            queryParams
+          )) as {
             data: Array<{
               id: string;
               object: string;
@@ -1305,7 +1350,7 @@ export class FineTuningService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, jobId, error: errorMessage }, 'Delete fine-tuning job failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Fine-tuning job ${jobId} not found`);
       }

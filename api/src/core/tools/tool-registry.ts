@@ -32,7 +32,7 @@ const log = logger.child({ component: 'tool-registry' });
 export type ToolHandler = (
   args: Record<string, unknown>,
   toolCallId: string,
-  context: ToolExecutionContext,
+  context: ToolExecutionContext
 ) => Promise<ToolResult>;
 
 /** Tool metadata for registration. */
@@ -46,7 +46,21 @@ export interface ToolRegistration {
   /** JSON Schema for parameters */
   parameters?: Record<string, unknown>;
   /** Tool category for scoping */
-  category: 'file' | 'git' | 'search' | 'code' | 'refactoring' | 'testing' | 'task' | 'analysis' | 'workflow' | 'web' | 'image' | 'video' | 'audio' | 'general';
+  category:
+    | 'file'
+    | 'git'
+    | 'search'
+    | 'code'
+    | 'refactoring'
+    | 'testing'
+    | 'task'
+    | 'analysis'
+    | 'workflow'
+    | 'web'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'general';
   /** Whether this tool is safe for use within orchestration strategies */
   safeForStrategies: boolean;
   /** The handler function */
@@ -71,7 +85,14 @@ class ToolRegistryImpl {
         this.tools.set(alias, registration);
       }
     }
-    log.debug({ tool: registration.name, category: registration.category, safeForStrategies: registration.safeForStrategies }, 'Tool registered');
+    log.debug(
+      {
+        tool: registration.name,
+        category: registration.category,
+        safeForStrategies: registration.safeForStrategies,
+      },
+      'Tool registered'
+    );
   }
 
   /** Register multiple tools at once. */
@@ -101,7 +122,7 @@ class ToolRegistryImpl {
     name: string,
     args: Record<string, unknown>,
     toolCallId: string,
-    context: ToolExecutionContext,
+    context: ToolExecutionContext
   ): Promise<ToolResult> {
     const registration = this.tools.get(name);
     if (!registration) {
@@ -115,7 +136,10 @@ class ToolRegistryImpl {
     try {
       return await registration.handler(args, toolCallId, context);
     } catch (err) {
-      log.error({ tool: name, error: err instanceof Error ? err.message : String(err) }, 'Tool execution error');
+      log.error(
+        { tool: name, error: err instanceof Error ? err.message : String(err) },
+        'Tool execution error'
+      );
       return {
         tool_call_id: toolCallId,
         success: false,
@@ -129,14 +153,22 @@ class ToolRegistryImpl {
     name: string,
     args: Record<string, unknown>,
     toolCallId: string,
-    context: ToolExecutionContext,
+    context: ToolExecutionContext
   ): Promise<ToolResult> {
     const registration = this.tools.get(name);
     if (!registration) {
-      return { tool_call_id: toolCallId, success: false, error: `Tool "${name}" not found in registry.` };
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: `Tool "${name}" not found in registry.`,
+      };
     }
     if (!registration.safeForStrategies) {
-      return { tool_call_id: toolCallId, success: false, error: `Tool "${name}" is not permitted within strategy execution (safety restriction).` };
+      return {
+        tool_call_id: toolCallId,
+        success: false,
+        error: `Tool "${name}" is not permitted within strategy execution (safety restriction).`,
+      };
     }
     return this.execute(name, args, toolCallId, context);
   }
@@ -184,9 +216,7 @@ class ToolRegistryImpl {
   describeStrategyToolsForPrompt(): string {
     const tools = this.listStrategyTools();
     if (tools.length === 0) return 'None available';
-    return tools
-      .map((t) => `${t.name} (${t.category}): ${t.description}`)
-      .join('\n');
+    return tools.map((t) => `${t.name} (${t.category}): ${t.description}`).join('\n');
   }
 
   /**
@@ -203,9 +233,7 @@ class ToolRegistryImpl {
   describeTriageRecommendableToolsForPrompt(): string {
     const tools = this.listStrategyTools().filter((t) => TRIAGE_RECOMMENDABLE_TOOLS.has(t.name));
     if (tools.length === 0) return 'None available';
-    return tools
-      .map((t) => `${t.name} (${t.category}): ${t.description}`)
-      .join('\n');
+    return tools.map((t) => `${t.name} (${t.category}): ${t.description}`).join('\n');
   }
 
   /** Get count of unique tools. */
@@ -216,7 +244,10 @@ class ToolRegistryImpl {
   /** Mark as initialized (called after all tools registered). */
   markInitialized(): void {
     this.initialized = true;
-    log.info({ toolCount: this.size(), strategyTools: this.listStrategyTools().length }, 'Tool registry initialized');
+    log.info(
+      { toolCount: this.size(), strategyTools: this.listStrategyTools().length },
+      'Tool registry initialized'
+    );
   }
 
   isInitialized(): boolean {

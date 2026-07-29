@@ -20,10 +20,7 @@
  * combination that minimises MAE on the train ensemble examples.
  */
 
-import type {
-  EnsembleCalibrationExample,
-  EnsembleEstimator,
-} from './ensemble-calibration-types';
+import type { EnsembleCalibrationExample, EnsembleEstimator } from './ensemble-calibration-types';
 import type { PeerLiftCalibrationResult } from './peer-lift-calibrator';
 import { lookupPeerLift } from './peer-lift-calibrator';
 
@@ -48,7 +45,7 @@ export const DEFAULT_MARGINAL_GAIN_POLICY: MarginalGainPolicy = Object.freeze({
 });
 
 export function resolveMarginalGainPolicy(
-  override?: Partial<MarginalGainPolicy>,
+  override?: Partial<MarginalGainPolicy>
 ): MarginalGainPolicy {
   if (!override) return DEFAULT_MARGINAL_GAIN_POLICY;
   return Object.freeze({ ...DEFAULT_MARGINAL_GAIN_POLICY, ...override });
@@ -85,7 +82,7 @@ export interface MarginalGainCalibrationResult {
  * policy. Deterministic tie-break: smaller maxTotalGain first.
  */
 export function calibrateMarginalGain(
-  input: MarginalGainCalibrationInput,
+  input: MarginalGainCalibrationInput
 ): MarginalGainCalibrationResult {
   const totalGrid = input.maxTotalGainGrid ?? [0.1, 0.15, 0.2, 0.25];
   const perModelGrid = input.maxPerModelGainGrid ?? [0.03, 0.05, 0.08];
@@ -124,7 +121,7 @@ export function calibrateMarginalGain(
 
 function evaluatePolicy(
   policy: MarginalGainPolicy,
-  input: MarginalGainCalibrationInput,
+  input: MarginalGainCalibrationInput
 ): MarginalGainGridResult {
   const errors: number[] = [];
   let nonFallback = 0;

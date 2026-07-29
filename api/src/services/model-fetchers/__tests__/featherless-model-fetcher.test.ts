@@ -53,7 +53,9 @@ describe('featherless-model-fetcher', () => {
   });
 
   it('sends page and per_page=1000 query params plus an explicit non-default User-Agent', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(page([{ id: 'a/m1' }], 1, 1));
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(page([{ id: 'a/m1' }], 1, 1));
 
     const fetcher = new FeatherlessModelFetcher('live-key');
     await fetcher.getModels();
@@ -104,7 +106,13 @@ describe('featherless-model-fetcher', () => {
   it('stops when a page comes back empty', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(page(Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })), 1, 3))
+      .mockResolvedValueOnce(
+        page(
+          Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })),
+          1,
+          3
+        )
+      )
       .mockResolvedValueOnce(page([], 2, 3));
 
     const fetcher = new FeatherlessModelFetcher('live-key');
@@ -117,7 +125,13 @@ describe('featherless-model-fetcher', () => {
   it('stops pagination on a non-OK page response instead of throwing', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(page(Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })), 1, 3))
+      .mockResolvedValueOnce(
+        page(
+          Array.from({ length: 1000 }, (_, i) => ({ id: `a/m${i}` })),
+          1,
+          3
+        )
+      )
       .mockResolvedValueOnce(jsonResponse({}, 500));
 
     const fetcher = new FeatherlessModelFetcher('live-key');

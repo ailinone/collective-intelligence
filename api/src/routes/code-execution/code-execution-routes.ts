@@ -10,12 +10,12 @@
 /**
  * Code Execution API Routes
  * Gemini-compatible code execution endpoints
- * 
+ *
  * Features:
  * - Multi-model orchestration (Gemini models with code_interpreter capability)
  * - Sandbox execution (E2B, Docker, etc.)
  * - Multiple languages (Python, JavaScript, etc.)
- * 
+ *
  * NO HARDCODED MODELS - Dynamic selection based on code_interpreter capability
  */
 
@@ -36,7 +36,8 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
     schema: {
       tags: ['Code Execution'],
       summary: 'Execute code in sandbox',
-      description: 'Executes code using dynamic capability routing with multi-backend sandbox policy (E2B primary, Daytona fallback, Local dev/emergency fallback). Automatically selects the best execution path based on runtime availability and policy.',
+      description:
+        'Executes code using dynamic capability routing with multi-backend sandbox policy (E2B primary, Daytona fallback, Local dev/emergency fallback). Automatically selects the best execution path based on runtime availability and policy.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -108,9 +109,16 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_code", "unsupported_language", "invalid_parameter")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "invalid_code", "unsupported_language", "invalid_parameter")',
+                },
               },
             },
           },
@@ -136,7 +144,10 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -165,7 +176,7 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
         taskType: 'code-generation',
         contextSize: 0,
       });
-      
+
       try {
         const body = request.body;
         if (!body || typeof body !== 'object' || !('code' in body) || !('language' in body)) {
@@ -177,23 +188,23 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
             },
           });
         }
-        
+
         // Safely extract code and language without type assertions
         let codeValue: unknown;
         let languageValue: unknown;
-        
+
         if (body && typeof body === 'object' && body !== null) {
           const codeDescriptor = Object.getOwnPropertyDescriptor(body, 'code');
           if (codeDescriptor) {
             codeValue = codeDescriptor.value;
           }
-          
+
           const languageDescriptor = Object.getOwnPropertyDescriptor(body, 'language');
           if (languageDescriptor) {
             languageValue = languageDescriptor.value;
           }
         }
-        
+
         if (typeof codeValue !== 'string' || typeof languageValue !== 'string') {
           return reply.code(400).send({
             error: {
@@ -203,7 +214,7 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
             },
           });
         }
-        
+
         const validLanguages = ['javascript', 'typescript', 'python', 'java', 'csharp', 'go'];
         if (!validLanguages.includes(languageValue)) {
           return reply.code(400).send({
@@ -214,28 +225,27 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
             },
           });
         }
-        
-        const functionNameValue = 'functionName' in body && typeof (body as { functionName?: unknown }).functionName === 'string'
-          ? (body as { functionName: string }).functionName
-          : undefined;
-        const testsValue = 'tests' in body && Array.isArray((body as { tests?: unknown }).tests)
-          ? (body as { tests: Array<{ args: unknown[]; expected: unknown }> }).tests
-          : undefined;
-        const timeoutMsValue = 'timeoutMs' in body && typeof (body as { timeoutMs?: unknown }).timeoutMs === 'number'
-          ? (body as { timeoutMs: number }).timeoutMs
-          : 30000;
+
+        const functionNameValue =
+          'functionName' in body &&
+          typeof (body as { functionName?: unknown }).functionName === 'string'
+            ? (body as { functionName: string }).functionName
+            : undefined;
+        const testsValue =
+          'tests' in body && Array.isArray((body as { tests?: unknown }).tests)
+            ? (body as { tests: Array<{ args: unknown[]; expected: unknown }> }).tests
+            : undefined;
+        const timeoutMsValue =
+          'timeoutMs' in body && typeof (body as { timeoutMs?: unknown }).timeoutMs === 'number'
+            ? (body as { timeoutMs: number }).timeoutMs
+            : 30000;
 
         const result = await executeRouteWithRetry(
           () =>
             codeExecService.executeCode({
               code: codeValue,
               language: languageValue as
-                | 'javascript'
-                | 'typescript'
-                | 'python'
-                | 'java'
-                | 'csharp'
-                | 'go',
+                'javascript' | 'typescript' | 'python' | 'java' | 'csharp' | 'go',
               functionName: functionNameValue,
               tests: testsValue,
               timeoutMs: timeoutMsValue,
@@ -255,13 +265,14 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
 
         return reply.send(result);
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Code execution failed';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'internal_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ error: errorMessage, requestId: request.id }, 'Code execution failed');
         return reply.code(statusCode).send({
           error: {
@@ -276,4 +287,3 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
 
   log.info('Code Execution API routes registered successfully');
 }
-

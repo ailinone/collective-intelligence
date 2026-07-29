@@ -153,9 +153,7 @@ function isAggregationMethod(value: unknown): value is AggregationMethod {
  * with a warning log so a corrupt settings blob cannot poison the
  * effective config.
  */
-export function parseOrganizationCollectiveSettings(
-  raw: unknown,
-): OrganizationCollectiveSettings {
+export function parseOrganizationCollectiveSettings(raw: unknown): OrganizationCollectiveSettings {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const obj = raw as Record<string, unknown>;
   const out: OrganizationCollectiveSettings = {};
@@ -163,9 +161,11 @@ export function parseOrganizationCollectiveSettings(
   if (typeof obj.enabled === 'boolean') out.enabled = obj.enabled;
   if (typeof obj.stopOnCriticalRisk === 'boolean') out.stopOnCriticalRisk = obj.stopOnCriticalRisk;
   if (typeof obj.persistAuditTrail === 'boolean') out.persistAuditTrail = obj.persistAuditTrail;
-  if (typeof obj.enableForExperiments === 'boolean') out.enableForExperiments = obj.enableForExperiments;
+  if (typeof obj.enableForExperiments === 'boolean')
+    out.enableForExperiments = obj.enableForExperiments;
   if (typeof obj.entropySeedEnabled === 'boolean') out.entropySeedEnabled = obj.entropySeedEnabled;
-  if (typeof obj.perAgentStateEnabled === 'boolean') out.perAgentStateEnabled = obj.perAgentStateEnabled;
+  if (typeof obj.perAgentStateEnabled === 'boolean')
+    out.perAgentStateEnabled = obj.perAgentStateEnabled;
 
   if (typeof obj.topologyKind === 'string' && TOPOLOGY_KINDS.has(obj.topologyKind)) {
     out.topologyKind = obj.topologyKind as CoordinationConfig['topologyKind'];
@@ -201,7 +201,7 @@ export function parseOrganizationCollectiveSettings(
  */
 export function mergeOrgSettingsIntoConfig(
   envDefault: CoordinationConfig,
-  override: OrganizationCollectiveSettings,
+  override: OrganizationCollectiveSettings
 ): CoordinationConfig {
   return {
     enabled: override.enabled ?? envDefault.enabled,
@@ -232,7 +232,7 @@ export function mergeOrgSettingsIntoConfig(
  * overrides, when the row does not exist, or when the DB read fails.
  */
 async function readOrgCollectiveSettings(
-  organizationId: string,
+  organizationId: string
 ): Promise<OrganizationCollectiveSettings> {
   try {
     const org: Pick<Organization, 'settings'> | null = await prisma.organization.findUnique({
@@ -252,7 +252,7 @@ async function readOrgCollectiveSettings(
         organizationId,
         error: err instanceof Error ? err.message : String(err),
       },
-      'readOrgCollectiveSettings failed — falling back to env-default config',
+      'readOrgCollectiveSettings failed — falling back to env-default config'
     );
     return {};
   }
@@ -272,7 +272,7 @@ async function readOrgCollectiveSettings(
  * NEVER throws; falls back to env-default on any DB error.
  */
 export async function getCollectiveConfigForOrg(
-  organizationId: string,
+  organizationId: string
 ): Promise<CoordinationConfig> {
   const envDefault = getCoordinationConfigFromEnv();
   if (!organizationId) return envDefault;

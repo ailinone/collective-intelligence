@@ -119,14 +119,25 @@ export class HybridStrategy extends BaseStrategy {
     const executions: ModelExecution[] = [];
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', models: [analyzer.model.name, ...executors.map(e => e.model.name)].filter(Boolean) as string[], summary: 'Hybrid: analyzing complexity then adapting execution.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [analyzer.model.name, ...executors.map((e) => e.model.name)].filter(
+        Boolean
+      ) as string[],
+      summary: 'Hybrid: analyzing complexity then adapting execution.',
+    });
 
     // PHASE 1: Analyze complexity
     this.log.debug('Phase 1: Complexity analysis');
     const analysisRequest = this.createComplexityAnalysisRequest(request);
     const reasoningEnabled = this.isReasoningEnabled(request);
     const analysisExecution = reasoningEnabled
-      ? await this.executeModelWithReasoning(analyzer.adapter, analyzer.model, analysisRequest, 'pre-analyzer')
+      ? await this.executeModelWithReasoning(
+          analyzer.adapter,
+          analyzer.model,
+          analysisRequest,
+          'pre-analyzer'
+        )
       : await this.executeModel(analyzer.adapter, analyzer.model, analysisRequest, 'pre-analyzer');
     executions.push(analysisExecution);
 
@@ -143,7 +154,12 @@ export class HybridStrategy extends BaseStrategy {
     if (complexity === 'simple' && executors.length >= 1) {
       // Simple: Use single premium model
       this.log.debug('Phase 2: Simple task - single execution');
-      finalExecution = await this.executeModel(executors[0].adapter, executors[0].model, request, 'primary');
+      finalExecution = await this.executeModel(
+        executors[0].adapter,
+        executors[0].model,
+        request,
+        'primary'
+      );
       executions.push(finalExecution);
     } else if (complexity === 'complex' && executors.length >= 2) {
       // Complex: Use parallel execution
@@ -171,16 +187,30 @@ export class HybridStrategy extends BaseStrategy {
     } else {
       // Default: Use first executor
       this.log.debug('Phase 2: Default - single execution');
-      finalExecution = await this.executeModel(executors[0].adapter, executors[0].model, request, 'primary');
+      finalExecution = await this.executeModel(
+        executors[0].adapter,
+        executors[0].model,
+        request,
+        'primary'
+      );
       executions.push(finalExecution);
     }
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Hybrid: ${complexity} path executed.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Hybrid: ${complexity} path executed.`,
+    });
 
     if (!finalExecution.success) {
       // Fallback: retry with alternate models before giving up
       const failedModel = executors[0];
-      const retryExec = await this.executeModelWithRetry(failedModel.adapter, failedModel.model, request, 'primary', context);
+      const retryExec = await this.executeModelWithRetry(
+        failedModel.adapter,
+        failedModel.model,
+        request,
+        'primary',
+        context
+      );
       executions.push(retryExec);
       if (retryExec.success) {
         finalExecution = retryExec;
@@ -190,7 +220,10 @@ export class HybridStrategy extends BaseStrategy {
     }
 
     const totalDuration = Date.now() - startTime;
-    const totalCost = Math.max(0, executions.reduce((sum, e) => sum + (e.cost || 0), 0));
+    const totalCost = Math.max(
+      0,
+      executions.reduce((sum, e) => sum + (e.cost || 0), 0)
+    );
 
     // Calculate quality (hybrid gets adaptive boost)
     const baseQuality = this.calculateQualityScore(finalExecution);
@@ -214,8 +247,18 @@ export class HybridStrategy extends BaseStrategy {
         complexity,
         executionMode:
           complexity === 'simple' ? 'single' : complexity === 'complex' ? 'parallel' : 'default',
-        ...(this.isReasoningEnabled(request) && executions.some(e => e.reasoning)
-          ? { reasoning_traces: executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && executions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: executions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -285,7 +328,7 @@ export class HybridStrategy extends BaseStrategy {
           analyzerId: analyzer.id,
           poolSize: models.length,
         },
-        'Hybrid strategy: requested model not in operational pool — falling back to quality-sort selection',
+        'Hybrid strategy: requested model not in operational pool — falling back to quality-sort selection'
       );
     } else if (preference.pinReason === 'pin-collision-excluded') {
       // The pinned model collided with the analyzer pick. The user's
@@ -297,14 +340,14 @@ export class HybridStrategy extends BaseStrategy {
           requestedModel: preference.requestedId,
           analyzerId: analyzer.id,
         },
-        'Hybrid strategy: requested model already serving as analyzer — executor picks via quality-sort',
+        'Hybrid strategy: requested model already serving as analyzer — executor picks via quality-sort'
       );
     }
 
     const executors = assembleExecutors(
       preference,
       2,
-      (a, b) => b.performance.quality - a.performance.quality,
+      (a, b) => b.performance.quality - a.performance.quality
     );
 
     if (executors.length === 0) {
@@ -316,14 +359,13 @@ export class HybridStrategy extends BaseStrategy {
       throw new Error('getAdapterForModel not injected by orchestration engine');
     }
     const allModels = [analyzer, ...executors];
-    const adapters = await Promise.all(
-      allModels.map((m) => this.getAdapterForModel!(m, context))
-    );
+    const adapters = await Promise.all(allModels.map((m) => this.getAdapterForModel!(m, context)));
 
     return allModels
       .map((model, i) => ({ model, adapter: adapters[i] }))
-      .filter((m): m is { model: Model; adapter: ProviderAdapter } => 
-        m.adapter !== null && m.adapter !== undefined
+      .filter(
+        (m): m is { model: Model; adapter: ProviderAdapter } =>
+          m.adapter !== null && m.adapter !== undefined
       );
   }
 
@@ -363,7 +405,7 @@ export class HybridStrategy extends BaseStrategy {
   private assessComplexity(analysisResponse: ChatResponse): 'simple' | 'medium' | 'complex' {
     const message = analysisResponse.choices[0]?.message;
     if (!message) return 'medium';
-    
+
     let content = '';
     if (typeof message.content === 'string') {
       content = message.content;
@@ -436,7 +478,10 @@ export class HybridStrategy extends BaseStrategy {
   /**
    * Create validation request
    */
-  private createValidationRequest(originalRequest: ChatRequest, finalResponse: ChatResponse): ChatRequest {
+  private createValidationRequest(
+    originalRequest: ChatRequest,
+    finalResponse: ChatResponse
+  ): ChatRequest {
     const content = safeResponseContent(finalResponse);
 
     return {

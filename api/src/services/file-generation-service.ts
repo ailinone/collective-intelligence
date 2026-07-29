@@ -20,7 +20,16 @@
  * caller-supplied structured content to a Buffer.
  */
 
-import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from 'docx';
+import {
+  Document,
+  HeadingLevel,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+} from 'docx';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import PDFDocument from 'pdfkit';
@@ -30,7 +39,8 @@ import { narrowAs } from '@/utils/type-guards';
 
 const log = logger.child({ service: 'file-generation' });
 
-export type FileGenerationFormat = 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code';
+export type FileGenerationFormat =
+  'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code';
 /** Sub-file formats a zip entry may bundle — everything except 'zip' itself
  *  (no nested archives; keeps the render graph a flat one level deep). */
 export type ZipEntryFormat = Exclude<FileGenerationFormat, 'zip'>;
@@ -174,43 +184,68 @@ const EXTENSIONS: Record<FileGenerationFormat, string> = {
  *  rejecting the request — an unfamiliar/niche language name shouldn't
  *  block the download, it should just get a generic .txt extension. */
 const CODE_LANGUAGE_EXTENSIONS: Record<string, string> = {
-  python: 'py', py: 'py',
-  javascript: 'js', js: 'js',
-  typescript: 'ts', ts: 'ts',
-  jsx: 'jsx', tsx: 'tsx',
+  python: 'py',
+  py: 'py',
+  javascript: 'js',
+  js: 'js',
+  typescript: 'ts',
+  ts: 'ts',
+  jsx: 'jsx',
+  tsx: 'tsx',
   java: 'java',
-  kotlin: 'kt', kt: 'kt',
+  kotlin: 'kt',
+  kt: 'kt',
   swift: 'swift',
-  go: 'go', golang: 'go',
-  rust: 'rs', rs: 'rs',
+  go: 'go',
+  golang: 'go',
+  rust: 'rs',
+  rs: 'rs',
   c: 'c',
-  cpp: 'cpp', 'c++': 'cpp', cplusplus: 'cpp',
-  csharp: 'cs', 'c#': 'cs', cs: 'cs',
-  ruby: 'rb', rb: 'rb',
+  cpp: 'cpp',
+  'c++': 'cpp',
+  cplusplus: 'cpp',
+  csharp: 'cs',
+  'c#': 'cs',
+  cs: 'cs',
+  ruby: 'rb',
+  rb: 'rb',
   php: 'php',
   html: 'html',
   css: 'css',
   scss: 'scss',
   sass: 'sass',
   sql: 'sql',
-  shell: 'sh', bash: 'sh', sh: 'sh', zsh: 'sh',
-  powershell: 'ps1', ps1: 'ps1',
-  yaml: 'yaml', yml: 'yaml',
+  shell: 'sh',
+  bash: 'sh',
+  sh: 'sh',
+  zsh: 'sh',
+  powershell: 'ps1',
+  ps1: 'ps1',
+  yaml: 'yaml',
+  yml: 'yaml',
   toml: 'toml',
   xml: 'xml',
-  perl: 'pl', pl: 'pl',
+  perl: 'pl',
+  pl: 'pl',
   lua: 'lua',
   r: 'r',
   scala: 'scala',
-  haskell: 'hs', hs: 'hs',
-  elixir: 'ex', ex: 'ex',
-  erlang: 'erl', erl: 'erl',
-  clojure: 'clj', clj: 'clj',
+  haskell: 'hs',
+  hs: 'hs',
+  elixir: 'ex',
+  ex: 'ex',
+  erlang: 'erl',
+  erl: 'erl',
+  clojure: 'clj',
+  clj: 'clj',
   dart: 'dart',
   vue: 'vue',
-  graphql: 'graphql', gql: 'graphql',
+  graphql: 'graphql',
+  gql: 'graphql',
   ini: 'ini',
-  text: 'txt', plaintext: 'txt', txt: 'txt',
+  text: 'txt',
+  plaintext: 'txt',
+  txt: 'txt',
 };
 const CODE_DEFAULT_EXTENSION = 'txt';
 
@@ -276,7 +311,16 @@ const XLSX_RESERVED_SHEET_NAMES = new Set(['history']);
  *  'zip' itself (checked at runtime since entry.content is `unknown`; the
  *  TS `ZipEntryFormat` type alone doesn't stop a model literally emitting
  *  `"format":"zip"` for a nested entry). */
-const ZIP_VALID_ENTRY_FORMATS = new Set<ZipEntryFormat>(['csv', 'json', 'markdown', 'docx', 'xlsx', 'pdf', 'pptx', 'code']);
+const ZIP_VALID_ENTRY_FORMATS = new Set<ZipEntryFormat>([
+  'csv',
+  'json',
+  'markdown',
+  'docx',
+  'xlsx',
+  'pdf',
+  'pptx',
+  'code',
+]);
 
 /** C0 control characters (including NUL) — stripped from zip entry names so
  *  they can't be injected into the archive's central directory (2026-07-16,
@@ -299,9 +343,28 @@ const ZIP_WINDOWS_INVALID_CHARS_PATTERN = /[<>:"|?*]/g;
 /** Windows-reserved device stems — any extension after these still refers
  *  to the reserved device, not a real file, on Windows. */
 const ZIP_RESERVED_STEMS = new Set([
-  'con', 'prn', 'aux', 'nul',
-  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
-  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  'com1',
+  'com2',
+  'com3',
+  'com4',
+  'com5',
+  'com6',
+  'com7',
+  'com8',
+  'com9',
+  'lpt1',
+  'lpt2',
+  'lpt3',
+  'lpt4',
+  'lpt5',
+  'lpt6',
+  'lpt7',
+  'lpt8',
+  'lpt9',
 ]);
 /** Hard cap on a zip entry's name stem (excluding extension/suffix). An
  *  unbounded name let a single overlong filename wrap the zip format's
@@ -504,7 +567,10 @@ export class FileGenerationService {
    */
   private resolveCodeFileMeta(content: CodeContent): { extension: string; mimeType: string } {
     const normalizedLanguage = content.language.trim().toLowerCase();
-    const rawExtension = Object.prototype.hasOwnProperty.call(CODE_LANGUAGE_EXTENSIONS, normalizedLanguage)
+    const rawExtension = Object.prototype.hasOwnProperty.call(
+      CODE_LANGUAGE_EXTENSIONS,
+      normalizedLanguage
+    )
       ? CODE_LANGUAGE_EXTENSIONS[normalizedLanguage]
       : CODE_DEFAULT_EXTENSION;
     const extension = /^[a-z0-9]+$/i.test(rawExtension) ? rawExtension : CODE_DEFAULT_EXTENSION;
@@ -559,8 +625,13 @@ export class FileGenerationService {
             log.warn({ section }, 'Skipping malformed docx heading section (missing text)');
             break;
           }
-          const levelIndex = Math.min(Math.max((section.level ?? 1) - 1, 0), DOCX_HEADING_LEVELS.length - 1);
-          body.push(new Paragraph({ text: section.text, heading: DOCX_HEADING_LEVELS[levelIndex] }));
+          const levelIndex = Math.min(
+            Math.max((section.level ?? 1) - 1, 0),
+            DOCX_HEADING_LEVELS.length - 1
+          );
+          body.push(
+            new Paragraph({ text: section.text, heading: DOCX_HEADING_LEVELS[levelIndex] })
+          );
           break;
         }
         case 'paragraph':
@@ -572,7 +643,10 @@ export class FileGenerationService {
           break;
         case 'bullet_list':
           if (!Array.isArray(section.items)) {
-            log.warn({ section }, 'Skipping malformed docx bullet_list section (missing items array)');
+            log.warn(
+              { section },
+              'Skipping malformed docx bullet_list section (missing items array)'
+            );
             break;
           }
           for (const item of section.items) {
@@ -581,7 +655,10 @@ export class FileGenerationService {
           break;
         case 'table':
           if (!Array.isArray(section.headers) || !Array.isArray(section.rows)) {
-            log.warn({ section }, 'Skipping malformed docx table section (missing headers/rows array)');
+            log.warn(
+              { section },
+              'Skipping malformed docx table section (missing headers/rows array)'
+            );
             break;
           }
           body.push(
@@ -591,7 +668,9 @@ export class FileGenerationService {
                   children: section.headers.map(
                     (header) =>
                       new TableCell({
-                        children: [new Paragraph({ children: [new TextRun({ text: header, bold: true })] })],
+                        children: [
+                          new Paragraph({ children: [new TextRun({ text: header, bold: true })] }),
+                        ],
                       })
                   ),
                 }),
@@ -599,7 +678,10 @@ export class FileGenerationService {
                   (row) =>
                     new TableRow({
                       children: row.map(
-                        (cell) => new TableCell({ children: [new Paragraph(cell === null ? '' : String(cell))] })
+                        (cell) =>
+                          new TableCell({
+                            children: [new Paragraph(cell === null ? '' : String(cell))],
+                          })
                       ),
                     })
                 ),
@@ -730,7 +812,10 @@ export class FileGenerationService {
               log.warn({ section }, 'Skipping malformed pdf heading section (missing text)');
               break;
             }
-            const levelIndex = Math.min(Math.max((section.level ?? 1) - 1, 0), PDF_HEADING_SIZES.length - 1);
+            const levelIndex = Math.min(
+              Math.max((section.level ?? 1) - 1, 0),
+              PDF_HEADING_SIZES.length - 1
+            );
             doc.fontSize(PDF_HEADING_SIZES[levelIndex]).font('Helvetica-Bold').text(section.text);
             doc.moveDown(0.5);
             break;
@@ -745,21 +830,32 @@ export class FileGenerationService {
             break;
           case 'bullet_list':
             if (!Array.isArray(section.items)) {
-              log.warn({ section }, 'Skipping malformed pdf bullet_list section (missing items array)');
+              log.warn(
+                { section },
+                'Skipping malformed pdf bullet_list section (missing items array)'
+              );
               break;
             }
             // pdfkit's .list() calls string methods (e.g. charCodeAt) on each
             // item directly — a non-string item (number/object/null) throws
             // and destroys the whole document. Coerce every item the same
             // way the table cells below already do.
-            doc.fontSize(PDF_BODY_SIZE).font('Helvetica').list(
-              section.items.map((item) => (item === null || item === undefined ? '' : String(item)))
-            );
+            doc
+              .fontSize(PDF_BODY_SIZE)
+              .font('Helvetica')
+              .list(
+                section.items.map((item) =>
+                  item === null || item === undefined ? '' : String(item)
+                )
+              );
             doc.moveDown();
             break;
           case 'table': {
             if (!Array.isArray(section.headers) || !Array.isArray(section.rows)) {
-              log.warn({ section }, 'Skipping malformed pdf table section (missing headers/rows array)');
+              log.warn(
+                { section },
+                'Skipping malformed pdf table section (missing headers/rows array)'
+              );
               break;
             }
             // Learned from the XLSX review: a `rows` array can still contain
@@ -782,7 +878,9 @@ export class FileGenerationService {
             // reaches doc.table().
             const headerCount = section.headers.length;
             const validRows = arrayRows.map((row) => {
-              const normalized = row.slice(0, headerCount).map((cell) => (cell === null ? '' : String(cell)));
+              const normalized = row
+                .slice(0, headerCount)
+                .map((cell) => (cell === null ? '' : String(cell)));
               while (normalized.length < headerCount) normalized.push('');
               return normalized;
             });
@@ -795,7 +893,10 @@ export class FileGenerationService {
                 // TTC/DFont collections) is silently ignored, so the header
                 // row would otherwise render in the same non-bold weight as
                 // the body.
-                section.headers.map((header) => ({ text: header, font: { src: 'Helvetica-Bold' } })),
+                section.headers.map((header) => ({
+                  text: header,
+                  font: { src: 'Helvetica-Bold' },
+                })),
                 ...validRows,
               ],
             });
@@ -832,8 +933,13 @@ export class FileGenerationService {
     if (typeof content.title === 'string') {
       const titleSlide = pptx.addSlide();
       titleSlide.addText(content.title, {
-        x: 0.5, y: 2.5, w: '90%', h: 1.5,
-        fontSize: 32, bold: true, align: 'center',
+        x: 0.5,
+        y: 2.5,
+        w: '90%',
+        h: 1.5,
+        fontSize: 32,
+        bold: true,
+        align: 'center',
       });
       slidesAdded++;
     } else if (content.title) {
@@ -936,7 +1042,9 @@ export class FileGenerationService {
             // header row to size against.
             const headerCount = item.headers.length;
             const columnCount =
-              headerCount > 0 ? headerCount : arrayRows.reduce((max, row) => Math.max(max, row.length), 0);
+              headerCount > 0
+                ? headerCount
+                : arrayRows.reduce((max, row) => Math.max(max, row.length), 0);
             if (columnCount === 0) {
               log.warn({ item }, 'Skipping pptx table item with no headers and no data');
               break;
@@ -1040,8 +1148,14 @@ export class FileGenerationService {
         entry.format === 'code'
           ? this.resolveCodeFileMeta(entry.content as CodeContent).extension
           : EXTENSIONS[entry.format];
-      const stripPattern = entry.format === 'code' ? CODE_ALL_EXTENSIONS_PATTERN : ALL_KNOWN_EXTENSIONS_PATTERN;
-      const finalName = this.uniqueZipEntryName(entry.filename, extension, stripPattern, usedNamesLower);
+      const stripPattern =
+        entry.format === 'code' ? CODE_ALL_EXTENSIONS_PATTERN : ALL_KNOWN_EXTENSIONS_PATTERN;
+      const finalName = this.uniqueZipEntryName(
+        entry.filename,
+        extension,
+        stripPattern,
+        usedNamesLower
+      );
       zip.file(finalName, buffer);
       usedNamesLower.add(finalName.toLowerCase());
       filesAdded++;

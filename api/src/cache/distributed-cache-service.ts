@@ -144,7 +144,10 @@ export class DistributedCacheService {
     if (this.globalRedis) {
       await this.writeEntry(this.globalRedis, storageKey, serialized, params.ttlSeconds).catch(
         (error) => {
-          this.log.error({ error: serializeError(error), storageKey }, 'Failed to replicate cache entry to global Redis');
+          this.log.error(
+            { error: serializeError(error), storageKey },
+            'Failed to replicate cache entry to global Redis'
+          );
         }
       );
     }
@@ -167,7 +170,10 @@ export class DistributedCacheService {
 
     if (this.globalRedis) {
       await this.scanAndDelete(this.globalRedis, pattern).catch((error) => {
-        this.log.error({ error: serializeError(error), namespace }, 'Failed to clear namespace from global Redis replica');
+        this.log.error(
+          { error: serializeError(error), namespace },
+          'Failed to clear namespace from global Redis replica'
+        );
       });
     }
 

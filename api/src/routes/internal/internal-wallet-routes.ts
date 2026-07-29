@@ -71,7 +71,9 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
     '/v1/internal/wallet/balance',
     { preHandler: [requireServiceAuth(SCOPE_READ)] },
     async (request, reply) => {
-      const user = await resolveOrProvisionActingUser((request as ServiceAuthedRequest).serviceAuth!);
+      const user = await resolveOrProvisionActingUser(
+        (request as ServiceAuthedRequest).serviceAuth!
+      );
       if (!user) {
         return reply.code(409).send({
           error: 'acting_user_not_provisioned',
@@ -83,14 +85,16 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
         balanceUsd = await walletInstance().getBalanceUsd(user.organizationId);
       } catch (error) {
         log.error({ error, organizationId: user.organizationId }, 'wallet balance read failed');
-        return reply.code(503).send({ error: 'wallet_unavailable', message: 'Could not read balance.' });
+        return reply
+          .code(503)
+          .send({ error: 'wallet_unavailable', message: 'Could not read balance.' });
       }
       return reply.send({
         organizationId: user.organizationId,
         balanceUsd,
         gateEnabled: isWalletGateEnabled(),
       });
-    },
+    }
   );
 
   /** POST top-up — system credit grant (billing → ci) after a Stripe credit purchase. */
@@ -98,16 +102,25 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
     '/v1/internal/wallet/topup',
     { preHandler: [requireTopupSecret] },
     async (request, reply) => {
-      const body = (request.body ?? {}) as { organizationId?: unknown; amountUsd?: unknown; reference?: unknown };
+      const body = (request.body ?? {}) as {
+        organizationId?: unknown;
+        amountUsd?: unknown;
+        reference?: unknown;
+      };
       const organizationId = typeof body.organizationId === 'string' ? body.organizationId : '';
-      const amountUsd = typeof body.amountUsd === 'number' ? body.amountUsd : Number(body.amountUsd);
+      const amountUsd =
+        typeof body.amountUsd === 'number' ? body.amountUsd : Number(body.amountUsd);
       const reference = typeof body.reference === 'string' ? body.reference : undefined;
 
       if (!organizationId || !UUID_RE.test(organizationId)) {
-        return reply.code(400).send({ error: 'bad_request', message: 'organizationId (uuid) is required' });
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'organizationId (uuid) is required' });
       }
       if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
-        return reply.code(400).send({ error: 'bad_request', message: 'amountUsd must be a positive number' });
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'amountUsd must be a positive number' });
       }
 
       try {
@@ -116,9 +129,11 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
         return reply.send({ organizationId, balanceUsd });
       } catch (error) {
         log.error({ error, organizationId, amountUsd }, 'wallet top-up failed');
-        return reply.code(503).send({ error: 'wallet_unavailable', message: 'Could not apply top-up.' });
+        return reply
+          .code(503)
+          .send({ error: 'wallet_unavailable', message: 'Could not apply top-up.' });
       }
-    },
+    }
   );
 
   /**
@@ -132,21 +147,40 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
     '/v1/internal/billing/checkout-credits',
     { preHandler: [requireServiceAuth('apikeys:write:on_behalf')] },
     async (request, reply) => {
-      const user = await resolveOrProvisionActingUser((request as ServiceAuthedRequest).serviceAuth!);
+      const user = await resolveOrProvisionActingUser(
+        (request as ServiceAuthedRequest).serviceAuth!
+      );
       if (!user) {
-        return reply.code(409).send({ error: 'acting_user_not_provisioned', message: 'The acting user does not exist in ci yet.' });
+        return reply
+          .code(409)
+          .send({
+            error: 'acting_user_not_provisioned',
+            message: 'The acting user does not exist in ci yet.',
+          });
       }
 
-      const body = (request.body ?? {}) as { amountUsd?: unknown; successUrl?: unknown; cancelUrl?: unknown };
-      const amountUsd = typeof body.amountUsd === 'number' ? body.amountUsd : Number(body.amountUsd);
+      const body = (request.body ?? {}) as {
+        amountUsd?: unknown;
+        successUrl?: unknown;
+        cancelUrl?: unknown;
+      };
+      const amountUsd =
+        typeof body.amountUsd === 'number' ? body.amountUsd : Number(body.amountUsd);
       if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
-        return reply.code(400).send({ error: 'bad_request', message: 'amountUsd must be a positive number' });
+        return reply
+          .code(400)
+          .send({ error: 'bad_request', message: 'amountUsd must be a positive number' });
       }
 
       const billingUrl = (process.env.BILLING_SERVICE_URL ?? '').replace(/\/+$/, '');
       const billingSecret = process.env.BILLING_API_SECRET_KEY ?? '';
       if (!billingUrl || !billingSecret) {
-        return reply.code(503).send({ error: 'billing_not_configured', message: 'Credit purchase is not available (billing not configured).' });
+        return reply
+          .code(503)
+          .send({
+            error: 'billing_not_configured',
+            message: 'Credit purchase is not available (billing not configured).',
+          });
       }
 
       try {
@@ -175,8 +209,10 @@ export async function internalWalletRoutes(server: FastifyInstance): Promise<voi
         return reply.send({ url: inner.url, sessionId: inner.session_id });
       } catch (error) {
         log.error({ error, organizationId: user.organizationId }, 'billing checkout proxy failed');
-        return reply.code(502).send({ error: 'billing_unreachable', message: 'Could not reach the billing service.' });
+        return reply
+          .code(502)
+          .send({ error: 'billing_unreachable', message: 'Could not reach the billing service.' });
       }
-    },
+    }
   );
 }

@@ -29,21 +29,20 @@ import {
 
 // Provider census canonical bucket breakdown (matches 01c1b-c3-scope-r4-provider-census-final.json)
 const BUCKET_COUNTS = {
-  chat_ready:              23,
-  credit_blocked:          20,
-  auth_blocked:            12,
-  suspended_or_shutdown:    2,
-  api_or_model_blocked:     2,
-  gcloud_or_project_blocked:1,
-  missing_secret:           5,
-  local_not_configured:     8,
-  non_chat:                 9,
+  chat_ready: 23,
+  credit_blocked: 20,
+  auth_blocked: 12,
+  suspended_or_shutdown: 2,
+  api_or_model_blocked: 2,
+  gcloud_or_project_blocked: 1,
+  missing_secret: 5,
+  local_not_configured: 8,
+  non_chat: 9,
 } as const;
 
 const BUCKET_SUM = Object.values(BUCKET_COUNTS).reduce((a, b) => a + b, 0);
 
 describe('01C.1B-C3-SCOPE-R4 — provider census integrity', () => {
-
   describe('totals', () => {
     it('C3_REGISTERED_PROVIDER_TOTAL is 82', () => {
       expect(C3_REGISTERED_PROVIDER_TOTAL).toBe(82);
@@ -125,9 +124,25 @@ describe('01C.1B-C3-SCOPE-R4 — provider census integrity', () => {
     });
 
     it('R3 baseline 17 providers all present', () => {
-      const r3Base = ['deepseek','mistral','cohere','openrouter','groq','fireworks-ai',
-        'deepinfra','cerebras','sambanova','vercel-ai-gateway','moonshot','minimax',
-        'writer','upstage','rekaai','avian','alibaba'];
+      const r3Base = [
+        'deepseek',
+        'mistral',
+        'cohere',
+        'openrouter',
+        'groq',
+        'fireworks-ai',
+        'deepinfra',
+        'cerebras',
+        'sambanova',
+        'vercel-ai-gateway',
+        'moonshot',
+        'minimax',
+        'writer',
+        'upstage',
+        'rekaai',
+        'avian',
+        'alibaba',
+      ];
       for (const p of r3Base) {
         expect(C3_CHAT_READY_PROVIDERS).toContain(p);
       }

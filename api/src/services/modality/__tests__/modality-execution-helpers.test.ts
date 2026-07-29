@@ -16,7 +16,17 @@ import {
 
 describe('normalizeStrategy', () => {
   it('passes through canonical values', () => {
-    for (const s of ['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'dynamic'] as const) {
+    for (const s of [
+      'single',
+      'cost',
+      'speed',
+      'quality',
+      'balanced',
+      'parallel',
+      'debate',
+      'quality_multipass',
+      'dynamic',
+    ] as const) {
       expect(normalizeStrategy(s)).toBe(s);
     }
   });
@@ -63,7 +73,12 @@ describe('diversifyProviders', () => {
     expect(diversifyProviders(models).map((m) => m.id)).toEqual(['a', 'c', 'd', 'b', 'e']);
   });
   it('is case-insensitive on provider and handles empty', () => {
-    expect(diversifyProviders([{ id: 'x', provider: 'OpenAI' }, { id: 'y', provider: 'openai' }]).map((m) => m.id)).toEqual(['x', 'y']);
+    expect(
+      diversifyProviders([
+        { id: 'x', provider: 'OpenAI' },
+        { id: 'y', provider: 'openai' },
+      ]).map((m) => m.id)
+    ).toEqual(['x', 'y']);
     expect(diversifyProviders([])).toEqual([]);
   });
 });

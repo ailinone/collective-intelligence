@@ -26,7 +26,9 @@ import type {
   ProviderMetadataView,
 } from '../provider-credit-audit-service';
 
-function fakeHub(providers: Record<string, { state: string; balance?: string }>): OperabilityHubView {
+function fakeHub(
+  providers: Record<string, { state: string; balance?: string }>
+): OperabilityHubView {
   return {
     getSummary: () => ({}),
     getProviderState: (id) => {
@@ -46,7 +48,12 @@ function fakeCatalog(counts: Record<string, { visible: number; usable: number }>
   };
 }
 
-function fakeMetadata(meta: Record<string, { credential?: boolean; aggregator?: boolean; router?: boolean; local?: boolean }>): ProviderMetadataView {
+function fakeMetadata(
+  meta: Record<
+    string,
+    { credential?: boolean; aggregator?: boolean; router?: boolean; local?: boolean }
+  >
+): ProviderMetadataView {
   return {
     hasCredential: (id) => meta[id]?.credential ?? true,
     isAggregator: (id) => meta[id]?.aggregator ?? false,
@@ -105,13 +112,13 @@ describe('ProviderCreditAuditService — metadata_only', () => {
     const svc = new ProviderCreditAuditService({
       hub: fakeHub({
         'cloud-1': { state: 'healthy' },
-        'ollama': { state: 'healthy' },
-        'aihub': { state: 'healthy' },
+        ollama: { state: 'healthy' },
+        aihub: { state: 'healthy' },
       }),
       catalog: fakeCatalog({
         'cloud-1': { visible: 1, usable: 1 },
-        'ollama': { visible: 1, usable: 1 },
-        'aihub': { visible: 100, usable: 100 },
+        ollama: { visible: 1, usable: 1 },
+        aihub: { visible: 100, usable: 100 },
       }),
       metadata: fakeMetadata({
         ollama: { local: true },
@@ -215,12 +222,14 @@ describe('ProviderCreditAuditService — metadata_only', () => {
         includeAggregators: true,
         includeRouters: true,
         includeLocal: true,
-      }),
+      })
     ).rejects.toThrow(/minimal_billable_probe is not implemented/);
   });
 
   it('zero provider call: catalog methods are awaited but no fetch is made', async () => {
-    const fetchSpy = vi.fn(async () => { throw new Error('fetch must not be called'); });
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('fetch must not be called');
+    });
     const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchSpy as unknown as typeof globalThis.fetch;
     try {

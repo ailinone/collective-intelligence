@@ -15,10 +15,7 @@
  */
 
 import { injectable } from 'tsyringe';
-import {
-  IProjectRepository,
-  ListProjectsOptions,
-} from '@/domain/repositories/iproject-repository';
+import { IProjectRepository, ListProjectsOptions } from '@/domain/repositories/iproject-repository';
 import { ProjectEntity } from '@/domain/entities/project.entity';
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
@@ -41,10 +38,7 @@ export class PrismaProjectRepository implements IProjectRepository {
     }
   }
 
-  async findBySlug(
-    organizationId: string,
-    slug: string
-  ): Promise<ProjectEntity | null> {
+  async findBySlug(organizationId: string, slug: string): Promise<ProjectEntity | null> {
     try {
       const row = await prisma.project.findUnique({
         where: {
@@ -80,10 +74,7 @@ export class PrismaProjectRepository implements IProjectRepository {
       return rows.map((r) => this.toEntity(r));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error(
-        { error: errorMessage, options },
-        'Failed to list projects'
-      );
+      this.log.error({ error: errorMessage, options }, 'Failed to list projects');
       throw error instanceof Error ? error : new Error(String(error));
     }
   }
@@ -101,10 +92,7 @@ export class PrismaProjectRepository implements IProjectRepository {
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error(
-        { error: errorMessage, organizationId, status },
-        'Failed to count projects'
-      );
+      this.log.error({ error: errorMessage, organizationId, status }, 'Failed to count projects');
       throw error instanceof Error ? error : new Error(String(error));
     }
   }

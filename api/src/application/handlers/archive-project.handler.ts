@@ -18,10 +18,7 @@
  */
 
 import { injectable, inject } from 'tsyringe';
-import {
-  ArchiveProjectCommand,
-  RestoreProjectCommand,
-} from '../commands/archive-project.command';
+import { ArchiveProjectCommand, RestoreProjectCommand } from '../commands/archive-project.command';
 import { IProjectRepository } from '@/domain/repositories/iproject-repository';
 import { ProjectEntity } from '@/domain/entities/project.entity';
 

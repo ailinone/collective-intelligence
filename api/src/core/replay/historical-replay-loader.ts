@@ -100,9 +100,7 @@ export function readJsonlFile(path: string): ReplayLoaderResult {
 
 // ─── Internals ──────────────────────────────────────────────────────────
 
-function sanitiseRow(
-  raw: Record<string, unknown>,
-): Record<string, unknown> {
+function sanitiseRow(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (FORBIDDEN_FIELDS.has(k)) continue;
@@ -111,18 +109,14 @@ function sanitiseRow(
   return out;
 }
 
-function buildExecution(
-  raw: Record<string, unknown>,
-): HistoricalReplayExecution | null {
+function buildExecution(raw: Record<string, unknown>): HistoricalReplayExecution | null {
   const executionId = pickString(raw, ['executionId', 'execution_id', 'id']);
   const experimentId = pickString(raw, ['experimentId', 'experiment_id']);
   const taskType = pickString(raw, ['taskType', 'task_type']);
   const strategyId = pickString(raw, ['strategyId', 'strategy', 'strategy_id']);
   if (!executionId || !experimentId || !taskType || !strategyId) return null;
 
-  const taskId =
-    pickString(raw, ['taskId', 'task_id']) ??
-    buildTaskId(experimentId, raw);
+  const taskId = pickString(raw, ['taskId', 'task_id']) ?? buildTaskId(experimentId, raw);
 
   const modelsUsed = pickStringArray(raw, ['modelsUsed', 'models_used']);
   if (modelsUsed.length === 0) return null;
@@ -152,19 +146,13 @@ function buildExecution(
   });
 }
 
-function buildTaskId(
-  experimentId: string,
-  raw: Record<string, unknown>,
-): string {
+function buildTaskId(experimentId: string, raw: Record<string, unknown>): string {
   const idx = raw.task_index ?? raw.taskIndex ?? '';
   const rep = raw.repetition ?? 0;
   return `${experimentId}::${String(idx)}::${String(rep)}`;
 }
 
-function pickString(
-  raw: Record<string, unknown>,
-  keys: readonly string[],
-): string | null {
+function pickString(raw: Record<string, unknown>, keys: readonly string[]): string | null {
   for (const k of keys) {
     const v = raw[k];
     if (typeof v === 'string' && v.length > 0) return v;
@@ -172,10 +160,7 @@ function pickString(
   return null;
 }
 
-function pickStringArray(
-  raw: Record<string, unknown>,
-  keys: readonly string[],
-): string[] {
+function pickStringArray(raw: Record<string, unknown>, keys: readonly string[]): string[] {
   for (const k of keys) {
     const v = raw[k];
     if (Array.isArray(v)) {
@@ -198,7 +183,7 @@ function pickStringArray(
 
 function pickStringArrayOpt(
   raw: Record<string, unknown>,
-  keys: readonly string[],
+  keys: readonly string[]
 ): readonly string[] | undefined {
   const arr = pickStringArray(raw, keys);
   return arr.length > 0 ? Object.freeze(arr) : undefined;
@@ -217,10 +202,7 @@ function parsePgArray(literal: string): string[] {
   return out;
 }
 
-function pickNumberOrNull(
-  raw: Record<string, unknown>,
-  keys: readonly string[],
-): number | null {
+function pickNumberOrNull(raw: Record<string, unknown>, keys: readonly string[]): number | null {
   for (const k of keys) {
     const v = raw[k];
     if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -234,16 +216,13 @@ function pickNumberOrNull(
 
 function pickNumberOrNullOpt(
   raw: Record<string, unknown>,
-  keys: readonly string[],
+  keys: readonly string[]
 ): number | null | undefined {
   const v = pickNumberOrNull(raw, keys);
   return v === null ? undefined : v;
 }
 
-function pickBoolean(
-  raw: Record<string, unknown>,
-  keys: readonly string[],
-): boolean | null {
+function pickBoolean(raw: Record<string, unknown>, keys: readonly string[]): boolean | null {
   for (const k of keys) {
     const v = raw[k];
     if (typeof v === 'boolean') return v;
@@ -255,23 +234,19 @@ function pickBoolean(
 
 function pickBooleanOpt(
   raw: Record<string, unknown>,
-  keys: readonly string[],
+  keys: readonly string[]
 ): boolean | undefined {
   const v = pickBoolean(raw, keys);
   return v === null ? undefined : v;
 }
 
-function pickComplexity(
-  raw: Record<string, unknown>,
-): ReplayComplexity | undefined {
+function pickComplexity(raw: Record<string, unknown>): ReplayComplexity | undefined {
   const v = pickString(raw, ['complexity']);
   if (v === 'low' || v === 'medium' || v === 'high' || v === 'extreme') return v;
   return undefined;
 }
 
-function pickModality(
-  raw: Record<string, unknown>,
-): ReplayModality | undefined {
+function pickModality(raw: Record<string, unknown>): ReplayModality | undefined {
   const v = pickString(raw, ['modality']);
   if (v === 'text' || v === 'image' || v === 'audio' || v === 'video' || v === 'mixed') {
     return v;

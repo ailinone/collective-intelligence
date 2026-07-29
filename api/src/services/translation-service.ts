@@ -28,14 +28,38 @@ const log = logger.child({ module: 'translation-service' });
 
 /** ISO 639-1 → NLLB Flores-200 code mapping */
 const LANG_MAP: Record<string, string> = {
-  en: 'eng_Latn', pt: 'por_Latn', es: 'spa_Latn', fr: 'fra_Latn',
-  de: 'deu_Latn', it: 'ita_Latn', nl: 'nld_Latn', ru: 'rus_Cyrl',
-  zh: 'zho_Hans', ja: 'jpn_Jpan', ko: 'kor_Hang', ar: 'arb_Arab',
-  hi: 'hin_Deva', tr: 'tur_Latn', pl: 'pol_Latn', uk: 'ukr_Cyrl',
-  vi: 'vie_Latn', th: 'tha_Thai', id: 'ind_Latn', ms: 'zsm_Latn',
-  sv: 'swe_Latn', da: 'dan_Latn', no: 'nob_Latn', fi: 'fin_Latn',
-  el: 'ell_Grek', he: 'heb_Hebr', cs: 'ces_Latn', ro: 'ron_Latn',
-  hu: 'hun_Latn', bg: 'bul_Cyrl', hr: 'hrv_Latn', sk: 'slk_Latn',
+  en: 'eng_Latn',
+  pt: 'por_Latn',
+  es: 'spa_Latn',
+  fr: 'fra_Latn',
+  de: 'deu_Latn',
+  it: 'ita_Latn',
+  nl: 'nld_Latn',
+  ru: 'rus_Cyrl',
+  zh: 'zho_Hans',
+  ja: 'jpn_Jpan',
+  ko: 'kor_Hang',
+  ar: 'arb_Arab',
+  hi: 'hin_Deva',
+  tr: 'tur_Latn',
+  pl: 'pol_Latn',
+  uk: 'ukr_Cyrl',
+  vi: 'vie_Latn',
+  th: 'tha_Thai',
+  id: 'ind_Latn',
+  ms: 'zsm_Latn',
+  sv: 'swe_Latn',
+  da: 'dan_Latn',
+  no: 'nob_Latn',
+  fi: 'fin_Latn',
+  el: 'ell_Grek',
+  he: 'heb_Hebr',
+  cs: 'ces_Latn',
+  ro: 'ron_Latn',
+  hu: 'hun_Latn',
+  bg: 'bul_Cyrl',
+  hr: 'hrv_Latn',
+  sk: 'slk_Latn',
 };
 
 export interface TranslationResult {
@@ -73,13 +97,14 @@ export class TranslationService {
   private readonly unhealthyRetryMs = Number(process.env.NLLB_UNHEALTHY_RETRY_MS) || 30000;
 
   constructor(config?: TranslationConfig) {
-    this.nllbUrl = config?.nllbUrl
-      || process.env.LOCAL_NLLB_URL
-      || 'http://nllb-translation:8087';  // Default: Swarm service name on gateway-net
+    this.nllbUrl = config?.nllbUrl || process.env.LOCAL_NLLB_URL || 'http://nllb-translation:8087'; // Default: Swarm service name on gateway-net
     this.timeout = config?.timeout || 120000; // 120s for first request (model loading), warm: ~200ms
     this.llmFallbackUrl = config?.llmFallbackUrl || null;
 
-    log.info({ url: this.nllbUrl, fromEnv: !!process.env.LOCAL_NLLB_URL }, 'TranslationService initialized');
+    log.info(
+      { url: this.nllbUrl, fromEnv: !!process.env.LOCAL_NLLB_URL },
+      'TranslationService initialized'
+    );
   }
 
   /** Cold (first-load) timeout until the first success, short deadline after. */
@@ -106,7 +131,7 @@ export class TranslationService {
   async translateText(
     text: string,
     sourceLang: string,
-    targetLang: string,
+    targetLang: string
   ): Promise<TranslationResult> {
     const start = performance.now();
 
@@ -114,16 +139,31 @@ export class TranslationService {
     // dead/wedged sidecar costs one probe per retry window, not a stall per call.
     if (this.shouldTryNllb()) {
       try {
-        log.info({ url: this.nllbUrl, sourceLang, targetLang, textLen: text.length }, 'NLLB: attempting translation');
+        log.info(
+          { url: this.nllbUrl, sourceLang, targetLang, textLen: text.length },
+          'NLLB: attempting translation'
+        );
         const result = await this.translateViaNLLB(text, sourceLang, targetLang);
         const latencyMs = Math.round(performance.now() - start);
         this.healthy = true;
         this.warmed = true; // steady-state from now on: short deadline, not the 120s cold budget
-        log.info({ sourceLang, targetLang, latencyMs, chars: text.length, translated: result.translatedText.substring(0, 50) }, 'NLLB translation OK');
+        log.info(
+          {
+            sourceLang,
+            targetLang,
+            latencyMs,
+            chars: text.length,
+            translated: result.translatedText.substring(0, 50),
+          },
+          'NLLB translation OK'
+        );
         return { ...result, latencyMs, model: 'nllb-200-distilled-600M' };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        log.error({ error: msg, url: this.nllbUrl, sourceLang, targetLang, text: text.substring(0, 50) }, 'NLLB translation FAILED');
+        log.error(
+          { error: msg, url: this.nllbUrl, sourceLang, targetLang, text: text.substring(0, 50) },
+          'NLLB translation FAILED'
+        );
         this.markUnhealthy();
       }
     }
@@ -146,12 +186,12 @@ export class TranslationService {
   async translateBatch(
     texts: string[],
     sourceLang: string,
-    targetLang: string,
+    targetLang: string
   ): Promise<TranslationResult[]> {
     if (!this.shouldTryNllb()) {
       // No sidecar configured OR circuit open — per-text path (which itself
       // skips NLLB while the circuit is open, going straight to the LLM).
-      return Promise.all(texts.map(t => this.translateText(t, sourceLang, targetLang)));
+      return Promise.all(texts.map((t) => this.translateText(t, sourceLang, targetLang)));
     }
 
     const start = performance.now();
@@ -167,7 +207,7 @@ export class TranslationService {
         throw new Error(`NLLB batch: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         results: Array<{ text: string; translated_text?: string; error?: string }>;
         latency_ms: number;
       };
@@ -184,7 +224,7 @@ export class TranslationService {
       }));
     } catch (error) {
       this.markUnhealthy();
-      return Promise.all(texts.map(t => this.translateText(t, sourceLang, targetLang)));
+      return Promise.all(texts.map((t) => this.translateText(t, sourceLang, targetLang)));
     }
   }
 
@@ -196,8 +236,14 @@ export class TranslationService {
           signal: AbortSignal.timeout(3000),
         });
         if (response.ok) {
-          const data = await response.json() as { languages: Array<{ code: string; name: string; flores_code: string }> };
-          return data.languages.map(l => ({ code: l.code, name: l.name, floresCode: l.flores_code }));
+          const data = (await response.json()) as {
+            languages: Array<{ code: string; name: string; flores_code: string }>;
+          };
+          return data.languages.map((l) => ({
+            code: l.code,
+            name: l.name,
+            floresCode: l.flores_code,
+          }));
         }
       } catch {
         // Fall through to static map
@@ -234,7 +280,7 @@ export class TranslationService {
   private async translateViaNLLB(
     text: string,
     sourceLang: string,
-    targetLang: string,
+    targetLang: string
   ): Promise<Pick<TranslationResult, 'translatedText' | 'sourceLang' | 'targetLang'>> {
     // Resolve hostname to IP to bypass Node.js DNS cache (stale in Docker overlay networks)
     let fetchUrl = `${this.nllbUrl}/v1/translations`;
@@ -245,7 +291,13 @@ export class TranslationService {
         fetchUrl = `http://${address}:${url.port || '8087'}/v1/translations`;
       }
     } catch (dnsErr) {
-      log.warn({ error: dnsErr instanceof Error ? dnsErr.message : String(dnsErr), hostname: this.nllbUrl }, 'DNS lookup failed, using original URL');
+      log.warn(
+        {
+          error: dnsErr instanceof Error ? dnsErr.message : String(dnsErr),
+          hostname: this.nllbUrl,
+        },
+        'DNS lookup failed, using original URL'
+      );
     }
 
     const response = await fetch(fetchUrl, {
@@ -266,7 +318,7 @@ export class TranslationService {
       throw new Error(`NLLB ${response.status}: ${body}`);
     }
 
-    const data = await response.json() as { translated_text: string };
+    const data = (await response.json()) as { translated_text: string };
     return {
       translatedText: data.translated_text,
       sourceLang,
@@ -277,12 +329,21 @@ export class TranslationService {
   private async translateViaLLM(
     text: string,
     sourceLang: string,
-    targetLang: string,
+    targetLang: string
   ): Promise<Pick<TranslationResult, 'translatedText' | 'sourceLang' | 'targetLang' | 'model'>> {
     const langNames: Record<string, string> = {
-      en: 'English', pt: 'Portuguese', es: 'Spanish', fr: 'French',
-      de: 'German', it: 'Italian', ja: 'Japanese', ko: 'Korean',
-      zh: 'Chinese', ru: 'Russian', ar: 'Arabic', hi: 'Hindi',
+      en: 'English',
+      pt: 'Portuguese',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      it: 'Italian',
+      ja: 'Japanese',
+      ko: 'Korean',
+      zh: 'Chinese',
+      ru: 'Russian',
+      ar: 'Arabic',
+      hi: 'Hindi',
     };
 
     const targetName = langNames[targetLang] || targetLang;
@@ -290,8 +351,7 @@ export class TranslationService {
 
     // Use Ollama for LLM-based translation fallback
     const ollamaUrl = process.env.OLLAMA_URL;
-    const chatUrl = this.llmFallbackUrl
-      || (ollamaUrl ? ollamaUrl.replace(/\/v1\/?$/, '') : null);
+    const chatUrl = this.llmFallbackUrl || (ollamaUrl ? ollamaUrl.replace(/\/v1\/?$/, '') : null);
 
     if (!chatUrl) {
       throw new Error('No LLM fallback URL configured (set OLLAMA_URL or llmFallbackUrl)');
@@ -319,7 +379,7 @@ export class TranslationService {
       throw new Error(`LLM translation: ${response.status}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices: Array<{ message: { content: string } }>;
       model?: string;
     };

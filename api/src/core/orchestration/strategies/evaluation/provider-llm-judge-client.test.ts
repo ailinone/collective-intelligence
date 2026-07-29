@@ -65,7 +65,7 @@ describe('ProviderLLMJudgeClient', () => {
     const adapter = {
       getName: () => 'mockprov',
       chatCompletion: vi.fn(async () =>
-        fakeChatResponse('{"score":0.8,"verdict":"pass","confidence":0.9,"rationale":"ok"}'),
+        fakeChatResponse('{"score":0.8,"verdict":"pass","confidence":0.9,"rationale":"ok"}')
       ),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
@@ -128,8 +128,7 @@ describe('ProviderLLMJudgeClient', () => {
     // 0-100 value and rescales it. This is the same salvage the consensus path uses.
     const adapter = {
       getName: () => 'mockprov',
-      chatCompletion: async () =>
-        fakeChatResponse('{"score":85,"verdict":"pass"}'),
+      chatCompletion: async () => fakeChatResponse('{"score":85,"verdict":"pass"}'),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
     const r = await client.judge({
@@ -150,8 +149,7 @@ describe('ProviderLLMJudgeClient', () => {
     // (EvaluationVerdict semantics: ran, but no objective basis to commit).
     const adapter = {
       getName: () => 'mockprov',
-      chatCompletion: async () =>
-        fakeChatResponse('{"score":0.5,"verdict":"maybe"}'),
+      chatCompletion: async () => fakeChatResponse('{"score":0.5,"verdict":"maybe"}'),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
     const r = await client.judge({
@@ -179,16 +177,14 @@ describe('ProviderLLMJudgeClient', () => {
         output: 'x',
         maxCostUsd: 0.01,
         timeoutMs: 1000,
-      }),
+      })
     ).rejects.toThrow(/judge_model_not_found:nope/);
   });
 
   it('pins temperature=0 and bounded max_tokens on the judge request', async () => {
     const adapter = {
       getName: () => 'mockprov',
-      chatCompletion: vi.fn(async () =>
-        fakeChatResponse('{"score":0.5,"verdict":"pass"}'),
-      ),
+      chatCompletion: vi.fn(async () => fakeChatResponse('{"score":0.5,"verdict":"pass"}')),
     };
     const client = new ProviderLLMJudgeClient({ registry: fakeRegistry(adapter) });
     await client.judge({
@@ -246,7 +242,7 @@ describe('pure helpers', () => {
 
   it('coerceRawResult throws only when NO score can be salvaged', () => {
     expect(() => coerceRawResult({ verdict: 'pass', rationale: 'no score here' })).toThrow(
-      /unparseable/,
+      /unparseable/
     );
   });
 });

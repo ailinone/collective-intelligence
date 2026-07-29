@@ -412,7 +412,24 @@ class ModelCacheService {
     await Promise.all(models.map((model) => this.setInRedis(this.normalizeId(model.id), model)));
   }
 
-  private normalizeModelRecord(record: { id: string; name: string; displayName: string; providerId: string; contextWindow: number; maxOutputTokens: number; inputCostPer1k: unknown; outputCostPer1k: unknown; capabilities: unknown; performance: unknown; status: string; metadata: unknown; tags?: unknown; specializations?: unknown } & { provider?: { name: string } }): Model {
+  private normalizeModelRecord(
+    record: {
+      id: string;
+      name: string;
+      displayName: string;
+      providerId: string;
+      contextWindow: number;
+      maxOutputTokens: number;
+      inputCostPer1k: unknown;
+      outputCostPer1k: unknown;
+      capabilities: unknown;
+      performance: unknown;
+      status: string;
+      metadata: unknown;
+      tags?: unknown;
+      specializations?: unknown;
+    } & { provider?: { name: string } }
+  ): Model {
     // Handle capabilities which can be array, Prisma JsonValue, or object
     // with `set` property (Prisma list field shape).
     const stringFromUnknown = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -421,7 +438,11 @@ class ModelCacheService {
     let capabilities: string[] = [];
     if (Array.isArray(record.capabilities)) {
       capabilities = filterStrings(record.capabilities);
-    } else if (record.capabilities && typeof record.capabilities === 'object' && 'set' in record.capabilities) {
+    } else if (
+      record.capabilities &&
+      typeof record.capabilities === 'object' &&
+      'set' in record.capabilities
+    ) {
       const capabilitiesWithSet = record.capabilities as { set?: unknown };
       if (Array.isArray(capabilitiesWithSet.set)) {
         capabilities = filterStrings(capabilitiesWithSet.set);
@@ -454,7 +475,8 @@ class ModelCacheService {
       outputCostPer1k: Number(record.outputCostPer1k),
       capabilities: capabilities as ModelCapability[],
       performance: performance as Model['performance'],
-      status: record.status as 'active' | 'maintenance' | 'disabled' | 'deprecated' | 'legacy' | 'preview',
+      status: record.status as
+        'active' | 'maintenance' | 'disabled' | 'deprecated' | 'legacy' | 'preview',
     };
   }
 
@@ -480,7 +502,10 @@ class ModelCacheService {
         }
       }
     } catch (error) {
-      logger.debug({ error }, '[ModelCache] Could not load aliases from Redis, using empty aliases');
+      logger.debug(
+        { error },
+        '[ModelCache] Could not load aliases from Redis, using empty aliases'
+      );
     }
 
     this.aliasesLoaded = true;

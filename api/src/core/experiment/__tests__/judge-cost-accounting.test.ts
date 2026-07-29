@@ -59,15 +59,26 @@ const CANONICAL_VERDICT = JSON.stringify({ score: 0.8, issues: [] });
 
 describe('judgeResponse — pinned HTTP path', () => {
   it('captures ailin_metadata.cost_usd from the judge call', async () => {
-    const mod = await importUnderEnv({ JUDGE_MODE: undefined, EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x' });
-    vi.stubGlobal('fetch', vi.fn(async () => httpJudgeResponse({
-      model: 'prov/judge-model-x',
-      choices: [{ message: { content: CANONICAL_VERDICT } }],
-      usage: { prompt_tokens: 100, completion_tokens: 50 },
-      ailin_metadata: { cost_usd: 0.01 },
-    })));
+    const mod = await importUnderEnv({
+      JUDGE_MODE: undefined,
+      EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        httpJudgeResponse({
+          model: 'prov/judge-model-x',
+          choices: [{ message: { content: CANONICAL_VERDICT } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+          ailin_metadata: { cost_usd: 0.01 },
+        })
+      )
+    );
 
-    const outcome = await mod.judgeResponse('a perfectly reasonable response', 'rubric: correctness');
+    const outcome = await mod.judgeResponse(
+      'a perfectly reasonable response',
+      'rubric: correctness'
+    );
     expect(outcome.judgeFailed).toBe(false);
     expect(outcome.score).toBeCloseTo(0.8, 10);
     expect(outcome.judgeCostUsd).toBeCloseTo(0.01, 10);
@@ -85,12 +96,20 @@ describe('judgeResponse — pinned HTTP path', () => {
         },
       },
     }));
-    const mod = await importUnderEnv({ JUDGE_MODE: undefined, EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x' });
-    vi.stubGlobal('fetch', vi.fn(async () => httpJudgeResponse({
-      model: 'prov/judge-model-x',
-      choices: [{ message: { content: CANONICAL_VERDICT } }],
-      usage: { prompt_tokens: 100, completion_tokens: 50 },
-    })));
+    const mod = await importUnderEnv({
+      JUDGE_MODE: undefined,
+      EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        httpJudgeResponse({
+          model: 'prov/judge-model-x',
+          choices: [{ message: { content: CANONICAL_VERDICT } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        })
+      )
+    );
 
     const outcome = await mod.judgeResponse('a response', 'rubric');
     expect(outcome.judgeFailed).toBe(false);
@@ -99,14 +118,19 @@ describe('judgeResponse — pinned HTTP path', () => {
   });
 
   it('accumulates the cost of EVERY billed attempt when no verdict ever parses (failed judging is not free)', async () => {
-    const mod = await importUnderEnv({ JUDGE_MODE: undefined, EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x' });
-    const fetchMock = vi.fn(async () => httpJudgeResponse({
-      model: 'prov/judge-model-x',
-      // No digits anywhere: defeats canonical parse, regex salvage AND the
-      // plain-number back-compat extractor, so every attempt is consumed.
-      choices: [{ message: { content: 'unusable verdict with no numerals whatsoever' } }],
-      ailin_metadata: { cost_usd: 0.01 },
-    }));
+    const mod = await importUnderEnv({
+      JUDGE_MODE: undefined,
+      EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x',
+    });
+    const fetchMock = vi.fn(async () =>
+      httpJudgeResponse({
+        model: 'prov/judge-model-x',
+        // No digits anywhere: defeats canonical parse, regex salvage AND the
+        // plain-number back-compat extractor, so every attempt is consumed.
+        choices: [{ message: { content: 'unusable verdict with no numerals whatsoever' } }],
+        ailin_metadata: { cost_usd: 0.01 },
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const outcome = await mod.judgeResponse('some response body long enough to score', 'rubric');
@@ -116,8 +140,16 @@ describe('judgeResponse — pinned HTTP path', () => {
   });
 
   it('returns judgeCostUsd 0 on the heuristic fallback when every attempt errored before billing', async () => {
-    const mod = await importUnderEnv({ JUDGE_MODE: undefined, EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x' });
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+    const mod = await importUnderEnv({
+      JUDGE_MODE: undefined,
+      EXPERIMENT_JUDGE_MODEL: 'prov/judge-model-x',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      })
+    );
 
     const outcome = await mod.judgeResponse('some response', 'rubric');
     expect(outcome.judgeFailed).toBe(true);
@@ -131,7 +163,13 @@ describe('judgeResponse — dynamic (in-process cascade) path', () => {
       getQualityScorer: () => ({
         calculatePolicyAwareScore: vi.fn(async () => ({
           overall: 0.9,
-          dimensions: { correctness: 0.9, completeness: 0.9, clarity: 0.9, efficiency: 0.9, relevance: 0.9 },
+          dimensions: {
+            correctness: 0.9,
+            completeness: 0.9,
+            clarity: 0.9,
+            efficiency: 0.9,
+            relevance: 0.9,
+          },
           confidence: 0.85,
           reasoning: [],
           method: 'llm-judge',
@@ -156,7 +194,13 @@ describe('judgeResponse — dynamic (in-process cascade) path', () => {
       getQualityScorer: () => ({
         calculatePolicyAwareScore: vi.fn(async () => ({
           overall: 0.5,
-          dimensions: { correctness: 0.5, completeness: 0.5, clarity: 0.5, efficiency: 0.5, relevance: 0.5 },
+          dimensions: {
+            correctness: 0.5,
+            completeness: 0.5,
+            clarity: 0.5,
+            efficiency: 0.5,
+            relevance: 0.5,
+          },
           confidence: 0.1,
           reasoning: ['WARNING: LLM-Judge failed'],
           method: 'heuristic',
@@ -168,11 +212,16 @@ describe('judgeResponse — dynamic (in-process cascade) path', () => {
       }),
     }));
     const mod = await importUnderEnv({ JUDGE_MODE: 'dynamic', EXPERIMENT_JUDGE_MODEL: undefined });
-    vi.stubGlobal('fetch', vi.fn(async () => httpJudgeResponse({
-      model: 'prov/judge-model-x',
-      choices: [{ message: { content: CANONICAL_VERDICT } }],
-      ailin_metadata: { cost_usd: 0.01 },
-    })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        httpJudgeResponse({
+          model: 'prov/judge-model-x',
+          choices: [{ message: { content: CANONICAL_VERDICT } }],
+          ailin_metadata: { cost_usd: 0.01 },
+        })
+      )
+    );
 
     const outcome = await mod.judgeResponse('a response', 'rubric');
     expect(outcome.judgeFailed).toBe(false); // pinned fallback produced the verdict

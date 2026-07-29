@@ -29,10 +29,7 @@
  */
 
 import { logger } from '@/utils/logger';
-import {
-  incrementCounter,
-  METRIC_NAMES,
-} from './metrics';
+import { incrementCounter, METRIC_NAMES } from './metrics';
 import type { CandidateTrace, CandidateStage, ProviderHealthState } from './types';
 
 const log = logger.child({ component: 'candidate-trace' });
@@ -105,7 +102,7 @@ export function emitCandidateTrace(input: EmitTraceInput): CandidateTrace {
       ...trace,
       msg_kind: 'candidate_trace',
     },
-    'candidate.trace',
+    'candidate.trace'
   );
 
   return trace;

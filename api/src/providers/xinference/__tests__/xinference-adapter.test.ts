@@ -105,22 +105,22 @@ describe('XinferenceAdapter — rerank wire', () => {
 
   it('rejects missing model', async () => {
     const adapter = makeAdapter();
-    await expect(
-      adapter.rerank({ model: '', query: 'q', documents: ['a'] }),
-    ).rejects.toThrow(/model is required/);
+    await expect(adapter.rerank({ model: '', query: 'q', documents: ['a'] })).rejects.toThrow(
+      /model is required/
+    );
   });
 
   it('rejects missing query', async () => {
     const adapter = makeAdapter();
-    await expect(
-      adapter.rerank({ model: 'm', query: '', documents: ['a'] }),
-    ).rejects.toThrow(/query is required/);
+    await expect(adapter.rerank({ model: 'm', query: '', documents: ['a'] })).rejects.toThrow(
+      /query is required/
+    );
   });
 
   it('rejects non-array documents', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.rerank({ model: 'm', query: 'q', documents: 'not-an-array' as unknown as string[] }),
+      adapter.rerank({ model: 'm', query: 'q', documents: 'not-an-array' as unknown as string[] })
     ).rejects.toThrow(/documents must be an array/);
   });
 
@@ -128,9 +128,9 @@ describe('XinferenceAdapter — rerank wire', () => {
     const restore = stubFetch({ ok: false, status: 500, body: { error: 'model not loaded' } });
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.rerank({ model: 'm', query: 'q', documents: ['a'] }),
-      ).rejects.toThrow(/500.*model not loaded/);
+      await expect(adapter.rerank({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
+        /500.*model not loaded/
+      );
     } finally {
       restore();
     }
@@ -140,9 +140,9 @@ describe('XinferenceAdapter — rerank wire', () => {
     const restore = stubFetch({ body: { not_results: [] } });
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.rerank({ model: 'm', query: 'q', documents: ['a'] }),
-      ).rejects.toThrow(/results.*array/);
+      await expect(adapter.rerank({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
+        /results.*array/
+      );
     } finally {
       restore();
     }

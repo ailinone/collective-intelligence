@@ -76,7 +76,10 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
   private readonly requestTimeoutMs: number;
   private readonly log = logger.child({ component: 'featherless-ai-fetcher' });
 
-  constructor(apiKey: string, requestTimeoutMs = Number(process.env.FEATHERLESS_DISCOVERY_TIMEOUT_MS || '15000')) {
+  constructor(
+    apiKey: string,
+    requestTimeoutMs = Number(process.env.FEATHERLESS_DISCOVERY_TIMEOUT_MS || '15000')
+  ) {
     super();
     this.apiKey = apiKey;
     this.requestTimeoutMs = requestTimeoutMs;
@@ -84,7 +87,10 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
 
   async getModels(): Promise<ProviderModel[]> {
     if (!this.apiKey || this.isMockKey(this.apiKey)) {
-      this.log.warn({ keyPresent: Boolean(this.apiKey) }, 'Featherless AI discovery skipped: no/mock key');
+      this.log.warn(
+        { keyPresent: Boolean(this.apiKey) },
+        'Featherless AI discovery skipped: no/mock key'
+      );
       return [];
     }
 
@@ -106,13 +112,19 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
         });
 
         if (!response.ok) {
-          this.log.warn({ page, status: response.status }, 'Featherless AI models page non-OK, stopping pagination');
+          this.log.warn(
+            { page, status: response.status },
+            'Featherless AI models page non-OK, stopping pagination'
+          );
           break;
         }
 
         body = (await response.json()) as FeatherlessModelsPage;
       } catch (error) {
-        this.log.warn({ page, error }, 'Featherless AI models page request failed, stopping pagination');
+        this.log.warn(
+          { page, error },
+          'Featherless AI models page request failed, stopping pagination'
+        );
         break;
       }
 
@@ -138,7 +150,15 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
       .filter((m) => typeof m.id === 'string' && m.id.length > 0)
       .map((m) => this.transform(m));
 
-    this.log.info({ pagesFetched, totalPages: Math.min(totalPages, MAX_PAGES), received: all.length, emitted: out.length }, 'Featherless AI discovery completed');
+    this.log.info(
+      {
+        pagesFetched,
+        totalPages: Math.min(totalPages, MAX_PAGES),
+        received: all.length,
+        emitted: out.length,
+      },
+      'Featherless AI discovery completed'
+    );
     return out;
   }
 

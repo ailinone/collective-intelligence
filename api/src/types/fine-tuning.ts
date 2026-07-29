@@ -156,4 +156,3 @@ export interface DeleteFineTuningJobResponse {
   object: 'fine_tuning.job';
   deleted: boolean;
 }
-

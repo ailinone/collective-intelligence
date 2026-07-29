@@ -50,9 +50,9 @@ const log = logger.child({ component: 'embedding-worker' });
 
 export interface EmbeddingWorkerStats {
   capabilities: { processed: number; failed: number };
-  models:       { processed: number; failed: number };
+  models: { processed: number; failed: number };
   modelVersion: string;
-  elapsedMs:    number;
+  elapsedMs: number;
 }
 
 export interface RunEmbeddingsOptions {
@@ -93,13 +93,13 @@ interface ModelRow {
 }
 
 export async function runEmbeddingWorker(
-  opts: RunEmbeddingsOptions = {},
+  opts: RunEmbeddingsOptions = {}
 ): Promise<EmbeddingWorkerStats> {
   const start = Date.now();
   const embedder = opts.embedder ?? getEmbedder();
   if (embedder.dimensions !== EMBEDDING_DIMS) {
     throw new Error(
-      `Embedder dimensions mismatch: vector(${EMBEDDING_DIMS}) column vs embedder ${embedder.dimensions}`,
+      `Embedder dimensions mismatch: vector(${EMBEDDING_DIMS}) column vs embedder ${embedder.dimensions}`
     );
   }
   const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK;
@@ -128,7 +128,7 @@ async function processCapabilities(
   embedder: Embedder,
   limit: number | undefined,
   chunkSize: number,
-  stats: EmbeddingWorkerStats,
+  stats: EmbeddingWorkerStats
 ): Promise<void> {
   const limitClause = limit && limit > 0 ? `LIMIT ${Math.floor(limit)}` : '';
   const rows = await prisma.$queryRawUnsafe<CapabilityRow[]>(
@@ -144,7 +144,7 @@ async function processCapabilities(
        )
      ORDER BY uri
      ${limitClause}`,
-    embedder.modelVersion,
+    embedder.modelVersion
   );
 
   if (rows.length === 0) {
@@ -164,8 +164,12 @@ async function processCapabilities(
     } catch (err) {
       stats.capabilities.failed += slice.length;
       log.warn(
-        { error: err instanceof Error ? err.message : String(err), chunkStart: i, chunkSize: slice.length },
-        'Capability embedding chunk failed; will retry on next run',
+        {
+          error: err instanceof Error ? err.message : String(err),
+          chunkStart: i,
+          chunkSize: slice.length,
+        },
+        'Capability embedding chunk failed; will retry on next run'
       );
     }
   }
@@ -181,7 +185,7 @@ function buildCapabilityPayload(row: CapabilityRow): string {
 async function persistCapabilityEmbeddings(
   rows: CapabilityRow[],
   vectors: number[][],
-  modelVersion: string,
+  modelVersion: string
 ): Promise<void> {
   if (rows.length !== vectors.length) {
     throw new Error(`persistCapabilityEmbeddings: rows=${rows.length} vectors=${vectors.length}`);
@@ -201,7 +205,7 @@ async function persistCapabilityEmbeddings(
      WHERE c.uri = v.uri`,
     uris,
     literals,
-    modelVersion,
+    modelVersion
   );
 }
 
@@ -211,7 +215,7 @@ async function processModels(
   embedder: Embedder,
   limit: number | undefined,
   chunkSize: number,
-  stats: EmbeddingWorkerStats,
+  stats: EmbeddingWorkerStats
 ): Promise<void> {
   const limitClause = limit && limit > 0 ? `LIMIT ${Math.floor(limit)}` : '';
   const rows = await prisma.$queryRawUnsafe<ModelRow[]>(
@@ -227,7 +231,7 @@ async function processModels(
        )
      ORDER BY uid
      ${limitClause}`,
-    embedder.modelVersion,
+    embedder.modelVersion
   );
 
   if (rows.length === 0) {
@@ -252,8 +256,12 @@ async function processModels(
     } catch (err) {
       stats.models.failed += slice.length;
       log.warn(
-        { error: err instanceof Error ? err.message : String(err), chunkStart: i, chunkSize: slice.length },
-        'Model embedding chunk failed; will retry on next run',
+        {
+          error: err instanceof Error ? err.message : String(err),
+          chunkStart: i,
+          chunkSize: slice.length,
+        },
+        'Model embedding chunk failed; will retry on next run'
       );
     }
   }
@@ -263,7 +271,7 @@ async function fetchCapabilityLabels(uris: string[]): Promise<Map<string, string
   if (uris.length === 0) return new Map();
   const rows = await prisma.$queryRawUnsafe<{ uri: string; preferred_label: string }[]>(
     `SELECT uri, preferred_label FROM capability_ontology WHERE uri = ANY($1::text[])`,
-    uris,
+    uris
   );
   return new Map(rows.map((r) => [r.uri, r.preferred_label]));
 }
@@ -281,7 +289,7 @@ function buildModelPayload(row: ModelRow, labelMap: Map<string, string>): string
 async function persistModelEmbeddings(
   rows: ModelRow[],
   vectors: number[][],
-  modelVersion: string,
+  modelVersion: string
 ): Promise<void> {
   if (rows.length !== vectors.length) {
     throw new Error(`persistModelEmbeddings: rows=${rows.length} vectors=${vectors.length}`);
@@ -299,7 +307,7 @@ async function persistModelEmbeddings(
      WHERE m.uid = v.uid`,
     uids,
     literals,
-    modelVersion,
+    modelVersion
   );
 }
 

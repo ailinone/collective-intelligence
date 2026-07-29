@@ -67,15 +67,13 @@ function mockSuccess(): void {
         latencyBreakdown: { totalMs: 1, tierLatencies: [] },
         requestId: 't',
       }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    )
   );
 }
 
 function mockServerError(): void {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response('upstream down', { status: 503 }),
-  );
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('upstream down', { status: 503 }));
 }
 
 beforeEach(() => {
@@ -145,7 +143,6 @@ describe('callEnsembleCoordinatorBreakered', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     }
   });
-
 });
 
 /**
@@ -178,7 +175,7 @@ describe('CircuitBreaker recovery state machine', () => {
     // 1. Trip the breaker via 3 failures
     for (let i = 0; i < 3; i++) {
       await expect(breaker.execute(() => Promise.reject(new Error('boom')))).rejects.toThrow(
-        'boom',
+        'boom'
       );
     }
 
@@ -189,7 +186,7 @@ describe('CircuitBreaker recovery state machine', () => {
       breaker.execute(() => {
         invoked = true;
         return Promise.resolve('should-not-run');
-      }),
+      })
     ).rejects.toBeInstanceOf(CircuitBreakerOpenError);
     expect(invoked).toBe(false);
 
@@ -215,7 +212,7 @@ describe('CircuitBreaker recovery state machine', () => {
       breaker.execute(() => {
         postRecoveryInvoked = true;
         return Promise.reject(new Error('post-recovery'));
-      }),
+      })
     ).rejects.toThrow('post-recovery');
     expect(postRecoveryInvoked).toBe(true);
   });
@@ -239,15 +236,15 @@ describe('CircuitBreaker recovery state machine', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     // Failure in HALF_OPEN → re-OPEN immediately
-    await expect(breaker.execute(() => Promise.reject(new Error('half-open-fail')))).rejects.toThrow(
-      'half-open-fail',
-    );
+    await expect(
+      breaker.execute(() => Promise.reject(new Error('half-open-fail')))
+    ).rejects.toThrow('half-open-fail');
 
     // Next call is OPEN-fast-failed even though we're still within the
     // first cooldown window of the original OPEN — because the
     // HALF_OPEN failure RESET the cooldown.
     await expect(breaker.execute(() => Promise.resolve('x'))).rejects.toBeInstanceOf(
-      CircuitBreakerOpenError,
+      CircuitBreakerOpenError
     );
   });
 });

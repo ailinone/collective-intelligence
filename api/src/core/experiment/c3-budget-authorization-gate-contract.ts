@@ -51,7 +51,8 @@ export const C3_ALLOWLIST_MAX_MODELS = 2 as const;
 
 export const C3_BUDGET_AUTHORIZATION_GATE_COMPLETE_DECISION =
   'CONSENSUS_01C_1B_C3_BUDGET_AUTHORIZATION_GATE_COMPLETE_READY_FOR_C3_MINIMAL_BILLABLE_MICROPROBE_DESIGN' as const;
-export const C3_BUDGET_AUTHORIZATION_GATE_NEXT_STEP = '01C.1B-C3-MINIMAL-BILLABLE-MICROPROBE-DESIGN' as const;
+export const C3_BUDGET_AUTHORIZATION_GATE_NEXT_STEP =
+  '01C.1B-C3-MINIMAL-BILLABLE-MICROPROBE-DESIGN' as const;
 
 export type C3BudgetAuthorizationRejectionReason =
   | 'not_approved'
@@ -118,7 +119,10 @@ export function isC3PlaceholderForBudget(modelId: string | undefined): boolean {
 }
 
 export function isC3HfWildcard(modelId: string | undefined): boolean {
-  return typeof modelId === 'string' && (modelId.includes('*') || /^huggingface$/i.test(modelId) || /^hf$/i.test(modelId));
+  return (
+    typeof modelId === 'string' &&
+    (modelId.includes('*') || /^huggingface$/i.test(modelId) || /^hf$/i.test(modelId))
+  );
 }
 
 export interface C3BudgetAuthorizationRequest {
@@ -171,19 +175,21 @@ export interface C3BudgetAuthorizationResult {
  */
 export function evaluateC3BudgetAuthorization(
   req: C3BudgetAuthorizationRequest,
-  cfg: C3BudgetAuthorizationConfig,
+  cfg: C3BudgetAuthorizationConfig
 ): C3BudgetAuthorizationResult {
   const reasons: string[] = [];
 
   // ── Master approval lock ──────────────────────────────────────────────────
-  const approved = cfg.envelope.approvalStatus === 'approved' && cfg.envelope.effectiveAuthorization === true;
+  const approved =
+    cfg.envelope.approvalStatus === 'approved' && cfg.envelope.effectiveAuthorization === true;
   if (cfg.envelope.approvalStatus !== 'approved') reasons.push('not_approved');
   if (cfg.envelope.effectiveAuthorization !== true) reasons.push('effective_authorization_false');
 
   // ── Unauthorized-action requests (only dangerous when unapproved) ──────────
   if (req.dryRunFalse === true && !approved) reasons.push('dryrun_false_without_approval');
   if (req.billable === true && !approved) reasons.push('billable_without_approval');
-  if (req.c3ExecutionAuthorized === true && !approved) reasons.push('c3_execution_auth_true_without_approval');
+  if (req.c3ExecutionAuthorized === true && !approved)
+    reasons.push('c3_execution_auth_true_without_approval');
 
   // ── Required fingerprints ──────────────────────────────────────────────────
   if (!req.approvedPlanFingerprint) reasons.push('missing_plan_fingerprint');
@@ -193,19 +199,25 @@ export function evaluateC3BudgetAuthorization(
   if (req.fingerprintMismatch === true) reasons.push('fingerprint_mismatch');
 
   // ── Allowlist ──────────────────────────────────────────────────────────────
-  if (req.providerId !== undefined && !cfg.allowlistProviders.has(req.providerId)) reasons.push('provider_outside_allowlist');
-  if (req.modelId !== undefined && !cfg.allowlistModels.has(req.modelId)) reasons.push('model_outside_allowlist');
+  if (req.providerId !== undefined && !cfg.allowlistProviders.has(req.providerId))
+    reasons.push('provider_outside_allowlist');
+  if (req.modelId !== undefined && !cfg.allowlistModels.has(req.modelId))
+    reasons.push('model_outside_allowlist');
   if (req.candidateClass === 'catalog_candidate') reasons.push('catalog_candidate');
-  else if (req.candidateClass !== undefined && req.candidateClass !== 'model_probe_validated') reasons.push('candidate_outside_allowlist');
-  if (req.requiresModelProbeBeforeBillableExecution === true) reasons.push('requires_model_probe_before_billable');
+  else if (req.candidateClass !== undefined && req.candidateClass !== 'model_probe_validated')
+    reasons.push('candidate_outside_allowlist');
+  if (req.requiresModelProbeBeforeBillableExecution === true)
+    reasons.push('requires_model_probe_before_billable');
   if (isC3PlaceholderForBudget(req.modelId)) reasons.push('placeholder_candidate');
   if (isC3HfWildcard(req.modelId)) reasons.push('hf_wildcard');
   if (req.modelProbeStatus === 'unknown') reasons.push('unknown_provider_status');
 
   // ── Budget ─────────────────────────────────────────────────────────────────
   if (Number(req.costUsd ?? 0) > cfg.budget.maxTotalCostUsd) reasons.push('budget_exceeded');
-  if (Number(req.inputTokens ?? 0) > cfg.budget.maxInputTokens) reasons.push('input_tokens_exceeded');
-  if (Number(req.outputTokens ?? 0) > cfg.budget.maxOutputTokens) reasons.push('output_tokens_exceeded');
+  if (Number(req.inputTokens ?? 0) > cfg.budget.maxInputTokens)
+    reasons.push('input_tokens_exceeded');
+  if (Number(req.outputTokens ?? 0) > cfg.budget.maxOutputTokens)
+    reasons.push('output_tokens_exceeded');
 
   // ── Runtime constraints ──────────────────────────────────────────────────
   if (Number(req.maxRetries ?? 0) > 0) reasons.push('max_retries_gt_zero');

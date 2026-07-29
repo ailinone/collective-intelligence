@@ -116,8 +116,6 @@ describe('ConsensusStrategy — pipeline', () => {
       eligibleModels: models,
     });
     const r = await strategy.execute(makeRequest(), makeContext(models));
-    expect(['synthesis', 'best_individual_fallback']).toContain(
-      r.metadata?.aggregationMethod,
-    );
+    expect(['synthesis', 'best_individual_fallback']).toContain(r.metadata?.aggregationMethod);
   });
 });

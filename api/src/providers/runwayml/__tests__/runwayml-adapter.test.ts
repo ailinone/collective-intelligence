@@ -29,13 +29,18 @@ const BASE = 'https://api.dev.runwayml.com';
 type FetchCall = { url: string; init: RequestInit };
 let calls: FetchCall[] = [];
 
-type RouteHandler = (url: string, init: RequestInit) => {
+type RouteHandler = (
+  url: string,
+  init: RequestInit
+) => {
   ok?: boolean;
   status?: number;
   body: unknown;
 };
 
-function installFetchRouter(routes: Array<{ match: (url: string) => boolean; handler: RouteHandler }>) {
+function installFetchRouter(
+  routes: Array<{ match: (url: string) => boolean; handler: RouteHandler }>
+) {
   const original = globalThis.fetch;
   globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
@@ -110,7 +115,12 @@ describe('RunwayMLAdapter — getModels (no probe)', () => {
     const original = globalThis.fetch;
     globalThis.fetch = ((..._args: unknown[]) => {
       sentinel.count++;
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}), text: async () => '' } as Response);
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+        text: async () => '',
+      } as Response);
     }) as unknown as typeof fetch;
     try {
       const models = await makeAdapter().getModels();
@@ -125,8 +135,16 @@ describe('RunwayMLAdapter — getModels (no probe)', () => {
 describe('RunwayMLAdapter — X-Runway-Version header', () => {
   it('stamps the default version on every call', async () => {
     const restore = installFetchRouter([
-      { match: (u) => u.endsWith('/v1/image_to_video'), handler: () => ({ body: { id: 't1', status: 'PENDING' } }) },
-      { match: (u) => u.includes('/v1/tasks/t1'), handler: () => ({ body: { id: 't1', status: 'SUCCEEDED', output: ['https://r.runway.out/a.mp4'] } }) },
+      {
+        match: (u) => u.endsWith('/v1/image_to_video'),
+        handler: () => ({ body: { id: 't1', status: 'PENDING' } }),
+      },
+      {
+        match: (u) => u.includes('/v1/tasks/t1'),
+        handler: () => ({
+          body: { id: 't1', status: 'SUCCEEDED', output: ['https://r.runway.out/a.mp4'] },
+        }),
+      },
     ]);
     try {
       const adapter = makeAdapter();
@@ -146,8 +164,14 @@ describe('RunwayMLAdapter — X-Runway-Version header', () => {
 
   it('honors apiVersion override', async () => {
     const restore = installFetchRouter([
-      { match: (u) => u.endsWith('/v1/image_to_video'), handler: () => ({ body: { id: 't2', status: 'PENDING' } }) },
-      { match: (u) => u.includes('/v1/tasks/t2'), handler: () => ({ body: { id: 't2', status: 'SUCCEEDED', output: ['u'] } }) },
+      {
+        match: (u) => u.endsWith('/v1/image_to_video'),
+        handler: () => ({ body: { id: 't2', status: 'PENDING' } }),
+      },
+      {
+        match: (u) => u.includes('/v1/tasks/t2'),
+        handler: () => ({ body: { id: 't2', status: 'SUCCEEDED', output: ['u'] } }),
+      },
     ]);
     try {
       const adapter = makeAdapter({ apiVersion: '2025-01-01' });
@@ -167,14 +191,23 @@ describe('RunwayMLAdapter — videoGenerate task state machine', () => {
   it('polls PENDING → RUNNING → SUCCEEDED and returns the first output URL', async () => {
     let statusCall = 0;
     const restore = installFetchRouter([
-      { match: (u) => u.endsWith('/v1/image_to_video'), handler: () => ({ body: { id: 't42', status: 'PENDING' } }) },
+      {
+        match: (u) => u.endsWith('/v1/image_to_video'),
+        handler: () => ({ body: { id: 't42', status: 'PENDING' } }),
+      },
       {
         match: (u) => u.includes('/v1/tasks/t42'),
         handler: () => {
           statusCall++;
           if (statusCall === 1) return { body: { id: 't42', status: 'PENDING' } };
           if (statusCall === 2) return { body: { id: 't42', status: 'RUNNING', progress: 0.5 } };
-          return { body: { id: 't42', status: 'SUCCEEDED', output: ['https://out.mp4', 'https://thumb.jpg'] } };
+          return {
+            body: {
+              id: 't42',
+              status: 'SUCCEEDED',
+              output: ['https://out.mp4', 'https://thumb.jpg'],
+            },
+          };
         },
       },
     ]);
@@ -193,10 +226,20 @@ describe('RunwayMLAdapter — videoGenerate task state machine', () => {
 
   it('throws when task ends FAILED and includes the failure reason', async () => {
     const restore = installFetchRouter([
-      { match: (u) => u.endsWith('/v1/image_to_video'), handler: () => ({ body: { id: 'tx', status: 'PENDING' } }) },
+      {
+        match: (u) => u.endsWith('/v1/image_to_video'),
+        handler: () => ({ body: { id: 'tx', status: 'PENDING' } }),
+      },
       {
         match: (u) => u.includes('/v1/tasks/tx'),
-        handler: () => ({ body: { id: 'tx', status: 'FAILED', failure: 'content_moderation', failureCode: 'CM_001' } }),
+        handler: () => ({
+          body: {
+            id: 'tx',
+            status: 'FAILED',
+            failure: 'content_moderation',
+            failureCode: 'CM_001',
+          },
+        }),
       },
     ]);
     try {
@@ -205,7 +248,7 @@ describe('RunwayMLAdapter — videoGenerate task state machine', () => {
         adapter.videoGenerate(mockModel('gen3a_turbo'), {
           prompt: 'x',
           options: { promptImage: 'https://in.jpg' },
-        }),
+        })
       ).rejects.toThrow(/FAILED.*content_moderation/);
     } finally {
       restore();
@@ -214,8 +257,14 @@ describe('RunwayMLAdapter — videoGenerate task state machine', () => {
 
   it('sends promptImage + promptText in the body', async () => {
     const restore = installFetchRouter([
-      { match: (u) => u.endsWith('/v1/image_to_video'), handler: () => ({ body: { id: 'b1', status: 'PENDING' } }) },
-      { match: (u) => u.includes('/v1/tasks/b1'), handler: () => ({ body: { id: 'b1', status: 'SUCCEEDED', output: ['u'] } }) },
+      {
+        match: (u) => u.endsWith('/v1/image_to_video'),
+        handler: () => ({ body: { id: 'b1', status: 'PENDING' } }),
+      },
+      {
+        match: (u) => u.includes('/v1/tasks/b1'),
+        handler: () => ({ body: { id: 'b1', status: 'SUCCEEDED', output: ['u'] } }),
+      },
     ]);
     try {
       const adapter = makeAdapter();
@@ -237,22 +286,22 @@ describe('RunwayMLAdapter — videoGenerate task state machine', () => {
 
   it('rejects when promptImage is missing', async () => {
     const adapter = makeAdapter();
-    await expect(
-      adapter.videoGenerate(mockModel('gen3a_turbo'), { prompt: 'x' }),
-    ).rejects.toThrow(/promptImage.*required/);
+    await expect(adapter.videoGenerate(mockModel('gen3a_turbo'), { prompt: 'x' })).rejects.toThrow(
+      /promptImage.*required/
+    );
   });
 });
 
 describe('RunwayMLAdapter — chat/embeddings are unsupported', () => {
   it('chatCompletion throws', async () => {
     await expect(
-      makeAdapter().chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'hi' }] }),
+      makeAdapter().chatCompletion({ model: 'x', messages: [{ role: 'user', content: 'hi' }] })
     ).rejects.toThrow(/video-only/);
   });
 
   it('generateEmbeddings throws', async () => {
     await expect(makeAdapter().generateEmbeddings({ model: 'x', input: 'y' })).rejects.toThrow(
-      /video-only/,
+      /video-only/
     );
   });
 });

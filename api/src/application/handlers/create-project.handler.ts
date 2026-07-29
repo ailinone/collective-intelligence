@@ -24,9 +24,7 @@
 
 import { injectable, inject } from 'tsyringe';
 import { CreateProjectCommand } from '../commands/create-project.command';
-import {
-  IProjectRepository,
-} from '@/domain/repositories/iproject-repository';
+import { IProjectRepository } from '@/domain/repositories/iproject-repository';
 import { ProjectEntity } from '@/domain/entities/project.entity';
 
 const MAX_SLUG_COLLISION_ATTEMPTS = 50;

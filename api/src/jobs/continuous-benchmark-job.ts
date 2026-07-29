@@ -36,9 +36,10 @@ const log = logger.child({ component: 'continuous-benchmark' });
 const CONFIG = {
   enabled: process.env.CI_BENCHMARK_JOB_ENABLED !== 'false',
   cronSchedule: process.env.CI_BENCHMARK_CRON || '0 3 * * *',
-  apiBase: process.env.BOOTSTRAP_API_BASE ?? process.env.EVAL_API_BASE_URL
-    ? `${process.env.EVAL_API_BASE_URL}/v1/chat/completions`
-    : 'http://localhost:3000/v1/chat/completions',
+  apiBase:
+    (process.env.BOOTSTRAP_API_BASE ?? process.env.EVAL_API_BASE_URL)
+      ? `${process.env.EVAL_API_BASE_URL}/v1/chat/completions`
+      : 'http://localhost:3000/v1/chat/completions',
   bearerToken: process.env.BOOTSTRAP_BEARER_TOKEN ?? process.env.EVAL_BEARER_TOKEN ?? '',
   sampleSize: parseInt(process.env.CI_BENCHMARK_SAMPLE_SIZE || '4', 10),
   delayBetweenCallsMs: parseInt(process.env.CI_BENCHMARK_DELAY_MS || '2000', 10),
@@ -61,14 +62,37 @@ interface BenchmarkCase {
 
 // ── Full strategy roster (all 31 registered strategies) ─────────────────
 const ALL_STRATEGIES: string[] = [
-  'single', 'parallel', 'sequential', 'collaborative', 'hybrid',
-  'competitive', 'expert-panel', 'massive-parallel', 'cost-cascade',
-  'quality-multipass', 'adaptive', 'contextual', 'hierarchical',
-  'consensus', 'reinforcement', 'debate', 'war-room', 'blind-debate',
-  'devil-advocate-consensus', 'safety-quorum', 'diversity-ensemble',
-  'stigmergic-refinement', 'swarm-explore', 'clarification-first',
-  'research-synthesize', 'critique-repair', 'double-diamond',
-  'multi-hop-qa', 'persona-exploration', 'agentic', 'compositor',
+  'single',
+  'parallel',
+  'sequential',
+  'collaborative',
+  'hybrid',
+  'competitive',
+  'expert-panel',
+  'massive-parallel',
+  'cost-cascade',
+  'quality-multipass',
+  'adaptive',
+  'contextual',
+  'hierarchical',
+  'consensus',
+  'reinforcement',
+  'debate',
+  'war-room',
+  'blind-debate',
+  'devil-advocate-consensus',
+  'safety-quorum',
+  'diversity-ensemble',
+  'stigmergic-refinement',
+  'swarm-explore',
+  'clarification-first',
+  'research-synthesize',
+  'critique-repair',
+  'double-diamond',
+  'multi-hop-qa',
+  'persona-exploration',
+  'agentic',
+  'compositor',
 ];
 
 // ── Base benchmark cases (prompts + rubrics) ────────────────────────────
@@ -77,26 +101,34 @@ const BASE_BENCHMARK_CASES: Omit<BenchmarkCase, 'strategies'>[] = [
   {
     taskType: 'code-generation',
     complexity: 'medium',
-    prompt: 'Write a TypeScript debounce function with generics. Signature: debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T',
-    judgeRubric: 'Implementation uses setTimeout+clearTimeout, correct TypeScript generics, returns wrapped function, handles edge cases.',
+    prompt:
+      'Write a TypeScript debounce function with generics. Signature: debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T',
+    judgeRubric:
+      'Implementation uses setTimeout+clearTimeout, correct TypeScript generics, returns wrapped function, handles edge cases.',
   },
   {
     taskType: 'code-review',
     complexity: 'high',
-    prompt: 'Review this auth code for security vulnerabilities:\n```js\nconst q = `SELECT * FROM users WHERE username = \'${username}\' AND password = \'${password}\'`;\nconst token = jwt.sign({ userId: results[0].id }, \'secret123\');\n```',
-    judgeRubric: 'Identifies SQL injection, hardcoded JWT secret, missing expiry. Provides concrete fixes for each vulnerability.',
+    prompt:
+      "Review this auth code for security vulnerabilities:\n```js\nconst q = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;\nconst token = jwt.sign({ userId: results[0].id }, 'secret123');\n```",
+    judgeRubric:
+      'Identifies SQL injection, hardcoded JWT secret, missing expiry. Provides concrete fixes for each vulnerability.',
   },
   {
     taskType: 'analysis',
     complexity: 'high',
-    prompt: 'Compare Event Sourcing+CQRS vs Traditional CRUD for a financial system: 50k TPS, audit trail required, 90% reads. Recommend with rationale.',
-    judgeRubric: 'Covers 50k TPS implications, audit trail comparison, read/write ratio impact, and makes a concrete recommendation.',
+    prompt:
+      'Compare Event Sourcing+CQRS vs Traditional CRUD for a financial system: 50k TPS, audit trail required, 90% reads. Recommend with rationale.',
+    judgeRubric:
+      'Covers 50k TPS implications, audit trail comparison, read/write ratio impact, and makes a concrete recommendation.',
   },
   {
     taskType: 'debugging',
     complexity: 'medium',
-    prompt: 'Debug this Node.js memory leak:\n```js\nconst ee = new EventEmitter();\nsetInterval(() => { ee.on("data", (d) => console.log(d)); }, 1000);\n```',
-    judgeRubric: 'Identifies listener accumulation as the root cause, explains the mechanism, provides fix using removeListener or once().',
+    prompt:
+      'Debug this Node.js memory leak:\n```js\nconst ee = new EventEmitter();\nsetInterval(() => { ee.on("data", (d) => console.log(d)); }, 1000);\n```',
+    judgeRubric:
+      'Identifies listener accumulation as the root cause, explains the mechanism, provides fix using removeListener or once().',
   },
 ];
 
@@ -106,15 +138,18 @@ const MULTIMODAL_CASE: Omit<BenchmarkCase, 'strategies'> = {
   taskType: 'multimodal-vision',
   complexity: 'medium',
   prompt: 'Describe in detail what you see in this image and any text or numbers visible.',
-  judgeRubric: 'Produces a structured description, identifies key visual elements, extracts any text accurately.',
+  judgeRubric:
+    'Produces a structured description, identifies key visual elements, extracts any text accurately.',
   modality: 'vision',
 };
 
 const COMPOSITOR_CASE: Omit<BenchmarkCase, 'strategies'> = {
   taskType: 'compositor-pipeline',
   complexity: 'high',
-  prompt: 'Write a comprehensive technical guide for deploying a Node.js application with Docker, including CI/CD pipeline configuration. Cover security best practices.',
-  judgeRubric: 'Covers Dockerfile creation, multi-stage builds, CI/CD config, security scanning, secrets management. Actionable and complete.',
+  prompt:
+    'Write a comprehensive technical guide for deploying a Node.js application with Docker, including CI/CD pipeline configuration. Cover security best practices.',
+  judgeRubric:
+    'Covers Dockerfile creation, multi-stage builds, CI/CD config, security scanning, secrets management. Actionable and complete.',
   strategyConfig: { strategyPipeline: ['research-synthesize', 'critique-repair'] },
 };
 
@@ -124,7 +159,7 @@ const COMPOSITOR_CASE: Omit<BenchmarkCase, 'strategies'> = {
  */
 function sampleStrategiesForRun(n: number): string[] {
   const sampled = new Set<string>(['single']); // Always include baseline
-  const pool = ALL_STRATEGIES.filter(s => s !== 'single');
+  const pool = ALL_STRATEGIES.filter((s) => s !== 'single');
 
   // Fisher-Yates partial shuffle
   const shuffled = [...pool];
@@ -149,7 +184,7 @@ function buildBenchmarkSuite(): BenchmarkCase[] {
   const strategies = sampleStrategiesForRun(CONFIG.strategySampleSize);
   log.info({ strategies, count: strategies.length }, 'Sampled strategies for benchmark run');
 
-  const suite: BenchmarkCase[] = BASE_BENCHMARK_CASES.map(c => ({
+  const suite: BenchmarkCase[] = BASE_BENCHMARK_CASES.map((c) => ({
     ...c,
     strategies,
   }));
@@ -182,7 +217,9 @@ export async function runContinuousBenchmarkNow(): Promise<{
   degradations: string[];
 }> {
   if (!CONFIG.bearerToken) {
-    log.warn('Continuous benchmark skipped: no bearer token configured (set BOOTSTRAP_BEARER_TOKEN or EVAL_BEARER_TOKEN)');
+    log.warn(
+      'Continuous benchmark skipped: no bearer token configured (set BOOTSTRAP_BEARER_TOKEN or EVAL_BEARER_TOKEN)'
+    );
     return { results: [], degradations: [] };
   }
 
@@ -239,16 +276,29 @@ export async function runContinuousBenchmarkNow(): Promise<{
 
   try {
     // 1. OI-06: Aggregate by niche and ingest into the configuration archive
-    const archiveAggregates = new Map<string, {
-      taskType: string; complexity: string; strategy: string;
-      totalQuality: number; totalLatency: number; successCount: number; count: number;
-    }>();
+    const archiveAggregates = new Map<
+      string,
+      {
+        taskType: string;
+        complexity: string;
+        strategy: string;
+        totalQuality: number;
+        totalLatency: number;
+        successCount: number;
+        count: number;
+      }
+    >();
 
     for (const r of results) {
       const key = `${r.taskType}|${r.complexity}|${r.strategy}`;
       const agg = archiveAggregates.get(key) ?? {
-        taskType: r.taskType, complexity: r.complexity, strategy: r.strategy,
-        totalQuality: 0, totalLatency: 0, successCount: 0, count: 0,
+        taskType: r.taskType,
+        complexity: r.complexity,
+        strategy: r.strategy,
+        totalQuality: 0,
+        totalLatency: 0,
+        successCount: 0,
+        count: 0,
       };
       agg.totalQuality += r.qualityScore;
       agg.totalLatency += r.durationMs;
@@ -258,7 +308,7 @@ export async function runContinuousBenchmarkNow(): Promise<{
     }
 
     const archiveIngestion = configurationArchive.ingestBenchmarkResults(
-      [...archiveAggregates.values()].map(a => ({
+      [...archiveAggregates.values()].map((a) => ({
         taskType: a.taskType,
         complexity: a.complexity,
         strategy: a.strategy,
@@ -267,41 +317,52 @@ export async function runContinuousBenchmarkNow(): Promise<{
         avgLatency: a.totalLatency / a.count,
         successRate: a.successCount / a.count,
         sampleCount: a.count,
-      })),
+      }))
     );
     log.info(archiveIngestion, 'Benchmark results ingested into archive (OI-06)');
 
     // 2. OI-11: Record strategy→task edges in knowledge graph
-    knowledgeGraphService.recordBenchmarkResults(
-      results.filter(r => r.success).map(r => ({
-        taskType: r.taskType,
-        strategy: r.strategy,
-        qualityScore: r.qualityScore,
-        complexity: r.complexity,
-      })),
-    ).catch(err => log.warn({ error: String(err) }, 'KG benchmark recording failed (OI-11)'));
+    knowledgeGraphService
+      .recordBenchmarkResults(
+        results
+          .filter((r) => r.success)
+          .map((r) => ({
+            taskType: r.taskType,
+            strategy: r.strategy,
+            qualityScore: r.qualityScore,
+            complexity: r.complexity,
+          }))
+      )
+      .catch((err) => log.warn({ error: String(err) }, 'KG benchmark recording failed (OI-11)'));
 
     // 3. OI-09: Pareto frontier evaluation across all niches
     const paretoResult = evaluatePareto(results);
-    log.info({
-      niches: paretoResult.totalNiches,
-      newEntries: paretoResult.newFrontierEntries,
-      dropped: paretoResult.droppedFromFrontier,
-    }, 'Pareto evaluation completed (OI-09)');
+    log.info(
+      {
+        niches: paretoResult.totalNiches,
+        newEntries: paretoResult.newFrontierEntries,
+        dropped: paretoResult.droppedFromFrontier,
+      },
+      'Pareto evaluation completed (OI-09)'
+    );
 
     // 4. OI-11: Record archive elites into KG for unified querying
     if (archiveIngestion.cellsUpdated > 0) {
       const snapshot = configurationArchive.getSnapshot();
-      knowledgeGraphService.recordArchiveElites(
-        snapshot.topElites.map(e => ({
-          taskType: e.taskType,
-          complexity: e.complexity,
-          dimension: e.dimension,
-          strategy: e.strategy,
-          fitness: e.fitness,
-          avgQuality: e.avgQuality,
-        })),
-      ).catch(err => log.warn({ error: String(err) }, 'KG archive elite recording failed (OI-11)'));
+      knowledgeGraphService
+        .recordArchiveElites(
+          snapshot.topElites.map((e) => ({
+            taskType: e.taskType,
+            complexity: e.complexity,
+            dimension: e.dimension,
+            strategy: e.strategy,
+            fitness: e.fitness,
+            avgQuality: e.avgQuality,
+          }))
+        )
+        .catch((err) =>
+          log.warn({ error: String(err) }, 'KG archive elite recording failed (OI-11)')
+        );
     }
   } catch (err) {
     log.warn({ error: String(err) }, 'Downstream learning system feed failed (non-fatal)');
@@ -316,7 +377,10 @@ export async function runContinuousBenchmarkNow(): Promise<{
   return { results, degradations };
 }
 
-async function runSingleBenchmark(bench: BenchmarkCase, strategy: string): Promise<BenchmarkResult> {
+async function runSingleBenchmark(
+  bench: BenchmarkCase,
+  strategy: string
+): Promise<BenchmarkResult> {
   const start = Date.now();
   try {
     const requestBody: Record<string, unknown> = {
@@ -348,26 +412,57 @@ async function runSingleBenchmark(bench: BenchmarkCase, strategy: string): Promi
     });
 
     const durationMs = Date.now() - start;
-    const json = await resp.json() as {
+    const json = (await resp.json()) as {
       error?: { message: string };
       choices?: Array<{ message?: { content?: string } }>;
     };
 
     if (json.error || !resp.ok) {
-      return { taskType: bench.taskType, complexity: bench.complexity, strategy, qualityScore: 0, success: false, durationMs };
+      return {
+        taskType: bench.taskType,
+        complexity: bench.complexity,
+        strategy,
+        qualityScore: 0,
+        success: false,
+        durationMs,
+      };
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     if (!content) {
-      return { taskType: bench.taskType, complexity: bench.complexity, strategy, qualityScore: 0, success: false, durationMs };
+      return {
+        taskType: bench.taskType,
+        complexity: bench.complexity,
+        strategy,
+        qualityScore: 0,
+        success: false,
+        durationMs,
+      };
     }
 
     const qualityScore = await judgeResponse(content, bench.judgeRubric);
-    log.info({ strategy, taskType: bench.taskType, qualityScore: qualityScore.toFixed(3), durationMs }, 'Benchmark case scored');
+    log.info(
+      { strategy, taskType: bench.taskType, qualityScore: qualityScore.toFixed(3), durationMs },
+      'Benchmark case scored'
+    );
 
-    return { taskType: bench.taskType, complexity: bench.complexity, strategy, qualityScore, success: true, durationMs };
+    return {
+      taskType: bench.taskType,
+      complexity: bench.complexity,
+      strategy,
+      qualityScore,
+      success: true,
+      durationMs,
+    };
   } catch (err) {
-    return { taskType: bench.taskType, complexity: bench.complexity, strategy, qualityScore: 0, success: false, durationMs: Date.now() - start };
+    return {
+      taskType: bench.taskType,
+      complexity: bench.complexity,
+      strategy,
+      qualityScore: 0,
+      success: false,
+      durationMs: Date.now() - start,
+    };
   }
 }
 
@@ -375,17 +470,22 @@ async function judgeResponse(content: string, rubric: string): Promise<number> {
   try {
     const resp = await fetch(CONFIG.apiBase, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${CONFIG.bearerToken}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${CONFIG.bearerToken}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         model: 'auto',
         strategy: 'single',
-        messages: [{
-          role: 'user',
-          content: `RUBRIC:\n${rubric}\n\nRESPONSE:\n${content}\n\nRespond ONLY with JSON: {"score": 0.0-1.0}`,
-        }],
+        messages: [
+          {
+            role: 'user',
+            content: `RUBRIC:\n${rubric}\n\nRESPONSE:\n${content}\n\nRespond ONLY with JSON: {"score": 0.0-1.0}`,
+          },
+        ],
       }),
     });
-    const json = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const judgeContent = json.choices?.[0]?.message?.content ?? '';
     const match = judgeContent.match(/\{[\s\S]*\}/);
     if (!match) return 0;

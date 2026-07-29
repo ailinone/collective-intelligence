@@ -42,10 +42,7 @@ import {
   type CoordinationConfig,
 } from '@/core/coordination/coordination-types';
 import { getCollectiveConfigForOrg } from '@/core/coordination/collective-feature-flags';
-import {
-  createInitialState,
-  aggregateSignals,
-} from '@/core/coordination/sensitivity-aggregator';
+import { createInitialState, aggregateSignals } from '@/core/coordination/sensitivity-aggregator';
 import {
   createInitialPerAgentStates,
   aggregatePerAgent,
@@ -95,10 +92,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     };
   }
 
-  async execute(
-    request: ChatRequest,
-    context: OrchestrationContext,
-  ): Promise<OrchestrationResult> {
+  async execute(request: ChatRequest, context: OrchestrationContext): Promise<OrchestrationResult> {
     const startTime = Date.now();
     const metadata = this.getMetadata();
     // F1.7 — per-tenant feature flag. Reads env defaults + overlays
@@ -119,7 +113,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         totalModels: context.models.length,
         configEnabled: config.enabled,
       },
-      'Executing Sensitivity Consensus strategy',
+      'Executing Sensitivity Consensus strategy'
     );
 
     if (models.length < metadata.minModels) {
@@ -129,7 +123,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           required: metadata.minModels,
           total: context.models.length,
         },
-        'Insufficient eligible models for sensitivity-consensus — falling back to consensus',
+        'Insufficient eligible models for sensitivity-consensus — falling back to consensus'
       );
       return this.executeFallback(request, context);
     }
@@ -144,31 +138,29 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     if (!config.enabled && !explicitlyRequested) {
       this.log.info(
         { requestId: context.requestId },
-        'Sensitivity consensus disabled via feature flag — falling back to consensus',
+        'Sensitivity consensus disabled via feature flag — falling back to consensus'
       );
-      coordinationFallbackUsed.inc(
-        { strategy: 'sensitivity-consensus', fallback_to: 'consensus' },
-      );
+      coordinationFallbackUsed.inc({ strategy: 'sensitivity-consensus', fallback_to: 'consensus' });
       return this.executeFallback(request, context);
     }
 
     const numModels = Math.min(
       config.maxModelsPerRound,
-      Math.max(config.minModelsPerRound, models.length),
+      Math.max(config.minModelsPerRound, models.length)
     );
     const selectedModels = await this.selectDiverseModels(models, numModels, context);
 
     this.log.debug(
       {
-        selectedModels: selectedModels.map(m => m.name),
+        selectedModels: selectedModels.map((m) => m.name),
         numModels: selectedModels.length,
       },
-      'Models selected for sensitivity-consensus',
+      'Models selected for sensitivity-consensus'
     );
 
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: selectedModels.map(m => m.name),
+      models: selectedModels.map((m) => m.name),
       summary: `Sensitivity consensus starting with ${selectedModels.length} participants.`,
     });
 
@@ -212,7 +204,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         selectedModels,
         state,
         config,
-        trace,
+        trace
       );
 
       const totalDuration = Date.now() - startTime;
@@ -256,7 +248,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         state,
         totalDuration,
         metadata,
-        trace,
+        trace
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -266,12 +258,10 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           round: state.round,
           error: errorMessage,
         },
-        'Sensitivity consensus failed — falling back to consensus',
+        'Sensitivity consensus failed — falling back to consensus'
       );
 
-      coordinationFallbackUsed.inc(
-        { strategy: 'sensitivity-consensus', fallback_to: 'consensus' },
-      );
+      coordinationFallbackUsed.inc({ strategy: 'sensitivity-consensus', fallback_to: 'consensus' });
 
       return this.executeFallback(request, context);
     }
@@ -283,7 +273,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     models: Model[],
     initialState: CoordinationState,
     config: CoordinationConfig,
-    trace: CollectiveTrace,
+    trace: CollectiveTrace
   ): Promise<{ result: CoordinationResult; executions: ModelExecution[] }> {
     let state = initialState;
     const allExecutions: ModelExecution[] = [];
@@ -336,7 +326,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           perAgentMode,
           topologyKind: perAgentMode ? config.topologyKind : 'shared',
         },
-        'Starting coordination round',
+        'Starting coordination round'
       );
 
       // F0.4: Pre-flight cost guardrail. Abort BEFORE issuing this
@@ -355,19 +345,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
             projectedTotalUsd: costEstimate.projectedTotalUsd,
             limitUsd: costEstimate.limitUsd,
           },
-          'Aborting coordination round — projected cost exceeds budget',
+          'Aborting coordination round — projected cost exceeds budget'
         );
         trace.endSpan(roundSpanId, {
           status: 'cancelled',
           attributes: { stopReason: 'max_cost' },
         });
         return {
-          result: this.buildCoordinationResult(
-            state,
-            models,
-            allExecutions,
-            'max_cost',
-          ),
+          result: this.buildCoordinationResult(state, models, allExecutions, 'max_cost'),
           executions: allExecutions,
         };
       }
@@ -389,7 +374,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         models,
         state,
         roundNumber,
-        config,
+        config
       );
       trace.endSpan(collectSpanId, {
         attributes: {
@@ -408,14 +393,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
             parseFailures,
             totalModels: models.length,
           },
-          'Some models returned unparseable signals',
+          'Some models returned unparseable signals'
         );
       }
 
       if (signals.length === 0) {
         this.log.warn(
           { runId: state.runId, round: roundNumber },
-          'No valid signals in round — stopping',
+          'No valid signals in round — stopping'
         );
 
         trace.endSpan(roundSpanId, {
@@ -427,7 +412,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
             state,
             models,
             allExecutions,
-            'insufficient_valid_signals',
+            'insufficient_valid_signals'
           ),
           executions: allExecutions,
         };
@@ -441,7 +426,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       }
       const maxRoundLatency = signals.reduce(
         (acc, s) => Math.max(acc, s.metrics?.latencyMs ?? 0),
-        0,
+        0
       );
       runTotalLatencyMs += maxRoundLatency;
       fullHistory.push(...signals);
@@ -488,7 +473,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           config.aggregationMethod,
           state.limits,
           'sensitivity-consensus',
-          state.runId,
+          state.runId
         );
         perAgentStates = nextStates;
 
@@ -531,7 +516,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
               dominant: result.dominantSignals,
               conflicting: result.conflictingSignals,
             },
-            'Per-agent aggregation step',
+            'Per-agent aggregation step'
           );
         }
       } else {
@@ -571,7 +556,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
 
       coordinationRoundDurationMs.observe(
         { strategy: 'sensitivity-consensus', round: String(roundNumber) },
-        Date.now() - roundStartTime,
+        Date.now() - roundStartTime
       );
 
       this.log.info(
@@ -586,7 +571,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           herdingDetected: evaluation.herdingDetected,
           poisoningDetected: evaluation.sensitivityPoisoningDetected,
         },
-        'Coordination round completed',
+        'Coordination round completed'
       );
 
       if (evaluation.shouldStop && evaluation.stopReason) {
@@ -594,12 +579,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           attributes: { stopReason: evaluation.stopReason, terminating: true },
         });
         return {
-          result: this.buildCoordinationResult(
-            state,
-            models,
-            allExecutions,
-            evaluation.stopReason,
-          ),
+          result: this.buildCoordinationResult(state, models, allExecutions, evaluation.stopReason),
           executions: allExecutions,
         };
       }
@@ -610,12 +590,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     }
 
     return {
-      result: this.buildCoordinationResult(
-        state,
-        models,
-        allExecutions,
-        'max_rounds',
-      ),
+      result: this.buildCoordinationResult(state, models, allExecutions, 'max_rounds'),
       executions: allExecutions,
     };
   }
@@ -636,15 +611,19 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     state: CoordinationState,
     participants: Model[],
     context: OrchestrationContext,
-    config: CoordinationConfig,
+    config: CoordinationConfig
   ): Promise<ReturnType<typeof aggregateSignals>> {
     const eligible = this.getEligibleModels(context);
     const coordinator = selectCoordinatorModel(participants, eligible);
 
     if (!coordinator) {
       this.log.warn(
-        { runId: state.runId, eligibleCount: eligible.length, participantCount: participants.length },
-        'Synthesis: no eligible non-participant coordinator — using weighted_confidence',
+        {
+          runId: state.runId,
+          eligibleCount: eligible.length,
+          participantCount: participants.length,
+        },
+        'Synthesis: no eligible non-participant coordinator — using weighted_confidence'
       );
       return aggregateSignals(signals, state, 'weighted_confidence');
     }
@@ -652,7 +631,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     if (!this.getAdapterForModel) {
       this.log.warn(
         { runId: state.runId },
-        'Synthesis: getAdapterForModel not injected — using weighted_confidence',
+        'Synthesis: getAdapterForModel not injected — using weighted_confidence'
       );
       return aggregateSignals(signals, state, 'weighted_confidence');
     }
@@ -661,7 +640,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     if (!adapter) {
       this.log.warn(
         { runId: state.runId, coordinatorModelId: coordinator.id },
-        'Synthesis: adapter unavailable for coordinator — using weighted_confidence',
+        'Synthesis: adapter unavailable for coordinator — using weighted_confidence'
       );
       return aggregateSignals(signals, state, 'weighted_confidence');
     }
@@ -687,7 +666,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         maxSynthesisCostUsd: Math.max(0.01, config.maxCostUsd * 0.2),
         timeoutMs: Math.min(15000, config.maxLatencyMs),
         fallbackMethod: 'weighted_confidence',
-      },
+      }
     );
   }
 
@@ -697,7 +676,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     models: Model[],
     state: CoordinationState,
     round: number,
-    config: CoordinationConfig,
+    config: CoordinationConfig
   ): Promise<{
     signals: CoordinationSignal[];
     executions: ModelExecution[];
@@ -721,7 +700,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           undefined,
           round,
           state.round > 0 ? state : undefined,
-          { entropySeedEnabled: config.entropySeedEnabled },
+          { entropySeedEnabled: config.entropySeedEnabled }
         );
         const userMessage = buildCoordinationUserMessage(request.messages);
 
@@ -741,7 +720,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           adapter,
           model,
           coordinationRequest,
-          'coordinator',
+          'coordinator'
         );
         const callDuration = Date.now() - callStart;
 
@@ -775,7 +754,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
           model.id,
           model.provider ?? adapter.getName(),
           undefined,
-          metrics,
+          metrics
         );
 
         if (parsed.signal) {
@@ -790,7 +769,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
               parseError: parsed.parseError,
               responsePreview: responseText.substring(0, 200),
             },
-            'Failed to parse signal from model response',
+            'Failed to parse signal from model response'
           );
         }
       } catch (error) {
@@ -801,7 +780,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
             round,
             error: error instanceof Error ? error.message : String(error),
           },
-          'Model failed during coordination signal collection',
+          'Model failed during coordination signal collection'
         );
       }
     });
@@ -813,7 +792,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
 
   private async executeFallback(
     request: ChatRequest,
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): Promise<OrchestrationResult> {
     const { ConsensusStrategy } = await import('./consensus-strategy');
     const fallback = new ConsensusStrategy();
@@ -836,9 +815,9 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     state: CoordinationState,
     models: Model[],
     executions: ModelExecution[],
-    stopReason: CoordinationResult['stopReason'],
+    stopReason: CoordinationResult['stopReason']
   ): CoordinationResult {
-    const lastRoundSignals = state.history.filter(s => s.round === state.round);
+    const lastRoundSignals = state.history.filter((s) => s.round === state.round);
     const majorityDecision = this.getMajorityDecision(lastRoundSignals);
     const dissent = this.extractDissent(lastRoundSignals, majorityDecision);
     const criticalVariables = this.extractCriticalVariables(state);
@@ -849,7 +828,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       majorityDecision,
       dissent,
       criticalVariables,
-      stopReason,
+      stopReason
     );
 
     return {
@@ -859,7 +838,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         confidence: 0,
         rationale: 'No majority decision reached',
       },
-      participatingModels: models.map(m => ({
+      participatingModels: models.map((m) => ({
         modelId: m.id,
         modelName: m.name,
         providerId: m.provider ?? 'unknown',
@@ -879,11 +858,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
   }
 
   private getMajorityDecision(
-    signals: CoordinationSignal[],
+    signals: CoordinationSignal[]
   ): CoordinationResult['decision'] | null {
     if (signals.length === 0) return null;
 
-    const decisionCounts: Record<string, { count: number; totalConfidence: number; signal: CoordinationSignal }> = {};
+    const decisionCounts: Record<
+      string,
+      { count: number; totalConfidence: number; signal: CoordinationSignal }
+    > = {};
     for (const sig of signals) {
       const type = sig.decision.type;
       if (!decisionCounts[type]) {
@@ -893,8 +875,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       decisionCounts[type].totalConfidence += sig.decision.confidence;
     }
 
-    const majority = Object.entries(decisionCounts)
-      .sort((a, b) => b[1].count - a[1].count)[0];
+    const majority = Object.entries(decisionCounts).sort((a, b) => b[1].count - a[1].count)[0];
 
     if (!majority) return null;
 
@@ -910,13 +891,13 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
 
   private extractDissent(
     signals: CoordinationSignal[],
-    majority: CoordinationResult['decision'] | null,
+    majority: CoordinationResult['decision'] | null
   ): CoordinationResult['dissent'] {
     if (!majority || signals.length === 0) return [];
 
     return signals
-      .filter(s => s.decision.type !== majority.type)
-      .map(s => ({
+      .filter((s) => s.decision.type !== majority.type)
+      .map((s) => ({
         agentId: s.agentId,
         modelId: s.modelId,
         decision: s.decision,
@@ -946,12 +927,15 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
   }
 
   private extractDominantSensitivities(
-    state: CoordinationState,
+    state: CoordinationState
   ): CoordinationResult['dominantSensitivities'] {
-    const lastRound = state.history.filter(s => s.round === state.round);
+    const lastRound = state.history.filter((s) => s.round === state.round);
     if (lastRound.length === 0) return [];
 
-    const variableSensMap = new Map<string, { count: number; sensitivity: typeof lastRound[0]['sensitivities'][0] }>();
+    const variableSensMap = new Map<
+      string,
+      { count: number; sensitivity: (typeof lastRound)[0]['sensitivities'][0] }
+    >();
 
     for (const sig of lastRound) {
       for (const sens of sig.sensitivities) {
@@ -967,7 +951,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     return [...variableSensMap.values()]
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
-      .map(v => v.sensitivity);
+      .map((v) => v.sensitivity);
   }
 
   private generateFinalResponseText(
@@ -975,19 +959,23 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     decision: CoordinationResult['decision'] | null,
     dissent: CoordinationResult['dissent'],
     criticalVariables: string[],
-    stopReason: string,
+    stopReason: string
   ): string {
     const parts: string[] = [];
 
     if (decision) {
-      parts.push(`**Decision: ${decision.type}** (confidence: ${(decision.confidence * 100).toFixed(0)}%)`);
+      parts.push(
+        `**Decision: ${decision.type}** (confidence: ${(decision.confidence * 100).toFixed(0)}%)`
+      );
       if (decision.rationale) {
         parts.push(`Rationale: ${decision.rationale}`);
       }
     }
 
     parts.push('');
-    parts.push(`**Coordination:** ${state.round} round(s), stopped due to ${stopReason.replace(/_/g, ' ')}.`);
+    parts.push(
+      `**Coordination:** ${state.round} round(s), stopped due to ${stopReason.replace(/_/g, ' ')}.`
+    );
     parts.push(`Convergence score: ${state.convergence.score.toFixed(2)}`);
 
     if (criticalVariables.length > 0) {
@@ -999,7 +987,9 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       parts.push('');
       parts.push('**Dissenting positions:**');
       for (const d of dissent.slice(0, 3)) {
-        parts.push(`- ${d.modelId}: ${d.decision.type} (confidence: ${(d.decision.confidence * 100).toFixed(0)}%) — ${d.rationale}`);
+        parts.push(
+          `- ${d.modelId}: ${d.decision.type} (confidence: ${(d.decision.confidence * 100).toFixed(0)}%) — ${d.rationale}`
+        );
       }
     }
 
@@ -1009,18 +999,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
   private async selectDiverseModels(
     models: Model[],
     count: number,
-    context?: OrchestrationContext,
+    context?: OrchestrationContext
   ): Promise<Model[]> {
-    const preference = context
-      ? resolvePreferredExecutor(models, context, [])
-      : undefined;
+    const preference = context ? resolvePreferredExecutor(models, context, []) : undefined;
 
     const pool = preference?.pinnedExecutor
-      ? models.filter(m => m.id !== preference.pinnedExecutor!.id)
+      ? models.filter((m) => m.id !== preference.pinnedExecutor!.id)
       : models;
-    const remainingCount = preference?.pinnedExecutor
-      ? Math.max(0, count - 1)
-      : count;
+    const remainingCount = preference?.pinnedExecutor ? Math.max(0, count - 1) : count;
 
     const byProvider: Record<string, Model[]> = {};
     for (const model of pool) {
@@ -1037,7 +1023,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
       const provider = providers[providerIndex % providers.length];
       const providerModels = byProvider[provider];
       if (providerModels && providerModels.length > 0) {
-        const candidate = providerModels.find(m => !selected.includes(m));
+        const candidate = providerModels.find((m) => !selected.includes(m));
         if (candidate) selected.push(candidate);
       }
       providerIndex++;
@@ -1061,7 +1047,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
     state: CoordinationState,
     totalDuration: number,
     metadata: StrategyMetadata,
-    trace?: CollectiveTrace,
+    trace?: CollectiveTrace
   ): OrchestrationResult {
     const completionWords = coordResult.finalResponseText.split(/\s+/).filter(Boolean).length;
     const completionTokens = Math.ceil(completionWords * 1.3);
@@ -1110,14 +1096,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         decisionConfidence: coordResult.decision.confidence,
         criticalVariables: coordResult.criticalVariables,
         dissentCount: coordResult.dissent.length,
-        dominantSensitivities: coordResult.dominantSensitivities.map(s => ({
+        dominantSensitivities: coordResult.dominantSensitivities.map((s) => ({
           variable: s.variable,
           direction: s.direction,
           confidence: s.confidence,
         })),
         totalCostUsd: coordResult.totalCostUsd,
         totalTokens: coordResult.totalTokens,
-        participatingModels: coordResult.participatingModels.map(m => m.modelId),
+        participatingModels: coordResult.participatingModels.map((m) => m.modelId),
         ...(coordResult.auditTrail ? { coordinationAuditTrail: true } : {}),
         // F2.7 — CollectiveTrace summary. We expose the per-phase
         // describe() output (counts only) instead of every span so
@@ -1136,7 +1122,7 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
   private recordCoordinationMetrics(
     result: CoordinationResult,
     context: OrchestrationContext,
-    totalDurationMs: number,
+    totalDurationMs: number
   ): void {
     try {
       recordCoordinationRun({
@@ -1149,9 +1135,10 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         totalLatencyMs: totalDurationMs,
         totalTokens: result.totalTokens,
         signalCount: result.auditTrail?.length ?? 0,
-        validSignalCount: result.auditTrail?.filter(s =>
-          s.decision && s.sensitivities && s.sensitivities.length > 0
-        ).length ?? 0,
+        validSignalCount:
+          result.auditTrail?.filter(
+            (s) => s.decision && s.sensitivities && s.sensitivities.length > 0
+          ).length ?? 0,
         parseFailureCount: 0,
         conflictCount: result.convergence.unstableVariables.length,
         finalQuality: result.decision.confidence,
@@ -1160,13 +1147,14 @@ export class SensitivityConsensusStrategy extends BaseStrategy {
         // names). Object.keys on an array gives stringified indices whose count
         // happens to equal the length — the call worked by coincidence but
         // misrepresented intent. Use `.length` directly for both arms.
-        variableCount: result.convergence.stableVariables.length + result.convergence.unstableVariables.length,
+        variableCount:
+          result.convergence.stableVariables.length + result.convergence.unstableVariables.length,
         variableStabilityAvg: result.convergence.score,
       });
     } catch (error) {
       this.log.warn(
         { error: error instanceof Error ? error.message : String(error) },
-        'Failed to record coordination metrics',
+        'Failed to record coordination metrics'
       );
     }
   }

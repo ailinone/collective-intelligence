@@ -9,7 +9,7 @@
 
 /**
  * User Persistence Mapper - Tests (Enterprise-Grade)
- * 
+ *
  * Test Coverage:
  * - Type safety (no as any bypasses)
  * - Optional field handling (null vs undefined)
@@ -28,8 +28,12 @@ import {
 } from './user-persistence-mapper';
 
 // Type-safe test data types (matching ReturnType<UserEntity['toPersistence']>)
-type UserPersistenceData = ReturnType<import('@/domain/entities/user.entity').UserEntity['toPersistence']>;
-type ApiKeyPersistenceData = ReturnType<import('@/domain/entities/api-key.entity').ApiKeyEntity['toPersistence']>;
+type UserPersistenceData = ReturnType<
+  import('@/domain/entities/user.entity').UserEntity['toPersistence']
+>;
+type ApiKeyPersistenceData = ReturnType<
+  import('@/domain/entities/api-key.entity').ApiKeyEntity['toPersistence']
+>;
 
 describe('User Persistence Mapper', () => {
   describe('mapUserToPrismaCreate', () => {
@@ -47,7 +51,9 @@ describe('User Persistence Mapper', () => {
         updatedAt: new Date('2025-01-02'),
       };
 
-      const result: Prisma.UserCreateInput = mapUserToPrismaCreate(userPersistence as UserPersistenceData);
+      const result: Prisma.UserCreateInput = mapUserToPrismaCreate(
+        userPersistence as UserPersistenceData
+      );
 
       expect(result).toEqual({
         id: 'user-123',
@@ -127,7 +133,9 @@ describe('User Persistence Mapper', () => {
         updatedAt: new Date('2025-01-03'),
       };
 
-      const result: Prisma.UserUpdateInput = mapUserToPrismaUpdate(userPersistence as UserPersistenceData);
+      const result: Prisma.UserUpdateInput = mapUserToPrismaUpdate(
+        userPersistence as UserPersistenceData
+      );
 
       expect(result).toEqual({
         name: 'Updated Name',
@@ -259,7 +267,11 @@ describe('User Persistence Mapper', () => {
         permissions: null,
       };
 
-      const result = mapApiKeyToPrismaCreate(apiKeyPersistence as ApiKeyPersistenceData, keyHash, quickHash);
+      const result = mapApiKeyToPrismaCreate(
+        apiKeyPersistence as ApiKeyPersistenceData,
+        keyHash,
+        quickHash
+      );
 
       expect(result.requestCount).toBe(0);
       expect(result.lastRequestIp).toBeNull();
@@ -285,7 +297,11 @@ describe('User Persistence Mapper', () => {
         permissions: null,
       };
 
-      const result = mapApiKeyToPrismaCreate(apiKeyPersistence as ApiKeyPersistenceData, keyHash, quickHash);
+      const result = mapApiKeyToPrismaCreate(
+        apiKeyPersistence as ApiKeyPersistenceData,
+        keyHash,
+        quickHash
+      );
 
       expect(result.ipWhitelist).toEqual([]);
     });
@@ -314,7 +330,9 @@ describe('User Persistence Mapper', () => {
         permissions: { read: true, write: false },
       };
 
-      const result: Prisma.ApiKeyUpdateInput = mapApiKeyToPrismaUpdate(apiKeyPersistence as ApiKeyPersistenceData);
+      const result: Prisma.ApiKeyUpdateInput = mapApiKeyToPrismaUpdate(
+        apiKeyPersistence as ApiKeyPersistenceData
+      );
 
       expect(result).toMatchObject({
         name: 'Updated Key Name',
@@ -379,7 +397,11 @@ describe('User Persistence Mapper', () => {
         permissions: null,
       };
 
-      const result = mapApiKeyToPrismaCreate(apiKeyPersistence as ApiKeyPersistenceData, 'hash', 'quickhash');
+      const result = mapApiKeyToPrismaCreate(
+        apiKeyPersistence as ApiKeyPersistenceData,
+        'hash',
+        'quickhash'
+      );
 
       // This should compile without errors (type check)
       const _typeCheck: Prisma.ApiKeyCreateInput = result;
@@ -387,4 +409,3 @@ describe('User Persistence Mapper', () => {
     });
   });
 });
-

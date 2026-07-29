@@ -86,23 +86,25 @@ describe('Training Data Export Job', () => {
         // Outcomes watermark
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-31') }])
         // Outcomes data
-        .mockResolvedValueOnce([{
-          decision_trace_id: 'req-001',
-          strategy: 'debate',
-          task_type: 'code-generation',
-          complexity: 'high',
-          quality_score: 0.88,
-          quality_dimensions: { correctness: 0.9 },
-          latency_ms: 3000,
-          cost_usd: 0.05,
-          total_tokens: 2000,
-          success: true,
-          feedback_iterations: 1,
-          models_used: ['gpt-4o', 'claude-sonnet'],
-          decision_source: 'triage',
-          input_hash: 'abc123',
-          created_at: testDate,
-        }])
+        .mockResolvedValueOnce([
+          {
+            decision_trace_id: 'req-001',
+            strategy: 'debate',
+            task_type: 'code-generation',
+            complexity: 'high',
+            quality_score: 0.88,
+            quality_dimensions: { correctness: 0.9 },
+            latency_ms: 3000,
+            cost_usd: 0.05,
+            total_tokens: 2000,
+            success: true,
+            feedback_iterations: 1,
+            models_used: ['gpt-4o', 'claude-sonnet'],
+            decision_source: 'triage',
+            input_hash: 'abc123',
+            created_at: testDate,
+          },
+        ])
         // Shadow watermark
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-31') }])
         // Shadow data (empty)
@@ -124,23 +126,25 @@ describe('Training Data Export Job', () => {
     it('never exports org_id or user_id', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
-        .mockResolvedValueOnce([{
-          decision_trace_id: 'req-pii',
-          strategy: 'single',
-          task_type: 'general',
-          complexity: 'low',
-          quality_score: 0.80,
-          quality_dimensions: null,
-          latency_ms: 1000,
-          cost_usd: 0.01,
-          total_tokens: 500,
-          success: true,
-          feedback_iterations: 1,
-          models_used: ['gpt-4o'],
-          decision_source: 'heuristic',
-          input_hash: null,
-          created_at: new Date(),
-        }])
+        .mockResolvedValueOnce([
+          {
+            decision_trace_id: 'req-pii',
+            strategy: 'single',
+            task_type: 'general',
+            complexity: 'low',
+            quality_score: 0.8,
+            quality_dimensions: null,
+            latency_ms: 1000,
+            cost_usd: 0.01,
+            total_tokens: 500,
+            success: true,
+            feedback_iterations: 1,
+            models_used: ['gpt-4o'],
+            decision_source: 'heuristic',
+            input_hash: null,
+            created_at: new Date(),
+          },
+        ])
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
         .mockResolvedValueOnce([])
         // Collective watermark + empty runs
@@ -162,23 +166,25 @@ describe('Training Data Export Job', () => {
       // Verify indirectly: trace_id_hash in output should not be the raw ID
       mockQueryRaw
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
-        .mockResolvedValueOnce([{
-          decision_trace_id: 'sensitive-trace-id-12345',
-          strategy: 'single',
-          task_type: 'general',
-          complexity: 'low',
-          quality_score: 0.80,
-          quality_dimensions: null,
-          latency_ms: 1000,
-          cost_usd: 0.01,
-          total_tokens: 500,
-          success: true,
-          feedback_iterations: 1,
-          models_used: [],
-          decision_source: null,
-          input_hash: null,
-          created_at: new Date(),
-        }])
+        .mockResolvedValueOnce([
+          {
+            decision_trace_id: 'sensitive-trace-id-12345',
+            strategy: 'single',
+            task_type: 'general',
+            complexity: 'low',
+            quality_score: 0.8,
+            quality_dimensions: null,
+            latency_ms: 1000,
+            cost_usd: 0.01,
+            total_tokens: 500,
+            success: true,
+            feedback_iterations: 1,
+            models_used: [],
+            decision_source: null,
+            input_hash: null,
+            created_at: new Date(),
+          },
+        ])
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
         .mockResolvedValueOnce([])
         // Collective watermark + empty runs
@@ -207,24 +213,26 @@ describe('Training Data Export Job', () => {
         // collective watermark
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
         // collective runs (1 row)
-        .mockResolvedValueOnce([{
-          id: '11111111-1111-1111-1111-111111111111',
-          request_id: 'req-collective-001',
-          strategy: 'sensitivity-consensus',
-          rounds: 3,
-          stop_reason: 'converged',
-          convergence_score: 0.85,
-          decision_flip_rate: 0.1,
-          dissent: 0.05,
-          total_cost_usd: 0.12,
-          total_latency_ms: 4500,
-          total_tokens: 3200,
-          final_decision_type: 'recommendation',
-          final_confidence: 0.92,
-          config: { maxRounds: 5, aggregationMethod: 'llm_synthesis' },
-          metadata: { participatingModels: ['gpt-4o', 'claude-sonnet'] },
-          created_at: runDate,
-        }])
+        .mockResolvedValueOnce([
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            request_id: 'req-collective-001',
+            strategy: 'sensitivity-consensus',
+            rounds: 3,
+            stop_reason: 'converged',
+            convergence_score: 0.85,
+            decision_flip_rate: 0.1,
+            dissent: 0.05,
+            total_cost_usd: 0.12,
+            total_latency_ms: 4500,
+            total_tokens: 3200,
+            final_decision_type: 'recommendation',
+            final_confidence: 0.92,
+            config: { maxRounds: 5, aggregationMethod: 'llm_synthesis' },
+            metadata: { participatingModels: ['gpt-4o', 'claude-sonnet'] },
+            created_at: runDate,
+          },
+        ])
         // collective signals (2 rows for the same run)
         .mockResolvedValueOnce([
           {
@@ -303,24 +311,26 @@ describe('Training Data Export Job', () => {
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
-        .mockResolvedValueOnce([{
-          id: '22222222-2222-2222-2222-222222222222',
-          request_id: 'sensitive-req-id',
-          strategy: 'sensitivity-consensus',
-          rounds: 1,
-          stop_reason: 'converged',
-          convergence_score: 0.9,
-          decision_flip_rate: 0,
-          dissent: 0,
-          total_cost_usd: 0.01,
-          total_latency_ms: 1000,
-          total_tokens: 500,
-          final_decision_type: null,
-          final_confidence: null,
-          config: {},
-          metadata: {},
-          created_at: new Date('2026-04-15T12:00:00Z'),
-        }])
+        .mockResolvedValueOnce([
+          {
+            id: '22222222-2222-2222-2222-222222222222',
+            request_id: 'sensitive-req-id',
+            strategy: 'sensitivity-consensus',
+            rounds: 1,
+            stop_reason: 'converged',
+            convergence_score: 0.9,
+            decision_flip_rate: 0,
+            dissent: 0,
+            total_cost_usd: 0.01,
+            total_latency_ms: 1000,
+            total_tokens: 500,
+            final_decision_type: null,
+            final_confidence: null,
+            config: {},
+            metadata: {},
+            created_at: new Date('2026-04-15T12:00:00Z'),
+          },
+        ])
         .mockResolvedValueOnce([]); // signals empty
 
       const { runTrainingDataExport } = await import('../training-data-export-job');
@@ -388,24 +398,26 @@ describe('Training Data Export Job', () => {
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ last_watermark: new Date('2026-03-01') }])
-        .mockResolvedValueOnce([{
-          id: '33333333-3333-3333-3333-333333333333',
-          request_id: 'req-with-shadow',
-          strategy: 'debate',
-          rounds: 2,
-          stop_reason: 'converged',
-          convergence_score: 0.95,
-          decision_flip_rate: 0,
-          dissent: 0,
-          total_cost_usd: 0.10,
-          total_latency_ms: 3000,
-          total_tokens: 2500,
-          final_decision_type: 'synthesis',
-          final_confidence: 0.92,
-          config: {},
-          metadata: {},
-          created_at: runDate,
-        }])
+        .mockResolvedValueOnce([
+          {
+            id: '33333333-3333-3333-3333-333333333333',
+            request_id: 'req-with-shadow',
+            strategy: 'debate',
+            rounds: 2,
+            stop_reason: 'converged',
+            convergence_score: 0.95,
+            decision_flip_rate: 0,
+            dissent: 0,
+            total_cost_usd: 0.1,
+            total_latency_ms: 3000,
+            total_tokens: 2500,
+            final_decision_type: 'synthesis',
+            final_confidence: 0.92,
+            config: {},
+            metadata: {},
+            created_at: runDate,
+          },
+        ])
         .mockResolvedValueOnce([
           {
             run_id: '33333333-3333-3333-3333-333333333333',

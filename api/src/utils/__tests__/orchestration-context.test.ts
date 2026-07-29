@@ -51,12 +51,14 @@ import type { FastifyRequest } from 'fastify';
  * a few duck-typed properties from `request.user` / extended fields,
  * so a partial mock is enough.
  */
-function mockRequest(overrides: Partial<{
-  id: string;
-  organizationId: string;
-  userId: string;
-  user: { userId: string; organizationId: string; roles: string[]; email: string; name: string };
-}> = {}): FastifyRequest {
+function mockRequest(
+  overrides: Partial<{
+    id: string;
+    organizationId: string;
+    userId: string;
+    user: { userId: string; organizationId: string; roles: string[]; email: string; name: string };
+  }> = {}
+): FastifyRequest {
   return {
     id: overrides.id ?? 'test-req-id',
     organizationId: overrides.organizationId,
@@ -145,12 +147,14 @@ describe('extractSemanticQueryFromMessages', () => {
       '..',
       'core',
       'orchestration',
-      'orchestration-engine.ts',
+      'orchestration-engine.ts'
     );
     const src = readFileSync(enginePath, 'utf-8');
     // The engine walks backwards (`for (let i = ...; i >= 0; i--)`) for
     // the last user message and slices to 200 chars.
-    expect(src).toMatch(/for\s*\(\s*let\s+i\s*=\s*request\.messages\.length\s*-\s*1\s*;\s*i\s*>=\s*0\s*;\s*i--\s*\)/);
+    expect(src).toMatch(
+      /for\s*\(\s*let\s+i\s*=\s*request\.messages\.length\s*-\s*1\s*;\s*i\s*>=\s*0\s*;\s*i--\s*\)/
+    );
     expect(src).toMatch(/\.slice\(\s*0\s*,\s*200\s*\)/);
     // And our cap matches.
     expect(SEMANTIC_QUERY_MAX_CHARS).toBe(200);
@@ -218,7 +222,7 @@ describe('createOrchestrationContext', () => {
 
   it('reads org/user from extendedRequest fields when set directly', () => {
     const ctx = createOrchestrationContext(
-      mockRequest({ organizationId: 'org-1', userId: 'user-1' }),
+      mockRequest({ organizationId: 'org-1', userId: 'user-1' })
     );
     expect(ctx.organizationId).toBe('org-1');
     expect(ctx.userId).toBe('user-1');
@@ -234,7 +238,7 @@ describe('createOrchestrationContext', () => {
           email: 'a@b',
           name: 'Test',
         },
-      }),
+      })
     );
     expect(ctx.organizationId).toBe('o-from-token');
     expect(ctx.userId).toBe('u-from-token');
@@ -343,7 +347,9 @@ describe('enrichContextWithIntent', () => {
 
   it('skips fully-empty preferredModelIds without changing context', () => {
     expect(enrichContextWithIntent(baseContext, { preferredModelIds: [] })).toBe(baseContext);
-    expect(enrichContextWithIntent(baseContext, { preferredModelIds: ['', '  '] })).toBe(baseContext);
+    expect(enrichContextWithIntent(baseContext, { preferredModelIds: ['', '  '] })).toBe(
+      baseContext
+    );
   });
 });
 

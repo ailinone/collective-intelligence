@@ -166,13 +166,10 @@ describe('model-capability-inference', () => {
   });
 
   it('marks endpoint compatibility as explicit when declared in metadata', () => {
-    const compatibility = inferEndpointCompatibility(
-      ['chat', 'function_calling', 'embeddings'],
-      {
-        endpoint: 'responses',
-        supported_endpoints: ['embeddings', 'chat_completions'],
-      }
-    );
+    const compatibility = inferEndpointCompatibility(['chat', 'function_calling', 'embeddings'], {
+      endpoint: 'responses',
+      supported_endpoints: ['embeddings', 'chat_completions'],
+    });
 
     expect(compatibility.responses).toBe('explicit');
     expect(compatibility.embeddings).toBe('explicit');

@@ -85,7 +85,7 @@ interface CapturedRequest {
 }
 
 function startTestServer(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
+  handler: (req: IncomingMessage, res: ServerResponse) => void
 ): Promise<{ server: Server; port: number; calls: CapturedRequest[] }> {
   const calls: CapturedRequest[] = [];
   const server = createServer((req, res) => {
@@ -96,7 +96,7 @@ function startTestServer(
         method: req.method ?? 'GET',
         url: req.url ?? '/',
         headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)]),
+          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)])
         ),
         body,
       });

@@ -64,7 +64,11 @@ describe('01C.1B-J2-C-R6 — normalizeArtificialAnalysisModel', () => {
         artificial_analysis_coding_index: 90,
         gpqa: 75,
       },
-      pricing: { price_1m_blended_3_to_1: 5.5, price_1m_input_tokens: 3, price_1m_output_tokens: 11 },
+      pricing: {
+        price_1m_blended_3_to_1: 5.5,
+        price_1m_input_tokens: 3,
+        price_1m_output_tokens: 11,
+      },
       median_output_tokens_per_second: 120,
       median_time_to_first_token_seconds: 0.42,
     } as never);

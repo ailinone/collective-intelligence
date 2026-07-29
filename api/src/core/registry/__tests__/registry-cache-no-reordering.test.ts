@@ -22,9 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildRuntimeModelRegistry } from '../registry-builder';
-import {
-  LEGACY_MODELS_FIXTURE,
-} from './fixtures/legacy-models.fixture';
+import { LEGACY_MODELS_FIXTURE } from './fixtures/legacy-models.fixture';
 import type { LegacyModelSnapshot } from '../legacy-model-snapshot';
 
 /**
@@ -57,15 +55,11 @@ describe('registry_cache no-reordering — input order is preserved', () => {
       models: LEGACY_MODELS_FIXTURE,
       source: 'fixture',
     });
-    expect(fingerprint(registry.getModelSnapshots())).toBe(
-      fingerprint(LEGACY_MODELS_FIXTURE),
-    );
+    expect(fingerprint(registry.getModelSnapshots())).toBe(fingerprint(LEGACY_MODELS_FIXTURE));
   });
 
   it('preserves a reverse-sorted-by-id ordering', () => {
-    const reversed = LEGACY_MODELS_FIXTURE.slice().sort((a, b) =>
-      b.id.localeCompare(a.id),
-    );
+    const reversed = LEGACY_MODELS_FIXTURE.slice().sort((a, b) => b.id.localeCompare(a.id));
     const { registry } = buildRuntimeModelRegistry({ models: reversed });
     expect(fingerprint(registry.getModelSnapshots())).toBe(fingerprint(reversed));
   });
@@ -86,8 +80,8 @@ describe('registry_cache no-reordering — input order is preserved', () => {
     // Build an input where cost is INVERSE of input order; if the
     // registry sorted by cost, output order would differ from input.
     const sorted = LEGACY_MODELS_FIXTURE.slice().sort((a, b) => {
-      const ca = (a.inputCostPer1k ?? 0);
-      const cb = (b.inputCostPer1k ?? 0);
+      const ca = a.inputCostPer1k ?? 0;
+      const cb = b.inputCostPer1k ?? 0;
       return cb - ca; // descending — expensive first
     });
     const { registry } = buildRuntimeModelRegistry({ models: sorted });
@@ -96,7 +90,7 @@ describe('registry_cache no-reordering — input order is preserved', () => {
 
   it('does NOT sort by contextWindow', () => {
     const sorted = LEGACY_MODELS_FIXTURE.slice().sort(
-      (a, b) => (a.contextWindow ?? 0) - (b.contextWindow ?? 0),
+      (a, b) => (a.contextWindow ?? 0) - (b.contextWindow ?? 0)
     );
     const { registry } = buildRuntimeModelRegistry({ models: sorted });
     expect(fingerprint(registry.getModelSnapshots())).toBe(fingerprint(sorted));

@@ -9,7 +9,7 @@
 
 /**
  * API Key Permissions Middleware
- * 
+ *
  * Validates API key permissions before allowing access to protected routes
  */
 
@@ -105,7 +105,7 @@ export async function checkApiKeyPermissions(
   if (reply.sent) {
     return;
   }
-  
+
   const extendedRequest = request as ExtendedFastifyRequest;
   const apiKey = extendedRequest.apiKey;
 
@@ -155,4 +155,3 @@ export async function checkApiKeyPermissions(
     }
   }
 }
-

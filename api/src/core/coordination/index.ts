@@ -33,10 +33,7 @@ export type {
   CoordinationConfig,
 } from './coordination-types';
 
-export {
-  DEFAULT_COORDINATION_CONFIG,
-  getCoordinationConfigFromEnv,
-} from './coordination-types';
+export { DEFAULT_COORDINATION_CONFIG, getCoordinationConfigFromEnv } from './coordination-types';
 
 // Validation
 export {
@@ -64,14 +61,9 @@ export {
 } from './sensitivity-prompt-adapter';
 
 // Metrics
-export {
-  recordCoordinationRun,
-  recordSignalParseFailure,
-} from './coordination-metrics';
+export { recordCoordinationRun, recordSignalParseFailure } from './coordination-metrics';
 export type { CoordinationRunMetrics } from './coordination-metrics';
 
 // Convergence evaluator
-export {
-  evaluateConvergence,
-} from './convergence-evaluator';
+export { evaluateConvergence } from './convergence-evaluator';
 export type { ConvergenceEvaluation } from './convergence-evaluator';

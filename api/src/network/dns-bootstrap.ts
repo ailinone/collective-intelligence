@@ -63,16 +63,25 @@ export async function installTcpDnsFallback(): Promise<DnsBootstrapResult> {
           keepAliveMaxTimeout: 60_000,
           connections: Number(process.env.HTTP_POOL_CONNECTIONS) || 128,
           pipelining: 1,
-        }),
+        })
       );
       installed = true;
-      logger.info({ keepAliveTimeoutMs: 30_000, connections: Number(process.env.HTTP_POOL_CONNECTIONS) || 128 }, 'Installed global keep-alive HTTP dispatcher (no custom TCP-DNS)');
+      logger.info(
+        {
+          keepAliveTimeoutMs: 30_000,
+          connections: Number(process.env.HTTP_POOL_CONNECTIONS) || 128,
+        },
+        'Installed global keep-alive HTTP dispatcher (no custom TCP-DNS)'
+      );
       return { installed: true, reason: 'keepalive_dispatcher_no_custom_dns' };
     } catch {
       return { installed: false, reason: 'env_DNS_TCP_FALLBACK_SERVERS_not_set' };
     }
   }
-  const servers = env.split(',').map((s) => s.trim()).filter(Boolean);
+  const servers = env
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (servers.length === 0) {
     return { installed: false, reason: 'env_empty_after_parse' };
   }
@@ -90,7 +99,11 @@ export async function installTcpDnsFallback(): Promise<DnsBootstrapResult> {
         // undici uses NodeJS's looser dns LookupOptions (with
         // `family?: number | 'IPv4' | 'IPv6'`) and our normalized
         // wrapper accepts that broader shape internally.
-        lookup: narrowAs<ConstructorParameters<typeof Agent>[0] extends { connect?: { lookup?: infer L } } ? L : never>(resolver.lookupCb),
+        lookup: narrowAs<
+          ConstructorParameters<typeof Agent>[0] extends { connect?: { lookup?: infer L } }
+            ? L
+            : never
+        >(resolver.lookupCb),
       },
       // Keep idle sockets warm so subsequent fetches reuse TCP without
       // re-resolving (the cache in TcpDnsResolver also helps, but
@@ -141,16 +154,24 @@ export async function installTcpDnsFallback(): Promise<DnsBootstrapResult> {
         });
       }
     } catch (err) {
-      log.warn({ err: err instanceof Error ? err.message : String(err) },
-        'http/https globalAgent or dns.lookup patch failed (undici-only fallback in effect)');
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'http/https globalAgent or dns.lookup patch failed (undici-only fallback in effect)'
+      );
     }
 
     installed = true;
     log.info({ servers }, '✅ TCP-DNS fallback installed (undici + http/https + dns.lookup)');
     return { installed: true, reason: 'env_DNS_TCP_FALLBACK_SERVERS_set', servers };
   } catch (err) {
-    log.warn({ err: err instanceof Error ? err.message : String(err) }, 'TCP-DNS fallback install failed');
-    return { installed: false, reason: `install_failed: ${err instanceof Error ? err.message : String(err)}` };
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'TCP-DNS fallback install failed'
+    );
+    return {
+      installed: false,
+      reason: `install_failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 

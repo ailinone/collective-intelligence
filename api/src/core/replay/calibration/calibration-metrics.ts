@@ -49,7 +49,7 @@ export interface ComputeCalibrationMetricsInput {
 }
 
 export function computeCalibrationMetrics(
-  input: ComputeCalibrationMetricsInput,
+  input: ComputeCalibrationMetricsInput
 ): CalibrationMetrics {
   const { rows, totalHoldoutRows } = input;
   const n = rows.length;
@@ -103,8 +103,7 @@ export function computeCalibrationMetrics(
     }
     if (r.modality_mismatch_avoided) modality += 1;
 
-    const actualWasCollective =
-      r.selectors.actual_historical.selectedModelIds.length > 1;
+    const actualWasCollective = r.selectors.actual_historical.selectedModelIds.length > 1;
     if (r.pareto_single_fallback && actualWasCollective) unjustifiedCollective += 1;
     if (
       r.pareto_single_fallback &&
@@ -115,8 +114,7 @@ export function computeCalibrationMetrics(
     }
     if (
       !r.pareto_single_fallback &&
-      r.selectors.pareto_aware.expectedCostUsd <
-        r.baseline.singleCostUsd * 0.5 &&
+      r.selectors.pareto_aware.expectedCostUsd < r.baseline.singleCostUsd * 0.5 &&
       r.selectors.pareto_aware.expectedJudge >= r.baseline.singleJudge
     ) {
       cheapGood += 1;
@@ -132,18 +130,12 @@ export function computeCalibrationMetrics(
 
     if (r.baseline.actualHistoricalJudge !== undefined) {
       judgeErrors.push(
-        Math.abs(
-          r.selectors.pareto_aware.expectedJudge -
-            r.baseline.actualHistoricalJudge,
-        ),
+        Math.abs(r.selectors.pareto_aware.expectedJudge - r.baseline.actualHistoricalJudge)
       );
     }
     if (r.baseline.actualHistoricalCostUsd !== undefined) {
       costErrors.push(
-        Math.abs(
-          r.selectors.pareto_aware.expectedCostUsd -
-            r.baseline.actualHistoricalCostUsd,
-        ),
+        Math.abs(r.selectors.pareto_aware.expectedCostUsd - r.baseline.actualHistoricalCostUsd)
       );
     }
   }

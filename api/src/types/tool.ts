@@ -19,4 +19,3 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
   tool_call_id?: string;
 }
-

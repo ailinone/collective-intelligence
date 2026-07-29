@@ -37,10 +37,7 @@ import {
   resolveCollectiveSelectionPolicy,
   type CollectiveSelectionPolicy,
 } from '../pareto/collective-selection-policy';
-import type {
-  EnsemblePlan,
-  ParetoEnsembleBaselines,
-} from '../pareto/ensemble-plan-types';
+import type { EnsemblePlan, ParetoEnsembleBaselines } from '../pareto/ensemble-plan-types';
 import { optimizeParetoEnsemble } from '../pareto/pareto-ensemble-optimizer';
 import { planStrategy } from '../strategy/strategy-planner';
 import {
@@ -57,15 +54,9 @@ import type {
   StrategySensitivity,
 } from '../strategy/strategy-types';
 import { profileTask } from '../task-profile/task-profiler';
-import type {
-  TaskProfile,
-  TaskProfilerInput,
-} from '../task-profile/task-profile-types';
+import type { TaskProfile, TaskProfilerInput } from '../task-profile/task-profile-types';
 import type { HistoricalContributionResult } from '../contribution/historical-contribution-scorer';
-import type {
-  RoutingDecisionTrace,
-  ParetoTraceSummary,
-} from '../routing/routing-decision-trace';
+import type { RoutingDecisionTrace, ParetoTraceSummary } from '../routing/routing-decision-trace';
 import { redactRoutingTrace } from '../routing/routing-redaction';
 
 // ─── Input / output ─────────────────────────────────────────────────────
@@ -97,7 +88,7 @@ const DEFAULT_TRACE_ID = 'trace-pareto-mvp8b';
 // ─── Main entry ─────────────────────────────────────────────────────────
 
 export function composeParetoRoutingPipeline(
-  input: ParetoRoutingPipelineInput,
+  input: ParetoRoutingPipelineInput
 ): ParetoRoutingPipelineResult {
   const _policy = resolveCollectiveSelectionPolicy(input.policy);
   const pin: ExplicitPinInfo | null = input.explicitModelPin ?? null;
@@ -118,7 +109,7 @@ export function composeParetoRoutingPipeline(
       latencySensitivity: deriveLatencySensitivity(profile),
       explicitModelPin: pin,
     },
-    { registry: input.registry },
+    { registry: input.registry }
   );
 
   // 3. Contribution-aware re-scoring.
@@ -129,7 +120,7 @@ export function composeParetoRoutingPipeline(
       historicalContributionResult: input.historicalContributionResult,
       policy: input.policy,
     },
-    { registry: input.registry },
+    { registry: input.registry }
   );
 
   // 4. Pareto ensemble optimisation.
@@ -146,12 +137,10 @@ export function composeParetoRoutingPipeline(
   const plannerCtx = profileToPlannerContext(profile, pin);
   const routesInfo = buildRoutesInfo(
     input.registry,
-    contribution.contributionScores.map((c) => c.routeId),
+    contribution.contributionScores.map((c) => c.routeId)
   );
   const plannerInput: StrategyPlannerInput = {
-    candidates: contribution.contributionScores.map((s) =>
-      contributionScoreAsModelScoreLike(s),
-    ),
+    candidates: contribution.contributionScores.map((s) => contributionScoreAsModelScoreLike(s)),
     context: plannerCtx,
     routesInfo,
   };
@@ -233,9 +222,7 @@ function deriveLatencySensitivity(profile: TaskProfile): Sensitivity {
   return 'low';
 }
 
-function pickTaskModality(
-  profile: TaskProfile,
-): 'text' | 'image' | 'audio' | 'video' | 'mixed' {
+function pickTaskModality(profile: TaskProfile): 'text' | 'image' | 'audio' | 'video' | 'mixed' {
   const ms = profile.modalities;
   if (ms.indexOf('image') !== -1) return 'image';
   if (ms.indexOf('audio') !== -1) return 'audio';
@@ -249,15 +236,13 @@ function complexityToStrategy(c: TaskProfile['complexity']): StrategyComplexity 
 function riskToStrategy(r: TaskProfile['riskLevel']): StrategyRiskLevel {
   return r;
 }
-function sensitivityToStrategy(
-  s: TaskProfile['costSensitivity'],
-): StrategySensitivity {
+function sensitivityToStrategy(s: TaskProfile['costSensitivity']): StrategySensitivity {
   return s;
 }
 
 function profileToPlannerContext(
   profile: TaskProfile,
-  pin: ExplicitPinInfo | null,
+  pin: ExplicitPinInfo | null
 ): StrategyPlanningContext {
   return {
     taskType: profile.taskType,
@@ -273,7 +258,7 @@ function profileToPlannerContext(
 
 function buildRoutesInfo(
   registry: RuntimeModelRegistry,
-  routeIds: readonly string[],
+  routeIds: readonly string[]
 ): ReadonlyMap<string, PlannerRouteMetadata> {
   const out = new Map<string, PlannerRouteMetadata>();
   for (const id of routeIds) {

@@ -186,24 +186,24 @@ function computeOutcome(state: CoordinationState): ScenarioOutcome {
 
 function judgeOutcome(
   scenario: AdversarialScenarioName,
-  outcome: ScenarioOutcome,
+  outcome: ScenarioOutcome
 ): { passed: boolean; mismatchSummary: string } {
   const expected = EXPECTED_OUTCOMES[scenario];
   const failures: string[] = [];
 
   if (expected.expectsPoisoning !== outcome.poisoningDetected) {
     failures.push(
-      `expected poisoningDetected=${expected.expectsPoisoning}, got ${outcome.poisoningDetected}`,
+      `expected poisoningDetected=${expected.expectsPoisoning}, got ${outcome.poisoningDetected}`
     );
   }
   if (expected.expectsHerding !== outcome.herdingDetected) {
     failures.push(
-      `expected herdingDetected=${expected.expectsHerding}, got ${outcome.herdingDetected}`,
+      `expected herdingDetected=${expected.expectsHerding}, got ${outcome.herdingDetected}`
     );
   }
   if (expected.expectsCriticalRisk !== outcome.criticalRiskCount > 0) {
     failures.push(
-      `expected criticalRisk=${expected.expectsCriticalRisk}, got ${outcome.criticalRiskCount} critical risk(s)`,
+      `expected criticalRisk=${expected.expectsCriticalRisk}, got ${outcome.criticalRiskCount} critical risk(s)`
     );
   }
 
@@ -240,7 +240,7 @@ export interface AdversarialRunOptions {
 }
 
 export function runAdversarialScenarioSynthetic(
-  options: AdversarialRunOptions,
+  options: AdversarialRunOptions
 ): ExperimentExecutionResult {
   const startMs = Date.now();
   const aggregationMethod = options.aggregationMethod ?? 'weighted_confidence';
@@ -268,7 +268,7 @@ export function runAdversarialScenarioSynthetic(
       criticalRiskCount: outcome.criticalRiskCount,
       latencyMs,
     },
-    'Adversarial scenario synthetic run completed',
+    'Adversarial scenario synthetic run completed'
   );
 
   const summaryParts: string[] = [
@@ -282,7 +282,9 @@ export function runAdversarialScenarioSynthetic(
   }
 
   const strategy =
-    options.mode.mode === 'collective' || options.mode.mode === 'forced-pool-collective' || options.mode.mode === 'ablation'
+    options.mode.mode === 'collective' ||
+    options.mode.mode === 'forced-pool-collective' ||
+    options.mode.mode === 'ablation'
       ? options.mode.strategy
       : 'single';
 
@@ -290,7 +292,8 @@ export function runAdversarialScenarioSynthetic(
     experimentId: options.experimentId,
     taskIndex: options.task.index,
     repetition: options.repetition,
-    executionMode: options.mode.mode === 'forced-pool-collective' ? 'collective-tier1' : options.mode.mode,
+    executionMode:
+      options.mode.mode === 'forced-pool-collective' ? 'collective-tier1' : options.mode.mode,
     strategy,
     model: null,
     taskType: options.task.taskType,
@@ -311,7 +314,8 @@ export function runAdversarialScenarioSynthetic(
     phase: options.phase,
     responseSummary: summaryParts.join(' | '),
     ablationDisabled: options.mode.mode === 'ablation' ? options.mode.disableComponents : [],
-    ablationCondition: options.mode.mode === 'ablation' ? `-${options.mode.disableComponents.join('-')}` : null,
+    ablationCondition:
+      options.mode.mode === 'ablation' ? `-${options.mode.disableComponents.join('-')}` : null,
     scoringPolicy: 'adversarial',
     judgeUsed: false,
     heuristicScoreRaw: null,
@@ -325,6 +329,12 @@ export function runAdversarialScenarioSynthetic(
  * should be dispatched to the synthetic runner. The experiment-runner
  * checks this at the start of `executeSingleRun` before any HTTP call.
  */
-export function isAdversarialScenarioMode(mode: ModeConfig): mode is ModeConfig & { adversarialScenario: AdversarialScenarioName } {
-  return mode.mode === 'collective' && typeof mode.adversarialScenario === 'string' && mode.adversarialScenario.length > 0;
+export function isAdversarialScenarioMode(
+  mode: ModeConfig
+): mode is ModeConfig & { adversarialScenario: AdversarialScenarioName } {
+  return (
+    mode.mode === 'collective' &&
+    typeof mode.adversarialScenario === 'string' &&
+    mode.adversarialScenario.length > 0
+  );
 }

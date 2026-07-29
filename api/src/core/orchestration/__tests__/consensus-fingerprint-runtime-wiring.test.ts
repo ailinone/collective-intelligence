@@ -29,9 +29,13 @@ import type { Model } from '@/types';
 
 function makeModel(id: string, providerId: string): Model {
   return {
-    id, name: id, provider: providerId,
-    capabilities: ['chat'], contextWindow: 8000,
-    inputCostPer1k: 0.001, outputCostPer1k: 0.002,
+    id,
+    name: id,
+    provider: providerId,
+    capabilities: ['chat'],
+    contextWindow: 8000,
+    inputCostPer1k: 0.001,
+    outputCostPer1k: 0.002,
     description: 'test',
   } as Model;
 }
@@ -39,10 +43,27 @@ function makeModel(id: string, providerId: string): Model {
 function makePlan(): ConsensusExecutionPlan {
   const m = makeModel('gpt-4o', 'openai');
   return {
-    participants: [{ model: m, providerId: 'openai', taskFitScore: 0.9, selectionSource: 'dynamic' } as never],
-    synthesizer: { model: m, providerId: 'openai', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
-    judge: { model: m, providerId: 'openai', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
-    fallbackSingle: { model: m, providerId: 'openai', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
+    participants: [
+      { model: m, providerId: 'openai', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
+    ],
+    synthesizer: {
+      model: m,
+      providerId: 'openai',
+      taskFitScore: 0.9,
+      selectionSource: 'dynamic',
+    } as never,
+    judge: {
+      model: m,
+      providerId: 'openai',
+      taskFitScore: 0.9,
+      selectionSource: 'dynamic',
+    } as never,
+    fallbackSingle: {
+      model: m,
+      providerId: 'openai',
+      taskFitScore: 0.9,
+      selectionSource: 'dynamic',
+    } as never,
     selectionSource: 'dynamic',
   } as ConsensusExecutionPlan;
 }
@@ -51,7 +72,12 @@ function makePromptFingerprints(aggregate: string): PromptFingerprintsSnapshot {
   return {
     aggregate,
     perRole: [
-      { role: 'participant', promptTemplateId: 'consensusVoter', promptVersion: 'v1', promptFingerprint: 'aaaa' },
+      {
+        role: 'participant',
+        promptTemplateId: 'consensusVoter',
+        promptVersion: 'v1',
+        promptFingerprint: 'aaaa',
+      },
     ],
     includedInPlanFingerprint: true,
   };
@@ -59,19 +85,23 @@ function makePromptFingerprints(aggregate: string): PromptFingerprintsSnapshot {
 
 function makeRouteCandidates(apiModelId: string): RouteCandidatesSnapshot {
   return {
-    perRole: [{
-      role: 'participant',
-      logicalModelId: 'gpt-4o',
-      candidates: [{
-        routeId: 'openai::' + apiModelId + '::oai',
+    perRole: [
+      {
+        role: 'participant',
         logicalModelId: 'gpt-4o',
-        apiModelId,
-        providerId: 'openai',
-        adapterKind: 'oai',
-        endpointKind: 'chat',
-        equivalenceKind: 'exact_same_model',
-      }],
-    }],
+        candidates: [
+          {
+            routeId: 'openai::' + apiModelId + '::oai',
+            logicalModelId: 'gpt-4o',
+            apiModelId,
+            providerId: 'openai',
+            adapterKind: 'oai',
+            endpointKind: 'chat',
+            equivalenceKind: 'exact_same_model',
+          },
+        ],
+      },
+    ],
     policy: {
       orderBy: ['liveReady'],
       maxRouteAttempts: 3,
@@ -88,12 +118,16 @@ describe('I3A — promptFingerprints + routeCandidates in runtime fingerprint', 
   it('caller passing both snapshots produces deterministic fingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-x'),
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-x'),
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
@@ -103,12 +137,16 @@ describe('I3A — promptFingerprints + routeCandidates in runtime fingerprint', 
   it('changing promptFingerprint aggregate changes planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-a'),
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-b'),
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
@@ -118,12 +156,16 @@ describe('I3A — promptFingerprints + routeCandidates in runtime fingerprint', 
   it('changing routeCandidates apiModelId changes planFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-a'),
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
     const f2 = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       promptFingerprints: makePromptFingerprints('agg-a'),
       routeCandidates: makeRouteCandidates('gpt-4o-mini'),
     });
@@ -144,7 +186,9 @@ describe('I3A — promptFingerprints + routeCandidates in runtime fingerprint', 
     const plan = makePlan();
     const fLegacy = computePlanFingerprint({ plan, strict: true, roleSpecificRetrieval: true });
     const fWithRoutes = computePlanFingerprint({
-      plan, strict: true, roleSpecificRetrieval: true,
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
       routeCandidates: makeRouteCandidates('gpt-4o'),
     });
     expect(fLegacy.planFingerprint).not.toBe(fWithRoutes.planFingerprint);

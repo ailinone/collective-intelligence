@@ -22,10 +22,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ConsensusExecutionPlanner } from '../../strategies/consensus-execution-planner';
 import { ModelRoleResolver } from '../model-role-resolver';
-import {
-  makeCandidate,
-  makeModel,
-} from './role-resolver.fixtures';
+import { makeCandidate, makeModel } from './role-resolver.fixtures';
 import type { ModelCapability } from '@/types';
 
 // ──────────────────────────────────────────────────────────────────────
@@ -63,7 +60,7 @@ function makeJudgeEligibleModel(id: string, providerId: string) {
       contextWindow: 64000,
       inputCostPer1k: 0.0001,
       outputCostPer1k: 0.0003,
-      performance: { latencyMs: 500, throughput: 150, quality: 0.90, reliability: 0.95 },
+      performance: { latencyMs: 500, throughput: 150, quality: 0.9, reliability: 0.95 },
     }),
   });
 }
@@ -110,9 +107,7 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
       makeJudgeEligibleModel('judge-eligible-1', 'provider-judge-x'),
       makeJudgeEligibleModel('judge-eligible-2', 'provider-judge-y'),
     ];
-    const synthPool = [
-      makeSynthesizerEligibleModel('synth-eligible-1', 'provider-synth-z'),
-    ];
+    const synthPool = [makeSynthesizerEligibleModel('synth-eligible-1', 'provider-synth-z')];
 
     const fetchSpy = vi.fn(async () => {
       throw new Error('PROVIDER_CALL_DETECTED — planner must NOT call providers');
@@ -128,7 +123,7 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
           judge: judgePool,
           synthesizer: synthPool,
         },
-        judgeConstraints: { maxCostUsd: 0.10 },
+        judgeConstraints: { maxCostUsd: 0.1 },
         synthesizerConstraints: { maxCostUsd: 1.0 },
       });
 
@@ -162,7 +157,7 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
       taskProfile: { taskType: 'general', approximateInputTokens: 800 },
       candidatePool: sharedPool,
       roleSpecificPools: { judge: judgePool },
-      judgeConstraints: { maxCostUsd: 0.10 },
+      judgeConstraints: { maxCostUsd: 0.1 },
     });
 
     expect(plan.roleCandidateStats).toBeDefined();
@@ -170,9 +165,7 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
     expect(plan.roleCandidateStats?.judge.selectedCount).toBe(1);
     expect(plan.roleCandidateStats?.judge.policyTier).toBe('strict');
     // Participant came from shared pool, NOT judgePool
-    expect(plan.roleCandidateStats?.participant.sourceUniverseCount).toBe(
-      sharedPool.length,
-    );
+    expect(plan.roleCandidateStats?.participant.sourceUniverseCount).toBe(sharedPool.length);
   });
 
   it('falls back to shared pool when role-specific pool is not provided (backwards compat)', async () => {
@@ -190,14 +183,12 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
     const plan = await planner.plan({
       taskProfile: { taskType: 'general', approximateInputTokens: 800 },
       candidatePool: allInOnePool,
-      judgeConstraints: { maxCostUsd: 0.10 },
+      judgeConstraints: { maxCostUsd: 0.1 },
     });
 
     expect(plan.judge).toBeDefined();
     expect(plan.judge?.model.id).toBe('j1');
-    expect(plan.roleCandidateStats?.judge.sourceUniverseCount).toBe(
-      allInOnePool.length,
-    );
+    expect(plan.roleCandidateStats?.judge.sourceUniverseCount).toBe(allInOnePool.length);
   });
 
   it('judge reuse-from-participants fallback fires when strict exclusion empties the slot', async () => {
@@ -217,13 +208,13 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
       taskProfile: { taskType: 'general', approximateInputTokens: 800 },
       candidatePool: sharedPool,
       roleSpecificPools: { judge: judgePool },
-      judgeConstraints: { maxCostUsd: 0.10 },
+      judgeConstraints: { maxCostUsd: 0.1 },
     });
 
     expect(plan.judge).toBeDefined();
     expect(plan.judge?.model.id).toBe('shared-j-and-p');
     expect(plan.roleCandidateStats?.judge.degradationReason).toBe(
-      'judge_reused_from_participants_or_synthesizer',
+      'judge_reused_from_participants_or_synthesizer'
     );
     // not a blocker
     expect(plan.blockers).not.toContain('no_eligible_judge');
@@ -243,7 +234,7 @@ describe('Judge full-registry eligibility — role-specific retrieval', () => {
       candidatePool: sharedPool,
       // judgePool is empty intentionally
       roleSpecificPools: { judge: [] },
-      judgeConstraints: { maxCostUsd: 0.10 },
+      judgeConstraints: { maxCostUsd: 0.1 },
     });
 
     expect(plan.judge).toBeUndefined();

@@ -41,9 +41,16 @@ Rules:
    * the narrator mirrors the user's language rather than the (English) event notes.
    */
   eventPrompt: (
-    event: { type: string; summary?: string; models?: string[]; round?: number; totalRounds?: number; reasoning?: string },
+    event: {
+      type: string;
+      summary?: string;
+      models?: string[];
+      round?: number;
+      totalRounds?: number;
+      reasoning?: string;
+    },
     userSample?: string,
-    brief?: boolean,
+    brief?: boolean
   ) => {
     const parts: string[] = [`Event type: ${event.type}`];
 

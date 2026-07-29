@@ -60,7 +60,17 @@ class ShardingService {
       startDate?: Date;
       endDate?: Date;
     }
-  ): Promise<Array<{ id: string; organizationId: string; requestId: string; endpoint: string; method: string; createdAt: Date; [key: string]: unknown }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      organizationId: string;
+      requestId: string;
+      endpoint: string;
+      method: string;
+      createdAt: Date;
+      [key: string]: unknown;
+    }>
+  > {
     const shardId = this.getShardId(organizationId);
 
     logger.debug(
@@ -159,7 +169,8 @@ class ShardingService {
     `;
 
     return stats.map((s: ShardStatRow) => {
-      const shardId = typeof s.shard_id === 'number' ? s.shard_id : parseInt(String(s.shard_id), 10);
+      const shardId =
+        typeof s.shard_id === 'number' ? s.shard_id : parseInt(String(s.shard_id), 10);
       return {
         shardId,
         shardName: s.shard_name || '',

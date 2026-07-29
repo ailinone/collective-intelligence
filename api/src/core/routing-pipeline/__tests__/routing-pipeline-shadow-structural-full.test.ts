@@ -109,9 +109,7 @@ describe('routing-pipeline — shadow_structural_full', () => {
         mode: 'shadow_structural_full',
       }),
     });
-    expect(result.trace.candidatesEvaluated).toBe(
-      result.retrievalResult?.candidates.length ?? -1,
-    );
+    expect(result.trace.candidatesEvaluated).toBe(result.retrievalResult?.candidates.length ?? -1);
   });
 
   it('trace does NOT contain raw prompt text', () => {

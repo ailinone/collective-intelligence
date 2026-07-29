@@ -26,7 +26,7 @@ import type { ModelTaskPerformanceProfile } from '../../../contribution/model-ta
 
 function profile(
   modelId: string,
-  overrides: Partial<ModelTaskPerformanceProfile> = {},
+  overrides: Partial<ModelTaskPerformanceProfile> = {}
 ): ModelTaskPerformanceProfile {
   return Object.freeze({
     modelId,
@@ -59,7 +59,7 @@ function candidate(
   modelId: string,
   cost: number,
   modality: 'text' | 'image' | 'audio' = 'text',
-  hist?: ModelTaskPerformanceProfile,
+  hist?: ModelTaskPerformanceProfile
 ): ContributionAwareCandidate {
   return {
     routeId,
@@ -91,8 +91,8 @@ export function scoreAnchorA(): ContributionAwareScore {
         harmRate: 0.08,
         confidence: 0.9,
         recommendedRole: 'anchor',
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -110,8 +110,8 @@ export function scoreAnchorB(): ContributionAwareScore {
         harmRate: 0.1,
         confidence: 0.85,
         recommendedRole: 'anchor',
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -131,8 +131,8 @@ export function scorePairX(): ContributionAwareScore {
         qualityPerDollar: 600,
         recommendedRole: 'anchor',
         costMean: 0.0014,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -152,8 +152,8 @@ export function scorePairY(): ContributionAwareScore {
         qualityPerDollar: 600,
         recommendedRole: 'anchor',
         costMean: 0.0014,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -173,8 +173,8 @@ export function scoreCheapGood(): ContributionAwareScore {
         qualityPerDollar: 500,
         recommendedRole: 'budget_support',
         costMean: 0.0015,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -196,8 +196,8 @@ export function scoreCheapHarmful(): ContributionAwareScore {
         qualityPerDollar: 50,
         recommendedRole: 'avoid',
         costMean: 0.0012,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -218,8 +218,8 @@ export function scoreMini(suffix: string): ContributionAwareScore {
         confidence: 0.85,
         recommendedRole: 'avoid',
         costMean: 0.0008,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -235,8 +235,8 @@ export function scoreModalityMismatchAudio(): ContributionAwareScore {
         harmRate: 1,
         harmScore: 0.9,
         recommendedRole: 'avoid',
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -252,8 +252,8 @@ export function scoreModalityMismatchImage(): ContributionAwareScore {
         harmRate: 1,
         harmScore: 0.9,
         recommendedRole: 'avoid',
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -273,8 +273,8 @@ export function scoreExpensiveNotPareto(): ContributionAwareScore {
         qualityPerDollar: 4,
         recommendedRole: 'anchor',
         costMean: 0.18,
-      }),
-    ),
+      })
+    )
   );
 }
 
@@ -293,8 +293,8 @@ export function scoreExpensiveAndBad(): ContributionAwareScore {
         confidence: 0.85,
         recommendedRole: 'support',
         costMean: 0.22,
-      }),
-    ),
+      })
+    )
   );
 }
 

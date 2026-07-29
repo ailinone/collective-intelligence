@@ -30,10 +30,7 @@
  */
 
 import { z } from 'zod';
-import {
-  incrementPromptMetric,
-  PROMPT_METRIC_NAMES,
-} from './prompts/prompt-metrics';
+import { incrementPromptMetric, PROMPT_METRIC_NAMES } from './prompts/prompt-metrics';
 import { PromptSlotValueSchema } from './prompts/prompt-slots';
 import { logger } from '@/utils/logger';
 
@@ -57,13 +54,13 @@ export const AUGMENTATION_MAX_LENGTH = 1200;
  * free-form augmentation path.
  */
 export const AUGMENTATION_DENY_PATTERNS: readonly RegExp[] = [
-  /you are\b/i,                      // role identity override
-  /your role\b/i,                    // role identity override
-  /ignore (previous|prior|above)/i,  // instruction injection
-  /adaptive depth/i,                 // tampering with depth directive
-  /never pad/i,                      // tampering with depth directive
-  /you must always/i,                // absolute directives that override catalog
-  /system:\s/i,                      // embedded system message injection
+  /you are\b/i, // role identity override
+  /your role\b/i, // role identity override
+  /ignore (previous|prior|above)/i, // instruction injection
+  /adaptive depth/i, // tampering with depth directive
+  /never pad/i, // tampering with depth directive
+  /you must always/i, // absolute directives that override catalog
+  /system:\s/i, // embedded system message injection
 ];
 
 /**
@@ -74,10 +71,10 @@ export const AUGMENTATION_DENY_PATTERNS: readonly RegExp[] = [
 export const AugmentationSandboxSchema = z
   .string()
   .max(AUGMENTATION_MAX_LENGTH)
-  .refine(
-    (val) => !AUGMENTATION_DENY_PATTERNS.some((p) => p.test(val)),
-    { message: 'Augmentation contains prohibited patterns (role identity override, directive tampering, etc.)' },
-  )
+  .refine((val) => !AUGMENTATION_DENY_PATTERNS.some((p) => p.test(val)), {
+    message:
+      'Augmentation contains prohibited patterns (role identity override, directive tampering, etc.)',
+  })
   .optional();
 
 /**
@@ -125,7 +122,10 @@ export const TriageStageSchema = z
      *  Review fix: TRUNCATE overlong values instead of rejecting — this is
      *  content, not contract; a 2001-char prompt failing the WHOLE parse
      *  would silently drop the entire multimodal plan to heuristic triage. */
-    generation_prompt: z.string().transform((s) => s.slice(0, 2000)).optional(),
+    generation_prompt: z
+      .string()
+      .transform((s) => s.slice(0, 2000))
+      .optional(),
   })
   .strip();
 

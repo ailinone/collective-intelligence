@@ -26,12 +26,7 @@
  * - Regulatory compliance (explainable AI)
  */
 
-import type {
-  ChatRequest,
-  Model,
-  OrchestrationContext,
-  OrchestrationResult,
-} from '@/types';
+import type { ChatRequest, Model, OrchestrationContext, OrchestrationResult } from '@/types';
 import { logger } from '@/utils/logger';
 import type { SelectedModel } from '@/core/selection/dynamic-model-selector';
 
@@ -234,14 +229,15 @@ export class ReasoningTransparencyService {
     if (!trace) return;
 
     // Calculate selection score based on selected strategy score vs alternatives
-    const selectedStrategyScore = alternatives.find(a => a.strategy === selectedStrategy)?.score ?? 0.5;
-    const maxAlternativeScore = alternatives.length > 0 
-      ? Math.max(...alternatives.map(a => a.score))
-      : selectedStrategyScore;
+    const selectedStrategyScore =
+      alternatives.find((a) => a.strategy === selectedStrategy)?.score ?? 0.5;
+    const maxAlternativeScore =
+      alternatives.length > 0
+        ? Math.max(...alternatives.map((a) => a.score))
+        : selectedStrategyScore;
     // Normalize score: 0-1 based on how close selected is to best alternative
-    const selectionScore = maxAlternativeScore > 0 
-      ? selectedStrategyScore / maxAlternativeScore
-      : 0.5;
+    const selectionScore =
+      maxAlternativeScore > 0 ? selectedStrategyScore / maxAlternativeScore : 0.5;
 
     trace.strategySelection = {
       selectedStrategy,
@@ -282,10 +278,7 @@ export class ReasoningTransparencyService {
   /**
    * Record execution results
    */
-  recordExecution(
-    requestId: string,
-    result: OrchestrationResult
-  ): void {
+  recordExecution(requestId: string, result: OrchestrationResult): void {
     const trace = this.traces.get(requestId);
     if (!trace) return;
 
@@ -381,7 +374,7 @@ export class ReasoningTransparencyService {
       parts.push(`- Selected: ${trace.modelSelection.selectedModel}`);
       parts.push(`- Score: ${(trace.modelSelection.selectionScore * 100).toFixed(0)}%`);
       parts.push(`- Selection time: ${trace.modelSelection.timeToSelect}ms`);
-      
+
       if (trace.modelSelection.alternativesConsidered.length > 0) {
         parts.push(`\n### Alternatives Considered`);
         for (const alt of trace.modelSelection.alternativesConsidered) {
@@ -424,9 +417,8 @@ export class ReasoningTransparencyService {
     let total = 0;
 
     for (const message of request.messages || []) {
-      const content = typeof message.content === 'string'
-        ? message.content
-        : JSON.stringify(message.content);
+      const content =
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
       // Rough estimate: 1 token per 4 characters
       total += Math.ceil(content.length / 4);
     }
@@ -437,7 +429,11 @@ export class ReasoningTransparencyService {
   /**
    * Extract score for a specific criterion
    */
-  private extractCriterionScore(selected: SelectedModel, criterion: string, context?: ExtendedContext): number {
+  private extractCriterionScore(
+    selected: SelectedModel,
+    criterion: string,
+    context?: ExtendedContext
+  ): number {
     switch (criterion) {
       case 'quality':
         return selected.model.performance?.quality || 0.7;
@@ -465,8 +461,8 @@ export class ReasoningTransparencyService {
     const modelCaps = model.capabilities || [];
 
     // Count how many required capabilities the model has
-    const matchingCaps = requiredCaps.filter(reqCap => 
-      modelCaps.some(modelCap => modelCap === reqCap)
+    const matchingCaps = requiredCaps.filter((reqCap) =>
+      modelCaps.some((modelCap) => modelCap === reqCap)
     ).length;
 
     // Score: percentage of required capabilities that are matched
@@ -556,10 +552,10 @@ export class ReasoningTransparencyService {
   private getStrategyPros(strategy: string): string[] {
     const pros: Record<string, string[]> = {
       'single-model': ['Fast', 'Low cost', 'Simple'],
-      'parallel': ['Fast', 'Multiple perspectives', 'Redundancy'],
-      'collaborative': ['High quality', 'Error correction', 'Comprehensive'],
-      'consensus': ['Reduces bias', 'Democratic', 'Reliable'],
-      'debate': ['Deep analysis', 'Multiple viewpoints', 'Thorough'],
+      parallel: ['Fast', 'Multiple perspectives', 'Redundancy'],
+      collaborative: ['High quality', 'Error correction', 'Comprehensive'],
+      consensus: ['Reduces bias', 'Democratic', 'Reliable'],
+      debate: ['Deep analysis', 'Multiple viewpoints', 'Thorough'],
     };
     return pros[strategy] || ['Optimized for task'];
   }
@@ -570,10 +566,10 @@ export class ReasoningTransparencyService {
   private getStrategyCons(strategy: string): string[] {
     const cons: Record<string, string[]> = {
       'single-model': ['Single point of failure', 'May miss nuance'],
-      'parallel': ['Higher cost', 'Needs aggregation'],
-      'collaborative': ['Slower', 'Higher cost'],
-      'consensus': ['Slower', 'May average out brilliance'],
-      'debate': ['Slowest', 'Highest cost'],
+      parallel: ['Higher cost', 'Needs aggregation'],
+      collaborative: ['Slower', 'Higher cost'],
+      consensus: ['Slower', 'May average out brilliance'],
+      debate: ['Slowest', 'Highest cost'],
     };
     return cons[strategy] || ['Resource intensive'];
   }
@@ -587,28 +583,26 @@ export class ReasoningTransparencyService {
     if (trace.modelSelection) {
       parts.push(
         `Selected ${trace.modelSelection.selectedModel} ` +
-        `(${(trace.modelSelection.selectionScore * 100).toFixed(0)}% match)`
+          `(${(trace.modelSelection.selectionScore * 100).toFixed(0)}% match)`
       );
     }
 
     if (trace.strategySelection) {
       parts.push(
         `using ${trace.strategySelection.selectedStrategy} strategy ` +
-        `for ${trace.strategySelection.taskAnalysis.complexity} ${trace.strategySelection.taskAnalysis.taskType} task`
+          `for ${trace.strategySelection.taskAnalysis.complexity} ${trace.strategySelection.taskAnalysis.taskType} task`
       );
     }
 
     if (trace.execution) {
       parts.push(
         `completed in ${trace.execution.totalDuration}ms ` +
-        `costing $${trace.execution.totalCost.toFixed(4)}`
+          `costing $${trace.execution.totalCost.toFixed(4)}`
       );
     }
 
     if (trace.quality) {
-      parts.push(
-        `with ${(trace.quality.score * 100).toFixed(0)}% quality`
-      );
+      parts.push(`with ${(trace.quality.score * 100).toFixed(0)}% quality`);
     }
 
     return parts.join(', ') + '.';
@@ -647,4 +641,3 @@ export function getReasoningTransparency(): ReasoningTransparencyService {
 
 // Export alias for backward compatibility with tests
 export { ReasoningTransparencyService as ReasoningTransparency };
-

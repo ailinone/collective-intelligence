@@ -18,9 +18,17 @@ import { isC3ControlledSmokeExecutionLocked } from '@/core/experiment/c3-dryrun-
 
 const COST_RE = /"cost_usd"\s*:\s*(?!0(?:\.0+)?(?:[,}\s\]]|$))[0-9.]+/i;
 const safe = {
-  dryRun: true, planOnly: true, c3ExecutionAuthorized: false, billableProviderCallsAuthorized: false,
-  providerCallExecuted: false, providerCallsExecuted: 0, modelProbesExecuted: 0, providerProbesExecuted: 0,
-  cost_usd: 0, usage: { total_tokens: 0 }, hiddenFallbackDetected: false,
+  dryRun: true,
+  planOnly: true,
+  c3ExecutionAuthorized: false,
+  billableProviderCallsAuthorized: false,
+  providerCallExecuted: false,
+  providerCallsExecuted: 0,
+  modelProbesExecuted: 0,
+  providerProbesExecuted: 0,
+  cost_usd: 0,
+  usage: { total_tokens: 0 },
+  hiddenFallbackDetected: false,
 };
 
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — anti-execution', () => {
@@ -37,9 +45,19 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — anti-execution', () => {
   });
 
   // Validator artifacts (cases 34-35) — verified when present.
-  const names = ['entrypoint', 'provider-boundary', 'runtime', 'negative-case', 'provenance', 'anti-execution', 'final'];
+  const names = [
+    'entrypoint',
+    'provider-boundary',
+    'runtime',
+    'negative-case',
+    'provenance',
+    'anti-execution',
+    'final',
+  ];
   const artifacts = names
-    .map((n) => resolve(process.cwd(), 'tmp', `01c1b-c3-dryrun-controlled-runtime-smoke-${n}-validator.json`))
+    .map((n) =>
+      resolve(process.cwd(), 'tmp', `01c1b-c3-dryrun-controlled-runtime-smoke-${n}-validator.json`)
+    )
     .filter((p) => existsSync(p))
     .map((p) => JSON.parse(readFileSync(p, 'utf8')));
   const maybe = artifacts.length === names.length ? describe : describe.skip;

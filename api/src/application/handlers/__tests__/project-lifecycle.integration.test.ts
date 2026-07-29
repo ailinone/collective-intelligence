@@ -40,10 +40,7 @@ import { CreateProjectHandler } from '../create-project.handler';
 import { ListProjectsHandler } from '../list-projects.handler';
 import { GetProjectHandler } from '../get-project.handler';
 import { UpdateProjectHandler } from '../update-project.handler';
-import {
-  ArchiveProjectHandler,
-  RestoreProjectHandler,
-} from '../archive-project.handler';
+import { ArchiveProjectHandler, RestoreProjectHandler } from '../archive-project.handler';
 
 import { CreateProjectCommand } from '../../commands/create-project.command';
 import { ListProjectsQuery } from '../../queries/list-projects.query';
@@ -129,12 +126,7 @@ describe('Project lifecycle (integration)', () => {
   it('full lifecycle: create → list → get-by-slug → get-by-id → update → archive → restore', async () => {
     // 1. CREATE
     const created = await createH.execute(
-      new CreateProjectCommand(
-        orgAId,
-        orgAUserId,
-        'Customer Portal',
-        'Initial description'
-      )
+      new CreateProjectCommand(orgAId, orgAUserId, 'Customer Portal', 'Initial description')
     );
     expect(created.success).toBe(true);
     expect(created.project).toBeDefined();
@@ -152,9 +144,7 @@ describe('Project lifecycle (integration)', () => {
     expect(listed.total).toBeGreaterThanOrEqual(1);
 
     // 3. GET BY SLUG
-    const bySlug = await getH.execute(
-      new GetProjectQuery(orgAId, 'customer-portal')
-    );
+    const bySlug = await getH.execute(new GetProjectQuery(orgAId, 'customer-portal'));
     expect(bySlug.success).toBe(true);
     expect(bySlug.project!.id).toBe(projectId);
 
@@ -187,20 +177,12 @@ describe('Project lifecycle (integration)', () => {
     expect(archived.project!.archivedAt).not.toBeNull();
 
     // 6a. List active → should NOT find it now
-    const listedAfterArchive = await listH.execute(
-      new ListProjectsQuery(orgAId, 'active')
-    );
-    expect(
-      listedAfterArchive.projects!.find((p) => p.id === projectId)
-    ).toBeUndefined();
+    const listedAfterArchive = await listH.execute(new ListProjectsQuery(orgAId, 'active'));
+    expect(listedAfterArchive.projects!.find((p) => p.id === projectId)).toBeUndefined();
 
     // 6b. List archived → should find it
-    const listedArchived = await listH.execute(
-      new ListProjectsQuery(orgAId, 'archived')
-    );
-    expect(
-      listedArchived.projects!.find((p) => p.id === projectId)
-    ).toBeDefined();
+    const listedArchived = await listH.execute(new ListProjectsQuery(orgAId, 'archived'));
+    expect(listedArchived.projects!.find((p) => p.id === projectId)).toBeDefined();
 
     // 7. RESTORE
     const restored = await restoreH.execute(
@@ -212,21 +194,15 @@ describe('Project lifecycle (integration)', () => {
   });
 
   it('slug collision auto-suffix: second project with same name gets "-2", third gets "-3"', async () => {
-    const r1 = await createH.execute(
-      new CreateProjectCommand(orgAId, orgAUserId, 'Twin App')
-    );
+    const r1 = await createH.execute(new CreateProjectCommand(orgAId, orgAUserId, 'Twin App'));
     expect(r1.success).toBe(true);
     expect(r1.project!.slug).toBe('twin-app');
 
-    const r2 = await createH.execute(
-      new CreateProjectCommand(orgAId, orgAUserId, 'Twin App')
-    );
+    const r2 = await createH.execute(new CreateProjectCommand(orgAId, orgAUserId, 'Twin App'));
     expect(r2.success).toBe(true);
     expect(r2.project!.slug).toBe('twin-app-2');
 
-    const r3 = await createH.execute(
-      new CreateProjectCommand(orgAId, orgAUserId, 'Twin App')
-    );
+    const r3 = await createH.execute(new CreateProjectCommand(orgAId, orgAUserId, 'Twin App'));
     expect(r3.success).toBe(true);
     expect(r3.project!.slug).toBe('twin-app-3');
   });
@@ -245,9 +221,7 @@ describe('Project lifecycle (integration)', () => {
     expect(tryById.success).toBe(false);
     expect(tryById.errorCode).toBe('not_found');
 
-    const tryBySlug = await getH.execute(
-      new GetProjectQuery(orgBId, projectSlug)
-    );
+    const tryBySlug = await getH.execute(new GetProjectQuery(orgBId, projectSlug));
     expect(tryBySlug.success).toBe(false);
     expect(tryBySlug.errorCode).toBe('not_found');
 
@@ -257,18 +231,14 @@ describe('Project lifecycle (integration)', () => {
   });
 
   it('invariant violation: empty name → invalid_payload (not 500)', async () => {
-    const r = await createH.execute(
-      new CreateProjectCommand(orgAId, orgAUserId, '')
-    );
+    const r = await createH.execute(new CreateProjectCommand(orgAId, orgAUserId, ''));
     expect(r.success).toBe(false);
     expect(r.errorCode).toBe('invalid_payload');
   });
 
   it('invariant violation: name producing empty slug → invalid_payload', async () => {
     // Pure non-alphanumeric collapses to nothing after slugify
-    const r = await createH.execute(
-      new CreateProjectCommand(orgAId, orgAUserId, '---')
-    );
+    const r = await createH.execute(new CreateProjectCommand(orgAId, orgAUserId, '---'));
     expect(r.success).toBe(false);
     expect(r.errorCode).toBe('invalid_payload');
   });
@@ -280,14 +250,10 @@ describe('Project lifecycle (integration)', () => {
     expect(created.success).toBe(true);
     const projectId = created.project!.id;
 
-    const first = await archiveH.execute(
-      new ArchiveProjectCommand(projectId, orgAUserId, orgAId)
-    );
+    const first = await archiveH.execute(new ArchiveProjectCommand(projectId, orgAUserId, orgAId));
     expect(first.success).toBe(true);
 
-    const second = await archiveH.execute(
-      new ArchiveProjectCommand(projectId, orgAUserId, orgAId)
-    );
+    const second = await archiveH.execute(new ArchiveProjectCommand(projectId, orgAUserId, orgAId));
     expect(second.success).toBe(false);
     expect(second.errorCode).toBe('invalid_state');
   });

@@ -23,12 +23,7 @@
 import type { TraceEnvelope } from '@/broadcast/domain/trace-envelope';
 
 /** Canonical destination types supported by the broadcast pipeline. */
-export const DESTINATION_TYPES = [
-  'webhook',
-  'langfuse',
-  'datadog',
-  'otlp_collector',
-] as const;
+export const DESTINATION_TYPES = ['webhook', 'langfuse', 'datadog', 'otlp_collector'] as const;
 export type DestinationType = (typeof DESTINATION_TYPES)[number];
 
 /**
@@ -83,6 +78,4 @@ export interface DestinationAdapter {
 }
 
 /** Registry key used by the executor to resolve adapters by destination type. */
-export type DestinationAdapterRegistry = Readonly<
-  Record<DestinationType, DestinationAdapter>
->;
+export type DestinationAdapterRegistry = Readonly<Record<DestinationType, DestinationAdapter>>;

@@ -70,10 +70,7 @@ describe('no holdout leakage — calibrator input contract', () => {
   });
 
   it('train + holdout experimentIds are disjoint sets (smoke)', () => {
-    const train = [
-      example('t-1', 'exp-A', 0.6),
-      example('t-2', 'exp-A', 0.7),
-    ];
+    const train = [example('t-1', 'exp-A', 0.6), example('t-2', 'exp-A', 0.7)];
     const holdout = [example('h-1', 'exp-B', 0.9)];
     const trainExp = new Set(train.map((e) => e.experimentId));
     const holdoutExp = new Set(holdout.map((e) => e.experimentId));

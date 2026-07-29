@@ -43,10 +43,7 @@ export class E2BSandbox implements CodeSandbox {
     return this.config.apiKey;
   }
 
-  private async executePythonOnE2B(
-    script: string,
-    timeoutMs: number
-  ): Promise<E2BExecutionOutput> {
+  private async executePythonOnE2B(script: string, timeoutMs: number): Promise<E2BExecutionOutput> {
     const apiKey = this.ensureConfigured();
     const packageName = '@e2b/code-interpreter';
     const module = (await import(packageName)) as Record<string, unknown>;
@@ -58,7 +55,8 @@ export class E2BSandbox implements CodeSandbox {
 
     let sandbox: Record<string, unknown> | null = null;
     try {
-      const createMethod = (sandboxCtor as { create?: (...args: unknown[]) => Promise<unknown> }).create;
+      const createMethod = (sandboxCtor as { create?: (...args: unknown[]) => Promise<unknown> })
+        .create;
       if (typeof createMethod === 'function') {
         sandbox = (await createMethod({
           apiKey,
@@ -85,7 +83,8 @@ export class E2BSandbox implements CodeSandbox {
 
       const stdout = typeof execution.text === 'string' ? execution.text : '';
       const stderr = typeof execution.stderr === 'string' ? execution.stderr : '';
-      const executionId = typeof execution.executionId === 'string' ? execution.executionId : undefined;
+      const executionId =
+        typeof execution.executionId === 'string' ? execution.executionId : undefined;
       return {
         stdout,
         stderr,
@@ -110,7 +109,9 @@ export class E2BSandbox implements CodeSandbox {
     options: SandboxRunOptions = {}
   ): Promise<SandboxTestResult> {
     if (lang !== 'python') {
-      throw new Error(`E2B sandbox currently supports python test harness only. Requested: ${lang}`);
+      throw new Error(
+        `E2B sandbox currently supports python test harness only. Requested: ${lang}`
+      );
     }
 
     const timeoutMs = options.timeoutMs ?? this.config.timeoutMs;

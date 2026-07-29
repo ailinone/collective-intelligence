@@ -72,9 +72,7 @@ describe('R2 — JudgeVerdict schema', () => {
   it('accepts a canonical verdict with score + issues', () => {
     const parsed = JudgeVerdictSchema.safeParse({
       score: 0.85,
-      issues: [
-        { severity: 'major', location: 'paragraph 2', description: 'missing edge case' },
-      ],
+      issues: [{ severity: 'major', location: 'paragraph 2', description: 'missing edge case' }],
       summary: 'Mostly good, one gap.',
       confidence: 0.9,
     });
@@ -87,7 +85,7 @@ describe('R2 — JudgeVerdict schema', () => {
 
   it('rejects unknown severity', () => {
     expect(
-      IssueSchema.safeParse({ severity: 'catastrophic', location: 'x', description: 'y' }).success,
+      IssueSchema.safeParse({ severity: 'catastrophic', location: 'x', description: 'y' }).success
     ).toBe(false);
   });
 
@@ -107,7 +105,7 @@ describe('R2 — normalizeJudgeOutput legacy adapters', () => {
   it('accepts canonical JudgeVerdict JSON unchanged', () => {
     const v = normalizeJudgeOutput(
       { score: 0.7, issues: [], summary: 'ok' },
-      { where: 'test.canonical' },
+      { where: 'test.canonical' }
     );
     expect(v?.score).toBe(0.7);
     expect(getPromptMetric(PROMPT_METRIC_NAMES.JUDGE_NORMALIZATIONS)).toBe(1);
@@ -145,7 +143,7 @@ describe('R2 — normalizeJudgeOutput legacy adapters', () => {
         relevance: 0.9,
         reasoning: ['solid logic', 'minor stylistic issues'],
       },
-      { where: 'test.dimensional' },
+      { where: 'test.dimensional' }
     );
     expect(v?.score).toBe(0.82);
     expect(v?.dimensions?.correctness).toBe(0.9);
@@ -207,7 +205,7 @@ describe('R3 — migrated prompts are in the SOTA catalog', () => {
 
   it('migrated prompts carry the adaptive-depth directive (regression vs R5)', () => {
     expect(PROMPTS.doubleDiamondSynthesizer.toLowerCase()).toContain(
-      'match depth to task complexity',
+      'match depth to task complexity'
     );
   });
 });
@@ -224,7 +222,7 @@ describe('Z-A/B — peer-review benchmark harness', () => {
 
   /** Deterministic runner: reports fixed latency/tokens per arm. */
   function makeRunner(
-    profiles: Record<BenchmarkArm, { latency: number; tokens: number; quality: number }>,
+    profiles: Record<BenchmarkArm, { latency: number; tokens: number; quality: number }>
   ): ExecutionRunner {
     return {
       async run(_task, arm) {
@@ -370,7 +368,9 @@ describe('T-Strict — triage schema hardening', () => {
           {
             name: 'main',
             strategy: 'single',
-            model_roles: [{ role: 'primary', count: 1, preferred_capabilities: [], quality_target: 0.8 }],
+            model_roles: [
+              { role: 'primary', count: 1, preferred_capabilities: [], quality_target: 0.8 },
+            ],
             required_capabilities: [],
             max_tokens: 2048,
             experimental_foo: 'bar', // unknown key — should be stripped, not rejected

@@ -9,9 +9,9 @@
 
 /**
  * Models Configuration Routes
- * 
+ *
  * Endpoints for configuring model settings
- * 
+ *
  * Endpoints:
  * - POST /v1/models/configure - Configure model settings (admin/editor only)
  */
@@ -42,11 +42,12 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
           if (reply.sent) {
             return;
           }
-          
+
           // Check API key permissions if using API key auth (after role check)
           // This ensures role-based authorization is checked first
           try {
-            const { checkApiKeyPermissions } = await import('@/middleware/api-key-permissions-middleware.js');
+            const { checkApiKeyPermissions } =
+              await import('@/middleware/api-key-permissions-middleware.js');
             await checkApiKeyPermissions(request, reply);
             // If checkApiKeyPermissions sends a response, it will return early
             // Check if reply was already sent
@@ -123,10 +124,10 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
       if (reply.sent) {
         return;
       }
-      
+
       try {
         const extendedRequest = request as ExtendedFastifyRequest;
-        
+
         // Double-check authorization - this should never be reached if requireRole blocked the request
         const user = extendedRequest.user;
         if (!user || typeof user !== 'object') {
@@ -135,45 +136,44 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
             message: 'Authentication required',
           });
         }
-        
-        const userRoles: string[] = 
+
+        const userRoles: string[] =
           'roles' in user && Array.isArray(user.roles)
             ? user.roles
             : 'role' in user && typeof user.role === 'string'
               ? [user.role]
               : [];
-        
+
         const allowedRoles = ['admin', 'developer', 'owner'];
         const hasRole = userRoles.some((role) => allowedRoles.includes(role));
-        
+
         if (!hasRole) {
-          logger.warn({
-            userRoles,
-            allowedRoles,
-            url: request.url,
-            method: request.method,
-          }, 'Authorization check failed in handler - this should not happen');
-          
+          logger.warn(
+            {
+              userRoles,
+              allowedRoles,
+              url: request.url,
+              method: request.method,
+            },
+            'Authorization check failed in handler - this should not happen'
+          );
+
           return reply.code(403).send({
             error: 'Forbidden',
             message: 'Insufficient permissions',
           });
         }
-        
+
         // Type-safe body extraction
         // Fastify schema validation already ensures body is an object if present
-        const body = typeof request.body === 'object' && request.body !== null
-          ? request.body
-          : {};
-        
+        const body = typeof request.body === 'object' && request.body !== null ? request.body : {};
+
         // Extract fields with type safety (optional fields)
-        const modelId = 'modelId' in body && typeof body.modelId === 'string'
-          ? body.modelId
-          : undefined;
-        const enabled = 'enabled' in body && typeof body.enabled === 'boolean'
-          ? body.enabled
-          : undefined;
-        
+        const modelId =
+          'modelId' in body && typeof body.modelId === 'string' ? body.modelId : undefined;
+        const enabled =
+          'enabled' in body && typeof body.enabled === 'boolean' ? body.enabled : undefined;
+
         // Validate required fields
         if (!modelId) {
           return reply.code(400).send({
@@ -183,7 +183,7 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
         }
 
         // Get organization ID from user context
-        const organizationId = 
+        const organizationId =
           'organizationId' in user && typeof user.organizationId === 'string'
             ? user.organizationId
             : 'orgId' in user && typeof user.orgId === 'string'
@@ -283,9 +283,8 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
           message: 'Failed to configure model',
         });
       }
-    },
+    }
   );
 
   logger.info('Models configuration routes registered');
 }
-

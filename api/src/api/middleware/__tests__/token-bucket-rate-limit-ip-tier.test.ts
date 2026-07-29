@@ -89,14 +89,29 @@ function makeRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   } as unknown as FastifyRequest;
 }
 
-function makeReply(): FastifyReply & { _sent: boolean; _statusCode?: number; _headers: Record<string, string> } {
+function makeReply(): FastifyReply & {
+  _sent: boolean;
+  _statusCode?: number;
+  _headers: Record<string, string>;
+} {
   const reply = {
     _sent: false,
     _headers: {} as Record<string, string>,
-    get sent() { return this._sent; },
-    status(code: number) { this._statusCode = code; return this; },
-    send() { this._sent = true; return this; },
-    header(key: string, value: string) { this._headers[key] = value; return this; },
+    get sent() {
+      return this._sent;
+    },
+    status(code: number) {
+      this._statusCode = code;
+      return this;
+    },
+    send() {
+      this._sent = true;
+      return this;
+    },
+    header(key: string, value: string) {
+      this._headers[key] = value;
+      return this;
+    },
   } as FastifyReply & { _sent: boolean; _statusCode?: number; _headers: Record<string, string> };
   return reply;
 }

@@ -41,7 +41,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
         apiKey?: string;
       }
       const apiKey = (this.client as GoogleClient).apiKey;
-      
+
       // Validate API key is not mock
       if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
         this.log.warn(
@@ -64,8 +64,11 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
         );
         return [];
       }
-      
-      this.log.debug({ endpoint: 'https://generativelanguage.googleapis.com/v1beta/models' }, 'Fetching models from Google AI Studio API');
+
+      this.log.debug(
+        { endpoint: 'https://generativelanguage.googleapis.com/v1beta/models' },
+        'Fetching models from Google AI Studio API'
+      );
 
       const response = await fetch(endpoint, {
         method: 'GET',
@@ -83,20 +86,14 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
         };
         const expectedStatus = new Set([400, 401, 403, 404, 429]);
         if (expectedStatus.has(response.status)) {
-          this.log.warn(
-            payload,
-            'Google AI Studio model discovery unavailable (non-critical)'
-          );
+          this.log.warn(payload, 'Google AI Studio model discovery unavailable (non-critical)');
         } else {
-          this.log.error(
-            payload,
-            'Failed to fetch models from Google AI Studio API'
-          );
+          this.log.error(payload, 'Failed to fetch models from Google AI Studio API');
         }
         return [];
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         models?: Array<{
           name: string;
           displayName?: string;
@@ -104,7 +101,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
           supportedGenerationMethods?: string[];
         }>;
       };
-      
+
       if (!data.models || !Array.isArray(data.models)) {
         this.log.warn('Google AI Studio API returned invalid response format');
         return [];
@@ -116,7 +113,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
         try {
           // Extract model ID from name (format: models/gemini-1.5-pro)
           const modelId = modelData.name?.replace('models/', '') || '';
-          
+
           if (!modelId) {
             continue;
           }
@@ -148,7 +145,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
             pricing,
             metadata,
           };
-          
+
           models.push(model);
         } catch (error) {
           this.log.warn({ modelData, error }, 'Failed to create model info');
@@ -156,7 +153,10 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
         }
       }
 
-      this.log.info({ count: models.length }, 'Successfully fetched models from Google AI Studio API');
+      this.log.info(
+        { count: models.length },
+        'Successfully fetched models from Google AI Studio API'
+      );
       return models;
     } catch (error) {
       this.log.warn(
@@ -171,7 +171,14 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
     }
   }
 
-  private async createProviderModel(modelId: string, modelData?: { displayName?: string; description?: string; supportedGenerationMethods?: string[] }): Promise<ProviderModel> {
+  private async createProviderModel(
+    modelId: string,
+    modelData?: {
+      displayName?: string;
+      description?: string;
+      supportedGenerationMethods?: string[];
+    }
+  ): Promise<ProviderModel> {
     // Use modelData if provided (from API), otherwise extract from model ID
     const capabilities = this.extractCapabilitiesFromGoogle(modelId, modelData);
     const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(modelId);
@@ -222,7 +229,9 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
       method.toLowerCase()
     );
     const hasMethodMetadata = methods.length > 0;
-    const supportsGenerateContent = this.supportsGenerateContent(modelData?.supportedGenerationMethods);
+    const supportsGenerateContent = this.supportsGenerateContent(
+      modelData?.supportedGenerationMethods
+    );
     const supportsEmbeddings =
       this.supportsEmbeddings(modelData?.supportedGenerationMethods) || isLikelyEmbeddingModel;
 
@@ -284,9 +293,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
     if (isComputerUseModel && supportsGenerateContent !== true) {
       return capabilities.filter(
         (capability) =>
-          capability !== 'chat' &&
-          capability !== 'text_generation' &&
-          capability !== 'streaming'
+          capability !== 'chat' && capability !== 'text_generation' && capability !== 'streaming'
       );
     }
 
@@ -308,9 +315,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
     }
 
     const methods = supportedMethods.map((method) => method.toLowerCase());
-    return methods.some(
-      (method) => method === 'embedcontent' || method === 'batchembedcontents'
-    );
+    return methods.some((method) => method === 'embedcontent' || method === 'batchembedcontents');
   }
 
   /**
@@ -318,7 +323,7 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
    */
   private extractFamily(modelId: string): string {
     const normalized = modelId.toLowerCase();
-    
+
     // Extract base family name (first meaningful segment before version/qualifier)
     // This works for any model name pattern
     const match = normalized.match(/^([a-z]+(?:-\d+)?(?:\.\d+)?)/);
@@ -327,16 +332,16 @@ export class GoogleModelFetcher extends BaseProviderModelFetcher {
       // Format to title case
       return prefix
         .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
     }
-    
+
     // Fallback: extract first segment
     const segments = normalized.split('-');
     if (segments.length > 0 && segments[0]) {
       return segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
     }
-    
+
     return 'Unknown';
   }
 

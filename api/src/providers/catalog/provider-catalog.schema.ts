@@ -77,11 +77,7 @@ export const CapabilityHintSchema = z
       'endpoint-declared',
       'integration-class-default',
     ]),
-    confidence: z
-      .number()
-      .min(0)
-      .max(1)
-      .optional(),
+    confidence: z.number().min(0).max(1).optional(),
   })
   .strict();
 
@@ -93,10 +89,7 @@ export const CapabilityHintSchema = z
  */
 const pathString = z
   .string()
-  .regex(
-    /^\/[\w\-./]*$/,
-    'path must start with `/` and contain only URL-safe characters',
-  )
+  .regex(/^\/[\w\-./]*$/, 'path must start with `/` and contain only URL-safe characters')
   .max(256);
 
 /**
@@ -108,7 +101,7 @@ const pollPathTemplateString = z
   .string()
   .regex(
     /^\/(?:[\w\-./]|\{taskId\})*$/,
-    'poll path must start with `/`, contain only URL-safe characters, and may embed the `{taskId}` placeholder',
+    'poll path must start with `/`, contain only URL-safe characters, and may embed the `{taskId}` placeholder'
   )
   .max(256);
 
@@ -188,7 +181,7 @@ const providerIdString = z
   .max(40)
   .regex(
     /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
-    'providerId must be lowercase kebab-case (e.g. `fireworks-ai`)',
+    'providerId must be lowercase kebab-case (e.g. `fireworks-ai`)'
   );
 
 /**
@@ -203,10 +196,7 @@ const envVarString = z
 /**
  * URL validator — must be https (http allowed only for self-hosted & local).
  */
-const baseUrlString = z
-  .string()
-  .url('baseUrl must be a valid URL')
-  .max(256);
+const baseUrlString = z.string().url('baseUrl must be a valid URL').max(256);
 
 // ─── Main entry schema ──────────────────────────────────────────────────────
 
@@ -283,13 +273,10 @@ export const ProviderCatalogEntrySchema = z
               z
                 .object({
                   id: z.string().min(1).max(200),
-                  capabilities: z
-                    .array(z.string().min(1).max(80))
-                    .min(1)
-                    .max(20),
+                  capabilities: z.array(z.string().min(1).max(80)).min(1).max(20),
                 })
                 .strict(),
-            ]),
+            ])
           )
           .min(1)
           .max(100),
@@ -334,21 +321,31 @@ export const ProviderCatalogEntrySchema = z
       const expected = `${entry.providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
       if (entry.apiKeyEnvVar === expected) return true;
       // Tolerate divergence for first-party/cloud providers with standard SDK envs.
-      if (entry.authScheme === 'hmac-sigv4' || entry.authScheme === 'iam-token' || entry.authScheme === 'oauth2' || entry.authScheme === 'custom') return true;
+      if (
+        entry.authScheme === 'hmac-sigv4' ||
+        entry.authScheme === 'iam-token' ||
+        entry.authScheme === 'oauth2' ||
+        entry.authScheme === 'custom'
+      )
+        return true;
       // Tolerate divergence when the entry author documented *why* via the
       // `apiKeyEnvVarOverrideReason` field. This is the escape hatch for
       // providers whose upstream SDK ships a canonical env name (HF_TOKEN,
       // GITHUB_TOKEN, CLOUDFLARE_API_TOKEN, DATABRICKS_TOKEN, GEMINI_API_KEY)
       // so users don't have to double-set the same secret. The 10-char min
       // on the reason string ensures the author thought about it.
-      if (typeof entry.apiKeyEnvVarOverrideReason === 'string' && entry.apiKeyEnvVarOverrideReason.length >= 10) return true;
+      if (
+        typeof entry.apiKeyEnvVarOverrideReason === 'string' &&
+        entry.apiKeyEnvVarOverrideReason.length >= 10
+      )
+        return true;
       return false;
     },
     {
       message:
         'apiKeyEnvVar must follow convention `<PROVIDER_ID_UPPER>_API_KEY` unless authScheme is hmac-sigv4/iam-token/oauth2/custom, or apiKeyEnvVarOverrideReason is set to document the divergence',
       path: ['apiKeyEnvVar'],
-    },
+    }
   )
   .refine(
     (entry) => {
@@ -361,7 +358,7 @@ export const ProviderCatalogEntrySchema = z
     {
       message: 'authScheme `api-key-header` requires authHeaderName',
       path: ['authHeaderName'],
-    },
+    }
   )
   .refine(
     (entry) => {
@@ -377,7 +374,7 @@ export const ProviderCatalogEntrySchema = z
     {
       message: 'http:// only permitted for self-hosted-* integrationClass',
       path: ['baseUrl'],
-    },
+    }
   )
   .refine(
     (entry) => {
@@ -398,7 +395,7 @@ export const ProviderCatalogEntrySchema = z
       message:
         'Specialty integrationClass (*-only) cannot declare supports.chat or supports.tools — create a gateway/first-party entry instead',
       path: ['supports'],
-    },
+    }
   )
   .refine(
     (entry) => {
@@ -411,15 +408,14 @@ export const ProviderCatalogEntrySchema = z
       }
       const hasPinnedFallback =
         entry.pinnedFallback !== undefined && entry.pinnedFallback.models.length > 0;
-      const hasStaticModels =
-        entry.staticModels !== undefined && entry.staticModels.length > 0;
+      const hasStaticModels = entry.staticModels !== undefined && entry.staticModels.length > 0;
       return hasPinnedFallback || hasStaticModels;
     },
     {
       message:
         'integrationMode `execution-only` requires pinnedFallback.models (preferred) or staticModels (deprecated) — discovery is disabled, where do models come from?',
       path: ['pinnedFallback'],
-    },
+    }
   );
 
 // ─── Collection schema (uniqueness, duplicate family warnings) ──────────────
@@ -435,7 +431,7 @@ export const ProviderCatalogSchema = z
       }
       return true;
     },
-    { message: 'duplicate providerId found in catalog' },
+    { message: 'duplicate providerId found in catalog' }
   )
   .refine(
     (entries) => {
@@ -447,7 +443,7 @@ export const ProviderCatalogSchema = z
       }
       return true;
     },
-    { message: 'duplicate apiKeyEnvVar found — each provider needs a unique env var' },
+    { message: 'duplicate apiKeyEnvVar found — each provider needs a unique env var' }
   );
 
 export type ValidatedProviderCatalogEntry = z.infer<typeof ProviderCatalogEntrySchema>;

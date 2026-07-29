@@ -13,11 +13,7 @@
  * of voting. Key case: a WRONG majority is overridden by the checker.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  extractFinalAnswer,
-  selfConsistency,
-  selectVerifiedAnswer,
-} from '../best-of-n-verifier';
+import { extractFinalAnswer, selfConsistency, selectVerifiedAnswer } from '../best-of-n-verifier';
 
 describe('extractFinalAnswer', () => {
   it('prefers the last FINAL: line', () => {
@@ -116,18 +112,25 @@ describe('selectVerifiedAnswer', () => {
   it('exposes passerIndices (original candidate order) and flags a vacuous majority', () => {
     // All passers distinct → no real mode → the returned answer is only the first
     // passer; the flag tells richer callers to re-rank among passerIndices.
-    const r = selectVerifiedAnswer(['FINAL: 3', 'FINAL: 2', 'FINAL: 4'], { checker: (a) => Number(a) % 2 === 0 });
+    const r = selectVerifiedAnswer(['FINAL: 3', 'FINAL: 2', 'FINAL: 4'], {
+      checker: (a) => Number(a) % 2 === 0,
+    });
     expect(r.passerIndices).toEqual([1, 2]);
     expect(r.arbitraryAmongPassers).toBe(true);
     expect(r.answer).toBe('2'); // unchanged default: first passer
 
     // A real mode → not arbitrary.
-    const modal = selectVerifiedAnswer(['FINAL: 2', 'FINAL: 2', 'FINAL: 4'], { checker: (a) => Number(a) % 2 === 0 });
+    const modal = selectVerifiedAnswer(['FINAL: 2', 'FINAL: 2', 'FINAL: 4'], {
+      checker: (a) => Number(a) % 2 === 0,
+    });
     expect(modal.arbitraryAmongPassers).toBe(false);
     expect(modal.answer).toBe('2');
 
     // Extremal selection is meaningful → not arbitrary; no checker → empty indices.
-    const extremal = selectVerifiedAnswer(['FINAL: 8', 'FINAL: 2'], { checker: () => true, among: 'min' });
+    const extremal = selectVerifiedAnswer(['FINAL: 8', 'FINAL: 2'], {
+      checker: () => true,
+      among: 'min',
+    });
     expect(extremal.arbitraryAmongPassers).toBe(false);
     expect(extremal.passerIndices).toEqual([0, 1]);
     expect(selectVerifiedAnswer(['FINAL: 7']).passerIndices).toEqual([]);

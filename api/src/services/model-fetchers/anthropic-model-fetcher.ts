@@ -80,7 +80,10 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
           url.searchParams.set('limit', '100'); // Max limit
         } catch (urlError) {
           this.log.error(
-            { baseUrl: this.baseUrl, error: urlError instanceof Error ? urlError.message : String(urlError) },
+            {
+              baseUrl: this.baseUrl,
+              error: urlError instanceof Error ? urlError.message : String(urlError),
+            },
             'Failed to construct Anthropic API URL - invalid baseUrl or character encoding issue'
           );
           return [];
@@ -131,8 +134,11 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
             if (model) {
               allModels.push(model);
             }
-        } catch (error) {
-            this.log.warn({ modelId: anthropicModel.id, error }, 'Failed to convert Anthropic model');
+          } catch (error) {
+            this.log.warn(
+              { modelId: anthropicModel.id, error },
+              'Failed to convert Anthropic model'
+            );
           }
         }
 
@@ -144,9 +150,10 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
       this.log.info({ count: allModels.length }, 'Successfully fetched models from Anthropic API');
       return allModels;
     } catch (error) {
-      const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+      const errorCode =
+        error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // Handle ERR_INVALID_CHAR specifically
       if (errorCode === 'ERR_INVALID_CHAR') {
         this.log.error(
@@ -253,8 +260,11 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
 
     // Reasoning capabilities - check for reasoning-related keywords or higher version numbers
     // Higher version numbers (e.g., 3.5, 4.0) often indicate enhanced reasoning
-    if (normalized.includes('reasoning') || normalized.includes('thinking') || 
-        (hasVersion && parseFloat(hasVersion[0]) >= 3.5)) {
+    if (
+      normalized.includes('reasoning') ||
+      normalized.includes('thinking') ||
+      (hasVersion && parseFloat(hasVersion[0]) >= 3.5)
+    ) {
       capabilities.push('reasoning', 'thinking_mode');
     }
 
@@ -266,7 +276,7 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
    */
   private extractFamily(modelId: string): string {
     const normalized = modelId.toLowerCase();
-    
+
     // Extract base family name (first meaningful segment)
     const match = normalized.match(/^([a-z]+(?:-\d+)?(?:\.\d+)?)/);
     if (match && match[1]) {
@@ -274,16 +284,16 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
       // Format to title case
       return prefix
         .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
     }
-    
+
     // Fallback: extract first segment
     const segments = normalized.split('-');
     if (segments.length > 0 && segments[0]) {
       return segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
     }
-    
+
     return 'Claude';
   }
 
@@ -311,20 +321,20 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
     pricing: { inputCostPer1M: number; outputCostPer1M: number; currency: string };
   } {
     const normalized = modelId.toLowerCase();
-    
+
     // Use generic tier/keyword patterns instead of specific model names
     const isFlagship = normalized.includes('opus');
     const isPremium = normalized.includes('sonnet');
     const isFast = normalized.includes('haiku');
-    
+
     // Extract version number if available (e.g., 3.5, 3.7, 4.0)
     const versionMatch = normalized.match(/(\d+)\.(\d+)/);
     const majorVersion = versionMatch ? parseInt(versionMatch[1], 10) : 3;
     const minorVersion = versionMatch ? parseInt(versionMatch[2], 10) : 0;
-    
+
     // Higher versions typically have larger context windows
     const hasEnhancedContext = majorVersion >= 3 && minorVersion >= 5;
-    
+
     // Estimate based on generic patterns
     if (isFlagship) {
       return {
@@ -333,7 +343,7 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
         pricing: { inputCostPer1M: 0.015 * 1000, outputCostPer1M: 0.075 * 1000, currency: 'USD' },
       };
     }
-    
+
     if (isPremium) {
       return {
         contextWindow: 200_000,
@@ -341,12 +351,16 @@ export class AnthropicModelFetcher extends BaseProviderModelFetcher {
         pricing: { inputCostPer1M: 0.003 * 1000, outputCostPer1M: 0.015 * 1000, currency: 'USD' },
       };
     }
-    
+
     if (isFast) {
       return {
         contextWindow: 200_000,
         maxOutputTokens: 4_096,
-        pricing: { inputCostPer1M: 0.00025 * 1000, outputCostPer1M: 0.00125 * 1000, currency: 'USD' },
+        pricing: {
+          inputCostPer1M: 0.00025 * 1000,
+          outputCostPer1M: 0.00125 * 1000,
+          currency: 'USD',
+        },
       };
     }
 

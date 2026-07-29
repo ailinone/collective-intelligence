@@ -34,10 +34,7 @@ import { createHmac, hkdfSync } from 'node:crypto';
  * previously-computed sampling decisions — not a problem operationally, but
  * treat as stable. Bump only to force resampling across the fleet.
  */
-const STATIC_SALT = Buffer.from(
-  'ailin-broadcast-sampling-salt:v1',
-  'utf8',
-);
+const STATIC_SALT = Buffer.from('ailin-broadcast-sampling-salt:v1', 'utf8');
 
 /**
  * Number of buckets. Smaller means coarser-grained sampling rates; 10_000
@@ -92,7 +89,7 @@ export function decideSampling(input: SamplingDecisionInput): SamplingDecision {
 export function shouldSample(
   destinationId: string,
   sessionIdOrRequestId: string,
-  samplingRate: number,
+  samplingRate: number
 ): boolean {
   return decideSampling({
     destinationId,
@@ -125,8 +122,8 @@ function destinationKey(destinationId: string): Buffer {
       STATIC_SALT,
       Buffer.alloc(0),
       Buffer.from(`broadcast-sampling:${destinationId}`, 'utf8'),
-      32,
-    ),
+      32
+    )
   );
   // Bound the cache — destination count is small in practice (<10k) but guard
   // against pathological churn.

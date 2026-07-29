@@ -26,11 +26,14 @@ let calls: FetchCall[] = [];
 function stubFetch(
   response:
     | { ok?: boolean; status?: number; body: unknown }
-    | ((url: string, init: RequestInit) => {
+    | ((
+        url: string,
+        init: RequestInit
+      ) => {
         ok?: boolean;
         status?: number;
         body: unknown;
-      }),
+      })
 ) {
   const original = globalThis.fetch;
   globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -68,7 +71,12 @@ describe('TritonAdapter — embeddings wire shape', () => {
     const restore = stubFetch({
       body: {
         outputs: [
-          { name: 'EMBEDDING', shape: [2, 3], datatype: 'FP32', data: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] },
+          {
+            name: 'EMBEDDING',
+            shape: [2, 3],
+            datatype: 'FP32',
+            data: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+          },
         ],
       },
     });
@@ -103,7 +111,9 @@ describe('TritonAdapter — embeddings wire shape', () => {
 
   it('accepts a single string input and wraps it into a batch of 1', async () => {
     const restore = stubFetch({
-      body: { outputs: [{ name: 'EMBEDDING', shape: [1, 4], datatype: 'FP32', data: [1, 2, 3, 4] }] },
+      body: {
+        outputs: [{ name: 'EMBEDDING', shape: [1, 4], datatype: 'FP32', data: [1, 2, 3, 4] }],
+      },
     });
     try {
       const adapter = makeAdapter();
@@ -176,12 +186,14 @@ describe('TritonAdapter — shape integrity guards', () => {
   it('throws when output batch size mismatches input batch size', async () => {
     const restore = stubFetch({
       // Asked for 3 strings; server returned 2 rows worth of data.
-      body: { outputs: [{ name: 'E', shape: [2, 4], datatype: 'FP32', data: [1, 2, 3, 4, 5, 6, 7, 8] }] },
+      body: {
+        outputs: [{ name: 'E', shape: [2, 4], datatype: 'FP32', data: [1, 2, 3, 4, 5, 6, 7, 8] }],
+      },
     });
     try {
       const adapter = makeAdapter();
       await expect(
-        adapter.generateEmbeddings({ model: 'm', input: ['a', 'b', 'c'] }),
+        adapter.generateEmbeddings({ model: 'm', input: ['a', 'b', 'c'] })
       ).rejects.toThrow(/batch.*mismatch/i);
     } finally {
       restore();
@@ -195,9 +207,9 @@ describe('TritonAdapter — shape integrity guards', () => {
     });
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.generateEmbeddings({ model: 'm', input: ['a', 'b'] }),
-      ).rejects.toThrow(/data length.*batch/i);
+      await expect(adapter.generateEmbeddings({ model: 'm', input: ['a', 'b'] })).rejects.toThrow(
+        /data length.*batch/i
+      );
     } finally {
       restore();
     }
@@ -207,9 +219,9 @@ describe('TritonAdapter — shape integrity guards', () => {
     const restore = stubFetch({ body: { not_outputs: [] } });
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.generateEmbeddings({ model: 'm', input: ['a'] }),
-      ).rejects.toThrow(/missing outputs/);
+      await expect(adapter.generateEmbeddings({ model: 'm', input: ['a'] })).rejects.toThrow(
+        /missing outputs/
+      );
     } finally {
       restore();
     }
@@ -219,9 +231,9 @@ describe('TritonAdapter — shape integrity guards', () => {
     const restore = stubFetch({ ok: false, status: 503, body: { error: 'model warming up' } });
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.generateEmbeddings({ model: 'm', input: ['a'] }),
-      ).rejects.toThrow(/Triton HTTP 503.*model warming up/);
+      await expect(adapter.generateEmbeddings({ model: 'm', input: ['a'] })).rejects.toThrow(
+        /Triton HTTP 503.*model warming up/
+      );
     } finally {
       restore();
     }
@@ -236,9 +248,9 @@ describe('TritonAdapter — shape integrity guards', () => {
     }) as unknown as typeof fetch;
     try {
       const adapter = makeAdapter();
-      await expect(
-        adapter.generateEmbeddings({ model: 'm', input: [] }),
-      ).rejects.toThrow(/non-empty/);
+      await expect(adapter.generateEmbeddings({ model: 'm', input: [] })).rejects.toThrow(
+        /non-empty/
+      );
       expect(sentinel.called).toBe(0);
     } finally {
       globalThis.fetch = original;
@@ -247,9 +259,9 @@ describe('TritonAdapter — shape integrity guards', () => {
 
   it('rejects missing model', async () => {
     const adapter = makeAdapter();
-    await expect(
-      adapter.generateEmbeddings({ model: '', input: ['a'] }),
-    ).rejects.toThrow(/model is required/);
+    await expect(adapter.generateEmbeddings({ model: '', input: ['a'] })).rejects.toThrow(
+      /model is required/
+    );
   });
 });
 
@@ -257,7 +269,7 @@ describe('TritonAdapter — chat surfaces', () => {
   it('throws explicit not-supported error for chatCompletion', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.chatCompletion({ model: 'any', messages: [{ role: 'user', content: 'hi' }] }),
+      adapter.chatCompletion({ model: 'any', messages: [{ role: 'user', content: 'hi' }] })
     ).rejects.toThrow(/chat completion not supported/);
   });
 });

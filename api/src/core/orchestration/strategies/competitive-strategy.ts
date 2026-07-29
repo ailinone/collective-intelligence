@@ -88,7 +88,7 @@ export class CompetitiveStrategy extends BaseStrategy {
       // Observer: start
       this.emitObserverEvent(context, {
         type: 'phase_start',
-        models: competitors.map(c => c.name || c.id),
+        models: competitors.map((c) => c.name || c.id),
         summary: `Competitive: ${competitors.length} models racing, arbiter will judge.`,
       });
 
@@ -109,7 +109,10 @@ export class CompetitiveStrategy extends BaseStrategy {
           const competitiveRequest: ChatRequest = {
             ...request,
             messages: [
-              { role: 'system', content: this.withReasoningPrompt(PROMPTS.parallelCompetitor, request, model) },
+              {
+                role: 'system',
+                content: this.withReasoningPrompt(PROMPTS.parallelCompetitor, request, model),
+              },
               ...request.messages,
             ],
           };
@@ -136,7 +139,9 @@ export class CompetitiveStrategy extends BaseStrategy {
 
       // Observer: competitors done
       this.emitObserverEvent(context, {
-        type: 'round_complete', round: 1, totalRounds: 2,
+        type: 'round_complete',
+        round: 1,
+        totalRounds: 2,
         summary: `${successfulExecutions.length} competitors responded. Arbiter evaluating.`,
       });
 
@@ -156,7 +161,11 @@ export class CompetitiveStrategy extends BaseStrategy {
         throw new Error('getAdapterForModel not injected by orchestration engine');
       }
 
-      this.emitObserverEvent(context, { type: 'synthesis_start', modelName: arbiter.name || arbiter.id, summary: 'Arbiter merging competitor responses.' });
+      this.emitObserverEvent(context, {
+        type: 'synthesis_start',
+        modelName: arbiter.name || arbiter.id,
+        summary: 'Arbiter merging competitor responses.',
+      });
 
       const merged = await this.synthesizeMerged(successfulExecutions, request, context, arbiter);
 
@@ -169,7 +178,10 @@ export class CompetitiveStrategy extends BaseStrategy {
         arbiterCost = merged.cost;
         allExecutions.push(merged);
         selectionReason = 'Arbiter merge synthesis';
-        this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Merged ${successfulExecutions.length} competitor responses into one.` });
+        this.emitObserverEvent(context, {
+          type: 'synthesis_complete',
+          summary: `Merged ${successfulExecutions.length} competitor responses into one.`,
+        });
       } else {
         // Fallback: select the best response via the legacy arbiter.
         const arbitrationRequest = this.createArbitrationRequest(request, successfulExecutions);
@@ -177,13 +189,24 @@ export class CompetitiveStrategy extends BaseStrategy {
         if (!arbiterAdapter) {
           throw new Error(`Adapter not found for arbiter model ${arbiter.name}`);
         }
-        const arbiterExec = await this.executeModel(arbiterAdapter, arbiter, arbitrationRequest, 'arbitrator');
-        const selectedIndex = this.parseArbiterSelection(arbiterExec.response, successfulExecutions.length);
+        const arbiterExec = await this.executeModel(
+          arbiterAdapter,
+          arbiter,
+          arbitrationRequest,
+          'arbitrator'
+        );
+        const selectedIndex = this.parseArbiterSelection(
+          arbiterExec.response,
+          successfulExecutions.length
+        );
         finalExecution = successfulExecutions[selectedIndex] || successfulExecutions[0];
         arbiterCost = arbiterExec.cost;
         allExecutions.push(arbiterExec);
         selectionReason = 'Arbiter selection (merge unavailable)';
-        this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Arbiter selected ${finalExecution.modelName}.` });
+        this.emitObserverEvent(context, {
+          type: 'synthesis_complete',
+          summary: `Arbiter selected ${finalExecution.modelName}.`,
+        });
       }
 
       // Calculate costs
@@ -212,8 +235,18 @@ export class CompetitiveStrategy extends BaseStrategy {
           arbiterModel: arbiter.name,
           selectedCompetitor: finalExecution.modelName,
           selectionReason,
-          ...(reasoningEnabled && allExecutions.some(e => e.reasoning)
-            ? { reasoning_traces: allExecutions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+          ...(reasoningEnabled && allExecutions.some((e) => e.reasoning)
+            ? {
+                reasoning_traces: allExecutions
+                  .filter((e) => e.reasoning)
+                  .map((e) => ({
+                    model_id: e.modelId,
+                    model_name: e.modelName,
+                    role: e.role,
+                    reasoning: e.reasoning,
+                    reasoning_tokens: e.reasoningTokens,
+                  })),
+              }
             : {}),
         },
       };
@@ -243,7 +276,8 @@ export class CompetitiveStrategy extends BaseStrategy {
 
     const requiresTools = Array.isArray(request.tools) && request.tools.length > 0;
     const supportsTools = (model: Model): boolean =>
-      !requiresTools || (Array.isArray(model.capabilities) && model.capabilities.includes('function_calling'));
+      !requiresTools ||
+      (Array.isArray(model.capabilities) && model.capabilities.includes('function_calling'));
 
     const sortedModels = [...models]
       .filter((model) => supportsTools(model))
@@ -267,7 +301,7 @@ export class CompetitiveStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible (capability/tools-filtered) — falling back to provider-diverse competitors.',
+        'Preferred model not eligible (capability/tools-filtered) — falling back to provider-diverse competitors.'
       );
     }
 
@@ -402,7 +436,7 @@ ${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`;
     }
     this.log.warn(
       { arbitrationResponse: contentStr.slice(0, 300) },
-      'Failed to parse arbiter selection via unified judge schema, defaulting to first',
+      'Failed to parse arbiter selection via unified judge schema, defaulting to first'
     );
     return 0;
   }

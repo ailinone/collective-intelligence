@@ -160,7 +160,11 @@ describe('createSmallWorldTopology', () => {
 
 describe('createSparseRandomTopology', () => {
   it('with edgeProbability=0 + ensureConnected=true falls back to a ring', () => {
-    const t = createSparseRandomTopology(AGENTS, { edgeProbability: 0, ensureConnected: true, seed: 0 });
+    const t = createSparseRandomTopology(AGENTS, {
+      edgeProbability: 0,
+      ensureConnected: true,
+      seed: 0,
+    });
     for (const a of AGENTS) {
       // With ring overlay, every agent has exactly 2 neighbors.
       expect(t.getNeighbors(a).length).toBe(2);
@@ -168,14 +172,22 @@ describe('createSparseRandomTopology', () => {
   });
 
   it('with edgeProbability=0 + ensureConnected=false leaves agents isolated', () => {
-    const t = createSparseRandomTopology(AGENTS, { edgeProbability: 0, ensureConnected: false, seed: 0 });
+    const t = createSparseRandomTopology(AGENTS, {
+      edgeProbability: 0,
+      ensureConnected: false,
+      seed: 0,
+    });
     for (const a of AGENTS) {
       expect(t.getNeighbors(a)).toEqual([]);
     }
   });
 
   it('with edgeProbability=1 connects every pair (regardless of ensureConnected)', () => {
-    const t = createSparseRandomTopology(AGENTS, { edgeProbability: 1, ensureConnected: false, seed: 0 });
+    const t = createSparseRandomTopology(AGENTS, {
+      edgeProbability: 1,
+      ensureConnected: false,
+      seed: 0,
+    });
     for (const a of AGENTS) {
       expect(t.getNeighbors(a).length).toBe(AGENTS.length - 1);
     }
@@ -261,8 +273,12 @@ describe('filterSignalsForViewer', () => {
     expect(ids).toEqual(['a', 'b', 'd']);
   });
 
-  it('always includes the viewer\'s own signals', () => {
-    const t = createSparseRandomTopology(['a', 'b', 'c'], { edgeProbability: 0, ensureConnected: false, seed: 0 });
+  it("always includes the viewer's own signals", () => {
+    const t = createSparseRandomTopology(['a', 'b', 'c'], {
+      edgeProbability: 0,
+      ensureConnected: false,
+      seed: 0,
+    });
     const signals = ['a', 'b', 'c'].map((a) => makeSignal(a));
     const filtered = filterSignalsForViewer(signals, 'a', t);
     expect(filtered.some((s) => s.agentId === 'a')).toBe(true);
@@ -293,7 +309,11 @@ describe('describeTopology', () => {
   });
 
   it('reports isolated agents when present', () => {
-    const t = createSparseRandomTopology(AGENTS, { edgeProbability: 0, ensureConnected: false, seed: 0 });
+    const t = createSparseRandomTopology(AGENTS, {
+      edgeProbability: 0,
+      ensureConnected: false,
+      seed: 0,
+    });
     const stats = describeTopology(t);
     expect(stats.isolatedAgents.length).toBe(8);
     expect(stats.isConnected).toBe(false);

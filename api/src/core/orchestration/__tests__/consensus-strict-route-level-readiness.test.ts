@@ -68,9 +68,24 @@ function decideRoleStrictPool(input: {
 describe('01C.1B-J1D §11.3 — strict route-level readiness', () => {
   it('strict admits synthesizer when ONE approved route has route-level liveReady (anthropic credit-blocked but openrouter+claude works)', () => {
     const approvedRoutes: ApprovedRoute[] = [
-      { providerId: 'anthropic', apiModelId: 'anthropic-claude-3.7-sonnet', logicalModelId: 'anthropic-claude-3.7-sonnet', liveReady: false },
-      { providerId: 'openrouter', apiModelId: 'anthropic/anthropic-claude-3.7-sonnet', logicalModelId: 'anthropic-claude-3.7-sonnet', liveReady: true },
-      { providerId: 'aiml', apiModelId: 'anthropic/anthropic-claude-3.7-sonnet', logicalModelId: 'anthropic-claude-3.7-sonnet', liveReady: false },
+      {
+        providerId: 'anthropic',
+        apiModelId: 'anthropic-claude-3.7-sonnet',
+        logicalModelId: 'anthropic-claude-3.7-sonnet',
+        liveReady: false,
+      },
+      {
+        providerId: 'openrouter',
+        apiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
+        logicalModelId: 'anthropic-claude-3.7-sonnet',
+        liveReady: true,
+      },
+      {
+        providerId: 'aiml',
+        apiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
+        logicalModelId: 'anthropic-claude-3.7-sonnet',
+        liveReady: false,
+      },
     ];
     const decision = decideRoleStrictPool({
       role: 'synthesizer',
@@ -83,7 +98,23 @@ describe('01C.1B-J1D §11.3 — strict route-level readiness', () => {
 
   it('strict blocks synthesizer when ALL 15 routes fail (anthropic credit + 14 router missing)', () => {
     const approvedRoutes: ApprovedRoute[] = Array.from({ length: 15 }, (_, i) => ({
-      providerId: ['anthropic', 'ai302', 'aihubmix', 'aiml', 'cometapi', 'edenai', 'heliconeai', 'nanogpt', 'openrouter', 'orqai', 'poe', 'requesty', 'routeway', 'synthetic', 'vercel-ai-gateway'][i],
+      providerId: [
+        'anthropic',
+        'ai302',
+        'aihubmix',
+        'aiml',
+        'cometapi',
+        'edenai',
+        'heliconeai',
+        'nanogpt',
+        'openrouter',
+        'orqai',
+        'poe',
+        'requesty',
+        'routeway',
+        'synthetic',
+        'vercel-ai-gateway',
+      ][i],
       apiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
       logicalModelId: 'anthropic-claude-3.7-sonnet',
       liveReady: false,
@@ -102,7 +133,12 @@ describe('01C.1B-J1D §11.3 — strict route-level readiness', () => {
     // (the openrouter::gemma:free judge route). The synthesizer route is
     // openrouter::anthropic/claude which was NEVER probed → liveReady=false.
     const approvedRoutes: ApprovedRoute[] = [
-      { providerId: 'openrouter', apiModelId: 'anthropic/anthropic-claude-3.7-sonnet', logicalModelId: 'anthropic-claude-3.7-sonnet', liveReady: false },
+      {
+        providerId: 'openrouter',
+        apiModelId: 'anthropic/anthropic-claude-3.7-sonnet',
+        logicalModelId: 'anthropic-claude-3.7-sonnet',
+        liveReady: false,
+      },
     ];
     const decision = decideRoleStrictPool({
       role: 'synthesizer',
@@ -115,7 +151,12 @@ describe('01C.1B-J1D §11.3 — strict route-level readiness', () => {
 
   it('legacy non-strict path still works (back-compat)', () => {
     const approvedRoutes: ApprovedRoute[] = [
-      { providerId: 'vercel-ai-gateway', apiModelId: 'meta/llama-3.2-11b', logicalModelId: 'meta/llama-3.2-11b', liveReady: true },
+      {
+        providerId: 'vercel-ai-gateway',
+        apiModelId: 'meta/llama-3.2-11b',
+        logicalModelId: 'meta/llama-3.2-11b',
+        liveReady: true,
+      },
     ];
     const decision = decideRoleStrictPool({
       role: 'participant',
@@ -131,7 +172,12 @@ describe('01C.1B-J1D §11.3 — strict route-level readiness', () => {
       { providerId: 'p1', apiModelId: 'm', logicalModelId: 'm', liveReady: false },
       { providerId: 'p2', apiModelId: 'm', logicalModelId: 'm', liveReady: false },
     ];
-    const roles: Array<'participant' | 'synthesizer' | 'judge' | 'fallback'> = ['participant', 'synthesizer', 'judge', 'fallback'];
+    const roles: Array<'participant' | 'synthesizer' | 'judge' | 'fallback'> = [
+      'participant',
+      'synthesizer',
+      'judge',
+      'fallback',
+    ];
     for (const role of roles) {
       const decision = decideRoleStrictPool({
         role,

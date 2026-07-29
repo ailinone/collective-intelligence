@@ -167,7 +167,7 @@ export class SemanticCache {
   constructor(
     options: Partial<SemanticCacheOptions> = {},
     private readonly pool: Pool = getCapabilityPool(),
-    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder(),
+    private readonly embedder: CapabilityEmbedder = getCapabilityEmbedder()
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
   }
@@ -200,10 +200,7 @@ export class SemanticCache {
       // Try exact match first (fastest) — plain indexed equality lookup.
       const exactMatch = await this.lookupExact(requestHash, organizationId);
       if (exactMatch) {
-        log.debug(
-          { organizationId, lookupMs: Date.now() - startTime },
-          'Semantic cache exact hit'
-        );
+        log.debug({ organizationId, lookupMs: Date.now() - startTime }, 'Semantic cache exact hit');
         return {
           entry: exactMatch,
           similarity: 1.0,
@@ -218,10 +215,7 @@ export class SemanticCache {
       const requestText = this.extractRequestText(request);
       const embeddingResult = await this.generateEmbedding(requestText);
       if (embeddingResult.source !== 'provider') {
-        log.debug(
-          { organizationId },
-          'Semantic cache lookup skipped due to fallback embedding'
-        );
+        log.debug({ organizationId }, 'Semantic cache lookup skipped due to fallback embedding');
         return null;
       }
 
@@ -244,16 +238,10 @@ export class SemanticCache {
         return similar;
       }
 
-      log.debug(
-        { organizationId, lookupMs: Date.now() - startTime },
-        'Semantic cache miss'
-      );
+      log.debug({ organizationId, lookupMs: Date.now() - startTime }, 'Semantic cache miss');
       return null;
     } catch (error) {
-      log.warn(
-        { error: getErrorMessage(error) },
-        'Semantic cache lookup failed'
-      );
+      log.warn({ error: getErrorMessage(error) }, 'Semantic cache lookup failed');
       return null;
     }
   }
@@ -303,7 +291,9 @@ export class SemanticCache {
           // NULL (not a hash-based sentinel) when only the fallback
           // "embedding" was available — keeps the HNSW index meaningful,
           // since a fallback vector isn't semantically comparable.
-          embeddingResult.source === 'provider' ? vectorToPgLiteral(embeddingResult.embedding) : null,
+          embeddingResult.source === 'provider'
+            ? vectorToPgLiteral(embeddingResult.embedding)
+            : null,
           embeddingResult.source === 'provider' ? this.embedder.id : null,
           requestText.substring(0, 500),
           JSON.stringify(response),
@@ -311,17 +301,14 @@ export class SemanticCache {
           metadata?.costSaved || 0,
           now,
           expiresAt,
-        ],
+        ]
       );
 
       log.debug({ id, organizationId, ttl }, 'Stored in semantic cache');
 
       return id;
     } catch (error) {
-      log.warn(
-        { error: getErrorMessage(error) },
-        'Semantic cache store failed'
-      );
+      log.warn({ error: getErrorMessage(error) }, 'Semantic cache store failed');
       return null;
     }
   }
@@ -339,12 +326,11 @@ export class SemanticCache {
       const result = pattern
         ? await this.pool.query(
             `DELETE FROM semantic_cache_entries WHERE organization_id = $1 AND original_request LIKE $2;`,
-            [organizationId, `%${pattern}%`],
+            [organizationId, `%${pattern}%`]
           )
-        : await this.pool.query(
-            `DELETE FROM semantic_cache_entries WHERE organization_id = $1;`,
-            [organizationId],
-          );
+        : await this.pool.query(`DELETE FROM semantic_cache_entries WHERE organization_id = $1;`, [
+            organizationId,
+          ]);
 
       const invalidated = result.rowCount ?? 0;
       log.info({ organizationId, invalidated, pattern }, 'Cache entries invalidated');
@@ -381,7 +367,7 @@ export class SemanticCache {
            MAX(created_at)                            AS newest_entry
          FROM semantic_cache_entries
          WHERE organization_id = $1;`,
-        [organizationId],
+        [organizationId]
       );
 
       const row = rows[0];
@@ -411,7 +397,7 @@ export class SemanticCache {
     try {
       await this.pool.query(
         `UPDATE semantic_cache_entries SET hit_count = hit_count + 1 WHERE id = $1;`,
-        [entryId],
+        [entryId]
       );
     } catch (error) {
       log.warn({ error: getErrorMessage(error) }, 'Failed to record cache hit');
@@ -427,7 +413,9 @@ export class SemanticCache {
    */
   async cleanupExpired(): Promise<number> {
     try {
-      const result = await this.pool.query(`DELETE FROM semantic_cache_entries WHERE expires_at <= NOW();`);
+      const result = await this.pool.query(
+        `DELETE FROM semantic_cache_entries WHERE expires_at <= NOW();`
+      );
       const deleted = result.rowCount ?? 0;
       if (deleted > 0) {
         log.info({ deleted }, 'Swept expired semantic cache entries');
@@ -451,7 +439,7 @@ export class SemanticCache {
         `SELECT * FROM semantic_cache_entries
          WHERE organization_id = $1 AND request_hash = $2 AND expires_at > NOW()
          LIMIT 1;`,
-        [organizationId, requestHash],
+        [organizationId, requestHash]
       );
       return rows[0] ? rowToEntry(rows[0]) : null;
     } catch (error) {
@@ -480,7 +468,7 @@ export class SemanticCache {
            AND embedding IS NOT NULL
          ORDER BY embedding <=> $1::vector
          LIMIT 1;`,
-        [vectorToPgLiteral(embedding), organizationId, strategyKey],
+        [vectorToPgLiteral(embedding), organizationId, strategyKey]
       );
 
       const row = rows[0];
@@ -522,7 +510,7 @@ export class SemanticCache {
     let hash = 0;
     for (let i = 0; i < hashInput.length; i++) {
       const char = hashInput.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
 
@@ -537,9 +525,8 @@ export class SemanticCache {
 
     for (const message of request.messages || []) {
       if (message.role === 'user' || message.role === 'system') {
-        const content = typeof message.content === 'string'
-          ? message.content
-          : JSON.stringify(message.content);
+        const content =
+          typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
         parts.push(content);
       }
     }
@@ -593,7 +580,9 @@ export class SemanticCache {
       ]);
 
       if (!result.vector || result.vector.length !== EMBEDDING_DIM) {
-        throw new Error(`Embedder returned dim ${result.vector?.length ?? 0}, expected ${EMBEDDING_DIM}`);
+        throw new Error(
+          `Embedder returned dim ${result.vector?.length ?? 0}, expected ${EMBEDDING_DIM}`
+        );
       }
 
       this.embeddingCache.set(cacheKey, result.vector);
@@ -618,10 +607,7 @@ export class SemanticCache {
           'Embedding circuit opened for 60s — using hash fallback, will re-probe'
         );
       }
-      log.warn(
-        { error: getErrorMessage(error) },
-        'Embedding generation failed, using fallback'
-      );
+      log.warn({ error: getErrorMessage(error) }, 'Embedding generation failed, using fallback');
 
       return {
         embedding: this.generateFallbackEmbedding(text),
@@ -648,7 +634,7 @@ export class SemanticCache {
 
     for (let i = 0; i < text.length; i++) {
       const idx = i % EMBEDDING_DIM;
-      embedding[idx] = (embedding[idx] + text.charCodeAt(i)) % 1000 / 1000;
+      embedding[idx] = ((embedding[idx] + text.charCodeAt(i)) % 1000) / 1000;
     }
 
     return embedding;

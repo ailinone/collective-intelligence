@@ -32,8 +32,20 @@ function basePlan(overrides: Partial<EnsemblePlan> = {}): EnsemblePlan {
     baselineCostUsd: 0.022,
     paretoStatus: 'beats_baseline',
     marginalContributions: [
-      { modelId: 'm1', marginalQualityGain: 0.7, marginalCostUsd: 0.01, accepted: true, reason: 'seed' },
-      { modelId: 'm2', marginalQualityGain: 0.1, marginalCostUsd: 0.01, accepted: true, reason: 'lift' },
+      {
+        modelId: 'm1',
+        marginalQualityGain: 0.7,
+        marginalCostUsd: 0.01,
+        accepted: true,
+        reason: 'seed',
+      },
+      {
+        modelId: 'm2',
+        marginalQualityGain: 0.1,
+        marginalCostUsd: 0.01,
+        accepted: true,
+        reason: 'lift',
+      },
     ],
     rejectedCandidates: [],
     explanation: 'test',
@@ -51,7 +63,7 @@ describe('validateEnsemblePlan', () => {
   it('mismatched route/model length errors', () => {
     const r = validateEnsemblePlan(
       basePlan({ selectedRouteIds: ['r1'], selectedModelIds: ['m1', 'm2'] }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.indexOf('route_model_length_mismatch') !== -1)).toBe(true);
@@ -63,10 +75,16 @@ describe('validateEnsemblePlan', () => {
         selectedRouteIds: ['r1'],
         selectedModelIds: ['m1'],
         marginalContributions: [
-          { modelId: 'm1', marginalQualityGain: 0.7, marginalCostUsd: 0.01, accepted: true, reason: 'seed' },
+          {
+            modelId: 'm1',
+            marginalQualityGain: 0.7,
+            marginalCostUsd: 0.01,
+            accepted: true,
+            reason: 'seed',
+          },
         ],
       }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.indexOf('below_minModels') !== -1)).toBe(true);
@@ -80,10 +98,16 @@ describe('validateEnsemblePlan', () => {
         selectedModelIds: ['m1'],
         paretoStatus: 'single_fallback',
         marginalContributions: [
-          { modelId: 'm1', marginalQualityGain: 0.7, marginalCostUsd: 0.01, accepted: true, reason: 'seed' },
+          {
+            modelId: 'm1',
+            marginalQualityGain: 0.7,
+            marginalCostUsd: 0.01,
+            accepted: true,
+            reason: 'seed',
+          },
         ],
       }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.valid).toBe(true);
   });
@@ -91,7 +115,7 @@ describe('validateEnsemblePlan', () => {
   it('expectedJudge out of [0..1] errors', () => {
     const r = validateEnsemblePlan(
       basePlan({ expectedJudge: 1.5 }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.errors.some((e) => e.indexOf('expectedJudge_out_of_range') !== -1)).toBe(true);
   });
@@ -99,7 +123,7 @@ describe('validateEnsemblePlan', () => {
   it('paretoStatus mismatch errors', () => {
     const r = validateEnsemblePlan(
       basePlan({ paretoStatus: 'dominated' }), // judge >= baseline AND cost <= baseline → should be beats_baseline
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.errors.some((e) => e.indexOf('paretoStatus_mismatch') !== -1)).toBe(true);
   });
@@ -110,7 +134,7 @@ describe('validateEnsemblePlan', () => {
         selectedRouteIds: ['r1', 'r2'],
         selectedModelIds: ['m1', 'm1'],
       }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
     expect(r.errors.some((e) => e.indexOf('duplicate_model_id') !== -1)).toBe(true);
   });
@@ -118,8 +142,10 @@ describe('validateEnsemblePlan', () => {
   it('collective plan with empty marginalContributions errors', () => {
     const r = validateEnsemblePlan(
       basePlan({ marginalContributions: [] }),
-      DEFAULT_COLLECTIVE_SELECTION_POLICY,
+      DEFAULT_COLLECTIVE_SELECTION_POLICY
     );
-    expect(r.errors.some((e) => e.indexOf('collective_plan_missing_marginal_records') !== -1)).toBe(true);
+    expect(r.errors.some((e) => e.indexOf('collective_plan_missing_marginal_records') !== -1)).toBe(
+      true
+    );
   });
 });

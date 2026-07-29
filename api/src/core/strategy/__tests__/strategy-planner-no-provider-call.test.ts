@@ -30,12 +30,10 @@ let fetchCalls = 0;
 beforeEach(() => {
   fetchCalls = 0;
   originalFetch = globalThis.fetch;
-  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(
-    () => {
-      fetchCalls += 1;
-      throw new Error('planner MUST NOT call fetch');
-    },
-  ) as unknown as typeof globalThis.fetch;
+  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(() => {
+    fetchCalls += 1;
+    throw new Error('planner MUST NOT call fetch');
+  }) as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
@@ -68,10 +66,7 @@ describe('planStrategy — does NOT call fetch / DB / TEI / HNSW / Redis', () =>
 
   it('cost_cascade path never calls fetch', () => {
     planStrategy({
-      candidates: [
-        makeResult({ routeId: 'r-1' }),
-        makeResult({ routeId: 'r-2' }),
-      ],
+      candidates: [makeResult({ routeId: 'r-1' }), makeResult({ routeId: 'r-2' })],
       context: CHEAP_CONTEXT,
     });
     expect(fetchCalls).toBe(0);

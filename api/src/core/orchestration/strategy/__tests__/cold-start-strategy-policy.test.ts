@@ -141,11 +141,11 @@ describe('selectColdStartStrategy — priority ordering', () => {
 
 describe('selectColdStartStrategy — model suitability', () => {
   it('returns suitableWithAvailableModels=true when models≥minRequired', () => {
-    const r1 = selectColdStartStrategy({ ...BASE_INPUT, modelsAvailable: 3 });  // single: min=1
+    const r1 = selectColdStartStrategy({ ...BASE_INPUT, modelsAvailable: 3 }); // single: min=1
     expect(r1.suitableWithAvailableModels).toBe(true);
 
     const r2 = selectColdStartStrategy({ ...BASE_INPUT, maxCostUsd: 0.001, modelsAvailable: 2 });
-    expect(r2.strategy).toBe('cost-cascade');  // min=2
+    expect(r2.strategy).toBe('cost-cascade'); // min=2
     expect(r2.suitableWithAvailableModels).toBe(true);
   });
 
@@ -169,14 +169,14 @@ describe('COLD_START_CANONICAL_SCENARIOS — 8-scenario matrix', () => {
 
   it('produces ≥3 distinct strategies across 8 scenarios', () => {
     const strategies = new Set(
-      COLD_START_CANONICAL_SCENARIOS.map(s => selectColdStartStrategy(s.input).strategy)
+      COLD_START_CANONICAL_SCENARIOS.map((s) => selectColdStartStrategy(s.input).strategy)
     );
     expect(strategies.size).toBeGreaterThanOrEqual(3);
   });
 
   it('produces exactly the expected distinct strategies', () => {
     const strategies = new Set(
-      COLD_START_CANONICAL_SCENARIOS.map(s => selectColdStartStrategy(s.input).strategy)
+      COLD_START_CANONICAL_SCENARIOS.map((s) => selectColdStartStrategy(s.input).strategy)
     );
     // Expected: single, consensus, cost-cascade
     expect(strategies.has('single')).toBe(true);
@@ -193,7 +193,7 @@ describe('extractColdStartInput', () => {
   it('extracts max_cost from request', () => {
     const input = extractColdStartInput(
       { messages: [], max_cost: 0.001 } as never,
-      { modelsAvailable: 3 } as never,
+      { modelsAvailable: 3 } as never
     );
     expect(input.maxCostUsd).toBe(0.001);
   });
@@ -201,7 +201,7 @@ describe('extractColdStartInput', () => {
   it('prefers context.qualityTarget over request.quality_target', () => {
     const input = extractColdStartInput(
       { messages: [], quality_target: 0.7 } as never,
-      { qualityTarget: 0.95, modelsAvailable: 3 } as never,
+      { qualityTarget: 0.95, modelsAvailable: 3 } as never
     );
     expect(input.qualityTarget).toBe(0.95);
   });
@@ -209,7 +209,7 @@ describe('extractColdStartInput', () => {
   it('falls back to request.quality_target when context.qualityTarget is absent', () => {
     const input = extractColdStartInput(
       { messages: [], quality_target: 0.85 } as never,
-      { modelsAvailable: 3 } as never,
+      { modelsAvailable: 3 } as never
     );
     expect(input.qualityTarget).toBe(0.85);
   });
@@ -217,7 +217,7 @@ describe('extractColdStartInput', () => {
   it('prefers context.preferSpeed over request.prefer_speed', () => {
     const input = extractColdStartInput(
       { messages: [], prefer_speed: false } as never,
-      { preferSpeed: true, modelsAvailable: 2 } as never,
+      { preferSpeed: true, modelsAvailable: 2 } as never
     );
     expect(input.preferSpeed).toBe(true);
   });

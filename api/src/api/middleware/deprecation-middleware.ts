@@ -9,12 +9,12 @@
 
 /**
  * API Deprecation Middleware (RFC 8594)
- * 
+ *
  * Implements:
  * - Deprecation header (RFC 8594)
  * - Sunset header (RFC 8594)
  * - Warning header (RFC 7234)
- * 
+ *
  * Reference: https://datatracker.ietf.org/doc/html/rfc8594
  */
 
@@ -32,14 +32,14 @@ export interface DeprecatedEndpoint {
 
 /**
  * Deprecated endpoints registry
- * 
+ *
  * INSTRUCTIONS:
  * 1. When deprecating an endpoint, add it here
  * 2. Set deprecationDate (when deprecation was announced)
  * 3. Set sunsetDate (when endpoint will be removed - typically 6-12 months after deprecation)
  * 4. Provide alternative endpoint if available
  * 5. Provide reason for deprecation
- * 
+ *
  * EXAMPLE:
  * {
  *   path: '/v1/old-endpoint',
@@ -65,14 +65,10 @@ const DEPRECATED_ENDPOINTS: DeprecatedEndpoint[] = [
 /**
  * Check if endpoint is deprecated
  */
-function findDeprecatedEndpoint(
-  method: string,
-  path: string
-): DeprecatedEndpoint | undefined {
+function findDeprecatedEndpoint(method: string, path: string): DeprecatedEndpoint | undefined {
   return DEPRECATED_ENDPOINTS.find(
     (endpoint) =>
-      endpoint.method.toUpperCase() === method.toUpperCase() &&
-      matchPath(endpoint.path, path)
+      endpoint.method.toUpperCase() === method.toUpperCase() && matchPath(endpoint.path, path)
   );
 }
 
@@ -82,13 +78,13 @@ function findDeprecatedEndpoint(
 function matchPath(pattern: string, path: string): boolean {
   // Exact match
   if (pattern === path) return true;
-  
+
   // Match with path params (e.g., /models/:id matches /models/gpt-4)
   const patternParts = pattern.split('/');
   const pathParts = path.split('/');
-  
+
   if (patternParts.length !== pathParts.length) return false;
-  
+
   return patternParts.every((part, i) => {
     // Path param matches anything
     if (part.startsWith(':') || part.startsWith('{')) return true;
@@ -114,15 +110,15 @@ export function deprecationMiddleware(
   done: () => void
 ): void {
   const deprecated = findDeprecatedEndpoint(request.method, request.url);
-  
+
   if (!deprecated) {
     done();
     return;
   }
-  
+
   const now = new Date();
   const isSunset = now >= deprecated.sunsetDate;
-  
+
   // If past sunset date, return 410 Gone
   if (isSunset) {
     logger.warn(
@@ -134,7 +130,7 @@ export function deprecationMiddleware(
       },
       'Request to sunset endpoint'
     );
-    
+
     reply.status(410).send({
       error: {
         code: 'endpoint_gone',
@@ -145,27 +141,27 @@ export function deprecationMiddleware(
     });
     return;
   }
-  
+
   // Add deprecation headers (RFC 8594)
   reply.header('Deprecation', formatHttpDate(deprecated.deprecationDate));
   reply.header('Sunset', formatHttpDate(deprecated.sunsetDate));
-  
+
   // Add warning header (RFC 7234)
   const daysUntilSunset = Math.ceil(
     (deprecated.sunsetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   );
-  
+
   const warningMessage = deprecated.alternative
     ? `299 - "Deprecated. Will be removed on ${formatHttpDate(deprecated.sunsetDate)}. Use ${deprecated.alternative} instead."`
     : `299 - "Deprecated. Will be removed on ${formatHttpDate(deprecated.sunsetDate)}."`;
-  
+
   reply.header('Warning', warningMessage);
-  
+
   // Add custom header with alternative
   if (deprecated.alternative) {
     reply.header('X-Alternative-Endpoint', deprecated.alternative);
   }
-  
+
   // Log deprecation usage
   logger.warn(
     {
@@ -179,7 +175,7 @@ export function deprecationMiddleware(
     },
     `Request to deprecated endpoint (${daysUntilSunset} days until sunset)`
   );
-  
+
   done();
 }
 
@@ -196,4 +192,3 @@ export function getDeprecatedEndpoints(): DeprecatedEndpoint[] {
 export function isDeprecated(method: string, path: string): boolean {
   return findDeprecatedEndpoint(method, path) !== undefined;
 }
-

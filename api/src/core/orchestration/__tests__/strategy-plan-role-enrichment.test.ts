@@ -49,10 +49,19 @@ const REQ = {
 
 function getSteps(strategyName: string, registered = true) {
   const result = buildPlanOnlyResult(
-    strategyName, 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered },
+    strategyName,
+    'explicit',
+    'request-flag',
+    REQ,
+    CTX,
+    null,
+    0.85,
+    { registered }
   );
   const meta = result.metadata as Record<string, unknown>;
-  const plan = meta['executionPlan'] as { steps: Array<{ action: string; role?: string; stepId: string }> };
+  const plan = meta['executionPlan'] as {
+    steps: Array<{ action: string; role?: string; stepId: string }>;
+  };
   return plan.steps;
 }
 
@@ -175,7 +184,13 @@ describe('01C.1B-SM-R5 §13 — FIX-001: ExecutionPlanStep.role population', () 
   // ── All multi-agent strategies: roles non-empty ──────────────────────────
 
   describe('all multi-agent strategies have non-empty roles on both steps', () => {
-    const MULTI_AGENT = ['consensus', 'debate', 'expert-panel', 'critique-repair', 'quality-multipass'];
+    const MULTI_AGENT = [
+      'consensus',
+      'debate',
+      'expert-panel',
+      'critique-repair',
+      'quality-multipass',
+    ];
 
     for (const strategy of MULTI_AGENT) {
       it(`${strategy}: step-0 role is a non-empty string`, () => {

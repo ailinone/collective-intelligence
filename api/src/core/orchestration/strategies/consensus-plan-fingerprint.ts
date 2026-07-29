@@ -490,14 +490,13 @@ function canonicalJsonStringify(value: unknown): string {
  * provider with the same routing.
  */
 function projectRole(
-  candidate: ConsensusExecutionPlan['participants'][number] | undefined,
+  candidate: ConsensusExecutionPlan['participants'][number] | undefined
 ): SanitizedPlanRole | null {
   if (!candidate) return null;
   return {
     modelId: candidate.model.id,
     providerId: candidate.providerId ?? candidate.model.provider ?? 'unknown',
-    routeId:
-      (candidate.model as { routeId?: string }).routeId ?? candidate.model.id,
+    routeId: (candidate.model as { routeId?: string }).routeId ?? candidate.model.id,
   };
 }
 
@@ -551,9 +550,7 @@ const EMPTY_ROLE_SELECTION_POLICY: RoleSelectionPolicySnapshot = {
   // (and therefore the same fingerprint hash) as before this stage.
 };
 
-export function buildSanitizedPlanSnapshot(
-  input: PlanFingerprintInput,
-): SanitizedPlanSnapshot {
+export function buildSanitizedPlanSnapshot(input: PlanFingerprintInput): SanitizedPlanSnapshot {
   return {
     strategy: 'consensus',
     plannerVersion: PLANNER_VERSION,
@@ -591,7 +588,7 @@ export function computePlanFingerprint(
     readonly planSource?: 'dry_run' | 'runtime_planner' | 'approved_dry_run_plan';
     readonly executionPlanId?: string;
     readonly nowISO?: string;
-  } = {},
+  } = {}
 ): PlanFingerprintResult {
   const snapshot = buildSanitizedPlanSnapshot(input);
   const canonical = canonicalJsonStringify(snapshot);
@@ -623,18 +620,27 @@ export interface PlanFingerprintDiff {
   readonly approvedPlanFingerprint: string;
   readonly wouldExecutePlanFingerprint: string;
   readonly mismatches: {
-    readonly participants?: { readonly approved: readonly string[]; readonly wouldExecute: readonly string[] };
-    readonly synthesizer?: { readonly approved: string | null; readonly wouldExecute: string | null };
+    readonly participants?: {
+      readonly approved: readonly string[];
+      readonly wouldExecute: readonly string[];
+    };
+    readonly synthesizer?: {
+      readonly approved: string | null;
+      readonly wouldExecute: string | null;
+    };
     readonly judge?: { readonly approved: string | null; readonly wouldExecute: string | null };
     readonly fallback?: { readonly approved: string | null; readonly wouldExecute: string | null };
-    readonly budget?: { readonly approved: SanitizedPlanSnapshot['budget']; readonly wouldExecute: SanitizedPlanSnapshot['budget'] };
+    readonly budget?: {
+      readonly approved: SanitizedPlanSnapshot['budget'];
+      readonly wouldExecute: SanitizedPlanSnapshot['budget'];
+    };
     readonly strict?: { readonly approved: boolean; readonly wouldExecute: boolean };
   };
 }
 
 export function diffPlanFingerprints(
   approved: { fingerprint: string; snapshot: SanitizedPlanSnapshot },
-  wouldExecute: { fingerprint: string; snapshot: SanitizedPlanSnapshot },
+  wouldExecute: { fingerprint: string; snapshot: SanitizedPlanSnapshot }
 ): PlanFingerprintDiff {
   const matched = approved.fingerprint === wouldExecute.fingerprint;
   if (matched) {
@@ -651,19 +657,27 @@ export function diffPlanFingerprints(
   if (aIds.length !== eIds.length || aIds.some((v, i) => v !== eIds[i])) {
     (mismatches as Record<string, unknown>).participants = { approved: aIds, wouldExecute: eIds };
   }
-  if ((approved.snapshot.synthesizer?.modelId ?? null) !== (wouldExecute.snapshot.synthesizer?.modelId ?? null)) {
+  if (
+    (approved.snapshot.synthesizer?.modelId ?? null) !==
+    (wouldExecute.snapshot.synthesizer?.modelId ?? null)
+  ) {
     (mismatches as Record<string, unknown>).synthesizer = {
       approved: approved.snapshot.synthesizer?.modelId ?? null,
       wouldExecute: wouldExecute.snapshot.synthesizer?.modelId ?? null,
     };
   }
-  if ((approved.snapshot.judge?.modelId ?? null) !== (wouldExecute.snapshot.judge?.modelId ?? null)) {
+  if (
+    (approved.snapshot.judge?.modelId ?? null) !== (wouldExecute.snapshot.judge?.modelId ?? null)
+  ) {
     (mismatches as Record<string, unknown>).judge = {
       approved: approved.snapshot.judge?.modelId ?? null,
       wouldExecute: wouldExecute.snapshot.judge?.modelId ?? null,
     };
   }
-  if ((approved.snapshot.fallback?.modelId ?? null) !== (wouldExecute.snapshot.fallback?.modelId ?? null)) {
+  if (
+    (approved.snapshot.fallback?.modelId ?? null) !==
+    (wouldExecute.snapshot.fallback?.modelId ?? null)
+  ) {
     (mismatches as Record<string, unknown>).fallback = {
       approved: approved.snapshot.fallback?.modelId ?? null,
       wouldExecute: wouldExecute.snapshot.fallback?.modelId ?? null,

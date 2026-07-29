@@ -65,14 +65,14 @@ export type AssertionSource =
   | 'hierarchy-inherited';
 
 export const SOURCE_WEIGHT: Readonly<Record<AssertionSource, number>> = Object.freeze({
-  'operator-override': 1.0,   // Human review — by definition trusted
-  'provider-declared': 0.95,  // Provider says so — gold but can be stale
-  'helicone-oracle': 0.85,  // Cross-checked but indirect
-  'modality-derived': 0.75,  // Strong but inferred from architecture fields
-  'parameter-derived': 0.65,  // "API accepts" ≠ "model excels"
-  'llm-extracted': 0.60,  // Doc-mined, calibrate via Snorkel later
-  'hierarchy-inherited': 0.50,  // Narrower-of inheritance — damped parent evidence
-  'name-regex': 0.20,  // Faint signal, never decisive alone
+  'operator-override': 1.0, // Human review — by definition trusted
+  'provider-declared': 0.95, // Provider says so — gold but can be stale
+  'helicone-oracle': 0.85, // Cross-checked but indirect
+  'modality-derived': 0.75, // Strong but inferred from architecture fields
+  'parameter-derived': 0.65, // "API accepts" ≠ "model excels"
+  'llm-extracted': 0.6, // Doc-mined, calibrate via Snorkel later
+  'hierarchy-inherited': 0.5, // Narrower-of inheritance — damped parent evidence
+  'name-regex': 0.2, // Faint signal, never decisive alone
 });
 
 // ─── Hierarchical propagation tuning ─────────────────────────────────────────
@@ -130,9 +130,7 @@ export const INCLUSION_THRESHOLD = NOISE_FLOOR;
  * hint, but must NOT flip a hard legacy gate on its own. 0.30 keeps
  * modality/parameter/provider-derived signals while dropping regex-only noise.
  */
-export const LEGACY_PROJECTION_FLOOR = Number(
-  process.env.HCRA_LEGACY_PROJECTION_FLOOR ?? 0.3,
-);
+export const LEGACY_PROJECTION_FLOOR = Number(process.env.HCRA_LEGACY_PROJECTION_FLOOR ?? 0.3);
 
 /** Opt-out for the HCRA→legacy projection (emergency quiesce). Default ON. */
 export function isLegacyProjectionEnabled(): boolean {
@@ -148,7 +146,7 @@ export function isLegacyProjectionEnabled(): boolean {
  * Exported pure for testing.
  */
 export function projectLegacyCapabilities(
-  kept: readonly Pick<FusedCapability, 'uri' | 'confidence'>[],
+  kept: readonly Pick<FusedCapability, 'uri' | 'confidence'>[]
 ): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -175,7 +173,7 @@ interface ActiveAssertion {
 
 export interface MaterialiseStats {
   modelsWritten: number;
-  modelsCleared: number;          // models that ended up with zero capabilities
+  modelsCleared: number; // models that ended up with zero capabilities
   capabilitiesEmitted: number;
   capabilitiesSuppressed: number; // had assertions but fused P < threshold
   elapsedMs: number;
@@ -183,8 +181,8 @@ export interface MaterialiseStats {
 
 interface FusedCapability {
   uri: string;
-  confidence: number;             // Fused P, in [0, 1]
-  sources: AssertionSource[];     // Distinct contributing sources, strongest-first
+  confidence: number; // Fused P, in [0, 1]
+  sources: AssertionSource[]; // Distinct contributing sources, strongest-first
 }
 
 // ─── Core fusion ──────────────────────────────────────────────────────────────
@@ -205,8 +203,11 @@ function sortSourcesByWeight(sources: AssertionSource[]): AssertionSource[] {
  * Exposed for testing.
  */
 export function fuseAssertions(
-  assertions: readonly Pick<ActiveAssertion, 'source' | 'confidence' | 'observed_at' | 'ttl_days'>[],
-  now: number = Date.now(),
+  assertions: readonly Pick<
+    ActiveAssertion,
+    'source' | 'confidence' | 'observed_at' | 'ttl_days'
+  >[],
+  now: number = Date.now()
 ): { confidence: number; sources: AssertionSource[] } {
   let oneMinusProduct = 1;
   const seenSources: AssertionSource[] = [];
@@ -235,7 +236,7 @@ export function fuseAssertions(
 export function propagateHierarchy(
   fused: readonly FusedCapability[],
   narrowerByUri: ReadonlyMap<string, readonly string[]>,
-  opts: { damping?: number; parentMin?: number } = {},
+  opts: { damping?: number; parentMin?: number } = {}
 ): FusedCapability[] {
   const damping = opts.damping ?? HIERARCHY_DAMPING;
   const parentMin = opts.parentMin ?? HIERARCHY_PARENT_MIN;
@@ -286,7 +287,7 @@ export async function loadNarrowerMap(pool: Pool): Promise<Map<string, string[]>
     return narrowerMapCache.map;
   }
   const { rows } = await pool.query<{ uri: string; narrower: string[] | null }>(
-    `SELECT uri, narrower FROM capability_ontology WHERE status != 'deprecated';`,
+    `SELECT uri, narrower FROM capability_ontology WHERE status != 'deprecated';`
   );
   const map = new Map<string, string[]>();
   for (const r of rows) {
@@ -321,7 +322,7 @@ async function* streamGroupedAssertions(pool: Pool): AsyncGenerator<{
     `SELECT model_uid, capability_uri, source, confidence, observed_at, ttl_days
      FROM model_capability_assertions
      WHERE superseded_at IS NULL
-     ORDER BY model_uid, capability_uri;`,
+     ORDER BY model_uid, capability_uri;`
   );
 
   let currentModel: string | null = null;
@@ -352,7 +353,7 @@ async function writeProjection(
   pool: Pool,
   modelUid: string,
   fused: FusedCapability[],
-  stats: MaterialiseStats,
+  stats: MaterialiseStats
 ): Promise<void> {
   const kept = fused.filter((f) => f.confidence >= INCLUSION_THRESHOLD);
   stats.capabilitiesSuppressed += fused.length - kept.length;
@@ -370,7 +371,7 @@ async function writeProjection(
            capability_sources = '{}'::jsonb,
            capability_updated_at = NOW()
        WHERE uid = $1;`,
-      [modelUid],
+      [modelUid]
     );
     stats.modelsCleared += 1;
     return;
@@ -400,7 +401,13 @@ async function writeProjection(
            capabilities = $4::jsonb,
            capability_updated_at = NOW()
        WHERE uid = $5;`,
-      [uris, JSON.stringify(confObj), JSON.stringify(sourcesObj), JSON.stringify(legacyCaps), modelUid],
+      [
+        uris,
+        JSON.stringify(confObj),
+        JSON.stringify(sourcesObj),
+        JSON.stringify(legacyCaps),
+        modelUid,
+      ]
     );
   } else {
     await pool.query(
@@ -410,7 +417,7 @@ async function writeProjection(
            capability_sources = $3::jsonb,
            capability_updated_at = NOW()
        WHERE uid = $4;`,
-      [uris, JSON.stringify(confObj), JSON.stringify(sourcesObj), modelUid],
+      [uris, JSON.stringify(confObj), JSON.stringify(sourcesObj), modelUid]
     );
   }
 
@@ -424,7 +431,7 @@ export function writeProjectionForTest(
   pool: Pool,
   modelUid: string,
   fused: FusedCapability[],
-  stats: MaterialiseStats,
+  stats: MaterialiseStats
 ): Promise<void> {
   return writeProjection(pool, modelUid, fused, stats);
 }
@@ -469,7 +476,7 @@ export async function materialiseOneModel(pool: Pool, modelUid: string): Promise
     `SELECT model_uid, capability_uri, source, confidence, observed_at, ttl_days
      FROM model_capability_assertions
      WHERE superseded_at IS NULL AND model_uid = $1;`,
-    [modelUid],
+    [modelUid]
   );
 
   const byCapability = new Map<string, ActiveAssertion[]>();

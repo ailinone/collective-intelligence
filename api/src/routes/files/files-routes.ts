@@ -10,14 +10,14 @@
 /**
  * Files API Routes
  * OpenAI-compatible file upload/management endpoints
- * 
+ *
  * Features:
  * - Multi-format support (text, image, audio, video, PDF, etc.)
  * - GCS storage integration (no hardcoded bucket names)
  * - Purpose-based file management (fine-tune, assistants, vision, batch, etc.)
  * - Automatic format validation
  * - Metadata tracking
- * 
+ *
  * NO HARDCODED - All storage configuration from environment
  */
 
@@ -38,8 +38,9 @@ const log = logger.child({ module: 'files-routes' });
  */
 function getUserContext(request: FastifyRequest): RequestUserContext {
   const extendedRequest = request as ExtendedFastifyRequest;
-  const user = extendedRequest.user as { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
-  
+  const user = extendedRequest.user as
+    { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
+
   return {
     requestId: request.id,
     organizationId: extendedRequest.organizationId || user?.organizationId || '',
@@ -110,21 +111,31 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Files'],
       summary: 'Upload file',
-      description: 'Uploads a file that can be used for various purposes (fine-tuning, assistants, vision, batch processing, etc.). Files are stored securely in GCS.',
+      description:
+        'Uploads a file that can be used for various purposes (fine-tuning, assistants, vision, batch processing, etc.). Files are stored securely in GCS.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       consumes: ['multipart/form-data'],
       body: {
         type: 'object',
         required: ['file', 'purpose'],
         properties: {
-          file: { 
-            type: 'string', 
+          file: {
+            type: 'string',
             format: 'binary',
             description: 'File to upload (text, image, audio, video, PDF, etc.)',
           },
-          purpose: { 
-            type: 'string', 
-            enum: ['fine-tune', 'fine-tune-results', 'assistants', 'assistants_output', 'batch', 'batch_output', 'vision', 'user_data'],
+          purpose: {
+            type: 'string',
+            enum: [
+              'fine-tune',
+              'fine-tune-results',
+              'assistants',
+              'assistants_output',
+              'batch',
+              'batch_output',
+              'vision',
+              'user_data',
+            ],
             description: 'Purpose of the file',
           },
         },
@@ -139,9 +150,30 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             bytes: { type: 'integer', description: 'File size in bytes' },
             created_at: { type: 'integer', description: 'Unix timestamp of file creation' },
             filename: { type: 'string', description: 'Original filename' },
-            purpose: { type: 'string', enum: ['fine-tune', 'fine-tune-results', 'assistants', 'assistants_output', 'batch', 'batch_output', 'vision', 'user_data'], description: 'Purpose of the file' },
-            status: { type: 'string', enum: ['uploaded', 'processed', 'error'], description: 'File processing status' },
-            status_details: { type: 'string', nullable: true, description: 'Additional status information' },
+            purpose: {
+              type: 'string',
+              enum: [
+                'fine-tune',
+                'fine-tune-results',
+                'assistants',
+                'assistants_output',
+                'batch',
+                'batch_output',
+                'vision',
+                'user_data',
+              ],
+              description: 'Purpose of the file',
+            },
+            status: {
+              type: 'string',
+              enum: ['uploaded', 'processed', 'error'],
+              description: 'File processing status',
+            },
+            status_details: {
+              type: 'string',
+              nullable: true,
+              description: 'Additional status information',
+            },
           },
         },
         400: {
@@ -151,9 +183,16 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "missing_file", "missing_purpose", "invalid_file_format")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "missing_file", "missing_purpose", "invalid_file_format")',
+                },
               },
             },
           },
@@ -179,7 +218,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -193,7 +235,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -212,7 +257,15 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       try {
         // Parse multipart form data
         // Note: Requires @fastify/multipart plugin
-        const data = await (request as { file?: () => Promise<{ filename: string; toBuffer: () => Promise<Buffer>; fields: Record<string, { value?: string }> }> }).file?.();
+        const data = await (
+          request as {
+            file?: () => Promise<{
+              filename: string;
+              toBuffer: () => Promise<Buffer>;
+              fields: Record<string, { value?: string }>;
+            }>;
+          }
+        ).file?.();
         if (!data) {
           return reply.code(400).send({
             error: {
@@ -238,7 +291,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
           });
         }
 
-        log.info({ requestId, filename, purpose, size: fileBuffer.length }, 'File upload processing started');
+        log.info(
+          { requestId, filename, purpose, size: fileBuffer.length },
+          'File upload processing started'
+        );
 
         const headerIdempotencyKey =
           getHeaderValue(request.headers['idempotency-key']) ??
@@ -287,13 +343,14 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
           status_details: result.status_details,
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Unknown error';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'file_upload_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ requestId, error: errorMessage }, 'File upload failed');
         return reply.code(statusCode).send({
           error: {
@@ -311,28 +368,29 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Files'],
       summary: 'List files',
-      description: 'Returns a paginated list of files that belong to the user\'s organization. Supports filtering by purpose and cursor-based pagination. Use this endpoint to browse uploaded files for fine-tuning, assistants, batch processing, or vision tasks.',
+      description:
+        "Returns a paginated list of files that belong to the user's organization. Supports filtering by purpose and cursor-based pagination. Use this endpoint to browse uploaded files for fine-tuning, assistants, batch processing, or vision tasks.",
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       querystring: {
         type: 'object',
         required: [],
         properties: {
-          purpose: { 
+          purpose: {
             type: 'string',
             description: 'Filter files by purpose (e.g., "assistants", "fine-tune", "batch")',
           },
-          limit: { 
-            type: 'integer', 
-            minimum: 1, 
-            maximum: 100, 
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
             default: 20,
             description: 'Number of files to return (1-100, default: 20)',
           },
-          after: { 
+          after: {
             type: 'string',
             description: 'Cursor for pagination (after this file ID)',
           },
-          before: { 
+          before: {
             type: 'string',
             description: 'Cursor for pagination (before this file ID)',
           },
@@ -354,15 +412,35 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
                   id: { type: 'string', description: 'Unique file ID' },
                   object: { type: 'string', enum: ['file'], description: 'Object type identifier' },
                   bytes: { type: 'integer', description: 'File size in bytes' },
-                  created_at: { type: 'integer', description: 'Unix timestamp when the file was uploaded' },
+                  created_at: {
+                    type: 'integer',
+                    description: 'Unix timestamp when the file was uploaded',
+                  },
                   filename: { type: 'string', description: 'Original filename as uploaded' },
-                  purpose: { type: 'string', description: 'File purpose: assistants (for RAG/vector stores), fine-tune (for fine-tuning jobs), batch (for batch processing)' },
-                  status: { type: 'string', description: 'File processing status: uploaded (file received), processing (being processed), processed (ready for use), error (processing failed)' },
-                  status_details: { type: 'string', nullable: true, description: 'Detailed status information (error messages if status is error, processing progress, validation results, etc.)' },
+                  purpose: {
+                    type: 'string',
+                    description:
+                      'File purpose: assistants (for RAG/vector stores), fine-tune (for fine-tuning jobs), batch (for batch processing)',
+                  },
+                  status: {
+                    type: 'string',
+                    description:
+                      'File processing status: uploaded (file received), processing (being processed), processed (ready for use), error (processing failed)',
+                  },
+                  status_details: {
+                    type: 'string',
+                    nullable: true,
+                    description:
+                      'Detailed status information (error messages if status is error, processing progress, validation results, etc.)',
+                  },
                 },
               },
             },
-            has_more: { type: 'boolean', description: 'Whether there are more files available beyond this page (true if additional pages exist)' },
+            has_more: {
+              type: 'boolean',
+              description:
+                'Whether there are more files available beyond this page (true if additional pages exist)',
+            },
           },
         },
         400: {
@@ -372,7 +450,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -400,7 +481,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -410,7 +494,12 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Querystring: { purpose?: string; limit?: number; after?: string; before?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Querystring: { purpose?: string; limit?: number; after?: string; before?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
       const requestId = request.id;
       const userContext = getUserContext(request);
       const { purpose, limit = 20, after, before } = request.query;
@@ -433,13 +522,14 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
           has_more: result.has_more,
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Unknown error';
         const statusCode = extractStatusCode(error) ?? 500;
         const errorType = extractErrorType(error) ?? 'file_list_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'internal_error';
-        
+
         log.error({ requestId, error: errorMessage }, 'List files failed');
         return reply.code(statusCode).send({
           error: {
@@ -457,7 +547,8 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Files'],
       summary: 'Retrieve file metadata',
-      description: 'Returns detailed information about a specific file, including size, purpose, processing status, and metadata. Use this endpoint to check file upload status and retrieve file details before using it with assistants or fine-tuning jobs.',
+      description:
+        'Returns detailed information about a specific file, including size, purpose, processing status, and metadata. Use this endpoint to check file upload status and retrieve file details before using it with assistants or fine-tuning jobs.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -478,7 +569,12 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             filename: { type: 'string', description: 'Original filename' },
             purpose: { type: 'string', description: 'Purpose of the file' },
             status: { type: 'string', description: 'File processing status' },
-            status_details: { type: 'string', nullable: true, description: 'Additional status information (error messages, processing details, validation results, etc.)' },
+            status_details: {
+              type: 'string',
+              nullable: true,
+              description:
+                'Additional status information (error messages, processing details, validation results, etc.)',
+            },
           },
         },
         400: {
@@ -488,7 +584,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -516,7 +615,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "file_not_found")' },
               },
@@ -530,7 +632,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -540,7 +645,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const requestId = request.id;
       const userContext = getUserContext(request);
       const { file_id } = request.params;
@@ -565,13 +673,14 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
           status_details: result.status_details,
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Unknown error';
         const statusCode = extractStatusCode(error) ?? 404;
         const errorType = extractErrorType(error) ?? 'file_not_found_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'not_found';
-        
+
         log.error({ requestId, file_id, error: errorMessage }, 'Get file failed');
         return reply.code(statusCode).send({
           error: {
@@ -589,7 +698,8 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Files'],
       summary: 'Delete file',
-      description: 'Permanently delete a file from the system. This action cannot be undone. The file will be removed from all associated assistants and vector stores. File ID will no longer be valid after deletion.',
+      description:
+        'Permanently delete a file from the system. This action cannot be undone. The file will be removed from all associated assistants and vector stores. File ID will no longer be valid after deletion.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -615,7 +725,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -643,7 +756,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "file_not_found")' },
               },
@@ -657,7 +773,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -667,7 +786,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const requestId = request.id;
       const userContext = getUserContext(request);
       const { file_id } = request.params;
@@ -687,13 +809,14 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
           deleted: result.deleted,
         });
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Unknown error';
         const statusCode = extractStatusCode(error) ?? 404;
         const errorType = extractErrorType(error) ?? 'file_not_found_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'not_found';
-        
+
         log.error({ requestId, file_id, error: errorMessage }, 'Delete file failed');
         return reply.code(statusCode).send({
           error: {
@@ -711,7 +834,8 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Files'],
       summary: 'Retrieve file content',
-      description: 'Downloads and returns the binary content of a specific file. The response includes appropriate Content-Type and Content-Disposition headers for file download. Use this endpoint to retrieve the actual file data after uploading.',
+      description:
+        'Downloads and returns the binary content of a specific file. The response includes appropriate Content-Type and Content-Disposition headers for file download. Use this endpoint to retrieve the actual file data after uploading.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -722,7 +846,8 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       },
       response: {
         200: {
-          description: 'File content retrieved successfully (returns binary content with appropriate Content-Type header)',
+          description:
+            'File content retrieved successfully (returns binary content with appropriate Content-Type header)',
           type: 'string',
           format: 'binary',
         },
@@ -733,7 +858,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -761,7 +889,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "file_not_found")' },
               },
@@ -775,7 +906,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -785,7 +919,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const requestId = request.id;
       const userContext = getUserContext(request);
       const { file_id } = request.params;
@@ -805,13 +942,14 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
 
         return reply.send(result.content);
       } catch (error: unknown) {
-        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } = await import('@/utils/type-guards');
-        
+        const { getErrorMessage, extractStatusCode, extractErrorType, extractErrorCodeFromObject } =
+          await import('@/utils/type-guards');
+
         const errorMessage = getErrorMessage(error) || 'Unknown error';
         const statusCode = extractStatusCode(error) ?? 404;
         const errorType = extractErrorType(error) ?? 'file_not_found_error';
         const errorCode = extractErrorCodeFromObject(error) ?? 'not_found';
-        
+
         log.error({ requestId, file_id, error: errorMessage }, 'Get file content failed');
         return reply.code(statusCode).send({
           error: {
@@ -826,4 +964,3 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
 
   log.info('Files API routes registered successfully');
 }
-

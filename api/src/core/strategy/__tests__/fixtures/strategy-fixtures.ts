@@ -15,10 +15,7 @@
 
 import type { ModelScoreResult } from '../../../scoring/model-scorer';
 import { zeroBreakdown, type ScoreBreakdown } from '../../../scoring/score-breakdown';
-import type {
-  PlannerRouteMetadata,
-  StrategyPlanningContext,
-} from '../../strategy-types';
+import type { PlannerRouteMetadata, StrategyPlanningContext } from '../../strategy-types';
 
 /**
  * Builds a synthetic ModelScoreResult with custom overrides. Defaults
@@ -28,7 +25,7 @@ import type {
 export function makeResult(
   overrides: Partial<ModelScoreResult> & {
     breakdownOverrides?: Partial<ScoreBreakdown>;
-  } = {},
+  } = {}
 ): ModelScoreResult {
   const { breakdownOverrides, ...rest } = overrides;
   return {
@@ -145,7 +142,7 @@ export const LOCAL_PREFERRED_CONTEXT: StrategyPlanningContext = Object.freeze({
 
 /** Helper to build routesInfo map. */
 export function makeRoutesInfo(
-  entries: ReadonlyArray<PlannerRouteMetadata>,
+  entries: ReadonlyArray<PlannerRouteMetadata>
 ): ReadonlyMap<string, PlannerRouteMetadata> {
   const m = new Map<string, PlannerRouteMetadata>();
   for (const e of entries) m.set(e.routeId, e);

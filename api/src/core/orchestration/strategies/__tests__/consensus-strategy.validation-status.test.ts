@@ -80,7 +80,7 @@ describe('ConsensusStrategy — validationStatus', () => {
     const { strategy } = wireStrategy({
       responses: {
         'voter-a': { content: 'A'.repeat(120) },
-        'voter-b': { content: '' },               // empty → outlier
+        'voter-b': { content: '' }, // empty → outlier
         'voter-c': { content: '', success: false, error: 'mock_err' }, // exec_failed → outlier
       },
       evaluator: null,

@@ -51,7 +51,7 @@ const SELF_HOSTED_KINDS: ReadonlySet<string> = new Set(['local', 'self_hosted'])
 
 export function filterByExplicitPin(
   c: FilterCandidate,
-  pin: ExplicitPinInfo | null | undefined,
+  pin: ExplicitPinInfo | null | undefined
 ): FilterVerdict {
   if (!pin) return PASS;
 
@@ -92,7 +92,7 @@ export function filterByExplicitPin(
 
 export function filterByPrivacy(
   c: FilterCandidate,
-  privacyMode: PrivacyMode | undefined,
+  privacyMode: PrivacyMode | undefined
 ): FilterVerdict {
   if (privacyMode !== 'local_required') return PASS;
   if (!SELF_HOSTED_KINDS.has(c.route.routeKind)) {
@@ -109,7 +109,7 @@ export function filterByPrivacy(
 
 export function filterByCapability(
   c: FilterCandidate,
-  required: readonly string[] | undefined,
+  required: readonly string[] | undefined
 ): FilterVerdict {
   if (!required || required.length === 0) return PASS;
   for (const cap of required) {
@@ -152,7 +152,7 @@ function candidateSatisfiesCapability(c: FilterCandidate, cap: string): boolean 
 
 export function filterByContextWindow(
   c: FilterCandidate,
-  minContextWindow: number | undefined,
+  minContextWindow: number | undefined
 ): FilterVerdict {
   if (!minContextWindow || minContextWindow <= 0) return PASS;
   if (c.route.contextWindow < minContextWindow) {
@@ -203,7 +203,7 @@ export function filterByReadiness(c: FilterCandidate): FilterVerdict {
 
 export function filterByLifecycle(
   c: FilterCandidate,
-  options?: { allowPreview?: boolean; allowDeprecated?: boolean },
+  options?: { allowPreview?: boolean; allowDeprecated?: boolean }
 ): FilterVerdict {
   const lc = c.canonical.lifecycle;
   const allowPreview = options?.allowPreview === true;

@@ -26,11 +26,7 @@
  *   }
  */
 
-import type {
-  DeliveryContext,
-  DeliveryOutcome,
-  DestinationAdapter,
-} from './destination-adapter';
+import type { DeliveryContext, DeliveryOutcome, DestinationAdapter } from './destination-adapter';
 import { EgressBlockedError, safeFetch } from './safe-http';
 
 // ─── Config ─────────────────────────────────────────────────────────────
@@ -48,9 +44,7 @@ function parseConfig(raw: Record<string, unknown>): OtlpConfig | { error: string
     return { error: 'missing or invalid "endpoint"' };
   }
   const tracesPath =
-    typeof raw.tracesPath === 'string' && raw.tracesPath.length > 0
-      ? raw.tracesPath
-      : '/v1/traces';
+    typeof raw.tracesPath === 'string' && raw.tracesPath.length > 0 ? raw.tracesPath : '/v1/traces';
   const headers: Record<string, string> = {};
   if (raw.headers && typeof raw.headers === 'object' && !Array.isArray(raw.headers)) {
     for (const [k, v] of Object.entries(raw.headers)) {

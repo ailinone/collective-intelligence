@@ -61,7 +61,7 @@ const shadowCallsTotal = getOrCreate(
       name: 'coord_ensemble_shadow_calls_total',
       help: 'Total Phase 2c shadow-ensemble calls, labeled by outcome kind.',
       labelNames: ['strategy', 'decisionType', 'kind'],
-    }),
+    })
 );
 
 const shadowRoleMatchTotal = getOrCreate(
@@ -71,7 +71,7 @@ const shadowRoleMatchTotal = getOrCreate(
       name: 'coord_ensemble_shadow_role_match_total',
       help: 'Shadow vs heuristic role agreement (success calls only).',
       labelNames: ['strategy', 'decisionType', 'match'],
-    }),
+    })
 );
 
 const shadowLatencySeconds = getOrCreate(
@@ -84,7 +84,7 @@ const shadowLatencySeconds = getOrCreate(
       // Mock-cascade hits <10ms in steady-state; teacher-proxy hits 1-3s.
       // Keep the long tail bucket below the 5s default timeoutMs.
       buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
-    }),
+    })
 );
 
 const shadowConfidence = getOrCreate(
@@ -95,7 +95,7 @@ const shadowConfidence = getOrCreate(
       help: 'Winner-share confidence distribution from successful shadow calls.',
       labelNames: ['strategy', 'decisionType'],
       buckets: [0.1, 0.25, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.99],
-    }),
+    })
 );
 
 /**
@@ -106,7 +106,7 @@ const shadowConfidence = getOrCreate(
 export function recordShadowMetrics(
   strategy: string,
   decisionType: string,
-  snapshot: ShadowEnsembleSnapshot,
+  snapshot: ShadowEnsembleSnapshot
 ): void {
   const labels = { strategy, decisionType };
 

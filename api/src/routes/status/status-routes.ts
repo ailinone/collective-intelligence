@@ -24,7 +24,8 @@ export const registerStatusRoutes: FastifyPluginAsync = async (fastify) => {
     const dbHealthy = await checkDatabaseHealth();
     const redisHealth = await checkRedisHealth();
     const openCriticalBreakers = Object.values(circuitBreakers.getAllStatus()).filter(
-      (breaker) => breaker.state === 'OPEN' && (breaker.name === 'database' || breaker.name === 'redis')
+      (breaker) =>
+        breaker.state === 'OPEN' && (breaker.name === 'database' || breaker.name === 'redis')
     );
 
     const healthy = dbHealthy && openCriticalBreakers.length === 0;
@@ -45,7 +46,8 @@ export const registerStatusRoutes: FastifyPluginAsync = async (fastify) => {
     const dbHealthy = await checkDatabaseHealth();
     const redisHealth = await checkRedisHealth();
     const openCriticalBreakers = Object.values(circuitBreakers.getAllStatus()).filter(
-      (breaker) => breaker.state === 'OPEN' && (breaker.name === 'database' || breaker.name === 'redis')
+      (breaker) =>
+        breaker.state === 'OPEN' && (breaker.name === 'database' || breaker.name === 'redis')
     );
 
     const ready = dbHealthy && openCriticalBreakers.length === 0;

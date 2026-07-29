@@ -33,7 +33,13 @@ describe('01C.1B-C3-DRYRUN-PARITY-GATE — subset + mode', () => {
     expect(isC3ParityAllowedMode('real_in_process_entrypoint_parity')).toBe(true);
   });
   it('case 3: forbidden modes are rejected', () => {
-    for (const m of ['offline_only_parity', 'synthetic_only_parity', 'local_adapter_only_parity', 'fingerprint_only_without_structural_parity', 'structural_only_without_fingerprint_parity']) {
+    for (const m of [
+      'offline_only_parity',
+      'synthetic_only_parity',
+      'local_adapter_only_parity',
+      'fingerprint_only_without_structural_parity',
+      'structural_only_without_fingerprint_parity',
+    ]) {
       expect(isC3ParityForbiddenMode(m)).toBe(true);
       expect(isC3ParityAllowedMode(m)).toBe(false);
     }

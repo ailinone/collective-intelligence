@@ -36,12 +36,10 @@ function buildCandidate(
   overrides: {
     route?: Partial<ProviderModelRoute>;
     canonical?: Partial<CanonicalModel>;
-  } = {},
+  } = {}
 ): FilterCandidate {
   const registry = buildFixtureRegistry();
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   const oid = snap?.uid ?? `${providerId}:${modelId}`;
   const offering = registry.lookupOffering(oid)!;
   const canonical = registry.lookupCanonicalModel(offering.canonicalModelId)!;

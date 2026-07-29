@@ -21,9 +21,7 @@ import {
   getProviderHealthRegistry,
   resetProviderHealthRegistryForTesting,
 } from '../provider-health-registry';
-import {
-  resetHealthSyncBusForTesting,
-} from '../health-sync-bus';
+import { resetHealthSyncBusForTesting } from '../health-sync-bus';
 import type { ProviderDiscoverySnapshot } from '../types';
 
 function buildSnapshot(
@@ -31,7 +29,7 @@ function buildSnapshot(
     providerId: string;
     available: boolean;
     models?: Array<{ modelId: string; family?: string; contextWindow?: number }>;
-  }>,
+  }>
 ): ProviderDiscoverySnapshot {
   const map = new Map<string, ReturnType<typeof makeResult>>();
   for (const r of results) {
@@ -47,7 +45,11 @@ function buildSnapshot(
   };
 }
 
-function makeResult(r: { providerId: string; available: boolean; models?: Array<{ modelId: string; family?: string; contextWindow?: number }> }) {
+function makeResult(r: {
+  providerId: string;
+  available: boolean;
+  models?: Array<{ modelId: string; family?: string; contextWindow?: number }>;
+}) {
   return {
     providerId: r.providerId,
     status: r.available ? ('available' as const) : ('unavailable' as const),
@@ -200,12 +202,10 @@ describe('OperationalCandidatePool', () => {
   it('addCandidatesByProvider merges without overwriting', () => {
     const pool = getOperationalCandidatePool();
     pool.rebuild({
-      snapshot: buildSnapshot([
-        { providerId: 'foo', available: true, models: [{ modelId: 'a' }] },
-      ]),
+      snapshot: buildSnapshot([{ providerId: 'foo', available: true, models: [{ modelId: 'a' }] }]),
     });
     pool.addCandidatesByProvider('foo', [
-      { modelId: 'a' },  // already exists, should not duplicate
+      { modelId: 'a' }, // already exists, should not duplicate
       { modelId: 'b' },
     ]);
     expect(pool.size()).toBe(2);

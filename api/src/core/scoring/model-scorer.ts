@@ -28,19 +28,9 @@
 import type { CanonicalModel } from '../registry/canonical-model';
 import type { ModelProviderOffering } from '../registry/model-offering';
 import type { ProviderModelRoute } from '../registry/model-route';
-import type {
-  ExplicitPinInfo,
-  PrivacyMode,
-} from '../registry/types';
-import {
-  scoreFreshness,
-  type FreshnessLifecycle,
-} from './freshness-scorer';
-import {
-  applyWeights,
-  zeroBreakdown,
-  type ScoreBreakdown,
-} from './score-breakdown';
+import type { ExplicitPinInfo, PrivacyMode } from '../registry/types';
+import { scoreFreshness, type FreshnessLifecycle } from './freshness-scorer';
+import { applyWeights, zeroBreakdown, type ScoreBreakdown } from './score-breakdown';
 import {
   DEFAULT_SCORING_POLICY,
   costSensitivityToWeightMultiplier,
@@ -55,10 +45,10 @@ import {
 // Each entry says: "if this capability URI is required, check this
 // boolean field on the route." Multiple URIs may map to the same flag.
 
-const CAPABILITY_URI_TO_ROUTE_FLAG: ReadonlyMap<
+const CAPABILITY_URI_TO_ROUTE_FLAG: ReadonlyMap<string, keyof ProviderModelRoute> = new Map<
   string,
   keyof ProviderModelRoute
-> = new Map<string, keyof ProviderModelRoute>([
+>([
   ['streaming', 'supportsStreaming'],
   ['tools', 'supportsTools'],
   ['function_calling', 'supportsTools'],
@@ -80,10 +70,7 @@ const CAPABILITY_URI_TO_ROUTE_FLAG: ReadonlyMap<
   ['speech-to-text', 'supportsAudio'],
 ]);
 
-const SELF_HOSTED_KINDS: ReadonlySet<string> = new Set([
-  'local',
-  'self_hosted',
-]);
+const SELF_HOSTED_KINDS: ReadonlySet<string> = new Set(['local', 'self_hosted']);
 
 // ─── Inputs ─────────────────────────────────────────────────────────────
 
@@ -125,7 +112,7 @@ interface CapabilityFitness {
 
 function capabilityFitness(
   route: ProviderModelRoute,
-  required: ReadonlyArray<string>,
+  required: ReadonlyArray<string>
 ): CapabilityFitness {
   if (required.length === 0) return { fit: 1, missing: [] };
   let satisfied = 0;
@@ -150,11 +137,7 @@ function capabilityFitness(
 
 // ─── Helper: normalise (lower is better → score) ────────────────────────
 
-function inverseNormalize(
-  value: number | null,
-  ceiling: number,
-  fallback: number,
-): number {
+function inverseNormalize(value: number | null, ceiling: number, fallback: number): number {
   if (value === null || !Number.isFinite(value)) return fallback;
   if (ceiling <= 0) return fallback;
   const ratio = value / ceiling;
@@ -170,9 +153,7 @@ function clamp01(n: number): number {
 
 // ─── Helper: lifecycle adapter ──────────────────────────────────────────
 
-function asFreshnessLifecycle(
-  lc: CanonicalModel['lifecycle'],
-): FreshnessLifecycle {
+function asFreshnessLifecycle(lc: CanonicalModel['lifecycle']): FreshnessLifecycle {
   // CanonicalLifecycle from MVP 1: 'preview' | 'current' | 'deprecated' | 'retired'.
   // FreshnessLifecycle accepts those plus 'legacy' and 'unknown'.
   return lc;
@@ -185,10 +166,7 @@ interface PinDecision {
   readonly rejectionReason: string | null;
 }
 
-function evaluatePin(
-  candidate: ModelScoringCandidate,
-  pin: ExplicitPinInfo,
-): PinDecision {
+function evaluatePin(candidate: ModelScoringCandidate, pin: ExplicitPinInfo): PinDecision {
   // Match by routeId first (most specific).
   if (pin.routeId) {
     if (candidate.route.routeId !== pin.routeId) {
@@ -236,7 +214,7 @@ function evaluatePin(
  */
 export function scoreModelCandidate(
   candidate: ModelScoringCandidate,
-  context: ModelScoringContext = {},
+  context: ModelScoringContext = {}
 ): ModelScoreResult {
   const policy = context.policy ?? DEFAULT_SCORING_POLICY;
   const reasons: string[] = [];
@@ -294,7 +272,7 @@ export function scoreModelCandidate(
   if (context.minContextWindow && context.minContextWindow > 0) {
     if (candidate.route.contextWindow < context.minContextWindow) {
       reasons.push(
-        `context_window_below_min:${candidate.route.contextWindow}<${context.minContextWindow}`,
+        `context_window_below_min:${candidate.route.contextWindow}<${context.minContextWindow}`
       );
       contextFitScore = 0;
     } else {
@@ -335,18 +313,13 @@ export function scoreModelCandidate(
   const latencyScore = inverseNormalize(
     candidate.route.latencyP95Ms,
     5_000,
-    /* fallback when unknown */ 0.5,
+    /* fallback when unknown */ 0.5
   );
 
   // ─── Cost efficiency (cheaper is better) ─────────────────────────────
   // Ceiling: $50 per 1M tokens. Beyond that → 0.
-  const totalCostPer1M =
-    candidate.route.inputCostPer1M + candidate.route.outputCostPer1M;
-  const costEfficiency = inverseNormalize(
-    totalCostPer1M,
-    50,
-    /* fallback */ 0.5,
-  );
+  const totalCostPer1M = candidate.route.inputCostPer1M + candidate.route.outputCostPer1M;
+  const costEfficiency = inverseNormalize(totalCostPer1M, 50, /* fallback */ 0.5);
 
   // ─── Local preference boost ──────────────────────────────────────────
   let localPreference = 0;
@@ -359,8 +332,7 @@ export function scoreModelCandidate(
   // ─── Risk penalty ────────────────────────────────────────────────────
   // Preview lifecycle → penalty. Deprecated/legacy already handled by
   // freshness (which zeroes the score when not allowed).
-  const riskPenalty =
-    candidate.canonicalModel.lifecycle === 'preview' ? 0.5 : 0;
+  const riskPenalty = candidate.canonicalModel.lifecycle === 'preview' ? 0.5 : 0;
 
   // ─── Build breakdown ─────────────────────────────────────────────────
   const breakdown: ScoreBreakdown = {

@@ -106,4 +106,3 @@ describe('Jina tool routes', () => {
     });
   });
 });
-

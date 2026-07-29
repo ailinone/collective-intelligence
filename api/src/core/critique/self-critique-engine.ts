@@ -24,13 +24,7 @@
  * enabling self-improvement and quality assurance.
  */
 
-import type {
-  ChatRequest,
-  ChatResponse,
-  ChatMessage,
-  Model,
-  OrchestrationContext,
-} from '@/types';
+import type { ChatRequest, ChatResponse, ChatMessage, Model, OrchestrationContext } from '@/types';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { safeResponseContent } from '@/core/orchestration/base-strategy';
@@ -116,10 +110,7 @@ export class SelfCritiqueEngine {
     );
 
     // Get critique model
-    const critiqueModel = await this.selectCritiqueModel(
-      originalRequest.model,
-      mergedOptions
-    );
+    const critiqueModel = await this.selectCritiqueModel(originalRequest.model, mergedOptions);
 
     // Perform critique
     const critique = await this.performCritique(
@@ -186,12 +177,9 @@ export class SelfCritiqueEngine {
     );
 
     // Record critique insights for continuous learning
-    this.recordCritiqueLearning(
-      context,
-      critique,
-      !!improvedResponse,
-      totalCost
-    ).catch((err) => log.error({ error: getErrorMessage(err) }, 'Failed to record critique learning'));
+    this.recordCritiqueLearning(context, critique, !!improvedResponse, totalCost).catch((err) =>
+      log.error({ error: getErrorMessage(err) }, 'Failed to record critique learning')
+    );
 
     return result;
   }
@@ -214,10 +202,7 @@ export class SelfCritiqueEngine {
     let currentContent = this.extractContent(response);
     let lastCritique: CritiqueResult['critique'] | null = null;
 
-    const critiqueModel = await this.selectCritiqueModel(
-      originalRequest.model,
-      mergedOptions
-    );
+    const critiqueModel = await this.selectCritiqueModel(originalRequest.model, mergedOptions);
 
     while (iterations < mergedOptions.maxIterations!) {
       iterations++;
@@ -377,10 +362,7 @@ Respond ONLY with valid JSON.`,
       critiqueResponse.usage?.completion_tokens || 0
     );
 
-    return this.parseCritiqueResponse(
-      this.extractContent(critiqueResponse),
-      cost
-    );
+    return this.parseCritiqueResponse(this.extractContent(critiqueResponse), cost);
   }
 
   /**
@@ -453,10 +435,11 @@ Respond ONLY with valid JSON.`,
     context: OrchestrationContext
   ): string {
     // Extract user's original question
-    const userMessages = originalRequest.messages
-      ?.filter((m) => m.role === 'user')
-      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
-      .join('\n') || '';
+    const userMessages =
+      originalRequest.messages
+        ?.filter((m) => m.role === 'user')
+        .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+        .join('\n') || '';
 
     return `Critically evaluate the following AI response.
 
@@ -550,9 +533,23 @@ Do not mention this critique or that you are improving - just provide the better
 
       // JSON.parse returns `unknown` — narrow each accessed field structurally.
       const parsed: unknown = JSON.parse(jsonStr);
-      const parsedObj: { strengths?: unknown; weaknesses?: unknown; improvements?: unknown; assessment?: unknown; overall?: unknown; qualityScore?: unknown } =
+      const parsedObj: {
+        strengths?: unknown;
+        weaknesses?: unknown;
+        improvements?: unknown;
+        assessment?: unknown;
+        overall?: unknown;
+        qualityScore?: unknown;
+      } =
         typeof parsed === 'object' && parsed !== null
-          ? (parsed as { strengths?: unknown; weaknesses?: unknown; improvements?: unknown; assessment?: unknown; overall?: unknown; qualityScore?: unknown })
+          ? (parsed as {
+              strengths?: unknown;
+              weaknesses?: unknown;
+              improvements?: unknown;
+              assessment?: unknown;
+              overall?: unknown;
+              qualityScore?: unknown;
+            })
           : {};
 
       const stringArray = (v: unknown): string[] =>
@@ -581,10 +578,7 @@ Do not mention this critique or that you are improving - just provide the better
         cost,
       };
     } catch (error) {
-      log.warn(
-        { error: getErrorMessage(error) },
-        'Failed to parse critique response'
-      );
+      log.warn({ error: getErrorMessage(error) }, 'Failed to parse critique response');
 
       return {
         strengths: [],
@@ -681,4 +675,3 @@ export function getSelfCritiqueEngine(): SelfCritiqueEngine {
   }
   return critiqueEngineInstance;
 }
-

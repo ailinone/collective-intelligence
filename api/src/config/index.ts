@@ -301,7 +301,7 @@ function buildProviderConfig(type: SecretsProviderType, priority: number): Secre
         process.env.GCP_PROJECT ||
         process.env.GOOGLE_CLOUD_PROJECT ||
         '';
-      
+
       const secretPrefix = process.env.GCP_SECRETS_PREFIX || 'ailin';
       const credentialsFile =
         process.env.GCP_SECRETS_CREDENTIALS_FILE ||
@@ -341,13 +341,16 @@ function parseSecretsProviders(): SecretsProviderConfig[] {
     // Try GCP_PROJECT_ID (common env var)
     gcpProjectId = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
     // Default to known project if credentials are available
-    if (!gcpProjectId && (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GCP_APPLICATION_CREDENTIALS)) {
+    if (
+      !gcpProjectId &&
+      (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GCP_APPLICATION_CREDENTIALS)
+    ) {
       gcpProjectId = process.env.GCP_PROJECT; // No baked-in default — set a GCP project env var
       // Cannot use logger here to avoid circular dependency
       // Logging will happen after config initialization
     }
   }
-  
+
   const inferredDefault = gcpProjectId ? 'gcp' : 'env';
   const allowedProviders = new Set<SecretsProviderType>(['vault', 'aws', 'azure', 'gcp', 'env']);
   const primaryRaw = (process.env.SECRETS_PROVIDER_PRIMARY || inferredDefault).trim().toLowerCase();
@@ -367,9 +370,7 @@ function parseSecretsProviders(): SecretsProviderConfig[] {
     .map((value) => value as SecretsProviderType);
 
   const effectiveFallback =
-    strictSecretsProd && primary !== 'env'
-      ? fallback.filter((value) => value !== 'env')
-      : fallback;
+    strictSecretsProd && primary !== 'env' ? fallback.filter((value) => value !== 'env') : fallback;
 
   const uniqueOrder = Array.from(
     new Set([primary, ...effectiveFallback].filter((value) => value.length > 0))
@@ -546,7 +547,8 @@ const redisQueueSentinelEnabled = getEnvBoolean(
 const redisQueueSentinels = parseSentinelList(process.env.REDIS_QUEUE_SENTINELS) ?? redisSentinels;
 const redisQueueSentinelName = process.env.REDIS_QUEUE_SENTINEL_NAME ?? redisSentinelName;
 
-const defaultServiceIdentifier = process.env.SERVICE_NAME || process.env.OTEL_SERVICE_NAME || 'ci-api';
+const defaultServiceIdentifier =
+  process.env.SERVICE_NAME || process.env.OTEL_SERVICE_NAME || 'ci-api';
 const defaultJwtIssuer = process.env.JWT_ISSUER || defaultServiceIdentifier;
 const defaultJwtAudience = process.env.JWT_AUDIENCE || defaultServiceIdentifier;
 const defaultJwtAlgorithms = getEnvArray('JWT_ALLOWED_ALGORITHMS', ['HS256']);
@@ -919,47 +921,71 @@ export const config: AppConfig = deepFreeze({
     //    does not cover these shapes today, so they remain a switch-case +
     //    config entry exception until a richer class is defined.
     // PaddleOCR: document OCR
-    ...(process.env.LOCAL_OCR_URL ? [{
-      name: 'local-ocr',
-      apiKey: 'local',
-      baseUrl: process.env.LOCAL_OCR_URL,
-      enabled: true,
-    }] : []),
+    ...(process.env.LOCAL_OCR_URL
+      ? [
+          {
+            name: 'local-ocr',
+            apiKey: 'local',
+            baseUrl: process.env.LOCAL_OCR_URL,
+            enabled: true,
+          },
+        ]
+      : []),
     // Docling: PDF → structured markdown/JSON
-    ...(process.env.LOCAL_DOCLING_URL ? [{
-      name: 'local-docling',
-      apiKey: 'local',
-      baseUrl: process.env.LOCAL_DOCLING_URL,
-      enabled: true,
-    }] : []),
+    ...(process.env.LOCAL_DOCLING_URL
+      ? [
+          {
+            name: 'local-docling',
+            apiKey: 'local',
+            baseUrl: process.env.LOCAL_DOCLING_URL,
+            enabled: true,
+          },
+        ]
+      : []),
     // Piper TTS: ultra-fast CPU-native TTS
-    ...(process.env.LOCAL_PIPER_URL ? [{
-      name: 'local-piper',
-      apiKey: 'local',
-      baseUrl: process.env.LOCAL_PIPER_URL,
-      enabled: true,
-    }] : []),
+    ...(process.env.LOCAL_PIPER_URL
+      ? [
+          {
+            name: 'local-piper',
+            apiKey: 'local',
+            baseUrl: process.env.LOCAL_PIPER_URL,
+            enabled: true,
+          },
+        ]
+      : []),
     // NLLB-200: neural machine translation (200 languages)
-    ...(process.env.LOCAL_NLLB_URL ? [{
-      name: 'local-nllb',
-      apiKey: 'local',
-      baseUrl: process.env.LOCAL_NLLB_URL,
-      enabled: true,
-    }] : []),
+    ...(process.env.LOCAL_NLLB_URL
+      ? [
+          {
+            name: 'local-nllb',
+            apiKey: 'local',
+            baseUrl: process.env.LOCAL_NLLB_URL,
+            enabled: true,
+          },
+        ]
+      : []),
     // CosyVoice2: multilingual streaming TTS (9 languages, 150ms)
-    ...(process.env.LOCAL_COSYVOICE_URL ? [{
-      name: 'local-cosyvoice',
-      apiKey: 'local',
-      baseUrl: process.env.LOCAL_COSYVOICE_URL,
-      enabled: true,
-    }] : []),
+    ...(process.env.LOCAL_COSYVOICE_URL
+      ? [
+          {
+            name: 'local-cosyvoice',
+            apiKey: 'local',
+            baseUrl: process.env.LOCAL_COSYVOICE_URL,
+            enabled: true,
+          },
+        ]
+      : []),
 
     // ── Self-Hosted Inference (sidecar containers) ──────────────────
-    ...(process.env.SELF_HOSTED_STT_URL || process.env.SELF_HOSTED_TTS_URL ? [{
-      name: 'self-hosted',
-      apiKey: 'local',
-      enabled: true,
-    }] : []),
+    ...(process.env.SELF_HOSTED_STT_URL || process.env.SELF_HOSTED_TTS_URL
+      ? [
+          {
+            name: 'self-hosted',
+            apiKey: 'local',
+            enabled: true,
+          },
+        ]
+      : []),
   ],
 
   orchestration: {
@@ -975,7 +1001,9 @@ export const config: AppConfig = deepFreeze({
     triageModel: getEnvOptional('ORCHESTRATION_TRIAGE_MODEL'),
     // Triage strategy: 'speed' | 'cost' | 'quality' | 'balanced' | 'adaptive'
     // Determines how triage models are selected dynamically based on capabilities
-    triageStrategy: (process.env.ORCHESTRATION_TRIAGE_STRATEGY as 'speed' | 'cost' | 'quality' | 'balanced' | 'adaptive') || 'balanced',
+    triageStrategy:
+      (process.env.ORCHESTRATION_TRIAGE_STRATEGY as
+        'speed' | 'cost' | 'quality' | 'balanced' | 'adaptive') || 'balanced',
     // Collective triage: number of models for collective triage (1-3, default: 1)
     // Multiple models will make independent decisions and reach consensus through voting
     triageCollective: getEnvNumber('ORCHESTRATION_TRIAGE_COLLECTIVE', 1),
@@ -1195,7 +1223,9 @@ export function validateConfig(): void {
       (algorithm) => !supportedJwtAlgorithms.has(algorithm)
     );
     if (invalidAlgorithms.length > 0) {
-      errors.push(`JWT_ALLOWED_ALGORITHMS contains unsupported values: ${invalidAlgorithms.join(', ')}`);
+      errors.push(
+        `JWT_ALLOWED_ALGORITHMS contains unsupported values: ${invalidAlgorithms.join(', ')}`
+      );
     }
   }
 
@@ -1205,7 +1235,10 @@ export function validateConfig(): void {
 
   if (config.env === 'production' && config.featureFlags.strictSecretsProd) {
     const requiredSecretKeys = ['JWT_SECRET'];
-    if (config.security.federation.allowSharedSecretFallback && !config.security.federation.jwksUri) {
+    if (
+      config.security.federation.allowSharedSecretFallback &&
+      !config.security.federation.jwksUri
+    ) {
       requiredSecretKeys.push('AILIN_SHARED_JWT_SECRET');
     }
     const insecureValuePattern = /(change[-_]?me|mock|placeholder|example|dummy|test-only)/i;
@@ -1229,7 +1262,7 @@ export function validateConfig(): void {
   ) {
     console.warn(
       'WARNING: AUTH_FEDERATION_ENABLED=true but neither AUTH_FEDERATION_JWKS_URI nor ' +
-      'AILIN_SHARED_JWT_SECRET is set. Federated token validation will be disabled at runtime.'
+        'AILIN_SHARED_JWT_SECRET is set. Federated token validation will be disabled at runtime.'
     );
   }
 
@@ -1481,9 +1514,7 @@ export function validateConfig(): void {
     config.auth.email.provider === 'sendgrid' &&
     !config.auth.email.sendgrid?.apiKey
   ) {
-    console.warn(
-      'WARNING: SendGrid API key not configured. Email code authentication will fail.'
-    );
+    console.warn('WARNING: SendGrid API key not configured. Email code authentication will fail.');
   }
 
   if (config.auth.email.provider === 'smtp') {
@@ -1516,4 +1547,3 @@ export const isProduction = config.env === 'production';
  * Is test environment
  */
 export const isTest = config.env === 'test';
-

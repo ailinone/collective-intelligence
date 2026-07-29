@@ -89,14 +89,14 @@ function lookupLiveState(
   store: LiveChatOperabilityStore,
   providerId: string,
   routeId: string,
-  modelId: string,
+  modelId: string
 ) {
   const exact = store.get({ providerId, routeId, modelId });
   if (exact) return exact;
   const byModel = store.getByModel(providerId, modelId);
   if (byModel.length > 0) {
     return [...byModel].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     )[0];
   }
   // 01C.1B-F — provider-level escalation. When no exact / by-model
@@ -108,12 +108,9 @@ function lookupLiveState(
   const providerStates = allStates.filter((s) => s.providerId === p);
   if (providerStates.length === 0) return undefined;
   const mostRecent = [...providerStates].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   )[0];
-  if (
-    mostRecent.lastErrorKind &&
-    PROVIDER_LEVEL_KINDS.has(mostRecent.lastErrorKind)
-  ) {
+  if (mostRecent.lastErrorKind && PROVIDER_LEVEL_KINDS.has(mostRecent.lastErrorKind)) {
     return mostRecent;
   }
   return undefined;
@@ -140,7 +137,7 @@ function lookupLiveState(
  */
 export function filterCandidatesByLiveOperability(
   candidates: readonly ModelCandidate[],
-  policy: LiveOperabilityFilterPolicy = DEFAULT_LIVE_OPERABILITY_POLICY,
+  policy: LiveOperabilityFilterPolicy = DEFAULT_LIVE_OPERABILITY_POLICY
 ): FilterResult {
   if (!policy.requireLiveChatOperability) {
     return { allowed: candidates, rejected: [], policyApplied: policy };
@@ -239,7 +236,7 @@ export function filterCandidatesByLiveOperability(
  * surfacing on the plan response.
  */
 export function summarizeLiveOperabilitySnapshot(
-  store: LiveChatOperabilityStore = getLiveChatOperabilityStore(),
+  store: LiveChatOperabilityStore = getLiveChatOperabilityStore()
 ): {
   readonly totalStates: number;
   readonly chatReadyCount: number;

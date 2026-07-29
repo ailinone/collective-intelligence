@@ -154,7 +154,7 @@ export class BroadcastOutboxPoller {
 
     // ── Phase 2: DISPATCH (no transaction held across HTTP) ─────────────
     const envelopeResults = await Promise.allSettled(
-      claimed.map((row) => this.processEnvelope(row)),
+      claimed.map((row) => this.processEnvelope(row))
     );
 
     const successfulOutcomes: EnvelopeOutcome[] = [];
@@ -173,10 +173,7 @@ export class BroadcastOutboxPoller {
         // Observe end-to-end lag (envelope origin → drain). Excludes adapter
         // latency, which is already covered by deliveryLatency.
         if (outcome.occurredAt) {
-          const lagS = Math.max(
-            0,
-            (drainedAt.getTime() - outcome.occurredAt.getTime()) / 1000,
-          );
+          const lagS = Math.max(0, (drainedAt.getTime() - outcome.occurredAt.getTime()) / 1000);
           broadcastMetrics.outboxLag.observe(lagS);
         }
       } else {
@@ -194,7 +191,7 @@ export class BroadcastOutboxPoller {
             err: reason instanceof Error ? reason.message : String(reason),
             stack: reason instanceof Error ? reason.stack : undefined,
           },
-          'envelope fan-out failed — resetting drained_at for retry',
+          'envelope fan-out failed — resetting drained_at for retry'
         );
       }
     }
@@ -243,7 +240,7 @@ export class BroadcastOutboxPoller {
 
         return claimed;
       },
-      { timeout: 5_000 },
+      { timeout: 5_000 }
     );
   }
 
@@ -289,9 +286,7 @@ export class BroadcastOutboxPoller {
    * so this function only throws on catastrophic issues (bad JSON, resolver
    * DB error). Those bubble up and trigger stranded-reclaim.
    */
-  private async processEnvelope(
-    row: ClaimedOutboxRow,
-  ): Promise<EnvelopeOutcome> {
+  private async processEnvelope(row: ClaimedOutboxRow): Promise<EnvelopeOutcome> {
     const envelope = this.parseRow(row);
     const occurredAt = new Date(envelope.occurredAt);
     const destinations = await this.resolver.resolveForEnvelope(envelope, this.db);
@@ -312,7 +307,7 @@ export class BroadcastOutboxPoller {
     // (envelope_id, destination_id, attempt_number). See the header
     // "Why the refactor" block for the at-least-once trade-off.
     const results = await Promise.allSettled(
-      destinations.map((d) => this.executor.deliverOne(envelope, d)),
+      destinations.map((d) => this.executor.deliverOne(envelope, d))
     );
 
     let attempted = 0;
@@ -334,14 +329,14 @@ export class BroadcastOutboxPoller {
         // Per contract the executor shouldn't throw — surface this loudly.
         log.error(
           { envelopeId: envelope.envelopeId, err: String(r.reason) },
-          'executor threw — contract violation',
+          'executor threw — contract violation'
         );
       }
     }
     if (breakerOpen) {
       log.warn(
         { envelopeId: envelope.envelopeId, retryAfterMs: breakerOpen.retryAfterMs },
-        'KEK breaker open during fan-out — envelope will be reclaimed',
+        'KEK breaker open during fan-out — envelope will be reclaimed'
       );
       throw breakerOpen;
     }
@@ -366,7 +361,7 @@ export class BroadcastOutboxPoller {
       const err = e as Error;
       log.error(
         { envelopeId: row.envelope_id, err: err.message },
-        'stored envelope failed schema parse — will be reclaimed',
+        'stored envelope failed schema parse — will be reclaimed'
       );
       throw err;
     }

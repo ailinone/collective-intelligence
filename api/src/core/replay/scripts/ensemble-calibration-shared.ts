@@ -26,7 +26,7 @@ import type { HistoricalReplayExecution } from '../historical-replay-types';
  */
 export function buildCalibrationExamplesFromTrain(
   train: readonly HistoricalReplayExecution[],
-  trainHistory: HistoricalContributionResult,
+  trainHistory: HistoricalContributionResult
 ): readonly EnsembleCalibrationExample[] {
   const profileIdx = new Map<string, ModelTaskPerformanceProfile>();
   for (const p of trainHistory.modelProfiles) {
@@ -113,7 +113,7 @@ interface BaselineSlot {
 }
 
 function computeSingleBaselinesByTask(
-  train: readonly HistoricalReplayExecution[],
+  train: readonly HistoricalReplayExecution[]
 ): Map<string, BaselineSlot> {
   const buckets = new Map<string, { judges: number[]; costs: number[] }>();
   for (const t of train) {

@@ -71,7 +71,8 @@ export class SecretsManager {
       if (result.status === 'fulfilled') {
         succeeded.push(provider);
       } else {
-        const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        const errorMsg =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
         failed.push({ id: provider.id, type: provider.type, error: errorMsg });
         logger.error(
           { provider: provider.id, type: provider.type, error: errorMsg },
@@ -83,7 +84,7 @@ export class SecretsManager {
     if (succeeded.length === 0) {
       throw new Error(
         `All secrets providers failed to initialize.\n` +
-        failed.map((f) => `  - ${f.id} (${f.type}): ${f.error}`).join('\n')
+          failed.map((f) => `  - ${f.id} (${f.type}): ${f.error}`).join('\n')
       );
     }
 

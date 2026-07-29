@@ -48,9 +48,7 @@ import {
   persistDebateRun,
   type DebateSignalInput,
 } from '@/core/coordination/collective-run-repository';
-import {
-  buildEnsembleRequest,
-} from '@/core/coordination/ensemble-coordinator-client';
+import { buildEnsembleRequest } from '@/core/coordination/ensemble-coordinator-client';
 import {
   runEnsembleInShadow,
   type ShadowEnsembleSnapshot,
@@ -95,27 +93,17 @@ export class DebateStrategy extends BaseStrategy {
       id: 'debate',
       name: 'debate',
       displayName: 'Multi-Turn Debate',
-      description:
-        'Multiple models engage in structured debate to arrive at best solution',
+      description: 'Multiple models engage in structured debate to arrive at best solution',
       minModels: 3,
       maxModels: 5,
       estimatedCostMultiplier: 4.0,
       estimatedQualityBoost: 0.35,
       estimatedDurationMultiplier: 5.0,
-      suitableFor: [
-        'analysis',
-        'code-review',
-        'refactoring',
-        'debugging',
-        'documentation',
-      ],
+      suitableFor: ['analysis', 'code-review', 'refactoring', 'debugging', 'documentation'],
     };
   }
 
-  async execute(
-    request: ChatRequest,
-    context: OrchestrationContext
-  ): Promise<OrchestrationResult> {
+  async execute(request: ChatRequest, context: OrchestrationContext): Promise<OrchestrationResult> {
     const DEBATE_TIMEOUT_MS = Number(process.env.DEBATE_TIMEOUT_MS ?? 90_000);
     return Promise.race([
       this.executeCore(request, context),
@@ -146,17 +134,18 @@ export class DebateStrategy extends BaseStrategy {
     const debatePlan = this.buildDebatePlan(request, context);
 
     // 1. Select debate participants (3-5 diverse models)
-    const participants = await this.selectParticipants(
-      context,
-      debatePlan.maxParticipants
-    );
+    const participants = await this.selectParticipants(context, debatePlan.maxParticipants);
 
     if (participants.length < 3) {
       throw new Error('Debate strategy requires at least 3 models');
     }
 
-    const { moderator, debaters, reason: moderatorReason, scheduler: moderatorScheduler } =
-      this.assignModeratorRole(participants, context);
+    const {
+      moderator,
+      debaters,
+      reason: moderatorReason,
+      scheduler: moderatorScheduler,
+    } = this.assignModeratorRole(participants, context);
 
     log.info(
       {
@@ -180,22 +169,18 @@ export class DebateStrategy extends BaseStrategy {
     // and ensemble decisions side-by-side. NEVER throws.
     let shadowSnapshot: ShadowEnsembleSnapshot | null = null;
     void runEnsembleInShadow(
-      buildEnsembleRequest(
-        'debate',
-        'moderator-selection',
-        {
-          requestId,
-          participantCount: participants.length,
-          participants: participants.map((p) => ({
-            modelId: p.model.id,
-            providerId: p.model.provider,
-            quality: p.model.performance?.quality ?? null,
-          })),
-          taskType: context.taskType,
-          complexity: context.triage?.complexity ?? null,
-          plannedRounds: debatePlan.numDebateRounds,
-        },
-      ),
+      buildEnsembleRequest('debate', 'moderator-selection', {
+        requestId,
+        participantCount: participants.length,
+        participants: participants.map((p) => ({
+          modelId: p.model.id,
+          providerId: p.model.provider,
+          quality: p.model.performance?.quality ?? null,
+        })),
+        taskType: context.taskType,
+        complexity: context.triage?.complexity ?? null,
+        plannedRounds: debatePlan.numDebateRounds,
+      }),
       {
         heuristicDecisionForComparison: {
           role: 'moderator',
@@ -205,7 +190,7 @@ export class DebateStrategy extends BaseStrategy {
         onShadowResult: (snapshot) => {
           shadowSnapshot = snapshot;
         },
-      },
+      }
     ).catch((err: unknown) => {
       // Defensive — runEnsembleInShadow already swallows errors, this
       // catch is a final safety net so an unhandled rejection can never
@@ -220,17 +205,12 @@ export class DebateStrategy extends BaseStrategy {
     // Observer: emit phase start
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: participants.map(p => p.name),
+      models: participants.map((p) => p.name),
       summary: `Debate started with ${debaters.length} debaters and 1 moderator. ${debatePlan.numDebateRounds} rounds planned.`,
     });
 
     // 2. Opening statements - each debater presents initial position
-    const openingRound = await this.conductOpeningRound(
-      request,
-      debaters,
-      context,
-      requestId
-    );
+    const openingRound = await this.conductOpeningRound(request, debaters, context, requestId);
 
     debateRounds.push(openingRound.round);
     allExecutions.push(...openingRound.executions);
@@ -289,7 +269,7 @@ export class DebateStrategy extends BaseStrategy {
       debateRounds,
       context,
       requestId,
-      allExecutions,
+      allExecutions
     );
 
     // Observer: synthesis complete
@@ -316,7 +296,8 @@ export class DebateStrategy extends BaseStrategy {
           debaterCount: participants.length - 1,
           roundCount: debateRounds.length,
           finalPositions: positionCount,
-          arrowWarning: 'Single moderator synthesizes — see blind-debate strategy for independent parallel alternative',
+          arrowWarning:
+            'Single moderator synthesizes — see blind-debate strategy for independent parallel alternative',
         },
         'Debate: moderator synthesis complete (Arrow single-aggregator pattern)'
       );
@@ -339,8 +320,10 @@ export class DebateStrategy extends BaseStrategy {
       try {
         const totalTokens = allExecutions.reduce(
           (sum, e) =>
-            sum + (e.response?.usage?.prompt_tokens ?? 0) + (e.response?.usage?.completion_tokens ?? 0),
-          0,
+            sum +
+            (e.response?.usage?.prompt_tokens ?? 0) +
+            (e.response?.usage?.completion_tokens ?? 0),
+          0
         );
         const participatingModels = participants.map((p) => ({
           modelId: p.model.id,
@@ -355,7 +338,7 @@ export class DebateStrategy extends BaseStrategy {
             const participant = nameToParticipant.get(pos.participant);
             if (!participant) continue; // defensive — shouldn't happen
             const exec = allExecutions.find(
-              (e) => e.modelId === participant.model.id && e.role !== 'moderator',
+              (e) => e.modelId === participant.model.id && e.role !== 'moderator'
             );
             flatSignals.push({
               round: round.roundNumber + 1, // 1-indexed
@@ -381,9 +364,10 @@ export class DebateStrategy extends BaseStrategy {
           providerId: moderator.model.provider,
           role: 'moderator',
           decisionType: 'synthesis',
-          text: typeof synthesis.execution.response?.choices?.[0]?.message?.content === 'string'
-            ? synthesis.execution.response.choices[0].message.content
-            : '',
+          text:
+            typeof synthesis.execution.response?.choices?.[0]?.message?.content === 'string'
+              ? synthesis.execution.response.choices[0].message.content
+              : '',
           durationMs: synthesis.execution.durationMs ?? 0,
           cost: synthesis.execution.cost ?? 0,
           inputTokens: synthesis.execution.response?.usage?.prompt_tokens ?? 0,
@@ -418,11 +402,13 @@ export class DebateStrategy extends BaseStrategy {
           totalTokens,
           participatingModels,
           signals: flatSignals,
-        }).catch(() => { /* audit persistence is non-critical and off the hot path */ });
+        }).catch(() => {
+          /* audit persistence is non-critical and off the hot path */
+        });
       } catch (err) {
         log.warn(
           { requestId, error: err instanceof Error ? err.message : String(err) },
-          'Debate persistence threw — continuing',
+          'Debate persistence threw — continuing'
         );
       }
     }
@@ -430,8 +416,8 @@ export class DebateStrategy extends BaseStrategy {
     // Collect reasoning traces for metadata (if enabled)
     const reasoningTraces = this.isReasoningEnabled(request)
       ? allExecutions
-          .filter(e => e.reasoning)
-          .map(e => ({
+          .filter((e) => e.reasoning)
+          .map((e) => ({
             model_id: e.modelId,
             model_name: e.modelName,
             role: e.role,
@@ -489,7 +475,11 @@ export class DebateStrategy extends BaseStrategy {
     const requestId = nanoid();
 
     // Phase start + observer
-    this.emitObserverEvent(context, { type: 'phase_start', models: participants.map(p => p.name), summary: `Debate with ${debaters.length} debaters, ${numRounds} rounds planned.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: participants.map((p) => p.name),
+      summary: `Debate with ${debaters.length} debaters, ${numRounds} rounds planned.`,
+    });
     yield this.progressChunk(`Debate started with ${participants.length} models`, 0, totalSteps);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -500,10 +490,15 @@ export class DebateStrategy extends BaseStrategy {
     // of after the whole round, killing the ~27s of client silence).
     const openingRound = yield* this.drainWhile(
       context,
-      this.conductOpeningRound(request, debaters, context, requestId),
+      this.conductOpeningRound(request, debaters, context, requestId)
     );
     debateRounds.push(openingRound.round);
-    this.emitObserverEvent(context, { type: 'round_complete', round: 0, totalRounds: numRounds, summary: `Opening: ${openingRound.round.positions.length} positions.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 0,
+      totalRounds: numRounds,
+      summary: `Opening: ${openingRound.round.positions.length} positions.`,
+    });
     yield this.progressChunk(`Opening statements from ${debaters.length} models`, 1, totalSteps);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -512,16 +507,25 @@ export class DebateStrategy extends BaseStrategy {
       // Stream narration DURING each debate round too (same rationale as above).
       const round = yield* this.drainWhile(
         context,
-        this.conductDebateRound(request, debaters, debateRounds, r, context, requestId),
+        this.conductDebateRound(request, debaters, debateRounds, r, context, requestId)
       );
       debateRounds.push(round.round);
-      this.emitObserverEvent(context, { type: 'round_complete', round: r, totalRounds: numRounds, summary: `Round ${r}/${numRounds}: ${round.round.positions.length} responses.` });
+      this.emitObserverEvent(context, {
+        type: 'round_complete',
+        round: r,
+        totalRounds: numRounds,
+        summary: `Round ${r}/${numRounds}: ${round.round.positions.length} responses.`,
+      });
       yield this.progressChunk(`Round ${r}/${numRounds} complete`, r + 1, totalSteps);
       for (const c of await this.drainObserverChunks(context)) yield c;
     }
 
     // Synthesis
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: moderator.name, summary: 'Moderator synthesizing debate.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: moderator.name,
+      summary: 'Moderator synthesizing debate.',
+    });
     yield this.progressChunk('Synthesizing final answer...', numRounds + 1, totalSteps);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -537,14 +541,15 @@ export class DebateStrategy extends BaseStrategy {
         .filter((d) => d.name !== moderator.name)
         .map((d) => ({ adapter: d.adapter, model: d.model })),
     ];
-    yield* this.streamSynthesisWithFallback(
-      synthesisRequest,
-      synthesizers,
-      () => this.buildDegradedSynthesis(debateRounds),
+    yield* this.streamSynthesisWithFallback(synthesisRequest, synthesizers, () =>
+      this.buildDegradedSynthesis(debateRounds)
     );
 
     // Final observer drain
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Debate synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Debate synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
@@ -555,15 +560,16 @@ export class DebateStrategy extends BaseStrategy {
     request: ChatRequest,
     moderator: DebateParticipant,
     debateRounds: DebateRound[],
-    allExecutions?: ModelExecution[],
+    allExecutions?: ModelExecution[]
   ): ChatRequest {
     const debateHistory = this.buildDebateHistory(debateRounds);
 
     // If reasoning is enabled, include reasoning traces so the moderator
     // can see HOW each debater arrived at their position — not just WHAT they said
-    const reasoningTraces = allExecutions && this.isReasoningEnabled(request)
-      ? this.formatReasoningForSynthesizer(allExecutions)
-      : '';
+    const reasoningTraces =
+      allExecutions && this.isReasoningEnabled(request)
+        ? this.formatReasoningForSynthesizer(allExecutions)
+        : '';
 
     const messages: ChatMessage[] = [
       {
@@ -631,7 +637,7 @@ export class DebateStrategy extends BaseStrategy {
    */
   private assignModeratorRole(
     participants: DebateParticipant[],
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): {
     moderator: DebateParticipant;
     debaters: DebateParticipant[];
@@ -645,7 +651,8 @@ export class DebateStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(participantModels, context, []);
 
     let moderator: DebateParticipant | undefined;
-    let reason: 'pinned' | 'pin-not-in-pool-quality-fallback' | 'quality-fallback' = 'quality-fallback';
+    let reason: 'pinned' | 'pin-not-in-pool-quality-fallback' | 'quality-fallback' =
+      'quality-fallback';
 
     if (preference.pinReason === 'pinned' && preference.pinnedExecutor) {
       moderator = participants.find((p) => p.model.id === preference.pinnedExecutor!.id);
@@ -659,7 +666,7 @@ export class DebateStrategy extends BaseStrategy {
             reason,
             scheduler: 'pin-or-quality',
           },
-          'Debate strategy: requested model assigned as moderator',
+          'Debate strategy: requested model assigned as moderator'
         );
       }
     } else if (preference.pinReason === 'pin-not-in-pool') {
@@ -672,7 +679,7 @@ export class DebateStrategy extends BaseStrategy {
           reason,
           scheduler: 'pin-or-quality',
         },
-        'Debate strategy: requested model not among debate participants — moderator picked by quality',
+        'Debate strategy: requested model not among debate participants — moderator picked by quality'
       );
     }
 
@@ -738,8 +745,7 @@ export class DebateStrategy extends BaseStrategy {
     request: ChatRequest,
     context: OrchestrationContext
   ): { maxParticipants: number; numDebateRounds: number } {
-    const maxTokens =
-      typeof request.max_tokens === 'number' ? request.max_tokens : 512;
+    const maxTokens = typeof request.max_tokens === 'number' ? request.max_tokens : 512;
     const promptChars = (request.messages || []).reduce((total, message) => {
       if (typeof message.content === 'string') {
         return total + message.content.length;
@@ -832,7 +838,7 @@ export class DebateStrategy extends BaseStrategy {
       const systemPrompt = this.withReasoningPrompt(
         PROMPTS.debateOpening(debater.name),
         request,
-        debater.model,
+        debater.model
       );
       const messages: ChatMessage[] = [
         {
@@ -850,9 +856,14 @@ export class DebateStrategy extends BaseStrategy {
       const execution = await this.boundModelExecution(
         () =>
           reasoningEnabled
-            ? this.executeModelWithReasoning(debater.adapter, debater.model, openingRequest, 'primary')
+            ? this.executeModelWithReasoning(
+                debater.adapter,
+                debater.model,
+                openingRequest,
+                'primary'
+              )
             : this.executeModel(debater.adapter, debater.model, openingRequest, 'primary'),
-        { adapter: debater.adapter, model: debater.model, request: openingRequest, role: 'primary' },
+        { adapter: debater.adapter, model: debater.model, request: openingRequest, role: 'primary' }
       );
 
       if (execution.success) {
@@ -930,7 +941,7 @@ export class DebateStrategy extends BaseStrategy {
         const roundSystemPrompt = this.withReasoningPrompt(
           PROMPTS.debateRound(debater.name, roundNumber),
           request,
-          debater.model,
+          debater.model
         );
         const messages: ChatMessage[] = [
           { role: 'system', content: roundSystemPrompt },
@@ -947,16 +958,25 @@ export class DebateStrategy extends BaseStrategy {
         // are arguments the moderator synthesizes — they don't each need a full long-form answer, and
         // unbounded turns dominate wall-clock. Honors a smaller user-set max_tokens.
         const debateCap = Number(process.env.DEBATE_TURN_MAX_TOKENS) || 900;
-        const debaterReq = { ...request, messages, max_tokens: Math.min(Number(request.max_tokens) || debateCap, debateCap) };
+        const debaterReq = {
+          ...request,
+          messages,
+          max_tokens: Math.min(Number(request.max_tokens) || debateCap, debateCap),
+        };
         const execution = await this.boundModelExecution(
           () =>
             reasoningEnabled
-              ? this.executeModelWithReasoning(debater.adapter, debater.model, debaterReq, 'primary')
+              ? this.executeModelWithReasoning(
+                  debater.adapter,
+                  debater.model,
+                  debaterReq,
+                  'primary'
+                )
               : this.executeModel(debater.adapter, debater.model, debaterReq, 'primary'),
-          { adapter: debater.adapter, model: debater.model, request: debaterReq, role: 'primary' },
+          { adapter: debater.adapter, model: debater.model, request: debaterReq, role: 'primary' }
         );
         return { debater, execution, respondingTo };
-      }),
+      })
     );
     for (const { debater, execution, respondingTo } of roundResults) {
       if (execution.success) {
@@ -990,18 +1010,30 @@ export class DebateStrategy extends BaseStrategy {
     debateRounds: DebateRound[],
     context: OrchestrationContext,
     requestId: string,
-    allExecutions?: ModelExecution[],
+    allExecutions?: ModelExecution[]
   ): Promise<{
     execution: ModelExecution;
     consensus: string;
   }> {
     log.debug({ requestId, moderator: moderator.name }, 'Moderator synthesizing debate');
 
-    const synthesisRequest = this.buildSynthesisRequest(request, moderator, debateRounds, allExecutions);
+    const synthesisRequest = this.buildSynthesisRequest(
+      request,
+      moderator,
+      debateRounds,
+      allExecutions
+    );
 
-    const execution = await this.executeModel(moderator.adapter, moderator.model, synthesisRequest, 'coordinator');
+    const execution = await this.executeModel(
+      moderator.adapter,
+      moderator.model,
+      synthesisRequest,
+      'coordinator'
+    );
 
-    const consensus = execution.success ? this.extractContent(execution.response) : '[DEGRADED] Moderator synthesis failed';
+    const consensus = execution.success
+      ? this.extractContent(execution.response)
+      : '[DEGRADED] Moderator synthesis failed';
 
     return {
       execution,
@@ -1016,12 +1048,12 @@ export class DebateStrategy extends BaseStrategy {
     const parts: string[] = [];
 
     for (const round of rounds) {
-      parts.push(`\n=== ${round.roundNumber === 0 ? 'Opening Statements' : `Round ${round.roundNumber}`} ===\n`);
+      parts.push(
+        `\n=== ${round.roundNumber === 0 ? 'Opening Statements' : `Round ${round.roundNumber}`} ===\n`
+      );
 
       for (const position of round.positions) {
-        const responding = position.respondingTo
-          ? ` (responding to ${position.respondingTo})`
-          : '';
+        const responding = position.respondingTo ? ` (responding to ${position.respondingTo})` : '';
         parts.push(`**${position.participant}**${responding}:\n${position.position}\n`);
       }
     }
@@ -1036,4 +1068,3 @@ export class DebateStrategy extends BaseStrategy {
     return safeResponseContent(response);
   }
 }
-

@@ -36,7 +36,7 @@ import type { OrchestrationContext } from '@/types';
 const CTX: OrchestrationContext = {
   requestId: 'sm-r6-cascade-001',
   taskType: 'general',
-  qualityTarget: 0.80,
+  qualityTarget: 0.8,
   preferSpeed: false,
   models: [
     { id: 'model-cheap', provider: 'openai' } as OrchestrationContext['models'][0],
@@ -51,9 +51,9 @@ const REQ = {
 };
 
 function getCascadeResult() {
-  return buildPlanOnlyResult(
-    'cost-cascade', 'explicit', 'request-flag', REQ, CTX, null, 0.80, { registered: true },
-  );
+  return buildPlanOnlyResult('cost-cascade', 'explicit', 'request-flag', REQ, CTX, null, 0.8, {
+    registered: true,
+  });
 }
 
 function getCascadePlan() {
@@ -203,12 +203,7 @@ describe('01C.1B-SM-R6 FIX-002 — cost-cascade semantic depth (4-step cascade)'
 
     it('roles array covers all 4 cascade roles', () => {
       const s = getCascadePlan().strategySemantics!;
-      expect(s['roles']).toEqual([
-        'cheap_candidate',
-        'quality_gate',
-        'escalator',
-        'synthesizer',
-      ]);
+      expect(s['roles']).toEqual(['cheap_candidate', 'quality_gate', 'escalator', 'synthesizer']);
     });
 
     it('cascadePolicy is present', () => {
@@ -249,12 +244,12 @@ describe('01C.1B-SM-R6 FIX-002 — cost-cascade semantic depth (4-step cascade)'
   describe('dry-run invariants', () => {
     it('no providerCallExecuted in any step', () => {
       const steps = getCascadePlan().steps;
-      expect(steps.every(s => s.providerCallExecuted === false)).toBe(true);
+      expect(steps.every((s) => s.providerCallExecuted === false)).toBe(true);
     });
 
     it('all actions carry the cost-cascade/ prefix', () => {
-      const actions = getCascadePlan().steps.map(s => s.action);
-      expect(actions.every(a => a.startsWith('cost-cascade/'))).toBe(true);
+      const actions = getCascadePlan().steps.map((s) => s.action);
+      expect(actions.every((a) => a.startsWith('cost-cascade/'))).toBe(true);
     });
 
     it('totalCost is 0', () => {

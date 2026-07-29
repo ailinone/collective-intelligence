@@ -74,7 +74,7 @@ describe('comparison — structural vs Pareto-aware', () => {
       expect(pareto.selectedRouteIds.length).toBeLessThanOrEqual(1);
     } else {
       expect(pareto.expectedCostUsd).toBeLessThanOrEqual(
-        STANDARD_BASELINE.singleModelCostUsd + 1e-9,
+        STANDARD_BASELINE.singleModelCostUsd + 1e-9
       );
     }
   });
@@ -94,17 +94,14 @@ describe('comparison — structural vs Pareto-aware', () => {
     const contributionRejected = r.contributionResult.rejectedByContribution.length;
     // The contribution-aware layer can only add rejections (it never
     // un-rejects). The combined count is at least the structural one.
-    expect(structuralRejected + contributionRejected).toBeGreaterThanOrEqual(
-      structuralRejected,
-    );
+    expect(structuralRejected + contributionRejected).toBeGreaterThanOrEqual(structuralRejected);
   });
 
   it('structural plan can pick a top single while Pareto either beats baseline or falls back', () => {
     const r = runPipeline();
     const pareto = r.paretoPlan;
     const judgeOk =
-      pareto.expectedJudge >=
-        STANDARD_BASELINE.singleModelJudge ||
+      pareto.expectedJudge >= STANDARD_BASELINE.singleModelJudge ||
       pareto.strategyId === 'single_fallback';
     expect(judgeOk).toBe(true);
   });
@@ -119,9 +116,7 @@ describe('comparison — structural vs Pareto-aware', () => {
     const r = runPipeline();
     const structuralRoutes = r.strategyAdapterResult.originalStrategyPlan.plan.selectedRouteIds;
     for (const id of structuralRoutes) {
-      const found = r.structuralRetrievalResult.candidates.some(
-        (c) => c.routeId === id,
-      );
+      const found = r.structuralRetrievalResult.candidates.some((c) => c.routeId === id);
       expect(found).toBe(true);
     }
   });
@@ -141,7 +136,7 @@ describe('comparison — adapter source reasoning', () => {
     if (r.strategyAdapterResult.finalOfflinePlan.source === 'single_fallback') {
       expect(
         r.paretoPlan.strategyId === 'single_fallback' ||
-          r.paretoPlan.paretoStatus === 'single_fallback',
+          r.paretoPlan.paretoStatus === 'single_fallback'
       ).toBe(true);
     }
   });

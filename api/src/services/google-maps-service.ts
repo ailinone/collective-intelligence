@@ -10,7 +10,7 @@
 /**
  * Google Maps Service
  * Real implementation using Google Maps API
- * 
+ *
  * Features:
  * - Places search (find places by name/type)
  * - Geocoding (address to coordinates)
@@ -189,14 +189,18 @@ export class GoogleMapsService {
   constructor() {
     // Try to get Google Maps API key from config or environment
     const providers = config.providers || [];
-    const googleProvider = Array.isArray(providers) 
+    const googleProvider = Array.isArray(providers)
       ? providers.find((p) => p.name === 'google')
       : null;
-    const googleApiKey = googleProvider && 'apiKey' in googleProvider ? googleProvider.apiKey : null;
-    this.apiKey = googleApiKey || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || null;
-    
+    const googleApiKey =
+      googleProvider && 'apiKey' in googleProvider ? googleProvider.apiKey : null;
+    this.apiKey =
+      googleApiKey || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || null;
+
     if (!this.apiKey) {
-      log.warn('Google Maps API key not configured. Google Maps functionality will be unavailable.');
+      log.warn(
+        'Google Maps API key not configured. Google Maps functionality will be unavailable.'
+      );
     }
   }
 
@@ -210,9 +214,13 @@ export class GoogleMapsService {
   /**
    * Search for places
    */
-  async searchPlaces(request: GoogleMapsPlaceSearchRequest): Promise<GoogleMapsPlaceSearchResult[]> {
+  async searchPlaces(
+    request: GoogleMapsPlaceSearchRequest
+  ): Promise<GoogleMapsPlaceSearchResult[]> {
     if (!this.apiKey) {
-      throw new Error('Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.');
+      throw new Error(
+        'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.'
+      );
     }
 
     const params = new URLSearchParams({
@@ -241,7 +249,7 @@ export class GoogleMapsService {
       log.debug({ url: url.replace(this.apiKey, '***') }, 'Searching places');
 
       const response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_MAPS_TIMEOUT_MS) });
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         status: string;
         results: Array<{
           place_id: string;
@@ -261,7 +269,9 @@ export class GoogleMapsService {
       };
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`);
+        throw new Error(
+          `Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`
+        );
       }
 
       return data.results || [];
@@ -277,7 +287,9 @@ export class GoogleMapsService {
    */
   async geocode(request: GoogleMapsGeocodeRequest): Promise<GoogleMapsGeocodeResult[]> {
     if (!this.apiKey) {
-      throw new Error('Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.');
+      throw new Error(
+        'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.'
+      );
     }
 
     const params = new URLSearchParams({
@@ -298,7 +310,7 @@ export class GoogleMapsService {
       log.debug({ url: url.replace(this.apiKey, '***') }, 'Geocoding address');
 
       const response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_MAPS_TIMEOUT_MS) });
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         status: string;
         results: Array<{
           place_id: string;
@@ -316,7 +328,9 @@ export class GoogleMapsService {
       };
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`);
+        throw new Error(
+          `Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`
+        );
       }
 
       return data.results || [];
@@ -330,9 +344,13 @@ export class GoogleMapsService {
   /**
    * Reverse geocode coordinates to address
    */
-  async reverseGeocode(request: GoogleMapsReverseGeocodeRequest): Promise<GoogleMapsGeocodeResult[]> {
+  async reverseGeocode(
+    request: GoogleMapsReverseGeocodeRequest
+  ): Promise<GoogleMapsGeocodeResult[]> {
     if (!this.apiKey) {
-      throw new Error('Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.');
+      throw new Error(
+        'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.'
+      );
     }
 
     const params = new URLSearchParams({
@@ -349,7 +367,7 @@ export class GoogleMapsService {
       log.debug({ url: url.replace(this.apiKey, '***') }, 'Reverse geocoding coordinates');
 
       const response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_MAPS_TIMEOUT_MS) });
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         status: string;
         results: Array<{
           place_id: string;
@@ -367,13 +385,18 @@ export class GoogleMapsService {
       };
 
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`);
+        throw new Error(
+          `Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`
+        );
       }
 
       return data.results || [];
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ error: errorMessage, lat: request.lat, lng: request.lng }, 'Failed to reverse geocode coordinates');
+      log.error(
+        { error: errorMessage, lat: request.lat, lng: request.lng },
+        'Failed to reverse geocode coordinates'
+      );
       throw error instanceof Error ? error : new Error(errorMessage);
     }
   }
@@ -383,13 +406,21 @@ export class GoogleMapsService {
    */
   async getDirections(request: GoogleMapsDirectionsRequest): Promise<GoogleMapsDirectionsResult> {
     if (!this.apiKey) {
-      throw new Error('Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.');
+      throw new Error(
+        'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.'
+      );
     }
 
     const params = new URLSearchParams({
       key: this.apiKey,
-      origin: typeof request.origin === 'string' ? request.origin : `${request.origin.lat},${request.origin.lng}`,
-      destination: typeof request.destination === 'string' ? request.destination : `${request.destination.lat},${request.destination.lng}`,
+      origin:
+        typeof request.origin === 'string'
+          ? request.origin
+          : `${request.origin.lat},${request.origin.lng}`,
+      destination:
+        typeof request.destination === 'string'
+          ? request.destination
+          : `${request.destination.lat},${request.destination.lng}`,
     });
 
     if (request.mode) {
@@ -413,7 +444,7 @@ export class GoogleMapsService {
       log.debug({ url: url.replace(this.apiKey, '***') }, 'Getting directions');
 
       const response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_MAPS_TIMEOUT_MS) });
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         status: string;
         routes: Array<{
           summary: string;
@@ -464,7 +495,9 @@ export class GoogleMapsService {
       };
 
       if (data.status !== 'OK') {
-        throw new Error(`Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`);
+        throw new Error(
+          `Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`
+        );
       }
 
       return {
@@ -480,9 +513,13 @@ export class GoogleMapsService {
   /**
    * Get place details
    */
-  async getPlaceDetails(request: GoogleMapsPlaceDetailsRequest): Promise<GoogleMapsPlaceDetailsResult> {
+  async getPlaceDetails(
+    request: GoogleMapsPlaceDetailsRequest
+  ): Promise<GoogleMapsPlaceDetailsResult> {
     if (!this.apiKey) {
-      throw new Error('Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.');
+      throw new Error(
+        'Google Maps API key not configured. Set GOOGLE_MAPS_API_KEY environment variable.'
+      );
     }
 
     const params = new URLSearchParams({
@@ -503,7 +540,7 @@ export class GoogleMapsService {
       log.debug({ url: url.replace(this.apiKey, '***') }, 'Getting place details');
 
       const response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_MAPS_TIMEOUT_MS) });
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         status: string;
         result: {
           place_id: string;
@@ -545,7 +582,9 @@ export class GoogleMapsService {
       };
 
       if (data.status !== 'OK') {
-        throw new Error(`Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`);
+        throw new Error(
+          `Google Maps API error: ${data.status}${data.error_message ? ` - ${data.error_message}` : ''}`
+        );
       }
 
       return data.result;
@@ -556,4 +595,3 @@ export class GoogleMapsService {
     }
   }
 }
-

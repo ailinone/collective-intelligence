@@ -34,7 +34,11 @@ import { lookupModelCost } from '../experiment-runner';
 
 // Fixture rows (fictitious test models — not real catalog entries).
 const zeroPricedRow = (name: string) => ({ inputCostPer1k: 0, outputCostPer1k: 0, name });
-const crossProviderRow = { inputCostPer1k: 0.001, outputCostPer1k: 0.002, id: 'other-provider/test-model' };
+const crossProviderRow = {
+  inputCostPer1k: 0.001,
+  outputCostPer1k: 0.002,
+  id: 'other-provider/test-model',
+};
 
 beforeEach(() => {
   findFirst.mockReset();
@@ -71,8 +75,12 @@ describe('lookupModelCost — read-only cross-provider estimation', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('uses the model\'s own pricing when present — no cross-provider query, no write', async () => {
-    findFirst.mockResolvedValueOnce({ inputCostPer1k: 0.005, outputCostPer1k: 0.01, name: 'test-model-b' });
+  it("uses the model's own pricing when present — no cross-provider query, no write", async () => {
+    findFirst.mockResolvedValueOnce({
+      inputCostPer1k: 0.005,
+      outputCostPer1k: 0.01,
+      name: 'test-model-b',
+    });
 
     const cost = await lookupModelCost('some-provider/test-model-b', 2_000, 1_000);
 
@@ -83,7 +91,8 @@ describe('lookupModelCost — read-only cross-provider estimation', () => {
 
   it('falls back to the blended rate when no cross-provider match exists — no write', async () => {
     findFirst.mockImplementation(async (args: { where?: { id?: string } }) =>
-      args?.where?.id ? zeroPricedRow('test-model-c') : null);
+      args?.where?.id ? zeroPricedRow('test-model-c') : null
+    );
 
     const cost = await lookupModelCost('some-provider/test-model-c', 5_000, 5_000);
 

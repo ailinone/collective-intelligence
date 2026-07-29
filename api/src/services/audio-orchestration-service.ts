@@ -10,19 +10,23 @@
 /**
  * Audio Orchestration Service
  * Orchestrates TTS, STT, and Audio Translation across multiple providers
- * 
+ *
  * Features:
  * - Dynamic model selection based on capabilities (text_to_speech, speech_to_text)
  * - Multi-provider orchestration (OpenAI, Google, ElevenLabs, etc.)
  * - Automatic failover on provider failures
  * - Format conversion and streaming support
- * 
+ *
  * NO HARDCODED MODELS - All selection is dynamic via model discovery
  */
 
 import { logger } from '@/utils/logger';
 import { ModelRepository } from '@/services/model-repository';
-import { normalizeStrategy, resolveFallbackDeadlineMs, diversifyProviders } from '@/services/modality/modality-execution-helpers';
+import {
+  normalizeStrategy,
+  resolveFallbackDeadlineMs,
+  diversifyProviders,
+} from '@/services/modality/modality-execution-helpers';
 import { runModalityFallback } from '@/services/modality/modality-fallback-driver';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderRegistry } from '@/providers/provider-registry';
@@ -178,7 +182,10 @@ export class AudioOrchestrationService {
   }
 
   private getModelQuality(model: Model): number {
-    if (typeof model.performance?.quality === 'number' && Number.isFinite(model.performance.quality)) {
+    if (
+      typeof model.performance?.quality === 'number' &&
+      Number.isFinite(model.performance.quality)
+    ) {
       return model.performance.quality;
     }
     const metadata = model.metadata && typeof model.metadata === 'object' ? model.metadata : {};
@@ -190,7 +197,10 @@ export class AudioOrchestrationService {
   }
 
   private getModelLatencyMs(model: Model): number {
-    if (typeof model.performance?.latencyMs === 'number' && Number.isFinite(model.performance.latencyMs)) {
+    if (
+      typeof model.performance?.latencyMs === 'number' &&
+      Number.isFinite(model.performance.latencyMs)
+    ) {
       return model.performance.latencyMs;
     }
     const metadata = model.metadata && typeof model.metadata === 'object' ? model.metadata : {};
@@ -206,13 +216,22 @@ export class AudioOrchestrationService {
 
   private sortModelsByStrategy(
     models: Model[],
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic',
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic',
     userContext: OrchestrationContext
   ): Model[] {
     const sorted = [...models];
 
     // LATENCY OPT: Pre-fetch empirical scores for all candidates (single Map lookup)
-    const empiricalScores = modelPerformanceTracker.getScores(sorted.map(m => m.id));
+    const empiricalScores = modelPerformanceTracker.getScores(sorted.map((m) => m.id));
 
     sorted.sort((a, b) => {
       const costA = this.getModelAverageCostPer1k(a);
@@ -221,10 +240,14 @@ export class AudioOrchestrationService {
       // Use empirical data when available (more accurate than static DB values)
       const empA = empiricalScores.get(a.id);
       const empB = empiricalScores.get(b.id);
-      const qualityA = empA && empA.sampleCount >= 5 ? empA.rollingQuality : this.getModelQuality(a);
-      const qualityB = empB && empB.sampleCount >= 5 ? empB.rollingQuality : this.getModelQuality(b);
-      const latencyA = empA && empA.sampleCount >= 5 ? empA.rollingLatencyP50 : this.getModelLatencyMs(a);
-      const latencyB = empB && empB.sampleCount >= 5 ? empB.rollingLatencyP50 : this.getModelLatencyMs(b);
+      const qualityA =
+        empA && empA.sampleCount >= 5 ? empA.rollingQuality : this.getModelQuality(a);
+      const qualityB =
+        empB && empB.sampleCount >= 5 ? empB.rollingQuality : this.getModelQuality(b);
+      const latencyA =
+        empA && empA.sampleCount >= 5 ? empA.rollingLatencyP50 : this.getModelLatencyMs(a);
+      const latencyB =
+        empB && empB.sampleCount >= 5 ? empB.rollingLatencyP50 : this.getModelLatencyMs(b);
 
       // LATENCY OPT: Heavily penalize models with high error rates
       const errorPenaltyA = empA && empA.errorRate > 0.3 ? 1000000 : 0;
@@ -250,7 +273,8 @@ export class AudioOrchestrationService {
       }
 
       // balanced / dynamic / single / parallel
-      const qualityWeight = userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
+      const qualityWeight =
+        userContext.qualityTarget && userContext.qualityTarget > 0.7 ? 0.6 : 0.45;
       const costWeight = userContext.maxCost !== undefined ? 0.45 : 0.3;
       const latencyWeight = 1 - qualityWeight - costWeight;
 
@@ -269,7 +293,6 @@ export class AudioOrchestrationService {
     });
     return sorted;
   }
-
 
   // Note: toErrorMessage + createCapabilityNotOperationalError were
   // removed when synthesizeSpeech migrated to executeWithFallback. The
@@ -333,16 +356,19 @@ export class AudioOrchestrationService {
     const strategyUsed = normalizeStrategy(strategy);
 
     log.info(
-      { requestId, model, textLength: text.length, voice, format, strategy: strategyUsed, allowFallback },
+      {
+        requestId,
+        model,
+        textLength: text.length,
+        voice,
+        format,
+        strategy: strategyUsed,
+        allowFallback,
+      },
       'TTS orchestration started'
     );
 
-    const candidates = await this.selectTTSCandidateModels(
-      model,
-      voice,
-      userContext,
-      strategyUsed
-    );
+    const candidates = await this.selectTTSCandidateModels(model, voice, userContext, strategyUsed);
 
     if (candidates.length === 0) {
       throw new ValidationError(
@@ -358,9 +384,7 @@ export class AudioOrchestrationService {
     // are owned by the shared runModalityFallback driver. Audio keeps its
     // parallelDegree racing and the deliberate 422-on-exhaustion (vs the driver's
     // default 503) via the onFallbackExhausted hook.
-    const result = await runModalityFallback<
-      Awaited<ReturnType<ProviderAdapter['textToSpeech']>>
-    >({
+    const result = await runModalityFallback<Awaited<ReturnType<ProviderAdapter['textToSpeech']>>>({
       capability: [
         'text_to_speech' as ModelCapability,
         'tts' as ModelCapability,
@@ -373,15 +397,13 @@ export class AudioOrchestrationService {
       deadlineMs: resolveFallbackDeadlineMs(strategyUsed, allowFallback),
       registry: this.getRegistry(),
       catalog: candidates,
-      supportsCapability: (adapter) =>
-        this.isAdapterMethodImplemented(adapter, 'textToSpeech'),
+      supportsCapability: (adapter) => this.isAdapterMethodImplemented(adapter, 'textToSpeech'),
       parallelDegree,
       execute: async (selectedModel, adapter) => {
         // TTS timeouts are tighter than STT: native TTS responds in ~300ms once
         // warm, so 8s catches genuine slow paths. Self-hosted retains 30s.
         const isSelfHosted =
-          selectedModel.provider === 'self-hosted' ||
-          selectedModel.providerId === 'self-hosted';
+          selectedModel.provider === 'self-hosted' || selectedModel.providerId === 'self-hosted';
         const TTS_TIMEOUT_MS = isSelfHosted ? 30000 : 8000;
         return Promise.race([
           adapter.textToSpeech(selectedModel, {
@@ -476,7 +498,15 @@ export class AudioOrchestrationService {
     const strategyUsed = normalizeStrategy(strategy);
 
     log.info(
-      { requestId, model, filename, language, format: responseFormat, strategy: strategyUsed, allowFallback },
+      {
+        requestId,
+        model,
+        filename,
+        language,
+        format: responseFormat,
+        strategy: strategyUsed,
+        allowFallback,
+      },
       'STT orchestration started'
     );
 
@@ -496,9 +526,7 @@ export class AudioOrchestrationService {
 
     const parallelDegree = allowFallback ? Math.min(3, candidates.length) : 1;
 
-    const result = await runModalityFallback<
-      Awaited<ReturnType<ProviderAdapter['speechToText']>>
-    >({
+    const result = await runModalityFallback<Awaited<ReturnType<ProviderAdapter['speechToText']>>>({
       capability: ['speech_to_text' as ModelCapability, 'transcription' as ModelCapability],
       capabilityLabel: 'speech_to_text',
       explicit: model ?? null,
@@ -506,13 +534,11 @@ export class AudioOrchestrationService {
       deadlineMs: resolveFallbackDeadlineMs(strategyUsed, allowFallback),
       registry: this.getRegistry(),
       catalog: candidates,
-      supportsCapability: (adapter) =>
-        this.isAdapterMethodImplemented(adapter, 'speechToText'),
+      supportsCapability: (adapter) => this.isAdapterMethodImplemented(adapter, 'speechToText'),
       parallelDegree,
       execute: async (selectedModel, adapter) => {
         const isSelfHostedSTT =
-          selectedModel.provider === 'self-hosted' ||
-          selectedModel.providerId === 'self-hosted';
+          selectedModel.provider === 'self-hosted' || selectedModel.providerId === 'self-hosted';
         const STT_TIMEOUT_MS = isSelfHostedSTT ? 30000 : 12000;
         return Promise.race([
           adapter.speechToText(selectedModel, {
@@ -646,9 +672,7 @@ export class AudioOrchestrationService {
 
     const parallelDegree = allowFallback ? Math.min(3, candidates.length) : 1;
 
-    const result = await runModalityFallback<
-      Awaited<ReturnType<ProviderAdapter['speechToText']>>
-    >({
+    const result = await runModalityFallback<Awaited<ReturnType<ProviderAdapter['speechToText']>>>({
       capability: ['speech_to_text' as ModelCapability, 'transcription' as ModelCapability],
       capabilityLabel: 'audio_translation',
       explicit: model ?? null,
@@ -656,13 +680,11 @@ export class AudioOrchestrationService {
       deadlineMs: resolveFallbackDeadlineMs(strategyUsed, allowFallback),
       registry: this.getRegistry(),
       catalog: candidates,
-      supportsCapability: (adapter) =>
-        this.isAdapterMethodImplemented(adapter, 'speechToText'),
+      supportsCapability: (adapter) => this.isAdapterMethodImplemented(adapter, 'speechToText'),
       parallelDegree,
       execute: async (selectedModel, adapter) => {
         const isSelfHostedSTT =
-          selectedModel.provider === 'self-hosted' ||
-          selectedModel.providerId === 'self-hosted';
+          selectedModel.provider === 'self-hosted' || selectedModel.providerId === 'self-hosted';
         const TRANSLATE_TIMEOUT_MS = isSelfHostedSTT ? 30000 : 12000;
         return Promise.race([
           adapter.speechToText(selectedModel, {
@@ -713,19 +735,34 @@ export class AudioOrchestrationService {
 
     // Type guard for raw response with segments
     const rawWithSegments =
-      translationResponse.raw && typeof translationResponse.raw === 'object' && 'segments' in translationResponse.raw
+      translationResponse.raw &&
+      typeof translationResponse.raw === 'object' &&
+      'segments' in translationResponse.raw
         ? (translationResponse.raw as { segments?: unknown; duration?: number })
         : null;
 
-    if (responseFormat === 'srt' && rawWithSegments?.segments && Array.isArray(rawWithSegments.segments)) {
+    if (
+      responseFormat === 'srt' &&
+      rawWithSegments?.segments &&
+      Array.isArray(rawWithSegments.segments)
+    ) {
       srt = this.convertToSRT(rawWithSegments.segments);
-    } else if (responseFormat === 'vtt' && rawWithSegments?.segments && Array.isArray(rawWithSegments.segments)) {
+    } else if (
+      responseFormat === 'vtt' &&
+      rawWithSegments?.segments &&
+      Array.isArray(rawWithSegments.segments)
+    ) {
       vtt = this.convertToVTT(rawWithSegments.segments);
     }
 
     const segmentsArray =
       rawWithSegments?.segments && Array.isArray(rawWithSegments.segments)
-        ? (rawWithSegments.segments as Array<{ id: number; start: number; end: number; text: string }>)
+        ? (rawWithSegments.segments as Array<{
+            id: number;
+            start: number;
+            end: number;
+            text: string;
+          }>)
         : undefined;
 
     return {
@@ -754,13 +791,25 @@ export class AudioOrchestrationService {
     explicitModel: string | undefined,
     voice: string | undefined,
     userContext: OrchestrationContext,
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic'
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic'
   ): Promise<Model[]> {
     // Resolve ailin-* aliases (e.g., 'ailin-tts-quality' → strategy:quality, quality_target:0.95)
     if (explicitModel?.startsWith('ailin-')) {
       const profile = resolveAilinAlias(explicitModel);
       if (profile) {
-        log.info({ alias: explicitModel, strategy: profile.strategy, preferSpeed: profile.prefer_speed }, 'Resolved audio alias');
+        log.info(
+          { alias: explicitModel, strategy: profile.strategy, preferSpeed: profile.prefer_speed },
+          'Resolved audio alias'
+        );
         if (profile.strategy) strategy = profile.strategy as typeof strategy;
         if (profile.prefer_speed) strategy = 'speed';
         explicitModel = undefined;
@@ -770,23 +819,32 @@ export class AudioOrchestrationService {
     if (explicitModel) {
       // Search TTS-capable models with separate queries (OR semantics via Promise.all)
       const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({ capabilities: ['text_to_speech' as ModelCapability], limit: 500 }),
+        this.modelRepo.searchModels({
+          capabilities: ['text_to_speech' as ModelCapability],
+          limit: 500,
+        }),
         this.modelRepo.searchModels({ capabilities: ['tts' as ModelCapability], limit: 200 }),
         this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
       ]);
       const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find((entry) => entry.name === explicitModel || entry.id === explicitModel);
+      const model = allModels.find(
+        (entry) => entry.name === explicitModel || entry.id === explicitModel
+      );
       if (!model || !this.hasTTSCapability(model)) {
-        throw new ValidationError(
-          `Model ${explicitModel} not found or does not support TTS`,
-          { modelId: explicitModel, capability: 'text_to_speech' }
-        );
+        throw new ValidationError(`Model ${explicitModel} not found or does not support TTS`, {
+          modelId: explicitModel,
+          capability: 'text_to_speech',
+        });
       }
       const runnable = this.filterModelsByAdapterMethod([model], 'textToSpeech');
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational textToSpeech adapter`,
-          { modelId: explicitModel, capability: 'text_to_speech', reason: 'adapter_not_operational' }
+          {
+            modelId: explicitModel,
+            capability: 'text_to_speech',
+            reason: 'adapter_not_operational',
+          }
         );
       }
       return runnable;
@@ -807,22 +865,22 @@ export class AudioOrchestrationService {
       }),
     ]);
 
-    const merged = [...ttsModelsPrimary, ...ttsModelsSecondary, ...ttsModelsFallback].filter((model) =>
-      this.hasTTSCapability(model)
+    const merged = [...ttsModelsPrimary, ...ttsModelsSecondary, ...ttsModelsFallback].filter(
+      (model) => this.hasTTSCapability(model)
     );
     const uniqueModels = Array.from(new Map(merged.map((model) => [model.id, model])).values());
 
     // QUALITY FIX: Exclude models that are clearly STT-only (misclassified with text_to_speech)
     // Models with "transcribe", "whisper", "listen", "scribe" in name are STT, not TTS
     const STT_NAME_PATTERNS = /transcrib|whisper|listen|scribe|diarize/i;
-    const ttsOnly = uniqueModels.filter(m => !STT_NAME_PATTERNS.test(m.name || m.id));
+    const ttsOnly = uniqueModels.filter((m) => !STT_NAME_PATTERNS.test(m.name || m.id));
     const modelsToFilter = ttsOnly.length > 0 ? ttsOnly : uniqueModels; // fallback
 
     const runnableModels = this.filterModelsByAdapterMethod(modelsToFilter, 'textToSpeech');
     if (runnableModels.length === 0) return [];
 
     // TIER FILTER: Prefer native TTS models (Cartesia, ElevenLabs) over multimodal chat models
-    const nativeTTSModels = runnableModels.filter(m => this.isNativeTTSModel(m));
+    const nativeTTSModels = runnableModels.filter((m) => this.isNativeTTSModel(m));
     const modelsForHealth = nativeTTSModels.length > 0 ? nativeTTSModels : runnableModels;
 
     // LATENCY OPT: Skip providers with OPEN circuit breakers (avoids 5-15s timeout cascade)
@@ -854,13 +912,25 @@ export class AudioOrchestrationService {
     explicitModel: string | undefined,
     language: string | undefined,
     userContext: OrchestrationContext,
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic'
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic'
   ): Promise<Model[]> {
     // Resolve ailin-* aliases (e.g., 'ailin-stt-fast' → strategy:speed, prefer_speed:true)
     if (explicitModel?.startsWith('ailin-')) {
       const profile = resolveAilinAlias(explicitModel);
       if (profile) {
-        log.info({ alias: explicitModel, strategy: profile.strategy, preferSpeed: profile.prefer_speed }, 'Resolved audio alias');
+        log.info(
+          { alias: explicitModel, strategy: profile.strategy, preferSpeed: profile.prefer_speed },
+          'Resolved audio alias'
+        );
         // Override strategy from alias profile
         if (profile.strategy) strategy = profile.strategy as typeof strategy;
         if (profile.prefer_speed) strategy = 'speed';
@@ -871,23 +941,32 @@ export class AudioOrchestrationService {
 
     if (explicitModel) {
       const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({ capabilities: ['speech_to_text' as ModelCapability], limit: 500 }),
+        this.modelRepo.searchModels({
+          capabilities: ['speech_to_text' as ModelCapability],
+          limit: 500,
+        }),
         this.modelRepo.searchModels({ capabilities: ['listen' as ModelCapability], limit: 200 }),
         this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
       ]);
       const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find((entry) => entry.name === explicitModel || entry.id === explicitModel);
+      const model = allModels.find(
+        (entry) => entry.name === explicitModel || entry.id === explicitModel
+      );
       if (!model || !this.hasSTTCapability(model)) {
-        throw new ValidationError(
-          `Model ${explicitModel} not found or does not support STT`,
-          { modelId: explicitModel, capability: 'speech_to_text' }
-        );
+        throw new ValidationError(`Model ${explicitModel} not found or does not support STT`, {
+          modelId: explicitModel,
+          capability: 'speech_to_text',
+        });
       }
       const runnable = this.filterModelsByAdapterMethod([model], 'speechToText');
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational speechToText adapter`,
-          { modelId: explicitModel, capability: 'speech_to_text', reason: 'adapter_not_operational' }
+          {
+            modelId: explicitModel,
+            capability: 'speech_to_text',
+            reason: 'adapter_not_operational',
+          }
         );
       }
       return runnable;
@@ -917,7 +996,7 @@ export class AudioOrchestrationService {
 
     // TIER FILTER: Prefer native STT models (Deepgram, Whisper) over multimodal chat models (GPT-4o)
     // This prevents selecting 4000+ chat models that were incorrectly tagged with speech_to_text
-    const nativeSTTModels = runnableModels.filter(m => this.isNativeSTTModel(m));
+    const nativeSTTModels = runnableModels.filter((m) => this.isNativeSTTModel(m));
     const modelsForRanking = nativeSTTModels.length > 0 ? nativeSTTModels : runnableModels;
 
     // LATENCY OPT: Skip providers with OPEN circuit breakers
@@ -948,16 +1027,30 @@ export class AudioOrchestrationService {
   private async selectTranslationCandidateModels(
     explicitModel: string | undefined,
     userContext: OrchestrationContext,
-    strategy: 'single' | 'cost' | 'speed' | 'quality' | 'balanced' | 'parallel' | 'debate' | 'quality_multipass' | 'dynamic'
+    strategy:
+      | 'single'
+      | 'cost'
+      | 'speed'
+      | 'quality'
+      | 'balanced'
+      | 'parallel'
+      | 'debate'
+      | 'quality_multipass'
+      | 'dynamic'
   ): Promise<Model[]> {
     if (explicitModel) {
       const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({ capabilities: ['speech_to_text' as ModelCapability], limit: 500 }),
+        this.modelRepo.searchModels({
+          capabilities: ['speech_to_text' as ModelCapability],
+          limit: 500,
+        }),
         this.modelRepo.searchModels({ capabilities: ['listen' as ModelCapability], limit: 200 }),
         this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
       ]);
       const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find((entry) => entry.name === explicitModel || entry.id === explicitModel);
+      const model = allModels.find(
+        (entry) => entry.name === explicitModel || entry.id === explicitModel
+      );
       if (!model || !this.hasSTTCapability(model)) {
         throw new ValidationError(
           `Model ${explicitModel} not found or does not support translation`,
@@ -968,7 +1061,11 @@ export class AudioOrchestrationService {
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational speechToText adapter`,
-          { modelId: explicitModel, capability: 'audio_translation', reason: 'adapter_not_operational' }
+          {
+            modelId: explicitModel,
+            capability: 'audio_translation',
+            reason: 'adapter_not_operational',
+          }
         );
       }
       return runnable;
@@ -1011,7 +1108,7 @@ export class AudioOrchestrationService {
     // A single model failure shouldn't block the entire provider.
     const seenProviders = new Map<string, boolean>();
 
-    return models.filter(model => {
+    return models.filter((model) => {
       const providerName = model.provider || model.providerId;
       if (!providerName) return true;
 
@@ -1022,11 +1119,20 @@ export class AudioOrchestrationService {
         // `localState` is a private member used as a debug surface — narrow
         // through `narrowAs<>` to keep the cast lint-clean while documenting
         // the boundary at a single, grep-able call site.
-        const localState = narrowAs<{ localState?: { state: string; consecutiveFailures: number } }>(breaker).localState;
+        const localState = narrowAs<{
+          localState?: { state: string; consecutiveFailures: number };
+        }>(breaker).localState;
         // Only skip if circuit is fully OPEN with 5+ consecutive failures
         // This prevents over-filtering when only some models of a provider fail
         if (localState && localState.state === 'OPEN' && localState.consecutiveFailures >= 5) {
-          log.debug({ provider: providerName, state: localState.state, failures: localState.consecutiveFailures }, 'Skipping unhealthy provider (OPEN + 5+ failures)');
+          log.debug(
+            {
+              provider: providerName,
+              state: localState.state,
+              failures: localState.consecutiveFailures,
+            },
+            'Skipping unhealthy provider (OPEN + 5+ failures)'
+          );
           seenProviders.set(providerName, false);
           return false;
         }
@@ -1078,14 +1184,16 @@ export class AudioOrchestrationService {
     if (['deepgram', 'self-hosted'].includes(provider)) return true;
 
     // Known native STT model patterns
-    if (/\b(whisper|nova-\d|faster-whisper|sherpa|moonshine|sensevoice)\b/i.test(modelId)) return true;
+    if (/\b(whisper|nova-\d|faster-whisper|sherpa|moonshine|sensevoice)\b/i.test(modelId))
+      return true;
 
     // OpenAI whisper models
     if (provider === 'openai' && modelId.includes('whisper')) return true;
 
     // Models that declare audio_transcriptions as explicit endpoint
     const endpoints = model.metadata?.endpoints as string[] | undefined;
-    if (endpoints?.some(e => e.includes('audio/transcriptions') || e.includes('listen'))) return true;
+    if (endpoints?.some((e) => e.includes('audio/transcriptions') || e.includes('listen')))
+      return true;
 
     return false;
   }
@@ -1098,7 +1206,8 @@ export class AudioOrchestrationService {
     const modelId = (model.id || model.name || '').toLowerCase();
 
     if (['cartesia', 'elevenlabs', 'deepgram', 'self-hosted'].includes(provider)) return true;
-    if (/\b(tts|piper|kokoro|melotts|cosyvoice|sonic|aura|xtts|fish-speech)\b/i.test(modelId)) return true;
+    if (/\b(tts|piper|kokoro|melotts|cosyvoice|sonic|aura|xtts|fish-speech)\b/i.test(modelId))
+      return true;
     if (provider === 'openai' && modelId.includes('tts')) return true;
 
     return false;
@@ -1114,7 +1223,13 @@ export class AudioOrchestrationService {
   private convertToSRT(segments: unknown[]): string {
     return segments
       .map((seg, index) => {
-        if (typeof seg !== 'object' || seg === null || !('start' in seg) || !('end' in seg) || !('text' in seg)) {
+        if (
+          typeof seg !== 'object' ||
+          seg === null ||
+          !('start' in seg) ||
+          !('end' in seg) ||
+          !('text' in seg)
+        ) {
           return '';
         }
         const typedSeg = seg as { start: number; end: number; text: string };
@@ -1133,7 +1248,13 @@ export class AudioOrchestrationService {
     const header = 'WEBVTT\n\n';
     const body = segments
       .map((seg) => {
-        if (typeof seg !== 'object' || seg === null || !('start' in seg) || !('end' in seg) || !('text' in seg)) {
+        if (
+          typeof seg !== 'object' ||
+          seg === null ||
+          !('start' in seg) ||
+          !('end' in seg) ||
+          !('text' in seg)
+        ) {
           return '';
         }
         const typedSeg = seg as { start: number; end: number; text: string };
@@ -1162,4 +1283,3 @@ export class AudioOrchestrationService {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`;
   }
 }
-

@@ -68,7 +68,7 @@ const ENGINE_PATH = join(
   '..',
   'core',
   'orchestration',
-  'orchestration-engine.ts',
+  'orchestration-engine.ts'
 );
 
 const routesSource = readFileSync(ROUTES_PATH, 'utf8');
@@ -93,7 +93,7 @@ describe('Phase 6 Fix 1 — chat-routes pin-extraction wiring contract', () => {
     // arrives at the engine with a fake model id and gets pinned by the
     // inference fallback — defeating the alias-routing feature entirely.
     expect(routesSource).toMatch(
-      /const\s+aliasResolution\s*=\s*resolveAilinVirtualModelAlias\s*\(\s*modelValue\s*\)/,
+      /const\s+aliasResolution\s*=\s*resolveAilinVirtualModelAlias\s*\(\s*modelValue\s*\)/
     );
   });
 
@@ -109,7 +109,7 @@ describe('Phase 6 Fix 1 — chat-routes pin-extraction wiring contract', () => {
     // model came from system policy, not the user) gets silently
     // re-pinned.
     expect(routesSource).toMatch(
-      /const\s+hasUserFlag\s*=\s*['"]user_specified_model['"]\s+in\s+chatRequest/,
+      /const\s+hasUserFlag\s*=\s*['"]user_specified_model['"]\s+in\s+chatRequest/
     );
     expect(routesSource).toMatch(/else\s+if\s*\(\s*!hasUserFlag\s*\)/);
   });
@@ -126,7 +126,7 @@ describe('Phase 6 Fix 1 — chat-routes pin-extraction wiring contract', () => {
     // the engine to keep DynamicModelSelector active rather than
     // hard-pinning the alias resolution.
     expect(routesSource).toMatch(
-      /if\s*\(\s*aliasResolution\s*\)\s*\{[\s\S]{0,120}?normalizedRequest\.user_specified_model\s*=\s*false/,
+      /if\s*\(\s*aliasResolution\s*\)\s*\{[\s\S]{0,120}?normalizedRequest\.user_specified_model\s*=\s*false/
     );
   });
 
@@ -142,7 +142,7 @@ describe('Phase 6 Fix 1 — chat-routes pin-extraction wiring contract', () => {
     // direction (dropping `modelProvided`) would also break: empty
     // string would suddenly become "user-pinned to ''".
     expect(routesSource).toMatch(
-      /normalizedRequest\.user_specified_model\s*=\s*modelProvided\s*&&\s*!explicitlyAuto/,
+      /normalizedRequest\.user_specified_model\s*=\s*modelProvided\s*&&\s*!explicitlyAuto/
     );
   });
 
@@ -157,7 +157,7 @@ describe('Phase 6 Fix 1 — chat-routes pin-extraction wiring contract', () => {
     //     branch-2 runs in `if (aliasResolution)` while branch-3 runs
     //     in `else if (!hasUserFlag)` — disjoint branches).
     expect(routesSource).toMatch(
-      /const\s+explicitlyAuto\s*=\s*modelValue\.toLowerCase\(\)\s*===\s*['"]auto['"]\s*\|\|\s*aliasResolution\s*!==\s*null/,
+      /const\s+explicitlyAuto\s*=\s*modelValue\.toLowerCase\(\)\s*===\s*['"]auto['"]\s*\|\|\s*aliasResolution\s*!==\s*null/
     );
   });
 
@@ -209,7 +209,7 @@ describe('Security — ailin_billing precedence contract', () => {
     // which let a client-supplied ailin_billing take precedence. That exact
     // conjunction must not reappear.
     expect(routesSource).not.toMatch(
-      /aliasResolution\?\.billing\s*&&\s*normalizedRequest\.ailin_billing\s*===\s*undefined/,
+      /aliasResolution\?\.billing\s*&&\s*normalizedRequest\.ailin_billing\s*===\s*undefined/
     );
   });
 
@@ -217,7 +217,7 @@ describe('Security — ailin_billing precedence contract', () => {
     // When the alias carries a billing profile it is assigned unconditionally
     // — no client-value guard.
     expect(routesSource).toMatch(
-      /if\s*\(\s*aliasResolution\?\.billing\s*\)\s*\{[\s\S]{0,160}?normalizedRequest\.ailin_billing\s*=\s*aliasResolution\.billing/,
+      /if\s*\(\s*aliasResolution\?\.billing\s*\)\s*\{[\s\S]{0,160}?normalizedRequest\.ailin_billing\s*=\s*aliasResolution\.billing/
     );
   });
 

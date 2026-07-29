@@ -48,11 +48,7 @@ export class InMemoryShadowMetrics implements ShadowRoutingMetrics {
     this.counters.set(key, (this.counters.get(key) ?? 0) + 1);
   }
 
-  observe(
-    name: string,
-    value: number,
-    labels: Readonly<Record<string, string>> = {},
-  ): void {
+  observe(name: string, value: number, labels: Readonly<Record<string, string>> = {}): void {
     const key = this.buildKey(name, labels);
     let arr = this.observations.get(key);
     if (!arr) {
@@ -66,10 +62,7 @@ export class InMemoryShadowMetrics implements ShadowRoutingMetrics {
     return this.counters.get(this.buildKey(name, labels)) ?? 0;
   }
 
-  getObservations(
-    name: string,
-    labels: Readonly<Record<string, string>> = {},
-  ): readonly number[] {
+  getObservations(name: string, labels: Readonly<Record<string, string>> = {}): readonly number[] {
     return this.observations.get(this.buildKey(name, labels)) ?? [];
   }
 

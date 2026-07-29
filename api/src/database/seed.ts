@@ -1638,9 +1638,10 @@ export async function seedDatabase(): Promise<void> {
       'Database seed completed successfully'
     );
   } catch (error: unknown) {
-    const errorDetails = error instanceof Error
-      ? { message: error.message, stack: error.stack, name: error.name }
-      : { message: String(error) };
+    const errorDetails =
+      error instanceof Error
+        ? { message: error.message, stack: error.stack, name: error.name }
+        : { message: String(error) };
     logger.error(
       {
         error: errorDetails,

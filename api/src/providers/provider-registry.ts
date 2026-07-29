@@ -19,7 +19,11 @@ import { GoogleAdapter } from './google/google-adapter';
 import { VertexAIAdapter } from './vertex-ai/vertex-ai-adapter';
 // AWSBedrockAdapter is constructed via its catalog factory binding (see
 // providers.catalog.ts) — the legacy switch case was removed 2026-06-11.
-import { AWSSageMakerAdapter, type AWSSageMakerAdapterConfig, type SageMakerPayloadSchema } from './aws-sagemaker/aws-sagemaker-adapter';
+import {
+  AWSSageMakerAdapter,
+  type AWSSageMakerAdapterConfig,
+  type SageMakerPayloadSchema,
+} from './aws-sagemaker/aws-sagemaker-adapter';
 import { DeepSeekAdapter } from './deepseek/deepseek-adapter';
 import { MistralAdapter } from './mistral/mistral-adapter';
 import { XAIAdapter } from './xai/xai-adapter';
@@ -170,7 +174,10 @@ export class ProviderRegistry {
    * No hardcoded provider lists — operability is checked dynamically via
    * resolveAdapterForModel() which verifies adapter registration in the registry.
    */
-  async findModel(modelId: string, preferredProvider?: string): Promise<{ model: Model; adapter: ProviderAdapter } | null> {
+  async findModel(
+    modelId: string,
+    preferredProvider?: string
+  ): Promise<{ model: Model; adapter: ProviderAdapter } | null> {
     // Determinism (2026-06-29): a popular id exists under MANY providers (e.g.
     // gpt-oss-20b under huggingface/phala/aihubmix/together). Picking the FIRST
     // catalog entry meant trying dead variants (phala 401 / aihubmix 403) before a
@@ -205,7 +212,7 @@ export class ProviderRegistry {
       if (resolution.adapter) {
         this.log.info(
           { modelId, resolvedProvider: model.provider, totalEntries: allEntries.length },
-          'Model resolved to proven-operable provider',
+          'Model resolved to proven-operable provider'
         );
         return { model, adapter: resolution.adapter };
       }
@@ -217,7 +224,7 @@ export class ProviderRegistry {
       if (resolution.adapter) {
         this.log.warn(
           { modelId, resolvedProvider: model.provider },
-          'No proven-operable provider — using last-resort variant',
+          'No proven-operable provider — using last-resort variant'
         );
         return { model, adapter: resolution.adapter };
       }
@@ -225,7 +232,7 @@ export class ProviderRegistry {
 
     this.log.warn(
       { modelId, preferredProvider, entriesChecked: allEntries.length },
-      'No operational provider found for model across all entries',
+      'No operational provider found for model across all entries'
     );
     return null;
   }
@@ -432,36 +439,36 @@ export async function initializeProviderRegistry(
       // Re-check API key availability (may have been loaded from secrets after config creation)
       const apiKeyFromEnv = resolveProviderApiKey(p.name);
       const _apiKey = p.apiKey || apiKeyFromEnv;
-      
+
       // Update config with API key from environment if available
       if (apiKeyFromEnv && !p.apiKey) {
         return { ...p, apiKey: apiKeyFromEnv };
       }
-      
+
       return p;
     })
     .filter((p) => {
       const apiKey = p.apiKey || resolveProviderApiKey(p.name);
-      
+
       // For providers with API keys, check if key is present (may have been loaded from secrets)
       if (apiKey.length > 0) {
         return true;
       }
-      
+
       // For vertex-ai, also check PROJECT_ID
       if (p.name === 'vertex-ai') {
         const projectId = process.env.VERTEX_AI_PROJECT_ID;
         return !!projectId;
       }
-      
+
       return false;
     });
 
   logger.info(
-    { 
-      totalConfigs: providersConfig.length, 
+    {
+      totalConfigs: providersConfig.length,
       enabledCount: enabledProviders.length,
-      enabledProviders: enabledProviders.map(p => p.name)
+      enabledProviders: enabledProviders.map((p) => p.name),
     },
     'Provider filtering at initialization time'
   );
@@ -506,10 +513,16 @@ export async function initializeProviderRegistry(
           const openRouterConfig: OpenRouterConfig = {
             ...config,
             // If metadata exists and has these properties, use them
-            ...(typeof config === 'object' && config !== null && 'metadata' in config && typeof (config as { metadata?: unknown }).metadata === 'object' && (config as { metadata?: Record<string, unknown> }).metadata !== null
+            ...(typeof config === 'object' &&
+            config !== null &&
+            'metadata' in config &&
+            typeof (config as { metadata?: unknown }).metadata === 'object' &&
+            (config as { metadata?: Record<string, unknown> }).metadata !== null
               ? {
-                  appUrl: (config as { metadata?: Record<string, unknown> }).metadata?.appUrl as string | undefined,
-                  appName: (config as { metadata?: Record<string, unknown> }).metadata?.appName as string | undefined,
+                  appUrl: (config as { metadata?: Record<string, unknown> }).metadata?.appUrl as
+                    string | undefined,
+                  appName: (config as { metadata?: Record<string, unknown> }).metadata?.appName as
+                    string | undefined,
                 }
               : {}),
           };
@@ -634,16 +647,13 @@ export async function initializeProviderRegistry(
               configWithMetadata.metadata?.region ||
               process.env.AWS_SAGEMAKER_REGION ||
               process.env.AWS_REGION,
-            accessKeyId:
-              configWithMetadata.metadata?.accessKeyId || process.env.AWS_ACCESS_KEY_ID,
+            accessKeyId: configWithMetadata.metadata?.accessKeyId || process.env.AWS_ACCESS_KEY_ID,
             secretAccessKey:
-              configWithMetadata.metadata?.secretAccessKey ||
-              process.env.AWS_SECRET_ACCESS_KEY,
+              configWithMetadata.metadata?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY,
             sessionToken:
               configWithMetadata.metadata?.sessionToken || process.env.AWS_SESSION_TOKEN,
             endpointName:
-              configWithMetadata.metadata?.endpointName ||
-              process.env.AWS_SAGEMAKER_ENDPOINT_NAME,
+              configWithMetadata.metadata?.endpointName || process.env.AWS_SAGEMAKER_ENDPOINT_NAME,
             payloadSchema:
               configWithMetadata.metadata?.payloadSchema ||
               (process.env.AWS_SAGEMAKER_PAYLOAD_SCHEMA as SageMakerPayloadSchema | undefined),
@@ -669,7 +679,9 @@ export async function initializeProviderRegistry(
           break;
 
         case 'palabraai': {
-          const palabraConfig = config as ProviderConfig & { metadata?: { clientId?: string; clientSecret?: string } };
+          const palabraConfig = config as ProviderConfig & {
+            metadata?: { clientId?: string; clientSecret?: string };
+          };
           adapter = new PalabraAIAdapter({
             ...config,
             clientId: palabraConfig.metadata?.clientId,
@@ -725,9 +737,8 @@ export async function initializeProviderRegistry(
   // `<parent>-<alias>` names. No-op when the env vars aren't set —
   // zero impact on the single-deployment path above.
   try {
-    const { registerMultiDeploymentProviders } = await import(
-      './catalog/multi-deployment-registrar.js'
-    );
+    const { registerMultiDeploymentProviders } =
+      await import('./catalog/multi-deployment-registrar.js');
     const multi = await registerMultiDeploymentProviders(registry);
     if (multi.totalRegistered > 0) {
       logger.info(
@@ -737,35 +748,35 @@ export async function initializeProviderRegistry(
           sagemaker: multi.sagemaker.length,
           total: multi.totalRegistered,
         },
-        'Multi-deployment providers registered',
+        'Multi-deployment providers registered'
       );
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.warn(
       { error: errorMessage },
-      'Multi-deployment registrar threw — single-deployment providers unaffected',
+      'Multi-deployment registrar threw — single-deployment providers unaffected'
     );
   }
 
   const registeredProviderNames = registry.getProviderNames();
   logger.info(
-    { 
-      providerCount: registry.count(), 
+    {
+      providerCount: registry.count(),
       providers: registeredProviderNames,
       initializedAdaptersCount: initializedAdapters.length,
-      initializedAdapterNames: initializedAdapters.map(a => a.getName())
+      initializedAdapterNames: initializedAdapters.map((a) => a.getName()),
     },
     'Provider registry initialized'
   );
-  
+
   // Verify that all initialized adapters were registered
   if (initializedAdapters.length !== registeredProviderNames.length) {
     logger.warn(
       {
         initializedCount: initializedAdapters.length,
         registeredCount: registeredProviderNames.length,
-        initializedNames: initializedAdapters.map(a => a.getName()),
+        initializedNames: initializedAdapters.map((a) => a.getName()),
         registeredNames: registeredProviderNames,
       },
       'Mismatch between initialized adapters and registered providers'

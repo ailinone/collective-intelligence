@@ -31,10 +31,7 @@
  */
 
 import { performance } from 'node:perf_hooks';
-import {
-  DEFAULT_SHADOW_CONFIG,
-  type ShadowRoutingConfig,
-} from './shadow-routing-config';
+import { DEFAULT_SHADOW_CONFIG, type ShadowRoutingConfig } from './shadow-routing-config';
 import {
   noopShadowLogger,
   SHADOW_DECISION_EVENT,
@@ -68,7 +65,7 @@ export interface ShadowParetoComputeResult {
 export interface ShadowParetoComputer {
   compute(
     input: ShadowRoutingInput,
-    signal: { aborted: boolean },
+    signal: { aborted: boolean }
   ): Promise<ShadowParetoComputeResult>;
 }
 
@@ -188,11 +185,7 @@ export class DefaultShadowRoutingService implements ShadowRoutingService {
 
   // ─── Internals ───────────────────────────────────────────────────────
 
-  private skip(
-    reason: ShadowSkipReason,
-    t0: number,
-    taskTypeForLog?: string,
-  ): ShadowRoutingResult {
+  private skip(reason: ShadowSkipReason, t0: number, taskTypeForLog?: string): ShadowRoutingResult {
     const latency = this.elapsed(t0);
     this.metrics.observe(SHADOW_METRIC_NAMES.LATENCY_MS, latency, {
       outcome: 'skipped',
@@ -202,9 +195,7 @@ export class DefaultShadowRoutingService implements ShadowRoutingService {
       executed: false,
       skippedReason: reason,
       latencyMs: latency,
-      taskProfile: taskTypeForLog
-        ? Object.freeze({ taskType: taskTypeForLog })
-        : undefined,
+      taskProfile: taskTypeForLog ? Object.freeze({ taskType: taskTypeForLog }) : undefined,
     });
     return result;
   }
@@ -216,9 +207,7 @@ export class DefaultShadowRoutingService implements ShadowRoutingService {
     return false;
   }
 
-  private async runWithinTimeout(
-    input: ShadowRoutingInput,
-  ): Promise<ShadowParetoComputeResult> {
+  private async runWithinTimeout(input: ShadowRoutingInput): Promise<ShadowParetoComputeResult> {
     const budget = this.config.maxLatencyMs;
     const signal = { aborted: false };
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -295,7 +284,7 @@ function hashIdsArray(ids: readonly string[] | undefined): string | undefined {
 
 function buildDiff(
   pareto: ShadowParetoPlanSummary | undefined,
-  input: ShadowRoutingInput,
+  input: ShadowRoutingInput
 ): ShadowRoutingResult['diff'] {
   if (!pareto) return undefined;
   const actualModel = input.routeContext.actualModel;
@@ -303,13 +292,10 @@ function buildDiff(
   const actualStrategy = input.routeContext.actualStrategy;
   return Object.freeze({
     sameModelAsActual: actualModel
-      ? pareto.selectedModelIds.length === 1 &&
-        pareto.selectedModelIds[0] === actualModel
+      ? pareto.selectedModelIds.length === 1 && pareto.selectedModelIds[0] === actualModel
       : undefined,
     sameProviderAsActual: actualProvider ? undefined : undefined,
-    sameStrategyAsActual: actualStrategy
-      ? pareto.strategy === actualStrategy
-      : undefined,
+    sameStrategyAsActual: actualStrategy ? pareto.strategy === actualStrategy : undefined,
     estimatedCostDeltaUsd: undefined,
   });
 }
@@ -317,7 +303,7 @@ function buildDiff(
 // ─── Factory ────────────────────────────────────────────────────────────
 
 export function createShadowRoutingService(
-  options: ShadowRoutingServiceOptions = {},
+  options: ShadowRoutingServiceOptions = {}
 ): ShadowRoutingService {
   return new DefaultShadowRoutingService(options);
 }

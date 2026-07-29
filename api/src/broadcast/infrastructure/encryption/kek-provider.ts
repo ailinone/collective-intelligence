@@ -143,15 +143,24 @@ export class LocalKekProvider implements KekProvider {
 
   private readonly kek: Buffer;
 
-  constructor(masterSecret: Buffer, public readonly resource: string) {
+  constructor(
+    masterSecret: Buffer,
+    public readonly resource: string
+  ) {
     if (masterSecret.length < 32) {
       throw new Error(
-        `LocalKekProvider master secret must be >= 32 bytes (got ${masterSecret.length})`,
+        `LocalKekProvider master secret must be >= 32 bytes (got ${masterSecret.length})`
       );
     }
     // Derive a 32-byte KEK via HKDF. Salt is empty (the master secret is already
     // a random high-entropy value in practice; HKDF info tag binds domain).
-    const derived = hkdfSync('sha256', masterSecret, Buffer.alloc(0), LocalKekProvider.HKDF_INFO, 32);
+    const derived = hkdfSync(
+      'sha256',
+      masterSecret,
+      Buffer.alloc(0),
+      LocalKekProvider.HKDF_INFO,
+      32
+    );
     this.kek = Buffer.from(derived);
   }
 
@@ -175,7 +184,10 @@ export class LocalKekProvider implements KekProvider {
       throw new Error(`Unsupported LocalKek wrap version: ${version}`);
     }
     const iv = wrappedDek.subarray(1, 1 + LocalKekProvider.IV_LEN);
-    const authTag = wrappedDek.subarray(1 + LocalKekProvider.IV_LEN, 1 + LocalKekProvider.IV_LEN + LocalKekProvider.TAG_LEN);
+    const authTag = wrappedDek.subarray(
+      1 + LocalKekProvider.IV_LEN,
+      1 + LocalKekProvider.IV_LEN + LocalKekProvider.TAG_LEN
+    );
     const ciphertext = wrappedDek.subarray(1 + LocalKekProvider.IV_LEN + LocalKekProvider.TAG_LEN);
     const decipher = createDecipheriv('aes-256-gcm', this.kek, iv);
     decipher.setAuthTag(authTag);
@@ -222,7 +234,7 @@ export function resolveKekProviderFromConfig(config: KekProviderConfig): KekProv
       const secret = Buffer.from(config.masterSecretB64, 'base64');
       return new LocalKekProvider(
         secret,
-        config.resourceId ?? 'local://env:BROADCAST_LOCAL_KEK_B64',
+        config.resourceId ?? 'local://env:BROADCAST_LOCAL_KEK_B64'
       );
     }
 
@@ -241,7 +253,7 @@ export function resolveKekProviderFromConfig(config: KekProviderConfig): KekProv
         "BROADCAST_KEK_PROVIDER='aws-kms' is not yet implemented in this build. " +
           'A future release will ship `AwsKmsKekProvider` with `@aws-sdk/client-kms` ' +
           'as an optional dependency, mirroring the GCP adapter. ' +
-          'Track the multi-cloud roadmap item before enabling.',
+          'Track the multi-cloud roadmap item before enabling.'
       );
     }
 
@@ -249,7 +261,7 @@ export function resolveKekProviderFromConfig(config: KekProviderConfig): KekProv
       throw new Error(
         "BROADCAST_KEK_PROVIDER='azure-keyvault' is not yet implemented in this build. " +
           'A future release will ship `AzureKeyVaultKekProvider` with ' +
-          '`@azure/keyvault-keys` as an optional dependency.',
+          '`@azure/keyvault-keys` as an optional dependency.'
       );
     }
 
@@ -259,7 +271,7 @@ export function resolveKekProviderFromConfig(config: KekProviderConfig): KekProv
       const _exhaustive: never = config;
       void _exhaustive;
       throw new Error(
-        `resolveKekProviderFromConfig: unknown backend in config (${JSON.stringify(config)})`,
+        `resolveKekProviderFromConfig: unknown backend in config (${JSON.stringify(config)})`
       );
     }
   }
@@ -289,7 +301,7 @@ export function parseKekConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Kek
       if (!keyResource) {
         throw new Error(
           "BROADCAST_KEK_PROVIDER='gcp-kms' requires BROADCAST_KMS_KEK_RESOURCE " +
-            '(full CryptoKey resource name).',
+            '(full CryptoKey resource name).'
         );
       }
       return { backend: 'gcp-kms', keyResource };
@@ -300,7 +312,7 @@ export function parseKekConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Kek
       if (!keyResource) {
         throw new Error(
           "BROADCAST_KEK_PROVIDER='aws-kms' requires BROADCAST_KMS_KEK_RESOURCE " +
-            '(KMS key ARN or alias).',
+            '(KMS key ARN or alias).'
         );
       }
       return { backend: 'aws-kms', keyResource, region: env.BROADCAST_KMS_REGION };
@@ -312,7 +324,7 @@ export function parseKekConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Kek
       if (!vaultUrl || !keyName) {
         throw new Error(
           "BROADCAST_KEK_PROVIDER='azure-keyvault' requires both BROADCAST_KV_VAULT_URL " +
-            'and BROADCAST_KV_KEY_NAME.',
+            'and BROADCAST_KV_KEY_NAME.'
         );
       }
       return {
@@ -328,13 +340,13 @@ export function parseKekConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Kek
       if (selected === '' && isProduction) {
         throw new Error(
           'BROADCAST_KEK_PROVIDER is unset in a production environment. Explicit ' +
-            'configuration is required in production (no implicit local backend).',
+            'configuration is required in production (no implicit local backend).'
         );
       }
       const masterSecretB64 = env.BROADCAST_LOCAL_KEK_B64;
       if (!masterSecretB64) {
         throw new Error(
-          'LocalKekProvider requires BROADCAST_LOCAL_KEK_B64 (>= 32 base64-encoded bytes).',
+          'LocalKekProvider requires BROADCAST_LOCAL_KEK_B64 (>= 32 base64-encoded bytes).'
         );
       }
       return { backend: 'local', masterSecretB64 };
@@ -343,7 +355,7 @@ export function parseKekConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Kek
     default: {
       throw new Error(
         `Unknown BROADCAST_KEK_PROVIDER="${selected}" (NODE_ENV=${env.NODE_ENV ?? 'unset'}). ` +
-          `Expected one of: ${KEK_BACKENDS.join(', ')}.`,
+          `Expected one of: ${KEK_BACKENDS.join(', ')}.`
       );
     }
   }

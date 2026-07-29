@@ -74,7 +74,7 @@ describe('Experiment Suite', () => {
   });
 
   it('task indices are unique and sequential', () => {
-    const indices = EXPERIMENT_SUITE.map(t => t.index);
+    const indices = EXPERIMENT_SUITE.map((t) => t.index);
     const unique = new Set(indices);
     expect(unique.size).toBe(EXPERIMENT_SUITE.length);
 
@@ -85,18 +85,18 @@ describe('Experiment Suite', () => {
 
   it('filters tasks correctly', () => {
     const codeGen = getFilteredTasks({ taskTypes: ['code-generation'] });
-    expect(codeGen.every(t => t.taskType === 'code-generation')).toBe(true);
+    expect(codeGen.every((t) => t.taskType === 'code-generation')).toBe(true);
     expect(codeGen.length).toBeGreaterThan(0);
 
     const highOnly = getFilteredTasks({ complexities: ['high'] });
-    expect(highOnly.every(t => t.complexity === 'high')).toBe(true);
+    expect(highOnly.every((t) => t.complexity === 'high')).toBe(true);
     expect(highOnly.length).toBeGreaterThan(0);
 
     const byIndex = getFilteredTasks({ indices: [0, 1, 2] });
     expect(byIndex.length).toBe(3);
 
     const businessDomain = getFilteredTasks({ domains: ['business'] });
-    expect(businessDomain.every(t => t.domain === 'business')).toBe(true);
+    expect(businessDomain.every((t) => t.domain === 'business')).toBe(true);
   });
 
   it('returns all tasks when no filters provided', () => {
@@ -214,13 +214,13 @@ describe('Report Generation', () => {
             complexity: task.complexity,
             domain: task.domain,
             prompt: task.prompt,
-            qualityScore: 0.70 + Math.random() * 0.2, // 0.70-0.90 (slightly higher)
-            costUsd: 0.05 + Math.random() * 0.10,
+            qualityScore: 0.7 + Math.random() * 0.2, // 0.70-0.90 (slightly higher)
+            costUsd: 0.05 + Math.random() * 0.1,
             latencyMs: 3000 + Math.random() * 5000,
             totalTokens: 1500 + Math.floor(Math.random() * 1000),
             success: true,
             modelsUsed: ['model-a', 'model-b', 'model-c'],
-            judgeScore: 0.70 + Math.random() * 0.2,
+            judgeScore: 0.7 + Math.random() * 0.2,
             judgeRubric: task.judgeRubric,
             faithfulnessScore: null,
             instructionFollowingScore: null,
@@ -307,7 +307,9 @@ describe('Report Generation', () => {
     const results = mockResults();
     const report = generateReport('exp-001', 'Test', results);
 
-    const h2h = report.detailedResults.headToHead.find(h => h.groupA === 'single-model' && h.groupB === 'collective');
+    const h2h = report.detailedResults.headToHead.find(
+      (h) => h.groupA === 'single-model' && h.groupB === 'collective'
+    );
     expect(h2h).toBeDefined();
 
     if (h2h) {
@@ -348,7 +350,9 @@ describe('Report Generation', () => {
 
     const report = generateReport('exp-small', 'Small Test', smallResults);
 
-    expect(report.methodology.limitations.some(l => l.includes('below recommended minimum'))).toBe(true);
+    expect(
+      report.methodology.limitations.some((l) => l.includes('below recommended minimum'))
+    ).toBe(true);
   });
 
   it('conclusion confidence scales with sample size', () => {
@@ -356,6 +360,8 @@ describe('Report Generation', () => {
     const report = generateReport('exp-001', 'Test', results);
 
     // With 30+ single-model and 20+ collective results, confidence should be medium+
-    expect(['high', 'medium', 'low', 'inconclusive']).toContain(report.executiveSummary.collectiveVsTier1.confidence);
+    expect(['high', 'medium', 'low', 'inconclusive']).toContain(
+      report.executiveSummary.collectiveVsTier1.confidence
+    );
   });
 });

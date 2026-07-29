@@ -29,11 +29,9 @@ import type { CanonicalModel } from '../../registry/canonical-model';
 function findCandidate(
   registry: ReturnType<typeof buildFixtureRegistry>,
   providerId: string,
-  modelId: string,
+  modelId: string
 ): ModelScoringCandidate {
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   const oid = snap?.uid ?? `${providerId}:${modelId}`;
   const offering = registry.lookupOffering(oid);
   if (!offering) throw new Error('offering missing');
@@ -62,9 +60,7 @@ function withHealthy(candidate: ModelScoringCandidate): ModelScoringCandidate {
 describe('model-scorer determinism — same input ⇒ same output', () => {
   it('produces identical totalScore + breakdown on 1000 iterations', () => {
     const registry = buildFixtureRegistry();
-    const candidate = withHealthy(
-      findCandidate(registry, 'anthropic', 'claude-opus-4-7'),
-    );
+    const candidate = withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7'));
     const context = { requiredCapabilities: ['chat', 'vision'] };
 
     const first = scoreModelCandidate(candidate, context);
@@ -74,7 +70,7 @@ describe('model-scorer determinism — same input ⇒ same output', () => {
       if (JSON.stringify(next) !== firstJSON) {
         // Fast-fail with a useful message.
         throw new Error(
-          `non-deterministic output at iteration ${i}: expected ${firstJSON}, got ${JSON.stringify(next)}`,
+          `non-deterministic output at iteration ${i}: expected ${firstJSON}, got ${JSON.stringify(next)}`
         );
       }
     }
@@ -101,9 +97,7 @@ describe('model-scorer determinism — same input ⇒ same output', () => {
 describe('model-scorer determinism — no clock/random dependency', () => {
   it('output is identical when Date.now is stubbed to two different values', () => {
     const registry = buildFixtureRegistry();
-    const candidate = withHealthy(
-      findCandidate(registry, 'openai', 'gpt-5.5-pro'),
-    );
+    const candidate = withHealthy(findCandidate(registry, 'openai', 'gpt-5.5-pro'));
     const ctx = { requiredCapabilities: ['chat'] };
 
     const realDateNow = Date.now;
@@ -120,9 +114,7 @@ describe('model-scorer determinism — no clock/random dependency', () => {
 
   it('output is identical with Math.random stubbed to two different values', () => {
     const registry = buildFixtureRegistry();
-    const candidate = withHealthy(
-      findCandidate(registry, 'openai', 'gpt-5.5-pro'),
-    );
+    const candidate = withHealthy(findCandidate(registry, 'openai', 'gpt-5.5-pro'));
     const ctx = { requiredCapabilities: ['chat'] };
 
     const spy1 = vi.spyOn(Math, 'random').mockReturnValue(0.1);
@@ -146,7 +138,7 @@ describe('model-scorer determinism — input is not mutated', () => {
         canonicalModel: candidate.canonicalModel,
         offering: candidate.offering,
         route: candidate.route,
-      }),
+      })
     );
     scoreModelCandidate(candidate, { requiredCapabilities: ['chat'] });
     const after = JSON.parse(
@@ -154,7 +146,7 @@ describe('model-scorer determinism — input is not mutated', () => {
         canonicalModel: candidate.canonicalModel,
         offering: candidate.offering,
         route: candidate.route,
-      }),
+      })
     );
     expect(after).toEqual(before);
   });

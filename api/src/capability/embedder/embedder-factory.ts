@@ -48,14 +48,14 @@ export function getCapabilityEmbedder(): CapabilityEmbedder {
   switch (choice) {
     case 'openai':
       activeEmbedder = new OpenAIEmbedder({
-        apiKey: hcraUrl ? (process.env.OPENAI_API_KEY || 'tei-local') : undefined,
+        apiKey: hcraUrl ? process.env.OPENAI_API_KEY || 'tei-local' : undefined,
         baseUrl: hcraUrl,
         model: hcraModel,
       });
       return activeEmbedder;
     default:
       throw new Error(
-        `Unknown HCRA_EMBEDDER='${choice}'. Supported: 'openai'. Add an implementation under capability/embedder/.`,
+        `Unknown HCRA_EMBEDDER='${choice}'. Supported: 'openai'. Add an implementation under capability/embedder/.`
       );
   }
 }

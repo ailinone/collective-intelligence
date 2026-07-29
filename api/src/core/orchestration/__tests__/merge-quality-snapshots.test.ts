@@ -23,9 +23,7 @@
  *   - sourceArtifacts union
  */
 import { describe, it, expect } from 'vitest';
-import {
-  mergeQualitySnapshots,
-} from '@/core/orchestration/quality-benchmark/merge-quality-snapshots';
+import { mergeQualitySnapshots } from '@/core/orchestration/quality-benchmark/merge-quality-snapshots';
 import {
   buildSnapshot,
   validateSnapshot,
@@ -34,7 +32,7 @@ import {
 } from '@/core/orchestration/role-selection/model-quality-calibration';
 
 function mkEntry(
-  overrides: Partial<ModelQualityCalibrationEntry> = {},
+  overrides: Partial<ModelQualityCalibrationEntry> = {}
 ): ModelQualityCalibrationEntry {
   return {
     modelId: 'test-x',
@@ -50,7 +48,7 @@ function mkEntry(
 
 function mkSnapshot(
   entries: ModelQualityCalibrationEntry[],
-  opts: Partial<{ version: string; sourceArtifacts: readonly string[] }> = {},
+  opts: Partial<{ version: string; sourceArtifacts: readonly string[] }> = {}
 ): ModelQualityCalibrationSnapshot {
   return buildSnapshot({
     version: opts.version ?? '1.0.0',
@@ -130,14 +128,14 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
     const s1 = mkSnapshot([
       mkEntry({
         canonicalModelId: 'shared',
-        sourceScores: [{ source: 'benchlm', score: 0.9, confidence: 'high' }],     // weight 1.0
+        sourceScores: [{ source: 'benchlm', score: 0.9, confidence: 'high' }], // weight 1.0
         qualityScoreSources: ['benchlm'],
       }),
     ]);
     const s2 = mkSnapshot([
       mkEntry({
         canonicalModelId: 'shared',
-        sourceScores: [{ source: 'lmarena', score: 0.5, confidence: 'low' }],       // weight 0.3
+        sourceScores: [{ source: 'lmarena', score: 0.5, confidence: 'low' }], // weight 0.3
         qualityScoreSources: ['lmarena'],
       }),
     ]);
@@ -151,24 +149,28 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
     const s1 = mkSnapshot([
       mkEntry({
         canonicalModelId: 'shared',
-        sourceScores: [{
-          source: 'benchlm',
-          score: 0.8,
-          confidence: 'high',
-          categoryScores: { chat_text: 0.85, code_webdev: 0.9 },
-        }],
+        sourceScores: [
+          {
+            source: 'benchlm',
+            score: 0.8,
+            confidence: 'high',
+            categoryScores: { chat_text: 0.85, code_webdev: 0.9 },
+          },
+        ],
         qualityScoreSources: ['benchlm'],
       }),
     ]);
     const s2 = mkSnapshot([
       mkEntry({
         canonicalModelId: 'shared',
-        sourceScores: [{
-          source: 'lmarena',
-          score: 0.85,
-          confidence: 'high',
-          categoryScores: { chat_text: 0.9, image_t2i: 0.6 },
-        }],
+        sourceScores: [
+          {
+            source: 'lmarena',
+            score: 0.85,
+            confidence: 'high',
+            categoryScores: { chat_text: 0.9, image_t2i: 0.6 },
+          },
+        ],
         qualityScoreSources: ['lmarena'],
       }),
     ]);
@@ -199,8 +201,8 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
     const r = mergeQualitySnapshots({ snapshots: [s1, s2], version: '1.0.0-merged' });
     const merged = r.snapshot.entries[0];
     expect(merged.dimensionScores!.reasoning).toBe(0.9); // max(0.85, 0.9)
-    expect(merged.dimensionScores!.coding).toBe(0.7);     // only s1
-    expect(merged.dimensionScores!.math).toBe(0.8);       // only s2
+    expect(merged.dimensionScores!.coding).toBe(0.7); // only s1
+    expect(merged.dimensionScores!.math).toBe(0.8); // only s2
   });
 
   it('manual source DEMOTED when external source present in same entry', () => {
@@ -229,9 +231,7 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
         canonicalModelId: 'shared',
         qualityScoreSource: 'manual_legacy',
         qualityConfidence: 'medium',
-        sourceScores: [
-          { source: 'manual', score: 0.7, confidence: 'medium' },
-        ],
+        sourceScores: [{ source: 'manual', score: 0.7, confidence: 'medium' }],
         qualityScoreSources: ['manual'],
       }),
     ]);
@@ -257,7 +257,9 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
       }),
     ]);
     const r = mergeQualitySnapshots({
-      snapshots: [s1], version: '1.0.0-merged', requireExternalBenchmark: true,
+      snapshots: [s1],
+      version: '1.0.0-merged',
+      requireExternalBenchmark: true,
     });
     expect(r.snapshot.entries.length).toBe(1);
     expect(r.snapshot.entries[0].canonicalModelId).toBe('external-backed');
@@ -288,13 +290,21 @@ describe('01C.1B-J2-C-R4 §10 — mergeQualitySnapshots', () => {
   });
 
   it('sourceArtifacts is union of input snapshots + explicit additions', () => {
-    const s1 = mkSnapshot([mkEntry({ canonicalModelId: 'a' })], { sourceArtifacts: ['benchlm.csv'] });
-    const s2 = mkSnapshot([mkEntry({ canonicalModelId: 'b' })], { sourceArtifacts: ['lmarena.md'] });
+    const s1 = mkSnapshot([mkEntry({ canonicalModelId: 'a' })], {
+      sourceArtifacts: ['benchlm.csv'],
+    });
+    const s2 = mkSnapshot([mkEntry({ canonicalModelId: 'b' })], {
+      sourceArtifacts: ['lmarena.md'],
+    });
     const r = mergeQualitySnapshots({
-      snapshots: [s1, s2], version: '1.0.0-merged', sourceArtifacts: ['manifest.json'],
+      snapshots: [s1, s2],
+      version: '1.0.0-merged',
+      sourceArtifacts: ['manifest.json'],
     });
     expect(r.snapshot.sourceArtifacts.slice().sort()).toEqual([
-      'benchlm.csv', 'lmarena.md', 'manifest.json',
+      'benchlm.csv',
+      'lmarena.md',
+      'manifest.json',
     ]);
   });
 

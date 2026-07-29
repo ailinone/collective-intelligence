@@ -40,13 +40,13 @@ const log = logger.child({ component: 'adaptive-quality-targets' });
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface QualityTargetRecommendation {
-  target: number;                     // 0.6-0.98
-  confidence: number;                 // 0-1, how confident we are in this target
+  target: number; // 0.6-0.98
+  confidence: number; // 0-1, how confident we are in this target
   source: 'learned' | 'heuristic' | 'default';
   reasoning: string;
-  historicalAvg: number | null;       // What quality is typically achieved
-  historicalP90: number | null;       // 90th percentile achievable quality
-  suggestedMinIterations: number;     // How many feedback iterations to allow
+  historicalAvg: number | null; // What quality is typically achieved
+  historicalP90: number | null; // 90th percentile achievable quality
+  suggestedMinIterations: number; // How many feedback iterations to allow
 }
 
 interface NicheProfile {
@@ -77,9 +77,9 @@ const CONFIG = {
   headroomFactor: 0.08,
   // Confidence multiplier for feedback iteration recommendation
   iterationThresholds: {
-    easy: 1,    // Single pass usually sufficient
-    medium: 1,  // One pass, confidence gate may trigger refinement
-    hard: 2,    // Allow 2 iterations
+    easy: 1, // Single pass usually sufficient
+    medium: 1, // One pass, confidence gate may trigger refinement
+    hard: 2, // Allow 2 iterations
     veryHard: 3, // Full feedback loop
   } as Record<string, number>,
 };
@@ -105,7 +105,7 @@ function cacheKey(taskType: string, complexity: string): string {
 export async function getAdaptiveQualityTarget(
   taskType: string,
   complexity: string,
-  userExplicitTarget?: number,
+  userExplicitTarget?: number
 ): Promise<QualityTargetRecommendation> {
   // If user explicitly set a target, respect it (but still return metadata)
   if (userExplicitTarget !== undefined) {
@@ -135,8 +135,10 @@ export async function getAdaptiveQualityTarget(
       return profileToRecommendation(profile);
     }
   } catch (err) {
-    log.warn({ error: String(err), taskType, complexity },
-      'Failed to load niche profile for adaptive quality target');
+    log.warn(
+      { error: String(err), taskType, complexity },
+      'Failed to load niche profile for adaptive quality target'
+    );
   }
 
   // Heuristic fallback
@@ -162,7 +164,8 @@ function profileToRecommendation(profile: NicheProfile): QualityTargetRecommenda
     target,
     confidence,
     source: 'learned',
-    reasoning: `Based on ${profile.sampleCount} observations: avg quality ${profile.avgQuality.toFixed(3)}, ` +
+    reasoning:
+      `Based on ${profile.sampleCount} observations: avg quality ${profile.avgQuality.toFixed(3)}, ` +
       `P90 ${profile.p90Quality.toFixed(3)}, best strategy "${profile.bestStrategy}" at ${profile.bestStrategyQuality.toFixed(3)}`,
     historicalAvg: profile.avgQuality,
     historicalP90: profile.p90Quality,
@@ -180,8 +183,8 @@ function inferDifficultyTier(profile: NicheProfile): string {
   const combined = qualityDifficulty * 0.6 + successDifficulty * 0.4;
 
   if (combined < 0.15) return 'easy';
-  if (combined < 0.30) return 'medium';
-  if (combined < 0.50) return 'hard';
+  if (combined < 0.3) return 'medium';
+  if (combined < 0.5) return 'hard';
   return 'veryHard';
 }
 
@@ -191,25 +194,25 @@ function inferDifficultyTier(profile: NicheProfile): string {
 function heuristicTarget(taskType: string, complexity: string): QualityTargetRecommendation {
   // Base targets by complexity
   const complexityTargets: Record<string, number> = {
-    'low': 0.80,
-    'simple': 0.80,
-    'medium': 0.85,
-    'moderate': 0.85,
-    'high': 0.90,
-    'complex': 0.90,
+    low: 0.8,
+    simple: 0.8,
+    medium: 0.85,
+    moderate: 0.85,
+    high: 0.9,
+    complex: 0.9,
   };
 
   // Task type adjustments — some tasks inherently need higher quality
   const taskTypeBonus: Record<string, number> = {
-    'code-generation': 0.02,     // Code needs correctness
-    'code-review': 0.03,         // Security-critical
-    'debugging': 0.02,           // Must find actual bug
-    'analysis': 0.0,             // Flexible
-    'documentation': -0.02,      // Lower bar acceptable
-    'testing': 0.01,             // Tests need correctness
-    'refactoring': 0.02,         // Must preserve behavior
-    'qa': 0.0,                   // Standard
-    'general': 0.0,              // Default
+    'code-generation': 0.02, // Code needs correctness
+    'code-review': 0.03, // Security-critical
+    debugging: 0.02, // Must find actual bug
+    analysis: 0.0, // Flexible
+    documentation: -0.02, // Lower bar acceptable
+    testing: 0.01, // Tests need correctness
+    refactoring: 0.02, // Must preserve behavior
+    qa: 0.0, // Standard
+    general: 0.0, // Default
   };
 
   const baseTarget = complexityTargets[complexity] ?? 0.85;
@@ -234,7 +237,7 @@ function heuristicTarget(taskType: string, complexity: string): QualityTargetRec
  */
 async function loadNicheProfile(
   taskType: string,
-  complexity: string,
+  complexity: string
 ): Promise<NicheProfile | null> {
   // Get strategy weights for this niche
   const weights = await prisma.strategyWeight.findMany({
@@ -302,7 +305,7 @@ export async function refreshAllProfiles(): Promise<number> {
       if (profile && profile.sampleCount >= CONFIG.minSamplesForLearned) {
         profileCache.set(
           cacheKey(niche.taskType, niche.complexity),
-          { profile, expiresAt: Date.now() + CONFIG.cacheTtlMs * 2 }, // Longer TTL for bulk refresh
+          { profile, expiresAt: Date.now() + CONFIG.cacheTtlMs * 2 } // Longer TTL for bulk refresh
         );
         refreshed++;
       }
@@ -319,7 +322,9 @@ export async function refreshAllProfiles(): Promise<number> {
 /**
  * Get all cached profiles for admin inspection.
  */
-export function getCachedProfiles(): Array<NicheProfile & { targetRecommendation: QualityTargetRecommendation }> {
+export function getCachedProfiles(): Array<
+  NicheProfile & { targetRecommendation: QualityTargetRecommendation }
+> {
   const results: Array<NicheProfile & { targetRecommendation: QualityTargetRecommendation }> = [];
 
   for (const entry of profileCache.values()) {

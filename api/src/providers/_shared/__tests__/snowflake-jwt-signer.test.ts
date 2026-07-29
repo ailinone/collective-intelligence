@@ -19,10 +19,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateKeyPairSync, createPublicKey, createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
-import {
-  SnowflakeJwtSigner,
-  computeSnowflakeFingerprint,
-} from '../snowflake-jwt-signer';
+import { SnowflakeJwtSigner, computeSnowflakeFingerprint } from '../snowflake-jwt-signer';
 
 function makePemKeyPair() {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -53,9 +50,15 @@ describe('SnowflakeJwtSigner', () => {
   const keys = makePemKeyPair();
 
   it('throws when required fields are missing', () => {
-    expect(() => new SnowflakeJwtSigner({ account: '', user: 'u', privateKeyPem: keys.privateKeyPem })).toThrow(/account/);
-    expect(() => new SnowflakeJwtSigner({ account: 'a', user: '', privateKeyPem: keys.privateKeyPem })).toThrow(/user/);
-    expect(() => new SnowflakeJwtSigner({ account: 'a', user: 'u', privateKeyPem: '' })).toThrow(/privateKeyPem/);
+    expect(
+      () => new SnowflakeJwtSigner({ account: '', user: 'u', privateKeyPem: keys.privateKeyPem })
+    ).toThrow(/account/);
+    expect(
+      () => new SnowflakeJwtSigner({ account: 'a', user: '', privateKeyPem: keys.privateKeyPem })
+    ).toThrow(/user/);
+    expect(() => new SnowflakeJwtSigner({ account: 'a', user: 'u', privateKeyPem: '' })).toThrow(
+      /privateKeyPem/
+    );
   });
 
   it('uppercases account + user in the issuer', () => {

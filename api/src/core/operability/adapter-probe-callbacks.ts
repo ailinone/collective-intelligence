@@ -29,10 +29,7 @@
  *     validates auth.
  */
 
-import {
-  type DiscoveredModel,
-  type ProviderErrorClass,
-} from './types';
+import { type DiscoveredModel, type ProviderErrorClass } from './types';
 import type { ProviderProbeCallbacks } from './discovery-service';
 
 // ─── Per-provider balance endpoints ───────────────────────────────────────
@@ -125,7 +122,7 @@ const PROBE_USER_AGENT = 'ailin-ci-discovery/1.0 (+https://ailin.one)';
 
 async function fetchWithTimeout(
   url: string,
-  init: Omit<RequestInit, 'headers'> & { timeoutMs: number; headers?: Record<string, string> },
+  init: Omit<RequestInit, 'headers'> & { timeoutMs: number; headers?: Record<string, string> }
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs);
@@ -251,10 +248,9 @@ async function listModelsViaOAICompat(input: {
           : typeof e.context_length === 'number'
             ? e.context_length
             : undefined,
-      capabilities:
-        Array.isArray(e.capabilities)
-          ? e.capabilities.filter((c): c is string => typeof c === 'string')
-          : undefined,
+      capabilities: Array.isArray(e.capabilities)
+        ? e.capabilities.filter((c): c is string => typeof c === 'string')
+        : undefined,
     });
   }
   return models;
@@ -287,13 +283,17 @@ export function buildProbeCallbacks(input: BuildProbeCallbacksInput): ProviderPr
   const callbacks: ProviderProbeCallbacks = {};
   const integration = (input.integrationClass ?? '').toLowerCase();
   const supportsOAIModelsList =
-    integration === 'oai-compat-pure'
-    || integration === 'native-openai'
-    || integration === 'self-hosted-oai-compat'
-    || integration === 'aggregator-with-billing';
+    integration === 'oai-compat-pure' ||
+    integration === 'native-openai' ||
+    integration === 'self-hosted-oai-compat' ||
+    integration === 'aggregator-with-billing';
 
   if (BALANCE_ENDPOINTS[input.providerId.toLowerCase()]) {
-    callbacks.probeCredit = (probeInput: { providerId: string; apiKey: string; timeoutMs: number }) =>
+    callbacks.probeCredit = (probeInput: {
+      providerId: string;
+      apiKey: string;
+      timeoutMs: number;
+    }) =>
       probeCreditViaBalanceEndpoint({
         providerId: input.providerId,
         apiKey: probeInput.apiKey,
@@ -304,7 +304,11 @@ export function buildProbeCallbacks(input: BuildProbeCallbacksInput): ProviderPr
   if (supportsOAIModelsList && input.baseUrl) {
     const baseUrl = input.baseUrl;
     const modelListPath = input.modelListPath;
-    callbacks.listModels = (probeInput: { providerId: string; apiKey: string; timeoutMs: number }) =>
+    callbacks.listModels = (probeInput: {
+      providerId: string;
+      apiKey: string;
+      timeoutMs: number;
+    }) =>
       listModelsViaOAICompat({
         providerId: input.providerId,
         apiKey: probeInput.apiKey,
@@ -322,7 +326,7 @@ export function buildProbeCallbacks(input: BuildProbeCallbacksInput): ProviderPr
  * pass to `runProviderDiscovery({ probeCallbacks })`.
  */
 export function buildProbeCallbacksMap(
-  providers: readonly BuildProbeCallbacksInput[],
+  providers: readonly BuildProbeCallbacksInput[]
 ): Record<string, ProviderProbeCallbacks> {
   const out: Record<string, ProviderProbeCallbacks> = {};
   for (const p of providers) {
@@ -343,7 +347,8 @@ export function inferProbeErrorClass(err: unknown): ProviderErrorClass {
   if (msg.includes('403') || msg.includes('forbidden')) return 'auth_failed';
   if (msg.includes('402')) return 'insufficient_credit';
   if (msg.includes('429') || msg.includes('rate')) return 'rate_limited';
-  if (msg.includes('timeout') || msg.includes('etimedout') || msg.includes('eai_again')) return 'provider_timeout';
+  if (msg.includes('timeout') || msg.includes('etimedout') || msg.includes('eai_again'))
+    return 'provider_timeout';
   if (msg.includes('404')) return 'endpoint_not_found';
   return 'unknown_error';
 }

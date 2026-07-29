@@ -93,10 +93,12 @@ describe('pricing-calibrator', () => {
   it('self-corrects: a cheaper strong entrant re-anchors the tier DOWN', () => {
     // Drop Grok further in price; the tier it qualifies for must not get MORE expensive.
     const cheaperGrok = LEADERBOARD.map((p) =>
-      p.modelId === 'grok-4.3' ? { ...p, outputPer1MUsd: 1.5 } : p,
+      p.modelId === 'grok-4.3' ? { ...p, outputPer1MUsd: 1.5 } : p
     );
     const after = deriveRateCard(cheaperGrok);
-    expect(after.rateCard.medium.outputPer1MUsd).toBeLessThanOrEqual(rateCard.medium.outputPer1MUsd);
+    expect(after.rateCard.medium.outputPer1MUsd).toBeLessThanOrEqual(
+      rateCard.medium.outputPer1MUsd
+    );
   });
 
   it('the COGS guard never exceeds revenue and matches the band margin', () => {

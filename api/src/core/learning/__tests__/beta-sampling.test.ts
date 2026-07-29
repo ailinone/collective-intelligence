@@ -69,7 +69,7 @@ describe('betaSample — true Beta(α, β) draws', () => {
   });
 
   it('a fresh arm Beta(1,1) outdraws a 0.8-mean incumbent ~20% of the time (cold-start exploration)', () => {
-    const winRate = draws(1, 1).filter(x => x > 0.8).length / N;
+    const winRate = draws(1, 1).filter((x) => x > 0.8).length / N;
     expect(winRate).toBeGreaterThan(0.13);
     expect(winRate).toBeLessThan(0.27);
   });

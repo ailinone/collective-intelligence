@@ -10,7 +10,7 @@
 /**
  * Authentication Security Matrix Tests
  * Validates security controls per the IAM Audit Plan (FASE 7)
- * 
+ *
  * Test Matrix:
  * | ID  | Scenario                    | Expected      | Go/No-Go |
  * |-----|-----------------------------| ------------- |----------|
@@ -55,19 +55,19 @@ function generateTestJWT(
   } = {}
 ): string {
   const secret = options.secret || TEST_JWT_SECRET;
-  
+
   // Build sign options without undefined values
   const signOptions: jwt.SignOptions = {
     issuer: options.issuer ?? TEST_JWT_OPTIONS.issuer,
     audience: options.audience ?? TEST_JWT_OPTIONS.audience,
     expiresIn: options.expiresIn ?? TEST_JWT_OPTIONS.expiresIn,
   };
-  
+
   // Only add notBefore if explicitly provided (not undefined)
   if (options.notBefore !== undefined) {
     signOptions.notBefore = options.notBefore;
   }
-  
+
   return jwt.sign(payload, secret, signOptions);
 }
 
@@ -132,7 +132,7 @@ describe('Authentication Security Matrix', () => {
         audience: ['ci-api', 'https://api.ailin.one'],
         clockTolerance: 30,
       });
-      
+
       expect(decoded).toBeDefined();
       expect((decoded as jwt.JwtPayload).userId).toBe(basePayload.userId);
     });
@@ -141,7 +141,7 @@ describe('Authentication Security Matrix', () => {
   describe('T2: Expired JWT', () => {
     it('should reject expired JWT with TokenExpiredError', () => {
       const token = generateExpiredJWT(basePayload);
-      
+
       expect(() => {
         jwt.verify(token, TEST_JWT_SECRET, {
           issuer: ['ci-api'],
@@ -154,7 +154,7 @@ describe('Authentication Security Matrix', () => {
   describe('T4: JWT with wrong audience', () => {
     it('should reject JWT with invalid audience', () => {
       const token = generateWrongAudienceJWT(basePayload);
-      
+
       expect(() => {
         jwt.verify(token, TEST_JWT_SECRET, {
           issuer: ['ci-api'],
@@ -167,7 +167,7 @@ describe('Authentication Security Matrix', () => {
   describe('T5: JWT with wrong issuer', () => {
     it('should reject JWT with invalid issuer', () => {
       const token = generateWrongIssuerJWT(basePayload);
-      
+
       expect(() => {
         jwt.verify(token, TEST_JWT_SECRET, {
           issuer: ['ci-api', 'https://ailin.id', 'gateway'],
@@ -180,7 +180,7 @@ describe('Authentication Security Matrix', () => {
   describe('T17: Clock skew (nbf future)', () => {
     it('should reject JWT with future nbf when outside tolerance', () => {
       const token = generateFutureNBFJWT(basePayload);
-      
+
       expect(() => {
         jwt.verify(token, TEST_JWT_SECRET, {
           issuer: ['ci-api'],
@@ -195,7 +195,7 @@ describe('Authentication Security Matrix', () => {
     it('should reject JWT with invalid signature', () => {
       const token = generateTestJWT(basePayload);
       const tamperedToken = token.slice(0, -10) + 'TAMPERED!!';
-      
+
       // jwt.verify throws 'invalid token' when signature verification fails
       // due to malformed JWT structure
       expect(() => {
@@ -209,7 +209,7 @@ describe('Authentication Security Matrix', () => {
         audience: TEST_JWT_OPTIONS.audience,
         expiresIn: TEST_JWT_OPTIONS.expiresIn,
       });
-      
+
       expect(() => {
         jwt.verify(token, TEST_JWT_SECRET);
       }).toThrow('invalid signature');
@@ -236,7 +236,7 @@ describe('Authentication Security Matrix', () => {
     it('should validate API key format', () => {
       const validKey = 'ak_live_1234567890abcdef';
       const invalidKey = 'invalid_key_format';
-      
+
       expect(validKey.startsWith('ak_')).toBe(true);
       expect(invalidKey.startsWith('ak_')).toBe(false);
     });
@@ -249,7 +249,7 @@ describe('Authentication Security Matrix', () => {
         'key_123',
       ];
 
-      invalidPrefixes.forEach(key => {
+      invalidPrefixes.forEach((key) => {
         expect(key.startsWith('ak_')).toBe(false);
       });
     });
@@ -258,7 +258,7 @@ describe('Authentication Security Matrix', () => {
   describe('Nonce Validation (T7 - Replay Attack Protection)', () => {
     it('should validate nonce format (base64url, 32 bytes)', () => {
       const nonce = generateNonce();
-      
+
       // Nonce should be base64url encoded 32 bytes (43 characters)
       expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(nonce.length).toBe(43);
@@ -267,7 +267,7 @@ describe('Authentication Security Matrix', () => {
     it('should validate nonce uniqueness', () => {
       const nonce1 = generateNonce();
       const nonce2 = generateNonce();
-      
+
       // Each nonce should be unique
       expect(nonce1).not.toBe(nonce2);
     });
@@ -276,19 +276,19 @@ describe('Authentication Security Matrix', () => {
   describe('Rate Limiting (T7 - Replay Attack Protection)', () => {
     it('should validate tier-based rate limits', () => {
       const tierLimits = {
-        'free': 20,
-        'starter': 60,
-        'professional': 120,
-        'business': 300,
-        'enterprise': 600,
+        free: 20,
+        starter: 60,
+        professional: 120,
+        business: 300,
+        enterprise: 600,
       };
-      
+
       // Validate that rate limits are defined for all tiers
       Object.entries(tierLimits).forEach(([tier, limit]) => {
         expect(limit).toBeGreaterThan(0);
         expect(typeof limit).toBe('number');
       });
-      
+
       // Validate burst multiplier
       const burstMultiplier = 1.5;
       expect(burstMultiplier).toBeGreaterThan(1);
@@ -358,7 +358,9 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
       // staging). TEST_USER_EMAIL / TEST_USER_PASSWORD must reference a real user.
       serverAvailable = await isServerReachable();
       if (!serverAvailable) {
-        console.warn(`Integration tests: server at ${baseUrl} not reachable, skipping integration suite`);
+        console.warn(
+          `Integration tests: server at ${baseUrl} not reachable, skipping integration suite`
+        );
       }
       return;
     }
@@ -572,4 +574,3 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
     expect(res.status).toBe(401);
   });
 });
-

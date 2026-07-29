@@ -9,7 +9,7 @@
 
 /**
  * Orchestration Integration Tests (Realistic)
- * 
+ *
  * Tests orchestration engine behavior without complex mocks.
  * Focus on: Strategy selection, error handling, configuration
  */
@@ -101,4 +101,3 @@ describe('Orchestration Engine Integration', () => {
     });
   });
 });
-

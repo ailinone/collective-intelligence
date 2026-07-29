@@ -35,7 +35,9 @@ describe('pricing-tier-billing', () => {
   it('extractTierContext needs both tier and rate', () => {
     expect(extractTierContext(null)).toBeNull();
     expect(extractTierContext({ tier: 'large' })).toBeNull();
-    expect(extractTierContext({ tier: 'large', tierRate: { inputPer1MUsd: 4, outputPer1MUsd: 20 } })).toEqual(LARGE);
+    expect(
+      extractTierContext({ tier: 'large', tierRate: { inputPer1MUsd: 4, outputPer1MUsd: 20 } })
+    ).toEqual(LARGE);
   });
 
   it('estimatePromptTokens counts string and array content (chars/4)', () => {

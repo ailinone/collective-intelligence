@@ -78,7 +78,10 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
           url.searchParams.set('page_size', '100'); // Max page size
         } catch (urlError) {
           this.log.error(
-            { baseUrl: this.baseUrl, error: urlError instanceof Error ? urlError.message : String(urlError) },
+            {
+              baseUrl: this.baseUrl,
+              error: urlError instanceof Error ? urlError.message : String(urlError),
+            },
             'Failed to construct Cohere API URL - invalid baseUrl or character encoding issue'
           );
           return [];
@@ -130,12 +133,12 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
             continue;
           }
 
-        try {
+          try {
             const model = this.convertCohereModel(cohereModel);
             if (model) {
               allModels.push(model);
             }
-        } catch (error) {
+          } catch (error) {
             this.log.warn({ model: cohereModel.name, error }, 'Failed to convert Cohere model');
           }
         }
@@ -148,9 +151,10 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
       this.log.info({ count: allModels.length }, 'Successfully fetched models from Cohere API');
       return allModels;
     } catch (error) {
-      const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+      const errorCode =
+        error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // Handle ERR_INVALID_CHAR specifically
       if (errorCode === 'ERR_INVALID_CHAR') {
         this.log.error(
@@ -195,27 +199,27 @@ export class CohereModelFetcher extends BaseProviderModelFetcher {
         cohereModel.context_length
       );
 
-    const metadata = {
-      endpoint: this.determineEndpoint({ capabilities, metadata: {} } as ProviderModel),
-      tools: this.extractTools({ capabilities, metadata: {} } as ProviderModel),
-      family: this.extractFamily(modelId),
-      tier: this.extractTier(modelId),
-      source: 'cohere-api',
+      const metadata = {
+        endpoint: this.determineEndpoint({ capabilities, metadata: {} } as ProviderModel),
+        tools: this.extractTools({ capabilities, metadata: {} } as ProviderModel),
+        family: this.extractFamily(modelId),
+        tier: this.extractTier(modelId),
+        source: 'cohere-api',
         endpoints: cohereModel.endpoints || [],
         defaultEndpoints: cohereModel.default_endpoints || [],
         features: cohereModel.features || [],
-    };
+      };
 
-    return {
-      id: modelId,
-      name: modelId,
-      displayName: this.formatDisplayName(modelId),
-      contextWindow,
-      maxOutputTokens,
-      capabilities,
-      pricing,
-      metadata,
-    };
+      return {
+        id: modelId,
+        name: modelId,
+        displayName: this.formatDisplayName(modelId),
+        contextWindow,
+        maxOutputTokens,
+        capabilities,
+        pricing,
+        metadata,
+      };
     } catch (error) {
       this.log.warn({ model: cohereModel.name, error }, 'Failed to convert Cohere model');
       return null;

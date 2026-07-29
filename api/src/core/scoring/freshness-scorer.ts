@@ -33,12 +33,7 @@
  * `'unknown'` as defensive fallbacks (legacy DB rows may carry these).
  */
 export type FreshnessLifecycle =
-  | 'current'
-  | 'preview'
-  | 'deprecated'
-  | 'legacy'
-  | 'retired'
-  | 'unknown';
+  'current' | 'preview' | 'deprecated' | 'legacy' | 'retired' | 'unknown';
 
 export interface FreshnessReadiness {
   /** Operability state. Common values: 'healthy', 'auth_failed', etc. */
@@ -179,10 +174,7 @@ export function scoreFreshness(input: FreshnessInput): FreshnessScore {
     let score = 1.0;
     if (typeof input.generationRank === 'number' && input.generationRank > 0) {
       // Soft curve: rank 1 → 0.7, rank 3 → 0.8, rank 10 → ~0.95, asymptote at 1.
-      score = Math.min(
-        1.0,
-        0.6 + (input.generationRank / (input.generationRank + 3)) * 0.4,
-      );
+      score = Math.min(1.0, 0.6 + (input.generationRank / (input.generationRank + 3)) * 0.4);
     }
     return {
       score,

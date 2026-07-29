@@ -57,7 +57,9 @@ describe('loadHumanEvalPlusTasks', () => {
     const uniq = new Set(tasks.map((t) => t.index));
     expect(uniq.size).toBe(tasks.length);
     // 30000+ never collides with HumanEval (10000+) or GSM8K (20000+)
-    expect(Math.min(...tasks.map((t) => t.index))).toBeGreaterThanOrEqual(HUMANEVAL_PLUS_INDEX_BASE);
+    expect(Math.min(...tasks.map((t) => t.index))).toBeGreaterThanOrEqual(
+      HUMANEVAL_PLUS_INDEX_BASE
+    );
     expect(HUMANEVAL_PLUS_INDEX_BASE).toBeGreaterThan(HUMANEVAL_INDEX_BASE);
     expect(HUMANEVAL_PLUS_INDEX_BASE).toBeGreaterThan(GSM8K_INDEX_BASE);
   });

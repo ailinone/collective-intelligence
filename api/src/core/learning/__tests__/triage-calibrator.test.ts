@@ -36,10 +36,10 @@ async function importCalibrator() {
   vi.resetModules();
   vi.mock('@/utils/logger', () => ({
     logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
       child: () => ({
         info: vi.fn(),
         debug: vi.fn(),
@@ -109,20 +109,24 @@ describe('TriageCalibrator (OI-07)', () => {
       // inferActualComplexity: quality < 0.4 && strategy !== 'single' → 'high'
       // So if predicted 'low' but inferred 'high' → underestimation
       for (let i = 0; i < 30; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.3,
-          executedStrategy: 'debate', // Non-single strategy with low quality → inferred 'high'
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.3,
+            executedStrategy: 'debate', // Non-single strategy with low quality → inferred 'high'
+          })
+        );
       }
       // Some correct predictions too
       for (let i = 0; i < 10; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.9,
-          executedStrategy: 'single',
-          actualLatencyMs: 1000, // fast → inferred 'low'
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.9,
+            executedStrategy: 'single',
+            actualLatencyMs: 1000, // fast → inferred 'low'
+          })
+        );
       }
 
       const score = calibrator.forceCalibration();
@@ -137,11 +141,13 @@ describe('TriageCalibrator (OI-07)', () => {
       // Record many observations where "high" complexity achieves great quality
       // with just the "single" strategy → over-resourced
       for (let i = 0; i < 30; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'high',
-          actualQualityScore: 0.92,
-          executedStrategy: 'single', // Simple strategy gets high quality
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'high',
+            actualQualityScore: 0.92,
+            executedStrategy: 'single', // Simple strategy gets high quality
+          })
+        );
       }
 
       const score = calibrator.forceCalibration();
@@ -161,23 +167,27 @@ describe('TriageCalibrator (OI-07)', () => {
       // detectMisclassifications requires: fraction > 0.3 of low-quality obs
       // and count >= minObservationsForRule (10)
       for (let i = 0; i < 40; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.3, // Below lowQualityThreshold (0.5)
-          actualSuccess: true,
-          executedStrategy: 'debate',
-          promptLength: 1000,
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.3, // Below lowQualityThreshold (0.5)
+            actualSuccess: true,
+            executedStrategy: 'debate',
+            promptLength: 1000,
+          })
+        );
       }
       // Some OK observations to keep the fraction above 0.3 but not 1.0
       for (let i = 0; i < 10; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.8,
-          actualSuccess: true,
-          executedStrategy: 'single',
-          promptLength: 500,
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.8,
+            actualSuccess: true,
+            executedStrategy: 'single',
+            promptLength: 500,
+          })
+        );
       }
 
       calibrator.forceCalibration();
@@ -188,7 +198,7 @@ describe('TriageCalibrator (OI-07)', () => {
 
       // The rule should correct "low" → "medium"
       const rule = state.activeRules.find(
-        r => r.correction.field === 'complexity' && r.correction.from === 'low'
+        (r) => r.correction.field === 'complexity' && r.correction.from === 'low'
       );
       expect(rule).toBeDefined();
       expect(rule!.correction.to).toBe('medium');
@@ -240,12 +250,14 @@ describe('TriageCalibrator (OI-07)', () => {
       // Generate a strong pattern that creates a rule
       // Flood with "low complexity" observations that have terrible quality
       for (let i = 0; i < 50; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.15,
-          executedStrategy: 'single',
-          promptLength: 800,
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.15,
+            executedStrategy: 'single',
+            promptLength: 800,
+          })
+        );
       }
 
       calibrator.forceCalibration();
@@ -296,10 +308,12 @@ describe('TriageCalibrator (OI-07)', () => {
 
       // Generate enough observations to potentially create rules
       for (let i = 0; i < 50; i++) {
-        calibrator.recordObservation(makeObservation({
-          predictedComplexity: 'low',
-          actualQualityScore: 0.15,
-        }));
+        calibrator.recordObservation(
+          makeObservation({
+            predictedComplexity: 'low',
+            actualQualityScore: 0.15,
+          })
+        );
       }
       calibrator.forceCalibration();
 

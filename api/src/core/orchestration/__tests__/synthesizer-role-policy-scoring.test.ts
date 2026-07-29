@@ -18,7 +18,9 @@ import {
   type SynthesizerCandidateMetrics,
 } from '@/core/orchestration/role-selection/synthesizer-role-policy';
 
-const baseMetrics = (overrides: Partial<SynthesizerCandidateMetrics> = {}): SynthesizerCandidateMetrics => ({
+const baseMetrics = (
+  overrides: Partial<SynthesizerCandidateMetrics> = {}
+): SynthesizerCandidateMetrics => ({
   modelId: 'model-x',
   providerId: 'p1',
   familyKey: 'family-x',
@@ -51,7 +53,7 @@ describe('01C.1B-J1G §17.1 — synthesizer-role-policy scoring', () => {
       modelId: 'anthropic-claude-3.7-sonnet',
       familyKey: 'claude-3.7-sonnet',
       quality: 0.9,
-      reliability: 0,  // no historical reliability data
+      reliability: 0, // no historical reliability data
       providerCoverageCount: 2,
       liveReadyRouteCount: 0,
       aliasConfidence: 'medium',
@@ -83,8 +85,9 @@ describe('01C.1B-J1G §17.1 — synthesizer-role-policy scoring', () => {
     expect(single.breakdown.singleProviderPenalty).toBe(0);
     expect(multi.breakdown.singleProviderPenalty).toBe(0);
     // Positive coverage score grows with provider count
-    expect(multi.breakdown.multiProviderCoverageScore)
-      .toBeGreaterThan(single.breakdown.multiProviderCoverageScore);
+    expect(multi.breakdown.multiProviderCoverageScore).toBeGreaterThan(
+      single.breakdown.multiProviderCoverageScore
+    );
     // Multi-provider STILL wins overall (because positive coverage bonus is
     // significant), but the gap is now smaller than under R0 — a high-
     // quality single-provider model CAN realistically overcome it.
@@ -93,18 +96,22 @@ describe('01C.1B-J1G §17.1 — synthesizer-role-policy scoring', () => {
 
   it('J1G-R2: single-provider with high quality + low cost CAN beat multi-provider with low quality', () => {
     // High-quality single-provider should now be competitive
-    const specialized = scoreSynthesizerCandidate(baseMetrics({
-      quality: 1.0,
-      estimatedCostUsd: 0.001,
-      providerCoverageCount: 1,
-      liveReadyRouteCount: 1,
-    }));
-    const commodity = scoreSynthesizerCandidate(baseMetrics({
-      quality: 0.65,  // just above floor
-      estimatedCostUsd: 0.04,
-      providerCoverageCount: 10,
-      liveReadyRouteCount: 5,
-    }));
+    const specialized = scoreSynthesizerCandidate(
+      baseMetrics({
+        quality: 1.0,
+        estimatedCostUsd: 0.001,
+        providerCoverageCount: 1,
+        liveReadyRouteCount: 1,
+      })
+    );
+    const commodity = scoreSynthesizerCandidate(
+      baseMetrics({
+        quality: 0.65, // just above floor
+        estimatedCostUsd: 0.04,
+        providerCoverageCount: 10,
+        liveReadyRouteCount: 5,
+      })
+    );
     // Under J1G-R0 (penalties active), specialized would have LOST due to
     // -0.35 coverage penalties. Under J1G-R2, the quality + cost advantage
     // overcomes the smaller coverage gap.
@@ -135,7 +142,9 @@ describe('01C.1B-J1G §17.1 — synthesizer-role-policy scoring', () => {
   it('rewards live-ready routes (concrete evidence beats discovery-only)', () => {
     const noLive = scoreSynthesizerCandidate(baseMetrics({ liveReadyRouteCount: 0 }));
     const livelyLive = scoreSynthesizerCandidate(baseMetrics({ liveReadyRouteCount: 5 }));
-    expect(livelyLive.breakdown.liveReadyRouteScore).toBeGreaterThan(noLive.breakdown.liveReadyRouteScore);
+    expect(livelyLive.breakdown.liveReadyRouteScore).toBeGreaterThan(
+      noLive.breakdown.liveReadyRouteScore
+    );
   });
 
   it('penalizes unknown quality (quality === 0)', () => {
@@ -152,8 +161,10 @@ describe('01C.1B-J1G §17.1 — synthesizer-role-policy scoring', () => {
     const r20 = scoreSynthesizerCandidate(baseMetrics({ providerCoverageCount: 20 }));
     const r100 = scoreSynthesizerCandidate(baseMetrics({ providerCoverageCount: 100 }));
     // 20 and 100 should be close (both capped near 1.0 normalized)
-    const delta_10_20 = r20.breakdown.multiProviderCoverageScore - r10.breakdown.multiProviderCoverageScore;
-    const delta_20_100 = r100.breakdown.multiProviderCoverageScore - r20.breakdown.multiProviderCoverageScore;
+    const delta_10_20 =
+      r20.breakdown.multiProviderCoverageScore - r10.breakdown.multiProviderCoverageScore;
+    const delta_20_100 =
+      r100.breakdown.multiProviderCoverageScore - r20.breakdown.multiProviderCoverageScore;
     expect(delta_10_20).toBeGreaterThan(delta_20_100); // diminishing returns
   });
 

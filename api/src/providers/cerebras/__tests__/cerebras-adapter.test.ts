@@ -31,10 +31,7 @@ function makeAdapter(): CerebrasAdapter {
   });
 }
 
-function invokeHook(
-  adapter: CerebrasAdapter,
-  request: ChatRequest,
-): Record<string, unknown> {
+function invokeHook(adapter: CerebrasAdapter, request: ChatRequest): Record<string, unknown> {
   return (
     adapter as unknown as {
       getExtraChatPayloadFields: (m: string, r: ChatRequest) => Record<string, unknown>;

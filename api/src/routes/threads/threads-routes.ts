@@ -10,13 +10,13 @@
 /**
  * Threads API Routes
  * OpenAI-compatible threads/messages/runs endpoints
- * 
+ *
  * Features:
  * - Persistent conversation threads
  * - Message management
  * - Run execution with streaming
  * - Dynamic model selection per run
- * 
+ *
  * NO HARDCODED MODELS - All model selection is dynamic
  */
 
@@ -52,8 +52,9 @@ const log = logger.child({ module: 'threads-routes' });
  */
 function getUserContext(request: FastifyRequest): RequestUserContext {
   const extendedRequest = request as ExtendedFastifyRequest;
-  const user = extendedRequest.user as { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
-  
+  const user = extendedRequest.user as
+    { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
+
   return {
     requestId: request.id,
     organizationId: extendedRequest.organizationId || user?.organizationId || '',
@@ -69,7 +70,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Create thread',
-      description: 'Create a new conversation thread. Threads represent conversations between a user and an assistant.',
+      description:
+        'Create a new conversation thread. Threads represent conversations between a user and an assistant.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
@@ -77,14 +79,16 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         properties: {
           messages: {
             type: 'array',
-            description: 'Initial messages for the thread. Messages establish conversation context and can include text, images, and file attachments.',
+            description:
+              'Initial messages for the thread. Messages establish conversation context and can include text, images, and file attachments.',
             items: {
               type: 'object',
               properties: {
-                role: { 
-                  type: 'string', 
+                role: {
+                  type: 'string',
                   enum: ['user', 'assistant', 'system', 'tool'],
-                  description: 'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)',
+                  description:
+                    'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)',
                 },
                 content: {
                   oneOf: [
@@ -95,21 +99,29 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                       items: {
                         type: 'object',
                         properties: {
-                          type: { 
-                            type: 'string', 
+                          type: {
+                            type: 'string',
                             enum: ['text', 'image_url'],
                             description: 'Content type: text or image_url',
                           },
-                          text: { type: 'string', description: 'Text content (required when type is "text")' },
+                          text: {
+                            type: 'string',
+                            description: 'Text content (required when type is "text")',
+                          },
                           image_url: {
                             type: 'object',
                             description: 'Image URL object (required when type is "image_url")',
                             properties: {
-                              url: { type: 'string', description: 'Image URL (must be publicly accessible or use data URI)' },
-                              detail: { 
-                                type: 'string', 
+                              url: {
+                                type: 'string',
+                                description:
+                                  'Image URL (must be publicly accessible or use data URI)',
+                              },
+                              detail: {
+                                type: 'string',
                                 enum: ['low', 'high', 'auto'],
-                                description: 'Image detail level: low (cost-effective), high (full resolution), auto (adaptive)',
+                                description:
+                                  'Image detail level: low (cost-effective), high (full resolution), auto (adaptive)',
                               },
                             },
                           },
@@ -118,29 +130,30 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                     },
                   ],
                 },
-                file_ids: { 
-                  type: 'array', 
+                file_ids: {
+                  type: 'array',
                   items: { type: 'string' },
                   description: 'Array of file IDs attached to this message (for file_search tool)',
                 },
-                metadata: { 
-                  type: 'object', 
+                metadata: {
+                  type: 'object',
                   additionalProperties: { type: 'string' },
                   description: 'Optional metadata key-value pairs for the message',
                 },
-                tool_call_id: { 
+                tool_call_id: {
                   type: 'string',
-                  description: 'ID of the tool call this message responds to (required for tool role messages)',
+                  description:
+                    'ID of the tool call this message responds to (required for tool role messages)',
                 },
-                name: { 
+                name: {
                   type: 'string',
                   description: 'Name of the tool/function called (required for tool role messages)',
                 },
               },
             },
           },
-          metadata: { 
-            type: 'object', 
+          metadata: {
+            type: 'object',
             additionalProperties: { type: 'string' },
             description: 'Optional metadata key-value pairs for the thread',
           },
@@ -153,8 +166,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           properties: {
             id: { type: 'string', description: 'Thread ID' },
             object: { type: 'string', enum: ['thread'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the thread was created' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the thread' },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the thread was created',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the thread',
+            },
           },
         },
         400: {
@@ -164,7 +184,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -192,7 +215,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -206,7 +232,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -216,7 +245,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Body: Omit<CreateThreadRequest, 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Body: Omit<CreateThreadRequest, 'userContext' | 'requestId'> }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const body = request.body as Omit<CreateThreadRequest, 'userContext' | 'requestId'>;
@@ -239,7 +271,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Retrieve thread',
-      description: 'Retrieve a specific conversation thread by ID. Returns complete thread information including all messages, metadata, and current state. Threads are used for maintaining conversation context across multiple interactions with assistants.',
+      description:
+        'Retrieve a specific conversation thread by ID. Returns complete thread information including all messages, metadata, and current state. Threads are used for maintaining conversation context across multiple interactions with assistants.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -255,8 +288,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           properties: {
             id: { type: 'string', description: 'Thread ID' },
             object: { type: 'string', enum: ['thread'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the thread was created' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs' },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the thread was created',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs',
+            },
           },
         },
         400: {
@@ -266,7 +306,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -294,7 +337,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -308,7 +354,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -318,7 +367,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getRequest: GetThreadRequest = {
@@ -339,7 +391,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Modify thread',
-      description: 'Updates the metadata of an existing thread. Only the metadata object can be modified; messages, runs, and other thread content cannot be changed through this endpoint. Use this to update custom metadata for organization and tracking purposes.',
+      description:
+        'Updates the metadata of an existing thread. Only the metadata object can be modified; messages, runs, and other thread content cannot be changed through this endpoint. Use this to update custom metadata for organization and tracking purposes.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -352,10 +405,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         type: 'object',
         required: [],
         properties: {
-          metadata: { 
-            type: 'object', 
+          metadata: {
+            type: 'object',
             additionalProperties: { type: 'string' },
-            description: 'Metadata key-value pairs to update. Replaces all existing metadata if provided.',
+            description:
+              'Metadata key-value pairs to update. Replaces all existing metadata if provided.',
           },
         },
       },
@@ -367,7 +421,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             id: { type: 'string' },
             object: { type: 'string', enum: ['thread'] },
             created_at: { type: 'integer' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the thread' },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the thread',
+            },
           },
         },
         400: {
@@ -377,7 +435,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -405,7 +466,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -419,7 +483,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -429,10 +496,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string }; Body: Omit<ModifyThreadRequest, 'threadId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string };
+        Body: Omit<ModifyThreadRequest, 'threadId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<ModifyThreadRequest, 'threadId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          ModifyThreadRequest,
+          'threadId' | 'userContext' | 'requestId'
+        >;
         const modifyRequest: ModifyThreadRequest = {
           threadId: request.params.thread_id,
           ...body,
@@ -453,7 +529,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Delete thread',
-      description: 'Permanently delete a conversation thread. This action cannot be undone. All messages, runs, and associated data will be removed. The thread ID will no longer be valid after deletion.',
+      description:
+        'Permanently delete a conversation thread. This action cannot be undone. All messages, runs, and associated data will be removed. The thread ID will no longer be valid after deletion.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -468,7 +545,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           type: 'object',
           properties: {
             id: { type: 'string', description: 'ID of the deleted thread' },
-            object: { type: 'string', enum: ['thread.deleted'], description: 'Object type identifier' },
+            object: {
+              type: 'string',
+              enum: ['thread.deleted'],
+              description: 'Object type identifier',
+            },
             deleted: { type: 'boolean', description: 'Deletion confirmation flag (always true)' },
           },
         },
@@ -479,7 +560,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -507,7 +591,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -521,7 +608,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -531,7 +621,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const deleteRequest: DeleteThreadRequest = {
@@ -553,7 +646,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Create message',
-      description: 'Creates a new message in an existing thread. Supports text content, images (via file IDs), tool call outputs, and attachments. Messages are automatically ordered chronologically and can be retrieved via the list messages endpoint.',
+      description:
+        'Creates a new message in an existing thread. Supports text content, images (via file IDs), tool call outputs, and attachments. Messages are automatically ordered chronologically and can be retrieved via the list messages endpoint.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -566,29 +660,30 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         type: 'object',
         required: ['role', 'content'],
         properties: {
-          role: { 
-            type: 'string', 
+          role: {
+            type: 'string',
             enum: ['user', 'assistant', 'system', 'tool'],
-            description: 'Message role. For "tool" role, tool_call_id and name are required.'
+            description: 'Message role. For "tool" role, tool_call_id and name are required.',
           },
-          content: { 
+          content: {
             oneOf: [
-              { 
+              {
                 type: 'string',
                 description: 'Text content as a string (simple text message)',
               },
-              { 
+              {
                 type: 'array',
                 description: 'Array of content parts for multimodal messages (text and/or images)',
                 items: {
                   type: 'object',
                   properties: {
-                    type: { 
-                      type: 'string', 
+                    type: {
+                      type: 'string',
                       enum: ['text', 'image_url'],
-                      description: 'Content part type: text (plain text) or image_url (image reference)',
+                      description:
+                        'Content part type: text (plain text) or image_url (image reference)',
                     },
-                    text: { 
+                    text: {
                       type: 'string',
                       description: 'Text content (required when type is "text")',
                     },
@@ -596,14 +691,16 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                       type: 'object',
                       description: 'Image URL object (required when type is "image_url")',
                       properties: {
-                        url: { 
+                        url: {
                           type: 'string',
-                          description: 'URL of the image. Can be a data URL (data:image/...) or HTTP(S) URL.',
+                          description:
+                            'URL of the image. Can be a data URL (data:image/...) or HTTP(S) URL.',
                         },
-                        detail: { 
-                          type: 'string', 
+                        detail: {
+                          type: 'string',
                           enum: ['low', 'high', 'auto'],
-                          description: 'Image detail level: "low" (faster, less accurate), "high" (slower, more accurate), "auto" (model decides).',
+                          description:
+                            'Image detail level: "low" (faster, less accurate), "high" (slower, more accurate), "auto" (model decides).',
                         },
                       },
                     },
@@ -611,22 +708,23 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                 },
               },
             ],
-            description: 'Message content. Can be a string (text only) or array of parts (multimodal: text and/or images)',
+            description:
+              'Message content. Can be a string (text only) or array of parts (multimodal: text and/or images)',
           },
-          file_ids: { 
-            type: 'array', 
+          file_ids: {
+            type: 'array',
             items: { type: 'string' },
             description: 'File IDs attached to the message',
           },
-          metadata: { 
+          metadata: {
             type: 'object',
             description: 'Additional metadata',
           },
-          tool_call_id: { 
+          tool_call_id: {
             type: 'string',
             description: 'Required when role is "tool"',
           },
-          name: { 
+          name: {
             type: 'string',
             description: 'Tool name, required when role is "tool"',
           },
@@ -650,57 +748,61 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                   items: {
                     type: 'object',
                     properties: {
-                      type: { 
-                        type: 'string', 
+                      type: {
+                        type: 'string',
                         enum: ['text', 'image_url'],
-                        description: 'Content part type: text (plain text) or image_url (image reference)',
+                        description:
+                          'Content part type: text (plain text) or image_url (image reference)',
                       },
-                      text: { 
-                        type: 'object', 
-                        properties: { 
-                          value: { 
+                      text: {
+                        type: 'object',
+                        properties: {
+                          value: {
                             type: 'string',
                             description: 'Text content value',
                           },
                         },
                         description: 'Text content object (required when type is "text")',
                       },
-                      image_url: { 
+                      image_url: {
                         type: 'object',
-                        description: 'Image URL object (required when type is "image_url"). Contains url and optional detail fields.',
+                        description:
+                          'Image URL object (required when type is "image_url"). Contains url and optional detail fields.',
                       },
                     },
                   },
                 },
               ],
             },
-            file_ids: { 
-              type: 'array', 
+            file_ids: {
+              type: 'array',
               items: { type: 'string' },
               description: 'Array of file IDs attached to this message (for file_search tool)',
             },
-            assistant_id: { 
-              type: 'string', 
+            assistant_id: {
+              type: 'string',
               nullable: true,
-              description: 'ID of the assistant that generated this message (for assistant role messages)',
+              description:
+                'ID of the assistant that generated this message (for assistant role messages)',
             },
-            run_id: { 
-              type: 'string', 
+            run_id: {
+              type: 'string',
               nullable: true,
               description: 'ID of the run that generated this message',
             },
-            metadata: { 
+            metadata: {
               type: 'object',
               additionalProperties: { type: 'string' },
               description: 'Optional metadata key-value pairs for the message',
             },
-            tool_call_id: { 
-              type: 'string', 
+            tool_call_id: {
+              type: 'string',
               nullable: true,
-              description: 'ID of the tool call this message responds to (required for tool role messages)',
+              description:
+                'ID of the tool call this message responds to (required for tool role messages)',
             },
-            name: { 
-              type: 'string', 
+            name: {
+              type: 'string',
               nullable: true,
               description: 'Name of the tool/function called (required for tool role messages)',
             },
@@ -713,9 +815,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "invalid_message_content")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "invalid_message_content")',
+                },
               },
             },
           },
@@ -741,7 +849,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -755,7 +866,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -765,10 +879,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string }; Body: Omit<CreateMessageRequest, 'threadId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string };
+        Body: Omit<CreateMessageRequest, 'threadId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<CreateMessageRequest, 'threadId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          CreateMessageRequest,
+          'threadId' | 'userContext' | 'requestId'
+        >;
         const createMessageRequest: CreateMessageRequest = {
           threadId: request.params.thread_id,
           ...body,
@@ -789,7 +912,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'List messages',
-      description: 'Retrieves a paginated list of messages from a thread. Supports cursor-based pagination using `after` and `before` parameters, and ordering with `order` parameter (asc/desc). Returns messages in chronological order by default, with detailed metadata for each message.',
+      description:
+        'Retrieves a paginated list of messages from a thread. Supports cursor-based pagination using `after` and `before` parameters, and ordering with `order` parameter (asc/desc). Returns messages in chronological order by default, with detailed metadata for each message.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -802,8 +926,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         type: 'object',
         required: [],
         properties: {
-          limit: { type: 'integer', description: 'Number of messages to return (1-100, default: 20)' },
-          order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort order (default: desc)' },
+          limit: {
+            type: 'integer',
+            description: 'Number of messages to return (1-100, default: 20)',
+          },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: 'Sort order (default: desc)',
+          },
           after: { type: 'string', description: 'Cursor for pagination (after this ID)' },
           before: { type: 'string', description: 'Cursor for pagination (before this ID)' },
           run_id: { type: 'string', description: 'Filter messages by run ID' },
@@ -823,23 +954,57 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                 description: 'Message object with role, content, and metadata',
                 properties: {
                   id: { type: 'string', description: 'Unique message ID' },
-                  object: { type: 'string', enum: ['thread.message'], description: 'Object type identifier' },
-                  created_at: { type: 'integer', description: 'Unix timestamp when the message was created' },
-                  thread_id: { type: 'string', description: 'ID of the thread this message belongs to' },
-                  role: { type: 'string', description: 'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)' },
-                  content: { 
+                  object: {
+                    type: 'string',
+                    enum: ['thread.message'],
+                    description: 'Object type identifier',
+                  },
+                  created_at: {
+                    type: 'integer',
+                    description: 'Unix timestamp when the message was created',
+                  },
+                  thread_id: {
+                    type: 'string',
+                    description: 'ID of the thread this message belongs to',
+                  },
+                  role: {
+                    type: 'string',
+                    description:
+                      'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)',
+                  },
+                  content: {
                     oneOf: [
-                      { type: 'string', description: 'Text content as a string (simple text message)' },
-                      { type: 'array', description: 'Array of content parts for multimodal messages (text blocks, images, etc.)' },
+                      {
+                        type: 'string',
+                        description: 'Text content as a string (simple text message)',
+                      },
+                      {
+                        type: 'array',
+                        description:
+                          'Array of content parts for multimodal messages (text blocks, images, etc.)',
+                      },
                     ],
-                    description: 'Message content. Can be a string (text only) or array of parts (multimodal: text and/or images)',
+                    description:
+                      'Message content. Can be a string (text only) or array of parts (multimodal: text and/or images)',
                   },
                 },
               },
             },
-            has_more: { type: 'boolean', description: 'Whether more messages are available beyond this page (true if additional pages exist)' },
-            first_id: { type: 'string', nullable: true, description: 'ID of the first message in this list (for pagination)' },
-            last_id: { type: 'string', nullable: true, description: 'ID of the last message in this list (for pagination)' },
+            has_more: {
+              type: 'boolean',
+              description:
+                'Whether more messages are available beyond this page (true if additional pages exist)',
+            },
+            first_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the first message in this list (for pagination)',
+            },
+            last_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the last message in this list (for pagination)',
+            },
           },
         },
         400: {
@@ -849,7 +1014,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -877,7 +1045,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -891,7 +1062,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -901,7 +1075,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string }; Querystring: { limit?: number; order?: 'asc' | 'desc'; after?: string; before?: string; run_id?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string };
+        Querystring: {
+          limit?: number;
+          order?: 'asc' | 'desc';
+          after?: string;
+          before?: string;
+          run_id?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const listMessagesRequest: ListMessagesRequest = {
@@ -928,7 +1114,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Create run',
-      description: 'Creates a new run to execute an assistant on a thread. A run processes all messages in the thread and generates assistant responses, executing tools as needed. The run will execute asynchronously and can be monitored via the get run endpoint. Supports streaming for real-time updates.',
+      description:
+        'Creates a new run to execute an assistant on a thread. A run processes all messages in the thread and generates assistant responses, executing tools as needed. The run will execute asynchronously and can be monitored via the get run endpoint. Supports streaming for real-time updates.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -946,22 +1133,24 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           instructions: { type: 'string', description: 'Override instructions for this run' },
           additional_instructions: { type: 'string', description: 'Additional instructions' },
           tools: { type: 'array', description: 'Override tools for this run' },
-          metadata: { 
-            type: 'object', 
+          metadata: {
+            type: 'object',
             additionalProperties: { type: 'string' },
             description: 'Optional metadata key-value pairs for the run',
           },
-          temperature: { 
-            type: 'number', 
-            minimum: 0, 
+          temperature: {
+            type: 'number',
+            minimum: 0,
             maximum: 2,
-            description: 'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused.',
+            description:
+              'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused.',
           },
-          top_p: { 
-            type: 'number', 
-            minimum: 0, 
+          top_p: {
+            type: 'number',
+            minimum: 0,
             maximum: 1,
-            description: 'Nucleus sampling parameter (0-1). Consider tokens with cumulative probability up to this threshold.',
+            description:
+              'Nucleus sampling parameter (0-1). Consider tokens with cumulative probability up to this threshold.',
           },
           stream: { type: 'boolean', description: 'Enable streaming' },
         },
@@ -976,7 +1165,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             created_at: { type: 'integer', description: 'Unix timestamp when the run was created' },
             thread_id: { type: 'string', description: 'ID of the thread this run belongs to' },
             assistant_id: { type: 'string', description: 'ID of the assistant used for this run' },
-            status: { type: 'string', description: 'Run status: queued (waiting to start), in_progress (currently executing), requires_action (waiting for tool outputs), cancelling (cancellation in progress), cancelled (cancelled by user), failed (execution failed), completed (successfully finished), expired (timeout)' },
+            status: {
+              type: 'string',
+              description:
+                'Run status: queued (waiting to start), in_progress (currently executing), requires_action (waiting for tool outputs), cancelling (cancellation in progress), cancelled (cancelled by user), failed (execution failed), completed (successfully finished), expired (timeout)',
+            },
           },
         },
         400: {
@@ -986,9 +1179,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "invalid_assistant")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "invalid_assistant")',
+                },
               },
             },
           },
@@ -1014,9 +1213,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or assistant was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or assistant was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found", "assistant_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found", "assistant_not_found")',
+                },
               },
             },
           },
@@ -1028,7 +1233,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1038,10 +1246,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string }; Body: Omit<CreateRunRequest, 'threadId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string };
+        Body: Omit<CreateRunRequest, 'threadId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<CreateRunRequest, 'threadId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          CreateRunRequest,
+          'threadId' | 'userContext' | 'requestId'
+        >;
         const createRunRequest: CreateRunRequest = {
           threadId: request.params.thread_id,
           ...body,
@@ -1083,7 +1300,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             default: 20,
             description: 'Number of runs to return (1-100, default: 20)',
           },
-          order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort order (default: desc)' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: 'Sort order (default: desc)',
+          },
           after: { type: 'string', description: 'Cursor for pagination (after this ID)' },
           before: { type: 'string', description: 'Cursor for pagination (before this ID)' },
         },
@@ -1100,17 +1321,46 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                 type: 'object',
                 properties: {
                   id: { type: 'string', description: 'Run ID' },
-                  object: { type: 'string', enum: ['thread.run'], description: 'Object type identifier' },
-                  created_at: { type: 'integer', description: 'Unix timestamp when the run was created' },
-                  thread_id: { type: 'string', description: 'ID of the thread this run belongs to' },
-                  assistant_id: { type: 'string', description: 'ID of the assistant used for this run' },
-                  status: { type: 'string', description: 'Run status: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired' },
+                  object: {
+                    type: 'string',
+                    enum: ['thread.run'],
+                    description: 'Object type identifier',
+                  },
+                  created_at: {
+                    type: 'integer',
+                    description: 'Unix timestamp when the run was created',
+                  },
+                  thread_id: {
+                    type: 'string',
+                    description: 'ID of the thread this run belongs to',
+                  },
+                  assistant_id: {
+                    type: 'string',
+                    description: 'ID of the assistant used for this run',
+                  },
+                  status: {
+                    type: 'string',
+                    description:
+                      'Run status: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired',
+                  },
                 },
               },
             },
-            has_more: { type: 'boolean', description: 'Whether more runs are available beyond this page (true if additional pages exist)' },
-            first_id: { type: 'string', nullable: true, description: 'ID of the first run in this list (for pagination)' },
-            last_id: { type: 'string', nullable: true, description: 'ID of the last run in this list (for pagination)' },
+            has_more: {
+              type: 'boolean',
+              description:
+                'Whether more runs are available beyond this page (true if additional pages exist)',
+            },
+            first_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the first run in this list (for pagination)',
+            },
+            last_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the last run in this list (for pagination)',
+            },
           },
         },
         400: {
@@ -1120,7 +1370,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1148,7 +1401,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "thread_not_found")' },
               },
@@ -1162,7 +1418,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1172,7 +1431,13 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string }; Querystring: { limit?: number; order?: 'asc' | 'desc'; after?: string; before?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string };
+        Querystring: { limit?: number; order?: 'asc' | 'desc'; after?: string; before?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         let limit: number = 20;
@@ -1210,7 +1475,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Get run',
-      description: 'Retrieve a specific run by ID. Returns detailed run information including status, steps, tool calls, and execution results. Runs represent individual assistant execution instances within a thread.',
+      description:
+        'Retrieve a specific run by ID. Returns detailed run information including status, steps, tool calls, and execution results. Runs represent individual assistant execution instances within a thread.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1230,15 +1496,55 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             created_at: { type: 'integer', description: 'Unix timestamp when the run was created' },
             thread_id: { type: 'string', description: 'ID of the thread this run belongs to' },
             assistant_id: { type: 'string', description: 'ID of the assistant used for this run' },
-            status: { type: 'string', description: 'Run status: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired' },
-            required_action: { type: 'object', nullable: true, description: 'Action required from the user (e.g., tool outputs). Present when status is "requires_action".' },
-            last_error: { type: 'object', nullable: true, description: 'Last error that occurred during the run. Present when status is "failed" or "cancelled".' },
-            expires_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run expires. Null if the run does not expire.' },
-            started_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run started. Null if the run has not started.' },
-            completed_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run completed. Null if the run has not completed.' },
-            cancelled_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run was cancelled. Null if the run was not cancelled.' },
-            failed_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run failed. Null if the run did not fail.' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the run' },
+            status: {
+              type: 'string',
+              description:
+                'Run status: queued, in_progress, requires_action, cancelling, cancelled, failed, completed, or expired',
+            },
+            required_action: {
+              type: 'object',
+              nullable: true,
+              description:
+                'Action required from the user (e.g., tool outputs). Present when status is "requires_action".',
+            },
+            last_error: {
+              type: 'object',
+              nullable: true,
+              description:
+                'Last error that occurred during the run. Present when status is "failed" or "cancelled".',
+            },
+            expires_at: {
+              type: 'integer',
+              nullable: true,
+              description: 'Unix timestamp when the run expires. Null if the run does not expire.',
+            },
+            started_at: {
+              type: 'integer',
+              nullable: true,
+              description: 'Unix timestamp when the run started. Null if the run has not started.',
+            },
+            completed_at: {
+              type: 'integer',
+              nullable: true,
+              description:
+                'Unix timestamp when the run completed. Null if the run has not completed.',
+            },
+            cancelled_at: {
+              type: 'integer',
+              nullable: true,
+              description:
+                'Unix timestamp when the run was cancelled. Null if the run was not cancelled.',
+            },
+            failed_at: {
+              type: 'integer',
+              nullable: true,
+              description: 'Unix timestamp when the run failed. Null if the run did not fail.',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the run',
+            },
           },
         },
         400: {
@@ -1248,7 +1554,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1276,9 +1585,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or run was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or run was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "run_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "run_not_found")',
+                },
               },
             },
           },
@@ -1290,7 +1605,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1300,7 +1618,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getRunRequest: GetRunRequest = {
@@ -1323,7 +1644,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Get message',
-      description: 'Retrieves detailed information about a specific message in a thread, including content, role, attachments, tool calls, and metadata. Use this endpoint to inspect individual messages and their associated data, such as file IDs or tool execution results.',
+      description:
+        'Retrieves detailed information about a specific message in a thread, including content, role, attachments, tool calls, and metadata. Use this endpoint to inspect individual messages and their associated data, such as file IDs or tool execution results.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1339,21 +1661,50 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           type: 'object',
           properties: {
             id: { type: 'string', description: 'Message ID' },
-            object: { type: 'string', enum: ['thread.message'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the message was created' },
+            object: {
+              type: 'string',
+              enum: ['thread.message'],
+              description: 'Object type identifier',
+            },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the message was created',
+            },
             thread_id: { type: 'string', description: 'ID of the thread this message belongs to' },
-            role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'], description: 'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)' },
-            content: { 
+            role: {
+              type: 'string',
+              enum: ['user', 'assistant', 'system', 'tool'],
+              description:
+                'Message role: user (human input), assistant (AI response), system (instructions), tool (tool execution results)',
+            },
+            content: {
               oneOf: [
                 { type: 'string', description: 'Text content as a string' },
                 { type: 'array', description: 'Array of content parts (multimodal content)' },
               ],
               description: 'Message content (string or array of parts)',
             },
-            file_ids: { type: 'array', items: { type: 'string' }, description: 'Array of file IDs attached to this message' },
-            assistant_id: { type: 'string', nullable: true, description: 'ID of the assistant that generated this message (for assistant role messages)' },
-            run_id: { type: 'string', nullable: true, description: 'ID of the run that generated this message' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the message' },
+            file_ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of file IDs attached to this message',
+            },
+            assistant_id: {
+              type: 'string',
+              nullable: true,
+              description:
+                'ID of the assistant that generated this message (for assistant role messages)',
+            },
+            run_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the run that generated this message',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the message',
+            },
           },
         },
         400: {
@@ -1363,7 +1714,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1391,9 +1745,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or message was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or message was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "message_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "message_not_found")',
+                },
               },
             },
           },
@@ -1405,7 +1765,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1415,7 +1778,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getMessageRequest: GetMessageRequest = {
@@ -1438,7 +1804,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Modify message',
-      description: 'Updates the metadata of an existing message in a thread. Only the metadata object can be modified; message content, role, and other core properties cannot be changed. The provided metadata replaces all existing metadata. Use this endpoint to update custom metadata for organization, tagging, or tracking purposes without affecting the message content itself.',
+      description:
+        'Updates the metadata of an existing message in a thread. Only the metadata object can be modified; message content, role, and other core properties cannot be changed. The provided metadata replaces all existing metadata. Use this endpoint to update custom metadata for organization, tagging, or tracking purposes without affecting the message content itself.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1452,10 +1819,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         type: 'object',
         required: [],
         properties: {
-          metadata: { 
-            type: 'object', 
+          metadata: {
+            type: 'object',
             additionalProperties: { type: 'string' },
-            description: 'Metadata key-value pairs to update. Replaces all existing metadata if provided.',
+            description:
+              'Metadata key-value pairs to update. Replaces all existing metadata if provided.',
           },
         },
       },
@@ -1465,18 +1833,29 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           type: 'object',
           properties: {
             id: { type: 'string', description: 'Message ID' },
-            object: { type: 'string', enum: ['thread.message'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the message was created' },
+            object: {
+              type: 'string',
+              enum: ['thread.message'],
+              description: 'Object type identifier',
+            },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the message was created',
+            },
             thread_id: { type: 'string', description: 'ID of the thread this message belongs to' },
             role: { type: 'string', description: 'Message role: user, assistant, system, or tool' },
-            content: { 
+            content: {
               oneOf: [
                 { type: 'string', description: 'Text content as a string' },
                 { type: 'array', description: 'Array of content parts (multimodal content)' },
               ],
               description: 'Message content (string or array of parts)',
             },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs associated with the message' },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs associated with the message',
+            },
           },
         },
         400: {
@@ -1486,7 +1865,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1514,9 +1896,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or message was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or message was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "message_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "message_not_found")',
+                },
               },
             },
           },
@@ -1528,7 +1916,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1538,10 +1929,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; message_id: string }; Body: Omit<ModifyMessageRequest, 'threadId' | 'messageId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string; message_id: string };
+        Body: Omit<ModifyMessageRequest, 'threadId' | 'messageId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<ModifyMessageRequest, 'threadId' | 'messageId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          ModifyMessageRequest,
+          'threadId' | 'messageId' | 'userContext' | 'requestId'
+        >;
         const modifyMessageRequest: ModifyMessageRequest = {
           threadId: request.params.thread_id,
           messageId: request.params.message_id,
@@ -1563,7 +1963,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Delete message',
-      description: 'Permanently deletes a message from a thread. This action cannot be undone. The message ID will no longer be valid after deletion. Use this endpoint to remove unwanted messages from conversation threads.',
+      description:
+        'Permanently deletes a message from a thread. This action cannot be undone. The message ID will no longer be valid after deletion. Use this endpoint to remove unwanted messages from conversation threads.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1579,7 +1980,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           type: 'object',
           properties: {
             id: { type: 'string', description: 'ID of the deleted message' },
-            object: { type: 'string', enum: ['thread.message.deleted'], description: 'Object type identifier' },
+            object: {
+              type: 'string',
+              enum: ['thread.message.deleted'],
+              description: 'Object type identifier',
+            },
             deleted: { type: 'boolean', description: 'Deletion confirmation flag' },
           },
         },
@@ -1590,7 +1995,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1618,9 +2026,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or message was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or message was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "message_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "message_not_found")',
+                },
               },
             },
           },
@@ -1632,7 +2046,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1642,7 +2059,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const deleteMessageRequest: DeleteMessageRequest = {
@@ -1665,7 +2085,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Submit tool outputs',
-      description: 'Submits tool execution results for a run that is waiting for action (status "requires_action"). When an assistant uses function/tool calling during a run, the run pauses and requires tool outputs to continue. This endpoint allows providing those outputs to resume the run execution. Each tool_output must correspond to a tool_call_id from the run\'s required_action.',
+      description:
+        'Submits tool execution results for a run that is waiting for action (status "requires_action"). When an assistant uses function/tool calling during a run, the run pauses and requires tool outputs to continue. This endpoint allows providing those outputs to resume the run execution. Each tool_output must correspond to a tool_call_id from the run\'s required_action.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1685,17 +2106,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
               type: 'object',
               required: ['tool_call_id'],
               properties: {
-                tool_call_id: { 
+                tool_call_id: {
                   type: 'string',
-                  description: 'ID of the tool call that this output is for. Must match a tool_call_id from the run\'s required_action.',
+                  description:
+                    "ID of the tool call that this output is for. Must match a tool_call_id from the run's required_action.",
                 },
-                output: { 
+                output: {
                   type: 'string',
                   description: 'Output from the tool execution. Required if error is not provided.',
                 },
-                error: { 
+                error: {
                   type: 'string',
-                  description: 'Error message if the tool execution failed. Required if output is not provided.',
+                  description:
+                    'Error message if the tool execution failed. Required if output is not provided.',
                 },
               },
             },
@@ -1713,8 +2136,17 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             created_at: { type: 'integer', description: 'Unix timestamp when the run was created' },
             thread_id: { type: 'string', description: 'ID of the thread this run belongs to' },
             assistant_id: { type: 'string', description: 'ID of the assistant used for this run' },
-            status: { type: 'string', description: 'Run status after tool outputs submission. Typically "in_progress" or "completed".' },
-            required_action: { type: 'object', nullable: true, description: 'Action still required from the user (if any). Null if no action needed.' },
+            status: {
+              type: 'string',
+              description:
+                'Run status after tool outputs submission. Typically "in_progress" or "completed".',
+            },
+            required_action: {
+              type: 'object',
+              nullable: true,
+              description:
+                'Action still required from the user (if any). Null if no action needed.',
+            },
           },
         },
         400: {
@@ -1724,9 +2156,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "invalid_parameter", "run_not_requires_action")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "invalid_parameter", "run_not_requires_action")',
+                },
               },
             },
           },
@@ -1752,9 +2190,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or run was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or run was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found", "run_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found", "run_not_found")',
+                },
               },
             },
           },
@@ -1766,7 +2210,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1776,13 +2223,19 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ 
-      Params: { thread_id: string; run_id: string }; 
-      Body: Omit<SubmitToolOutputsRequest, 'threadId' | 'runId' | 'userContext' | 'requestId'>;
-    }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string; run_id: string };
+        Body: Omit<SubmitToolOutputsRequest, 'threadId' | 'runId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<SubmitToolOutputsRequest, 'threadId' | 'runId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          SubmitToolOutputsRequest,
+          'threadId' | 'runId' | 'userContext' | 'requestId'
+        >;
         const submitToolOutputsRequest: SubmitToolOutputsRequest = {
           threadId: request.params.thread_id,
           runId: request.params.run_id,
@@ -1795,7 +2248,12 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         return reply.send(result);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.includes('not found') || errorMessage.includes('not in requires_action') || errorMessage.includes('missing output') ? 400 : 500;
+        const statusCode =
+          errorMessage.includes('not found') ||
+          errorMessage.includes('not in requires_action') ||
+          errorMessage.includes('missing output')
+            ? 400
+            : 500;
         return reply.code(statusCode).send({ error: { message: errorMessage } });
       }
     },
@@ -1806,7 +2264,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Cancel run',
-      description: 'Cancels an in-progress run. Only runs with status "in_progress" or "queued" can be cancelled. Once cancelled, the run status changes to "cancelling" (immediate) or "cancelled" (final). The run will stop processing and no further assistant responses will be generated. Use this endpoint to halt long-running runs or when user input is needed to proceed. This is useful for stopping expensive operations or when a user changes their mind about a request.',
+      description:
+        'Cancels an in-progress run. Only runs with status "in_progress" or "queued" can be cancelled. Once cancelled, the run status changes to "cancelling" (immediate) or "cancelled" (final). The run will stop processing and no further assistant responses will be generated. Use this endpoint to halt long-running runs or when user input is needed to proceed. This is useful for stopping expensive operations or when a user changes their mind about a request.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1826,8 +2285,18 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             created_at: { type: 'integer', description: 'Unix timestamp when the run was created' },
             thread_id: { type: 'string', description: 'ID of the thread this run belongs to' },
             assistant_id: { type: 'string', description: 'ID of the assistant used for this run' },
-            status: { type: 'string', enum: ['cancelled', 'cancelling'], description: 'Run status: "cancelling" (cancellation in progress) or "cancelled" (fully cancelled)' },
-            cancelled_at: { type: 'integer', nullable: true, description: 'Unix timestamp when the run was cancelled. Null if cancellation is still in progress (status is "cancelling").' },
+            status: {
+              type: 'string',
+              enum: ['cancelled', 'cancelling'],
+              description:
+                'Run status: "cancelling" (cancellation in progress) or "cancelled" (fully cancelled)',
+            },
+            cancelled_at: {
+              type: 'integer',
+              nullable: true,
+              description:
+                'Unix timestamp when the run was cancelled. Null if cancellation is still in progress (status is "cancelling").',
+            },
           },
         },
         400: {
@@ -1837,7 +2306,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating why the run cannot be cancelled (e.g., already completed, failed, cancelled, or not yet started)' },
+                message: {
+                  type: 'string',
+                  description:
+                    'Error message indicating why the run cannot be cancelled (e.g., already completed, failed, cancelled, or not yet started)',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_state")' },
               },
@@ -1865,9 +2338,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or run was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or run was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "run_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "run_not_found")',
+                },
               },
             },
           },
@@ -1879,7 +2358,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1889,7 +2371,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const cancelRunRequest: CancelRunRequest = {
@@ -1902,7 +2387,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         return reply.send(result);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.includes('not found') || errorMessage.includes('cannot be cancelled') ? 400 : 500;
+        const statusCode =
+          errorMessage.includes('not found') || errorMessage.includes('cannot be cancelled')
+            ? 400
+            : 500;
         return reply.code(statusCode).send({ error: { message: errorMessage } });
       }
     },
@@ -1913,7 +2401,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'List run steps',
-      description: 'Returns a paginated list of all steps executed within a run, ordered chronologically. Steps represent individual operations such as message creation or tool calls. Supports cursor-based pagination using `after` and `before` parameters, and ordering with `order` parameter. Use this endpoint to inspect the complete execution flow of a run and track each operation performed by the assistant.',
+      description:
+        'Returns a paginated list of all steps executed within a run, ordered chronologically. Steps represent individual operations such as message creation or tool calls. Supports cursor-based pagination using `after` and `before` parameters, and ordering with `order` parameter. Use this endpoint to inspect the complete execution flow of a run and track each operation performed by the assistant.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1935,7 +2424,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             default: 20,
             description: 'Number of steps to return (1-100, default: 20)',
           },
-          order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort order (default: desc)' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: 'Sort order (default: desc)',
+          },
           after: { type: 'string', description: 'Cursor for pagination (after this ID)' },
           before: { type: 'string', description: 'Cursor for pagination (before this ID)' },
         },
@@ -1952,19 +2445,54 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
                 type: 'object',
                 properties: {
                   id: { type: 'string', description: 'Step ID' },
-                  object: { type: 'string', enum: ['thread.run.step'], description: 'Object type identifier' },
-                  created_at: { type: 'integer', description: 'Unix timestamp when the step was created' },
+                  object: {
+                    type: 'string',
+                    enum: ['thread.run.step'],
+                    description: 'Object type identifier',
+                  },
+                  created_at: {
+                    type: 'integer',
+                    description: 'Unix timestamp when the step was created',
+                  },
                   run_id: { type: 'string', description: 'ID of the run this step belongs to' },
-                  thread_id: { type: 'string', description: 'ID of the thread this step belongs to' },
-                  type: { type: 'string', enum: ['message_creation', 'tool_calls'], description: 'Step type: message_creation (creating message) or tool_calls (executing tools)' },
-                  status: { type: 'string', description: 'Step status: in_progress, cancelled, failed, completed, or expired' },
-                  step_details: { type: 'object', description: 'Detailed information about the step execution (message_creation or tool_calls details)' },
+                  thread_id: {
+                    type: 'string',
+                    description: 'ID of the thread this step belongs to',
+                  },
+                  type: {
+                    type: 'string',
+                    enum: ['message_creation', 'tool_calls'],
+                    description:
+                      'Step type: message_creation (creating message) or tool_calls (executing tools)',
+                  },
+                  status: {
+                    type: 'string',
+                    description:
+                      'Step status: in_progress, cancelled, failed, completed, or expired',
+                  },
+                  step_details: {
+                    type: 'object',
+                    description:
+                      'Detailed information about the step execution (message_creation or tool_calls details)',
+                  },
                 },
               },
             },
-            has_more: { type: 'boolean', description: 'Whether more steps are available beyond this page (true if additional pages exist)' },
-            first_id: { type: 'string', nullable: true, description: 'ID of the first step in this list (for pagination)' },
-            last_id: { type: 'string', nullable: true, description: 'ID of the last step in this list (for pagination)' },
+            has_more: {
+              type: 'boolean',
+              description:
+                'Whether more steps are available beyond this page (true if additional pages exist)',
+            },
+            first_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the first step in this list (for pagination)',
+            },
+            last_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the last step in this list (for pagination)',
+            },
           },
         },
         400: {
@@ -1974,7 +2502,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -2002,9 +2533,15 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread or run was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread or run was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found" or "run_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "thread_not_found" or "run_not_found")',
+                },
               },
             },
           },
@@ -2016,7 +2553,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -2026,7 +2566,13 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; run_id: string }; Querystring: { limit?: number; order?: 'asc' | 'desc'; after?: string; before?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { thread_id: string; run_id: string };
+        Querystring: { limit?: number; order?: 'asc' | 'desc'; after?: string; before?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const listRunStepsRequest: ListRunStepsRequest = {
@@ -2054,7 +2600,8 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
     schema: {
       tags: ['Threads'],
       summary: 'Get run step',
-      description: 'Retrieves detailed information about a specific step within a run. Steps represent individual operations performed during run execution, such as message creation or tool call execution. Returns step type, status, execution details (tool calls, message creation), and any errors that occurred during step processing. Use this to inspect individual operations within a run.',
+      description:
+        'Retrieves detailed information about a specific step within a run. Steps represent individual operations performed during run execution, such as message creation or tool call execution. Returns step type, status, execution details (tool calls, message creation), and any errors that occurred during step processing. Use this to inspect individual operations within a run.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -2071,22 +2618,52 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
           type: 'object',
           properties: {
             id: { type: 'string', description: 'Step ID' },
-            object: { type: 'string', enum: ['thread.run.step'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the step was created' },
+            object: {
+              type: 'string',
+              enum: ['thread.run.step'],
+              description: 'Object type identifier',
+            },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the step was created',
+            },
             run_id: { type: 'string', description: 'ID of the run this step belongs to' },
             thread_id: { type: 'string', description: 'ID of the thread this step belongs to' },
-            type: { type: 'string', enum: ['message_creation', 'tool_calls'], description: 'Step type: message_creation (creating message) or tool_calls (executing tools)' },
-            status: { type: 'string', description: 'Step status: in_progress, cancelled, failed, completed, or expired' },
+            type: {
+              type: 'string',
+              enum: ['message_creation', 'tool_calls'],
+              description:
+                'Step type: message_creation (creating message) or tool_calls (executing tools)',
+            },
+            status: {
+              type: 'string',
+              description: 'Step status: in_progress, cancelled, failed, completed, or expired',
+            },
             step_details: {
               type: 'object',
               description: 'Detailed information about the step execution',
               properties: {
-                type: { type: 'string', description: 'Step detail type: message_creation or tool_calls' },
-                message_creation: { type: 'object', nullable: true, description: 'Message creation details (when type is message_creation)' },
-                tool_calls: { type: 'array', nullable: true, description: 'Array of tool calls made in this step (when type is tool_calls)' },
+                type: {
+                  type: 'string',
+                  description: 'Step detail type: message_creation or tool_calls',
+                },
+                message_creation: {
+                  type: 'object',
+                  nullable: true,
+                  description: 'Message creation details (when type is message_creation)',
+                },
+                tool_calls: {
+                  type: 'array',
+                  nullable: true,
+                  description: 'Array of tool calls made in this step (when type is tool_calls)',
+                },
               },
             },
-            usage: { type: 'object', nullable: true, description: 'Token usage statistics for this step' },
+            usage: {
+              type: 'object',
+              nullable: true,
+              description: 'Token usage statistics for this step',
+            },
           },
         },
         400: {
@@ -2096,7 +2673,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -2124,9 +2704,16 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the thread, run, or step was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the thread, run, or step was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "thread_not_found", "run_not_found", or "step_not_found")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "thread_not_found", "run_not_found", or "step_not_found")',
+                },
               },
             },
           },
@@ -2138,7 +2725,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -2148,7 +2738,10 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { thread_id: string; run_id: string; step_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { thread_id: string; run_id: string; step_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getRunStepRequest: GetRunStepRequest = {

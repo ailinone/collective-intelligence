@@ -51,13 +51,13 @@ const lastRollbackByScope = new Map<string, number>();
  * Called after drift detection completes.
  */
 export async function processRollbacks(
-  driftEvents: DriftEventInput[],
+  driftEvents: DriftEventInput[]
 ): Promise<{ rollbacksExecuted: number; skipped: number }> {
   let executed = 0;
   let skipped = 0;
 
   const severeEvents = driftEvents.filter(
-    e => e.severity === 'critical' || e.severity === 'high',
+    (e) => e.severity === 'critical' || e.severity === 'high'
   );
 
   for (const event of severeEvents) {
@@ -105,12 +105,14 @@ async function executeRollback(driftEvent: DriftEventInput): Promise<void> {
   if (!strategy) return;
 
   // Get current weights for this strategy
-  const currentWeights = await prisma.$queryRaw<Array<{
-    task_type: string;
-    complexity: string;
-    weight: number;
-    avg_quality: number;
-  }>>`
+  const currentWeights = await prisma.$queryRaw<
+    Array<{
+      task_type: string;
+      complexity: string;
+      weight: number;
+      avg_quality: number;
+    }>
+  >`
     SELECT task_type, complexity, weight, avg_quality
     FROM strategy_weights
     WHERE strategy = ${strategy}
@@ -158,13 +160,16 @@ async function executeRollback(driftEvent: DriftEventInput): Promise<void> {
     )
   `;
 
-  log.warn({
-    strategy,
-    severity: driftEvent.severity,
-    deltaPercent: driftEvent.deltaPercent.toFixed(1),
-    metric: (driftEvent.evidence as Record<string, unknown>).metric,
-    weightReduction: CONFIG.weightReductionFactor,
-  }, 'ROLLBACK EXECUTED — strategy weight reduced');
+  log.warn(
+    {
+      strategy,
+      severity: driftEvent.severity,
+      deltaPercent: driftEvent.deltaPercent.toFixed(1),
+      metric: (driftEvent.evidence as Record<string, unknown>).metric,
+      weightReduction: CONFIG.weightReductionFactor,
+    },
+    'ROLLBACK EXECUTED — strategy weight reduced'
+  );
 }
 
 async function getDailyRollbackCount(scopeKey: string): Promise<number> {
@@ -184,27 +189,31 @@ async function getDailyRollbackCount(scopeKey: string): Promise<number> {
 /**
  * Get recent rollback events for admin inspection.
  */
-export async function getRecentRollbacks(limit: number = 20): Promise<Array<{
-  id: string;
-  scopeKey: string;
-  reason: string;
-  executedAt: Date;
-  validatedAt: Date | null;
-}>> {
+export async function getRecentRollbacks(limit: number = 20): Promise<
+  Array<{
+    id: string;
+    scopeKey: string;
+    reason: string;
+    executedAt: Date;
+    validatedAt: Date | null;
+  }>
+> {
   try {
-    const rows = await prisma.$queryRaw<Array<{
-      id: string;
-      scope_key: string;
-      reason: string;
-      executed_at: Date;
-      validated_at: Date | null;
-    }>>`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        scope_key: string;
+        reason: string;
+        executed_at: Date;
+        validated_at: Date | null;
+      }>
+    >`
       SELECT id, scope_key, reason, executed_at, validated_at
       FROM rollback_events
       ORDER BY executed_at DESC
       LIMIT ${limit}
     `;
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       scopeKey: r.scope_key,
       reason: r.reason,

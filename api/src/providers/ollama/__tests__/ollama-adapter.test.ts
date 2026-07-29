@@ -26,7 +26,7 @@ describe('OllamaAdapter', () => {
           providerName: 'ollama',
           apiKey: '',
           baseUrl: 'http://localhost:11434/v1',
-        }),
+        })
     ).not.toThrow();
   });
 
@@ -76,7 +76,7 @@ describe('OllamaAdapter', () => {
           providerName: 'ollama',
           apiKey: 'proxy-token-123',
           baseUrl: 'https://ollama.example.com/v1',
-        }),
+        })
     ).not.toThrow();
   });
 

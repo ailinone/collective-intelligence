@@ -58,8 +58,7 @@ const log = logger.child({ component: 'broadcast-admin-service' });
 // DLQ snapshot may carry the REDACTED_STRING sentinel or a pseudonym in place of
 // a tenant id; coerce anything that is not a canonical UUID to null so a replay
 // insert cannot throw Prisma P2007 on those columns.
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function asUuidOrNull(value: unknown): string | null {
   return typeof value === 'string' && UUID_RE.test(value) ? value : null;
 }
@@ -82,17 +81,15 @@ function asUuidOrNull(value: unknown): string | null {
  */
 export function rehydrateReplayTenant(
   snapshotTenant: Record<string, unknown>,
-  destination: { tenantType: string; tenantId: string } | null | undefined,
+  destination: { tenantType: string; tenantId: string } | null | undefined
 ): TenantContext {
   // Defensive: the destination relation is FK-required so it should always be
   // present, but degrade to coercion-only (nulls) rather than throw if not.
   const destType = destination?.tenantType;
   const destId = destination?.tenantId ?? null;
   const organizationId =
-    asUuidOrNull(snapshotTenant.organizationId) ??
-    (destType === 'organization' ? destId : null);
-  const userId =
-    asUuidOrNull(snapshotTenant.userId) ?? (destType === 'user' ? destId : null);
+    asUuidOrNull(snapshotTenant.organizationId) ?? (destType === 'organization' ? destId : null);
+  const userId = asUuidOrNull(snapshotTenant.userId) ?? (destType === 'user' ? destId : null);
   const scope = snapshotTenant.resolutionScope;
   const resolutionScope =
     scope === 'organization' || scope === 'user' || scope === 'chatroom'
@@ -111,8 +108,7 @@ export function rehydrateReplayTenant(
 // ─── Types ──────────────────────────────────────────────────────────────
 
 export type Subject =
-  | { kind: 'user'; userId: string }
-  | { kind: 'organization'; organizationId: string };
+  { kind: 'user'; userId: string } | { kind: 'organization'; organizationId: string };
 
 export interface ErasureTally {
   outboxDeleted: number;
@@ -166,7 +162,7 @@ export class BroadcastAdminService {
   private readonly now: () => Date;
 
   constructor(deps: BroadcastAdminServiceDeps = {}) {
-    this.db = deps.db ?? (narrowAs<AdminRunner>(defaultPrisma));
+    this.db = deps.db ?? narrowAs<AdminRunner>(defaultPrisma);
     this.now = deps.now ?? (() => new Date());
   }
 
@@ -232,7 +228,7 @@ export class BroadcastAdminService {
           dlqDeleted,
           destinationsDeleted: destinationsDeleted.count,
         },
-        'broadcast right-to-erasure executed',
+        'broadcast right-to-erasure executed'
       );
       broadcastMetrics.erasures.inc({ subject_kind: subject.kind });
 
@@ -336,17 +332,12 @@ export class BroadcastAdminService {
           envelopeId: newEnvelopeId,
           envelope: clone as Prisma.InputJsonValue,
           schemaVersion:
-            typeof snapshot.schemaVersion === 'string'
-              ? snapshot.schemaVersion
-              : '1.0.0',
+            typeof snapshot.schemaVersion === 'string' ? snapshot.schemaVersion : '1.0.0',
           organizationId: tenant.organizationId,
           userId: tenant.userId,
           apiKeyId: tenant.apiKeyId,
           resolutionScope: tenant.resolutionScope,
-          occurredAt:
-            typeof snapshot.occurredAt === 'string'
-              ? new Date(snapshot.occurredAt)
-              : now,
+          occurredAt: typeof snapshot.occurredAt === 'string' ? new Date(snapshot.occurredAt) : now,
           createdAt: now,
         },
       });
@@ -366,7 +357,7 @@ export class BroadcastAdminService {
           originalEnvelopeId: snapshot.envelopeId,
           replayedByUserId: request.replayedByUserId,
         },
-        'broadcast DLQ entry replayed',
+        'broadcast DLQ entry replayed'
       );
       broadcastMetrics.dlqReplays.inc({
         destination_type: (snapshot.destinationType as string | undefined) ?? 'unknown',
@@ -380,4 +371,3 @@ export class BroadcastAdminService {
     });
   }
 }
-

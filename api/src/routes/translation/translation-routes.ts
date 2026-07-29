@@ -22,7 +22,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate } from '@/middleware/auth-middleware';
 import { getProviderRegistry } from '@/providers/provider-registry';
-import { PalabraAIAdapter, type PalabraSessionRequest } from '@/providers/palabraai/palabraai-adapter';
+import {
+  PalabraAIAdapter,
+  type PalabraSessionRequest,
+} from '@/providers/palabraai/palabraai-adapter';
 import { getTranslationService } from '@/services/translation-service';
 
 const log = logger.child({ module: 'translation-routes' });
@@ -41,21 +44,34 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
       schema: {
         tags: ['Translation'],
         summary: 'Create real-time translation session',
-        description: 'Creates a Palabra.ai translation session with LiveKit WebRTC room credentials. The client connects directly to the LiveKit room for low-latency bidirectional audio translation.',
+        description:
+          'Creates a Palabra.ai translation session with LiveKit WebRTC room credentials. The client connects directly to the LiveKit room for low-latency bidirectional audio translation.',
         body: {
           type: 'object',
           required: ['sourceLanguage', 'targetLanguages'],
           properties: {
-            sourceLanguage: { type: 'string', description: 'Source language code (e.g., "pt", "en", "es")' },
+            sourceLanguage: {
+              type: 'string',
+              description: 'Source language code (e.g., "pt", "en", "es")',
+            },
             targetLanguages: {
               type: 'array',
               items: { type: 'string' },
               minItems: 1,
               description: 'Target language codes (e.g., ["en", "es", "fr"])',
             },
-            voiceId: { type: 'string', description: 'Voice ID for TTS output (default: "default_low")' },
-            sentenceSplitterEnabled: { type: 'boolean', description: 'Enable sentence splitting (default: true)' },
-            translatePartialTranscriptions: { type: 'boolean', description: 'Translate partial transcriptions (default: false)' },
+            voiceId: {
+              type: 'string',
+              description: 'Voice ID for TTS output (default: "default_low")',
+            },
+            sentenceSplitterEnabled: {
+              type: 'boolean',
+              description: 'Enable sentence splitting (default: true)',
+            },
+            translatePartialTranscriptions: {
+              type: 'boolean',
+              description: 'Translate partial transcriptions (default: false)',
+            },
           },
         },
       },
@@ -64,11 +80,14 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
       const requestId = typeof request.id === 'string' ? request.id : `tr-${Date.now()}`;
       const body = request.body as PalabraSessionRequest;
 
-      log.info({
-        requestId,
-        source: body.sourceLanguage,
-        targets: body.targetLanguages,
-      }, 'Translation session requested');
+      log.info(
+        {
+          requestId,
+          source: body.sourceLanguage,
+          targets: body.targetLanguages,
+        },
+        'Translation session requested'
+      );
 
       try {
         const registry = getProviderRegistry();
@@ -78,7 +97,8 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
           return reply.status(503).send({
             error: {
               code: 'translation_provider_unavailable',
-              message: 'Palabra.ai provider not configured. Set PALABRAAI_CLIENT_ID and PALABRAAI_CLIENT_SECRET.',
+              message:
+                'Palabra.ai provider not configured. Set PALABRAAI_CLIENT_ID and PALABRAAI_CLIENT_SECRET.',
             },
           });
         }
@@ -157,14 +177,21 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
       schema: {
         tags: ['Translation'],
         summary: 'Translate text (NLLB-200)',
-        description: 'Fast text-to-text translation via self-hosted NLLB-200. ~50ms per sentence, 200+ languages.',
+        description:
+          'Fast text-to-text translation via self-hosted NLLB-200. ~50ms per sentence, 200+ languages.',
         body: {
           type: 'object',
           required: ['text', 'target_lang'],
           properties: {
             text: { type: 'string', description: 'Text to translate' },
-            source_lang: { type: 'string', description: 'Source language ISO 639-1 (e.g., "en"). Auto-detected if omitted.' },
-            target_lang: { type: 'string', description: 'Target language ISO 639-1 (e.g., "pt", "ja", "es")' },
+            source_lang: {
+              type: 'string',
+              description: 'Source language ISO 639-1 (e.g., "en"). Auto-detected if omitted.',
+            },
+            target_lang: {
+              type: 'string',
+              description: 'Target language ISO 639-1 (e.g., "pt", "ja", "es")',
+            },
           },
         },
       },
@@ -181,7 +208,7 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
         const result = await service.translateText(
           body.text,
           body.source_lang || 'en',
-          body.target_lang,
+          body.target_lang
         );
 
         return reply.status(200).send({
@@ -229,11 +256,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
         const results = await service.translateBatch(
           body.texts,
           body.source_lang || 'en',
-          body.target_lang,
+          body.target_lang
         );
 
         return reply.status(200).send({
-          translations: results.map(r => ({
+          translations: results.map((r) => ({
             translated_text: r.translatedText,
             model: r.model,
             latency_ms: r.latencyMs,

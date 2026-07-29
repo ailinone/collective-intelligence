@@ -197,7 +197,9 @@ export class TokenBucket {
    * `consume()` followed by `getStats()`, since the Lua script already computes
    * the post-consume token count atomically (see `consumeRedisWithState`).
    */
-  async consumeWithStats(tokens: number = 1): Promise<{ allowed: boolean; stats: TokenBucketStats }> {
+  async consumeWithStats(
+    tokens: number = 1
+  ): Promise<{ allowed: boolean; stats: TokenBucketStats }> {
     this.localStats.totalRequests++;
 
     if (this.useLocalFallback) {
@@ -259,7 +261,12 @@ export class TokenBucket {
    */
   private async consumeRedisWithState(
     tokens: number
-  ): Promise<{ allowed: boolean; tokensAvailable: number; totalRequests: number; totalRejected: number }> {
+  ): Promise<{
+    allowed: boolean;
+    tokensAvailable: number;
+    totalRequests: number;
+    totalRejected: number;
+  }> {
     const redis = getRedisClient();
     const now = Date.now();
     const key = this.redisKey;
@@ -465,7 +472,10 @@ export class TokenBucket {
     };
 
     logger.info(
-      { identifier: safeLogIdentifier(this.config.scope, this.config.identifier), scope: this.config.scope },
+      {
+        identifier: safeLogIdentifier(this.config.scope, this.config.identifier),
+        scope: this.config.scope,
+      },
       'Token bucket reset'
     );
   }

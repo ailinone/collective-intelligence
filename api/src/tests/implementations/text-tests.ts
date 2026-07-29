@@ -64,7 +64,11 @@ export const functionCallingTest: CapabilityTester = async ({ model, client }) =
   const success =
     result.toolCalls.length > 0 &&
     result.toolCalls[0].toolName === 'get_weather' &&
-    (typeof result.toolCalls[0].arguments === 'object' && result.toolCalls[0].arguments !== null && 'city' in result.toolCalls[0].arguments && typeof result.toolCalls[0].arguments.city === 'string' && result.toolCalls[0].arguments.city.toLowerCase().includes('são paulo')) &&
+    typeof result.toolCalls[0].arguments === 'object' &&
+    result.toolCalls[0].arguments !== null &&
+    'city' in result.toolCalls[0].arguments &&
+    typeof result.toolCalls[0].arguments.city === 'string' &&
+    result.toolCalls[0].arguments.city.toLowerCase().includes('são paulo') &&
     result.toolCalls[0].arguments.unit === 'celsius';
 
   return {

@@ -22,10 +22,7 @@
  *   - `evaluatorId` — stable identifier of the implementation, so
  *      shifts in scoring quality can be correlated to evaluator changes.
  */
-import type {
-  ScoringMode,
-  ValidationStatus,
-} from '../evaluation/strategy-output-evaluator';
+import type { ScoringMode, ValidationStatus } from '../evaluation/strategy-output-evaluator';
 
 export interface ConsensusParticipantArtifact {
   readonly modelId: string;
@@ -63,10 +60,7 @@ export type ConsensusEffectiveStrategyId =
  * blocker, not a warning.
  */
 export type PlanSource = 'dynamic_role_resolver' | 'legacy_selection' | 'none';
-export type JudgeSelectionSource =
-  | 'dynamic_role_resolver'
-  | 'env_fallback'
-  | 'unavailable';
+export type JudgeSelectionSource = 'dynamic_role_resolver' | 'env_fallback' | 'unavailable';
 
 /**
  * Strategy 01C.0.2 — synthesizer-selection source. Where the model
@@ -187,7 +181,8 @@ export interface ConsensusStrategyArtifacts {
   } | null;
 
   readonly finalSelection: {
-    readonly source: 'synthesis' | 'best_individual' | 'verified_individual' | 'agreement_individual';
+    readonly source:
+      'synthesis' | 'best_individual' | 'verified_individual' | 'agreement_individual';
     readonly fallbackTriggered: boolean;
     readonly fallbackReason?: string;
     readonly finalScore?: number;

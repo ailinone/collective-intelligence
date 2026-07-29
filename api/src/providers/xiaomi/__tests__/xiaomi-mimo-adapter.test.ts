@@ -24,7 +24,7 @@ describe('XiaomiMimoAdapter', () => {
           providerName: 'xiaomi-mimo',
           apiKey: 'test-mimo-key',
           baseUrl: 'https://platform.xiaomimimo.com/v1',
-        }),
+        })
     ).not.toThrow();
   });
 

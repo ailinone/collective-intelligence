@@ -9,9 +9,9 @@
 
 /**
  * Organization Settings Routes
- * 
+ *
  * Endpoints for managing organization settings
- * 
+ *
  * Endpoints:
  * - PATCH /v1/organization/settings - Update organization settings (admin only)
  */
@@ -98,7 +98,7 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
       try {
         const extendedRequest = request as ExtendedFastifyRequest;
         const user = extendedRequest.user;
-        
+
         if (!user || typeof user !== 'object') {
           return reply.code(401).send({
             error: 'Unauthorized',
@@ -107,7 +107,7 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
         }
 
         // Get organization ID from user context
-        const organizationId = 
+        const organizationId =
           'organizationId' in user && typeof user.organizationId === 'string'
             ? user.organizationId
             : 'orgId' in user && typeof user.orgId === 'string'
@@ -122,16 +122,13 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
         }
 
         // Type-safe body extraction
-        const body = typeof request.body === 'object' && request.body !== null
-          ? request.body
-          : {};
-        
-        const name = 'name' in body && typeof body.name === 'string'
-          ? body.name
-          : undefined;
-        const settings = 'settings' in body && typeof body.settings === 'object' && body.settings !== null
-          ? body.settings as Record<string, unknown>
-          : undefined;
+        const body = typeof request.body === 'object' && request.body !== null ? request.body : {};
+
+        const name = 'name' in body && typeof body.name === 'string' ? body.name : undefined;
+        const settings =
+          'settings' in body && typeof body.settings === 'object' && body.settings !== null
+            ? (body.settings as Record<string, unknown>)
+            : undefined;
 
         // Validate at least one field to update
         if (!name && !settings) {
@@ -166,15 +163,18 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
 
         if (settings !== undefined) {
           // Merge with existing settings (preserve existing, update provided)
-          const existingSettings = existingOrg.settings && typeof existingOrg.settings === 'object' && existingOrg.settings !== null
-            ? existingOrg.settings as Record<string, unknown>
-            : {};
-          
+          const existingSettings =
+            existingOrg.settings &&
+            typeof existingOrg.settings === 'object' &&
+            existingOrg.settings !== null
+              ? (existingOrg.settings as Record<string, unknown>)
+              : {};
+
           const mergedSettings = {
             ...existingSettings,
             ...settings,
           };
-          
+
           // Convert to Prisma.InputJsonValue type-safe
           updateData.settings = mergedSettings as Prisma.InputJsonValue;
         }
@@ -224,9 +224,8 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
           message: 'Failed to update organization settings',
         });
       }
-    },
+    }
   );
 
   logger.info('Organization settings routes registered');
 }
-

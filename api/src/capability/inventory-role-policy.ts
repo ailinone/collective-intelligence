@@ -134,10 +134,7 @@ export interface InventoryRoleInput {
  * Operator: extend or trim this list as you refine your view of what
  * "community" means for routing decisions.
  */
-export const COMMUNITY_PROVIDERS: ReadonlyArray<string> = [
-  'huggingface',
-  'replicate',
-];
+export const COMMUNITY_PROVIDERS: ReadonlyArray<string> = ['huggingface', 'replicate'];
 
 /**
  * Initial seed (2026-04-30, conservative). Drawn from the catalog rows
@@ -213,14 +210,14 @@ export function classifyInventoryRole(input: InventoryRoleInput): InventoryRole 
 export function roleForModel(
   model: { id: string; providerId: string },
   provider: Pick<Provider, 'id'> | null,
-  ctx: { providerInventoryClass?: string | null; hasUpstreamTwin?: boolean } = {},
+  ctx: { providerInventoryClass?: string | null; hasUpstreamTwin?: boolean } = {}
 ): InventoryRole {
   // Truthiness check (not `??`) so empty-string providerId — which appears in
   // malformed test fixtures and partially-populated DTOs — also triggers the
   // provider.id fallback. `??` only catches null/undefined, which would let
   // `providerId: ''` through and silently mis-classify the row as 'primary'.
   const resolvedProviderId =
-    (model.providerId && model.providerId.length > 0)
+    model.providerId && model.providerId.length > 0
       ? model.providerId
       : (provider?.id ?? 'unknown');
   return classifyInventoryRole({

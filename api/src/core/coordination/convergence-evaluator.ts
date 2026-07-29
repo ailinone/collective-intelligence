@@ -17,10 +17,7 @@
  * coordination rounds or stop.
  */
 
-import type {
-  CoordinationState,
-  CoordinationStopReason,
-} from './coordination-types';
+import type { CoordinationState, CoordinationStopReason } from './coordination-types';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'convergence-evaluator' });
@@ -73,7 +70,7 @@ export function evaluateConvergence(state: CoordinationState): ConvergenceEvalua
         dominantModel: herding.dominantModel,
         influence: herding.influence.toFixed(2),
       },
-      'Herding detected in coordination — models converging to single dominant position',
+      'Herding detected in coordination — models converging to single dominant position'
     );
 
     if (round >= 2) {
@@ -89,7 +86,7 @@ export function evaluateConvergence(state: CoordinationState): ConvergenceEvalua
         round,
         flaggedVariables: poisoning.flaggedVariables,
       },
-      'Potential sensitivity poisoning detected',
+      'Potential sensitivity poisoning detected'
     );
   }
 
@@ -105,7 +102,7 @@ export function evaluateConvergence(state: CoordinationState): ConvergenceEvalua
         round,
         convergenceScore: convergence.score,
       },
-      'False convergence detected — apparent agreement but low genuine confidence',
+      'False convergence detected — apparent agreement but low genuine confidence'
     );
   }
 
@@ -124,17 +121,21 @@ export function evaluateConvergence(state: CoordinationState): ConvergenceEvalua
 function computeDetailedMetrics(state: CoordinationState): ConvergenceEvaluation['details'] {
   const { convergence, variables, history } = state;
 
-  const currentRoundSignals = history.filter(s => s.round === state.round);
-  const previousRoundSignals = history.filter(s => s.round === state.round - 1);
+  const currentRoundSignals = history.filter((s) => s.round === state.round);
+  const previousRoundSignals = history.filter((s) => s.round === state.round - 1);
 
-  const uniqueDecisions = new Set(currentRoundSignals.map(s => s.decision.type)).size;
+  const uniqueDecisions = new Set(currentRoundSignals.map((s) => s.decision.type)).size;
 
-  const currentConfAvg = currentRoundSignals.length > 0
-    ? currentRoundSignals.reduce((s, sig) => s + sig.decision.confidence, 0) / currentRoundSignals.length
-    : 0;
-  const previousConfAvg = previousRoundSignals.length > 0
-    ? previousRoundSignals.reduce((s, sig) => s + sig.decision.confidence, 0) / previousRoundSignals.length
-    : 0;
+  const currentConfAvg =
+    currentRoundSignals.length > 0
+      ? currentRoundSignals.reduce((s, sig) => s + sig.decision.confidence, 0) /
+        currentRoundSignals.length
+      : 0;
+  const previousConfAvg =
+    previousRoundSignals.length > 0
+      ? previousRoundSignals.reduce((s, sig) => s + sig.decision.confidence, 0) /
+        previousRoundSignals.length
+      : 0;
 
   const avgConfidenceDelta = currentConfAvg - previousConfAvg;
 
@@ -155,9 +156,8 @@ function computeDetailedMetrics(state: CoordinationState): ConvergenceEvaluation
   const dominantModelInfluence = maxModelSignals / totalSignals;
 
   const varValues = Object.values(variables);
-  const variableStability = varValues.length > 0
-    ? varValues.reduce((s, v) => s + v.stability, 0) / varValues.length
-    : 0;
+  const variableStability =
+    varValues.length > 0 ? varValues.reduce((s, v) => s + v.stability, 0) / varValues.length : 0;
 
   let variableDrift = 0;
   if (state.round > 1) {
@@ -190,15 +190,15 @@ function detectHerding(state: CoordinationState): {
     return { detected: false, influence: 0 };
   }
 
-  const currentRound = history.filter(s => s.round === round);
+  const currentRound = history.filter((s) => s.round === round);
   if (currentRound.length < 2) return { detected: false, influence: 0 };
 
-  const decisions = currentRound.map(s => s.decision.type);
+  const decisions = currentRound.map((s) => s.decision.type);
   const unique = new Set(decisions);
   if (unique.size === 1 && convergence.decisionFlipRate === 0 && convergence.dissent === 0) {
-    const prevRound = history.filter(s => s.round === round - 1);
+    const prevRound = history.filter((s) => s.round === round - 1);
     if (prevRound.length >= 2) {
-      const prevDecisions = new Set(prevRound.map(s => s.decision.type));
+      const prevDecisions = new Set(prevRound.map((s) => s.decision.type));
       if (prevDecisions.size > 1) {
         const modelCounts: Record<string, number> = {};
         for (const s of currentRound) {
@@ -216,7 +216,7 @@ function detectHerding(state: CoordinationState): {
 
   if (convergence.decisionFlipRate > 0 && convergence.decisionFlipRate < 0.15) {
     const allDecisionsSame = unique.size <= 1;
-    const allConfHigh = currentRound.every(s => s.decision.confidence >= 0.9);
+    const allConfHigh = currentRound.every((s) => s.decision.confidence >= 0.9);
     if (allDecisionsSame && allConfHigh && convergence.confidenceTrend.length >= 2) {
       const trend = convergence.confidenceTrend;
       const risingFast = trend[0] < 0.7 && trend[trend.length - 1] >= 0.9;
@@ -246,21 +246,21 @@ function detectSensitivityPoisoning(state: CoordinationState): {
   for (const [varName, varState] of Object.entries(variables)) {
     if (varState.updatedBy.length <= 1) continue;
 
-    const allSensitivities = history.flatMap(s =>
-      s.sensitivities.filter(sens => sens.variable === varName)
+    const allSensitivities = history.flatMap((s) =>
+      s.sensitivities.filter((sens) => sens.variable === varName)
     );
 
     if (allSensitivities.length < 2) continue;
 
     const identicalTriggers = allSensitivities.filter(
-      s => s.trigger === allSensitivities[0].trigger
+      (s) => s.trigger === allSensitivities[0].trigger
     );
     if (identicalTriggers.length === allSensitivities.length && allSensitivities.length >= 3) {
       flaggedVariables.push(varName);
       continue;
     }
 
-    const extremeConfidence = allSensitivities.filter(s => s.confidence >= 0.99);
+    const extremeConfidence = allSensitivities.filter((s) => s.confidence >= 0.99);
     if (extremeConfidence.length === allSensitivities.length && allSensitivities.length >= 3) {
       flaggedVariables.push(varName);
     }
@@ -284,10 +284,7 @@ function detectStagnation(state: CoordinationState): {
   const trend = convergence.confidenceTrend;
   if (trend.length >= 3) {
     const last3 = trend.slice(-3);
-    const maxDelta = Math.max(
-      Math.abs(last3[1] - last3[0]),
-      Math.abs(last3[2] - last3[1])
-    );
+    const maxDelta = Math.max(Math.abs(last3[1] - last3[0]), Math.abs(last3[2] - last3[1]));
     if (maxDelta < 0.01 && convergence.decisionFlipRate === 0) {
       return { detected: true };
     }
@@ -298,7 +295,7 @@ function detectStagnation(state: CoordinationState): {
 
 function detectFalseConvergence(
   state: CoordinationState,
-  details: ConvergenceEvaluation['details'],
+  details: ConvergenceEvaluation['details']
 ): boolean {
   if (state.convergence.score >= state.limits.minConvergenceScore) {
     if (details.avgConfidenceDelta < -0.1) {
@@ -333,7 +330,7 @@ function checkStopConditions(state: CoordinationState): CoordinationStopReason |
   }
 
   if (limits.stopOnCriticalRisk) {
-    if (risks.some(r => r.severity === 'critical')) {
+    if (risks.some((r) => r.severity === 'critical')) {
       return 'critical_risk';
     }
   }
@@ -346,11 +343,15 @@ function checkStopConditions(state: CoordinationState): CoordinationStopReason |
     return 'converged';
   }
 
-  if (round >= 3 && convergence.dissent > limits.maxDissent && convergence.decisionFlipRate > limits.maxDecisionFlipRate) {
+  if (
+    round >= 3 &&
+    convergence.dissent > limits.maxDissent &&
+    convergence.decisionFlipRate > limits.maxDecisionFlipRate
+  ) {
     return 'persistent_divergence';
   }
 
-  const currentRoundValid = state.history.filter(s => s.round === round);
+  const currentRoundValid = state.history.filter((s) => s.round === round);
   if (currentRoundValid.length < limits.minValidSignalsPerRound) {
     return 'insufficient_valid_signals';
   }

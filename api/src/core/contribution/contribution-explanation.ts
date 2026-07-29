@@ -30,9 +30,7 @@ export interface CandidateExplanationInput {
   readonly rejectionReasons: readonly string[];
 }
 
-export function buildCandidateExplanation(
-  input: CandidateExplanationInput,
-): string {
+export function buildCandidateExplanation(input: CandidateExplanationInput): string {
   if (input.rejected) {
     const reasons = input.rejectionReasons.length
       ? input.rejectionReasons.join(',')

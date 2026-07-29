@@ -138,7 +138,9 @@ class RequestQueueService {
       // C3 fix: Set up DLQ routing for this queue (ADR-003)
       import('@/queue/dlq-manager.js')
         .then(({ setupDLQ }) => setupDLQ(this.queue!))
-        .catch((err: unknown) => this.log.warn({ err }, 'Failed to setup DLQ for chat-requests queue'));
+        .catch((err: unknown) =>
+          this.log.warn({ err }, 'Failed to setup DLQ for chat-requests queue')
+        );
     } catch (error) {
       this.queue = null;
       if (this.queueConnection) {
@@ -560,9 +562,11 @@ class RequestQueueService {
 
     worker.on('completed', (job) => {
       const queueTime = Date.now() - job.data.queuedAt;
-      queueResultService.setCompleted(job.id!, job.returnvalue, queueTime).catch((error: unknown) => {
-        this.log.error({ error, jobId: job.id }, 'Failed to cache completed job result');
-      });
+      queueResultService
+        .setCompleted(job.id!, job.returnvalue, queueTime)
+        .catch((error: unknown) => {
+          this.log.error({ error, jobId: job.id }, 'Failed to cache completed job result');
+        });
       this.log.info(
         { jobId: job.id, queueTimeMs: queueTime },
         'Queue job completed event processed'

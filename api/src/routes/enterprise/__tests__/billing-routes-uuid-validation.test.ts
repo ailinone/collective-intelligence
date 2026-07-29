@@ -26,15 +26,19 @@ describe('enterprise/billing — UUID path-param validation', () => {
   it('rejects non-UUID invoiceId on GET with 400 (not 500/P2007)', async () => {
     const app = Fastify({ logger: false });
 
-    app.get('/v1/enterprise/billing/invoices/:invoiceId', {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['invoiceId'],
-          properties: { invoiceId: { type: 'string', format: 'uuid' } },
+    app.get(
+      '/v1/enterprise/billing/invoices/:invoiceId',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            required: ['invoiceId'],
+            properties: { invoiceId: { type: 'string', format: 'uuid' } },
+          },
         },
       },
-    }, async () => ({ should: 'never reach' }));
+      async () => ({ should: 'never reach' })
+    );
 
     const res = await app.inject({
       method: 'GET',
@@ -51,15 +55,19 @@ describe('enterprise/billing — UUID path-param validation', () => {
   it('rejects non-UUID invoiceId on POST /pay with 400', async () => {
     const app = Fastify({ logger: false });
 
-    app.post('/v1/enterprise/billing/invoices/:invoiceId/pay', {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['invoiceId'],
-          properties: { invoiceId: { type: 'string', format: 'uuid' } },
+    app.post(
+      '/v1/enterprise/billing/invoices/:invoiceId/pay',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            required: ['invoiceId'],
+            properties: { invoiceId: { type: 'string', format: 'uuid' } },
+          },
         },
       },
-    }, async () => ({ should: 'never reach' }));
+      async () => ({ should: 'never reach' })
+    );
 
     const res = await app.inject({
       method: 'POST',
@@ -77,18 +85,22 @@ describe('enterprise/billing — UUID path-param validation', () => {
     const app = Fastify({ logger: false });
     let handlerCalled = false;
 
-    app.get('/v1/enterprise/billing/invoices/:invoiceId', {
-      schema: {
-        params: {
-          type: 'object',
-          required: ['invoiceId'],
-          properties: { invoiceId: { type: 'string', format: 'uuid' } },
+    app.get(
+      '/v1/enterprise/billing/invoices/:invoiceId',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            required: ['invoiceId'],
+            properties: { invoiceId: { type: 'string', format: 'uuid' } },
+          },
         },
       },
-    }, async () => {
-      handlerCalled = true;
-      return { ok: true };
-    });
+      async () => {
+        handlerCalled = true;
+        return { ok: true };
+      }
+    );
 
     const res = await app.inject({
       method: 'GET',

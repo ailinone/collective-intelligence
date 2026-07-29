@@ -44,9 +44,7 @@ describe('capability-materialise job ↔ scheduled-jobs registry wiring', () => 
   });
 
   it('handler imports from `./capability-materialise-job`', () => {
-    expect(registrySource).toMatch(
-      /import\(\s*['"]\.\/capability-materialise-job(\.js)?['"]\s*\)/,
-    );
+    expect(registrySource).toMatch(/import\(\s*['"]\.\/capability-materialise-job(\.js)?['"]\s*\)/);
   });
 
   it('schedules the cron under the same name', () => {

@@ -193,7 +193,7 @@ function parseTEIResponse(json: unknown, expectedLength: number): Float32Array[]
   if (out.length !== expectedLength) {
     log.warn(
       { received: out.length, expected: expectedLength },
-      'TEI returned different number of embeddings than requested',
+      'TEI returned different number of embeddings than requested'
     );
   }
   return out;

@@ -405,9 +405,12 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const openRouterMessages = this.convertMessagesToOpenRouter(request.messages);
 
       // Type-safe message content
-      type OpenRouterMessageContent = 
-        | string 
-        | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }>;
+      type OpenRouterMessageContent =
+        | string
+        | Array<
+            | { type: 'text'; text: string }
+            | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+          >;
 
       // Type-safe tool calls
       type OpenRouterToolCall = Array<{
@@ -442,50 +445,72 @@ export class OpenRouterAdapter extends ProviderAdapter {
       }
 
       // Convert ChatCompletionMessageParam[] to OpenRouter format with type safety
-      const openRouterMessagesFormatted: OpenRouterMessage[] = openRouterMessages.map((msg): OpenRouterMessage => {
-        // Type-safe content conversion
-        let contentValue: OpenRouterMessageContent = '';
-        if (typeof msg.content === 'string') {
-          contentValue = msg.content;
-        } else if (Array.isArray(msg.content)) {
-          contentValue = msg.content.map((item) => {
-            if (item && typeof item === 'object' && 'type' in item) {
-              if (item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
-                return { type: 'text' as const, text: (item as { text: string }).text };
-              } else if (item.type === 'image_url' && 'image_url' in item && typeof (item as { image_url: unknown }).image_url === 'object' && item.image_url !== null) {
-                const imgUrl = item.image_url as { url: string; detail?: 'low' | 'high' | 'auto' };
-                return {
-                  type: 'image_url' as const,
-                  image_url: {
-                    url: imgUrl.url,
-                    detail: imgUrl.detail,
-                  },
-                };
+      const openRouterMessagesFormatted: OpenRouterMessage[] = openRouterMessages.map(
+        (msg): OpenRouterMessage => {
+          // Type-safe content conversion
+          let contentValue: OpenRouterMessageContent = '';
+          if (typeof msg.content === 'string') {
+            contentValue = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            contentValue = msg.content.map((item) => {
+              if (item && typeof item === 'object' && 'type' in item) {
+                if (
+                  item.type === 'text' &&
+                  'text' in item &&
+                  typeof (item as { text: unknown }).text === 'string'
+                ) {
+                  return { type: 'text' as const, text: (item as { text: string }).text };
+                } else if (
+                  item.type === 'image_url' &&
+                  'image_url' in item &&
+                  typeof (item as { image_url: unknown }).image_url === 'object' &&
+                  item.image_url !== null
+                ) {
+                  const imgUrl = item.image_url as {
+                    url: string;
+                    detail?: 'low' | 'high' | 'auto';
+                  };
+                  return {
+                    type: 'image_url' as const,
+                    image_url: {
+                      url: imgUrl.url,
+                      detail: imgUrl.detail,
+                    },
+                  };
+                }
               }
-            }
-            return { type: 'text' as const, text: String(item || '') };
-          });
-        } else {
-          contentValue = String(msg.content || '');
+              return { type: 'text' as const, text: String(item || '') };
+            });
+          } else {
+            contentValue = String(msg.content || '');
+          }
+
+          const base: OpenRouterMessage = {
+            role: msg.role,
+            content: contentValue,
+          };
+
+          // Type-safe tool_calls conversion
+          if (
+            'tool_calls' in msg &&
+            msg.tool_calls !== undefined &&
+            Array.isArray(msg.tool_calls)
+          ) {
+            base.tool_calls = msg.tool_calls as OpenRouterToolCall;
+          }
+
+          // Type-safe tool_call_id
+          if (
+            'tool_call_id' in msg &&
+            msg.tool_call_id !== undefined &&
+            typeof msg.tool_call_id === 'string'
+          ) {
+            base.tool_call_id = msg.tool_call_id;
+          }
+
+          return base;
         }
-
-        const base: OpenRouterMessage = {
-          role: msg.role,
-          content: contentValue,
-        };
-
-        // Type-safe tool_calls conversion
-        if ('tool_calls' in msg && msg.tool_calls !== undefined && Array.isArray(msg.tool_calls)) {
-          base.tool_calls = msg.tool_calls as OpenRouterToolCall;
-        }
-
-        // Type-safe tool_call_id
-        if ('tool_call_id' in msg && msg.tool_call_id !== undefined && typeof msg.tool_call_id === 'string') {
-          base.tool_call_id = msg.tool_call_id;
-        }
-
-        return base;
-      });
+      );
 
       const payload: OpenRouterPayload = {
         model: request.model,
@@ -645,11 +670,14 @@ export class OpenRouterAdapter extends ProviderAdapter {
         created: Math.floor(Date.now() / 1000),
         model: typedData.model,
         choices: (typedData.choices || []).map((choice) => {
-          const finishReason = choice.finish_reason ? (choice.finish_reason as 'stop' | 'length' | 'tool_calls' | 'content_filter') : null;
+          const finishReason = choice.finish_reason
+            ? (choice.finish_reason as 'stop' | 'length' | 'tool_calls' | 'content_filter')
+            : null;
           return {
             index: choice.index || 0,
             message: {
-              role: (choice.message?.role || 'assistant') as 'function' | 'system' | 'user' | 'assistant' | 'tool',
+              role: (choice.message?.role || 'assistant') as
+                'function' | 'system' | 'user' | 'assistant' | 'tool',
               content: choice.message?.content || '',
               toolCalls: choice.message?.tool_calls,
             },
@@ -691,15 +719,29 @@ export class OpenRouterAdapter extends ProviderAdapter {
   private convertMessagesToOpenRouter(messages: ChatMessage[]): ChatCompletionMessageParam[] {
     return messages.map((message): ChatCompletionMessageParam => {
       // Convert content to proper format
-      let contentValue: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }> = '';
-      
+      let contentValue:
+        | string
+        | Array<
+            | { type: 'text'; text: string }
+            | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+          > = '';
+
       if (typeof message.content === 'string') {
         contentValue = message.content;
       } else if (Array.isArray(message.content)) {
         contentValue = message.content.map((item) => {
-          if (item.type === 'text' && 'text' in item && typeof (item as { text: unknown }).text === 'string') {
+          if (
+            item.type === 'text' &&
+            'text' in item &&
+            typeof (item as { text: unknown }).text === 'string'
+          ) {
             return { type: 'text' as const, text: (item as { text: string }).text };
-          } else if (item.type === 'image_url' && 'image_url' in item && typeof (item as { image_url: unknown }).image_url === 'object' && item.image_url !== null) {
+          } else if (
+            item.type === 'image_url' &&
+            'image_url' in item &&
+            typeof (item as { image_url: unknown }).image_url === 'object' &&
+            item.image_url !== null
+          ) {
             const imgUrl = item.image_url as { url: string; detail?: 'low' | 'high' | 'auto' };
             return {
               type: 'image_url' as const,
@@ -725,16 +767,23 @@ export class OpenRouterAdapter extends ProviderAdapter {
         case 'assistant': {
           // Assistant messages can only have text content, not images
           // Filter to only text parts if it's an array
-          let assistantContent: string | OpenAI.Chat.Completions.ChatCompletionContentPartText[] = '';
+          let assistantContent: string | OpenAI.Chat.Completions.ChatCompletionContentPartText[] =
+            '';
           if (typeof contentValue === 'string') {
             assistantContent = contentValue;
           } else if (Array.isArray(contentValue)) {
-            const textParts = contentValue.filter((c): c is OpenAI.Chat.Completions.ChatCompletionContentPartText => {
-              return c.type === 'text' && 'text' in c && typeof (c as { text: unknown }).text === 'string';
-            }).map((c) => ({ type: 'text' as const, text: (c as { text: string }).text }));
+            const textParts = contentValue
+              .filter((c): c is OpenAI.Chat.Completions.ChatCompletionContentPartText => {
+                return (
+                  c.type === 'text' &&
+                  'text' in c &&
+                  typeof (c as { text: unknown }).text === 'string'
+                );
+              })
+              .map((c) => ({ type: 'text' as const, text: (c as { text: string }).text }));
             assistantContent = textParts.length > 0 ? textParts : '';
           }
-          
+
           const assistantMessage: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam = {
             role: 'assistant',
             content: assistantContent,
@@ -748,9 +797,10 @@ export class OpenRouterAdapter extends ProviderAdapter {
           return assistantMessage;
         }
         case 'tool': {
-          const toolContent = typeof contentValue === 'string' 
-            ? contentValue 
-            : contentValue.map((c) => ('text' in c ? c.text : '')).join('\n');
+          const toolContent =
+            typeof contentValue === 'string'
+              ? contentValue
+              : contentValue.map((c) => ('text' in c ? c.text : '')).join('\n');
           return {
             role: 'tool',
             content: toolContent,
@@ -758,9 +808,10 @@ export class OpenRouterAdapter extends ProviderAdapter {
           };
         }
         case 'system': {
-          const systemContent = typeof contentValue === 'string' 
-            ? contentValue 
-            : contentValue.map((c) => ('text' in c ? c.text : '')).join('\n');
+          const systemContent =
+            typeof contentValue === 'string'
+              ? contentValue
+              : contentValue.map((c) => ('text' in c ? c.text : '')).join('\n');
           return {
             role: 'system',
             content: systemContent,
@@ -769,7 +820,8 @@ export class OpenRouterAdapter extends ProviderAdapter {
         default: {
           return {
             role: 'user',
-            content: typeof contentValue === 'string' ? contentValue : String(message.content || ''),
+            content:
+              typeof contentValue === 'string' ? contentValue : String(message.content || ''),
           };
         }
       }
@@ -986,11 +1038,11 @@ export class OpenRouterAdapter extends ProviderAdapter {
    */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const startTime = Date.now();
-    
+
     try {
       // Get non-streaming response
       const fullResponse = await this.chatCompletion(request);
-      
+
       // Extract text content from message (can be string or MessageContent[])
       const messageContent = fullResponse.choices[0]?.message?.content;
       let contentText = '';
@@ -999,22 +1051,27 @@ export class OpenRouterAdapter extends ProviderAdapter {
       } else if (Array.isArray(messageContent)) {
         contentText = messageContent
           .map((item) => {
-            if (typeof item === 'object' && item !== null && 'text' in item && typeof item.text === 'string') {
+            if (
+              typeof item === 'object' &&
+              item !== null &&
+              'text' in item &&
+              typeof item.text === 'string'
+            ) {
               return item.text;
             }
             return '';
           })
           .join('');
       }
-      
+
       // Split content into chunks for streaming simulation
       const chunkSize = 20; // Characters per chunk
       const chunks: string[] = [];
-      
+
       for (let i = 0; i < contentText.length; i += chunkSize) {
         chunks.push(contentText.slice(i, i + chunkSize));
       }
-      
+
       // Yield chunks progressively
       for (let i = 0; i < chunks.length; i++) {
         yield {
@@ -1029,19 +1086,23 @@ export class OpenRouterAdapter extends ProviderAdapter {
                 role: 'assistant',
                 content: chunks[i],
               },
-              finish_reason: i === chunks.length - 1 ? fullResponse.choices[0]?.finish_reason || 'stop' : null,
+              finish_reason:
+                i === chunks.length - 1 ? fullResponse.choices[0]?.finish_reason || 'stop' : null,
               logprobs: null,
             },
           ],
           usage: i === chunks.length - 1 ? fullResponse.usage : undefined,
         };
-        
+
         // Small delay to simulate streaming
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
-      
+
       const totalDuration = Date.now() - startTime;
-      this.providerLog.debug({ duration: totalDuration, chunks: chunks.length }, 'Streaming completed');
+      this.providerLog.debug(
+        { duration: totalDuration, chunks: chunks.length },
+        'Streaming completed'
+      );
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
       this.providerLog.error(
@@ -1070,8 +1131,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
     // OpenRouter pricing varies by model, using average rates as fallback
     const inputRate = Math.max(0, Number(model.inputCostPer1k) || 0.001);
     const outputRate = Math.max(0, Number(model.outputCostPer1k) || 0.004);
-    const cost = (inputTokens / 1000) * inputRate
-               + (outputTokens / 1000) * outputRate;
+    const cost = (inputTokens / 1000) * inputRate + (outputTokens / 1000) * outputRate;
     return Math.max(0, cost);
   }
 
@@ -1115,9 +1175,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
         typeof request.options?.max_tokens === 'number' ? request.options.max_tokens : 1024,
     });
 
-    const content = this.extractTextFromResponseContent(
-      response.choices?.[0]?.message?.content
-    );
+    const content = this.extractTextFromResponseContent(response.choices?.[0]?.message?.content);
 
     return {
       content,
@@ -1147,8 +1205,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       ],
       webSearch: true,
       webSearchOptions: {
-        max_results:
-          typeof request.maxResults === 'number' ? Math.max(1, request.maxResults) : 5,
+        max_results: typeof request.maxResults === 'number' ? Math.max(1, request.maxResults) : 5,
         search_context_size:
           request.options && typeof request.options.search_context_size === 'string'
             ? (request.options.search_context_size as 'low' | 'medium' | 'high')
@@ -1158,9 +1215,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       max_tokens: 1500,
     });
 
-    const content = this.extractTextFromResponseContent(
-      response.choices?.[0]?.message?.content
-    );
+    const content = this.extractTextFromResponseContent(response.choices?.[0]?.message?.content);
     const parsed = this.parseStructuredSearchOutput(content);
 
     return {
@@ -1196,7 +1251,9 @@ export class OpenRouterAdapter extends ProviderAdapter {
     return {
       audio: audioBuffer,
       format:
-        typeof payload.response_format === 'string' ? payload.response_format : request.format || 'mp3',
+        typeof payload.response_format === 'string'
+          ? payload.response_format
+          : request.format || 'mp3',
       raw: { size: audioBuffer.length },
     };
   }
@@ -1207,9 +1264,13 @@ export class OpenRouterAdapter extends ProviderAdapter {
       typeof request.options?.filename === 'string' ? request.options.filename : 'audio.wav';
     const mimeType =
       typeof request.options?.mimeType === 'string' ? request.options.mimeType : 'audio/wav';
-    const file = new File([new Blob([new Uint8Array(request.audio)], { type: mimeType })], fileName, {
-      type: mimeType,
-    });
+    const file = new File(
+      [new Blob([new Uint8Array(request.audio)], { type: mimeType })],
+      fileName,
+      {
+        type: mimeType,
+      }
+    );
 
     formData.append('file', file);
     formData.append('model', model.id || model.name);
@@ -1403,7 +1464,8 @@ export class OpenRouterAdapter extends ProviderAdapter {
 
       // Parse the response
       const messageContent = chatResponse.choices[0]?.message?.content;
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
+      const contentStr =
+        typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent ?? {});
       const moderationResult = JSON.parse(contentStr || '{}') as {
         flagged?: boolean;
         categories?: Record<string, boolean>;
@@ -1421,8 +1483,10 @@ export class OpenRouterAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.categories?.['hate/threatening'] || false,
           'violence/graphic': moderationResult.categories?.['violence/graphic'] || false,
           'self-harm/intent': moderationResult.categories?.['self-harm/intent'] || false,
-          'self-harm/instructions': moderationResult.categories?.['self-harm/instructions'] || false,
-          'harassment/threatening': moderationResult.categories?.['harassment/threatening'] || false,
+          'self-harm/instructions':
+            moderationResult.categories?.['self-harm/instructions'] || false,
+          'harassment/threatening':
+            moderationResult.categories?.['harassment/threatening'] || false,
           violence: moderationResult.categories?.violence || false,
         },
         category_scores: {
@@ -1434,8 +1498,10 @@ export class OpenRouterAdapter extends ProviderAdapter {
           'hate/threatening': moderationResult.category_scores?.['hate/threatening'] || 0,
           'violence/graphic': moderationResult.category_scores?.['violence/graphic'] || 0,
           'self-harm/intent': moderationResult.category_scores?.['self-harm/intent'] || 0,
-          'self-harm/instructions': moderationResult.category_scores?.['self-harm/instructions'] || 0,
-          'harassment/threatening': moderationResult.category_scores?.['harassment/threatening'] || 0,
+          'self-harm/instructions':
+            moderationResult.category_scores?.['self-harm/instructions'] || 0,
+          'harassment/threatening':
+            moderationResult.category_scores?.['harassment/threatening'] || 0,
           violence: moderationResult.category_scores?.violence || 0,
         },
         raw: moderationResult,
@@ -1443,8 +1509,11 @@ export class OpenRouterAdapter extends ProviderAdapter {
     } catch (error) {
       // Fallback: return safe defaults if moderation fails
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.providerLog.warn({ error: errorMessage }, 'Moderation analysis failed, returning safe defaults');
-      
+      this.providerLog.warn(
+        { error: errorMessage },
+        'Moderation analysis failed, returning safe defaults'
+      );
+
       return {
         flagged: false,
         categories: {
@@ -1508,7 +1577,9 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const openaiAdapter = providerRegistry.get('openai');
 
       if (!openaiAdapter) {
-        throw new Error('OpenAI adapter not available in provider registry. Cannot route image edit request.');
+        throw new Error(
+          'OpenAI adapter not available in provider registry. Cannot route image edit request.'
+        );
       }
 
       // Type guard to check if adapter supports image editing
@@ -1532,10 +1603,14 @@ export class OpenRouterAdapter extends ProviderAdapter {
       // Find corresponding OpenAI model (remove "openai/" prefix)
       const openaiModelId = modelId.replace(/^openai\//, '');
       const openaiModels = await openaiAdapter.getModels();
-      const openaiModel = openaiModels.find((m) => m.id === openaiModelId || m.name === openaiModelId);
+      const openaiModel = openaiModels.find(
+        (m) => m.id === openaiModelId || m.name === openaiModelId
+      );
 
       if (!openaiModel) {
-        throw new Error(`OpenAI model ${openaiModelId} not found. Available models: ${openaiModels.map((m) => m.id).join(', ')}`);
+        throw new Error(
+          `OpenAI model ${openaiModelId} not found. Available models: ${openaiModels.map((m) => m.id).join(', ')}`
+        );
       }
 
       this.providerLog.info(
@@ -1572,7 +1647,10 @@ export class OpenRouterAdapter extends ProviderAdapter {
    * OpenRouter aggregates models but doesn't have direct image variation endpoints
    * For OpenAI models with image variation capabilities, we route directly to OpenAI adapter
    */
-  async imageVariation(model: Model, request: ImageVariationRequest): Promise<ImageVariationResponse> {
+  async imageVariation(
+    model: Model,
+    request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
     const startTime = Date.now();
     const modelId = model.id || model.name;
 
@@ -1596,12 +1674,17 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const openaiAdapter = providerRegistry.get('openai');
 
       if (!openaiAdapter) {
-        throw new Error('OpenAI adapter not available in provider registry. Cannot route image variation request.');
+        throw new Error(
+          'OpenAI adapter not available in provider registry. Cannot route image variation request.'
+        );
       }
 
       // Type guard to check if adapter supports image variation
       interface ImageVariationCapableAdapter {
-        imageVariation: (model: Model, request: ImageVariationRequest) => Promise<ImageVariationResponse>;
+        imageVariation: (
+          model: Model,
+          request: ImageVariationRequest
+        ) => Promise<ImageVariationResponse>;
       }
 
       const hasImageVariation = (adapter: unknown): adapter is ImageVariationCapableAdapter => {
@@ -1620,10 +1703,14 @@ export class OpenRouterAdapter extends ProviderAdapter {
       // Find corresponding OpenAI model (remove "openai/" prefix)
       const openaiModelId = modelId.replace(/^openai\//, '');
       const openaiModels = await openaiAdapter.getModels();
-      const openaiModel = openaiModels.find((m) => m.id === openaiModelId || m.name === openaiModelId);
+      const openaiModel = openaiModels.find(
+        (m) => m.id === openaiModelId || m.name === openaiModelId
+      );
 
       if (!openaiModel) {
-        throw new Error(`OpenAI model ${openaiModelId} not found. Available models: ${openaiModels.map((m) => m.id).join(', ')}`);
+        throw new Error(
+          `OpenAI model ${openaiModelId} not found. Available models: ${openaiModels.map((m) => m.id).join(', ')}`
+        );
       }
 
       this.providerLog.info(

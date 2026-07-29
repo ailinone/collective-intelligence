@@ -146,10 +146,7 @@ export class MemoryContextService {
         memorySources: topSources,
       };
     } catch (error) {
-      this.log.error(
-        { error: getErrorMessage(error) },
-        'Failed to build memory context'
-      );
+      this.log.error({ error: getErrorMessage(error) }, 'Failed to build memory context');
       return this.emptyContext();
     }
   }
@@ -186,20 +183,14 @@ export class MemoryContextService {
         'Stored conversation outcome as memory'
       );
     } catch (error) {
-      this.log.error(
-        { error: getErrorMessage(error) },
-        'Failed to store conversation outcome'
-      );
+      this.log.error({ error: getErrorMessage(error) }, 'Failed to store conversation outcome');
     }
   }
 
   /**
    * Enrich a request with memory context
    */
-  enrichRequest(
-    request: ChatRequest,
-    memoryContext: MemoryContext
-  ): ChatRequest {
+  enrichRequest(request: ChatRequest, memoryContext: MemoryContext): ChatRequest {
     if (!memoryContext.hasContext || !memoryContext.contextText) {
       return request;
     }
@@ -212,10 +203,7 @@ export class MemoryContextService {
 
     if (systemIndex >= 0) {
       const systemMessage = messages[systemIndex];
-      const currentContent =
-        typeof systemMessage.content === 'string'
-          ? systemMessage.content
-          : '';
+      const currentContent = typeof systemMessage.content === 'string' ? systemMessage.content : '';
 
       messages[systemIndex] = {
         ...systemMessage,
@@ -249,8 +237,9 @@ export class MemoryContextService {
         // Handle array content (multimodal)
         if (Array.isArray(message.content)) {
           const textParts = message.content
-            .filter((part): part is { type: 'text'; text: string } => 
-              part.type === 'text' && 'text' in part
+            .filter(
+              (part): part is { type: 'text'; text: string } =>
+                part.type === 'text' && 'text' in part
             )
             .map((part) => part.text);
           return textParts.join(' ');
@@ -263,10 +252,7 @@ export class MemoryContextService {
   /**
    * Build context text from memories
    */
-  private buildContextText(
-    memories: MemoryEntry[],
-    includeSystemContext: boolean
-  ): string {
+  private buildContextText(memories: MemoryEntry[], includeSystemContext: boolean): string {
     if (memories.length === 0) {
       return '';
     }
@@ -285,9 +271,7 @@ export class MemoryContextService {
     // Build sections
     for (const [type, typeMemories] of byType) {
       const typeLabel = this.getTypeLabel(type);
-      const items = typeMemories
-        .map((m) => `- ${m.content}`)
-        .join('\n');
+      const items = typeMemories.map((m) => `- ${m.content}`).join('\n');
 
       if (includeSystemContext) {
         sections.push(`**${typeLabel}:**\n${items}`);
@@ -348,4 +332,3 @@ export function initializeMemoryContextService(): MemoryContextService {
   memoryContextService = new MemoryContextService();
   return memoryContextService;
 }
-

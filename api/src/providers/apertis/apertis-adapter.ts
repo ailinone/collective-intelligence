@@ -43,7 +43,7 @@ export class ApertisAdapter extends OpenAICompatibleHubAdapter {
 
   protected override getExtraChatPayloadFields(
     _resolvedModel: string,
-    _request: ChatRequest,
+    _request: ChatRequest
   ): Record<string, unknown> {
     return { fallback_enabled: false };
   }

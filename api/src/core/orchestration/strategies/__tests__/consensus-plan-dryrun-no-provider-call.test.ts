@@ -29,9 +29,7 @@ const ORIG_FETCH = globalThis.fetch;
 describe('ConsensusPlanDryRunService — provider-call tripwire', () => {
   it('never calls globalThis.fetch when producing a plan', async () => {
     const fetchSpy = vi.fn(async () => {
-      throw new Error(
-        'PROVIDER_CALL_DETECTED — dry-run path must NOT reach global fetch',
-      );
+      throw new Error('PROVIDER_CALL_DETECTED — dry-run path must NOT reach global fetch');
     });
     globalThis.fetch = fetchSpy as unknown as typeof globalThis.fetch;
     try {
@@ -58,7 +56,7 @@ describe('ConsensusPlanDryRunService — provider-call tripwire', () => {
     // OAuth token refresh, etc.), the spy throws and the test fails.
     const fetchSpy = vi.fn(async () => {
       throw new Error(
-        'PROVIDER_CALL_DETECTED — list-models, balance probe, or any HTTP must NOT fire from dry-run',
+        'PROVIDER_CALL_DETECTED — list-models, balance probe, or any HTTP must NOT fire from dry-run'
       );
     });
     globalThis.fetch = fetchSpy as unknown as typeof globalThis.fetch;

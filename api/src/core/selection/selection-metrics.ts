@@ -31,9 +31,7 @@
  * (the Lote 5 exporter upgrade now propagates attribute labels).
  */
 
-import {
-  incrementPromptMetric,
-} from '@/core/orchestration/prompts/prompt-metrics';
+import { incrementPromptMetric } from '@/core/orchestration/prompts/prompt-metrics';
 
 /**
  * Stable counter names. Adding a new counter is cheap; renaming is a breaking
@@ -76,28 +74,27 @@ export type RejectionReason =
  * the HTTP status or exception class it most often corresponds to.
  */
 export type ExecutionFailureCause =
-  | 'provider-auth'         // 401 / 403
-  | 'balance'               // 402 / insufficient credit
-  | 'rate-limit'            // 429
-  | 'timeout'               // wall-clock exceeded
-  | 'provider-error'        // 5xx
-  | 'schema-error'          // response shape invalid
-  | 'adapter-not-found'     // provider registry missing adapter
+  | 'provider-auth' // 401 / 403
+  | 'balance' // 402 / insufficient credit
+  | 'rate-limit' // 429
+  | 'timeout' // wall-clock exceeded
+  | 'provider-error' // 5xx
+  | 'schema-error' // response shape invalid
+  | 'adapter-not-found' // provider registry missing adapter
   | 'unknown';
 
 /** Kinds a provider can be in from the registry's perspective. */
 export type ProviderRegistryState =
-  | 'enabled'
-  | 'disabled-no-credential'
-  | 'disabled-config'
-  | 'unhealthy'
-  | 'circuit-open';
+  'enabled' | 'disabled-no-credential' | 'disabled-config' | 'unhealthy' | 'circuit-open';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Emitter helpers — kept small and typed so call sites stay readable.
 // ──────────────────────────────────────────────────────────────────────────
 
-export function recordSelectionCandidates(count: number, attributes: Record<string, string | number> = {}): void {
+export function recordSelectionCandidates(
+  count: number,
+  attributes: Record<string, string | number> = {}
+): void {
   incrementPromptMetric(SELECTION_METRIC_NAMES.CANDIDATES_RETURNED, {
     ...attributes,
     count,
@@ -107,7 +104,7 @@ export function recordSelectionCandidates(count: number, attributes: Record<stri
 export function recordSelectionRejection(
   reason: RejectionReason,
   count: number,
-  attributes: Record<string, string | number> = {},
+  attributes: Record<string, string | number> = {}
 ): void {
   if (count <= 0) return;
   incrementPromptMetric(SELECTION_METRIC_NAMES.CANDIDATES_REJECTED, {
@@ -153,7 +150,7 @@ export function recordProviderSelected(attributes: {
 
 export function recordExecutionFailure(
   cause: ExecutionFailureCause,
-  attributes: { provider: string; modelId: string; strategy?: string },
+  attributes: { provider: string; modelId: string; strategy?: string }
 ): void {
   incrementPromptMetric(SELECTION_METRIC_NAMES.MODEL_EXECUTION_FAILED, {
     ...attributes,
@@ -161,10 +158,7 @@ export function recordExecutionFailure(
   });
 }
 
-export function recordProviderRegistryState(
-  state: ProviderRegistryState,
-  provider: string,
-): void {
+export function recordProviderRegistryState(state: ProviderRegistryState, provider: string): void {
   incrementPromptMetric(SELECTION_METRIC_NAMES.PROVIDER_REGISTRY_STATE, {
     state,
     provider,

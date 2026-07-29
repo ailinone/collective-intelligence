@@ -141,7 +141,12 @@ export interface CapabilityInvoker {
    * Translation — translate text between languages.
    * Uses TranslationService (NLLB for speed, LLM fallback).
    */
-  translate(text: string, sourceLang: string, targetLang: string, options?: TranslateOptions): Promise<TranslationResult>;
+  translate(
+    text: string,
+    sourceLang: string,
+    targetLang: string,
+    options?: TranslateOptions
+  ): Promise<TranslationResult>;
 
   /**
    * Video generation — generate video from a prompt (+ optional image/audio).
@@ -252,7 +257,12 @@ interface AudioSynthesizeOptions {
   userContext: OrchestrationContext;
   requestId: string;
 }
-type AudioResultLike = { text?: unknown; audioBuffer?: unknown; provider?: unknown; modelUsed?: unknown };
+type AudioResultLike = {
+  text?: unknown;
+  audioBuffer?: unknown;
+  provider?: unknown;
+  modelUsed?: unknown;
+};
 type AudioServiceLike = {
   transcribeAudio(options: AudioTranscribeOptions): Promise<AudioResultLike>;
   synthesizeSpeech(options: AudioSynthesizeOptions): Promise<AudioResultLike>;
@@ -300,13 +310,16 @@ type FileServiceLike = {
     format: 'csv' | 'json' | 'markdown' | 'docx' | 'xlsx' | 'pdf' | 'pptx' | 'zip' | 'code',
     content: unknown,
     filenameBase?: string
-  ): Promise<{ buffer: Buffer; filename: string; mimeType: string }> | { buffer: Buffer; filename: string; mimeType: string };
+  ):
+    | Promise<{ buffer: Buffer; filename: string; mimeType: string }>
+    | { buffer: Buffer; filename: string; mimeType: string };
 };
 
 const FILE_FORMAT_INSTRUCTIONS: Record<FileGenInvokeOptions['format'], string> = {
   csv: 'Respond ONLY with a JSON object of the exact shape {"headers": string[], "rows": Array<Array<string|number|boolean|null>>} representing the requested data as a table. No prose, no markdown code fences, no extra keys.',
   json: 'Respond ONLY with the raw JSON value being requested (object or array) — no prose, no markdown code fences, no wrapping unless explicitly asked for one.',
-  markdown: 'Respond ONLY with the markdown document itself — no prose framing before or after it, no code fence wrapping the whole document.',
+  markdown:
+    'Respond ONLY with the markdown document itself — no prose framing before or after it, no code fence wrapping the whole document.',
   docx: 'Respond ONLY with a JSON object of the exact shape {"title"?: string, "sections": Array<{"type":"heading","text":string,"level"?:1|2|3|4} | {"type":"paragraph","text":string} | {"type":"bullet_list","items":string[]} | {"type":"table","headers":string[],"rows":Array<Array<string|number|boolean|null>>}>} representing the full document body, in order. No prose, no markdown code fences, no extra keys.',
   xlsx: 'Respond ONLY with a JSON object of the exact shape {"sheets": Array<{"name":string,"headers"?:string[],"rows":Array<Array<string|number|boolean|null>>}>} representing one or more worksheets. No prose, no markdown code fences, no extra keys.',
   pdf: 'Respond ONLY with a JSON object of the exact shape {"title"?: string, "sections": Array<{"type":"heading","text":string,"level"?:1|2|3|4} | {"type":"paragraph","text":string} | {"type":"bullet_list","items":string[]} | {"type":"table","headers":string[],"rows":Array<Array<string|number|boolean|null>>}>} representing the full document body, in order. No prose, no markdown code fences, no extra keys.',
@@ -328,7 +341,17 @@ export function createCapabilityInvoker(deps: {
   audioService?: AudioServiceLike;
   /** TranslationService instance */
   translationService?: {
-    translateText(text: string, sourceLang: string, targetLang: string): Promise<{ translatedText: string; latencyMs: number; model: string; sourceLang: string; targetLang: string }>;
+    translateText(
+      text: string,
+      sourceLang: string,
+      targetLang: string
+    ): Promise<{
+      translatedText: string;
+      latencyMs: number;
+      model: string;
+      sourceLang: string;
+      targetLang: string;
+    }>;
   };
   /** VideoOrchestrationService instance (loosely typed to avoid circular imports) */
   videoService?: VideoServiceLike;
@@ -354,7 +377,10 @@ export function createCapabilityInvoker(deps: {
       if (!deps.audioService) {
         throw new Error('Audio transcription capability not available');
       }
-      log.debug({ requestId, audioBytes: audioBuffer.length, model: options?.model }, 'Invoking STT capability');
+      log.debug(
+        { requestId, audioBytes: audioBuffer.length, model: options?.model },
+        'Invoking STT capability'
+      );
       const result = await deps.audioService.transcribeAudio({
         audioBuffer,
         filename: 'invoker-audio.wav',
@@ -376,7 +402,10 @@ export function createCapabilityInvoker(deps: {
       if (!deps.audioService) {
         throw new Error('Audio synthesis capability not available');
       }
-      log.debug({ requestId, textLen: text.length, voice: options?.voice }, 'Invoking TTS capability');
+      log.debug(
+        { requestId, textLen: text.length, voice: options?.voice },
+        'Invoking TTS capability'
+      );
       const result = await deps.audioService.synthesizeSpeech({
         text,
         voice: options?.voice || 'alloy',
@@ -402,7 +431,10 @@ export function createCapabilityInvoker(deps: {
       if (!deps.translationService) {
         throw new Error('Translation capability not available');
       }
-      log.debug({ requestId, textLen: text.length, from: sourceLang, to: targetLang }, 'Invoking translation capability');
+      log.debug(
+        { requestId, textLen: text.length, from: sourceLang, to: targetLang },
+        'Invoking translation capability'
+      );
       const result = await deps.translationService.translateText(text, sourceLang, targetLang);
       return {
         translatedText: result.translatedText,
@@ -417,7 +449,10 @@ export function createCapabilityInvoker(deps: {
       if (!deps.videoService) {
         throw new Error('Video generation capability not available');
       }
-      log.debug({ requestId, promptLen: options.prompt.length, model: options.model }, 'Invoking video generation capability');
+      log.debug(
+        { requestId, promptLen: options.prompt.length, model: options.model },
+        'Invoking video generation capability'
+      );
       const result = await deps.videoService.generateVideo({
         prompt: options.prompt,
         model: options.model,
@@ -444,7 +479,10 @@ export function createCapabilityInvoker(deps: {
       if (!deps.imageService) {
         throw new Error('Image generation capability not available');
       }
-      log.debug({ requestId, promptLen: options.prompt.length, model: options.model }, 'Invoking image generation capability');
+      log.debug(
+        { requestId, promptLen: options.prompt.length, model: options.model },
+        'Invoking image generation capability'
+      );
       const result = await deps.imageService.generateImages({
         prompt: options.prompt,
         model: options.model,
@@ -468,12 +506,19 @@ export function createCapabilityInvoker(deps: {
 
     async generateFile(options) {
       if (!deps.chatHandler) {
-        throw new Error('File generation capability not available in this context — no chat handler');
+        throw new Error(
+          'File generation capability not available in this context — no chat handler'
+        );
       }
       if (!deps.fileService) {
-        throw new Error('File generation capability not available in this context — no file service');
+        throw new Error(
+          'File generation capability not available in this context — no file service'
+        );
       }
-      log.debug({ requestId, promptLen: options.prompt.length, format: options.format }, 'Invoking file generation capability');
+      log.debug(
+        { requestId, promptLen: options.prompt.length, format: options.format },
+        'Invoking file generation capability'
+      );
 
       // CRITICAL: strategy: 'single' — see the ChatOptions.strategy doc.
       // options.prompt is the CALLER's original request text (often the
@@ -482,8 +527,17 @@ export function createCapabilityInvoker(deps: {
       // chatHandler wiring re-enters the full engine, re-detects the same
       // file-generation intent, and recurses without bound.
       const response = await deps.chatHandler(
-        [{ role: 'user', content: `${options.prompt}\n\n${FILE_FORMAT_INSTRUCTIONS[options.format]}` }],
-        { temperature: 0, responseFormat: options.format === 'markdown' ? 'text' : 'json_object', strategy: 'single' }
+        [
+          {
+            role: 'user',
+            content: `${options.prompt}\n\n${FILE_FORMAT_INSTRUCTIONS[options.format]}`,
+          },
+        ],
+        {
+          temperature: 0,
+          responseFormat: options.format === 'markdown' ? 'text' : 'json_object',
+          strategy: 'single',
+        }
       );
       const rawContent = response.choices?.[0]?.message?.content;
       if (typeof rawContent !== 'string' || rawContent.trim().length === 0) {
@@ -503,7 +557,11 @@ export function createCapabilityInvoker(deps: {
         }
       }
 
-      const rendered = await deps.fileService.generate(options.format, structuredContent, options.filenameBase);
+      const rendered = await deps.fileService.generate(
+        options.format,
+        structuredContent,
+        options.filenameBase
+      );
       return { ...rendered, model: response.model };
     },
   };

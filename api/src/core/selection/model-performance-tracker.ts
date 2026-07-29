@@ -32,38 +32,38 @@ const log = logger.child({ component: 'model-performance-tracker' });
 export interface ModelExecutionSample {
   modelId: string;
   provider: string;
-  qualityScore: number;   // 0–1
+  qualityScore: number; // 0–1
   latencyMs: number;
   success: boolean;
   costUsd: number;
   timestamp: number;
-  taskType?: string;      // Task type for per-type competence tracking (independence filter)
+  taskType?: string; // Task type for per-type competence tracking (independence filter)
 }
 
 export interface DynamicModelScore {
   modelId: string;
-  rollingQuality: number;     // Exponential moving average
-  rollingLatencyP50: number;  // Median of last N samples
-  rollingLatencyP99: number;  // 99th percentile of last N samples
-  errorRate: number;          // Fraction of failed executions
-  costEfficiency: number;     // quality / (costUsd * 1000 + 0.001)
+  rollingQuality: number; // Exponential moving average
+  rollingLatencyP50: number; // Median of last N samples
+  rollingLatencyP99: number; // 99th percentile of last N samples
+  errorRate: number; // Fraction of failed executions
+  costEfficiency: number; // quality / (costUsd * 1000 + 0.001)
   sampleCount: number;
   lastUpdated: number;
 }
 
-const RING_SIZE = 100;         // Keep last 100 executions per model
-const EMA_ALPHA = 0.1;         // Exponential moving average decay (lower = slower to adapt)
-const FLUSH_INTERVAL_MS = 60_000;  // Flush to DB every minute
+const RING_SIZE = 100; // Keep last 100 executions per model
+const EMA_ALPHA = 0.1; // Exponential moving average decay (lower = slower to adapt)
+const FLUSH_INTERVAL_MS = 60_000; // Flush to DB every minute
 
 // Provider-level sliding window: samples from the last 15 minutes decide
 // whether a provider is "unreliable". This replaces the previous cumulative
 // counter (failures/total since process start) that would monotonically drift
 // toward "unreliable" for any provider that ever had a bad hour — and never
 // recover without a full container restart. See docs in isProviderUnreliable().
-const PROVIDER_WINDOW_MS = 15 * 60 * 1000;           // 15 min
-const PROVIDER_MIN_SAMPLES = 5;                       // need 5+ samples in-window
-const PROVIDER_UNRELIABLE_THRESHOLD = 0.6;            // 60% failure rate
-const PROVIDER_RING_MAX = 200;                        // hard cap on per-provider ring
+const PROVIDER_WINDOW_MS = 15 * 60 * 1000; // 15 min
+const PROVIDER_MIN_SAMPLES = 5; // need 5+ samples in-window
+const PROVIDER_UNRELIABLE_THRESHOLD = 0.6; // 60% failure rate
+const PROVIDER_RING_MAX = 200; // hard cap on per-provider ring
 
 interface ProviderSample {
   timestamp: number;
@@ -79,8 +79,7 @@ interface ProviderSample {
 // no static pins. Lazily imported (avoids any import cycle) + fire-and-forget so
 // the hot path is never blocked or broken by a metrics failure.
 let _selectionMetrics:
-  | import('@/services/model-performance-tracker').ModelPerformanceTracker
-  | null = null;
+  import('@/services/model-performance-tracker').ModelPerformanceTracker | null = null;
 let _selectionMetricsLoading = false;
 function bridgeSampleToSelectionMetrics(sample: ModelExecutionSample): void {
   const send = (t: NonNullable<typeof _selectionMetrics>): void => {
@@ -93,7 +92,9 @@ function bridgeSampleToSelectionMetrics(sample: ModelExecutionSample): void {
         qualityScore: sample.qualityScore,
         success: sample.success,
       })
-      .catch(() => { /* non-critical */ });
+      .catch(() => {
+        /* non-critical */
+      });
   };
   if (_selectionMetrics) {
     send(_selectionMetrics);
@@ -106,7 +107,9 @@ function bridgeSampleToSelectionMetrics(sample: ModelExecutionSample): void {
       _selectionMetrics = m.getModelPerformanceTracker();
       send(_selectionMetrics);
     })
-    .catch(() => { /* non-critical */ })
+    .catch(() => {
+      /* non-critical */
+    })
     .finally(() => {
       _selectionMetricsLoading = false;
     });
@@ -320,8 +323,7 @@ class ModelPerformanceTracker {
     const p50 = this.percentile(successLatencies, 50);
     const p99 = this.percentile(successLatencies, 99);
     const errorRate = ring.filter((s) => !s.success).length / ring.length;
-    const avgCost =
-      ring.reduce((s, r) => s + r.costUsd, 0) / ring.length || 0.001;
+    const avgCost = ring.reduce((s, r) => s + r.costUsd, 0) / ring.length || 0.001;
     const costEfficiency = newQuality / (avgCost * 1000 + 0.001);
 
     this.scores.set(modelId, {

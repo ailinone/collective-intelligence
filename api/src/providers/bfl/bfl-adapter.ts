@@ -161,19 +161,18 @@ export class BflAdapter extends ProviderAdapter {
    * test guards against accidental network leakage in this method.
    */
   async getModels(): Promise<Model[]> {
-    return FLUX_MODELS.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'bfl',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: EDIT_CAPABLE.has(id)
-            ? ['image_generation', 'image_editing']
-            : ['image_generation'],
-        })),
+    return FLUX_MODELS.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'bfl',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: EDIT_CAPABLE.has(id)
+          ? ['image_generation', 'image_editing']
+          : ['image_generation'],
+      })
     );
   }
 
@@ -207,9 +206,7 @@ export class BflAdapter extends ProviderAdapter {
   async imageGenerate(model: Model, request: ImageGenRequest): Promise<ImageGenResponse> {
     const modelId = (model.name || model.id || 'flux-pro-1.1').trim();
     if (!BflAdapter.isFluxModel(modelId)) {
-      throw new Error(
-        `bfl: unknown model ${modelId} — expected one of ${FLUX_MODELS.join(', ')}`,
-      );
+      throw new Error(`bfl: unknown model ${modelId} — expected one of ${FLUX_MODELS.join(', ')}`);
     }
     return this.runJob(modelId, this.buildBody(request));
   }
@@ -222,12 +219,12 @@ export class BflAdapter extends ProviderAdapter {
   async imageEdit(model: Model, request: ImageEditRequest): Promise<ImageEditResponse> {
     const modelId = (model.name || model.id || 'flux-pro-1.1').trim();
     if (!BflAdapter.isFluxModel(modelId)) {
-      throw new Error(
-        `bfl: unknown model ${modelId} — expected one of ${FLUX_MODELS.join(', ')}`,
-      );
+      throw new Error(`bfl: unknown model ${modelId} — expected one of ${FLUX_MODELS.join(', ')}`);
     }
     if (!EDIT_CAPABLE.has(modelId)) {
-      throw new Error(`bfl: imageEdit not supported on ${modelId} — use one of ${[...EDIT_CAPABLE].join(', ')}`);
+      throw new Error(
+        `bfl: imageEdit not supported on ${modelId} — use one of ${[...EDIT_CAPABLE].join(', ')}`
+      );
     }
     if (!request.image) {
       throw new Error('bfl.imageEdit: image is required');
@@ -352,7 +349,9 @@ export class BflAdapter extends ProviderAdapter {
       return (await submit.json()) as BflSubmitResponse;
     }, 'image generation');
     const id = submitted.id;
-    const pollUrl = submitted.polling_url || (id ? `${this.baseUrl}/get_result?id=${encodeURIComponent(id)}` : null);
+    const pollUrl =
+      submitted.polling_url ||
+      (id ? `${this.baseUrl}/get_result?id=${encodeURIComponent(id)}` : null);
     if (!id || !pollUrl) {
       throw new Error('bfl: submit response missing id or polling_url');
     }
@@ -361,7 +360,7 @@ export class BflAdapter extends ProviderAdapter {
     const status = (terminal.status || '').toLowerCase();
     if (status !== READY) {
       throw new Error(
-        `bfl: job ${id} ended in status "${terminal.status}": ${terminal.error ?? '(no error detail)'}`,
+        `bfl: job ${id} ended in status "${terminal.status}": ${terminal.error ?? '(no error detail)'}`
       );
     }
 
@@ -404,7 +403,7 @@ export class BflAdapter extends ProviderAdapter {
       await this.sleep(this.pollIntervalMs);
     }
     throw new Error(
-      `bfl: job ${jobId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`,
+      `bfl: job ${jobId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`
     );
   }
 }

@@ -49,9 +49,20 @@ function makeExec(role: ModelRole, content: string): ModelExecution {
     object: 'chat.completion',
     created: 0,
     model: 'm',
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop', logprobs: null }],
+    choices: [
+      { index: 0, message: { role: 'assistant', content }, finish_reason: 'stop', logprobs: null },
+    ],
   } as unknown as ChatResponse;
-  return { modelId: role, modelName: role, role, request: {} as ChatRequest, response, cost: 0, durationMs: 0, success: true };
+  return {
+    modelId: role,
+    modelName: role,
+    role,
+    request: {} as ChatRequest,
+    response,
+    cost: 0,
+    durationMs: 0,
+    success: true,
+  };
 }
 
 const criticJson = (score: number): string =>
@@ -59,7 +70,9 @@ const criticJson = (score: number): string =>
     quality_score: score,
     // Always surface a CRITICAL issue so the loop proceeds to the repair step
     // when the score is below target (a >=target score short-circuits first).
-    issues: [{ severity: 'CRITICAL', location: 'body', description: 'issue', suggested_fix: 'fix' }],
+    issues: [
+      { severity: 'CRITICAL', location: 'body', description: 'issue', suggested_fix: 'fix' },
+    ],
   });
 
 /** Pull the string the critic is scoring out of a critique request. */
@@ -98,7 +111,10 @@ class ScriptedStrategy extends CritiqueRepairStrategy {
     return [genModel, criticModel];
   }
 
-  protected getAdapterForModel(_model: Model, _context: OrchestrationContext): Promise<ProviderAdapter | null> {
+  protected getAdapterForModel(
+    _model: Model,
+    _context: OrchestrationContext
+  ): Promise<ProviderAdapter | null> {
     return Promise.resolve(stubAdapter);
   }
 
@@ -110,10 +126,12 @@ class ScriptedStrategy extends CritiqueRepairStrategy {
     _adapter: ProviderAdapter,
     _model: Model,
     request: ChatRequest,
-    role: ModelRole,
+    role: ModelRole
   ): Promise<ModelExecution> {
     if (role === 'critic') {
-      return Promise.resolve(makeExec('critic', criticJson(this.script.score(evaluatedContent(request)))));
+      return Promise.resolve(
+        makeExec('critic', criticJson(this.script.score(evaluatedContent(request))))
+      );
     }
     if (role === 'repairer') {
       return Promise.resolve(makeExec('repairer', this.script.repair(currentContent(request))));
@@ -123,10 +141,15 @@ class ScriptedStrategy extends CritiqueRepairStrategy {
 }
 
 const request = { messages: [{ role: 'user', content: 'Solve the task' }] } as ChatRequest;
-const context = { requestId: 'r1', models: [genModel, criticModel], taskType: 'code-generation' } as unknown as OrchestrationContext;
+const context = {
+  requestId: 'r1',
+  models: [genModel, criticModel],
+  taskType: 'code-generation',
+} as unknown as OrchestrationContext;
 
-const finalContent = (r: { finalResponse?: { choices?: Array<{ message?: { content?: unknown } }> } }): string =>
-  String(r.finalResponse?.choices?.[0]?.message?.content ?? '');
+const finalContent = (r: {
+  finalResponse?: { choices?: Array<{ message?: { content?: unknown } }> };
+}): string => String(r.finalResponse?.choices?.[0]?.message?.content ?? '');
 
 describe('CritiqueRepairStrategy — non-regressive repair gate', () => {
   it('(i) rejects a repair that renames the primary function; keeps the primary output', async () => {

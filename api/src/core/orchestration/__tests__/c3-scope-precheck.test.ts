@@ -85,9 +85,9 @@ const REQ = {
 };
 
 function getResult(strategyName: string) {
-  return buildPlanOnlyResult(
-    strategyName, 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
-  );
+  return buildPlanOnlyResult(strategyName, 'explicit', 'request-flag', REQ, CTX, null, 0.85, {
+    registered: true,
+  });
 }
 
 function getPlanSteps(strategyName: string) {
@@ -130,18 +130,22 @@ describe('01C.1B-SM-R6 §13e — C3 scope precheck', () => {
 
       it(`${strategy}: has ≥1 step with providerCallPlanned=true`, () => {
         const steps = getPlanSteps(strategy);
-        const liveSteps = steps.filter(s => s.providerCallPlanned);
+        const liveSteps = steps.filter((s) => s.providerCallPlanned);
         expect(liveSteps.length).toBeGreaterThanOrEqual(1);
       });
 
       it(`${strategy}: all steps carry the strategy prefix in action`, () => {
         const steps = getPlanSteps(strategy);
-        expect(steps.every(s => s.action.startsWith(strategy + '/'))).toBe(true);
+        expect(steps.every((s) => s.action.startsWith(strategy + '/'))).toBe(true);
       });
 
       it(`${strategy}: no step has providerCallExecuted=true (dry-run guarantee)`, () => {
         const steps = getPlanSteps(strategy);
-        expect(steps.every(s => (s as { providerCallExecuted: boolean }).providerCallExecuted === false)).toBe(true);
+        expect(
+          steps.every(
+            (s) => (s as { providerCallExecuted: boolean }).providerCallExecuted === false
+          )
+        ).toBe(true);
       });
 
       it(`${strategy}: plan fingerprint starts with pf_`, () => {
@@ -229,7 +233,9 @@ describe('01C.1B-SM-R6 §13e — C3 scope precheck', () => {
     it('fast is excluded from C3 scope per FAST_STRATEGY_DECISION', () => {
       expect(FAST_STRATEGY_DECISION).toBe('proxy_alias_excluded_from_c3');
       expect(C3_EXCLUDED_ALIASES).toContain('fast');
-      expect(C3_ELIGIBLE_STRATEGIES).not.toContain('fast' as typeof C3_ELIGIBLE_STRATEGIES[number]);
+      expect(C3_ELIGIBLE_STRATEGIES).not.toContain(
+        'fast' as (typeof C3_ELIGIBLE_STRATEGIES)[number]
+      );
     });
 
     it('fast is not in C3_ELIGIBLE_STRATEGIES', () => {
@@ -250,7 +256,14 @@ describe('01C.1B-SM-R6 §13e — C3 scope precheck', () => {
       // resolveExecutionStrategy would return undefined for it — it is used as a direct engine
       // name, not an input alias. buildPlanOnlyResult accepts it and produces a correct plan.
       const result = buildPlanOnlyResult(
-        'sensitivity-consensus', 'explicit', 'request-flag', REQ, CTX, null, 0.85, { registered: true },
+        'sensitivity-consensus',
+        'explicit',
+        'request-flag',
+        REQ,
+        CTX,
+        null,
+        0.85,
+        { registered: true }
       );
       expect(result.strategyUsed).toBe('sensitivity-consensus');
     });
@@ -264,7 +277,7 @@ describe('01C.1B-SM-R6 §13e — C3 scope precheck', () => {
   // ── All plans have distinct fingerprints ─────────────────────────────────
   describe('plan fingerprint uniqueness across C3-eligible strategies', () => {
     it('all 7 C3-eligible strategies produce distinct plan fingerprints', () => {
-      const fingerprints = C3_ELIGIBLE_STRATEGIES.map(strategy => {
+      const fingerprints = C3_ELIGIBLE_STRATEGIES.map((strategy) => {
         const meta = getResult(strategy).metadata as Record<string, unknown>;
         return meta['planFingerprint'] as string;
       });
@@ -276,7 +289,12 @@ describe('01C.1B-SM-R6 §13e — C3 scope precheck', () => {
   // ── Semantic plan version marker ─────────────────────────────────────────
   describe('SM-R6 semantic plan version', () => {
     it('template strategies include semanticPlanVersion 01c1b-sm-r6-v1 in strategySemantics', () => {
-      const TEMPLATE_STRATEGIES = ['single', 'cost-cascade', 'critique-repair', 'quality-multipass'];
+      const TEMPLATE_STRATEGIES = [
+        'single',
+        'cost-cascade',
+        'critique-repair',
+        'quality-multipass',
+      ];
       for (const strategy of TEMPLATE_STRATEGIES) {
         const meta = getResult(strategy).metadata as Record<string, unknown>;
         const plan = meta['executionPlan'] as { strategySemantics?: Record<string, unknown> };

@@ -29,7 +29,7 @@ import path from 'node:path';
 
 const catalogSrc = fs.readFileSync(
   path.resolve(__dirname, '../../../providers/catalog/providers.catalog.ts'),
-  'utf8',
+  'utf8'
 );
 
 function getProviderBlock(providerId: string): string | null {

@@ -51,10 +51,8 @@ describe('buildDatabricksBaseUrl helper', () => {
       buildDatabricksBaseUrl({
         workspaceHost: 'my-co.cloud.databricks.com',
         endpoint: 'databricks-llama-3-70b-instruct',
-      }),
-    ).toBe(
-      'https://my-co.cloud.databricks.com/serving-endpoints/databricks-llama-3-70b-instruct',
-    );
+      })
+    ).toBe('https://my-co.cloud.databricks.com/serving-endpoints/databricks-llama-3-70b-instruct');
   });
 
   it('handles the dbc-* workspace hostname format', () => {
@@ -62,7 +60,7 @@ describe('buildDatabricksBaseUrl helper', () => {
       buildDatabricksBaseUrl({
         workspaceHost: 'dbc-abc123de-f456.cloud.databricks.com',
         endpoint: 'prod-llm',
-      }),
+      })
     ).toBe('https://dbc-abc123de-f456.cloud.databricks.com/serving-endpoints/prod-llm');
   });
 
@@ -72,7 +70,7 @@ describe('buildDatabricksBaseUrl helper', () => {
       buildDatabricksBaseUrl({
         workspaceHost: 'https://my-co.cloud.databricks.com/',
         endpoint: 'ep',
-      }),
+      })
     ).toBe('https://my-co.cloud.databricks.com/serving-endpoints/ep');
   });
 
@@ -82,7 +80,7 @@ describe('buildDatabricksBaseUrl helper', () => {
 
   it('throws when endpoint is missing', () => {
     expect(() => buildDatabricksBaseUrl({ workspaceHost: 'x' })).toThrow(
-      /endpoint \(serving endpoint name\) is required/,
+      /endpoint \(serving endpoint name\) is required/
     );
   });
 });
@@ -98,7 +96,7 @@ describe('DatabricksAdapter — URL resolution', () => {
       endpoint: 'databricks-llama-3-70b-instruct',
     });
     expect(getResolvedBaseUrl(adapter)).toBe(
-      'https://prod.cloud.databricks.com/serving-endpoints/databricks-llama-3-70b-instruct',
+      'https://prod.cloud.databricks.com/serving-endpoints/databricks-llama-3-70b-instruct'
     );
   });
 
@@ -113,7 +111,7 @@ describe('DatabricksAdapter — URL resolution', () => {
       apiKey: 'dapi',
     });
     expect(getResolvedBaseUrl(adapter)).toBe(
-      'https://env.cloud.databricks.com/serving-endpoints/env-endpoint',
+      'https://env.cloud.databricks.com/serving-endpoints/env-endpoint'
     );
   });
 
@@ -128,7 +126,7 @@ describe('DatabricksAdapter — URL resolution', () => {
       baseUrl: 'https://gateway.corp/databricks/serving-endpoints/custom',
     });
     expect(getResolvedBaseUrl(adapter)).toBe(
-      'https://gateway.corp/databricks/serving-endpoints/custom',
+      'https://gateway.corp/databricks/serving-endpoints/custom'
     );
   });
 

@@ -71,7 +71,7 @@ describe('composeParetoRoutingPipeline — happy path', () => {
   it('produces a contribution result with one score per structural candidate', () => {
     const r = composeParetoRoutingPipeline(basicArgs());
     expect(r.contributionResult.contributionScores.length).toBe(
-      r.structuralRetrievalResult.candidates.length,
+      r.structuralRetrievalResult.candidates.length
     );
   });
 
@@ -80,7 +80,7 @@ describe('composeParetoRoutingPipeline — happy path', () => {
     expect(r.paretoPlan).toBeDefined();
     expect(r.paretoPlan.strategyId).toBeTruthy();
     expect(['parallel', 'consensus', 'critique-repair', 'single_fallback']).toContain(
-      r.paretoPlan.strategyId,
+      r.paretoPlan.strategyId
     );
   });
 
@@ -89,7 +89,7 @@ describe('composeParetoRoutingPipeline — happy path', () => {
     expect(r.strategyAdapterResult).toBeDefined();
     expect(r.strategyAdapterResult.finalOfflinePlan).toBeDefined();
     expect(['pareto', 'single_fallback', 'original_strategy']).toContain(
-      r.strategyAdapterResult.finalOfflinePlan.source,
+      r.strategyAdapterResult.finalOfflinePlan.source
     );
   });
 
@@ -109,7 +109,7 @@ describe('composeParetoRoutingPipeline — trace privacy', () => {
     const r = composeParetoRoutingPipeline(
       basicArgs({
         profilerInput: { requestId: 'r-priv', text: promptText },
-      }),
+      })
     );
     const json = JSON.stringify(r.trace);
     expect(json).not.toContain(promptText);
@@ -228,9 +228,7 @@ describe('composeParetoRoutingPipeline — explicit pin propagation', () => {
       nowIso: '2026-05-12T15:31:00.000Z',
       traceId: 'trace-pin-1',
     });
-    expect(r.strategyAdapterResult.finalOfflinePlan.reason).toBe(
-      'explicit_pin_preserved',
-    );
+    expect(r.strategyAdapterResult.finalOfflinePlan.reason).toBe('explicit_pin_preserved');
   });
 });
 
@@ -243,7 +241,7 @@ describe('composeParetoRoutingPipeline — local_required', () => {
           text: 'private',
           explicitPrivacyMode: 'local_required',
         },
-      }),
+      })
     );
     expect(r.taskProfile.privacyMode).toBe('local_required');
   });

@@ -67,12 +67,15 @@ export class RealtimeTranslationAdapter extends EventEmitter {
     await this.openDeepgramStream(config.sourceLanguage);
 
     const deepgramOk = this.deepgramWs?.readyState === WebSocket.OPEN;
-    log.info({
-      requestId: this.requestId,
-      sourceLanguage: config.sourceLanguage,
-      targetLanguage: config.targetLanguage,
-      deepgramActive: deepgramOk,
-    }, 'Translation adapter connected — deepgramWs=' + (deepgramOk ? 'OPEN' : 'NULL'));
+    log.info(
+      {
+        requestId: this.requestId,
+        sourceLanguage: config.sourceLanguage,
+        targetLanguage: config.targetLanguage,
+        deepgramActive: deepgramOk,
+      },
+      'Translation adapter connected — deepgramWs=' + (deepgramOk ? 'OPEN' : 'NULL')
+    );
 
     // Emit diagnostic event so the client knows the STT status
     this.emit('translation.adapter.status', {
@@ -94,11 +97,14 @@ export class RealtimeTranslationAdapter extends EventEmitter {
       this.deepgramWs.send(buffer);
     } else {
       // Log the issue — helps diagnose if Deepgram WS failed to connect
-      log.warn({
-        requestId: this.requestId,
-        wsState: this.deepgramWs?.readyState ?? 'null',
-        bufferLen: buffer.length,
-      }, 'Audio dropped — Deepgram WS not OPEN');
+      log.warn(
+        {
+          requestId: this.requestId,
+          wsState: this.deepgramWs?.readyState ?? 'null',
+          bufferLen: buffer.length,
+        },
+        'Audio dropped — Deepgram WS not OPEN'
+      );
     }
   }
 
@@ -126,7 +132,10 @@ export class RealtimeTranslationAdapter extends EventEmitter {
     const apiKey = deepgramAdapter?.getApiKey();
 
     if (!apiKey) {
-      log.error({ requestId: this.requestId }, 'No Deepgram API key — translation adapter cannot start STT');
+      log.error(
+        { requestId: this.requestId },
+        'No Deepgram API key — translation adapter cannot start STT'
+      );
       this.emit('error', {
         type: 'error',
         error: { type: 'config_error', message: 'Deepgram API key not configured' },
@@ -135,9 +144,7 @@ export class RealtimeTranslationAdapter extends EventEmitter {
     }
 
     // Normalize language code: pt_BR → pt-BR, pt → pt, auto → omit
-    const dgLang = sourceLanguage === 'auto'
-      ? undefined
-      : sourceLanguage.replace('_', '-');
+    const dgLang = sourceLanguage === 'auto' ? undefined : sourceLanguage.replace('_', '-');
 
     const params = new URLSearchParams({
       model: 'nova-3',
@@ -163,18 +170,25 @@ export class RealtimeTranslationAdapter extends EventEmitter {
 
         const connectTimeout = setTimeout(() => {
           log.warn({ requestId: this.requestId }, 'Deepgram WS connect timeout (5s)');
-          try { ws.close(); } catch { /* ignore */ }
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
           resolve(); // Resolve without setting deepgramWs — sendAudio will silently drop
         }, 5000);
 
         ws.on('open', () => {
           clearTimeout(connectTimeout);
           this.deepgramWs = ws;
-          log.info({
-            requestId: this.requestId,
-            endpointingMs: DEEPGRAM_ENDPOINTING_MS,
-            language: dgLang || 'auto',
-          }, 'Deepgram streaming STT connected');
+          log.info(
+            {
+              requestId: this.requestId,
+              endpointingMs: DEEPGRAM_ENDPOINTING_MS,
+              language: dgLang || 'auto',
+            },
+            'Deepgram streaming STT connected'
+          );
           resolve();
         });
 
@@ -194,7 +208,10 @@ export class RealtimeTranslationAdapter extends EventEmitter {
           resolve(); // Don't reject — adapter still works, just without STT
         });
       } catch (err) {
-        log.error({ requestId: this.requestId, error: err instanceof Error ? err.message : String(err) }, 'Failed to create Deepgram WS');
+        log.error(
+          { requestId: this.requestId, error: err instanceof Error ? err.message : String(err) },
+          'Failed to create Deepgram WS'
+        );
         resolve();
       }
     });
@@ -207,7 +224,9 @@ export class RealtimeTranslationAdapter extends EventEmitter {
           this.deepgramWs.send(JSON.stringify({ type: 'CloseStream' }));
         }
         this.deepgramWs.close();
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       this.deepgramWs = null;
     }
   }
@@ -238,12 +257,15 @@ export class RealtimeTranslationAdapter extends EventEmitter {
         this.phraseCounter++;
         const phraseId = this.phraseCounter;
 
-        log.info({
-          requestId: this.requestId,
-          phraseId,
-          text: transcript.substring(0, 60),
-          confidence: confidence.toFixed(2),
-        }, 'Phrase finalized');
+        log.info(
+          {
+            requestId: this.requestId,
+            phraseId,
+            text: transcript.substring(0, 60),
+            confidence: confidence.toFixed(2),
+          },
+          'Phrase finalized'
+        );
 
         this.emit('conversation.item.input_audio_transcription.completed', {
           type: 'conversation.item.input_audio_transcription.completed',
@@ -291,13 +313,16 @@ export class RealtimeTranslationAdapter extends EventEmitter {
 
         if (!this.connected) return;
 
-        log.info({
-          requestId: this.requestId,
-          phraseId,
-          translateMs: result.latencyMs,
-          src: text.substring(0, 40),
-          tgt: result.translatedText.substring(0, 40),
-        }, 'Phrase translated');
+        log.info(
+          {
+            requestId: this.requestId,
+            phraseId,
+            translateMs: result.latencyMs,
+            src: text.substring(0, 40),
+            tgt: result.translatedText.substring(0, 40),
+          },
+          'Phrase translated'
+        );
 
         // Emit translated text
         this.emit('translation.text.translated', {
@@ -319,13 +344,16 @@ export class RealtimeTranslationAdapter extends EventEmitter {
         const totalMs = Date.now() - phraseStart;
         log.info({ requestId: this.requestId, phraseId, totalMs }, 'Phrase complete');
       })
-      .catch(err => {
+      .catch((err) => {
         // Catch ALL errors — never let them escape as unhandled rejections
-        log.error({
-          requestId: this.requestId,
-          phraseId,
-          error: err instanceof Error ? err.message : String(err),
-        }, 'Phrase processing failed');
+        log.error(
+          {
+            requestId: this.requestId,
+            phraseId,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          'Phrase processing failed'
+        );
       });
   }
 
@@ -351,7 +379,8 @@ export class RealtimeTranslationAdapter extends EventEmitter {
       }
 
       // Strategy 3: Batch TTS via AudioOrchestrationService
-      const { AudioOrchestrationService } = await import('@/services/audio-orchestration-service.js');
+      const { AudioOrchestrationService } =
+        await import('@/services/audio-orchestration-service.js');
       const audioService = new AudioOrchestrationService();
       const result = await audioService.synthesizeSpeech({
         text,
@@ -372,20 +401,32 @@ export class RealtimeTranslationAdapter extends EventEmitter {
         if (!this.connected) break;
         this.emit('response.audio.delta', {
           type: 'response.audio.delta',
-          delta: result.audioBuffer.subarray(i, Math.min(i + TTS_CHUNK_BYTES, result.audioBuffer.length)).toString('base64'),
+          delta: result.audioBuffer
+            .subarray(i, Math.min(i + TTS_CHUNK_BYTES, result.audioBuffer.length))
+            .toString('base64'),
         });
       }
       this.emit('response.audio.done', { type: 'response.audio.done' });
-      log.info({ requestId: this.requestId, ttsMs: Date.now() - ttsStart, method: 'batch' }, 'TTS done');
+      log.info(
+        { requestId: this.requestId, ttsMs: Date.now() - ttsStart, method: 'batch' },
+        'TTS done'
+      );
     } catch (err) {
-      log.warn({
-        requestId: this.requestId,
-        error: err instanceof Error ? err.message : String(err),
-      }, 'TTS failed (text still delivered)');
+      log.warn(
+        {
+          requestId: this.requestId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'TTS failed (text still delivered)'
+      );
     }
   }
 
-  private async streamCartesiaTTS(apiKey: string, text: string, startTime: number): Promise<boolean> {
+  private async streamCartesiaTTS(
+    apiKey: string,
+    text: string,
+    startTime: number
+  ): Promise<boolean> {
     try {
       const response = await fetch('https://api.cartesia.ai/tts/bytes', {
         method: 'POST',
@@ -418,28 +459,48 @@ export class RealtimeTranslationAdapter extends EventEmitter {
         totalBytes += chunk.length;
 
         if (firstChunk) {
-          log.info({ requestId: this.requestId, ttfb: Date.now() - startTime }, 'TTS first byte (Cartesia)');
+          log.info(
+            { requestId: this.requestId, ttfb: Date.now() - startTime },
+            'TTS first byte (Cartesia)'
+          );
           firstChunk = false;
         }
 
         for (let i = 0; i < chunk.length; i += TTS_CHUNK_BYTES) {
           this.emit('response.audio.delta', {
             type: 'response.audio.delta',
-            delta: chunk.subarray(i, Math.min(i + TTS_CHUNK_BYTES, chunk.length)).toString('base64'),
+            delta: chunk
+              .subarray(i, Math.min(i + TTS_CHUNK_BYTES, chunk.length))
+              .toString('base64'),
           });
         }
       }
 
       this.emit('response.audio.done', { type: 'response.audio.done' });
-      log.info({ requestId: this.requestId, ttsMs: Date.now() - startTime, totalBytes, method: 'cartesia-stream' }, 'TTS done');
+      log.info(
+        {
+          requestId: this.requestId,
+          ttsMs: Date.now() - startTime,
+          totalBytes,
+          method: 'cartesia-stream',
+        },
+        'TTS done'
+      );
       return totalBytes > 0;
     } catch (err) {
-      log.warn({ requestId: this.requestId, error: err instanceof Error ? err.message : String(err) }, 'Cartesia TTS failed');
+      log.warn(
+        { requestId: this.requestId, error: err instanceof Error ? err.message : String(err) },
+        'Cartesia TTS failed'
+      );
       return false;
     }
   }
 
-  private async streamSidecarTTS(baseUrl: string, text: string, startTime: number): Promise<boolean> {
+  private async streamSidecarTTS(
+    baseUrl: string,
+    text: string,
+    startTime: number
+  ): Promise<boolean> {
     try {
       const response = await fetch(`${baseUrl}/v1/audio/speech`, {
         method: 'POST',
@@ -469,13 +530,23 @@ export class RealtimeTranslationAdapter extends EventEmitter {
         for (let i = 0; i < chunk.length; i += TTS_CHUNK_BYTES) {
           this.emit('response.audio.delta', {
             type: 'response.audio.delta',
-            delta: chunk.subarray(i, Math.min(i + TTS_CHUNK_BYTES, chunk.length)).toString('base64'),
+            delta: chunk
+              .subarray(i, Math.min(i + TTS_CHUNK_BYTES, chunk.length))
+              .toString('base64'),
           });
         }
       }
 
       this.emit('response.audio.done', { type: 'response.audio.done' });
-      log.info({ requestId: this.requestId, ttsMs: Date.now() - startTime, totalBytes, method: 'sidecar-stream' }, 'TTS done');
+      log.info(
+        {
+          requestId: this.requestId,
+          ttsMs: Date.now() - startTime,
+          totalBytes,
+          method: 'sidecar-stream',
+        },
+        'TTS done'
+      );
       return totalBytes > 0;
     } catch {
       return false;

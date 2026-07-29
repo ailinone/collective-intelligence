@@ -96,7 +96,7 @@ describe('SapAiCoreAdapter — deployment map resolution', () => {
       tokenProviderFactory: () => makeFakeTokenProvider(),
     });
     await expect(
-      adapter.chatCompletion({ model: 'unknown-model', messages: [{ role: 'user', content: 'x' }] }),
+      adapter.chatCompletion({ model: 'unknown-model', messages: [{ role: 'user', content: 'x' }] })
     ).rejects.toThrow(/no deployment_id mapped/);
   });
 
@@ -200,6 +200,8 @@ describe('SapAiCoreAdapter — unsupported surfaces', () => {
       tokenProviderFactory: () => makeFakeTokenProvider(),
     });
     const dummyModel = { id: 'm' } as never;
-    await expect(adapter.imageGenerate(dummyModel, { prompt: 'x' })).rejects.toThrow(/not supported/);
+    await expect(adapter.imageGenerate(dummyModel, { prompt: 'x' })).rejects.toThrow(
+      /not supported/
+    );
   });
 });

@@ -173,9 +173,7 @@ function deriveOfferingId(snapshot: LegacyModelSnapshot): string {
 /**
  * Constructs a `RuntimeModelRegistry` from legacy snapshots. Pure.
  */
-export function buildRuntimeModelRegistry(
-  input: RegistryBuildInput,
-): RegistryBuildResult {
+export function buildRuntimeModelRegistry(input: RegistryBuildInput): RegistryBuildResult {
   const now = input.now ?? new Date(0).toISOString();
   // `now` defaults to epoch when not provided — keeps the function
   // deterministic for tests. Callers in production pass `new Date().toISOString()`.
@@ -201,20 +199,15 @@ export function buildRuntimeModelRegistry(
       continue;
     }
     if (!snapshot.providerId || snapshot.providerId.length === 0) {
-      skippedReasons['missing_provider_id'] =
-        (skippedReasons['missing_provider_id'] ?? 0) + 1;
+      skippedReasons['missing_provider_id'] = (skippedReasons['missing_provider_id'] ?? 0) + 1;
       skippedCount += 1;
       continue;
     }
 
-    const canonicalModelId = deriveCanonicalModelId(
-      snapshot.providerId,
-      snapshot.id,
-    );
+    const canonicalModelId = deriveCanonicalModelId(snapshot.providerId, snapshot.id);
     const offeringId = deriveOfferingId(snapshot);
     const capabilities = resolveCapabilities(snapshot);
-    const routeKind: RouteKind =
-      routeKindByProvider[snapshot.providerId] ?? 'native';
+    const routeKind: RouteKind = routeKindByProvider[snapshot.providerId] ?? 'native';
     const contextWindow = snapshot.contextWindow ?? 0;
     const maxOutputTokens = snapshot.maxOutputTokens ?? 0;
 
@@ -279,7 +272,7 @@ export function buildRuntimeModelRegistry(
         capabilities,
         'audio_generation',
         'text_to_speech',
-        'speech_to_text',
+        'speech_to_text'
       ),
 
       healthState: DEFAULT_HEALTH_STATE,

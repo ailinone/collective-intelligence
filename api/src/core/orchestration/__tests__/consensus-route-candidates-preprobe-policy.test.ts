@@ -32,7 +32,9 @@ import type { ChatRequest } from '@/types';
 
 function basePool() {
   return [
-    ...diversePool().filter((c) => c.hasCredits).map((c) => c.model),
+    ...diversePool()
+      .filter((c) => c.hasCredits)
+      .map((c) => c.model),
     makeCandidate({
       id: 'judge-candidate',
       model: makeModel({
@@ -84,13 +86,13 @@ describe('01C.1B-J1R — routeCandidates preprobe policy', () => {
     // At least ONE role should have approved candidates now.
     const totalApproved = (ext.routeCandidatesPerRole ?? []).reduce(
       (a, r) => a + r.candidates.length,
-      0,
+      0
     );
     expect(totalApproved).toBeGreaterThan(0);
     // The candidates should be marked liveReady=false (unaudited) since the
     // operability store is fresh / no probes have run.
     const allUnaudited = (ext.routeCandidatesPerRole ?? []).every((r) =>
-      r.candidates.every((c) => c.liveReady === false || c.liveReady === undefined),
+      r.candidates.every((c) => c.liveReady === false || c.liveReady === undefined)
     );
     expect(allUnaudited).toBe(true);
   });
@@ -114,7 +116,7 @@ describe('01C.1B-J1R — routeCandidates preprobe policy', () => {
     // With no probes run, strict mode should reject all routes.
     const totalApproved = (ext.routeCandidatesPerRole ?? []).reduce(
       (a, r) => a + r.candidates.length,
-      0,
+      0
     );
     expect(totalApproved).toBe(0);
   });
@@ -122,7 +124,7 @@ describe('01C.1B-J1R — routeCandidates preprobe policy', () => {
   it('allowUnknownLiveOperability omitted (default false) preserves strict legacy behavior', async () => {
     const svc = new ConsensusPlanDryRunService();
     const plan = await svc.plan({
-      chatRequest: reqWithEval({ /* no allowUnknownLiveOperability flag */ }),
+      chatRequest: reqWithEval({/* no allowUnknownLiveOperability flag */}),
       candidatePool: basePool(),
     });
     const ext = plan as typeof plan & {

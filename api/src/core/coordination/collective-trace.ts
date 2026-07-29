@@ -81,11 +81,7 @@ export interface CollectiveSpan {
 }
 
 type AttributeValue =
-  | string
-  | number
-  | boolean
-  | null
-  | ReadonlyArray<string | number | boolean | null>;
+  string | number | boolean | null | ReadonlyArray<string | number | boolean | null>;
 
 // ─── Counter / id generation ────────────────────────────────────────────
 
@@ -139,7 +135,9 @@ function sanitizeAttribute(value: unknown): AttributeValue {
   return '[unrepresentable]';
 }
 
-function sanitizeAttributes(attrs: Record<string, unknown> | undefined): Record<string, AttributeValue> {
+function sanitizeAttributes(
+  attrs: Record<string, unknown> | undefined
+): Record<string, AttributeValue> {
   if (!attrs) return {};
   const out: Record<string, AttributeValue> = {};
   for (const [key, value] of Object.entries(attrs)) {
@@ -185,7 +183,7 @@ export class CollectiveTrace {
     options: {
       parentSpanId?: string;
       attributes?: Record<string, unknown>;
-    } = {},
+    } = {}
   ): string {
     if (this.completed) return '';
     if (this.spans.length >= this.maxSpans) {
@@ -223,7 +221,7 @@ export class CollectiveTrace {
       status?: CollectiveSpanStatus;
       attributes?: Record<string, unknown>;
       errorMessage?: string;
-    } = {},
+    } = {}
   ): void {
     if (this.completed) return;
     const span = this.openSpans.get(spanId);
@@ -315,7 +313,7 @@ export async function tracedSpan<T>(
   options: {
     parentSpanId?: string;
     attributes?: Record<string, unknown>;
-  } = {},
+  } = {}
 ): Promise<T> {
   const spanId = trace.startSpan(phase, options);
   try {

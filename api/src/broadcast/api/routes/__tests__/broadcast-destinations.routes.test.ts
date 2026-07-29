@@ -125,7 +125,7 @@ vi.mock('@/database/client', async () => {
         (r) =>
           r.tenantType === where.tenantType &&
           r.tenantId === where.tenantId &&
-          (where.deletedAt === null ? r.deletedAt === null : true),
+          (where.deletedAt === null ? r.deletedAt === null : true)
       );
       if (orderBy && typeof orderBy === 'object' && 'createdAt' in orderBy) {
         result.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -222,7 +222,11 @@ describe('broadcast-destinations.routes — create', () => {
       payload: {
         destinationType: 'webhook',
         name: 'Bad',
-        config: { url: 'not-a-url', secret: 'super-secret-at-least-16-chars', signatureScheme: 'v1' },
+        config: {
+          url: 'not-a-url',
+          secret: 'super-secret-at-least-16-chars',
+          signatureScheme: 'v1',
+        },
       },
     });
     expect(response.statusCode).toBe(400);
@@ -257,7 +261,7 @@ describe('broadcast-destinations.routes — list + get', () => {
     await server.close();
   });
 
-  it('GET returns only the authenticated tenant\'s destinations', async () => {
+  it("GET returns only the authenticated tenant's destinations", async () => {
     // Create one as org A, then switch identity to org B and create another.
     await server.inject({
       method: 'POST',
@@ -327,8 +331,11 @@ describe('broadcast-destinations.routes — update + delete', () => {
     });
     const id = (JSON.parse(create.body) as { destination: { id: string } }).destination.id;
 
-    const rows = (globalThis as unknown as { __broadcastDestRows: Map<string, { configDekWrapped: Uint8Array }> })
-      .__broadcastDestRows;
+    const rows = (
+      globalThis as unknown as {
+        __broadcastDestRows: Map<string, { configDekWrapped: Uint8Array }>;
+      }
+    ).__broadcastDestRows;
     const dekBefore = Buffer.from(rows.get(id)!.configDekWrapped);
 
     const patch = await server.inject({
@@ -353,8 +360,11 @@ describe('broadcast-destinations.routes — update + delete', () => {
     });
     const id = (JSON.parse(create.body) as { destination: { id: string } }).destination.id;
 
-    const rows = (globalThis as unknown as { __broadcastDestRows: Map<string, { configDekWrapped: Uint8Array }> })
-      .__broadcastDestRows;
+    const rows = (
+      globalThis as unknown as {
+        __broadcastDestRows: Map<string, { configDekWrapped: Uint8Array }>;
+      }
+    ).__broadcastDestRows;
     const dekBefore = Buffer.from(rows.get(id)!.configDekWrapped);
 
     const patch = await server.inject({
@@ -410,7 +420,7 @@ describe('broadcast-destinations.routes — update + delete', () => {
     expect(get.statusCode).toBe(404);
   });
 
-  it('DELETE of another tenant\'s id returns 404 (not 403)', async () => {
+  it("DELETE of another tenant's id returns 404 (not 403)", async () => {
     const create = await server.inject({
       method: 'POST',
       url: '/v1/broadcast/destinations',

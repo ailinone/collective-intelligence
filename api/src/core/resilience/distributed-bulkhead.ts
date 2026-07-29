@@ -97,7 +97,10 @@ function sleep(ms: number): Promise<void> {
 
 export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
   private readonly config: Required<
-    Pick<DistributedBulkheadConfig, 'name' | 'maxConcurrent' | 'queueTimeout' | 'leaseTtlMs' | 'maxQueueSize'>
+    Pick<
+      DistributedBulkheadConfig,
+      'name' | 'maxConcurrent' | 'queueTimeout' | 'leaseTtlMs' | 'maxQueueSize'
+    >
   >;
 
   private readonly redisKey: string;
@@ -180,7 +183,8 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
         );
       }
 
-      const jitter = ACQUIRE_RETRY_MIN_MS + Math.random() * (ACQUIRE_RETRY_MAX_MS - ACQUIRE_RETRY_MIN_MS);
+      const jitter =
+        ACQUIRE_RETRY_MIN_MS + Math.random() * (ACQUIRE_RETRY_MAX_MS - ACQUIRE_RETRY_MIN_MS);
       await sleep(Math.min(jitter, Math.max(0, deadline - Date.now())));
     }
   }
@@ -251,7 +255,10 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
       // Releasing is best-effort: if this fails, the lease still expires on
       // its own via leaseTtlMs, so capacity self-heals rather than leaking
       // permanently.
-      logger.debug({ provider: this.config.name, error }, 'Distributed bulkhead release failed (will self-expire)');
+      logger.debug(
+        { provider: this.config.name, error },
+        'Distributed bulkhead release failed (will self-expire)'
+      );
     }
   }
 
@@ -259,7 +266,10 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
     if (this.useLocalFallback) return;
     this.useLocalFallback = true;
     bulkheadMode.set({ provider: this.config.name }, 1);
-    logger.warn({ provider: this.config.name, reason }, 'Distributed bulkhead running in local fallback mode');
+    logger.warn(
+      { provider: this.config.name, reason },
+      'Distributed bulkhead running in local fallback mode'
+    );
   }
 
   private getLocalBulkhead(): Bulkhead {
@@ -301,7 +311,10 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
         totalRejected: this.totalRejected,
       };
     } catch (error) {
-      logger.warn({ provider: this.config.name, error }, 'Failed to read distributed bulkhead stats');
+      logger.warn(
+        { provider: this.config.name, error },
+        'Failed to read distributed bulkhead stats'
+      );
       return {
         name: this.config.name,
         mode: 'distributed',
@@ -320,7 +333,10 @@ export class DistributedBulkhead extends EventEmitter implements BulkheadLike {
 export class DistributedBulkheadManager {
   private bulkheads = new Map<string, DistributedBulkhead>();
 
-  getBulkhead(name: string, config?: Partial<Omit<DistributedBulkheadConfig, 'name'>>): DistributedBulkhead {
+  getBulkhead(
+    name: string,
+    config?: Partial<Omit<DistributedBulkheadConfig, 'name'>>
+  ): DistributedBulkhead {
     if (!this.bulkheads.has(name)) {
       const bulkheadConfig: DistributedBulkheadConfig = {
         maxConcurrent: 10,
@@ -330,7 +346,8 @@ export class DistributedBulkheadManager {
 
       if (
         bulkheadConfig.forceDistributed === undefined &&
-        (appConfig.resilience.forceDistributedBulkheads || process.env.FORCE_DISTRIBUTED_BULKHEADS === 'true')
+        (appConfig.resilience.forceDistributedBulkheads ||
+          process.env.FORCE_DISTRIBUTED_BULKHEADS === 'true')
       ) {
         bulkheadConfig.forceDistributed = true;
       }

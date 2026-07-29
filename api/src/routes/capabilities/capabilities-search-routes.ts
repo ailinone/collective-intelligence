@@ -45,14 +45,7 @@ import { logger } from '@/utils/logger';
 
 const log = logger.child({ module: 'capabilities-search-routes' });
 
-const ALLOWED_CATEGORIES = new Set([
-  'modality',
-  'task',
-  'tool',
-  'safety',
-  'language',
-  'meta',
-]);
+const ALLOWED_CATEGORIES = new Set(['modality', 'task', 'tool', 'safety', 'language', 'meta']);
 
 const ALLOWED_SOURCES = new Set([
   'provider-declared',
@@ -105,7 +98,7 @@ function parseFloatBounded(
   raw: string | undefined,
   fallback: number,
   min: number,
-  max: number,
+  max: number
 ): number {
   if (!raw) return fallback;
   const n = Number.parseFloat(raw);
@@ -168,7 +161,8 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
       try {
         const hits = await getService().searchOntology({
           query: q,
-          category: category as 'modality' | 'task' | 'tool' | 'safety' | 'language' | 'meta' | undefined,
+          category: category as
+            'modality' | 'task' | 'tool' | 'safety' | 'language' | 'meta' | undefined,
           limit: parseInt32(request.query.limit, 20, 100),
           recallLimit: parseInt32(request.query.recall_limit, 50, 200),
           rrfK: parseInt32(request.query.rrf_k, 60, 200),
@@ -178,7 +172,7 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
         const durationMs = Date.now() - start;
         log.info(
           { q, category, count: hits.length, durationMs, requestId: request.id },
-          'Ontology search completed',
+          'Ontology search completed'
         );
 
         return reply.send({
@@ -203,7 +197,7 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
           },
         });
       }
-    },
+    }
   );
 
   server.get<{ Querystring: ModelSearchQuery }>(
@@ -226,7 +220,7 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
       if (!q && requireCaps.length === 0 && providerIds.length === 0) {
         return badRequest(
           reply,
-          "At least one of 'q', 'require_capabilities', or 'provider_ids' is required.",
+          "At least one of 'q', 'require_capabilities', or 'provider_ids' is required."
         );
       }
 
@@ -250,8 +244,13 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
           prefersCapabilities: prefersCaps,
           minConfidence: parseFloatBounded(request.query.min_confidence, 0, 0, 1),
           sources: sources as Array<
-            'provider-declared' | 'helicone-oracle' | 'modality-derived' |
-            'parameter-derived' | 'name-regex' | 'llm-extracted' | 'operator-override'
+            | 'provider-declared'
+            | 'helicone-oracle'
+            | 'modality-derived'
+            | 'parameter-derived'
+            | 'name-regex'
+            | 'llm-extracted'
+            | 'operator-override'
           >,
           providerIds,
           limit: parseInt32(request.query.limit, 20, 100),
@@ -270,7 +269,7 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
             durationMs,
             requestId: request.id,
           },
-          'Model search completed',
+          'Model search completed'
         );
 
         return reply.send({
@@ -302,7 +301,7 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
           },
         });
       }
-    },
+    }
   );
 
   log.info('Capability search routes registered (ontology + models)');

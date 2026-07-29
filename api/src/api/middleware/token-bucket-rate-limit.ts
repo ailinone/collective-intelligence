@@ -154,7 +154,10 @@ function getIdentifiers(request: FastifyRequest): {
   return {
     apiKey: getHeaderString(request.headers, 'x-api-key'),
     ip: request.ip,
-    userId: tenantContext?.userId || extendedRequest.userId || getHeaderString(request.headers, 'x-user-id'),
+    userId:
+      tenantContext?.userId ||
+      extendedRequest.userId ||
+      getHeaderString(request.headers, 'x-user-id'),
     organizationId:
       tenantContext?.organizationId ||
       extendedRequest.organizationId ||
@@ -217,7 +220,9 @@ export async function tokenBucketRateLimitMiddleware(
     // emitted through this child logger for the rest of the request.
     identifiers: {
       ...identifiers,
-      apiKey: identifiers.apiKey ? safeLogIdentifier('api-key', identifiers.apiKey) : identifiers.apiKey,
+      apiKey: identifiers.apiKey
+        ? safeLogIdentifier('api-key', identifiers.apiKey)
+        : identifiers.apiKey,
     },
   });
 

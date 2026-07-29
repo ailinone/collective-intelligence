@@ -13,7 +13,10 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
 import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_DEPLOYMENT_ENVIRONMENT_NAME } from '@opentelemetry/semantic-conventions';
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
+} from '@opentelemetry/semantic-conventions';
 import { config, isDevelopment } from '@/config';
 import { logger } from '@/utils/logger';
 

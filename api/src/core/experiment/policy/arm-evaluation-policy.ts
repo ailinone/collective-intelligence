@@ -45,13 +45,13 @@ export type ResolvedExperimentMode = ModeConfig['mode'];
  * primary input to `resolveArmEvaluationPolicy()`.
  */
 export type ArmRole =
-  | 'top_tier_baseline'      // measure exact provider+model (reference)
-  | 'family_baseline'         // measure family via any equivalent silo
-  | 'dynamic_router'          // measure the semantic/dynamic router
-  | 'collective_strategy'     // measure multi-model composition
-  | 'resilience_strategy'     // measure behavior under failure
-  | 'local_baseline'          // measure local (Ollama) standalone — strict subgroup
-  | 'ablation';               // measure component-isolated variant — inherits parent role
+  | 'top_tier_baseline' // measure exact provider+model (reference)
+  | 'family_baseline' // measure family via any equivalent silo
+  | 'dynamic_router' // measure the semantic/dynamic router
+  | 'collective_strategy' // measure multi-model composition
+  | 'resilience_strategy' // measure behavior under failure
+  | 'local_baseline' // measure local (Ollama) standalone — strict subgroup
+  | 'ablation'; // measure component-isolated variant — inherits parent role
 
 /**
  * Granularity at which arm identity is enforced.
@@ -96,7 +96,7 @@ export const SUBSTITUTION_LEVEL_ORDER: readonly SubstitutionLevel[] = Object.fre
 /** Compare two substitution levels. Returns true if `actual <= max`. */
 export function isSubstitutionLevelAllowed(
   actual: SubstitutionLevel,
-  max: SubstitutionLevel,
+  max: SubstitutionLevel
 ): boolean {
   return SUBSTITUTION_LEVEL_ORDER.indexOf(actual) <= SUBSTITUTION_LEVEL_ORDER.indexOf(max);
 }
@@ -105,36 +105,29 @@ export function isSubstitutionLevelAllowed(
 
 /** Scope of fallback explored when primary fails. */
 export type FallbackScope =
-  | 'none'                              // strict baseline: no fallback
-  | 'same_provider'                     // intra-silo only (model alternates)
-  | 'same_family'                       // family baseline: distinct silos same family
-  | 'same_capability_tier'              // dynamic: capability-equivalent across families
-  | 'any_semantically_valid'            // dynamic+: maximum freedom under policy
-  | 'strategy_declared_only';           // collective: only declared strategy roles
+  | 'none' // strict baseline: no fallback
+  | 'same_provider' // intra-silo only (model alternates)
+  | 'same_family' // family baseline: distinct silos same family
+  | 'same_capability_tier' // dynamic: capability-equivalent across families
+  | 'any_semantically_valid' // dynamic+: maximum freedom under policy
+  | 'strategy_declared_only'; // collective: only declared strategy roles
 
 /** Parallel inference policy. */
 export type HedgedRequestPolicy =
-  | false                               // strict baselines forbid hedging
-  | 'budget_guarded'                    // hedge allowed if total spend < budget
-  | 'strategy_declared_only';           // hedge allowed only when strategy declares it
+  | false // strict baselines forbid hedging
+  | 'budget_guarded' // hedge allowed if total spend < budget
+  | 'strategy_declared_only'; // hedge allowed only when strategy declares it
 
 /** Adaptive learning behavior during this arm's execution. */
 export type AdaptiveLearningPolicy =
-  | 'frozen'                            // bandits/feedback don't update
-  | 'frozen_during_eval'                // frozen for this experiment only
-  | 'updates_globally'                  // dynamic_router: update real production state
-  | 'updates_within_arm';               // resilience: update arm-local state only
+  | 'frozen' // bandits/feedback don't update
+  | 'frozen_during_eval' // frozen for this experiment only
+  | 'updates_globally' // dynamic_router: update real production state
+  | 'updates_within_arm'; // resilience: update arm-local state only
 
 /** Origin role of an attempt within a strategy. */
 export type AttemptRoleInStrategy =
-  | 'primary'
-  | 'fallback'
-  | 'judge'
-  | 'expert'
-  | 'critic'
-  | 'aggregator'
-  | 'hedged'
-  | 'probe';
+  'primary' | 'fallback' | 'judge' | 'expert' | 'critic' | 'aggregator' | 'hedged' | 'probe';
 
 /** Reason an attempt was selected. Auditable, not derived from heuristics. */
 export type SelectionReason =
@@ -221,7 +214,8 @@ export const POLICY_STRICT_BASELINE: ArmEvaluationPolicy = Object.freeze({
 
 export const POLICY_FAMILY_BASELINE: ArmEvaluationPolicy = Object.freeze({
   kind: 'family_baseline_identity',
-  description: 'Mede a família semântica via qualquer silo equivalente; cross-silo intra-família OK',
+  description:
+    'Mede a família semântica via qualquer silo equivalente; cross-silo intra-família OK',
   fallbackScope: 'same_family',
   maxFallbackDepth: 3,
   allowOllamaPrimary: false,
@@ -234,14 +228,15 @@ export const POLICY_FAMILY_BASELINE: ArmEvaluationPolicy = Object.freeze({
   enforceFamilyIdentity: true,
   enforceCapabilityIdentity: true,
   perAttemptBudgetUsd: 0.05,
-  totalArmBudgetUsd: 0.10,
+  totalArmBudgetUsd: 0.1,
   perAttemptTimeoutMs: 15_000,
   totalArmTimeoutMs: 30_000,
 });
 
 export const POLICY_DYNAMIC_ROUTER: ArmEvaluationPolicy = Object.freeze({
   kind: 'dynamic_router',
-  description: 'Mede o roteador semântico/dinâmico; liberdade auditada; Ollama+frontier+health-aware',
+  description:
+    'Mede o roteador semântico/dinâmico; liberdade auditada; Ollama+frontier+health-aware',
   fallbackScope: 'any_semantically_valid',
   maxFallbackDepth: 4,
   allowOllamaPrimary: true,
@@ -253,8 +248,8 @@ export const POLICY_DYNAMIC_ROUTER: ArmEvaluationPolicy = Object.freeze({
   enforceProviderIdentity: false,
   enforceFamilyIdentity: false,
   enforceCapabilityIdentity: true,
-  perAttemptBudgetUsd: 0.10,
-  totalArmBudgetUsd: 0.30,
+  perAttemptBudgetUsd: 0.1,
+  totalArmBudgetUsd: 0.3,
   perAttemptTimeoutMs: 15_000,
   totalArmTimeoutMs: 45_000,
 });
@@ -273,8 +268,8 @@ export const POLICY_COLLECTIVE_STRATEGY: ArmEvaluationPolicy = Object.freeze({
   enforceProviderIdentity: false,
   enforceFamilyIdentity: false,
   enforceCapabilityIdentity: true,
-  perAttemptBudgetUsd: 0.10,
-  totalArmBudgetUsd: 0.50,
+  perAttemptBudgetUsd: 0.1,
+  totalArmBudgetUsd: 0.5,
   perAttemptTimeoutMs: 20_000,
   totalArmTimeoutMs: 90_000,
 });
@@ -293,20 +288,21 @@ export const POLICY_RESILIENCE_STRATEGY: ArmEvaluationPolicy = Object.freeze({
   enforceProviderIdentity: false,
   enforceFamilyIdentity: false,
   enforceCapabilityIdentity: false,
-  perAttemptBudgetUsd: 0.10,
-  totalArmBudgetUsd: 0.40,
+  perAttemptBudgetUsd: 0.1,
+  totalArmBudgetUsd: 0.4,
   perAttemptTimeoutMs: 15_000,
   totalArmTimeoutMs: 60_000,
 });
 
 /** All canonical policies, indexable by `kind`. */
-export const POLICIES_BY_KIND: Readonly<Record<ArmEvaluationPolicy['kind'], ArmEvaluationPolicy>> = Object.freeze({
-  strict_baseline_identity: POLICY_STRICT_BASELINE,
-  family_baseline_identity: POLICY_FAMILY_BASELINE,
-  dynamic_router: POLICY_DYNAMIC_ROUTER,
-  collective_strategy: POLICY_COLLECTIVE_STRATEGY,
-  resilience_strategy: POLICY_RESILIENCE_STRATEGY,
-});
+export const POLICIES_BY_KIND: Readonly<Record<ArmEvaluationPolicy['kind'], ArmEvaluationPolicy>> =
+  Object.freeze({
+    strict_baseline_identity: POLICY_STRICT_BASELINE,
+    family_baseline_identity: POLICY_FAMILY_BASELINE,
+    dynamic_router: POLICY_DYNAMIC_ROUTER,
+    collective_strategy: POLICY_COLLECTIVE_STRATEGY,
+    resilience_strategy: POLICY_RESILIENCE_STRATEGY,
+  });
 
 // ─── Arm declaration extensions ────────────────────────────────────────────
 
@@ -456,12 +452,14 @@ export function isOllamaProviderId(providerId: string): boolean {
 }
 
 /** Frozen lookup of canonical policies by role (default mapping). */
-export const ROLE_TO_DEFAULT_POLICY: Readonly<Record<ArmRole, ArmEvaluationPolicy>> = Object.freeze({
-  top_tier_baseline: POLICY_STRICT_BASELINE,
-  family_baseline: POLICY_FAMILY_BASELINE,
-  dynamic_router: POLICY_DYNAMIC_ROUTER,
-  collective_strategy: POLICY_COLLECTIVE_STRATEGY,
-  resilience_strategy: POLICY_RESILIENCE_STRATEGY,
-  local_baseline: POLICY_STRICT_BASELINE,
-  ablation: POLICY_COLLECTIVE_STRATEGY, // ablation inherits parent default; resolved engine fixes it
-});
+export const ROLE_TO_DEFAULT_POLICY: Readonly<Record<ArmRole, ArmEvaluationPolicy>> = Object.freeze(
+  {
+    top_tier_baseline: POLICY_STRICT_BASELINE,
+    family_baseline: POLICY_FAMILY_BASELINE,
+    dynamic_router: POLICY_DYNAMIC_ROUTER,
+    collective_strategy: POLICY_COLLECTIVE_STRATEGY,
+    resilience_strategy: POLICY_RESILIENCE_STRATEGY,
+    local_baseline: POLICY_STRICT_BASELINE,
+    ablation: POLICY_COLLECTIVE_STRATEGY, // ablation inherits parent default; resolved engine fixes it
+  }
+);

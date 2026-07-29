@@ -9,12 +9,12 @@
 
 /**
  * Database Migration Safety Tests
- * 
+ *
  * Tests migration robustness:
  * - Idempotency (can run multiple times safely)
  * - Data integrity preservation
  * - Schema validation
- * 
+ *
  * Note: Full migration performance tests require production-like data volume
  */
 
@@ -65,13 +65,13 @@ describe('Migration Safety Tests', () => {
       expect(indexes.length).toBeGreaterThan(20);
 
       const indexNames = indexes.map((i) => i.indexname);
-      
+
       // Verify critical indexes exist
-      const hasQuickHashIndex = indexNames.some((name) => 
-        name.includes('api_keys') && name.includes('quick_hash')
+      const hasQuickHashIndex = indexNames.some(
+        (name) => name.includes('api_keys') && name.includes('quick_hash')
       );
-      const hasEmailIndex = indexNames.some((name) => 
-        name.includes('users') && name.includes('email')
+      const hasEmailIndex = indexNames.some(
+        (name) => name.includes('users') && name.includes('email')
       );
 
       expect(hasQuickHashIndex).toBe(true);
@@ -84,7 +84,7 @@ describe('Migration Safety Tests', () => {
       `;
 
       const extNames = extensions.map((e) => e.extname);
-      
+
       expect(extNames).toContain('pgcrypto');
       expect(extNames).toContain('pg_trgm');
     });
@@ -92,7 +92,9 @@ describe('Migration Safety Tests', () => {
 
   describe('Data Integrity', () => {
     it('should maintain foreign key constraints', async () => {
-      const fkCheck = await prisma.$queryRaw<Array<{ table_name: string; constraint_name: string }>>`
+      const fkCheck = await prisma.$queryRaw<
+        Array<{ table_name: string; constraint_name: string }>
+      >`
         SELECT tc.table_name, tc.constraint_name
         FROM information_schema.table_constraints AS tc
         WHERE tc.constraint_type = 'FOREIGN KEY'
@@ -114,4 +116,3 @@ describe('Migration Safety Tests', () => {
     });
   });
 });
-

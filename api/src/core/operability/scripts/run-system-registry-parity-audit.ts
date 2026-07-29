@@ -68,7 +68,9 @@ interface SecretsSummary {
   readonly notLoadedCount: number;
 }
 
-async function bootstrap(args: Args): Promise<{ secrets: SecretsSummary; providersInRegistry: string[] }> {
+async function bootstrap(
+  args: Args
+): Promise<{ secrets: SecretsSummary; providersInRegistry: string[] }> {
   if (!args.bootstrapRuntime) {
     return {
       secrets: {
@@ -96,7 +98,7 @@ async function bootstrap(args: Args): Promise<{ secrets: SecretsSummary; provide
       await loadProviderCatalog();
     } catch (err) {
       process.stderr.write(
-        `loadProviderCatalog failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `loadProviderCatalog failed: ${err instanceof Error ? err.message : String(err)}\n`
       );
     }
   }
@@ -137,7 +139,7 @@ function computeProviderView(input: {
   const byBucket: Record<ConsolidationBucket, number> = {
     'live-validation': 0,
     'no-live-validation': 0,
-    'partial': 0,
+    partial: 0,
     'credentials-missing': 0,
     'vendor-side-failure': 0,
     'upstream-suspended': 0,
@@ -206,14 +208,14 @@ async function computeModelView(): Promise<ModelRegistryView> {
     const all = await modelCatalogService.listModels();
     const active = all.filter((m) => m.status === 'active');
     const chatCapable = active.filter(
-      (m) => Array.isArray(m.capabilities) && m.capabilities.includes('chat'),
+      (m) => Array.isArray(m.capabilities) && m.capabilities.includes('chat')
     );
     const priced = active.filter(
-      (m) => Number(m.inputCostPer1k ?? 0) > 0 || Number(m.outputCostPer1k ?? 0) > 0,
+      (m) => Number(m.inputCostPer1k ?? 0) > 0 || Number(m.outputCostPer1k ?? 0) > 0
     );
     const withContext = active.filter((m) => (m.contextWindow ?? 0) > 0);
     const withCapUris = active.filter(
-      (m) => Array.isArray(m.capabilityUris) && m.capabilityUris.length > 0,
+      (m) => Array.isArray(m.capabilityUris) && m.capabilityUris.length > 0
     );
     const providers = new Set(active.map((m) => m.provider));
     return {
@@ -270,9 +272,7 @@ async function main(): Promise<number> {
 
   // Probe registry — auxiliary, not the universe.
   const probeReg = new ProviderProbeRegistry();
-  const probedProviders = args.bootstrapRuntime
-    ? registerDefaultProbes(probeReg)
-    : [];
+  const probedProviders = args.bootstrapRuntime ? registerDefaultProbes(probeReg) : [];
 
   // Credentials → canonical provider IDs. `getLoadedProviderNames()`
   // exposes the load-secrets module's normalized provider names; we
@@ -372,8 +372,7 @@ async function main(): Promise<number> {
           secretLoaderExecuted: secrets.secretLoaderExecuted,
           secretsSource: secrets.secretsSource,
           gcpProjectDetected: secrets.gcpProjectDetected,
-          providerRegistryMatchesCanonical:
-            providerView.total >= 100 && providerView.total <= 120,
+          providerRegistryMatchesCanonical: providerView.total >= 100 && providerView.total <= 120,
           modelRegistryReachable: modelView.source === 'catalog_db',
           atLeastOneAdapterRegistered: providerView.withAdapterRegistered >= 1,
           atLeastOneProvWithCredAndProbe: providerView.withProbe >= 1,
@@ -382,8 +381,8 @@ async function main(): Promise<number> {
         },
       },
       null,
-      2,
-    ) + '\n',
+      2
+    ) + '\n'
   );
 
   return 0;
@@ -393,7 +392,7 @@ main()
   .then((code) => process.exit(code))
   .catch((err) => {
     process.stderr.write(
-      `parity audit crashed: ${err instanceof Error ? err.message : String(err)}\n`,
+      `parity audit crashed: ${err instanceof Error ? err.message : String(err)}\n`
     );
     process.exit(3);
   });

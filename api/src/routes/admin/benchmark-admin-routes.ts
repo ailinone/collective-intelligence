@@ -42,10 +42,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
 import { logger } from '@/utils/logger';
-import {
-  BenchmarkEvaluator,
-  loadBenchmarkConfig,
-} from '@/core/benchmark/benchmark-evaluator';
+import { BenchmarkEvaluator, loadBenchmarkConfig } from '@/core/benchmark/benchmark-evaluator';
 import {
   getBalancedSample,
   getSuiteStats,
@@ -209,10 +206,12 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = request.body as {
-        taskCount?: number;
-        category?: string;
-      } | undefined;
+      const body = request.body as
+        | {
+            taskCount?: number;
+            category?: string;
+          }
+        | undefined;
 
       const taskCount = body?.taskCount ?? 10;
       const category = body?.category as BenchmarkCategory | undefined;
@@ -245,13 +244,13 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
             overallScore: run.overallScore,
             durationMs: run.durationMs,
             totalCostUsd: run.totalCostUsd,
-            categoryScores: run.categoryScores.map(cs => ({
+            categoryScores: run.categoryScores.map((cs) => ({
               category: cs.category,
               averageScore: cs.avgQuality,
             })),
             rewardCorrelation: run.rewardIntegrity?.correlation,
             driftDetected: run.rewardIntegrity?.driftDetected,
-            gamingSignals: run.rewardIntegrity?.gamingSignals?.map(gs => ({
+            gamingSignals: run.rewardIntegrity?.gamingSignals?.map((gs) => ({
               type: gs.type,
               severity: gs.severity,
             })),
@@ -261,10 +260,17 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
           for (const result of run.results) {
             const prefix = result.taskId.split('-')[0];
             const catMap: Record<string, string> = {
-              'cg': 'coding-generate', 'ce': 'coding-edit', 'cd': 'coding-debug',
-              'cr': 'coding-review', 'at': 'analysis-technical', 'ad': 'analysis-data',
-              'ax': 'analysis-text', 'fq': 'factual-qa', 'cv': 'creative',
-              'ms': 'multi-step', 'rs': 'reasoning',
+              cg: 'coding-generate',
+              ce: 'coding-edit',
+              cd: 'coding-debug',
+              cr: 'coding-review',
+              at: 'analysis-technical',
+              ad: 'analysis-data',
+              ax: 'analysis-text',
+              fq: 'factual-qa',
+              cv: 'creative',
+              ms: 'multi-step',
+              rs: 'reasoning',
             };
             recordBenchmarkTask({
               category: catMap[prefix] ?? 'unknown',
@@ -280,14 +286,21 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
           // Map BenchmarkExecutionResult → formats expected by archive, KG, Pareto
           try {
             const taskCategoryMap: Record<string, string> = {
-              'cg': 'code-generation', 'ce': 'code-editing', 'cd': 'code-debugging',
-              'cr': 'code-review', 'at': 'analysis', 'ad': 'analysis',
-              'ax': 'analysis', 'fq': 'factual-qa', 'cv': 'creative',
-              'ms': 'multi-step', 'rs': 'reasoning',
+              cg: 'code-generation',
+              ce: 'code-editing',
+              cd: 'code-debugging',
+              cr: 'code-review',
+              at: 'analysis',
+              ad: 'analysis',
+              ax: 'analysis',
+              fq: 'factual-qa',
+              cv: 'creative',
+              ms: 'multi-step',
+              rs: 'reasoning',
             };
 
             // Map to common result shape for downstream consumers
-            const mappedResults = run.results.map(r => {
+            const mappedResults = run.results.map((r) => {
               const prefix = r.taskId.split('-')[0];
               return {
                 taskType: taskCategoryMap[prefix] ?? 'general',
@@ -301,17 +314,31 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
             });
 
             // 1. OI-06: Aggregate and ingest into the quality-diversity archive
-            const archiveAggregates = new Map<string, {
-              taskType: string; complexity: string; strategy: string;
-              totalQuality: number; totalCost: number; totalLatency: number;
-              successCount: number; count: number;
-            }>();
+            const archiveAggregates = new Map<
+              string,
+              {
+                taskType: string;
+                complexity: string;
+                strategy: string;
+                totalQuality: number;
+                totalCost: number;
+                totalLatency: number;
+                successCount: number;
+                count: number;
+              }
+            >();
 
             for (const r of mappedResults) {
               const key = `${r.taskType}|${r.complexity}|${r.strategy}`;
               const agg = archiveAggregates.get(key) ?? {
-                taskType: r.taskType, complexity: r.complexity, strategy: r.strategy,
-                totalQuality: 0, totalCost: 0, totalLatency: 0, successCount: 0, count: 0,
+                taskType: r.taskType,
+                complexity: r.complexity,
+                strategy: r.strategy,
+                totalQuality: 0,
+                totalCost: 0,
+                totalLatency: 0,
+                successCount: 0,
+                count: 0,
               };
               agg.totalQuality += r.qualityScore;
               agg.totalCost += r.costUsd;
@@ -322,7 +349,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
             }
 
             const archiveIngestion = configurationArchive.ingestBenchmarkResults(
-              [...archiveAggregates.values()].map(a => ({
+              [...archiveAggregates.values()].map((a) => ({
                 taskType: a.taskType,
                 complexity: a.complexity,
                 strategy: a.strategy,
@@ -331,50 +358,69 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
                 avgLatency: a.totalLatency / a.count,
                 successRate: a.successCount / a.count,
                 sampleCount: a.count,
-              })),
+              }))
             );
             log.info(archiveIngestion, 'Ad-hoc run: archive ingestion (OI-06)');
 
             // 2. OI-11: Record in knowledge graph
-            knowledgeGraphService.recordBenchmarkResults(
-              mappedResults.filter(r => r.success).map(r => ({
-                taskType: r.taskType,
-                strategy: r.strategy,
-                qualityScore: r.qualityScore,
-                complexity: r.complexity,
-              })),
-            ).catch(err => log.warn({ error: String(err) }, 'Ad-hoc run: KG recording failed (OI-11)'));
+            knowledgeGraphService
+              .recordBenchmarkResults(
+                mappedResults
+                  .filter((r) => r.success)
+                  .map((r) => ({
+                    taskType: r.taskType,
+                    strategy: r.strategy,
+                    qualityScore: r.qualityScore,
+                    complexity: r.complexity,
+                  }))
+              )
+              .catch((err) =>
+                log.warn({ error: String(err) }, 'Ad-hoc run: KG recording failed (OI-11)')
+              );
 
             // 3. OI-09: Pareto frontier evaluation
             const paretoResult = evaluatePareto(mappedResults);
-            log.info({
-              niches: paretoResult.totalNiches,
-              newEntries: paretoResult.newFrontierEntries,
-            }, 'Ad-hoc run: Pareto evaluation (OI-09)');
+            log.info(
+              {
+                niches: paretoResult.totalNiches,
+                newEntries: paretoResult.newFrontierEntries,
+              },
+              'Ad-hoc run: Pareto evaluation (OI-09)'
+            );
 
             // 4. OI-11: Record archive elites in KG
             if (archiveIngestion.cellsUpdated > 0) {
               const snapshot = configurationArchive.getSnapshot();
-              knowledgeGraphService.recordArchiveElites(
-                snapshot.topElites.map(e => ({
-                  taskType: e.taskType,
-                  complexity: e.complexity,
-                  dimension: e.dimension,
-                  strategy: e.strategy,
-                  fitness: e.fitness,
-                  avgQuality: e.avgQuality,
-                })),
-              ).catch(err => log.warn({ error: String(err) }, 'Ad-hoc run: KG archive recording failed'));
+              knowledgeGraphService
+                .recordArchiveElites(
+                  snapshot.topElites.map((e) => ({
+                    taskType: e.taskType,
+                    complexity: e.complexity,
+                    dimension: e.dimension,
+                    strategy: e.strategy,
+                    fitness: e.fitness,
+                    avgQuality: e.avgQuality,
+                  }))
+                )
+                .catch((err) =>
+                  log.warn({ error: String(err) }, 'Ad-hoc run: KG archive recording failed')
+                );
             }
           } catch (downstreamErr) {
-            log.warn({ error: String(downstreamErr) }, 'Ad-hoc run: downstream learning feed failed (non-fatal)');
+            log.warn(
+              { error: String(downstreamErr) },
+              'Ad-hoc run: downstream learning feed failed (non-fatal)'
+            );
           }
 
-          log.info({
-            runId: run.runId,
-            overallScore: run.overallScore.toFixed(3),
-            totalCost: run.totalCostUsd.toFixed(4),
-          }, 'Ad-hoc benchmark run completed');
+          log.info(
+            {
+              runId: run.runId,
+              overallScore: run.overallScore.toFixed(3),
+              totalCost: run.totalCostUsd.toFixed(4),
+            },
+            'Ad-hoc benchmark run completed'
+          );
         } catch (err) {
           log.error({ error: String(err) }, 'Ad-hoc benchmark run failed');
         }
@@ -383,7 +429,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       return reply.status(202).send({
         message: 'Benchmark run started',
         taskCount: tasks.length,
-        estimatedDurationMinutes: Math.ceil(tasks.length * 2 * 3 / 60), // ~3 strategies × 2s delay
+        estimatedDurationMinutes: Math.ceil((tasks.length * 2 * 3) / 60), // ~3 strategies × 2s delay
       });
     }
   );
@@ -415,7 +461,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       const runs = runStore
         .slice(-limit)
         .reverse()
-        .map(run => ({
+        .map((run) => ({
           runId: run.runId,
           startedAt: run.startedAt,
           completedAt: run.completedAt,
@@ -456,7 +502,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { runId } = request.params as { runId: string };
-      const run = runStore.find(r => r.runId === runId);
+      const run = runStore.find((r) => r.runId === runId);
 
       if (!run) {
         return reply.status(404).send({ error: 'Run not found', runId });
@@ -465,9 +511,10 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       return reply.send({
         ...run,
         // Truncate response content to keep payload reasonable
-        results: run.results.map(r => ({
+        results: run.results.map((r) => ({
           ...r,
-          responseContent: r.responseContent.slice(0, 500) + (r.responseContent.length > 500 ? '...' : ''),
+          responseContent:
+            r.responseContent.slice(0, 500) + (r.responseContent.length > 500 ? '...' : ''),
         })),
       });
     }
@@ -489,8 +536,8 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
     },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       const results = runStore
-        .filter(r => r.rewardIntegrity)
-        .map(r => ({
+        .filter((r) => r.rewardIntegrity)
+        .map((r) => ({
           runId: r.runId,
           timestamp: r.completedAt,
           ...r.rewardIntegrity,
@@ -498,7 +545,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
         .reverse();
 
       const latest = results[0] ?? null;
-      const driftHistory = results.map(r => ({
+      const driftHistory = results.map((r) => ({
         runId: r.runId,
         timestamp: r.timestamp,
         correlation: r.correlation,
@@ -533,9 +580,9 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
     },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       const allSignals = runStore
-        .filter(r => r.rewardIntegrity?.gamingSignals?.length)
-        .flatMap(r =>
-          (r.rewardIntegrity?.gamingSignals ?? []).map(gs => ({
+        .filter((r) => r.rewardIntegrity?.gamingSignals?.length)
+        .flatMap((r) =>
+          (r.rewardIntegrity?.gamingSignals ?? []).map((gs) => ({
             runId: r.runId,
             runTimestamp: r.completedAt,
             ...gs,
@@ -544,15 +591,18 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
         .reverse();
 
       const bySeverity = {
-        high: allSignals.filter(s => s.severity === 'high').length,
-        medium: allSignals.filter(s => s.severity === 'medium').length,
-        low: allSignals.filter(s => s.severity === 'low').length,
+        high: allSignals.filter((s) => s.severity === 'high').length,
+        medium: allSignals.filter((s) => s.severity === 'medium').length,
+        low: allSignals.filter((s) => s.severity === 'low').length,
       };
 
-      const byType = allSignals.reduce((acc, s) => {
-        acc[s.type] = (acc[s.type] ?? 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const byType = allSignals.reduce(
+        (acc, s) => {
+          acc[s.type] = (acc[s.type] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
       return reply.send({
         signals: allSignals.slice(0, 100),
@@ -599,11 +649,23 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       let winRates: Record<string, number> | null = null;
       if (query.taskType && query.complexity) {
         const strategies = [
-          'single', 'quality-multipass', 'debate', 'collaborative',
-          'consensus', 'parallel-vote', 'hierarchical', 'speculative',
-          'iterative-deepening', 'mixture-of-experts', 'red-team',
-          'chain-of-thought', 'meta-reasoning', 'ensembled',
-          'divide-conquer', 'adaptive-routing', 'tournament',
+          'single',
+          'quality-multipass',
+          'debate',
+          'collaborative',
+          'consensus',
+          'parallel-vote',
+          'hierarchical',
+          'speculative',
+          'iterative-deepening',
+          'mixture-of-experts',
+          'red-team',
+          'chain-of-thought',
+          'meta-reasoning',
+          'ensembled',
+          'divide-conquer',
+          'adaptive-routing',
+          'tournament',
         ];
         winRates = strategyBandit.getWinRates(query.taskType, query.complexity, strategies);
       }
@@ -614,9 +676,10 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
           bestRewardRate: successStoryState.bestRewardRate,
           snapshotCount: successStoryState.snapshotCount,
           recentExecutionCount: successStoryState.recentExecutionCount,
-          lastRollbackAt: successStoryState.lastRollbackAt > 0
-            ? new Date(successStoryState.lastRollbackAt).toISOString()
-            : null,
+          lastRollbackAt:
+            successStoryState.lastRollbackAt > 0
+              ? new Date(successStoryState.lastRollbackAt).toISOString()
+              : null,
         },
         winRates,
         queryFilters: {
@@ -648,9 +711,8 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
         currentRewardRate: state.currentRewardRate,
         snapshotCount: state.snapshotCount,
         bestRewardRate: state.bestRewardRate,
-        lastRollbackAt: state.lastRollbackAt > 0
-          ? new Date(state.lastRollbackAt).toISOString()
-          : null,
+        lastRollbackAt:
+          state.lastRollbackAt > 0 ? new Date(state.lastRollbackAt).toISOString() : null,
         // Note: individual snapshot params not exposed via public API to avoid
         // leaking internal strategy weights. Only aggregate metrics shown.
       });
@@ -721,24 +783,35 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
 
       // Build per-category breakdown
       const categories = [
-        'coding-generate', 'coding-edit', 'coding-debug', 'coding-review',
-        'analysis-data', 'analysis-technical', 'analysis-text',
-        'factual-qa', 'creative', 'multi-step', 'reasoning', 'tool-use',
+        'coding-generate',
+        'coding-edit',
+        'coding-debug',
+        'coding-review',
+        'analysis-data',
+        'analysis-technical',
+        'analysis-text',
+        'factual-qa',
+        'creative',
+        'multi-step',
+        'reasoning',
+        'tool-use',
       ] as BenchmarkCategory[];
 
-      const categoryBreakdown = categories.map(cat => {
-        const tasks = getTasksByCategory(cat);
-        return {
-          category: cat,
-          taskCount: tasks.length,
-          difficulties: {
-            easy: tasks.filter(t => t.difficulty === 'easy').length,
-            medium: tasks.filter(t => t.difficulty === 'medium').length,
-            hard: tasks.filter(t => t.difficulty === 'hard').length,
-          },
-          evaluationMethods: [...new Set(tasks.map(t => t.evaluationMethod))],
-        };
-      }).filter(c => c.taskCount > 0);
+      const categoryBreakdown = categories
+        .map((cat) => {
+          const tasks = getTasksByCategory(cat);
+          return {
+            category: cat,
+            taskCount: tasks.length,
+            difficulties: {
+              easy: tasks.filter((t) => t.difficulty === 'easy').length,
+              medium: tasks.filter((t) => t.difficulty === 'medium').length,
+              hard: tasks.filter((t) => t.difficulty === 'hard').length,
+            },
+            evaluationMethods: [...new Set(tasks.map((t) => t.evaluationMethod))],
+          };
+        })
+        .filter((c) => c.taskCount > 0);
 
       return reply.send({
         ...stats,
@@ -781,13 +854,10 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
 
       // If taskType/complexity specified, return alternatives for that niche
       if (query.taskType && query.complexity) {
-        const alternatives = configurationArchive.getAlternatives(
-          query.taskType,
-          query.complexity,
-        );
+        const alternatives = configurationArchive.getAlternatives(query.taskType, query.complexity);
         return reply.send({
           query: { taskType: query.taskType, complexity: query.complexity },
-          alternatives: alternatives.map(a => ({
+          alternatives: alternatives.map((a) => ({
             dimension: a.dimension,
             strategy: a.elite.strategy,
             fitness: a.elite.fitness,
@@ -848,7 +918,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
       const recommendation = configurationArchive.getRecommendation(
         query.taskType,
         query.complexity,
-        query.preference,
+        query.preference
       );
 
       if (!recommendation) {
@@ -921,10 +991,13 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
         activeRuleCount: triageCalibrator.getState().activeRules.length,
       });
 
-      log.info({
-        overall: calibration.overall.toFixed(3),
-        complexityAccuracy: calibration.complexityAccuracy.toFixed(3),
-      }, 'Manual triage calibration triggered by admin');
+      log.info(
+        {
+          overall: calibration.overall.toFixed(3),
+          complexityAccuracy: calibration.complexityAccuracy.toFixed(3),
+        },
+        'Manual triage calibration triggered by admin'
+      );
 
       return reply.send(calibration);
     }
@@ -1051,7 +1124,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
 
       // Emit metrics
       recordParetoEvaluation({
-        frontiers: snapshot.frontiers.map(f => ({
+        frontiers: snapshot.frontiers.map((f) => ({
           taskType: f.taskType,
           complexity: f.complexity,
           frontierSize: f.frontierSize,
@@ -1084,7 +1157,7 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
 
       return reply.send({
         evaluationCount: history.length,
-        history: history.map(h => ({
+        history: history.map((h) => ({
           timestamp: h.timestamp,
           totalNiches: h.totalNiches,
           avgFrontierSize: h.avgFrontierSize,
@@ -1140,7 +1213,5 @@ export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Pro
     }
   );
 
-  log.info(
-    '✅ Benchmark admin routes registered (/v1/admin/benchmark/* — OI-01 through OI-11)',
-  );
+  log.info('✅ Benchmark admin routes registered (/v1/admin/benchmark/* — OI-01 through OI-11)');
 }

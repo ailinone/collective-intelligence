@@ -363,16 +363,24 @@ export async function createInvoice(request: CreateInvoiceRequest): Promise<Invo
     } catch (stripeError: unknown) {
       // I1 fix: Saga failure path — mark as stripe_sync_failed for reconciliation
       const errorMessage = stripeError instanceof Error ? stripeError.message : String(stripeError);
-      log.error({ invoiceId: invoice.id, error: errorMessage }, 'Stripe sync failed — invoice marked for reconciliation');
-      await prisma.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          status: 'stripe_sync_failed',
-          lastError: errorMessage,
-        },
-      }).catch((updateErr) => {
-        log.error({ invoiceId: invoice.id, updateErr: serializeError(updateErr) }, 'Failed to mark invoice as stripe_sync_failed');
-      });
+      log.error(
+        { invoiceId: invoice.id, error: errorMessage },
+        'Stripe sync failed — invoice marked for reconciliation'
+      );
+      await prisma.invoice
+        .update({
+          where: { id: invoice.id },
+          data: {
+            status: 'stripe_sync_failed',
+            lastError: errorMessage,
+          },
+        })
+        .catch((updateErr) => {
+          log.error(
+            { invoiceId: invoice.id, updateErr: serializeError(updateErr) },
+            'Failed to mark invoice as stripe_sync_failed'
+          );
+        });
       // Don't re-throw — the DB invoice exists, reconciliation job will retry
     }
   }

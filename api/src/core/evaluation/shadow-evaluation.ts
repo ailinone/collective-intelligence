@@ -101,7 +101,7 @@ export function shouldRunShadowEval(): boolean {
  */
 export async function recordShadowEvaluation(
   input: ShadowEvalInput,
-  shadow: ShadowEvalResult,
+  shadow: ShadowEvalResult
 ): Promise<void> {
   try {
     await prisma.$executeRaw`
@@ -128,13 +128,16 @@ export async function recordShadowEvaluation(
     // Track cost budget
     currentHourCostUsd += shadow.shadowCostUsd;
 
-    log.info({
-      decisionTraceId: input.decisionTraceId,
-      chosen: input.chosenStrategy,
-      shadow: shadow.shadowStrategy,
-      qualityRegret: shadow.qualityRegret.toFixed(4),
-      winner: shadow.winnerStrategy,
-    }, 'Shadow evaluation recorded');
+    log.info(
+      {
+        decisionTraceId: input.decisionTraceId,
+        chosen: input.chosenStrategy,
+        shadow: shadow.shadowStrategy,
+        qualityRegret: shadow.qualityRegret.toFixed(4),
+        winner: shadow.winnerStrategy,
+      },
+      'Shadow evaluation recorded'
+    );
   } catch (err) {
     log.warn({ error: String(err) }, 'Failed to record shadow evaluation');
   }
@@ -156,7 +159,7 @@ export async function runShadowEvaluation(
     quality: number;
     latencyMs: number;
     costUsd: number;
-  }>,
+  }>
 ): Promise<ShadowEvalResult | null> {
   if (!shouldRunShadowEval()) return null;
 
@@ -165,11 +168,12 @@ export async function runShadowEvaluation(
     const shadowResult = await executeStrategy(shadowStrategyName);
 
     const qualityRegret = shadowResult.quality - input.chosenQuality;
-    const winnerStrategy = qualityRegret > 0.02
-      ? shadowStrategyName // Shadow was meaningfully better
-      : qualityRegret < -0.02
-        ? input.chosenStrategy // Chosen was meaningfully better
-        : input.chosenStrategy; // Tie goes to chosen (no regret)
+    const winnerStrategy =
+      qualityRegret > 0.02
+        ? shadowStrategyName // Shadow was meaningfully better
+        : qualityRegret < -0.02
+          ? input.chosenStrategy // Chosen was meaningfully better
+          : input.chosenStrategy; // Tie goes to chosen (no regret)
 
     const result: ShadowEvalResult = {
       shadowStrategy: shadowStrategyName,
@@ -183,7 +187,10 @@ export async function runShadowEvaluation(
     await recordShadowEvaluation(input, result);
     return result;
   } catch (err) {
-    log.warn({ error: String(err), shadow: shadowStrategyName }, 'Shadow evaluation execution failed');
+    log.warn(
+      { error: String(err), shadow: shadowStrategyName },
+      'Shadow evaluation execution failed'
+    );
     return null;
   } finally {
     activeShadowEvals--;
@@ -203,12 +210,14 @@ export async function getShadowEvalStats(hours: number = 24): Promise<{
   try {
     const since = new Date(Date.now() - hours * 3_600_000);
 
-    const stats = await prisma.$queryRaw<Array<{
-      total: bigint;
-      avg_regret: number | null;
-      chosen_wins: bigint;
-      shadow_wins: bigint;
-    }>>`
+    const stats = await prisma.$queryRaw<
+      Array<{
+        total: bigint;
+        avg_regret: number | null;
+        chosen_wins: bigint;
+        shadow_wins: bigint;
+      }>
+    >`
       SELECT
         COUNT(*) as total,
         AVG(quality_regret) as avg_regret,
@@ -221,12 +230,14 @@ export async function getShadowEvalStats(hours: number = 24): Promise<{
     const row = stats[0];
     const total = Number(row?.total ?? 0);
 
-    const topRegret = await prisma.$queryRaw<Array<{
-      chosen_strategy: string;
-      shadow_strategy: string;
-      avg_regret: number;
-      cnt: bigint;
-    }>>`
+    const topRegret = await prisma.$queryRaw<
+      Array<{
+        chosen_strategy: string;
+        shadow_strategy: string;
+        avg_regret: number;
+        cnt: bigint;
+      }>
+    >`
       SELECT chosen_strategy, shadow_strategy, AVG(quality_regret) as avg_regret, COUNT(*) as cnt
       FROM shadow_evaluations
       WHERE created_at >= ${since} AND quality_regret > 0
@@ -240,7 +251,7 @@ export async function getShadowEvalStats(hours: number = 24): Promise<{
       avgRegret: row?.avg_regret ?? 0,
       chosenWinRate: total > 0 ? Number(row?.chosen_wins ?? 0) / total : 0,
       shadowWinRate: total > 0 ? Number(row?.shadow_wins ?? 0) / total : 0,
-      topRegretStrategies: topRegret.map(r => ({
+      topRegretStrategies: topRegret.map((r) => ({
         chosen: r.chosen_strategy,
         shadow: r.shadow_strategy,
         avgRegret: r.avg_regret,
@@ -249,7 +260,13 @@ export async function getShadowEvalStats(hours: number = 24): Promise<{
     };
   } catch (err) {
     log.warn({ error: String(err) }, 'Failed to get shadow eval stats');
-    return { totalEvals: 0, avgRegret: 0, chosenWinRate: 0, shadowWinRate: 0, topRegretStrategies: [] };
+    return {
+      totalEvals: 0,
+      avgRegret: 0,
+      chosenWinRate: 0,
+      shadowWinRate: 0,
+      topRegretStrategies: [],
+    };
   }
 }
 

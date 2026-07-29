@@ -10,13 +10,13 @@
 /**
  * Assistants API Routes
  * OpenAI-compatible assistants endpoints
- * 
+ *
  * Features:
  * - Persistent AI assistants with instructions
  * - Tool integration (code_interpreter, file_search, function calling)
  * - Multi-model support (dynamic selection)
  * - Vector stores for knowledge
- * 
+ *
  * NO HARDCODED MODELS - All model selection is dynamic
  */
 
@@ -43,8 +43,9 @@ const log = logger.child({ module: 'assistants-routes' });
  */
 function getUserContext(request: FastifyRequest): RequestUserContext {
   const extendedRequest = request as ExtendedFastifyRequest;
-  const user = extendedRequest.user as { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
-  
+  const user = extendedRequest.user as
+    { userId?: string; organizationId?: string; email?: string; name?: string } | undefined;
+
   return {
     requestId: request.id,
     organizationId: extendedRequest.organizationId || user?.organizationId || '',
@@ -60,34 +61,59 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Assistants'],
       summary: 'Create assistant',
-      description: 'Create an assistant with a model and instructions. Supports dynamic model selection based on capabilities. Assistants can be configured with custom tools, metadata, and behavior settings for specific use cases.',
+      description:
+        'Create an assistant with a model and instructions. Supports dynamic model selection based on capabilities. Assistants can be configured with custom tools, metadata, and behavior settings for specific use cases.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
         required: [],
         properties: {
-          model: { type: 'string', description: 'Model ID (e.g., "gpt-4", "claude-3-opus", or "auto" for dynamic selection)' },
+          model: {
+            type: 'string',
+            description:
+              'Model ID (e.g., "gpt-4", "claude-3-opus", or "auto" for dynamic selection)',
+          },
           name: { type: 'string', nullable: true, description: 'Name of the assistant' },
-          description: { type: 'string', nullable: true, description: 'Description of the assistant' },
-          instructions: { type: 'string', nullable: true, description: 'System instructions for the assistant' },
+          description: {
+            type: 'string',
+            nullable: true,
+            description: 'Description of the assistant',
+          },
+          instructions: {
+            type: 'string',
+            nullable: true,
+            description: 'System instructions for the assistant',
+          },
           tools: {
             type: 'array',
-            description: 'Tools available to the assistant. Each tool can be a code interpreter, file search, or custom function.',
+            description:
+              'Tools available to the assistant. Each tool can be a code interpreter, file search, or custom function.',
             items: {
               type: 'object',
               properties: {
-                type: { 
-                  type: 'string', 
+                type: {
+                  type: 'string',
                   enum: ['code_interpreter', 'file_search', 'function'],
-                  description: 'Tool type: code_interpreter (execute Python), file_search (semantic search), or function (custom function calling)',
+                  description:
+                    'Tool type: code_interpreter (execute Python), file_search (semantic search), or function (custom function calling)',
                 },
                 function: {
                   type: 'object',
                   description: 'Function tool definition (required when type is "function")',
                   properties: {
-                    name: { type: 'string', description: 'Function name (must be unique, a-z, A-Z, 0-9, _, -)' },
-                    description: { type: 'string', description: 'Function description for the model to understand when to use it' },
-                    parameters: { type: 'object', description: 'JSON Schema object defining function parameters' },
+                    name: {
+                      type: 'string',
+                      description: 'Function name (must be unique, a-z, A-Z, 0-9, _, -)',
+                    },
+                    description: {
+                      type: 'string',
+                      description:
+                        'Function description for the model to understand when to use it',
+                    },
+                    parameters: {
+                      type: 'object',
+                      description: 'JSON Schema object defining function parameters',
+                    },
                   },
                 },
               },
@@ -95,40 +121,45 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           },
           tool_resources: {
             type: 'object',
-            description: 'Resources for tool execution. Defines files and vector stores available to code_interpreter and file_search tools.',
+            description:
+              'Resources for tool execution. Defines files and vector stores available to code_interpreter and file_search tools.',
             properties: {
               code_interpreter: {
                 type: 'object',
-                description: 'Resources for code_interpreter tool. Files uploaded here can be accessed by the code interpreter.',
+                description:
+                  'Resources for code_interpreter tool. Files uploaded here can be accessed by the code interpreter.',
                 properties: {
-                  file_ids: { 
-                    type: 'array', 
+                  file_ids: {
+                    type: 'array',
                     items: { type: 'string' },
-                    description: 'Array of file IDs accessible to the code interpreter for reading and writing data',
+                    description:
+                      'Array of file IDs accessible to the code interpreter for reading and writing data',
                   },
                 },
               },
               file_search: {
                 type: 'object',
-                description: 'Resources for file_search tool. Configures vector stores for semantic search over documents.',
+                description:
+                  'Resources for file_search tool. Configures vector stores for semantic search over documents.',
                 properties: {
-                  vector_store_ids: { 
-                    type: 'array', 
+                  vector_store_ids: {
+                    type: 'array',
                     items: { type: 'string' },
                     description: 'Array of existing vector store IDs to use for file search',
                   },
                   vector_stores: {
                     type: 'array',
-                    description: 'Array of vector store configurations to create and use. Alternative to vector_store_ids.',
+                    description:
+                      'Array of vector store configurations to create and use. Alternative to vector_store_ids.',
                     items: {
                       type: 'object',
                       properties: {
-                        file_ids: { 
-                          type: 'array', 
+                        file_ids: {
+                          type: 'array',
                           items: { type: 'string' },
                           description: 'File IDs to add to this vector store for semantic search',
                         },
-                        name: { 
+                        name: {
                           type: 'string',
                           description: 'Optional name for the vector store',
                         },
@@ -139,36 +170,51 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
               },
             },
           },
-          metadata: { 
-            type: 'object', 
+          metadata: {
+            type: 'object',
             additionalProperties: { type: 'string' },
-            description: 'Optional metadata key-value pairs for the assistant. Can be used for custom organization or filtering.',
+            description:
+              'Optional metadata key-value pairs for the assistant. Can be used for custom organization or filtering.',
           },
-          temperature: { 
-            type: 'number', 
-            nullable: true, 
-            minimum: 0, 
+          temperature: {
+            type: 'number',
+            nullable: true,
+            minimum: 0,
             maximum: 2,
-            description: 'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused. Default varies by model.',
+            description:
+              'Sampling temperature (0-2). Higher values make output more random. Lower values make it more focused. Default varies by model.',
           },
-          top_p: { 
-            type: 'number', 
-            nullable: true, 
-            minimum: 0, 
+          top_p: {
+            type: 'number',
+            nullable: true,
+            minimum: 0,
             maximum: 1,
-            description: 'Nucleus sampling parameter (0-1). Consider tokens with cumulative probability up to this threshold. Alternative to temperature.',
+            description:
+              'Nucleus sampling parameter (0-1). Consider tokens with cumulative probability up to this threshold. Alternative to temperature.',
           },
           response_format: {
             oneOf: [
-              { type: 'string', enum: ['text', 'json_object'], description: 'Response format as string: "text" (default) or "json_object" (forces JSON output)' },
-              { 
-                type: 'object', 
-                properties: { type: { type: 'string', enum: ['json_object'], description: 'Must be "json_object" to force JSON output' } },
+              {
+                type: 'string',
+                enum: ['text', 'json_object'],
+                description:
+                  'Response format as string: "text" (default) or "json_object" (forces JSON output)',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['json_object'],
+                    description: 'Must be "json_object" to force JSON output',
+                  },
+                },
                 description: 'Response format as object with type field',
               },
               { type: 'null', description: 'No format restriction (default text)' },
             ],
-            description: 'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
+            description:
+              'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
           },
         },
       },
@@ -231,7 +277,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: [authenticateRequest, requireTenantContext()],
-    handler: async (request: FastifyRequest<{ Body: Omit<CreateAssistantRequest, 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Body: Omit<CreateAssistantRequest, 'userContext' | 'requestId'> }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const body = request.body as Omit<CreateAssistantRequest, 'userContext' | 'requestId'>;
@@ -254,7 +303,8 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Assistants'],
       summary: 'Retrieve assistant',
-      description: 'Retrieve a specific assistant by ID. Returns complete assistant details including model configuration, instructions, tools, and metadata. The assistant can be used for conversations and task execution. This endpoint provides full access to all assistant settings and configuration.',
+      description:
+        'Retrieve a specific assistant by ID. Returns complete assistant details including model configuration, instructions, tools, and metadata. The assistant can be used for conversations and task execution. This endpoint provides full access to all assistant settings and configuration.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -270,33 +320,59 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           properties: {
             id: { type: 'string', description: 'Assistant ID' },
             object: { type: 'string', enum: ['assistant'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the assistant was created' },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the assistant was created',
+            },
             name: { type: 'string', nullable: true, description: 'Assistant name' },
             description: { type: 'string', nullable: true, description: 'Assistant description' },
             model: { type: 'string', description: 'Model ID used by the assistant' },
-            instructions: { type: 'string', nullable: true, description: 'System instructions for the assistant' },
+            instructions: {
+              type: 'string',
+              nullable: true,
+              description: 'System instructions for the assistant',
+            },
             tools: { type: 'array', description: 'Array of tools available to the assistant' },
-            tool_resources: { type: 'object', nullable: true, description: 'Resources for tool execution (files, vector stores)' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs' },
-            temperature: { type: 'number', nullable: true, description: 'Sampling temperature (0-2)' },
-            top_p: { type: 'number', nullable: true, description: 'Nucleus sampling parameter (0-1)' },
+            tool_resources: {
+              type: 'object',
+              nullable: true,
+              description: 'Resources for tool execution (files, vector stores)',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs',
+            },
+            temperature: {
+              type: 'number',
+              nullable: true,
+              description: 'Sampling temperature (0-2)',
+            },
+            top_p: {
+              type: 'number',
+              nullable: true,
+              description: 'Nucleus sampling parameter (0-1)',
+            },
             response_format: {
               oneOf: [
-                { 
-                  type: 'string', 
+                {
+                  type: 'string',
                   enum: ['text', 'json_object'],
-                  description: 'Response format as string: "text" (default) or "json_object" (forces JSON output)',
+                  description:
+                    'Response format as string: "text" (default) or "json_object" (forces JSON output)',
                 },
-                { 
+                {
                   type: 'object',
-                  description: 'Response format as object with type field (e.g., { type: "json_object" })',
+                  description:
+                    'Response format as object with type field (e.g., { type: "json_object" })',
                 },
-                { 
+                {
                   type: 'null',
                   description: 'No format restriction (default text)',
                 },
               ],
-              description: 'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
+              description:
+                'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
             },
           },
         },
@@ -307,7 +383,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -335,7 +414,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "assistant_not_found")' },
               },
@@ -349,7 +431,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -359,13 +444,16 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { assistant_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const result = await assistantsService.getAssistant({ 
-          assistantId: request.params.assistant_id, 
-          userContext, 
-          requestId: request.id 
+        const result = await assistantsService.getAssistant({
+          assistantId: request.params.assistant_id,
+          userContext,
+          requestId: request.id,
         });
         return reply.send(result);
       } catch (error: unknown) {
@@ -379,7 +467,8 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Assistants'],
       summary: 'Modify assistant',
-      description: 'Modify an assistant. Only provided fields will be updated. This allows partial updates to assistant configuration, including model settings, tools, instructions, and metadata. All fields are optional and only the provided ones will be changed.',
+      description:
+        'Modify an assistant. Only provided fields will be updated. This allows partial updates to assistant configuration, including model settings, tools, instructions, and metadata. All fields are optional and only the provided ones will be changed.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -392,54 +481,74 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         type: 'object',
         required: [],
         properties: {
-          model: { 
+          model: {
             type: 'string',
-            description: 'Model ID to update (e.g., "gpt-4", "claude-3-opus", or "auto" for dynamic selection)',
+            description:
+              'Model ID to update (e.g., "gpt-4", "claude-3-opus", or "auto" for dynamic selection)',
           },
-          name: { 
-            type: 'string', 
+          name: {
+            type: 'string',
             nullable: true,
             description: 'Assistant name. Set to null to remove the name.',
           },
-          description: { 
-            type: 'string', 
+          description: {
+            type: 'string',
             nullable: true,
             description: 'Assistant description. Set to null to remove the description.',
           },
-          instructions: { 
-            type: 'string', 
+          instructions: {
+            type: 'string',
             nullable: true,
-            description: 'System instructions for the assistant. Set to null to remove instructions.',
+            description:
+              'System instructions for the assistant. Set to null to remove instructions.',
           },
-          tools: { 
+          tools: {
             type: 'array',
-            description: 'Array of tools available to the assistant. Replaces existing tools if provided.',
+            description:
+              'Array of tools available to the assistant. Replaces existing tools if provided.',
           },
-          tool_resources: { 
+          tool_resources: {
             type: 'object',
-            description: 'Resources for tool execution (files, vector stores). Replaces existing resources if provided.',
+            description:
+              'Resources for tool execution (files, vector stores). Replaces existing resources if provided.',
           },
-          metadata: { 
+          metadata: {
             type: 'object',
             description: 'Metadata key-value pairs. Replaces all existing metadata if provided.',
           },
-          temperature: { 
-            type: 'number', 
+          temperature: {
+            type: 'number',
             nullable: true,
             description: 'Sampling temperature (0-2). Set to null to use model default.',
           },
-          top_p: { 
-            type: 'number', 
+          top_p: {
+            type: 'number',
             nullable: true,
             description: 'Nucleus sampling parameter (0-1). Set to null to use model default.',
           },
           response_format: {
             oneOf: [
-              { type: 'string', enum: ['text', 'json_object'], description: 'Response format as string: "text" (default) or "json_object" (forces JSON output)' },
-              { type: 'object', properties: { type: { type: 'string', enum: ['json_object'], description: 'Must be "json_object" to force JSON output' } }, description: 'Response format as object with type field' },
+              {
+                type: 'string',
+                enum: ['text', 'json_object'],
+                description:
+                  'Response format as string: "text" (default) or "json_object" (forces JSON output)',
+              },
+              {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['json_object'],
+                    description: 'Must be "json_object" to force JSON output',
+                  },
+                },
+                description: 'Response format as object with type field',
+              },
               { type: 'null', description: 'No format restriction (default text)' },
             ],
-            description: 'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode. Set to null to use default.',
+            description:
+              'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode. Set to null to use default.',
           },
         },
       },
@@ -450,33 +559,59 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           properties: {
             id: { type: 'string', description: 'Assistant ID' },
             object: { type: 'string', enum: ['assistant'], description: 'Object type identifier' },
-            created_at: { type: 'integer', description: 'Unix timestamp when the assistant was created' },
+            created_at: {
+              type: 'integer',
+              description: 'Unix timestamp when the assistant was created',
+            },
             name: { type: 'string', nullable: true, description: 'Assistant name' },
             description: { type: 'string', nullable: true, description: 'Assistant description' },
             model: { type: 'string', description: 'Model ID used by the assistant' },
-            instructions: { type: 'string', nullable: true, description: 'System instructions for the assistant' },
+            instructions: {
+              type: 'string',
+              nullable: true,
+              description: 'System instructions for the assistant',
+            },
             tools: { type: 'array', description: 'Array of tools available to the assistant' },
-            tool_resources: { type: 'object', nullable: true, description: 'Resources for tool execution (files, vector stores)' },
-            metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Metadata key-value pairs' },
-            temperature: { type: 'number', nullable: true, description: 'Sampling temperature (0-2)' },
-            top_p: { type: 'number', nullable: true, description: 'Nucleus sampling parameter (0-1)' },
+            tool_resources: {
+              type: 'object',
+              nullable: true,
+              description: 'Resources for tool execution (files, vector stores)',
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: { type: 'string' },
+              description: 'Metadata key-value pairs',
+            },
+            temperature: {
+              type: 'number',
+              nullable: true,
+              description: 'Sampling temperature (0-2)',
+            },
+            top_p: {
+              type: 'number',
+              nullable: true,
+              description: 'Nucleus sampling parameter (0-1)',
+            },
             response_format: {
               oneOf: [
-                { 
-                  type: 'string', 
+                {
+                  type: 'string',
                   enum: ['text', 'json_object'],
-                  description: 'Response format as string: "text" (default) or "json_object" (forces JSON output)',
+                  description:
+                    'Response format as string: "text" (default) or "json_object" (forces JSON output)',
                 },
-                { 
+                {
                   type: 'object',
-                  description: 'Response format as object with type field (e.g., { type: "json_object" })',
+                  description:
+                    'Response format as object with type field (e.g., { type: "json_object" })',
                 },
-                { 
+                {
                   type: 'null',
                   description: 'No format restriction (default text)',
                 },
               ],
-              description: 'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
+              description:
+                'Response format specification. Use "json_object" or { type: "json_object" } to force JSON responses. Requires model support for JSON mode.',
             },
           },
         },
@@ -487,7 +622,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -509,15 +647,24 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           },
         },
         404: {
-          description: 'Assistant not found or referenced resource not found (e.g., file, vector store)',
+          description:
+            'Assistant not found or referenced resource not found (e.g., file, vector store)',
           type: 'object',
           properties: {
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant or referenced resource was not found' },
+                message: {
+                  type: 'string',
+                  description:
+                    'Error message indicating the assistant or referenced resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "assistant_not_found", "file_not_found", "vector_store_not_found")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "assistant_not_found", "file_not_found", "vector_store_not_found")',
+                },
               },
             },
           },
@@ -529,7 +676,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -539,10 +689,19 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string }; Body: Omit<ModifyAssistantRequest, 'assistantId' | 'userContext' | 'requestId'> }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { assistant_id: string };
+        Body: Omit<ModifyAssistantRequest, 'assistantId' | 'userContext' | 'requestId'>;
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const body = request.body as Omit<ModifyAssistantRequest, 'assistantId' | 'userContext' | 'requestId'>;
+        const body = request.body as Omit<
+          ModifyAssistantRequest,
+          'assistantId' | 'userContext' | 'requestId'
+        >;
         const modifyRequest: ModifyAssistantRequest = {
           assistantId: request.params.assistant_id,
           ...body,
@@ -563,7 +722,8 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
     schema: {
       tags: ['Assistants'],
       summary: 'Delete assistant',
-      description: 'Permanently delete an assistant. This action cannot be undone. All associated data, including vector stores and file associations, will be removed. The assistant ID will no longer be valid after deletion.',
+      description:
+        'Permanently delete an assistant. This action cannot be undone. All associated data, including vector stores and file associations, will be removed. The assistant ID will no longer be valid after deletion.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -589,7 +749,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -617,7 +780,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "assistant_not_found")' },
               },
@@ -631,7 +797,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -641,13 +810,16 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { assistant_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
-        const result = await assistantsService.deleteAssistant({ 
-          assistantId: request.params.assistant_id, 
-          userContext, 
-          requestId: request.id 
+        const result = await assistantsService.deleteAssistant({
+          assistantId: request.params.assistant_id,
+          userContext,
+          requestId: request.id,
         });
         return reply.send(result);
       } catch (error: unknown) {
@@ -678,7 +850,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           },
           after: { type: 'string', description: 'Cursor for pagination (after this ID)' },
           before: { type: 'string', description: 'Cursor for pagination (before this ID)' },
-          order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort order (default: desc)' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: 'Sort order (default: desc)',
+          },
         },
       },
       response: {
@@ -705,9 +881,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
                 },
               },
             },
-            has_more: { 
+            has_more: {
               type: 'boolean',
-              description: 'Whether more assistants are available beyond this page (true if additional pages exist)',
+              description:
+                'Whether more assistants are available beyond this page (true if additional pages exist)',
             },
             first_id: {
               type: 'string',
@@ -728,7 +905,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -756,7 +936,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -766,7 +949,17 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: [authenticateRequest, requireTenantContext()],
-    handler: async (request: FastifyRequest<{ Querystring: { limit?: number | string; after?: string; before?: string; order?: 'asc' | 'desc' } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Querystring: {
+          limit?: number | string;
+          after?: string;
+          before?: string;
+          order?: 'asc' | 'desc';
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         // Parse limit - can be string from query params
@@ -782,13 +975,13 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
           }
         }
 
-        const result = await assistantsService.listAssistants({ 
-          limit, 
+        const result = await assistantsService.listAssistants({
+          limit,
           after: request.query.after,
           before: request.query.before,
           order: request.query.order || 'desc',
-          userContext, 
-          requestId: request.id 
+          userContext,
+          requestId: request.id,
         });
         return reply.send({ object: 'list', data: result.assistants, has_more: result.has_more });
       } catch (error: unknown) {
@@ -801,10 +994,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
 
   // POST /v1/assistants/{id}/files
   server.post('/v1/assistants/:assistant_id/files', {
-    schema: { 
-      tags: ['Assistants'], 
+    schema: {
+      tags: ['Assistants'],
       summary: 'Create assistant file',
-      description: 'Associate a file with an assistant. Files associated with assistants can be used by tools like file_search for semantic search and retrieval. The file must first be uploaded via the Files API before it can be associated with an assistant.',
+      description:
+        'Associate a file with an assistant. Files associated with assistants can be used by tools like file_search for semantic search and retrieval. The file must first be uploaded via the Files API before it can be associated with an assistant.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -817,7 +1011,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         type: 'object',
         required: ['file_id'],
         properties: {
-          file_id: { type: 'string', description: 'The ID of the file to associate with the assistant' },
+          file_id: {
+            type: 'string',
+            description: 'The ID of the file to associate with the assistant',
+          },
         },
       },
       response: {
@@ -838,7 +1035,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -866,9 +1066,15 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant or file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant or file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "assistant_not_found" or "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "assistant_not_found" or "file_not_found")',
+                },
               },
             },
           },
@@ -880,7 +1086,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -890,7 +1099,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string }; Body: { file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { assistant_id: string }; Body: { file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const createRequest: CreateAssistantFileRequest = {
@@ -911,10 +1123,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
 
   // GET /v1/assistants/{id}/files
   server.get('/v1/assistants/:assistant_id/files', {
-    schema: { 
-      tags: ['Assistants'], 
+    schema: {
+      tags: ['Assistants'],
       summary: 'List assistant files',
-      description: 'List all files associated with an assistant. Returns a paginated list of file associations that can be used by the assistant\'s tools (e.g., file_search for semantic search). Supports cursor-based pagination.',
+      description:
+        "List all files associated with an assistant. Returns a paginated list of file associations that can be used by the assistant's tools (e.g., file_search for semantic search). Supports cursor-based pagination.",
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -935,7 +1148,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             default: 20,
             description: 'Number of files to return (1-100, default: 20)',
           },
-          order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort order (default: desc)' },
+          order: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            description: 'Sort order (default: desc)',
+          },
           after: { type: 'string', description: 'Cursor for pagination (after this ID)' },
           before: { type: 'string', description: 'Cursor for pagination (before this ID)' },
         },
@@ -958,9 +1175,20 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
                 },
               },
             },
-            has_more: { type: 'boolean', description: 'Whether more items are available beyond this page' },
-            first_id: { type: 'string', nullable: true, description: 'ID of the first item in this list (for pagination)' },
-            last_id: { type: 'string', nullable: true, description: 'ID of the last item in this list (for pagination)' },
+            has_more: {
+              type: 'boolean',
+              description: 'Whether more items are available beyond this page',
+            },
+            first_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the first item in this list (for pagination)',
+            },
+            last_id: {
+              type: 'string',
+              nullable: true,
+              description: 'ID of the last item in this list (for pagination)',
+            },
           },
         },
         400: {
@@ -970,7 +1198,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -998,7 +1229,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "assistant_not_found")' },
               },
@@ -1012,7 +1246,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1022,7 +1259,18 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string }; Querystring: { limit?: number | string; order?: 'asc' | 'desc'; after?: string; before?: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{
+        Params: { assistant_id: string };
+        Querystring: {
+          limit?: number | string;
+          order?: 'asc' | 'desc';
+          after?: string;
+          before?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         let limit: number = 20;
@@ -1058,10 +1306,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
 
   // GET /v1/assistants/{id}/files/{file_id}
   server.get('/v1/assistants/:assistant_id/files/:file_id', {
-    schema: { 
-      tags: ['Assistants'], 
+    schema: {
+      tags: ['Assistants'],
       summary: 'Get assistant file',
-      description: 'Retrieve information about a specific file associated with an assistant. Returns metadata about the file association, including when it was created and the file ID. Use this to verify file associations for tools like file_search.',
+      description:
+        'Retrieve information about a specific file associated with an assistant. Returns metadata about the file association, including when it was created and the file ID. Use this to verify file associations for tools like file_search.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1089,7 +1338,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1117,9 +1369,15 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant or file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant or file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "assistant_not_found" or "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "assistant_not_found" or "file_not_found")',
+                },
               },
             },
           },
@@ -1131,7 +1389,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1141,7 +1402,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const getRequest: GetAssistantFileRequest = {
@@ -1154,7 +1418,8 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         return reply.send(result);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
+        const statusCode =
+          errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
         return reply.code(statusCode).send({ error: { message: errorMessage } });
       }
     },
@@ -1162,10 +1427,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
 
   // DELETE /v1/assistants/{id}/files/{file_id}
   server.delete('/v1/assistants/:assistant_id/files/:file_id', {
-    schema: { 
-      tags: ['Assistants'], 
+    schema: {
+      tags: ['Assistants'],
       summary: 'Delete assistant file',
-      description: 'Remove a file association from an assistant. This disconnects the file from the assistant, preventing it from being used by tools like file_search. The file itself is not deleted and can be re-associated later if needed.',
+      description:
+        'Remove a file association from an assistant. This disconnects the file from the assistant, preventing it from being used by tools like file_search. The file itself is not deleted and can be re-associated later if needed.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       params: {
         type: 'object',
@@ -1192,7 +1458,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -1220,9 +1489,15 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the assistant or file was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the assistant or file was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "assistant_not_found" or "file_not_found")' },
+                code: {
+                  type: 'string',
+                  description: 'Error code (e.g., "assistant_not_found" or "file_not_found")',
+                },
               },
             },
           },
@@ -1234,7 +1509,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -1244,7 +1522,10 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
       },
     },
     preHandler: authenticateRequest,
-    handler: async (request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>, reply: FastifyReply) => {
+    handler: async (
+      request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>,
+      reply: FastifyReply
+    ) => {
       const userContext = getUserContext(request);
       try {
         const deleteRequest: DeleteAssistantFileRequest = {
@@ -1257,7 +1538,8 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         return reply.send(result);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
+        const statusCode =
+          errorMessage.includes('not found') || errorMessage.includes('not associated') ? 404 : 500;
         return reply.code(statusCode).send({ error: { message: errorMessage } });
       }
     },

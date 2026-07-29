@@ -55,7 +55,7 @@ export const BASE_CAP_MIN_CONFIDENCE = 0.05;
  * claims that a human reviewer would describe as "well-supported".
  */
 const DERIVED_CONFIDENCE = 0.85;
-const DERIVED_CONFIDENCE_CONSERVATIVE = 0.70;
+const DERIVED_CONFIDENCE_CONSERVATIVE = 0.7;
 
 /**
  * Damping factor for derived confidence when bases are weak.
@@ -63,7 +63,7 @@ const DERIVED_CONFIDENCE_CONSERVATIVE = 0.70;
  * is below 0.5, preventing a "vision@name-regex + text@name-regex → VQA@0.85"
  * inflation. Keeps the derived signal never stronger than its weakest input.
  */
-const DERIVATION_FLOOR_DAMPING = 0.90;
+const DERIVATION_FLOOR_DAMPING = 0.9;
 
 interface StructuralRule {
   target: ModelCapability;
@@ -88,17 +88,20 @@ const RULES: readonly StructuralRule[] = [
   {
     target: 'image_captioning',
     requiresAll: ['vision', 'text_generation'],
-    rationale: 'Vision input + text output is the canonical image-captioning pipeline. GPT-4o, Claude 3.x, Gemini 1.5+ all expose this as their default vision behavior.',
+    rationale:
+      'Vision input + text output is the canonical image-captioning pipeline. GPT-4o, Claude 3.x, Gemini 1.5+ all expose this as their default vision behavior.',
   },
   {
     target: 'visual_question_answering',
     requiresAll: ['vision', 'chat'],
-    rationale: 'Vision + chat implies the model accepts an image alongside a question — the definitional VQA setup. Universally true for chat-capable multimodal models.',
+    rationale:
+      'Vision + chat implies the model accepts an image alongside a question — the definitional VQA setup. Universally true for chat-capable multimodal models.',
   },
   {
     target: 'pdf_understanding',
     requiresAll: ['vision', 'multimodal'],
-    rationale: 'Vision + multimodal models typically accept PDF as an image/document modality (Claude 3.5 Sonnet+, Gemini 1.5+). Weaker claim for "multimodal" alone, so require both.',
+    rationale:
+      'Vision + multimodal models typically accept PDF as an image/document modality (Claude 3.5 Sonnet+, Gemini 1.5+). Weaker claim for "multimodal" alone, so require both.',
     confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
   },
 
@@ -115,7 +118,8 @@ const RULES: readonly StructuralRule[] = [
       ['refactoring'],
       ['code_interpreter'],
     ],
-    rationale: 'Coding is the umbrella term for the code-narrower set. Possessing any specialised code capability implies the umbrella.',
+    rationale:
+      'Coding is the umbrella term for the code-narrower set. Possessing any specialised code capability implies the umbrella.',
     confidence: DERIVED_CONFIDENCE,
   },
 
@@ -123,7 +127,8 @@ const RULES: readonly StructuralRule[] = [
   {
     target: 'agents',
     requiresAll: ['tool_use', 'function_calling'],
-    rationale: 'Tool-use + function-calling is the minimal substrate for agent behavior (loops, planning, sub-task dispatch). Models without tools cannot drive an agent.',
+    rationale:
+      'Tool-use + function-calling is the minimal substrate for agent behavior (loops, planning, sub-task dispatch). Models without tools cannot drive an agent.',
     confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
   },
 
@@ -134,7 +139,8 @@ const RULES: readonly StructuralRule[] = [
   {
     target: 'qa',
     requiresAll: ['chat', 'reasoning'],
-    rationale: 'Reasoning-capable chat models are the target for structured QA benchmarks (MMLU, ARC, MATH). Plain chat alone would inflate recall.',
+    rationale:
+      'Reasoning-capable chat models are the target for structured QA benchmarks (MMLU, ARC, MATH). Plain chat alone would inflate recall.',
     confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
   },
 
@@ -145,8 +151,9 @@ const RULES: readonly StructuralRule[] = [
   {
     target: 'tts',
     requiresAll: ['text_to_speech'],
-    rationale: 'Legacy alias — text_to_speech and tts denote the same capability. Consolidate in ontology later; derive here to close the coverage gap.',
-    confidence: 0.90,
+    rationale:
+      'Legacy alias — text_to_speech and tts denote the same capability. Consolidate in ontology later; derive here to close the coverage gap.',
+    confidence: 0.9,
   },
 ];
 
@@ -168,7 +175,7 @@ export function deriveStructuralSignals(model: CapabilityReadable): CapabilitySi
     const uri = LEGACY_CAPABILITY_TO_URI[cap];
     if (!uri || !uriSet.has(uri)) return 0;
     const conf = confidenceByUri[uri];
-    if (typeof conf !== 'number') return 0.5;  // legacy rows without confidence map — treat as moderate
+    if (typeof conf !== 'number') return 0.5; // legacy rows without confidence map — treat as moderate
     return conf >= BASE_CAP_MIN_CONFIDENCE ? conf : 0;
   };
 

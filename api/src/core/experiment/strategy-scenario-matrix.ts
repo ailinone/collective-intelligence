@@ -129,7 +129,7 @@ export interface StrategyScenarioMatrix {
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 const METHODOLOGY_NOTE =
-  'Per-strategy scoreboard vs the BEST single MODEL\'s mean performance per task ' +
+  "Per-strategy scoreboard vs the BEST single MODEL's mean performance per task " +
   '(repetitions averaged per model BEFORE picking the best model — never the ' +
   'raw max across every single-model execution, which mixes models and ' +
   'repetitions and is a biased "luckiest draw" baseline that can fabricate ' +
@@ -172,7 +172,10 @@ function strategyLabel(r: ExperimentExecutionResult): string | null {
   }
 }
 
-function scenarioOf(r: ExperimentExecutionResult): { key: string; kind: StrategyScenarioCell['scenarioKind'] } {
+function scenarioOf(r: ExperimentExecutionResult): {
+  key: string;
+  kind: StrategyScenarioCell['scenarioKind'];
+} {
   const regime = CONFIRMATORY_REGISTRY.find((g) => g.taskType === r.taskType);
   if (regime) return { key: regime.key, kind: 'confirmatory-regime' };
   return { key: `${r.taskType}/${r.complexity}`, kind: 'exploratory' };
@@ -214,7 +217,11 @@ interface SingleModelTaskBaseline {
  * comparator for a WIN or a LOSS claim alike.
  */
 function bestSingleModelMeanPerTask(rows: ExperimentExecutionResult[]): SingleModelTaskBaseline[] {
-  interface Group { taskIndex: number; qualities: number[]; costs: number[] }
+  interface Group {
+    taskIndex: number;
+    qualities: number[];
+    costs: number[];
+  }
   const groups = new Map<string, Group>();
   for (const r of rows) {
     if (!Number.isFinite(r.qualityScore)) continue;
@@ -238,7 +245,11 @@ function bestSingleModelMeanPerTask(rows: ExperimentExecutionResult[]): SingleMo
       byTask.set(g.taskIndex, { value: meanQuality, costUsd: meanCost });
     }
   }
-  return [...byTask.entries()].map(([taskIndex, v]) => ({ taskIndex, value: v.value, costUsd: v.costUsd }));
+  return [...byTask.entries()].map(([taskIndex, v]) => ({
+    taskIndex,
+    value: v.value,
+    costUsd: v.costUsd,
+  }));
 }
 
 function avgCost(rows: ExperimentExecutionResult[]): number {
@@ -268,7 +279,7 @@ function classifyCell(deltas: number[], qValue: number | null): MatrixVerdict {
 export function generateStrategyScenarioMatrix(
   experimentId: string,
   results: ExperimentExecutionResult[],
-  _thresholds: GoNoGoThresholds = DEFAULT_THRESHOLDS,
+  _thresholds: GoNoGoThresholds = DEFAULT_THRESHOLDS
 ): StrategyScenarioMatrix {
   // Attempted-execution tally (successRate denominator) — computed from EVERY
   // row regardless of success/phase, so a strategy cannot look flawless purely
@@ -337,7 +348,10 @@ export function generateStrategyScenarioMatrix(
 
   for (const [scenarioKey, bucket] of scenarios) {
     const baseline = bestSingleModelMeanPerTask(bucket.singles);
-    const baselineScores: TaskScore[] = baseline.map((b) => ({ taskIndex: b.taskIndex, value: b.value }));
+    const baselineScores: TaskScore[] = baseline.map((b) => ({
+      taskIndex: b.taskIndex,
+      value: b.value,
+    }));
     const baselineCostByTask = new Map(baseline.map((b) => [b.taskIndex, b.costUsd]));
 
     for (const [strategy, rows] of bucket.byStrategy) {
@@ -346,7 +360,9 @@ export function generateStrategyScenarioMatrix(
       const shared = sharedTaskIndices(strategyScores, baselineScores);
       const pValue = deltas.length >= 2 ? pairedTTest(deltas).pValue : null;
       const attemptedExecutions = attemptedByCell.get(`${strategy}|${scenarioKey}`) ?? rows.length;
-      const sharedCosts = shared.map((ti) => baselineCostByTask.get(ti)).filter((c): c is number => c != null);
+      const sharedCosts = shared
+        .map((ti) => baselineCostByTask.get(ti))
+        .filter((c): c is number => c != null);
       pending.push({
         strategy,
         scenario: scenarioKey,
@@ -355,7 +371,8 @@ export function generateStrategyScenarioMatrix(
         pValue,
         shared,
         strategyAvgCostUsd: avgCost(rows),
-        bestSingleAvgCostUsd: sharedCosts.length > 0 ? sharedCosts.reduce((s, v) => s + v, 0) / sharedCosts.length : 0,
+        bestSingleAvgCostUsd:
+          sharedCosts.length > 0 ? sharedCosts.reduce((s, v) => s + v, 0) / sharedCosts.length : 0,
         successRate: attemptedExecutions > 0 ? rows.length / attemptedExecutions : 0,
         attemptedExecutions,
       });
@@ -389,32 +406,40 @@ export function generateStrategyScenarioMatrix(
   // by task against the global best-single-model baseline) + overall
   // reliability. Sort winners-first, with a deterministic final tiebreak by
   // strategy name so equal-record rows do not depend on input row order.
-  const globalBaseline = bestSingleModelMeanPerTask(measured.filter((r) => r.executionMode === 'single-model'));
-  const globalBaselineScores: TaskScore[] = globalBaseline.map((b) => ({ taskIndex: b.taskIndex, value: b.value }));
-  const scoreboard: StrategyScoreboardRow[] = [...allStrategies].map((strategy) => {
-    const own = cells.filter((c) => c.strategy === strategy);
-    const tally = (v: MatrixVerdict) => own.filter((c) => c.verdict === v).length;
-    const strategyRows = measured.filter((r) => strategyLabel(r) === strategy);
-    const overallDeltas = pairByTaskDeltas(toTaskScores(strategyRows), globalBaselineScores);
-    const overallAttempted = attemptedByStrategy.get(strategy) ?? strategyRows.length;
-    return {
-      strategy,
-      wins: tally('WIN'),
-      ties: tally('TIE'),
-      losses: tally('LOSS'),
-      undecided: tally('UNDECIDED'),
-      insufficientData: tally('INSUFFICIENT_DATA'),
-      overallPairedDeltaMean: meanDelta(overallDeltas),
-      overallSharedTaskCount: overallDeltas.length,
-      overallSuccessRate: overallAttempted > 0 ? strategyRows.length / overallAttempted : 0,
-      overallAttemptedExecutions: overallAttempted,
-    };
-  }).sort((a, b) =>
-    b.wins - a.wins ||
-    a.losses - b.losses ||
-    b.overallPairedDeltaMean - a.overallPairedDeltaMean ||
-    a.strategy.localeCompare(b.strategy),
+  const globalBaseline = bestSingleModelMeanPerTask(
+    measured.filter((r) => r.executionMode === 'single-model')
   );
+  const globalBaselineScores: TaskScore[] = globalBaseline.map((b) => ({
+    taskIndex: b.taskIndex,
+    value: b.value,
+  }));
+  const scoreboard: StrategyScoreboardRow[] = [...allStrategies]
+    .map((strategy) => {
+      const own = cells.filter((c) => c.strategy === strategy);
+      const tally = (v: MatrixVerdict) => own.filter((c) => c.verdict === v).length;
+      const strategyRows = measured.filter((r) => strategyLabel(r) === strategy);
+      const overallDeltas = pairByTaskDeltas(toTaskScores(strategyRows), globalBaselineScores);
+      const overallAttempted = attemptedByStrategy.get(strategy) ?? strategyRows.length;
+      return {
+        strategy,
+        wins: tally('WIN'),
+        ties: tally('TIE'),
+        losses: tally('LOSS'),
+        undecided: tally('UNDECIDED'),
+        insufficientData: tally('INSUFFICIENT_DATA'),
+        overallPairedDeltaMean: meanDelta(overallDeltas),
+        overallSharedTaskCount: overallDeltas.length,
+        overallSuccessRate: overallAttempted > 0 ? strategyRows.length / overallAttempted : 0,
+        overallAttemptedExecutions: overallAttempted,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.wins - a.wins ||
+        a.losses - b.losses ||
+        b.overallPairedDeltaMean - a.overallPairedDeltaMean ||
+        a.strategy.localeCompare(b.strategy)
+    );
 
   return {
     experimentId,

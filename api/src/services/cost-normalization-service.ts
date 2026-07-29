@@ -64,21 +64,21 @@ export interface CostRecord {
  */
 const DEFAULT_PRICING_PER_1K: Record<string, { input: number; output: number }> = {
   // Frontier models
-  'gpt-5': { input: 0.015, output: 0.060 },
-  'gpt-4': { input: 0.010, output: 0.030 },
+  'gpt-5': { input: 0.015, output: 0.06 },
+  'gpt-4': { input: 0.01, output: 0.03 },
   'claude-opus': { input: 0.015, output: 0.075 },
   'claude-sonnet': { input: 0.003, output: 0.015 },
   'claude-haiku': { input: 0.00025, output: 0.00125 },
   'gemini-pro': { input: 0.001, output: 0.002 },
   'gemini-flash': { input: 0.0001, output: 0.0004 },
   'mistral-large': { input: 0.004, output: 0.012 },
-  'grok': { input: 0.005, output: 0.015 },
+  grok: { input: 0.005, output: 0.015 },
   // Budget models
-  'deepseek': { input: 0.00014, output: 0.00028 },
-  'qwen': { input: 0.0002, output: 0.0006 },
-  'llama': { input: 0.0002, output: 0.0006 },
+  deepseek: { input: 0.00014, output: 0.00028 },
+  qwen: { input: 0.0002, output: 0.0006 },
+  llama: { input: 0.0002, output: 0.0006 },
   // Generic fallback
-  '_default': { input: 0.002, output: 0.006 },
+  _default: { input: 0.002, output: 0.006 },
 };
 
 // ─── Service ────────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ export function normalizeCost(
   inputTokens?: number,
   outputTokens?: number,
   modelInputCostPer1k?: number,
-  modelOutputCostPer1k?: number,
+  modelOutputCostPer1k?: number
 ): CostRecord {
   const hub = getProviderOperabilityHub();
   const isSelfHosted = hub.isSelfHostedProvider(provider);
@@ -141,7 +141,8 @@ export function normalizeCost(
 
     // Try DB pricing first
     const dbInputCost = modelInputCostPer1k && modelInputCostPer1k > 0 ? modelInputCostPer1k : 0;
-    const dbOutputCost = modelOutputCostPer1k && modelOutputCostPer1k > 0 ? modelOutputCostPer1k : 0;
+    const dbOutputCost =
+      modelOutputCostPer1k && modelOutputCostPer1k > 0 ? modelOutputCostPer1k : 0;
 
     if (dbInputCost > 0 || dbOutputCost > 0) {
       const estimated = (inTokens / 1000) * dbInputCost + (outTokens / 1000) * dbOutputCost;
@@ -159,7 +160,8 @@ export function normalizeCost(
     // Try family-based pricing
     const familyPricing = matchFamilyPricing(modelId);
     if (familyPricing) {
-      const estimated = (inTokens / 1000) * familyPricing.input + (outTokens / 1000) * familyPricing.output;
+      const estimated =
+        (inTokens / 1000) * familyPricing.input + (outTokens / 1000) * familyPricing.output;
       return {
         rawCostUsd: rawCost,
         normalizedCostUsd: Math.max(estimated, 0.000001),
@@ -199,7 +201,9 @@ export function normalizeCost(
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function matchFamilyPricing(modelId: string): { family: string; input: number; output: number } | null {
+function matchFamilyPricing(
+  modelId: string
+): { family: string; input: number; output: number } | null {
   const lowered = modelId.toLowerCase();
 
   for (const [family, pricing] of Object.entries(DEFAULT_PRICING_PER_1K)) {
@@ -226,7 +230,8 @@ function matchFamilyPricing(modelId: string): { family: string; input: number; o
  */
 export function effectiveCostForSorting(costRecord: CostRecord): number {
   if (costRecord.costSource === 'genuinely_free') return 0;
-  if (costRecord.normalizedCostUsd !== null && costRecord.normalizedCostUsd > 0) return costRecord.normalizedCostUsd;
+  if (costRecord.normalizedCostUsd !== null && costRecord.normalizedCostUsd > 0)
+    return costRecord.normalizedCostUsd;
   if (costRecord.costSource === 'missing') return Number.MAX_SAFE_INTEGER;
   return costRecord.normalizedCostUsd ?? Number.MAX_SAFE_INTEGER;
 }

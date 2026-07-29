@@ -35,7 +35,7 @@ const SOURCES: Record<string, string> = {
   'candidate-sorter.ts': resolve(__dirname, '..', 'candidate-sorter.ts'),
   'model-capability-document-builder.ts': resolve(
     __dirname,
-    '../../capabilities/model-capability-document-builder.ts',
+    '../../capabilities/model-capability-document-builder.ts'
   ),
 };
 

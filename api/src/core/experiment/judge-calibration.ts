@@ -76,7 +76,7 @@ export interface CalibrationReport {
   avgStdDev: number;
   maxStdDev: number;
   minStdDev: number;
-  reliable: boolean;       // true ONLY if enoughData AND maxStdDev <= threshold (NOISE axis)
+  reliable: boolean; // true ONLY if enoughData AND maxStdDev <= threshold (NOISE axis)
   threshold: number;
   // ── ACCURACY axis (vs human gold labels) ────────────────────────────────
   // The noise axis (reliable/maxStdDev) is the right gate for a PINNED judge.
@@ -122,11 +122,12 @@ function clamp(value: number, min: number, max: number): number {
 - NaN inputs return NaN
 - Infinity values work correctly
 - min === max returns that value`,
-    rubric: 'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
+    rubric:
+      'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
   },
   {
     label: 'mediocre-code (expected ~0.50)',
-    expectedScore: 0.50,
+    expectedScore: 0.5,
     // NOT gated: correct-but-incomplete vs an exacting rubric is genuinely
     // ambiguous (human raters split ~0.3–0.6), so it is measured but does not
     // gate the judge. Keeping it as a gate target overfit the judge prompt.
@@ -139,15 +140,18 @@ function clamp(value: number, min: number, max: number): number {
   return value;
 }
 \`\`\``,
-    rubric: 'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
+    rubric:
+      'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
   },
   {
     label: 'wrong-answer (expected ~0.00)',
-    expectedScore: 0.00,
+    expectedScore: 0.0,
     gated: true,
     taskType: 'code-generation',
-    response: 'The clamp function returns the average of min and max. Here it is:\n\n```typescript\nfunction clamp(value: number, min: number, max: number): number {\n  return (min + max) / 2;\n}\n```',
-    rubric: 'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
+    response:
+      'The clamp function returns the average of min and max. Here it is:\n\n```typescript\nfunction clamp(value: number, min: number, max: number): number {\n  return (min + max) / 2;\n}\n```',
+    rubric:
+      'Correct TypeScript clamp function with: proper clamping logic, NaN handling, min>max validation, edge case documentation. Clean code with JSDoc or comments.',
   },
   {
     label: 'detailed-analysis (expected ~0.85)',
@@ -169,18 +173,25 @@ Recommendations:
 1. Immediate: Add database query batching for /api/users (expected 60% latency reduction)
 2. Short-term: Increase connection pool from 20 to 40 and add PgBouncer
 3. Medium-term: Implement read replicas for analytics queries`,
-    rubric: 'Accurate analysis of performance metrics with: correct identification of trends, plausible root cause analysis, specific and actionable recommendations. Should reference actual data points from the metrics.',
+    rubric:
+      'Accurate analysis of performance metrics with: correct identification of trends, plausible root cause analysis, specific and actionable recommendations. Should reference actual data points from the metrics.',
   },
 ];
 
 /** Build a per-case result (mean/stdDev + accuracy vs gold) from a score sample.
  *  Shared by the HTTP (pinned) and in-process (dynamic) calibration paths so both
  *  report identical NOISE + ACCURACY axes. */
-function summarizeCase(label: string, expectedScore: number, scores: number[], gated: boolean): CalibrationResult {
+function summarizeCase(
+  label: string,
+  expectedScore: number,
+  scores: number[],
+  gated: boolean
+): CalibrationResult {
   const mean = scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : 0;
-  const stdDev = scores.length > 1
-    ? Math.sqrt(scores.reduce((s, v) => s + (v - mean) ** 2, 0) / (scores.length - 1))
-    : 0;
+  const stdDev =
+    scores.length > 1
+      ? Math.sqrt(scores.reduce((s, v) => s + (v - mean) ** 2, 0) / (scores.length - 1))
+      : 0;
   return {
     taskLabel: label,
     scores,
@@ -201,25 +212,35 @@ function summarizeCase(label: string, expectedScore: number, scores: number[], g
 /** Aggregate per-case results into the dual-axis report — NOISE (reliable/stdDev,
  *  the pinned-judge gate) and ACCURACY (accurate/absError vs gold, the dynamic-
  *  judge gate). `runsRequested` drives the minimum-sample guard. */
-function buildReport(judgeModel: string, runsRequested: number, results: CalibrationResult[]): CalibrationReport {
-  const threshold = Number(process.env.JUDGE_CALIBRATION_THRESHOLD ?? 0.10);
+function buildReport(
+  judgeModel: string,
+  runsRequested: number,
+  results: CalibrationResult[]
+): CalibrationReport {
+  const threshold = Number(process.env.JUDGE_CALIBRATION_THRESHOLD ?? 0.1);
   const accuracyThreshold = Number(process.env.JUDGE_ACCURACY_THRESHOLD ?? 0.15);
-  const stdDevs = results.map(r => r.stdDev);
+  const stdDevs = results.map((r) => r.stdDev);
   // Too few parsed scores ⇒ untrustworthy: an empty/near-empty sample yields
   // stdDev 0 AND absError NaN, which must not pass either gate. Require a real
   // sample per case — >=2 for a variance, and at least half the requested runs.
   const minScoresPerCase = Math.max(2, Math.ceil(runsRequested / 2));
   const totalScoresCollected = results.reduce((s, r) => s + r.scores.length, 0);
-  const enoughData = results.length > 0 && results.every(r => r.scores.length >= minScoresPerCase);
+  const enoughData =
+    results.length > 0 && results.every((r) => r.scores.length >= minScoresPerCase);
 
   // ACCURACY gate considers only GATED cases (unambiguous gold). Non-gated cases
   // (e.g. correct-but-incomplete, where human raters legitimately disagree) are
   // still measured and reported, but never fail the gate.
-  const gatedResults = results.filter(r => r.gated);
-  const absErrors = gatedResults.map(r => r.absError).filter((e) => Number.isFinite(e));
-  const meanAbsError = absErrors.length > 0 ? absErrors.reduce((s, v) => s + v, 0) / absErrors.length : Number.NaN;
+  const gatedResults = results.filter((r) => r.gated);
+  const absErrors = gatedResults.map((r) => r.absError).filter((e) => Number.isFinite(e));
+  const meanAbsError =
+    absErrors.length > 0 ? absErrors.reduce((s, v) => s + v, 0) / absErrors.length : Number.NaN;
   const maxAbsError = absErrors.length > 0 ? Math.max(...absErrors) : Number.NaN;
-  const accurate = enoughData && gatedResults.length > 0 && absErrors.length === gatedResults.length && maxAbsError <= accuracyThreshold;
+  const accurate =
+    enoughData &&
+    gatedResults.length > 0 &&
+    absErrors.length === gatedResults.length &&
+    maxAbsError <= accuracyThreshold;
 
   const report: CalibrationReport = {
     judgeModel,
@@ -239,23 +260,26 @@ function buildReport(judgeModel: string, runsRequested: number, results: Calibra
     timestamp: new Date().toISOString(),
   };
 
-  log.info({
-    reliable: report.reliable,
-    maxStdDev: report.maxStdDev.toFixed(3),
-    threshold,
-    accurate: report.accurate,
-    meanAbsError: Number.isNaN(meanAbsError) ? 'n/a' : meanAbsError.toFixed(3),
-    maxAbsError: Number.isNaN(maxAbsError) ? 'n/a' : maxAbsError.toFixed(3),
-    accuracyThreshold,
-    enoughData,
-    totalScoresCollected,
-  }, !enoughData
-    ? 'Judge calibration FAILED — too few scores collected (judge unreachable/unauthenticated or producing no parseable output)'
-    : (report.reliable && report.accurate)
-      ? 'Judge calibration PASSED (consistent AND accurate vs gold)'
-      : !report.accurate
-        ? 'Judge calibration: INACCURATE vs gold (maxAbsError > accuracyThreshold) — the dynamic-judge concern'
-        : 'Judge calibration: NOISY (maxStdDev > threshold) — accurate but inconsistent (pinned-judge concern)');
+  log.info(
+    {
+      reliable: report.reliable,
+      maxStdDev: report.maxStdDev.toFixed(3),
+      threshold,
+      accurate: report.accurate,
+      meanAbsError: Number.isNaN(meanAbsError) ? 'n/a' : meanAbsError.toFixed(3),
+      maxAbsError: Number.isNaN(maxAbsError) ? 'n/a' : maxAbsError.toFixed(3),
+      accuracyThreshold,
+      enoughData,
+      totalScoresCollected,
+    },
+    !enoughData
+      ? 'Judge calibration FAILED — too few scores collected (judge unreachable/unauthenticated or producing no parseable output)'
+      : report.reliable && report.accurate
+        ? 'Judge calibration PASSED (consistent AND accurate vs gold)'
+        : !report.accurate
+          ? 'Judge calibration: INACCURATE vs gold (maxAbsError > accuracyThreshold) — the dynamic-judge concern'
+          : 'Judge calibration: NOISY (maxStdDev > threshold) — accurate but inconsistent (pinned-judge concern)'
+  );
 
   return report;
 }
@@ -266,7 +290,10 @@ function buildReport(judgeModel: string, runsRequested: number, results: Calibra
 export async function calibrateJudge(config: CalibrationConfig): Promise<CalibrationReport> {
   const results: CalibrationResult[] = [];
 
-  log.info({ judgeModel: config.judgeModel, runs: config.runs, cases: CALIBRATION_CASES.length }, 'Starting judge calibration');
+  log.info(
+    { judgeModel: config.judgeModel, runs: config.runs, cases: CALIBRATION_CASES.length },
+    'Starting judge calibration'
+  );
 
   for (const testCase of CALIBRATION_CASES) {
     const scores: number[] = [];
@@ -286,9 +313,10 @@ export async function calibrateJudge(config: CalibrationConfig): Promise<Calibra
             no_cache: true,
             response_format: { type: 'json_object' },
             ailin_constraints: { requiredCapabilities: ['chat', 'json_mode'] },
-            messages: [{
-              role: 'user',
-              content: `You are an expert evaluator. Score the following response against the rubric.
+            messages: [
+              {
+                role: 'user',
+                content: `You are an expert evaluator. Score the following response against the rubric.
 
 RUBRIC:
 ${testCase.rubric}
@@ -300,11 +328,12 @@ Score from 0.0 (completely wrong) to 1.0 (perfect).
 Consider: accuracy, completeness, actionability, and depth.
 
 ${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`,
-            }],
+              },
+            ],
           }),
         });
 
-        const json = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
         const content = json.choices?.[0]?.message?.content ?? '';
         // J-Final (Lote 4): route through the unified judge normalizer so
         // canonical JudgeVerdict JSON, legacy `{score, reasoning}`, and
@@ -318,16 +347,24 @@ ${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`,
       }
     }
 
-    const result = summarizeCase(testCase.label, testCase.expectedScore, scores, testCase.gated ?? true);
+    const result = summarizeCase(
+      testCase.label,
+      testCase.expectedScore,
+      scores,
+      testCase.gated ?? true
+    );
     results.push(result);
-    log.info({
-      case: testCase.label,
-      runs: scores.length,
-      mean: result.mean.toFixed(3),
-      expected: testCase.expectedScore.toFixed(2),
-      absError: Number.isNaN(result.absError) ? 'n/a' : result.absError.toFixed(3),
-      stdDev: result.stdDev.toFixed(3),
-    }, 'Calibration case complete');
+    log.info(
+      {
+        case: testCase.label,
+        runs: scores.length,
+        mean: result.mean.toFixed(3),
+        expected: testCase.expectedScore.toFixed(2),
+        absError: Number.isNaN(result.absError) ? 'n/a' : result.absError.toFixed(3),
+        stdDev: result.stdDev.toFixed(3),
+      },
+      'Calibration case complete'
+    );
   }
 
   return buildReport(config.judgeModel, config.runs, results);
@@ -348,30 +385,53 @@ ${JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS}`,
  * completeness/clarity/relevance), NOT each case's specific rubric, so part of
  * any gold gap is prompt-mismatch rather than judge error — read accordingly.
  */
-export async function calibrateDynamicJudge(runs: number): Promise<CalibrationReport & { totalCostUsd: number }> {
+export async function calibrateDynamicJudge(
+  runs: number
+): Promise<CalibrationReport & { totalCostUsd: number }> {
   const { getQualityScorer } = await import('@/core/quality/quality-scorer.js');
   const scorer = getQualityScorer();
   const results: CalibrationResult[] = [];
   let totalCostUsd = 0;
 
-  log.info({ runs, cases: CALIBRATION_CASES.length }, 'Starting DYNAMIC judge calibration (in-process cascade, no forced pick)');
+  log.info(
+    { runs, cases: CALIBRATION_CASES.length },
+    'Starting DYNAMIC judge calibration (in-process cascade, no forced pick)'
+  );
 
   for (const testCase of CALIBRATION_CASES) {
     const scores: number[] = [];
     const response = narrowAs<ChatResponse>({
-      id: 'calib', object: 'chat.completion', created: 0, model: 'calibration',
-      choices: [{ index: 0, message: { role: 'assistant', content: testCase.response }, finish_reason: 'stop' }],
+      id: 'calib',
+      object: 'chat.completion',
+      created: 0,
+      model: 'calibration',
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: testCase.response },
+          finish_reason: 'stop',
+        },
+      ],
     });
     const context = narrowAs<OrchestrationContext>({
-      taskType: testCase.taskType, models: [], contextSize: 0,
+      taskType: testCase.taskType,
+      models: [],
+      contextSize: 0,
     });
     const originalRequest = narrowAs<ChatRequest>({
-      model: 'auto', messages: [{ role: 'user', content: testCase.rubric }],
+      model: 'auto',
+      messages: [{ role: 'user', content: testCase.rubric }],
     });
 
     for (let i = 0; i < runs; i++) {
       try {
-        const r = await scorer.calculatePolicyAwareScore(response, context, undefined, 'benchmark', { originalRequest });
+        const r = await scorer.calculatePolicyAwareScore(
+          response,
+          context,
+          undefined,
+          'benchmark',
+          { originalRequest }
+        );
         totalCostUsd += r.judgeCostUsd ?? 0;
         // Only count a REAL judge verdict (the cascade succeeded). A judgeFailed
         // result is a neutral non-verdict — dropping it keeps it out of the score
@@ -380,20 +440,31 @@ export async function calibrateDynamicJudge(runs: number): Promise<CalibrationRe
           scores.push(typeof r.judgeScore === 'number' ? r.judgeScore : r.overall);
         }
       } catch (err) {
-        log.warn({ case: testCase.label, run: i, error: String(err) }, 'Dynamic calibration run failed');
+        log.warn(
+          { case: testCase.label, run: i, error: String(err) },
+          'Dynamic calibration run failed'
+        );
       }
     }
 
-    const result = summarizeCase(testCase.label, testCase.expectedScore, scores, testCase.gated ?? true);
+    const result = summarizeCase(
+      testCase.label,
+      testCase.expectedScore,
+      scores,
+      testCase.gated ?? true
+    );
     results.push(result);
-    log.info({
-      case: testCase.label,
-      runs: scores.length,
-      mean: result.mean.toFixed(3),
-      expected: testCase.expectedScore.toFixed(2),
-      absError: Number.isNaN(result.absError) ? 'n/a' : result.absError.toFixed(3),
-      stdDev: result.stdDev.toFixed(3),
-    }, 'Dynamic calibration case complete');
+    log.info(
+      {
+        case: testCase.label,
+        runs: scores.length,
+        mean: result.mean.toFixed(3),
+        expected: testCase.expectedScore.toFixed(2),
+        absError: Number.isNaN(result.absError) ? 'n/a' : result.absError.toFixed(3),
+        stdDev: result.stdDev.toFixed(3),
+      },
+      'Dynamic calibration case complete'
+    );
   }
 
   const report = buildReport('dynamic-cascade (no forced pick)', runs, results);

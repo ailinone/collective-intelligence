@@ -70,10 +70,7 @@ export function zeroBreakdown(): ScoreBreakdown {
  *
  * Formula: sum(weight_i × component_i) − weight_risk × riskPenalty.
  */
-export function applyWeights(
-  breakdown: ScoreBreakdown,
-  weights: ScoreBreakdownWeights,
-): number {
+export function applyWeights(breakdown: ScoreBreakdown, weights: ScoreBreakdownWeights): number {
   const positive =
     weights.capabilityFit * breakdown.capabilityFit +
     weights.freshness * breakdown.freshness +

@@ -187,7 +187,7 @@ export class UserEntity {
 
     // Validate email format via Email value object
     const emailValueObject = Email.create(newEmail);
-    
+
     // Only update if email actually changed
     if (this.props.email.getValue().toLowerCase() !== emailValueObject.getValue().toLowerCase()) {
       this.props.email = emailValueObject;

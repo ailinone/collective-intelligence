@@ -55,7 +55,7 @@ beforeEach(() => {
   PROVIDER_CALL_SENTINEL.mockClear();
   // Fail-fast on any outbound network call so we catch silent provider
   // dispatches even if they go through a non-fetch path that imports here.
-  globalThis.fetch = (PROVIDER_CALL_SENTINEL as unknown) as typeof globalThis.fetch;
+  globalThis.fetch = PROVIDER_CALL_SENTINEL as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
@@ -135,7 +135,7 @@ describe('applyDryRunFailClosedGate — dry-run preconditions', () => {
         } as ChatRequest,
         requestId: 'rid-4',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       message: expect.stringMatching(/strategy/i),
       statusCode: 422,
@@ -159,7 +159,7 @@ describe('applyDryRunFailClosedGate — dry-run preconditions', () => {
         } as ChatRequest,
         requestId: 'rid-5',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       statusCode: 422,
       code: 'DRY_RUN_UNSUPPORTED_FOR_REQUEST_SHAPE',
@@ -182,7 +182,7 @@ describe('applyDryRunFailClosedGate — dry-run preconditions', () => {
         } as ChatRequest,
         requestId: 'rid-6',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       statusCode: 409,
       code: 'DRY_RUN_NOT_ENABLED_IN_RUNTIME',
@@ -205,7 +205,7 @@ describe('applyDryRunFailClosedGate — dry-run preconditions', () => {
         } as ChatRequest,
         requestId: 'rid-7',
         log: makeLog(),
-      }),
+      })
     ).rejects.toMatchObject({
       statusCode: 409,
       code: 'DRY_RUN_NOT_ENABLED_IN_RUNTIME',

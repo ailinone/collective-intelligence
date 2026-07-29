@@ -24,7 +24,7 @@ describe('LmStudioAdapter', () => {
           providerName: 'lm-studio',
           apiKey: '',
           baseUrl: 'http://localhost:1234/v1',
-        }),
+        })
     ).not.toThrow();
   });
 
@@ -48,7 +48,7 @@ describe('LmStudioAdapter', () => {
           providerName: 'lm-studio',
           apiKey: 'lm-studio-placeholder',
           baseUrl: 'http://localhost:1234/v1',
-        }),
+        })
     ).not.toThrow();
   });
 });

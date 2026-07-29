@@ -29,7 +29,10 @@ function narr(text: string): ObserverNarration {
   };
 }
 
-type MetaChunk = { choices: Array<{ delta: { content?: string } }>; ailin_metadata: { type: string; narration?: string } };
+type MetaChunk = {
+  choices: Array<{ delta: { content?: string } }>;
+  ailin_metadata: { type: string; narration?: string };
+};
 
 describe('observer chunk wire shapes', () => {
   it('off-channel chunk keeps delta.content empty so naive clients ignore it', () => {
@@ -40,7 +43,9 @@ describe('observer chunk wire shapes', () => {
   });
 
   it('inline chunk places the narration in delta.content as visible opening tokens', () => {
-    const c = buildInlineNarrationChunk(narr('Os analistas começaram a debater.')) as unknown as MetaChunk;
+    const c = buildInlineNarrationChunk(
+      narr('Os analistas começaram a debater.')
+    ) as unknown as MetaChunk;
     // The narration IS the visible text, with a blank line separating it from the
     // synthesis that streams after.
     expect(c.choices[0].delta.content).toBe('Os analistas começaram a debater.\n\n');

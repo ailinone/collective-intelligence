@@ -21,13 +21,15 @@ import type { OrchestrationContext } from '@/types';
  * Extended FastifyRequest with custom decorators
  */
 export interface ExtendedFastifyRequest extends Omit<FastifyRequest, 'user'> {
-  user?: FastifyRequest['user'] | {
-    userId: string;
-    organizationId: string;
-    roles: string[];
-    email: string;
-    name: string;
-  };
+  user?:
+    | FastifyRequest['user']
+    | {
+        userId: string;
+        organizationId: string;
+        roles: string[];
+        email: string;
+        name: string;
+      };
   correlationId?: string;
   tenantContext?: TenantContext;
   queueContext?: QueueContext;
@@ -137,4 +139,3 @@ export interface ToolsRoutesModule {
 }
 
 import type { FastifyPluginAsync } from 'fastify';
-

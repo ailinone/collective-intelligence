@@ -10,14 +10,14 @@
 /**
  * Moderations Orchestration Service
  * Orchestrates content moderation across multiple providers
- * 
+ *
  * Features:
  * - Dynamic model selection based on capabilities
  * - Multi-provider orchestration (OpenAI Moderation, Google Safety API, Azure, etc.)
  * - Automatic failover on provider failures
  * - Multi-language support
  * - Consistent category scoring
- * 
+ *
  * NO HARDCODED MODELS - All selection is dynamic via model discovery
  */
 
@@ -123,7 +123,7 @@ export class ModerationsOrchestrationService {
     const preRanked = this.rankModerationCandidates(moderationModels);
 
     const supportsModeration = (adapter: ProviderAdapter): boolean =>
-      typeof (narrowAs<{ moderate?: unknown }>(adapter)).moderate === 'function';
+      typeof narrowAs<{ moderate?: unknown }>(adapter).moderate === 'function';
 
     // DUP #2 phase 2: executeWithFallback + cost + completion log + error
     // classification (NoFallback→ValidationError, FallbackExhausted→503) are
@@ -143,7 +143,10 @@ export class ModerationsOrchestrationService {
         // this all-or-nothing semantic so callers never see a half-
         // classified result set.
         const moderate = narrowAs<{
-          moderate: (m: Model, p: { text: string }) => Promise<{
+          moderate: (
+            m: Model,
+            p: { text: string }
+          ) => Promise<{
             flagged: boolean;
             categories: ModerationResult['results'][number]['categories'];
             category_scores: ModerationResult['results'][number]['category_scores'];
@@ -161,7 +164,7 @@ export class ModerationsOrchestrationService {
               categories: r.categories,
               category_scores: r.category_scores,
             };
-          }),
+          })
         );
         return out;
       },
@@ -211,4 +214,3 @@ export class ModerationsOrchestrationService {
     return [...models].sort((a, b) => score(b) - score(a));
   }
 }
-

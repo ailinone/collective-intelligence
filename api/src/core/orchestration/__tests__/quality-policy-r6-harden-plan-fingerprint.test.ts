@@ -115,24 +115,44 @@ const hardenedPolicy: RoleSelectionPolicySnapshot = {
 describe('01C.1B-J2-C-R6-HARDEN — c3EligibilityPolicy × planFingerprint', () => {
   it('baseline: fingerprint is stable across identical calls', () => {
     const f1 = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselinePolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselinePolicy,
+      },
+      { planSource: 'dry_run' }
     );
     const f2 = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselinePolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselinePolicy,
+      },
+      { planSource: 'dry_run' }
     );
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
   });
 
   it('enabling c3EligibilityPolicy CHANGES the fingerprint', () => {
     const off = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: baselinePolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: baselinePolicy,
+      },
+      { planSource: 'dry_run' }
     );
     const on = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: hardenedPolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: hardenedPolicy,
+      },
+      { planSource: 'dry_run' }
     );
     expect(off.planFingerprint).not.toBe(on.planFingerprint);
   });
@@ -140,17 +160,21 @@ describe('01C.1B-J2-C-R6-HARDEN — c3EligibilityPolicy × planFingerprint', () 
   it('changing c3EligibilityPolicyVersion CHANGES the fingerprint', () => {
     const a = computePlanFingerprint(
       {
-        plan: makePlan(), strict: true, roleSpecificRetrieval: true,
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...hardenedPolicy, c3EligibilityPolicyVersion: 'v1' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
-        plan: makePlan(), strict: true, roleSpecificRetrieval: true,
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
         roleSelectionPolicy: { ...hardenedPolicy, c3EligibilityPolicyVersion: 'v2' },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
@@ -158,28 +182,45 @@ describe('01C.1B-J2-C-R6-HARDEN — c3EligibilityPolicy × planFingerprint', () 
   it('changing c3EligibilityEligibleCount CHANGES the fingerprint', () => {
     const a = computePlanFingerprint(
       {
-        plan: makePlan(), strict: true, roleSpecificRetrieval: true,
-        roleSelectionPolicy: { ...hardenedPolicy, c3EligibilityEligibleCount: 2, c3EligibilityBlockedCount: 2 },
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: {
+          ...hardenedPolicy,
+          c3EligibilityEligibleCount: 2,
+          c3EligibilityBlockedCount: 2,
+        },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const b = computePlanFingerprint(
       {
-        plan: makePlan(), strict: true, roleSpecificRetrieval: true,
-        roleSelectionPolicy: { ...hardenedPolicy, c3EligibilityEligibleCount: 4, c3EligibilityBlockedCount: 0 },
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: {
+          ...hardenedPolicy,
+          c3EligibilityEligibleCount: 4,
+          c3EligibilityBlockedCount: 0,
+        },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(a.planFingerprint).not.toBe(b.planFingerprint);
   });
 
   it('hardened snapshot is fingerprinted with the correct policy version constant', () => {
     const result = computePlanFingerprint(
-      { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: hardenedPolicy },
-      { planSource: 'dry_run' },
+      {
+        plan: makePlan(),
+        strict: true,
+        roleSpecificRetrieval: true,
+        roleSelectionPolicy: hardenedPolicy,
+      },
+      { planSource: 'dry_run' }
     );
     expect(result.snapshot.roleSelectionPolicy.c3EligibilityPolicyVersion).toBe(
-      C3_ELIGIBILITY_POLICY_VERSION,
+      C3_ELIGIBILITY_POLICY_VERSION
     );
     expect(result.snapshot.roleSelectionPolicy.c3EligibilityBlockedCount).toBe(2);
     expect(result.snapshot.roleSelectionPolicy.c3EligibilityEligibleCount).toBe(2);

@@ -23,12 +23,7 @@ interface ErrorEvent {
   provider: string;
   model: string;
   errorType:
-    | 'rate-limit'
-    | 'timeout'
-    | 'provider-error'
-    | 'model-unavailable'
-    | 'quality-low'
-    | 'other';
+    'rate-limit' | 'timeout' | 'provider-error' | 'model-unavailable' | 'quality-low' | 'other';
   errorCode?: string;
   taskType: string;
   strategy: string;

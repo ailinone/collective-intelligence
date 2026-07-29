@@ -190,7 +190,10 @@ export async function loadSecret(
     for (const candidate of candidates) {
       try {
         const value = await secretsManager.getSecret(candidate);
-        logger.debug({ requestedKey: key, resolvedKey: candidate }, 'Secret loaded from Secrets Manager');
+        logger.debug(
+          { requestedKey: key, resolvedKey: candidate },
+          'Secret loaded from Secrets Manager'
+        );
         return value;
       } catch (error) {
         managerLookupError = error as Error;
@@ -199,7 +202,10 @@ export async function loadSecret(
     }
   } catch (error) {
     managerLookupError = error as Error;
-    perCandidateErrors.push({ candidate: '(getSecretsManager)', error: managerLookupError.message });
+    perCandidateErrors.push({
+      candidate: '(getSecretsManager)',
+      error: managerLookupError.message,
+    });
   }
 
   // Fallback to environment variable

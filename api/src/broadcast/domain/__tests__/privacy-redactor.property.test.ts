@@ -37,10 +37,7 @@ import {
   type PrivacyPolicy,
   type FieldMode,
 } from '../privacy-redactor';
-import {
-  TRACE_ENVELOPE_SCHEMA_VERSION,
-  type TraceEnvelope,
-} from '../trace-envelope';
+import { TRACE_ENVELOPE_SCHEMA_VERSION, type TraceEnvelope } from '../trace-envelope';
 
 // ─── Arbitraries (fast-check generators) ─────────────────────────────────
 
@@ -90,7 +87,9 @@ function envelopeArb(): fc.Arbitrary<TraceEnvelope> {
     parentSpanId: fc.option(spanIdHex, { nil: undefined }) as fc.Arbitrary<
       TraceEnvelope['parentSpanId']
     >,
-    requestId: fc.string({ minLength: 1, maxLength: 64 }) as fc.Arbitrary<TraceEnvelope['requestId']>,
+    requestId: fc.string({ minLength: 1, maxLength: 64 }) as fc.Arbitrary<
+      TraceEnvelope['requestId']
+    >,
     occurredAt: isoDate,
 
     tenant: fc.record({
@@ -260,7 +259,10 @@ describe('Invariant 2 — MONOTONICITY', () => {
     fc.assert(
       fc.property(envelopeArb(), (envelope) => {
         const pseudoKey = randomBytes(32);
-        const sotaWithKey: PrivacyPolicy = { ...PRIVACY_POLICY_SOTA, pseudonymizationKey: pseudoKey };
+        const sotaWithKey: PrivacyPolicy = {
+          ...PRIVACY_POLICY_SOTA,
+          pseudonymizationKey: pseudoKey,
+        };
         const sotaOutput = redactEnvelope(envelope, sotaWithKey);
         const passthroughOutput = redactEnvelope(envelope, PRIVACY_POLICY_PASSTHROUGH);
 
@@ -443,7 +445,9 @@ describe('Targeted: SOTA policy defaults', () => {
         fc.string({ minLength: 1 }),
         fc.string({ minLength: 1 }),
         (env, feature, version) => {
-          const envelope = { custom: { environment: env, feature, version } } as unknown as TraceEnvelope;
+          const envelope = {
+            custom: { environment: env, feature, version },
+          } as unknown as TraceEnvelope;
           // Build a minimal envelope stub by spreading the policy application to just custom
           const policy: PrivacyPolicy = {
             ...PRIVACY_POLICY_SOTA,
@@ -485,7 +489,12 @@ describe('Targeted: tool call arguments redaction', () => {
       spanId: '0'.repeat(16),
       requestId: 'req-1',
       occurredAt: new Date().toISOString(),
-      tenant: { organizationId: null, userId: null, apiKeyId: null, resolutionScope: 'user' as const },
+      tenant: {
+        organizationId: null,
+        userId: null,
+        apiKeyId: null,
+        resolutionScope: 'user' as const,
+      },
       resource: { serviceName: 'ailin-ci-api', deploymentEnvironment: 'production' as const },
       generation: {
         model: { slug: 'x', provider: 'y' },

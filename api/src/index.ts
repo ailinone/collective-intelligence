@@ -30,7 +30,10 @@
 import dns from 'node:dns';
 const __dnsOverride = process.env.DNS_OVERRIDE_SERVERS;
 if (__dnsOverride) {
-  const servers = __dnsOverride.split(',').map((s) => s.trim()).filter(Boolean);
+  const servers = __dnsOverride
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (servers.length > 0) {
     try {
       dns.setServers(servers);
@@ -136,9 +139,12 @@ async function bootstrap(): Promise<void> {
     try {
       const { installTcpDnsFallback } = await import('./network/dns-bootstrap.js');
       const dnsResult = await installTcpDnsFallback();
-      logger.info(dnsResult, dnsResult.installed
-        ? '✅ TCP-DNS fallback active'
-        : 'TCP-DNS fallback skipped (UDP/53 assumed working)');
+      logger.info(
+        dnsResult,
+        dnsResult.installed
+          ? '✅ TCP-DNS fallback active'
+          : 'TCP-DNS fallback skipped (UDP/53 assumed working)'
+      );
     } catch (err) {
       logger.warn({ err: serializeError(err) }, 'TCP-DNS fallback bootstrap failed (non-fatal)');
     }
@@ -202,7 +208,7 @@ async function bootstrap(): Promise<void> {
     }
     logger.info(
       { skipPerPluginDiscovery: process.env.SKIP_PER_PLUGIN_DISCOVERY === 'true' },
-      '✅ Phase 5 boot guard passed',
+      '✅ Phase 5 boot guard passed'
     );
 
     // Initialize provider availability (credentials) before touching adapters
@@ -311,7 +317,8 @@ async function bootstrap(): Promise<void> {
         const discoveryService = new ModelDiscoveryService(logger);
 
         // Start discovery in background to avoid blocking startup
-        discoveryService.syncDiscoveredModels()
+        discoveryService
+          .syncDiscoveredModels()
           .then((result) => {
             logger.info(
               {
@@ -323,7 +330,10 @@ async function bootstrap(): Promise<void> {
             );
           })
           .catch((error) => {
-            logger.warn({ error: serializeError(error) }, 'Model discovery failed in background (non-critical, will retry later)');
+            logger.warn(
+              { error: serializeError(error) },
+              'Model discovery failed in background (non-critical, will retry later)'
+            );
           });
 
         // Verify no hardcoded models exist
@@ -335,7 +345,9 @@ async function bootstrap(): Promise<void> {
         );
 
         if (syncedModels.length === 0) {
-          logger.warn('⚠️ WARNING: No models discovered. This may indicate provider API issues or missing API keys.');
+          logger.warn(
+            '⚠️ WARNING: No models discovered. This may indicate provider API issues or missing API keys.'
+          );
           logger.warn('The API will continue to start, but model availability may be limited.');
         }
       } catch (error: unknown) {
@@ -396,7 +408,7 @@ async function bootstrap(): Promise<void> {
       } catch (err) {
         logger.warn(
           { err: serializeError(err) },
-          '⚠️ Provider health sync bus failed to start — local registry only',
+          '⚠️ Provider health sync bus failed to start — local registry only'
         );
       }
     }
@@ -426,8 +438,7 @@ async function bootstrap(): Promise<void> {
       const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub.js');
       const { PROVIDER_CATALOG } = await import('@/providers/catalog/providers.catalog.js');
       const hub = getProviderOperabilityHub();
-      const eligibleIds = PROVIDER_CATALOG
-        .filter((entry) => entry.enabledByDefault)
+      const eligibleIds = PROVIDER_CATALOG.filter((entry) => entry.enabledByDefault)
         .filter((entry) => !entry.apiKeyEnvVar || !!process.env[entry.apiKeyEnvVar])
         .map((entry) => entry.providerId);
       const result = hub.bootstrapKnownProviders(eligibleIds, 'catalog_bootstrap');
@@ -438,12 +449,12 @@ async function bootstrap(): Promise<void> {
           total: result.total,
           catalogSize: PROVIDER_CATALOG.length,
         },
-        '✅ ProviderOperabilityHub seeded from catalog',
+        '✅ ProviderOperabilityHub seeded from catalog'
       );
     } catch (err) {
       logger.warn(
         { err: serializeError(err) },
-        '⚠️ ProviderOperabilityHub catalog bootstrap failed — hub may remain empty',
+        '⚠️ ProviderOperabilityHub catalog bootstrap failed — hub may remain empty'
       );
     }
 
@@ -461,7 +472,7 @@ async function bootstrap(): Promise<void> {
     } catch (err) {
       logger.warn(
         { err: serializeError(err) },
-        '⚠️ ProviderOperabilityHub persistence init failed (non-fatal)',
+        '⚠️ ProviderOperabilityHub persistence init failed (non-fatal)'
       );
     }
 
@@ -479,24 +490,23 @@ async function bootstrap(): Promise<void> {
 
     if (process.env.OPERABILITY_DISCOVERY_SCHEDULER_ENABLED !== 'false') {
       try {
-        const {
-          getDiscoveryScheduler,
-          buildCatalogResolvers,
-          rebuildEmbeddingIndex,
-        } = await import('@/core/operability');
+        const { getDiscoveryScheduler, buildCatalogResolvers, rebuildEmbeddingIndex } =
+          await import('@/core/operability');
         const resolvers = buildCatalogResolvers();
         // Clamp interval to safe bounds. Floor 30s prevents runaway probes
         // hammering balance endpoints (some hubs rate-limit their billing
         // API). Ceiling 1h prevents pool from going stale beyond the
         // typical credit-replenish window observed in production.
         const rawInterval = Number(process.env.OPERABILITY_DISCOVERY_INTERVAL_MS);
-        const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0
-          ? Math.min(Math.max(rawInterval, 30_000), 60 * 60 * 1000)
-          : 5 * 60 * 1000;
+        const intervalMs =
+          Number.isFinite(rawInterval) && rawInterval > 0
+            ? Math.min(Math.max(rawInterval, 30_000), 60 * 60 * 1000)
+            : 5 * 60 * 1000;
         const rawInitialDelay = Number(process.env.OPERABILITY_DISCOVERY_INITIAL_DELAY_MS);
-        const initialDelayMs = Number.isFinite(rawInitialDelay) && rawInitialDelay >= 0
-          ? Math.min(rawInitialDelay, 60_000)
-          : 5_000;
+        const initialDelayMs =
+          Number.isFinite(rawInitialDelay) && rawInitialDelay >= 0
+            ? Math.min(rawInitialDelay, 60_000)
+            : 5_000;
 
         getDiscoveryScheduler().start({
           ...resolvers,
@@ -509,7 +519,7 @@ async function bootstrap(): Promise<void> {
             } catch (err) {
               logger.warn(
                 { err: serializeError(err) },
-                'Embedding pipeline rebuild failed — semantic resolver will fall back to pool query',
+                'Embedding pipeline rebuild failed — semantic resolver will fall back to pool query'
               );
             }
             // Re-warm the catalog cache right after each discovery rebuild so the heavy
@@ -518,23 +528,27 @@ async function bootstrap(): Promise<void> {
             // contends with the discovery write burst (the ~32s cold-selection tax).
             // invalidate→reload guarantees the warmed cache reflects the just-rebuilt catalog.
             try {
-              const { invalidateCatalogCache, getAllCatalogModels } = await import('@/services/model-catalog-service.js');
+              const { invalidateCatalogCache, getAllCatalogModels } =
+                await import('@/services/model-catalog-service.js');
               invalidateCatalogCache();
               const warmed = await getAllCatalogModels();
-              logger.info({ models: warmed.length }, '✅ Catalog cache re-warmed after discovery rebuild');
+              logger.info(
+                { models: warmed.length },
+                '✅ Catalog cache re-warmed after discovery rebuild'
+              );
             } catch (err) {
-              logger.warn({ err: serializeError(err) }, '⚠️ Catalog re-warm after rebuild failed (non-fatal)');
+              logger.warn(
+                { err: serializeError(err) },
+                '⚠️ Catalog re-warm after rebuild failed (non-fatal)'
+              );
             }
           },
         });
-        logger.info(
-          { intervalMs, initialDelayMs },
-          '✅ Operability discovery scheduler active',
-        );
+        logger.info({ intervalMs, initialDelayMs }, '✅ Operability discovery scheduler active');
       } catch (err) {
         logger.warn(
           { err: serializeError(err) },
-          '⚠️ Operability discovery scheduler failed to start',
+          '⚠️ Operability discovery scheduler failed to start'
         );
       }
     }
@@ -583,18 +597,20 @@ async function bootstrap(): Promise<void> {
             failed: catalogSummary.failed,
             reasonCounts: catalogSummary.reasonCounts,
           },
-          'Provider catalog loaded into runtime registry',
+          'Provider catalog loaded into runtime registry'
         );
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorStack = error instanceof Error ? error.stack : undefined;
         logger.error(
           { error: errorMessage, stack: errorStack },
-          'Provider catalog loader threw — legacy switch-registered adapters unaffected, catalog providers NOT registered',
+          'Provider catalog loader threw — legacy switch-registered adapters unaffected, catalog providers NOT registered'
         );
       }
     } else {
-      logger.warn('Provider catalog load DEFERRED (DEFER_CATALOG_LOAD=true) — will run post-listen in background');
+      logger.warn(
+        'Provider catalog load DEFERRED (DEFER_CATALOG_LOAD=true) — will run post-listen in background'
+      );
     }
 
     // L4: Start proactive credit monitor (polls provider balances every 5 min)
@@ -603,7 +619,10 @@ async function bootstrap(): Promise<void> {
       const { getCreditMonitorService } = await import('./services/credit-monitor-service.js');
       getCreditMonitorService().start();
     } catch (error: unknown) {
-      logger.warn({ error: error instanceof Error ? error.message : String(error) }, 'Failed to start credit monitor (non-critical)');
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        'Failed to start credit monitor (non-critical)'
+      );
     }
 
     // Initialize tool registry (shared between chat processor and strategies)
@@ -616,14 +635,16 @@ async function bootstrap(): Promise<void> {
       const { mcpClientService } = await import('./core/mcp/mcp-client-service.js');
       await mcpClientService.initialize();
     } catch (err) {
-      logger.warn({ error: err instanceof Error ? err.message : String(err) }, 'MCP initialization failed (non-fatal)');
+      logger.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        'MCP initialization failed (non-fatal)'
+      );
     }
 
     // Initialize orchestration engine
     logger.info('Initializing orchestration engine...');
-    const { OrchestrationEngine, setOrchestrationEngine } = await import(
-      '@/core/orchestration/orchestration-engine.js'
-    );
+    const { OrchestrationEngine, setOrchestrationEngine } =
+      await import('@/core/orchestration/orchestration-engine.js');
     const enableFeedbackLoop = process.env.ORCHESTRATION_ENABLE_FEEDBACK_LOOP !== 'false';
     const feedbackIterationsRaw = Number.parseInt(
       process.env.ORCHESTRATION_MAX_FEEDBACK_ITERATIONS || '',
@@ -732,7 +753,7 @@ async function bootstrap(): Promise<void> {
     // Semantic Memory, Semantic Cache, Reasoning Transparency, Agentic Workflows
     // ==========================================
     logger.info('Initializing Collective Intelligence services...');
-    
+
     // Initialize Semantic Cache (requires Redis)
     if (isCacheEnabled()) {
       try {
@@ -744,13 +765,14 @@ async function bootstrap(): Promise<void> {
         // deployments have no embedder key, so we run without semantic cache.
         logger.warn(
           { err },
-          '⚠️ Semantic Cache disabled — embedder unavailable (set an embedder API key to enable)',
+          '⚠️ Semantic Cache disabled — embedder unavailable (set an embedder API key to enable)'
         );
       }
     }
 
     // Initialize Reasoning Transparency
-    const { getReasoningTransparency } = await import('./core/transparency/reasoning-transparency.js');
+    const { getReasoningTransparency } =
+      await import('./core/transparency/reasoning-transparency.js');
     getReasoningTransparency();
     logger.info('✅ Reasoning Transparency service initialized');
 
@@ -797,9 +819,8 @@ async function bootstrap(): Promise<void> {
     // Event-driven architecture
     // ==========================================
     logger.info('Setting up Event Bus...');
-    const { setupEventSubscriptions } = await import(
-      './infrastructure/events/event-subscriptions.js'
-    );
+    const { setupEventSubscriptions } =
+      await import('./infrastructure/events/event-subscriptions.js');
     setupEventSubscriptions();
     logger.info('✅ Event Bus initialized (3 event handlers registered)');
 
@@ -822,7 +843,9 @@ async function bootstrap(): Promise<void> {
         logger.warn({ err }, 'Failed to start outbox poller — domain event delivery inactive');
       }
     } else {
-      logger.warn('Outbox poller disabled via OUTBOX_POLLER_ENABLED=false — events written but not polled');
+      logger.warn(
+        'Outbox poller disabled via OUTBOX_POLLER_ENABLED=false — events written but not polled'
+      );
     }
     // if (config.autoLearning.enabled) {
     //   logger.info('Initializing auto-learning system...');
@@ -837,7 +860,9 @@ async function bootstrap(): Promise<void> {
     // can rely on stable requestId/correlationId tracing and standardized errors.
     const { registerRequestContext } = await import('./api/middleware/request-context.js');
     await registerRequestContext(server);
-    logger.info('Request context middleware registered (request/correlation tracing + error envelope)');
+    logger.info(
+      'Request context middleware registered (request/correlation tracing + error envelope)'
+    );
 
     if (httpMetricsRegistered) {
       const { registerHttpMetrics } = await import('./utils/metrics.js');
@@ -862,12 +887,13 @@ async function bootstrap(): Promise<void> {
     logger.info('Registering API key authentication middleware...');
     const { apiKeyAuthMiddleware } = await import('./api/middleware/api-key-auth-middleware.js');
     server.addHook('preHandler', apiKeyAuthMiddleware);
-    logger.info('✅ API key authentication middleware registered (enterprise-grade with real user lookup)');
+    logger.info(
+      '✅ API key authentication middleware registered (enterprise-grade with real user lookup)'
+    );
 
     // Token Bucket Rate Limiting (after auth)
-    const { createTokenBucketMiddleware } = await import(
-      './api/middleware/token-bucket-rate-limit.js'
-    );
+    const { createTokenBucketMiddleware } =
+      await import('./api/middleware/token-bucket-rate-limit.js');
     const tokenBucketMiddleware = createTokenBucketMiddleware({
       perApiKey: true,
       perIP: true,
@@ -883,21 +909,20 @@ async function bootstrap(): Promise<void> {
     // Clean Architecture routes (v5.1)
     const { authRoutesClean } = await import('./routes/auth/auth-routes-clean.js');
     const { userRoutes } = await import('./routes/user/user-routes-clean.js');
-    const { organizationRoutesClean } = await import(
-      './routes/organization/organization-routes-clean.js'
-    );
+    const { organizationRoutesClean } =
+      await import('./routes/organization/organization-routes-clean.js');
     const { apiKeysRoutesClean } = await import('./routes/api-keys/api-keys-routes-clean.js');
     const { internalApiKeysRoutes } = await import('./routes/internal/internal-api-keys-routes.js');
     const { internalUsageRoutes } = await import('./routes/internal/internal-usage-routes.js');
     const { internalWalletRoutes } = await import('./routes/internal/internal-wallet-routes.js');
-    const { projectsRoutesClean } = await import(
-      './routes/projects/projects-routes-clean.js'
-    );
+    const { projectsRoutesClean } = await import('./routes/projects/projects-routes-clean.js');
 
     // Legacy routes (orchestration endpoints)
     const { registerModelRoutes } = await import('@/routes/models/models-routes.js');
-    const { registerChatRoutes, registerCapabilityRoutes } = await import('@/routes/chat/chat-routes.js');
-    const { registerCapabilitiesRoutes } = await import('@/routes/capabilities/capabilities-routes.js');
+    const { registerChatRoutes, registerCapabilityRoutes } =
+      await import('@/routes/chat/chat-routes.js');
+    const { registerCapabilitiesRoutes } =
+      await import('@/routes/capabilities/capabilities-routes.js');
     // ADR-022 — HCRA ontology + model-by-capability search routes.
     // The plugin defines its own auth boundary internally (operational
     // /v1/hcra/health is in the OUTER scope — public; product routes are in
@@ -905,47 +930,51 @@ async function bootstrap(): Promise<void> {
     // The auth/rate-limit middleware whitelists already include
     // /v1/hcra/health (see api-key-auth-middleware PUBLIC_ROUTES and
     // token-bucket-rate-limit OPERATIONAL_ROUTE_PATHS).
-    const { default: hcraSearchRoutes } = await import('@/routes/capabilities/hcra-search-routes.js');
+    const { default: hcraSearchRoutes } =
+      await import('@/routes/capabilities/hcra-search-routes.js');
     // Caminho-C Stage 4: singleton-backed search routes mounted at /v1/capabilities/*.
     // Coexists with /v1/hcra/* (above) during the migration window described in
     // hcra-search-routes.ts. The two backends differ — hcraSearchRoutes uses
     // prisma+embedder directly; this one delegates to CapabilitySearchService
     // (the future canonical home for hybrid retrieval).
-    const { registerCapabilitySearchRoutes } = await import(
-      '@/routes/capabilities/capabilities-search-routes.js'
-    );
+    const { registerCapabilitySearchRoutes } =
+      await import('@/routes/capabilities/capabilities-search-routes.js');
     const { registerEmbeddingsRoutes } = await import('@/routes/embeddings/embeddings-routes.js');
     const { registerAudioRoutes } = await import('@/routes/audio/audio-routes.js');
     const { registerVideosRoutes } = await import('@/routes/videos/videos-routes.js');
     const { registerImagesRoutes } = await import('@/routes/images/images-routes.js');
     const { registerSearchRoutes } = await import('@/routes/search/search-routes.js');
-    const { registerModerationsRoutes } = await import('@/routes/moderations/moderations-routes.js');
+    const { registerModerationsRoutes } =
+      await import('@/routes/moderations/moderations-routes.js');
     const { registerFilesRoutes } = await import('@/routes/files/files-routes.js');
     const { registerBatchesRoutes } = await import('@/routes/batches/batches-routes.js');
     const { registerFineTuningRoutes } = await import('@/routes/fine-tuning/fine-tuning-routes.js');
     const { registerAssistantsRoutes } = await import('@/routes/assistants/assistants-routes.js');
-    const { registerVectorStoresRoutes } = await import('@/routes/vector-stores/vector-stores-routes.js');
+    const { registerVectorStoresRoutes } =
+      await import('@/routes/vector-stores/vector-stores-routes.js');
     const { registerThreadsRoutes } = await import('@/routes/threads/threads-routes.js');
-    const { registerCodeExecutionRoutes } = await import('@/routes/code-execution/code-execution-routes.js');
+    const { registerCodeExecutionRoutes } =
+      await import('@/routes/code-execution/code-execution-routes.js');
     const { registerPDFRoutes } = await import('@/routes/pdf/pdf-routes.js');
     const { registerGoogleMapsRoutes } = await import('@/routes/google-maps/google-maps-routes.js');
-    const { registerContextCachingRoutes } = await import('@/routes/context-caching/context-caching-routes.js');
-    const { registerExtendedThinkingRoutes } = await import('@/routes/extended-thinking/extended-thinking-routes.js');
+    const { registerContextCachingRoutes } =
+      await import('@/routes/context-caching/context-caching-routes.js');
+    const { registerExtendedThinkingRoutes } =
+      await import('@/routes/extended-thinking/extended-thinking-routes.js');
     const { registerCollectiveRoutes } = await import('@/routes/collective/collective-routes.js');
     const { registerResponsesRoutes } = await import('@/routes/responses/responses-routes.js');
     const { registerRealtimeRoutes } = await import('@/routes/realtime/realtime-routes.js');
     const { registerUsageRoutes } = await import('@/routes/usage/usage-routes.js');
-    const { registerUserManagementRoutes } = await import(
-      '@/routes/user/user-management-routes.js'
-    );
-    const { registerApiKeyRotationRoutes } = await import(
-      '@/routes/admin/api-key-rotation-routes.js'
-    );
+    const { registerUserManagementRoutes } =
+      await import('@/routes/user/user-management-routes.js');
+    const { registerApiKeyRotationRoutes } =
+      await import('@/routes/admin/api-key-rotation-routes.js');
     const codebaseRoutesModule = await import('./routes/codebase/codebase-routes.js');
     const { registerCodebaseRoutes } = codebaseRoutesModule as {
       registerCodebaseRoutes: (server: FastifyInstance) => Promise<void>;
     };
-    const codebaseAnalysisRoutesModule = await import('./routes/codebase/codebase-analysis-routes.js');
+    const codebaseAnalysisRoutesModule =
+      await import('./routes/codebase/codebase-analysis-routes.js');
     const { registerCodebaseAnalysisRoutes } = codebaseAnalysisRoutesModule as {
       registerCodebaseAnalysisRoutes: (server: FastifyInstance) => Promise<void>;
     };
@@ -953,18 +982,14 @@ async function bootstrap(): Promise<void> {
     const { registerEnterpriseQuotaRoutes } = enterpriseQuotaRoutesModule as {
       registerEnterpriseQuotaRoutes: (server: FastifyInstance) => Promise<void>;
     };
-    const enterpriseBillingRoutesModule = await import(
-      './routes/enterprise/billing-routes.js'
-    );
+    const enterpriseBillingRoutesModule = await import('./routes/enterprise/billing-routes.js');
     const { registerEnterpriseBillingRoutes } = enterpriseBillingRoutesModule as {
       registerEnterpriseBillingRoutes: (server: FastifyInstance) => Promise<void>;
     };
-    const { registerBillingWebhookRoutes } = await import(
-      './routes/enterprise/billing-webhooks.js'
-    );
-    const enterpriseUsageAnalyticsRoutesModule = await import(
-      './routes/enterprise/usage-analytics-routes.js'
-    );
+    const { registerBillingWebhookRoutes } =
+      await import('./routes/enterprise/billing-webhooks.js');
+    const enterpriseUsageAnalyticsRoutesModule =
+      await import('./routes/enterprise/usage-analytics-routes.js');
     const { registerEnterpriseUsageAnalyticsRoutes } = enterpriseUsageAnalyticsRoutesModule as {
       registerEnterpriseUsageAnalyticsRoutes: (server: FastifyInstance) => Promise<void>;
     };
@@ -988,7 +1013,8 @@ async function bootstrap(): Promise<void> {
     const { registerToolsRoutes } = toolsRoutesModule as {
       registerToolsRoutes: (server: FastifyInstance) => Promise<void>;
     };
-    const { registerProviderHealthRoutes } = await import('./routes/health/provider-health-routes.js');
+    const { registerProviderHealthRoutes } =
+      await import('./routes/health/provider-health-routes.js');
 
     // Register Clean Architecture routes
     console.log('🚀 Registering auth routes...');
@@ -1040,37 +1066,44 @@ async function bootstrap(): Promise<void> {
     await registerCollectiveRoutes(server); // F1.6: Collective coordination audit (org-scoped)
     await registerResponsesRoutes(server); // OpenAI Responses API
     await registerRealtimeRoutes(server); // Realtime API (WebSocket)
-    const { registerTranslationRoutes } = await import('@/routes/translation/translation-routes.js');
+    const { registerTranslationRoutes } =
+      await import('@/routes/translation/translation-routes.js');
     await registerTranslationRoutes(server); // Translation API (Palabra.ai S2S)
     await registerUsageRoutes(server);
     await registerUserManagementRoutes(server);
     await registerApiKeyRotationRoutes(server); // v5.0: API Key Rotation admin endpoints
     const { registerAdminRoutes } = await import('./routes/admin/admin-routes.js');
     await registerAdminRoutes(server); // Admin routes (users, etc.)
-    const { registerBenchmarkAdminRoutes } = await import('./routes/admin/benchmark-admin-routes.js');
+    const { registerBenchmarkAdminRoutes } =
+      await import('./routes/admin/benchmark-admin-routes.js');
     await registerBenchmarkAdminRoutes(server); // Benchmark harness admin (OI-01/02/03)
-    const { registerEvaluationAdminRoutes } = await import('./routes/admin/evaluation-admin-routes.js');
+    const { registerEvaluationAdminRoutes } =
+      await import('./routes/admin/evaluation-admin-routes.js');
     await registerEvaluationAdminRoutes(server); // Closed-loop evaluation admin (drift, learning, outcomes)
-    const { registerExperimentAdminRoutes } = await import('./routes/admin/experiment-admin-routes.js');
+    const { registerExperimentAdminRoutes } =
+      await import('./routes/admin/experiment-admin-routes.js');
     await registerExperimentAdminRoutes(server); // Comparative experiment framework (Mode A/B/C)
-    const { registerTrainingDataAdminRoutes } = await import('./routes/admin/training-data-admin-routes.js');
+    const { registerTrainingDataAdminRoutes } =
+      await import('./routes/admin/training-data-admin-routes.js');
     await registerTrainingDataAdminRoutes(server); // F3.3: Ad-hoc training-data export trigger + watermark state
     // R3 fix: DLQ admin routes (ADR-003)
     const { registerDLQAdminRoutes } = await import('./routes/admin/dlq-routes.js');
     await registerDLQAdminRoutes(server);
     // Phase 1-5 control plane diagnostic endpoints
-    const { registerOperabilityAdminRoutes } = await import('./routes/admin/operability-admin-routes.js');
+    const { registerOperabilityAdminRoutes } =
+      await import('./routes/admin/operability-admin-routes.js');
     await registerOperabilityAdminRoutes(server);
     // Enterprise governance control plane (budget cap, access policy, audit query)
     const { registerOrgGovernanceRoutes } = await import('./routes/admin/org-governance-routes.js');
     await registerOrgGovernanceRoutes(server);
     const { registerModelsConfigRoutes } = await import('./routes/models/models-config-routes.js');
     await registerModelsConfigRoutes(server); // Models configuration routes
-    const { registerOrganizationSettingsRoutes } = await import('./routes/organization/organization-settings-routes.js');
+    const { registerOrganizationSettingsRoutes } =
+      await import('./routes/organization/organization-settings-routes.js');
     await registerOrganizationSettingsRoutes(server); // Organization settings routes
     await registerCodebaseRoutes(server);
     await registerCodebaseAnalysisRoutes(server);
-    
+
     // Register admin discovery routes
     const { discoveryRoutes } = await import('./api/routes/admin/discovery.js');
     await discoveryRoutes(server);
@@ -1082,12 +1115,10 @@ async function bootstrap(): Promise<void> {
     // (post-listen background section) when the flag is enabled.
     if (process.env.BROADCAST_FEATURE_ENABLED === 'true') {
       try {
-        const { broadcastDestinationsRoutes } = await import(
-          './broadcast/api/routes/broadcast-destinations.routes.js'
-        );
-        const { broadcastAdminRoutes } = await import(
-          './broadcast/api/routes/broadcast-admin.routes.js'
-        );
+        const { broadcastDestinationsRoutes } =
+          await import('./broadcast/api/routes/broadcast-destinations.routes.js');
+        const { broadcastAdminRoutes } =
+          await import('./broadcast/api/routes/broadcast-admin.routes.js');
         await server.register(broadcastDestinationsRoutes);
         await server.register(broadcastAdminRoutes);
         logger.info('✅ Broadcast routes registered (/v1/broadcast/*, /v1/admin/broadcast/*)');
@@ -1107,7 +1138,7 @@ async function bootstrap(): Promise<void> {
     await server.register(registerStatusRoutes);
     await registerToolsRoutes(server);
     logger.info('✅ Tools API routes registered (50+ tool endpoints)');
-    
+
     await registerProviderHealthRoutes(server);
     logger.info('✅ Provider health check routes registered (/v1/health/providers)');
 
@@ -1117,7 +1148,8 @@ async function bootstrap(): Promise<void> {
     logger.info('✅ Providers routes registered (/v1/providers)');
 
     // Orchestration routes
-    const { registerOrchestrationRoutes } = await import('./routes/orchestration/orchestration-routes.js');
+    const { registerOrchestrationRoutes } =
+      await import('./routes/orchestration/orchestration-routes.js');
     await registerOrchestrationRoutes(server);
     logger.info('✅ Orchestration routes registered (/v1/orchestration/strategies)');
 
@@ -1132,16 +1164,14 @@ async function bootstrap(): Promise<void> {
     });
 
     // Collective Intelligence routes (v5.2)
-    const { registerCollectiveIntelligenceRoutes } = await import(
-      './routes/collective-intelligence/ci-routes.js'
-    );
+    const { registerCollectiveIntelligenceRoutes } =
+      await import('./routes/collective-intelligence/ci-routes.js');
     await registerCollectiveIntelligenceRoutes(server);
     logger.info('✅ Collective Intelligence routes registered (memory, workflows, reasoning)');
 
     // CI Dashboard routes (v5.2)
-    const { registerCIDashboardRoutes } = await import(
-      './routes/observability/ci-dashboard-routes.js'
-    );
+    const { registerCIDashboardRoutes } =
+      await import('./routes/observability/ci-dashboard-routes.js');
     await registerCIDashboardRoutes(server);
     logger.info('✅ CI Dashboard routes registered (observability, metrics, analytics)');
 
@@ -1210,7 +1240,7 @@ async function bootstrap(): Promise<void> {
             'node-cron scheduler has been removed because it duplicated scheduled ' +
             'runs across replicas. BullMQ distributed crons are now the only ' +
             'scheduler. Unset USE_BULLMQ_CRONS (the default) or set it to "true" ' +
-            'to run scheduled jobs.',
+            'to run scheduled jobs.'
         );
       }
 
@@ -1224,11 +1254,11 @@ async function bootstrap(): Promise<void> {
       if (queueRuntime.configuration.runWorkersInApiProcess) {
         await startScheduledTasksWorker();
         logger.info(
-          '✅ Scheduler ACTIVE: BullMQ distributed crons, worker running in-process (single execution across replicas; legacy node-cron removed)',
+          '✅ Scheduler ACTIVE: BullMQ distributed crons, worker running in-process (single execution across replicas; legacy node-cron removed)'
         );
       } else {
         logger.info(
-          '✅ Scheduler ACTIVE: BullMQ distributed crons registered; execution delegated to dedicated worker deployment',
+          '✅ Scheduler ACTIVE: BullMQ distributed crons registered; execution delegated to dedicated worker deployment'
         );
       }
     }
@@ -1242,13 +1272,15 @@ async function bootstrap(): Promise<void> {
     // server accepting traffic. Gated by the same flag as the routes.
     if (process.env.BROADCAST_FEATURE_ENABLED === 'true') {
       try {
-        const { startBroadcastPoller } = await import(
-          './broadcast/application/broadcast-poller-runner.js'
-        );
+        const { startBroadcastPoller } =
+          await import('./broadcast/application/broadcast-poller-runner.js');
         startBroadcastPoller();
         logger.info('✅ Broadcast outbox poller started');
       } catch (err) {
-        logger.warn({ err }, 'Failed to start broadcast poller — staged traces will not be delivered');
+        logger.warn(
+          { err },
+          'Failed to start broadcast poller — staged traces will not be delivered'
+        );
       }
     }
 
@@ -1266,11 +1298,13 @@ async function bootstrap(): Promise<void> {
           const summary = await loadProviderCatalog();
           logger.info(
             { ...summary, durationMs: Date.now() - t0 },
-            '✅ Post-listen catalog load completed',
+            '✅ Post-listen catalog load completed'
           );
         } catch (err) {
-          logger.error({ err: err instanceof Error ? err.message : String(err) },
-                       'Post-listen catalog load failed');
+          logger.error(
+            { err: err instanceof Error ? err.message : String(err) },
+            'Post-listen catalog load failed'
+          );
         }
       });
     }
@@ -1306,7 +1340,7 @@ async function bootstrap(): Promise<void> {
       const forceExitTimer = setTimeout(() => {
         logger.fatal(
           { shutdownTimeoutMs },
-          'Graceful shutdown exceeded SHUTDOWN_TIMEOUT_MS — forcing exit',
+          'Graceful shutdown exceeded SHUTDOWN_TIMEOUT_MS — forcing exit'
         );
         process.exit(1);
       }, shutdownTimeoutMs);
@@ -1317,7 +1351,10 @@ async function bootstrap(): Promise<void> {
         try {
           await fn();
         } catch (err) {
-          logger.warn({ err: serializeError(err), step: label }, 'Shutdown step failed (non-fatal)');
+          logger.warn(
+            { err: serializeError(err), step: label },
+            'Shutdown step failed (non-fatal)'
+          );
         }
       };
 
@@ -1334,7 +1371,8 @@ async function bootstrap(): Promise<void> {
         await stopOutboxPoller();
       });
       await runStep('broadcast-poller', async () => {
-        const { stopBroadcastPoller } = await import('./broadcast/application/broadcast-poller-runner.js');
+        const { stopBroadcastPoller } =
+          await import('./broadcast/application/broadcast-poller-runner.js');
         stopBroadcastPoller();
       });
       await runStep('dlq-manager', async () => {
@@ -1358,9 +1396,8 @@ async function bootstrap(): Promise<void> {
       });
       if (config.security.audit.enabled) {
         await runStep('security-audit-retention-job', async () => {
-          const { stopSecurityAuditRetentionJob } = await import(
-            './jobs/security-audit-retention-job.js'
-          );
+          const { stopSecurityAuditRetentionJob } =
+            await import('./jobs/security-audit-retention-job.js');
           stopSecurityAuditRetentionJob();
         });
       }
@@ -1370,9 +1407,8 @@ async function bootstrap(): Promise<void> {
           stopStripeCatalogSyncJob();
         });
         await runStep('billing-usage-reconciliation-job', async () => {
-          const { stopBillingUsageReconciliationJob } = await import(
-            './jobs/billing-usage-reconciliation-job.js'
-          );
+          const { stopBillingUsageReconciliationJob } =
+            await import('./jobs/billing-usage-reconciliation-job.js');
           await stopBillingUsageReconciliationJob();
         });
       }
@@ -1386,9 +1422,8 @@ async function bootstrap(): Promise<void> {
         stopContextCacheCleanupJob();
       });
       await runStep('collective-intelligence-reflection-job', async () => {
-        const { stopCollectiveIntelligenceReflectionJob } = await import(
-          './jobs/collective-intelligence-reflection-job.js'
-        );
+        const { stopCollectiveIntelligenceReflectionJob } =
+          await import('./jobs/collective-intelligence-reflection-job.js');
         stopCollectiveIntelligenceReflectionJob();
         logger.info('Collective intelligence reflection job stopped');
         logger.info('✅ Context cache cleanup job stopped');

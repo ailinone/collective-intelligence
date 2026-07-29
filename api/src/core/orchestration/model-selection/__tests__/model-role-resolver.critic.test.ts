@@ -40,7 +40,12 @@ describe('ModelRoleResolver — critic', () => {
             id: 'reviewer',
             provider: 'p2',
             contextWindow: 64000,
-            capabilities: ['chat', 'text_generation', 'reasoning', 'code_review'] as ModelCapability[],
+            capabilities: [
+              'chat',
+              'text_generation',
+              'reasoning',
+              'code_review',
+            ] as ModelCapability[],
             performance: { latencyMs: 1000, throughput: 100, quality: 0.85, reliability: 0.92 },
           }),
         }),
@@ -57,8 +62,14 @@ describe('ModelRoleResolver — critic', () => {
       strategyName: 'consensus',
       role: 'critic',
       candidatePool: [
-        makeCandidate({ id: 'participant-1', model: makeModel({ id: 'participant-1', contextWindow: 64000, provider: 'p1' }) }),
-        makeCandidate({ id: 'fresh-critic', model: makeModel({ id: 'fresh-critic', contextWindow: 64000, provider: 'p2' }) }),
+        makeCandidate({
+          id: 'participant-1',
+          model: makeModel({ id: 'participant-1', contextWindow: 64000, provider: 'p1' }),
+        }),
+        makeCandidate({
+          id: 'fresh-critic',
+          model: makeModel({ id: 'fresh-critic', contextWindow: 64000, provider: 'p2' }),
+        }),
       ],
       constraints: { excludeModelIds: ['participant-1'] },
     });

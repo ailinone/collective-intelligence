@@ -24,11 +24,23 @@ const __dirname = dirname(__filename);
 
 const SOURCES: Record<string, string> = {
   'historical-execution-types.ts': resolve(__dirname, '..', 'historical-execution-types.ts'),
-  'model-task-performance-profile.ts': resolve(__dirname, '..', 'model-task-performance-profile.ts'),
+  'model-task-performance-profile.ts': resolve(
+    __dirname,
+    '..',
+    'model-task-performance-profile.ts'
+  ),
   'model-harm-profile.ts': resolve(__dirname, '..', 'model-harm-profile.ts'),
   'pair-contribution-profile.ts': resolve(__dirname, '..', 'pair-contribution-profile.ts'),
-  'historical-contribution-scorer.ts': resolve(__dirname, '..', 'historical-contribution-scorer.ts'),
-  'contribution-aware-candidate-scorer.ts': resolve(__dirname, '..', 'contribution-aware-candidate-scorer.ts'),
+  'historical-contribution-scorer.ts': resolve(
+    __dirname,
+    '..',
+    'historical-contribution-scorer.ts'
+  ),
+  'contribution-aware-candidate-scorer.ts': resolve(
+    __dirname,
+    '..',
+    'contribution-aware-candidate-scorer.ts'
+  ),
   'contribution-explanation.ts': resolve(__dirname, '..', 'contribution-explanation.ts'),
 };
 

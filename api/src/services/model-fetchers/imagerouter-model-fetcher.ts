@@ -74,8 +74,8 @@ export class ImageRouterModelFetcher extends BaseProviderModelFetcher {
 
   private extractRawModels(payload: unknown): RawModelRecord[] {
     if (Array.isArray(payload)) {
-      return payload.filter(
-        (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+      return payload.filter((item): item is RawModelRecord =>
+        Boolean(item && typeof item === 'object')
       );
     }
 
@@ -87,8 +87,8 @@ export class ImageRouterModelFetcher extends BaseProviderModelFetcher {
     const arrays = [record.data, record.models, record.items, record.results];
     for (const candidate of arrays) {
       if (Array.isArray(candidate)) {
-        return candidate.filter(
-          (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+        return candidate.filter((item): item is RawModelRecord =>
+          Boolean(item && typeof item === 'object')
         );
       }
     }
@@ -148,8 +148,11 @@ export class ImageRouterModelFetcher extends BaseProviderModelFetcher {
       capabilities,
       pricing: {
         inputCostPer1M:
-          this.extractNumber(rawModel, ['input_cost_per_1m', 'inputCostPer1M', 'prompt_cost_per_1m']) ||
-          0,
+          this.extractNumber(rawModel, [
+            'input_cost_per_1m',
+            'inputCostPer1M',
+            'prompt_cost_per_1m',
+          ]) || 0,
         outputCostPer1M:
           this.extractNumber(rawModel, [
             'output_cost_per_1m',
@@ -259,4 +262,3 @@ export class ImageRouterModelFetcher extends BaseProviderModelFetcher {
     }
   }
 }
-

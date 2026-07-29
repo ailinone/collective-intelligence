@@ -67,10 +67,10 @@ export interface LastResortMetadata {
  */
 export function evaluateLastResort(
   eligibleExternalCount: number,
-  allModels: Model[],
+  allModels: Model[]
 ): LastResortDecision {
   const hub = getProviderOperabilityHub();
-  const selfHostedModels = allModels.filter(m => {
+  const selfHostedModels = allModels.filter((m) => {
     const provider = (m.provider ?? '').toLowerCase();
     return hub.isSelfHostedProvider(provider) && m.status === 'active';
   });
@@ -98,10 +98,13 @@ export function evaluateLastResort(
   }
 
   // Activate self-hosted fallback
-  log.warn({
-    selfHostedCount: selfHostedModels.length,
-    models: selfHostedModels.map(m => m.id).slice(0, 5),
-  }, 'Activating self-hosted last-resort fallback — all external providers exhausted');
+  log.warn(
+    {
+      selfHostedCount: selfHostedModels.length,
+      models: selfHostedModels.map((m) => m.id).slice(0, 5),
+    },
+    'Activating self-hosted last-resort fallback — all external providers exhausted'
+  );
 
   return {
     activated: true,
@@ -119,10 +122,7 @@ export function evaluateLastResort(
  *   - Excluded from benchmark primary metrics
  *   - Auditable with full reasoning
  */
-export function buildLastResortMetadata(
-  model: Model,
-  reason: string,
-): LastResortMetadata {
+export function buildLastResortMetadata(model: Model, reason: string): LastResortMetadata {
   return {
     execution_mode: 'last_resort_self_hosted',
     degraded: true,

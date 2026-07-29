@@ -80,13 +80,14 @@ export interface WriteAssertionStats {
  * Default TTL by source — sources that get re-probed frequently can afford
  * shorter TTLs (less stale data); expensive probes (LLM, oracle) age longer.
  */
-const DEFAULT_TTL_DAYS_BY_SOURCE: Readonly<Record<CapabilitySignal['source'], number>> = Object.freeze({
-  'provider-declared': 30,
-  'helicone-oracle': 30,
-  'modality-derived': 60,
-  'parameter-derived': 60,
-  'name-regex': 90,
-});
+const DEFAULT_TTL_DAYS_BY_SOURCE: Readonly<Record<CapabilitySignal['source'], number>> =
+  Object.freeze({
+    'provider-declared': 30,
+    'helicone-oracle': 30,
+    'modality-derived': 60,
+    'parameter-derived': 60,
+    'name-regex': 90,
+  });
 
 type PrismaRunner = Pick<PrismaClient, '$executeRawUnsafe' | '$queryRawUnsafe'>;
 
@@ -102,7 +103,7 @@ type PrismaRunner = Pick<PrismaClient, '$executeRawUnsafe' | '$queryRawUnsafe'>;
 export async function writeAssertions(
   batch: readonly ModelAssertionBatch[],
   opts: WriteAssertionOptions,
-  runner: PrismaRunner = prisma,
+  runner: PrismaRunner = prisma
 ): Promise<WriteAssertionStats> {
   const stats: WriteAssertionStats = {
     modelsTouched: 0,
@@ -131,7 +132,7 @@ export async function writeAssertions(
         stats.signalsDropped += 1;
         log.warn(
           { capability: signal.capability, modelUid, source: signal.source },
-          'No URI mapping for capability — dropping assertion. Add to ontology seed.',
+          'No URI mapping for capability — dropping assertion. Add to ontology seed.'
         );
         continue;
       }
@@ -160,7 +161,7 @@ export async function writeAssertions(
        AND model_uid = ANY($1::varchar[])
        AND source_detail->>'fetcher' = $2`,
     uniqueModelUids,
-    opts.origin,
+    opts.origin
   );
   stats.rowsSuperseded = Number(supersedeResult ?? 0);
 
@@ -181,7 +182,7 @@ export async function writeAssertions(
     rows.map((r) => r.source),
     rows.map((r) => JSON.stringify(r.detail)),
     rows.map((r) => r.confidence),
-    rows.map((r) => r.ttlDays),
+    rows.map((r) => r.ttlDays)
   );
   stats.rowsInserted = Number(insertResult ?? 0);
 
@@ -190,11 +191,17 @@ export async function writeAssertions(
 
 function defaultConfidenceForSource(source: CapabilitySignal['source']): number {
   switch (source) {
-    case 'provider-declared': return 1.0;
-    case 'helicone-oracle':   return 0.95;
-    case 'modality-derived':  return 0.85;
-    case 'parameter-derived': return 0.75;
-    case 'name-regex':        return 0.4;
-    default:                  return 0.5;
+    case 'provider-declared':
+      return 1.0;
+    case 'helicone-oracle':
+      return 0.95;
+    case 'modality-derived':
+      return 0.85;
+    case 'parameter-derived':
+      return 0.75;
+    case 'name-regex':
+      return 0.4;
+    default:
+      return 0.5;
   }
 }

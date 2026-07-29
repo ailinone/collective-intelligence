@@ -15,16 +15,22 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  C3_MAX_TOTAL_COST_USD, C3_MAX_COST_PER_PROVIDER_USD, C3_MAX_INPUT_TOKENS,
-  C3_MAX_OUTPUT_TOKENS, C3_MAX_RETRIES, C3_NON_STREAMING_REQUIRED,
+  C3_MAX_TOTAL_COST_USD,
+  C3_MAX_COST_PER_PROVIDER_USD,
+  C3_MAX_INPUT_TOKENS,
+  C3_MAX_OUTPUT_TOKENS,
+  C3_MAX_RETRIES,
+  C3_NON_STREAMING_REQUIRED,
 } from '@/core/experiment/c3-budget-authorization-gate-contract';
 
 const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-budget-authorization-gate-budget-policy.json');
 const budget = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — budget policy', () => {
-  it('case 4: max total cost <= 0.05', () => expect(C3_MAX_TOTAL_COST_USD).toBeLessThanOrEqual(0.05));
-  it('case 5: max cost per provider <= 0.05', () => expect(C3_MAX_COST_PER_PROVIDER_USD).toBeLessThanOrEqual(0.05));
+  it('case 4: max total cost <= 0.05', () =>
+    expect(C3_MAX_TOTAL_COST_USD).toBeLessThanOrEqual(0.05));
+  it('case 5: max cost per provider <= 0.05', () =>
+    expect(C3_MAX_COST_PER_PROVIDER_USD).toBeLessThanOrEqual(0.05));
   it('case 6: max retries = 0', () => expect(C3_MAX_RETRIES).toBe(0));
   it('case 7: non-streaming required', () => expect(C3_NON_STREAMING_REQUIRED).toBe(true));
   it('token caps are positive and bounded', () => {

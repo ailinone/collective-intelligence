@@ -33,9 +33,7 @@ describe('optimizer — cost ceiling', () => {
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
     });
-    expect(plan.expectedCostUsd).toBeLessThanOrEqual(
-      STANDARD_BASELINE.singleModelCostUsd + 1e-9,
-    );
+    expect(plan.expectedCostUsd).toBeLessThanOrEqual(STANDARD_BASELINE.singleModelCostUsd + 1e-9);
     expect(plan.strategyId).toBe('parallel');
   });
 
@@ -46,9 +44,7 @@ describe('optimizer — cost ceiling', () => {
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
     });
-    expect(plan.expectedJudge).toBeGreaterThanOrEqual(
-      STANDARD_BASELINE.singleModelJudge,
-    );
+    expect(plan.expectedJudge).toBeGreaterThanOrEqual(STANDARD_BASELINE.singleModelJudge);
   });
 
   it('paretoStatus = beats_baseline for the parallel winner', () => {
@@ -73,9 +69,7 @@ describe('optimizer — cost ceiling', () => {
     if (plan.strategyId !== 'parallel') {
       expect(plan.strategyId).toBe('single_fallback');
     } else {
-      expect(plan.expectedCostUsd).toBeLessThanOrEqual(
-        STANDARD_BASELINE.singleModelCostUsd + 1e-9,
-      );
+      expect(plan.expectedCostUsd).toBeLessThanOrEqual(STANDARD_BASELINE.singleModelCostUsd + 1e-9);
     }
   });
 
@@ -115,7 +109,7 @@ describe('optimizer — cost ceiling', () => {
       policy: { maxCostRatioVsSingle: 0.5 },
     });
     expect(plan.expectedCostUsd).toBeLessThanOrEqual(
-      STANDARD_BASELINE.singleModelCostUsd * 0.5 + 1e-9,
+      STANDARD_BASELINE.singleModelCostUsd * 0.5 + 1e-9
     );
   });
 });

@@ -140,7 +140,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
         panelScheduler,
         panelReason,
       },
-      'Expert panel composed',
+      'Expert panel composed'
     );
 
     // Phase 2c shadow integration — fire ensemble in parallel without
@@ -148,24 +148,20 @@ export class ExpertPanelStrategy extends BaseStrategy {
     // decision_value.shadowEnsemble for F3.3 export. NEVER throws.
     let shadowSnapshot: ShadowEnsembleSnapshot | null = null;
     void runEnsembleInShadow(
-      buildEnsembleRequest(
-        'expert-panel',
-        'panel-composition',
-        {
-          requestId: context.requestId,
-          domains,
-          coordinatorModelId: coordinatorModel.id,
-          coordinatorProviderId: coordinatorModel.provider,
-          expertCount: expertModels.length,
-          experts: expertModels.map((m) => ({
-            modelId: m.id,
-            providerId: m.provider,
-            quality: m.performance?.quality ?? null,
-          })),
-          taskType: context.taskType,
-          complexity: context.triage?.complexity ?? null,
-        },
-      ),
+      buildEnsembleRequest('expert-panel', 'panel-composition', {
+        requestId: context.requestId,
+        domains,
+        coordinatorModelId: coordinatorModel.id,
+        coordinatorProviderId: coordinatorModel.provider,
+        expertCount: expertModels.length,
+        experts: expertModels.map((m) => ({
+          modelId: m.id,
+          providerId: m.provider,
+          quality: m.performance?.quality ?? null,
+        })),
+        taskType: context.taskType,
+        complexity: context.triage?.complexity ?? null,
+      }),
       {
         heuristicDecisionForComparison: {
           role: 'coordinator',
@@ -175,13 +171,17 @@ export class ExpertPanelStrategy extends BaseStrategy {
         onShadowResult: (snapshot) => {
           shadowSnapshot = snapshot;
         },
-      },
+      }
     ).catch((err: unknown) => {
       this.log.debug({ err: String(err) }, 'shadow runner promise rejected silently');
     });
 
     // Observer: phase start
-    this.emitObserverEvent(context, { type: 'phase_start', models: expertModels.map(m => m.name || m.id), summary: `Expert panel: ${domains.length} domains (${domains.join(', ')}). Consulting specialists.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: expertModels.map((m) => m.name || m.id),
+      summary: `Expert panel: ${domains.length} domains (${domains.join(', ')}). Consulting specialists.`,
+    });
 
     // 3. Consult each expert (parallel, independent)
     const expertConsultations = await this.consultExperts(request, expertModels, domains, context);
@@ -194,38 +194,59 @@ export class ExpertPanelStrategy extends BaseStrategy {
       // already-completed reviewee (i+1 mod n) and writes only its OWN slot (reviewer.execution.crossReview)
       // — no read/write conflict between iterations — so the previous sequential `for` (3-5 serial HTTP
       // calls) needlessly serialized. ~9-20s saved on long-form.
-      await Promise.all(expertConsultations.map(async (reviewer, i) => {
-        const reviewee = expertConsultations[(i + 1) % expertConsultations.length];
-        const revieweeContent = reviewee.execution.response?.choices?.[0]?.message?.content;
-        const revieweeText = typeof revieweeContent === 'string' ? revieweeContent.slice(0, 1500) : '';
-        if (!revieweeText || !this.getAdapterForModel) return;
+      await Promise.all(
+        expertConsultations.map(async (reviewer, i) => {
+          const reviewee = expertConsultations[(i + 1) % expertConsultations.length];
+          const revieweeContent = reviewee.execution.response?.choices?.[0]?.message?.content;
+          const revieweeText =
+            typeof revieweeContent === 'string' ? revieweeContent.slice(0, 1500) : '';
+          if (!revieweeText || !this.getAdapterForModel) return;
 
-        try {
-          const model = reviewer.execution.model as import('@/types').Model;
-          if (!model) return;
-          const adapter = await this.getAdapterForModel(model, context);
-          if (!adapter) return;
+          try {
+            const model = reviewer.execution.model as import('@/types').Model;
+            if (!model) return;
+            const adapter = await this.getAdapterForModel(model, context);
+            if (!adapter) return;
 
-          const crossReviewReq: ChatRequest = {
-            ...request,
-            messages: [{
-              role: 'user',
-              content: `As a ${reviewer.domain} expert, briefly review this ${reviewee.domain} expert's analysis. Note any errors, missing considerations, or points that contradict your own analysis. Be concise (2-3 points max).\n\nTheir analysis:\n${revieweeText}`,
-            }],
-            max_tokens: 500,
-          };
-          const crossModelExec = await this.executeModel(adapter, model, crossReviewReq, 'reviewer');
-          const crossContent = crossModelExec.response?.choices?.[0]?.message?.content;
-          if (typeof crossContent === 'string' && crossContent.length > 20) {
-            (reviewer.execution as { crossReview?: string }).crossReview = crossContent;
+            const crossReviewReq: ChatRequest = {
+              ...request,
+              messages: [
+                {
+                  role: 'user',
+                  content: `As a ${reviewer.domain} expert, briefly review this ${reviewee.domain} expert's analysis. Note any errors, missing considerations, or points that contradict your own analysis. Be concise (2-3 points max).\n\nTheir analysis:\n${revieweeText}`,
+                },
+              ],
+              max_tokens: 500,
+            };
+            const crossModelExec = await this.executeModel(
+              adapter,
+              model,
+              crossReviewReq,
+              'reviewer'
+            );
+            const crossContent = crossModelExec.response?.choices?.[0]?.message?.content;
+            if (typeof crossContent === 'string' && crossContent.length > 20) {
+              (reviewer.execution as { crossReview?: string }).crossReview = crossContent;
+            }
+          } catch {
+            /* cross-review failure is non-fatal */
           }
-        } catch { /* cross-review failure is non-fatal */ }
-      }));
+        })
+      );
     }
 
     // Observer: experts done
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${expertConsultations.length} expert assessments received. Coordinator synthesizing.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: coordinatorModel.name || coordinatorModel.id, summary: 'Coordinator integrating multi-domain expert inputs.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${expertConsultations.length} expert assessments received. Coordinator synthesizing.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: coordinatorModel.name || coordinatorModel.id,
+      summary: 'Coordinator integrating multi-domain expert inputs.',
+    });
 
     // 4. Coordinator synthesizes expert inputs (now with cross-review notes)
     const finalResponse = await this.coordinateSynthesis(
@@ -236,7 +257,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
     );
 
     // Observer: synthesis complete
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Expert panel synthesis complete across ${domains.length} domains.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Expert panel synthesis complete across ${domains.length} domains.`,
+    });
 
     // 5. Calculate metrics
     const duration = Date.now() - startTime;
@@ -280,10 +304,16 @@ export class ExpertPanelStrategy extends BaseStrategy {
         const totalTokens =
           expertConsultations.reduce(
             (sum, c) => sum + c.execution.usage.prompt_tokens + c.execution.usage.completion_tokens,
-            0,
-          ) + finalResponse.execution.usage.prompt_tokens + finalResponse.execution.usage.completion_tokens;
+            0
+          ) +
+          finalResponse.execution.usage.prompt_tokens +
+          finalResponse.execution.usage.completion_tokens;
 
-        const participatingModels: ReadonlyArray<{ modelId: string; modelName: string; providerId: string }> = [
+        const participatingModels: ReadonlyArray<{
+          modelId: string;
+          modelName: string;
+          providerId: string;
+        }> = [
           ...expertConsultations.map((c) => ({
             modelId: c.execution.model.id,
             modelName: c.execution.model.name ?? c.execution.model.id,
@@ -299,9 +329,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
         const flatSignals: ExpertPanelSignalInput[] = [];
         // Round 1: expert consultations
         for (const c of expertConsultations) {
-          const text = typeof c.execution.response?.choices?.[0]?.message?.content === 'string'
-            ? c.execution.response.choices[0].message.content
-            : '';
+          const text =
+            typeof c.execution.response?.choices?.[0]?.message?.content === 'string'
+              ? c.execution.response.choices[0].message.content
+              : '';
           flatSignals.push({
             round: 1,
             agentName: c.execution.modelName,
@@ -318,7 +349,8 @@ export class ExpertPanelStrategy extends BaseStrategy {
           });
         }
         // Round 2: cross-reviews (when present — written in-place to expert.execution.crossReview)
-        const crossReviewEnabled = process.env.EXPERT_PANEL_CROSS_REVIEW !== 'false' && expertConsultations.length >= 2;
+        const crossReviewEnabled =
+          process.env.EXPERT_PANEL_CROSS_REVIEW !== 'false' && expertConsultations.length >= 2;
         if (crossReviewEnabled) {
           for (let i = 0; i < expertConsultations.length; i++) {
             const reviewer = expertConsultations[i];
@@ -351,9 +383,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
           providerId: coordinatorModel.provider,
           role: 'coordinator',
           decisionType: 'synthesis',
-          text: typeof finalResponse.execution.response?.choices?.[0]?.message?.content === 'string'
-            ? finalResponse.execution.response.choices[0].message.content
-            : '',
+          text:
+            typeof finalResponse.execution.response?.choices?.[0]?.message?.content === 'string'
+              ? finalResponse.execution.response.choices[0].message.content
+              : '',
           durationMs: finalResponse.execution.duration,
           cost: finalResponse.execution.cost,
           inputTokens: finalResponse.execution.usage.prompt_tokens,
@@ -384,11 +417,13 @@ export class ExpertPanelStrategy extends BaseStrategy {
           totalTokens,
           participatingModels,
           signals: flatSignals,
-        }).catch(() => { /* audit persistence is non-critical and off the hot path */ });
+        }).catch(() => {
+          /* audit persistence is non-critical and off the hot path */
+        });
       } catch (err) {
         this.log.warn(
           { error: err instanceof Error ? err.message : String(err) },
-          'Expert-panel persistence threw — continuing',
+          'Expert-panel persistence threw — continuing'
         );
       }
     }
@@ -409,39 +444,63 @@ export class ExpertPanelStrategy extends BaseStrategy {
           recommendation: this.extractRecommendation(c.execution.response),
         })),
         synthesisApproach: 'coordinator-integration',
-        ...(this.isReasoningEnabled(request) ? {
-          reasoning_traces: expertConsultations
-            .filter(c => (c.execution as { reasoning?: string }).reasoning)
-            .map(c => ({
-              model_id: c.execution.modelId,
-              model_name: c.execution.modelName,
-              role: `expert-${c.domain}`,
-              reasoning: (c.execution as { reasoning?: string }).reasoning,
-              reasoning_tokens: (c.execution as { reasoningTokens?: number }).reasoningTokens,
-            })),
-        } : {}),
+        ...(this.isReasoningEnabled(request)
+          ? {
+              reasoning_traces: expertConsultations
+                .filter((c) => (c.execution as { reasoning?: string }).reasoning)
+                .map((c) => ({
+                  model_id: c.execution.modelId,
+                  model_name: c.execution.modelName,
+                  role: `expert-${c.domain}`,
+                  reasoning: (c.execution as { reasoning?: string }).reasoning,
+                  reasoning_tokens: (c.execution as { reasoningTokens?: number }).reasoningTokens,
+                })),
+            }
+          : {}),
       },
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Expert panel requires at least 3 models');
     const domains = this.detectExpertiseDomains(request, context);
     const { coordinatorModel, expertModels } = this.selectPanel(models, domains, context);
 
-    this.emitObserverEvent(context, { type: 'phase_start', models: expertModels.map(m => m.name || m.id), summary: `Expert panel: ${domains.length} domains (${domains.join(', ')}).` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: expertModels.map((m) => m.name || m.id),
+      summary: `Expert panel: ${domains.length} domains (${domains.join(', ')}).`,
+    });
     yield this.progressChunk(`Consulting ${expertModels.length} domain experts...`, 0, 2);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Phase 1: consult experts (parallel)
     const expertConsultations = await this.consultExperts(request, expertModels, domains, context);
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 1, summary: `${expertConsultations.length} expert assessments received.` });
-    this.emitObserverEvent(context, { type: 'synthesis_start', modelName: coordinatorModel.name || coordinatorModel.id, summary: 'Coordinator integrating expert inputs.' });
-    yield this.progressChunk(`${expertConsultations.length} experts consulted, coordinator synthesizing...`, 1, 2);
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 1,
+      summary: `${expertConsultations.length} expert assessments received.`,
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      modelName: coordinatorModel.name || coordinatorModel.id,
+      summary: 'Coordinator integrating expert inputs.',
+    });
+    yield this.progressChunk(
+      `${expertConsultations.length} experts consulted, coordinator synthesizing...`,
+      1,
+      2
+    );
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Phase 2: stream coordinator synthesis
@@ -449,16 +508,22 @@ export class ExpertPanelStrategy extends BaseStrategy {
     const coordAdapter = await this.getAdapterForModel(coordinatorModel, context);
     if (!coordAdapter) throw new Error(`No adapter for coordinator`);
 
-    const expertInputs = expertConsultations.map(c => {
-      const content = safeResponseContent(c.execution.response);
-      return `**${c.domain.toUpperCase()} EXPERT:**\n${content}`;
-    }).join('\n\n---\n\n');
+    const expertInputs = expertConsultations
+      .map((c) => {
+        const content = safeResponseContent(c.execution.response);
+        return `**${c.domain.toUpperCase()} EXPERT:**\n${content}`;
+      })
+      .join('\n\n---\n\n');
 
     let reasoningSection = '';
     if (this.isReasoningEnabled(request)) {
       const traces = expertConsultations
-        .filter(c => (c.execution as { reasoning?: string }).reasoning)
-        .map(c => `### ${c.domain.toUpperCase()} Expert:\n${(c.execution as { reasoning?: string }).reasoning}`).join('\n\n');
+        .filter((c) => (c.execution as { reasoning?: string }).reasoning)
+        .map(
+          (c) =>
+            `### ${c.domain.toUpperCase()} Expert:\n${(c.execution as { reasoning?: string }).reasoning}`
+        )
+        .join('\n\n');
       if (traces) reasoningSection = `\n\n## Expert Reasoning Traces\n${traces}`;
     }
 
@@ -468,7 +533,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
       // the previous `filter(m => m.role !== 'system')` silently dropped it.
       messages: this.buildCoordinatorMessages(
         request,
-        `${PROMPTS.expertCoordinator}\n\nEXPERT RECOMMENDATIONS:\n${expertInputs}${reasoningSection}\n\nSynthesize into a unified response.`,
+        `${PROMPTS.expertCoordinator}\n\nEXPERT RECOMMENDATIONS:\n${expertInputs}${reasoningSection}\n\nSynthesize into a unified response.`
       ),
     };
 
@@ -478,10 +543,13 @@ export class ExpertPanelStrategy extends BaseStrategy {
     yield* this.streamSynthesisWithFallback(
       coordReq,
       [{ adapter: coordAdapter, model: coordinatorModel }],
-      () => expertInputs.slice(0, 4000),
+      () => expertInputs.slice(0, 4000)
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Expert panel synthesis complete across ${domains.length} domains.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Expert panel synthesis complete across ${domains.length} domains.`,
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
@@ -500,7 +568,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
         .map((stage) => stage.name)
         .filter((name) => name && name.length > 0);
       if (domains.length >= 2) {
-        this.log.info({ source: 'triage-plan', domains }, 'Expert domains from triage execution plan');
+        this.log.info(
+          { source: 'triage-plan', domains },
+          'Expert domains from triage execution plan'
+        );
         return domains.slice(0, 5);
       }
     }
@@ -509,8 +580,11 @@ export class ExpertPanelStrategy extends BaseStrategy {
     if (plan?.stages) {
       const roles = plan.stages.flatMap((s) => s.modelRoles || []);
       if (roles.length >= 2) {
-        const domains = roles.map((r) => typeof r.role === 'string' ? r.role : 'specialist');
-        this.log.info({ source: 'triage-roles', domains }, 'Expert domains from triage model roles');
+        const domains = roles.map((r) => (typeof r.role === 'string' ? r.role : 'specialist'));
+        this.log.info(
+          { source: 'triage-roles', domains },
+          'Expert domains from triage model roles'
+        );
         return [...new Set(domains)].slice(0, 5);
       }
     }
@@ -523,21 +597,24 @@ export class ExpertPanelStrategy extends BaseStrategy {
       // Map task intent to expert domains — semantic, not regex
       const intentDomains: Record<string, string[]> = {
         'code-review': ['code-quality', 'architecture', 'testing'],
-        'refactoring': ['code-quality', 'architecture', 'performance'],
-        'debugging': ['debugging', 'testing', 'performance'],
-        'analysis': ['architecture', 'performance', 'security'],
-        'documentation': ['documentation', 'architecture', 'general'],
-        'general': ['general', 'analysis', 'synthesis'],
-        'creative': ['creative', 'synthesis', 'analysis'],
-        'reasoning': ['logic', 'analysis', 'verification'],
-        'math': ['mathematics', 'logic', 'verification'],
-        'support': ['troubleshooting', 'documentation', 'general'],
+        refactoring: ['code-quality', 'architecture', 'performance'],
+        debugging: ['debugging', 'testing', 'performance'],
+        analysis: ['architecture', 'performance', 'security'],
+        documentation: ['documentation', 'architecture', 'general'],
+        general: ['general', 'analysis', 'synthesis'],
+        creative: ['creative', 'synthesis', 'analysis'],
+        reasoning: ['logic', 'analysis', 'verification'],
+        math: ['mathematics', 'logic', 'verification'],
+        support: ['troubleshooting', 'documentation', 'general'],
       };
       const mapped = intentDomains[intent] || ['general', 'analysis', 'synthesis'];
       // High complexity gets more domains
       const count = complexity === 'high' ? 4 : complexity === 'medium' ? 3 : 2;
       const domains = mapped.slice(0, count);
-      this.log.info({ source: 'triage-intent', intent, complexity, domains }, 'Expert domains from triage intent');
+      this.log.info(
+        { source: 'triage-intent', intent, complexity, domains },
+        'Expert domains from triage intent'
+      );
       return domains;
     }
 
@@ -580,7 +657,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
   private selectPanel(
     availableModels: Model[],
     domains: string[],
-    context: OrchestrationContext,
+    context: OrchestrationContext
   ): {
     coordinatorModel: Model;
     expertModels: Model[];
@@ -598,7 +675,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
           reason: 'pin-not-in-pool-quality-fallback',
           scheduler: 'pin-or-quality',
         },
-        'Expert panel: requested model not in operational pool — falling back to quality-sort coordinator selection',
+        'Expert panel: requested model not in operational pool — falling back to quality-sort coordinator selection'
       );
     }
 
@@ -614,7 +691,9 @@ export class ExpertPanelStrategy extends BaseStrategy {
     const expertModels = this.selectExperts(availableModels, domains);
     const coordinatorModel = this.selectCoordinator(availableModels, expertModels);
     const reason: 'pin-not-in-pool-quality-fallback' | 'quality-fallback' =
-      preference.pinReason === 'pin-not-in-pool' ? 'pin-not-in-pool-quality-fallback' : 'quality-fallback';
+      preference.pinReason === 'pin-not-in-pool'
+        ? 'pin-not-in-pool-quality-fallback'
+        : 'quality-fallback';
     return { coordinatorModel, expertModels, reason, scheduler: 'pin-or-quality' };
   }
 
@@ -704,7 +783,10 @@ export class ExpertPanelStrategy extends BaseStrategy {
         // specialist generations were the dominant cost keeping expert-panel at ~104s on long-form.
         // Honors a smaller user-set max_tokens.
         const expertCap = Number(process.env.EXPERT_PANEL_EXPERT_MAX_TOKENS) || 1200;
-        const cappedExpertRequest = { ...expertRequest, max_tokens: Math.min(Number(expertRequest.max_tokens) || expertCap, expertCap) };
+        const cappedExpertRequest = {
+          ...expertRequest,
+          max_tokens: Math.min(Number(expertRequest.max_tokens) || expertCap, expertCap),
+        };
 
         const modelExec = this.isReasoningEnabled(request)
           ? await this.executeModelWithReasoning(adapter, model, cappedExpertRequest, 'specialist')
@@ -770,20 +852,23 @@ export class ExpertPanelStrategy extends BaseStrategy {
     // Flag experts whose response is suspiciously short/generic relative to peers
     if (successful.length >= 2) {
       const MIN_EFFORT_RATIO = Number(process.env.EXPERT_PANEL_MIN_EFFORT_RATIO ?? 0.3);
-      const lengths = successful.map(c => {
+      const lengths = successful.map((c) => {
         const content = c.execution.response?.choices?.[0]?.message?.content;
         return typeof content === 'string' ? content.length : 0;
       });
       const avgLength = lengths.reduce((s, l) => s + l, 0) / lengths.length;
       for (let i = 0; i < successful.length; i++) {
         if (avgLength > 0 && lengths[i] < avgLength * MIN_EFFORT_RATIO) {
-          this.log.warn({
-            expert: successful[i].execution.modelId,
-            domain: successful[i].domain,
-            responseLength: lengths[i],
-            avgLength: Math.round(avgLength),
-            ratio: (lengths[i] / avgLength).toFixed(2),
-          }, 'Expert panel: social loafing detected — requesting more thorough response');
+          this.log.warn(
+            {
+              expert: successful[i].execution.modelId,
+              domain: successful[i].domain,
+              responseLength: lengths[i],
+              avgLength: Math.round(avgLength),
+              ratio: (lengths[i] / avgLength).toFixed(2),
+            },
+            'Expert panel: social loafing detected — requesting more thorough response'
+          );
 
           // Social Loafing Correction: re-execute with stronger prompt
           if (process.env.EXPERT_PANEL_CORRECT_LOAFING !== 'false') {
@@ -792,26 +877,42 @@ export class ExpertPanelStrategy extends BaseStrategy {
               if (this.getAdapterForModel && model) {
                 const adapter = await this.getAdapterForModel(model, context);
                 if (adapter) {
-                  const retryRequest = this.createExpertRequest(request, successful[i].domain, { variant: selectedVariant });
+                  const retryRequest = this.createExpertRequest(request, successful[i].domain, {
+                    variant: selectedVariant,
+                  });
                   // Enhanced prompt demanding thoroughness
                   const enhancedRequest: ChatRequest = {
                     ...retryRequest,
                     messages: [
-                      { role: 'system', content: 'IMPORTANT: Your previous response was insufficiently thorough. Provide a comprehensive, detailed analysis. Your output will be compared against other experts and scored.' },
+                      {
+                        role: 'system',
+                        content:
+                          'IMPORTANT: Your previous response was insufficiently thorough. Provide a comprehensive, detailed analysis. Your output will be compared against other experts and scored.',
+                      },
                       ...retryRequest.messages,
                     ],
                   };
-                  const retryExec = await this.executeModel(adapter, model, enhancedRequest, 'specialist');
+                  const retryExec = await this.executeModel(
+                    adapter,
+                    model,
+                    enhancedRequest,
+                    'specialist'
+                  );
                   const retryContent = retryExec.response?.choices?.[0]?.message?.content;
                   const retryLen = typeof retryContent === 'string' ? retryContent.length : 0;
                   if (retryLen > lengths[i]) {
                     // Update the execution with the better response
                     successful[i].execution.response = retryExec.response;
-                    this.log.info({ expert: model.id, originalLen: lengths[i], retryLen }, 'Expert panel: loafing corrected — improved response accepted');
+                    this.log.info(
+                      { expert: model.id, originalLen: lengths[i], retryLen },
+                      'Expert panel: loafing corrected — improved response accepted'
+                    );
                   }
                 }
               }
-            } catch { /* retry failed — keep original */ }
+            } catch {
+              /* retry failed — keep original */
+            }
           }
         }
       }
@@ -838,7 +939,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
   private createExpertRequest(
     originalRequest: ChatRequest,
     domain: string,
-    opts: { slots?: PromptSlotValues; variant?: PromptVariant | null } = {},
+    opts: { slots?: PromptSlotValues; variant?: PromptVariant | null } = {}
   ): ChatRequest {
     const { domain: displayDomain, expertRole } = expertRoleForDomain(domain);
     const baseInstruction = opts.variant
@@ -868,7 +969,7 @@ export class ExpertPanelStrategy extends BaseStrategy {
    */
   private buildCoordinatorMessages(
     originalRequest: ChatRequest,
-    coordinatorSystem: string,
+    coordinatorSystem: string
   ): ChatRequest['messages'] {
     const clientSystem = originalRequest.messages
       .filter((m) => m.role === 'system')
@@ -913,8 +1014,11 @@ export class ExpertPanelStrategy extends BaseStrategy {
     let reasoningSection = '';
     if (this.isReasoningEnabled(originalRequest)) {
       const traces = expertConsultations
-        .filter(c => (c.execution as { reasoning?: string }).reasoning)
-        .map(c => `### ${c.domain.toUpperCase()} Expert — Reasoning:\n${(c.execution as { reasoning?: string }).reasoning}`)
+        .filter((c) => (c.execution as { reasoning?: string }).reasoning)
+        .map(
+          (c) =>
+            `### ${c.domain.toUpperCase()} Expert — Reasoning:\n${(c.execution as { reasoning?: string }).reasoning}`
+        )
         .join('\n\n');
       if (traces) {
         reasoningSection = `\n\n## Expert Reasoning Traces\nUse these to understand HOW each expert arrived at their recommendations:\n\n${traces}`;
@@ -940,11 +1044,16 @@ Synthesize these expert inputs into a unified, practical response that:
 3. Prioritizes actionable steps
 4. Provides a clear, implementable plan
 
-Be concise but comprehensive.`,
+Be concise but comprehensive.`
       ),
     };
 
-    const coordExec = await this.executeModel(adapter, coordinatorModel, synthesisRequest, 'coordinator');
+    const coordExec = await this.executeModel(
+      adapter,
+      coordinatorModel,
+      synthesisRequest,
+      'coordinator'
+    );
     const response = coordExec.response;
 
     // Internal execution format (richer than public ModelExecution).

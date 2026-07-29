@@ -66,7 +66,8 @@ describe('Phase 8 invariant: discovery+execution providers declare capabilities'
       if (!hasAnyCapability) {
         violators.push({
           providerId: entry.providerId,
-          reason: 'discovery+execution row with no truthy `supports.X` key — orphaned in strategy candidate pool',
+          reason:
+            'discovery+execution row with no truthy `supports.X` key — orphaned in strategy candidate pool',
         });
       }
     }
@@ -107,7 +108,7 @@ describe('Phase 8 invariant: discovery+execution providers declare capabilities'
 
       const supports = entry.supports || {};
       const hasOutputCapability = OUTPUT_CAPABILITY_KEYS.some(
-        (k) => (supports as Record<string, boolean | undefined>)[k] === true,
+        (k) => (supports as Record<string, boolean | undefined>)[k] === true
       );
 
       if (!hasOutputCapability) {
@@ -176,7 +177,7 @@ describe('Phase 8 invariant: no orphan capability', () => {
     for (const key of CAPABILITY_KEYS) {
       if (KNOWN_DEFERRED_CAPABILITIES.has(key)) continue;
       const suppliers = PROVIDER_CATALOG.filter(
-        (e) => (e.supports as Record<string, boolean | undefined>)[key] === true,
+        (e) => (e.supports as Record<string, boolean | undefined>)[key] === true
       );
       if (suppliers.length === 0) {
         orphans.push(key);
@@ -196,7 +197,7 @@ describe('Phase 8 invariant: no orphan capability', () => {
       (e) =>
         e.integrationMode === 'discovery+execution' &&
         e.enabledByDefault === true &&
-        e.supports.chat === true,
+        e.supports.chat === true
     );
 
     expect(chatProviders.length).toBeGreaterThanOrEqual(3);
@@ -227,10 +228,10 @@ describe('Phase 8 invariant: enabled providers cover the canonical capabilities'
         (e) =>
           e.enabledByDefault === true &&
           e.integrationMode === 'discovery+execution' &&
-          (e.supports as Record<string, boolean | undefined>)[cap] === true,
+          (e.supports as Record<string, boolean | undefined>)[cap] === true
       );
 
       expect(enabledSuppliers.length).toBeGreaterThan(0);
-    },
+    }
   );
 });

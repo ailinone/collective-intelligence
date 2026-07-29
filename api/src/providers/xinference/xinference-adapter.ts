@@ -156,10 +156,8 @@ export class XinferenceAdapter extends OpenAICompatibleHubAdapter {
    * chain explicit to readers.
    */
   private exposeBuildRequestHeaders(includeJsonContentType: boolean): Record<string, string> {
-    return (
-      narrowAs<{
-        buildRequestHeaders(includeJsonContentType: boolean): Record<string, string>;
-      }>(this)
-    ).buildRequestHeaders(includeJsonContentType);
+    return narrowAs<{
+      buildRequestHeaders(includeJsonContentType: boolean): Record<string, string>;
+    }>(this).buildRequestHeaders(includeJsonContentType);
   }
 }

@@ -74,7 +74,9 @@ describe('profileTask — input is not mutated', () => {
   });
 
   it('policy override is unchanged after profiling', () => {
-    const policy = { tokenThresholds: { low: 100, medium: 1_000, high: 10_000, longContext: 5_000 } };
+    const policy = {
+      tokenThresholds: { low: 100, medium: 1_000, high: 10_000, longContext: 5_000 },
+    };
     const before = JSON.stringify(policy);
     profileTask({ requestId: 'r-1', text: 'hi' }, policy);
     const after = JSON.stringify(policy);

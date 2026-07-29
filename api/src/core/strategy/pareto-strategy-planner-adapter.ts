@@ -80,7 +80,7 @@ export interface ParetoStrategyPlannerResult {
 // ─── Main entry ─────────────────────────────────────────────────────────
 
 export function adaptStrategyPlan(
-  input: ParetoStrategyPlannerAdapterInput,
+  input: ParetoStrategyPlannerAdapterInput
 ): ParetoStrategyPlannerResult {
   const policy = resolveCollectiveSelectionPolicy(input.policy);
   const original = input.originalStrategyResult.plan;
@@ -88,10 +88,7 @@ export function adaptStrategyPlan(
 
   // 1. Explicit pin → preserve original.
   if (input.explicitModelPin) {
-    const modelIds = deriveModelIdsForRoutes(
-      input.contributionResult,
-      original.selectedRouteIds,
-    );
+    const modelIds = deriveModelIdsForRoutes(input.contributionResult, original.selectedRouteIds);
     return Object.freeze({
       originalStrategyPlan: input.originalStrategyResult,
       paretoEnsemblePlan: pareto,
@@ -135,16 +132,13 @@ export function adaptStrategyPlan(
   }
 
   // 5. Otherwise: keep original.
-  const modelIds = deriveModelIdsForRoutes(
-    input.contributionResult,
-    original.selectedRouteIds,
-  );
+  const modelIds = deriveModelIdsForRoutes(input.contributionResult, original.selectedRouteIds);
   const reason =
     pareto.paretoStatus === 'dominated'
       ? 'pareto_dominated_kept_original'
       : pareto.paretoStatus === 'quality_tradeoff'
-      ? 'pareto_quality_tradeoff_kept_original'
-      : 'pareto_did_not_beat_thesis';
+        ? 'pareto_quality_tradeoff_kept_original'
+        : 'pareto_did_not_beat_thesis';
   return Object.freeze({
     originalStrategyPlan: input.originalStrategyResult,
     paretoEnsemblePlan: pareto,
@@ -166,7 +160,7 @@ function wrapPareto(
   input: ParetoStrategyPlannerAdapterInput,
   pareto: EnsemblePlan,
   reason: string,
-  source: FinalPlanSource,
+  source: FinalPlanSource
 ): ParetoStrategyPlannerResult {
   return Object.freeze({
     originalStrategyPlan: input.originalStrategyResult,
@@ -193,7 +187,7 @@ function policyPermitsCostTradeoff(policy: CollectiveSelectionPolicy): boolean {
 
 function deriveModelIdsForRoutes(
   contribution: ContributionAwareRetrieverResult,
-  routeIds: readonly string[],
+  routeIds: readonly string[]
 ): readonly string[] {
   const byRoute = new Map<string, string>();
   for (const s of contribution.contributionScores) byRoute.set(s.routeId, s.modelId);
@@ -207,6 +201,4 @@ function deriveModelIdsForRoutes(
 
 // ─── Re-export for consumers ────────────────────────────────────────────
 
-export type {
-  ContributionAwareRejectionRecord,
-};
+export type { ContributionAwareRejectionRecord };

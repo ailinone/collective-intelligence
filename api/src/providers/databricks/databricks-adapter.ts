@@ -124,8 +124,7 @@ export class DatabricksAdapter extends OpenAICompatibleHubAdapter {
   private readonly endpoint: string;
 
   constructor(config: DatabricksAdapterConfig) {
-    const workspaceHost =
-      config.workspaceHost?.trim() || process.env.DATABRICKS_HOST?.trim() || '';
+    const workspaceHost = config.workspaceHost?.trim() || process.env.DATABRICKS_HOST?.trim() || '';
     const endpoint =
       config.endpoint?.trim() || process.env.DATABRICKS_SERVING_ENDPOINT?.trim() || '';
 
@@ -142,8 +141,7 @@ export class DatabricksAdapter extends OpenAICompatibleHubAdapter {
     }
 
     // Resolve providerName — same multi-deployment override as Azure.
-    const resolvedProviderName =
-      config.providerNameOverride?.trim() || 'databricks';
+    const resolvedProviderName = config.providerNameOverride?.trim() || 'databricks';
 
     super({
       ...config,
@@ -178,7 +176,7 @@ export class DatabricksAdapter extends OpenAICompatibleHubAdapter {
   }
 
   override async *chatCompletionStream(
-    request: ChatRequest,
+    request: ChatRequest
   ): AsyncGenerator<ChatResponse, void, unknown> {
     yield* super.chatCompletionStream({ ...request, model: this.endpoint });
   }

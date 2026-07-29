@@ -85,7 +85,9 @@ export interface ChampionChallengerResult {
 /**
  * Aggregates benchmark results into per-(taskType, complexity, strategy) metrics.
  */
-function aggregateChallengerResults(results: BenchmarkResult[]): Map<string, { avgQuality: number; successRate: number; sampleCount: number }> {
+function aggregateChallengerResults(
+  results: BenchmarkResult[]
+): Map<string, { avgQuality: number; successRate: number; sampleCount: number }> {
   const buckets = new Map<string, { totalQuality: number; successCount: number; count: number }>();
 
   for (const r of results) {
@@ -97,7 +99,10 @@ function aggregateChallengerResults(results: BenchmarkResult[]): Map<string, { a
     buckets.set(key, bucket);
   }
 
-  const aggregated = new Map<string, { avgQuality: number; successRate: number; sampleCount: number }>();
+  const aggregated = new Map<
+    string,
+    { avgQuality: number; successRate: number; sampleCount: number }
+  >();
   for (const [key, bucket] of buckets) {
     aggregated.set(key, {
       avgQuality: bucket.count > 0 ? bucket.totalQuality / bucket.count : 0,
@@ -142,7 +147,7 @@ async function loadChampionWeights(): Promise<Map<string, StrategyWeightRow>> {
  * 3. Champion must have minChampionSamples for comparison; otherwise treated as new entry.
  */
 export async function evaluateChallenger(
-  challengerResults: BenchmarkResult[],
+  challengerResults: BenchmarkResult[]
 ): Promise<ChampionChallengerResult> {
   const timestamp = new Date().toISOString();
   const championMap = await loadChampionWeights();
@@ -165,7 +170,9 @@ export async function evaluateChallenger(
     if (!champion || champion.sampleCount < CONFIG.minChampionSamples) {
       const [taskType, complexity, strategy] = key.split('|');
       promoted.push({
-        taskType, complexity, strategy,
+        taskType,
+        complexity,
+        strategy,
         championQuality: champion?.avgQuality ?? 0,
         challengerQuality: challenger.avgQuality,
         delta: challenger.avgQuality - (champion?.avgQuality ?? 0),
@@ -180,7 +187,9 @@ export async function evaluateChallenger(
     if (delta < -CONFIG.degradationLimit) {
       hasCriticalDegradation = true;
       rejected.push({
-        taskType, complexity, strategy,
+        taskType,
+        complexity,
+        strategy,
         reason: `Degradation ${(delta * 100).toFixed(2)}pp exceeds limit ${(CONFIG.degradationLimit * 100).toFixed(1)}pp`,
         championQuality: champion.avgQuality,
         challengerQuality: challenger.avgQuality,
@@ -192,7 +201,9 @@ export async function evaluateChallenger(
     // Check for promotion
     if (delta >= CONFIG.promotionThreshold) {
       promoted.push({
-        taskType, complexity, strategy,
+        taskType,
+        complexity,
+        strategy,
         championQuality: champion.avgQuality,
         challengerQuality: challenger.avgQuality,
         delta,
@@ -220,20 +231,41 @@ export async function evaluateChallenger(
     overallVerdict = 'no-change';
   }
 
-  const result: ChampionChallengerResult = { promoted, rejected, unchanged, overallVerdict, timestamp };
+  const result: ChampionChallengerResult = {
+    promoted,
+    rejected,
+    unchanged,
+    overallVerdict,
+    timestamp,
+  };
 
   // Log and emit metrics
-  log.info({ overallVerdict, promoted: promoted.length, rejected: rejected.length, unchanged }, 'Champion/Challenger evaluation complete');
+  log.info(
+    { overallVerdict, promoted: promoted.length, rejected: rejected.length, unchanged },
+    'Champion/Challenger evaluation complete'
+  );
 
   for (const p of promoted) {
     log.info({ ...p }, 'Strategy promoted');
-    ciMetrics.championChallengerPromotions?.inc({ task_type: p.taskType, complexity: p.complexity, strategy: p.strategy });
-    ciMetrics.championChallengerQualityDelta?.observe({ task_type: p.taskType, strategy: p.strategy }, p.delta);
+    ciMetrics.championChallengerPromotions?.inc({
+      task_type: p.taskType,
+      complexity: p.complexity,
+      strategy: p.strategy,
+    });
+    ciMetrics.championChallengerQualityDelta?.observe(
+      { task_type: p.taskType, strategy: p.strategy },
+      p.delta
+    );
   }
 
   for (const r of rejected) {
     log.warn({ ...r }, 'Strategy rejected');
-    ciMetrics.championChallengerRejections?.inc({ task_type: r.taskType, complexity: r.complexity, strategy: r.strategy, reason: 'degradation' });
+    ciMetrics.championChallengerRejections?.inc({
+      task_type: r.taskType,
+      complexity: r.complexity,
+      strategy: r.strategy,
+      reason: 'degradation',
+    });
   }
 
   return result;
@@ -245,7 +277,7 @@ export async function evaluateChallenger(
  */
 export async function promoteChallenger(
   evaluation: ChampionChallengerResult,
-  challengerResults: BenchmarkResult[],
+  challengerResults: BenchmarkResult[]
 ): Promise<void> {
   if (evaluation.overallVerdict !== 'promoted') {
     log.warn('promoteChallenger called but verdict is not "promoted" — skipping');
@@ -253,7 +285,9 @@ export async function promoteChallenger(
   }
 
   const challengerMap = aggregateChallengerResults(challengerResults);
-  const promotedKeys = new Set(evaluation.promoted.map(p => `${p.taskType}|${p.complexity}|${p.strategy}`));
+  const promotedKeys = new Set(
+    evaluation.promoted.map((p) => `${p.taskType}|${p.complexity}|${p.strategy}`)
+  );
 
   for (const [key, challenger] of challengerMap) {
     if (!promotedKeys.has(key)) continue;
@@ -277,10 +311,13 @@ export async function promoteChallenger(
         successRate: challenger.successRate,
         weight,
         sampleCount: challenger.sampleCount,
-        avgCostEfficiency: 0.70,
+        avgCostEfficiency: 0.7,
       },
     });
 
-    log.info({ taskType, complexity, strategy, quality: challenger.avgQuality, weight }, 'Strategy weight promoted');
+    log.info(
+      { taskType, complexity, strategy, quality: challenger.avgQuality, weight },
+      'Strategy weight promoted'
+    );
   }
 }

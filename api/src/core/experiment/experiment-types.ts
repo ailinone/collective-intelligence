@@ -22,7 +22,8 @@
 // ─── Execution Modes ───────────────────────────────────────────────────────
 
 /** The experimental conditions under comparison (4-arm benchmark + adaptive). */
-export type ExecutionMode = 'single-model' | 'collective' | 'adaptive' | 'collective-tier1' | 'single-budget' | 'ablation';
+export type ExecutionMode =
+  'single-model' | 'collective' | 'adaptive' | 'collective-tier1' | 'single-budget' | 'ablation';
 
 /** Strategies available for collective intelligence mode. */
 /**
@@ -68,14 +69,35 @@ export type CollectiveStrategy =
  * to dynamically include every registered strategy without hardcoding.
  */
 export const ALL_COLLECTIVE_STRATEGIES: CollectiveStrategy[] = [
-  'collaborative', 'parallel', 'sequential', 'hybrid', 'competitive',
-  'expert-panel', 'massive-parallel', 'cost-cascade', 'quality-multipass',
-  'adaptive', 'contextual', 'hierarchical', 'consensus', 'reinforcement',
-  'debate', 'war-room', 'blind-debate', 'devil-advocate-consensus',
-  'safety-quorum', 'diversity-ensemble', 'stigmergic-refinement',
-  'swarm-explore', 'clarification-first', 'research-synthesize',
-  'critique-repair', 'double-diamond', 'multi-hop-qa',
-  'persona-exploration', 'agentic',
+  'collaborative',
+  'parallel',
+  'sequential',
+  'hybrid',
+  'competitive',
+  'expert-panel',
+  'massive-parallel',
+  'cost-cascade',
+  'quality-multipass',
+  'adaptive',
+  'contextual',
+  'hierarchical',
+  'consensus',
+  'reinforcement',
+  'debate',
+  'war-room',
+  'blind-debate',
+  'devil-advocate-consensus',
+  'safety-quorum',
+  'diversity-ensemble',
+  'stigmergic-refinement',
+  'swarm-explore',
+  'clarification-first',
+  'research-synthesize',
+  'critique-repair',
+  'double-diamond',
+  'multi-hop-qa',
+  'persona-exploration',
+  'agentic',
   'sensitivity-consensus',
   'tri-role-collective',
 ];
@@ -191,7 +213,8 @@ export interface ExperimentTask {
     strategyWorkflow?: { steps: Array<{ id: string; strategy: string; depends_on?: string[] }> };
   };
   /** Modality for multimodal scenarios. */
-  modality?: 'chat' | 'stt' | 'tts' | 'image' | 'video' | 'vision' | 'translation' | 'ocr' | 'pipeline';
+  modality?:
+    'chat' | 'stt' | 'tts' | 'image' | 'video' | 'vision' | 'translation' | 'ocr' | 'pipeline';
   /** Multimodal payloads. */
   audioUrl?: string;
   imageUrl?: string;
@@ -215,7 +238,10 @@ export interface ExperimentTask {
   codeTest?: {
     readonly language: 'javascript' | 'typescript' | 'python' | 'java' | 'csharp' | 'go';
     readonly functionName: string;
-    readonly tests: ReadonlyArray<{ readonly args: readonly unknown[]; readonly expected: unknown }>;
+    readonly tests: ReadonlyArray<{
+      readonly args: readonly unknown[];
+      readonly expected: unknown;
+    }>;
     /**
      * HumanEval-style native harness. When set, grading does NOT use the
      * structured `{args, expected}` vectors above — instead the runner
@@ -269,7 +295,11 @@ export interface ExperimentTask {
    * of the OpenAI tools schema (kept inline to avoid an orchestration import). */
   tools?: ReadonlyArray<{
     readonly type: 'function';
-    readonly function: { readonly name: string; readonly description?: string; readonly parameters?: Record<string, unknown> };
+    readonly function: {
+      readonly name: string;
+      readonly description?: string;
+      readonly parameters?: Record<string, unknown>;
+    };
   }>;
   toolChoice?: 'auto' | 'none';
   /**
@@ -402,7 +432,18 @@ export interface AblationConfig {
   mode: 'ablation';
   strategy: CollectiveStrategy;
   displayName: string;
-  disableComponents: ('memory' | 'bandit' | 'archive' | 'pareto' | 'critique' | 'feedback-loop' | 'shadow' | 'knowledge-graph' | 'triage' | 'debate-rounds')[];
+  disableComponents: (
+    | 'memory'
+    | 'bandit'
+    | 'archive'
+    | 'pareto'
+    | 'critique'
+    | 'feedback-loop'
+    | 'shadow'
+    | 'knowledge-graph'
+    | 'triage'
+    | 'debate-rounds'
+  )[];
   /** Quality target (0-1) passed to the orchestration engine for model selection. */
   qualityTarget?: number;
   /** Required capabilities to filter out incompatible models (e.g., video models for chat tasks). */
@@ -410,7 +451,13 @@ export interface AblationConfig {
 }
 
 /** Discriminated union of mode configurations. */
-export type ModeConfig = SingleModelConfig | CollectiveConfig | AdaptiveConfig | ForcedPoolCollectiveConfig | SingleBudgetConfig | AblationConfig;
+export type ModeConfig =
+  | SingleModelConfig
+  | CollectiveConfig
+  | AdaptiveConfig
+  | ForcedPoolCollectiveConfig
+  | SingleBudgetConfig
+  | AblationConfig;
 
 // ─── Experiment Configuration ──────────────────────────────────────────────
 
@@ -515,7 +562,8 @@ export interface ExperimentExecutionResult {
    * separate objective grades (answer_check / executed code) from fuzzy LLM-judge
    * grades and from failed-judge heuristics. (review TS-04 / F2)
    */
-  scoreSource?: 'answer_check' | 'code_execution' | 'tool_call' | 'llm_judge' | 'heuristic_fallback' | null;
+  scoreSource?:
+    'answer_check' | 'code_execution' | 'tool_call' | 'llm_judge' | 'heuristic_fallback' | null;
   /**
    * The judge instrument this run was pinned to (mode + model id), stamped on
    * EVERY row so a calibration-vs-run instrument mismatch ("split-brain": the
@@ -540,15 +588,22 @@ export interface ExperimentExecutionResult {
    * `responseSummary` text. Absent for single-model executions.
    */
   subcalls?: Array<{
-    model_id: string; model_name: string; role: string;
-    cost_usd: number; latency_ms: number; success: boolean;
-    error: string | null; tokens: Record<string, number> | null;
+    model_id: string;
+    model_name: string;
+    role: string;
+    cost_usd: number;
+    latency_ms: number;
+    success: boolean;
+    error: string | null;
+    tokens: Record<string, number> | null;
     /** Full-flow capture (include_subcall_content): the subcall's actual
      *  output text, extracted reasoning, and prompt-variant provenance — the
      *  whole intra-collective transcript, persisted so every strategy's
      *  behavior is auditable per model per stage, not just its metrics. */
-    content?: string | null; reasoning?: string | null;
-    prompt_key?: string | null; prompt_variant_id?: string | null;
+    content?: string | null;
+    reasoning?: string | null;
+    prompt_key?: string | null;
+    prompt_variant_id?: string | null;
     content_truncated?: boolean;
   }>;
 }
@@ -753,9 +808,24 @@ export interface ExecutiveSummary {
   successfulExecutions: number;
   totalCostUsd: number;
 
-  bestOverallApproach: { label: string; mode: ExecutionMode; avgQuality: number; evidence: EvidenceStrength };
-  bestByScenario: Array<{ scenario: string; winner: string; avgQuality: number; evidence: EvidenceStrength }>;
-  collectiveVsTier1: { verdict: string; confidence: ConclusionConfidence; qualityDelta: number; costMultiplier: number };
+  bestOverallApproach: {
+    label: string;
+    mode: ExecutionMode;
+    avgQuality: number;
+    evidence: EvidenceStrength;
+  };
+  bestByScenario: Array<{
+    scenario: string;
+    winner: string;
+    avgQuality: number;
+    evidence: EvidenceStrength;
+  }>;
+  collectiveVsTier1: {
+    verdict: string;
+    confidence: ConclusionConfidence;
+    qualityDelta: number;
+    costMultiplier: number;
+  };
   adaptiveValue: { verdict: string; confidence: ConclusionConfidence; evidence: string };
   finalVerdict: FinalVerdict;
   verdictDetails: string;
@@ -765,13 +835,28 @@ export interface ExecutiveSummary {
 // ─── Document 2: Methodology ───────────────────────────────────────────────
 
 export interface MethodologyDocument {
-  modelsCompared: Array<{ id: string; displayName: string; provider: string; available: boolean; unavailableReason?: string }>;
+  modelsCompared: Array<{
+    id: string;
+    displayName: string;
+    provider: string;
+    available: boolean;
+    unavailableReason?: string;
+  }>;
   collectiveStrategies: string[];
   adaptiveDescription: string;
-  taskSuite: { totalTasks: number; byTaskType: Record<string, number>; byComplexity: Record<string, number>; byDomain: Record<string, number> };
+  taskSuite: {
+    totalTasks: number;
+    byTaskType: Record<string, number>;
+    byComplexity: Record<string, number>;
+    byDomain: Record<string, number>;
+  };
   evaluationCriteria: string[];
   segmentations: string[];
-  phases: { warmupExecutions: number; frozenEvaluation: boolean; learningFrozenDuringMeasurement: boolean };
+  phases: {
+    warmupExecutions: number;
+    frozenEvaluation: boolean;
+    learningFrozenDuringMeasurement: boolean;
+  };
   statisticalMethods: string[];
   limitations: string[];
   threatsToValidity: string[];
@@ -780,16 +865,41 @@ export interface MethodologyDocument {
 // ─── Document 3: Detailed Results ──────────────────────────────────────────
 
 export interface DetailedResults {
-  overallRanking: Array<{ label: string; mode: ExecutionMode; avgQuality: number; avgCost: number; avgLatency: number; winRate: number; sampleSize: number; ci95: ConfidenceInterval }>;
-  rankingByTaskType: Record<string, Array<{ label: string; avgQuality: number; sampleSize: number; ci95: ConfidenceInterval }>>;
-  rankingByComplexity: Record<string, Array<{ label: string; avgQuality: number; sampleSize: number }>>;
+  overallRanking: Array<{
+    label: string;
+    mode: ExecutionMode;
+    avgQuality: number;
+    avgCost: number;
+    avgLatency: number;
+    winRate: number;
+    sampleSize: number;
+    ci95: ConfidenceInterval;
+  }>;
+  rankingByTaskType: Record<
+    string,
+    Array<{ label: string; avgQuality: number; sampleSize: number; ci95: ConfidenceInterval }>
+  >;
+  rankingByComplexity: Record<
+    string,
+    Array<{ label: string; avgQuality: number; sampleSize: number }>
+  >;
   rankingByDomain: Record<string, Array<{ label: string; avgQuality: number; sampleSize: number }>>;
   segments: SegmentAnalysis[];
   headToHead: HeadToHead[];
   paretoDominance: ParetoDominanceResult;
   tradeoffs: {
-    qualityVsCost: Array<{ label: string; avgQuality: number; avgCost: number; qualityPerDollar: number }>;
-    qualityVsLatency: Array<{ label: string; avgQuality: number; avgLatency: number; qualityPerSecond: number }>;
+    qualityVsCost: Array<{
+      label: string;
+      avgQuality: number;
+      avgCost: number;
+      qualityPerDollar: number;
+    }>;
+    qualityVsLatency: Array<{
+      label: string;
+      avgQuality: number;
+      avgLatency: number;
+      qualityPerSecond: number;
+    }>;
   };
   consistencyAnalysis: {
     byMode: Array<{ mode: ExecutionMode; stabilityIndex: number; cv: number; sampleSize: number }>;
@@ -803,11 +913,22 @@ export interface DetailedResults {
 // ─── Document 4: Statistical Appendix ──────────────────────────────────────
 
 export interface StatisticalAppendix {
-  sampleSizes: Record<string, { mode: ExecutionMode; n: number; nSuccessful: number; successRate: number }>;
-  descriptiveStatsByGroup: Record<string, { quality: DescriptiveStats; cost: DescriptiveStats; latency: DescriptiveStats }>;
+  sampleSizes: Record<
+    string,
+    { mode: ExecutionMode; n: number; nSuccessful: number; successRate: number }
+  >;
+  descriptiveStatsByGroup: Record<
+    string,
+    { quality: DescriptiveStats; cost: DescriptiveStats; latency: DescriptiveStats }
+  >;
   confidenceIntervals: Record<string, ConfidenceInterval>;
   tTests: Array<{ groupA: string; groupB: string; result: TTestResult; interpretation: string }>;
-  effectSizes: Array<{ groupA: string; groupB: string; result: EffectSizeResult; practicalSignificance: string }>;
+  effectSizes: Array<{
+    groupA: string;
+    groupB: string;
+    result: EffectSizeResult;
+    practicalSignificance: string;
+  }>;
   outliers: Record<string, { count: number; indices: number[]; impact: string }>;
   methodNotes: string[];
 }
@@ -818,15 +939,33 @@ export interface DecisionMemo {
   /** Q1: Best single model baseline? */
   bestSingleModel: { model: string; avgQuality: number; evidence: string };
   /** Q2: Does collective beat Tier 1? */
-  collectiveBeatsTier1: { answer: 'yes' | 'no' | 'depends' | 'inconclusive'; evidence: EvidenceStrength; details: string };
+  collectiveBeatsTier1: {
+    answer: 'yes' | 'no' | 'depends' | 'inconclusive';
+    evidence: EvidenceStrength;
+    details: string;
+  };
   /** Q3: Where does collective win defensibly? */
-  collectiveWinsWhere: Array<{ scenario: string; qualityGain: number; costMultiplier: number; evidenceStrength: EvidenceStrength }>;
+  collectiveWinsWhere: Array<{
+    scenario: string;
+    qualityGain: number;
+    costMultiplier: number;
+    evidenceStrength: EvidenceStrength;
+  }>;
   /** Q4: Where are single models still superior? */
   singleModelWinsWhere: Array<{ scenario: string; reason: string }>;
   /** Q5: Does adaptive beat both? */
-  adaptiveBeatsBoth: { answer: 'yes' | 'no' | 'depends' | 'inconclusive'; evidence: EvidenceStrength; details: string };
+  adaptiveBeatsBoth: {
+    answer: 'yes' | 'no' | 'depends' | 'inconclusive';
+    evidence: EvidenceStrength;
+    details: string;
+  };
   /** Q6: Does collective quality gain justify cost? */
-  collectiveWorthCost: { answer: 'yes' | 'no' | 'marginal' | 'inconclusive'; qualityGain: number; costMultiplier: number; latencyMultiplier: number };
+  collectiveWorthCost: {
+    answer: 'yes' | 'no' | 'marginal' | 'inconclusive';
+    qualityGain: number;
+    costMultiplier: number;
+    latencyMultiplier: number;
+  };
   /** Q7: What to use in production? */
   productionRecommendation: { defaultMode: string; escalationPolicy: string; guardrails: string[] };
   /** Q8: Overall conclusion strength? */
@@ -861,7 +1000,8 @@ export type ExperimentReport = ExperimentReportBundle;
 export type GoNoGoVerdict = 'GO' | 'CONDITIONAL-GO' | 'NO-GO' | 'INCONCLUSIVE';
 
 /** Usage profile that drives threshold selection. */
-export type UsageProfile = 'max-quality' | 'low-cost' | 'low-latency' | 'high-robustness' | 'generalist';
+export type UsageProfile =
+  'max-quality' | 'low-cost' | 'low-latency' | 'high-robustness' | 'generalist';
 
 /** Configurable thresholds for GO/NO-GO decisions. */
 export interface GoNoGoThresholds {
@@ -890,7 +1030,7 @@ export const DEFAULT_THRESHOLDS: GoNoGoThresholds = {
   maxLatencyMultiplierForCollective: 2.0,
   qualityFloor: 0.75,
   successRateFloor: 0.95,
-  consistencyFloor: 0.70,
+  consistencyFloor: 0.7,
   minSamplesHighConfidence: 50,
   minSamplesModerateConfidence: 20,
 };

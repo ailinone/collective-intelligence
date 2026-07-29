@@ -59,8 +59,13 @@ describe('loadEvaluatorConfigFromEnv', () => {
   });
 
   it('llmJudgeModelId is trimmed; empty becomes undefined', () => {
-    expect(loadEvaluatorConfigFromEnv({ STRATEGY_EVALUATOR_LLM_JUDGE_MODEL_ID: '  ' }).llmJudgeModelId).toBeUndefined();
-    expect(loadEvaluatorConfigFromEnv({ STRATEGY_EVALUATOR_LLM_JUDGE_MODEL_ID: 'judge-a' }).llmJudgeModelId).toBe('judge-a');
+    expect(
+      loadEvaluatorConfigFromEnv({ STRATEGY_EVALUATOR_LLM_JUDGE_MODEL_ID: '  ' }).llmJudgeModelId
+    ).toBeUndefined();
+    expect(
+      loadEvaluatorConfigFromEnv({ STRATEGY_EVALUATOR_LLM_JUDGE_MODEL_ID: 'judge-a' })
+        .llmJudgeModelId
+    ).toBe('judge-a');
   });
 });
 
@@ -103,7 +108,9 @@ describe('createStrategyOutputEvaluator', () => {
       STRATEGY_EVALUATOR_TASK_SPECIFIC_ENABLED: 'true',
       STRATEGY_EVALUATOR_LLM_JUDGE_ENABLED: 'false',
     });
-    const e = createStrategyOutputEvaluator(cfg, { llmClient: judgeClient as unknown as LLMJudgeClient });
+    const e = createStrategyOutputEvaluator(cfg, {
+      llmClient: judgeClient as unknown as LLMJudgeClient,
+    });
     expect(e).toBeInstanceOf(CompositeEvaluator);
     await e.evaluate({ task: {}, output: 'A'.repeat(100), strategyName: 'consensus' });
     expect(judgeClient.judge).not.toHaveBeenCalled();
@@ -118,7 +125,9 @@ describe('createStrategyOutputEvaluator', () => {
       STRATEGY_EVALUATOR_LLM_JUDGE_MODEL_ID: 'judge-x',
       STRATEGY_EVALUATOR_MAX_COST_USD: '0',
     });
-    const e = createStrategyOutputEvaluator(cfg, { llmClient: judgeClient as unknown as LLMJudgeClient });
+    const e = createStrategyOutputEvaluator(cfg, {
+      llmClient: judgeClient as unknown as LLMJudgeClient,
+    });
     await e.evaluate({ task: {}, output: 'A'.repeat(100), strategyName: 'consensus' });
     expect(judgeClient.judge).not.toHaveBeenCalled();
   });

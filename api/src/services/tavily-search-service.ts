@@ -102,9 +102,7 @@ export class TavilySearchService {
    */
   private getApiKey(): string {
     if (!this.apiKey) {
-      throw new Error(
-        'Tavily API key not configured. Set TAVILY_API_KEY environment variable.'
-      );
+      throw new Error('Tavily API key not configured. Set TAVILY_API_KEY environment variable.');
     }
     return this.apiKey;
   }
@@ -153,9 +151,16 @@ export class TavilySearchService {
         throw new Error(`Tavily API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         answer?: string;
-        results?: Array<{ title?: string; url?: string; content?: string; raw_content?: string; score?: number; published_date?: string }>;
+        results?: Array<{
+          title?: string;
+          url?: string;
+          content?: string;
+          raw_content?: string;
+          score?: number;
+          published_date?: string;
+        }>;
         images?: string[];
       };
       const responseTime = Date.now() - startTime;
@@ -174,14 +179,23 @@ export class TavilySearchService {
         success: true,
         query: options.query,
         answer: data.answer,
-        results: (data.results || []).map((r: { title?: string; url?: string; content?: string; raw_content?: string; score?: number; published_date?: string }) => ({
-          title: r.title || '',
-          url: r.url || '',
-          content: r.content || '',
-          rawContent: r.raw_content,
-          score: r.score || 0,
-          publishedDate: r.published_date,
-        })),
+        results: (data.results || []).map(
+          (r: {
+            title?: string;
+            url?: string;
+            content?: string;
+            raw_content?: string;
+            score?: number;
+            published_date?: string;
+          }) => ({
+            title: r.title || '',
+            url: r.url || '',
+            content: r.content || '',
+            rawContent: r.raw_content,
+            score: r.score || 0,
+            publishedDate: r.published_date,
+          })
+        ),
         images: data.images,
         responseTime,
       };
@@ -259,7 +273,7 @@ export class TavilySearchService {
         throw new Error(`Tavily Extract API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         results?: Array<{ url?: string; raw_content?: string; images?: string[] }>;
         failed_results?: Array<{ url?: string; error?: string }>;
       };
@@ -268,8 +282,13 @@ export class TavilySearchService {
       return {
         success: true,
         results: (data.results || [])
-          .filter((r: { url?: string; raw_content?: string; images?: string[] }): r is { url: string; raw_content?: string; images?: string[] } => 
-            r.url !== undefined && r.url !== null && typeof r.url === 'string'
+          .filter(
+            (r: {
+              url?: string;
+              raw_content?: string;
+              images?: string[];
+            }): r is { url: string; raw_content?: string; images?: string[] } =>
+              r.url !== undefined && r.url !== null && typeof r.url === 'string'
           )
           .map((r): TavilyExtractResult => ({
             url: r.url,
@@ -277,8 +296,9 @@ export class TavilySearchService {
             images: Array.isArray(r.images) ? r.images : [],
           })),
         failedResults: (data.failed_results || [])
-          .filter((r: { url?: string; error?: string }): r is { url: string; error: string } => 
-            r.url !== undefined && r.url !== null && r.error !== undefined && r.error !== null
+          .filter(
+            (r: { url?: string; error?: string }): r is { url: string; error: string } =>
+              r.url !== undefined && r.url !== null && r.error !== undefined && r.error !== null
           )
           .map((r) => ({
             url: r.url,
@@ -376,4 +396,3 @@ export function getTavilySearchService(): TavilySearchService {
   }
   return tavilyService;
 }
-

@@ -36,11 +36,9 @@ import type { ExplicitPinInfo } from '../../registry/types';
 function findCandidate(
   registry: ReturnType<typeof buildFixtureRegistry>,
   providerId: string,
-  modelId: string,
+  modelId: string
 ): ModelScoringCandidate {
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   const oid = snap?.uid ?? `${providerId}:${modelId}`;
   const offering = registry.lookupOffering(oid);
   if (!offering) throw new Error('offering missing');
@@ -67,7 +65,7 @@ function withHealthy(c: ModelScoringCandidate): ModelScoringCandidate {
 
 function withReadiness(
   c: ModelScoringCandidate,
-  overrides: Partial<Pick<ProviderModelRoute, 'healthState' | 'creditStatus' | 'minimalChatStatus'>>,
+  overrides: Partial<Pick<ProviderModelRoute, 'healthState' | 'creditStatus' | 'minimalChatStatus'>>
 ): ModelScoringCandidate {
   return {
     ...c,
@@ -175,7 +173,7 @@ describe('explicit pin — pinned route unhealthy is REJECTED, NOT substituted',
     const registry = buildFixtureRegistry();
     const pinned = withReadiness(
       withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7')),
-      { creditStatus: 'no_credits' },
+      { creditStatus: 'no_credits' }
     );
     const pin: ExplicitPinInfo = {
       source: 'request_modelPin',
@@ -188,9 +186,7 @@ describe('explicit pin — pinned route unhealthy is REJECTED, NOT substituted',
       explicitModelPin: pin,
     });
     expect(result.rejected).toBe(true);
-    expect(result.rejectionReasons.some((r) => r.startsWith('freshness_blocked'))).toBe(
-      true,
-    );
+    expect(result.rejectionReasons.some((r) => r.startsWith('freshness_blocked'))).toBe(true);
     // Critically: result is for the PINNED route, not a substitute.
     expect(result.routeId).toBe(pinned.route.routeId);
   });
@@ -199,7 +195,7 @@ describe('explicit pin — pinned route unhealthy is REJECTED, NOT substituted',
     const registry = buildFixtureRegistry();
     const pinned = withReadiness(
       withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7')),
-      { healthState: 'auth_failed' },
+      { healthState: 'auth_failed' }
     );
     const pin: ExplicitPinInfo = {
       source: 'request_modelPin',
@@ -219,7 +215,7 @@ describe('explicit pin — pinned route unhealthy is REJECTED, NOT substituted',
     const registry = buildFixtureRegistry();
     const pinned = withReadiness(
       withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7')),
-      { minimalChatStatus: 'failed' },
+      { minimalChatStatus: 'failed' }
     );
     const pin: ExplicitPinInfo = {
       source: 'request_modelPin',
@@ -243,7 +239,7 @@ describe('explicit pin — allowSubstitution=true STILL does not substitute in M
     const registry = buildFixtureRegistry();
     const pinned = withReadiness(
       withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7')),
-      { creditStatus: 'no_credits' },
+      { creditStatus: 'no_credits' }
     );
     const pin: ExplicitPinInfo = {
       source: 'request_modelPin',
@@ -268,7 +264,7 @@ describe('explicit pin — allowSubstitution=true STILL does not substitute in M
     const registry = buildFixtureRegistry();
     const pinned = withReadiness(
       withHealthy(findCandidate(registry, 'anthropic', 'claude-opus-4-7')),
-      { creditStatus: 'no_credits' },
+      { creditStatus: 'no_credits' }
     );
     const alternative = withHealthy(findCandidate(registry, 'openai', 'gpt-5.5-pro'));
 

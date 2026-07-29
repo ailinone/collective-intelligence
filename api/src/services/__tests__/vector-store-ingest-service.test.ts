@@ -48,9 +48,8 @@ function makeFakeEmbedder(): CapabilityEmbedder & {
     return Array.from({ length: EMBEDDING_DIM }, (_, i) => ((i % seed) + 1) / 10);
   };
   const embed = vi.fn(async (text: string): Promise<EmbedResult> => ({ vector: vecFor(text) }));
-  const embedBatch = vi.fn(
-    async (texts: readonly string[]): Promise<EmbedResult[]> =>
-      texts.map((t) => ({ vector: vecFor(t) })),
+  const embedBatch = vi.fn(async (texts: readonly string[]): Promise<EmbedResult[]> =>
+    texts.map((t) => ({ vector: vecFor(t) }))
   );
   return {
     id: 'test/fake-embedder@384',
@@ -169,10 +168,10 @@ describe('VectorStoreIngestService.ingestFile', () => {
 
     // One DELETE (idempotent replace) + one INSERT per chunk.
     const inserts = pool.query.mock.calls.filter((c) =>
-      String(c[0]).includes('INSERT INTO vector_store_chunks'),
+      String(c[0]).includes('INSERT INTO vector_store_chunks')
     );
     const deletes = pool.query.mock.calls.filter((c) =>
-      String(c[0]).includes('DELETE FROM vector_store_chunks'),
+      String(c[0]).includes('DELETE FROM vector_store_chunks')
     );
     expect(deletes).toHaveLength(1);
     expect(inserts).toHaveLength(result.chunksCreated);
@@ -211,9 +210,7 @@ describe('VectorStoreIngestService.ingestFile', () => {
     expect(result.chunksCreated).toBe(0);
     expect(embedder.embedBatch).not.toHaveBeenCalled();
     // Only the DELETE ran; no INSERTs.
-    const inserts = pool.query.mock.calls.filter((c) =>
-      String(c[0]).includes('INSERT INTO'),
-    );
+    const inserts = pool.query.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO'));
     expect(inserts).toHaveLength(0);
   });
 
@@ -226,7 +223,7 @@ describe('VectorStoreIngestService.ingestFile', () => {
         fileId: 'file_1',
         organizationId: 'org-1',
         content: 'short text',
-      }),
+      })
     ).rejects.toThrow(/dim/i);
   });
 });
@@ -248,8 +245,24 @@ describe('VectorStoreIngestService.search', () => {
       if (sql.includes('SELECT') && sql.includes('vector_store_chunks')) {
         return {
           rows: [
-            { id: 'c1', file_id: 'f1', vector_store_file_id: 'vsf1', chunk_index: 0, content: 'most relevant', score: 0.97, metadata: { filename: 'a.txt' } },
-            { id: 'c2', file_id: 'f1', vector_store_file_id: 'vsf1', chunk_index: 1, content: 'less relevant', score: 0.61, metadata: {} },
+            {
+              id: 'c1',
+              file_id: 'f1',
+              vector_store_file_id: 'vsf1',
+              chunk_index: 0,
+              content: 'most relevant',
+              score: 0.97,
+              metadata: { filename: 'a.txt' },
+            },
+            {
+              id: 'c2',
+              file_id: 'f1',
+              vector_store_file_id: 'vsf1',
+              chunk_index: 1,
+              content: 'less relevant',
+              score: 0.61,
+              metadata: {},
+            },
           ],
         };
       }
@@ -271,8 +284,8 @@ describe('VectorStoreIngestService.search', () => {
     expect(hits[0].metadata).toEqual({ filename: 'a.txt' });
 
     // The SQL must scope to BOTH store and org (tenant isolation) and pass top_k.
-    const selectCall = pool.query.mock.calls.find((c) =>
-      String(c[0]).includes('SELECT') && String(c[0]).includes('vector_store_chunks'),
+    const selectCall = pool.query.mock.calls.find(
+      (c) => String(c[0]).includes('SELECT') && String(c[0]).includes('vector_store_chunks')
     );
     const sql = String(selectCall?.[0]);
     expect(sql).toContain('vector_store_id = $2');
@@ -287,9 +300,14 @@ describe('VectorStoreIngestService.search', () => {
   it('clamps top_k into [1,100]', async () => {
     const pool = makeFakePool(() => ({ rows: [] }));
     const service = new VectorStoreIngestService(pool, embedder);
-    await service.search({ vectorStoreId: 'vs_1', organizationId: 'org-1', query: 'q', topK: 9999 });
+    await service.search({
+      vectorStoreId: 'vs_1',
+      organizationId: 'org-1',
+      query: 'q',
+      topK: 9999,
+    });
     const selectCall = pool.query.mock.calls.find((c) =>
-      String(c[0]).includes('vector_store_chunks'),
+      String(c[0]).includes('vector_store_chunks')
     );
     expect((selectCall?.[1] as unknown[])[3]).toBe(100);
   });
@@ -297,7 +315,11 @@ describe('VectorStoreIngestService.search', () => {
   it('returns [] and does not hit the DB for an empty query', async () => {
     const pool = makeFakePool();
     const service = new VectorStoreIngestService(pool, embedder);
-    const hits = await service.search({ vectorStoreId: 'vs_1', organizationId: 'org-1', query: '   ' });
+    const hits = await service.search({
+      vectorStoreId: 'vs_1',
+      organizationId: 'org-1',
+      query: '   ',
+    });
     expect(hits).toEqual([]);
     expect(pool.query).not.toHaveBeenCalled();
     expect(embedder.embed).not.toHaveBeenCalled();
@@ -313,7 +335,7 @@ describe('VectorStoreIngestService.search', () => {
       fileIds: ['f1', 'f2'],
     });
     const selectCall = pool.query.mock.calls.find((c) =>
-      String(c[0]).includes('vector_store_chunks'),
+      String(c[0]).includes('vector_store_chunks')
     );
     expect(String(selectCall?.[0])).toContain('file_id = ANY');
     expect((selectCall?.[1] as unknown[])[4]).toEqual(['f1', 'f2']);

@@ -84,8 +84,7 @@ describe('routing-pipeline — shadow_trace_only', () => {
   });
 
   it('trace does NOT contain raw prompt fields', () => {
-    const promptText =
-      'sensitive prompt content that must never appear in the trace';
+    const promptText = 'sensitive prompt content that must never appear in the trace';
     const result = composeRoutingPipeline({
       requestId: 'r-st-5',
       profilerInput: { requestId: 'r-st-5', text: promptText },

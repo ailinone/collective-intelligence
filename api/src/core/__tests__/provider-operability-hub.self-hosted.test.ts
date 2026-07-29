@@ -44,7 +44,7 @@ import { getSelfHostedProvidersForTesting } from '../provider-operability-hub';
 describe('provider-operability-hub: SELF_HOSTED_PROVIDERS coherence', () => {
   it('contains every catalog entry classified as self-hosted-*', () => {
     const catalogSelfHostedIds = PROVIDER_CATALOG.filter((entry) =>
-      entry.integrationClass.startsWith('self-hosted-'),
+      entry.integrationClass.startsWith('self-hosted-')
     ).map((entry) => entry.providerId);
 
     // Smoke: the catalog MUST already have at least one self-hosted entry

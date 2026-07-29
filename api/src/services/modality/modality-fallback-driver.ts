@@ -77,7 +77,7 @@ export interface ModalityFallbackResult<TRaw> {
 }
 
 export async function runModalityFallback<TRaw>(
-  args: ModalityFallbackArgs<TRaw>,
+  args: ModalityFallbackArgs<TRaw>
 ): Promise<ModalityFallbackResult<TRaw>> {
   const firstCatalogId = args.catalog[0]?.id;
   try {
@@ -113,7 +113,7 @@ export async function runModalityFallback<TRaw>(
         costUsd: cost.normalizedCostUsd,
         costSource: cost.costSource,
       },
-      `${args.capabilityLabel} completed`,
+      `${args.capabilityLabel} completed`
     );
 
     return {
@@ -130,7 +130,7 @@ export async function runModalityFallback<TRaw>(
     if (error instanceof NoFallbackCandidateError) {
       args.log.warn(
         { requestId: args.requestId, model: args.explicit, message: error.message, durationMs },
-        `${args.capabilityLabel} candidate not found`,
+        `${args.capabilityLabel} candidate not found`
       );
       // Preserve the route's ValidationError shape for explicit-name miss.
       throw new ValidationError(error.message, error.details);
@@ -143,14 +143,14 @@ export async function runModalityFallback<TRaw>(
       }
       args.log.error(
         { requestId: args.requestId, attempts: error.attempts, durationMs },
-        `All ${args.capabilityLabel} providers failed`,
+        `All ${args.capabilityLabel} providers failed`
       );
       // Re-throw as-is — ApplicationError carries statusCode 503 + attempts.
       throw error;
     }
     args.log.error(
       { requestId: args.requestId, error, durationMs },
-      `${args.capabilityLabel} orchestration failed`,
+      `${args.capabilityLabel} orchestration failed`
     );
     throw error;
   }

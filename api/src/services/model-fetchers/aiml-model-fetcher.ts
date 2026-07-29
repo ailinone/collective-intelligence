@@ -96,7 +96,7 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
         const body = await this.safeReadBody(response);
         this.log.warn(
           { status: response.status, body: body.slice(0, 400) },
-          'AIML proprietary /models endpoint returned non-success status',
+          'AIML proprietary /models endpoint returned non-success status'
         );
         return [];
       }
@@ -117,14 +117,14 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
 
       this.log.info(
         { totalRaw: rawModels.length, converted: converted.length },
-        'AIML model discovery complete',
+        'AIML model discovery complete'
       );
 
       return converted;
     } catch (error) {
       this.log.warn(
         { error: error instanceof Error ? error.message : String(error) },
-        'Failed to fetch models from AIML proprietary API',
+        'Failed to fetch models from AIML proprietary API'
       );
       return [];
     }
@@ -153,7 +153,9 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
   }
 
   private isRawModel(item: unknown): item is AimlRawModel {
-    return Boolean(item && typeof item === 'object' && typeof (item as AimlRawModel).id === 'string');
+    return Boolean(
+      item && typeof item === 'object' && typeof (item as AimlRawModel).id === 'string'
+    );
   }
 
   private convertRawModel(raw: AimlRawModel): ProviderModel | null {
@@ -198,7 +200,10 @@ export class AimlModelFetcher extends BaseProviderModelFetcher {
 
     // Add features as capabilities (filter to valid ModelCapability values)
     for (const feature of features) {
-      const normalized = feature.trim().toLowerCase().replace(/[\s-]+/g, '_');
+      const normalized = feature
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_');
       // Only add if it looks like a known capability pattern
       if (normalized) {
         capSet.add(normalized as ModelCapability);

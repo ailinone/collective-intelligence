@@ -47,11 +47,11 @@ const log = logger.child({ component: 'configuration-archive' });
  * Aligned with TriageStrategy values plus additional nuanced dimensions.
  */
 export type OptimizationDimension =
-  | 'quality'          // Maximize quality score
-  | 'cost-efficient'   // Maximize quality/cost ratio
-  | 'speed'            // Maximize quality with minimum latency
-  | 'balanced'         // Weighted combination of quality, cost, latency
-  | 'reliability'      // Maximize success rate
+  | 'quality' // Maximize quality score
+  | 'cost-efficient' // Maximize quality/cost ratio
+  | 'speed' // Maximize quality with minimum latency
+  | 'balanced' // Weighted combination of quality, cost, latency
+  | 'reliability' // Maximize success rate
   | 'quality-per-token'; // Maximize quality / total tokens (efficiency)
 
 /**
@@ -68,14 +68,14 @@ export interface ArchiveCell {
  */
 export interface EliteConfig {
   strategy: string;
-  fitness: number;            // Fitness on the cell's optimization dimension
+  fitness: number; // Fitness on the cell's optimization dimension
   avgQuality: number;
-  avgCost: number;            // USD
-  avgLatency: number;         // ms
-  successRate: number;        // 0-1
-  sampleCount: number;        // How many observations formed this elite
-  avgTokens: number;          // Average total tokens
-  lastUpdated: number;        // timestamp ms
+  avgCost: number; // USD
+  avgLatency: number; // ms
+  successRate: number; // 0-1
+  sampleCount: number; // How many observations formed this elite
+  avgTokens: number; // Average total tokens
+  lastUpdated: number; // timestamp ms
   promotionSource: 'benchmark' | 'production' | 'champion-challenger';
 }
 
@@ -98,16 +98,16 @@ export interface ArchiveSnapshot {
  * Higher fitness = better elite for that dimension.
  */
 const FITNESS_FUNCTIONS: Record<OptimizationDimension, (e: EliteConfig) => number> = {
-  'quality': (e) => e.avgQuality * e.successRate,
+  quality: (e) => e.avgQuality * e.successRate,
   'cost-efficient': (e) => {
     const cost = Math.max(e.avgCost, 0.0001);
     return (e.avgQuality * e.successRate) / cost;
   },
-  'speed': (e) => {
+  speed: (e) => {
     const latencyPenalty = Math.min(e.avgLatency / 30000, 1); // normalized to 30s max
     return e.avgQuality * e.successRate * (1 - latencyPenalty * 0.5);
   },
-  'balanced': (e) => {
+  balanced: (e) => {
     const cost = Math.max(e.avgCost, 0.0001);
     const latencyNorm = Math.min(e.avgLatency / 10000, 1);
     return (
@@ -117,7 +117,7 @@ const FITNESS_FUNCTIONS: Record<OptimizationDimension, (e: EliteConfig) => numbe
       (1 - latencyNorm) * 0.15
     );
   },
-  'reliability': (e) => {
+  reliability: (e) => {
     // Weight success rate heavily, but require minimum quality
     return e.successRate * 0.7 + Math.min(e.avgQuality, 0.8) * 0.3;
   },
@@ -128,7 +128,12 @@ const FITNESS_FUNCTIONS: Record<OptimizationDimension, (e: EliteConfig) => numbe
 };
 
 const ALL_DIMENSIONS: OptimizationDimension[] = [
-  'quality', 'cost-efficient', 'speed', 'balanced', 'reliability', 'quality-per-token',
+  'quality',
+  'cost-efficient',
+  'speed',
+  'balanced',
+  'reliability',
+  'quality-per-token',
 ];
 
 // ─── Archive Implementation ─────────────────────────────────────────────────
@@ -148,7 +153,9 @@ class ConfigurationArchive {
   private lastSyncedAt: number | null = null;
 
   // S-NEW fix (ADR-004): Redis backing for cross-instance convergence
-  private redis: import('./redis-backed-state').RedisBackedMap<{ cell: ArchiveCell; elite: EliteConfig }> | null = null;
+  private redis:
+    | import('./redis-backed-state').RedisBackedMap<{ cell: ArchiveCell; elite: EliteConfig }>
+    | null = null;
 
   // Minimum observations before an entry can become an elite
   private static readonly MIN_SAMPLES = 5;
@@ -186,7 +193,10 @@ class ConfigurationArchive {
           this.elites.set(field, value);
         }
       }
-      log.info({ loaded, localElites: this.elites.size }, 'Configuration archive Redis backing connected');
+      log.info(
+        { loaded, localElites: this.elites.size },
+        'Configuration archive Redis backing connected'
+      );
     } catch (err) {
       log.warn({ err }, 'Failed to connect Redis backing for archive — operating local-only');
     }
@@ -203,7 +213,7 @@ class ConfigurationArchive {
     taskType: string,
     complexity: string,
     config: Omit<EliteConfig, 'fitness' | 'lastUpdated'>,
-    options?: { excludeDimensions?: OptimizationDimension[] },
+    options?: { excludeDimensions?: OptimizationDimension[] }
   ): { inserted: boolean; cellsUpdated: string[] } {
     if (config.sampleCount < ConfigurationArchive.MIN_SAMPLES) {
       return { inserted: false, cellsUpdated: [] };
@@ -242,13 +252,18 @@ class ConfigurationArchive {
         cellsUpdated.push(dimension);
 
         if (existing) {
-          log.debug({
-            taskType, complexity, dimension,
-            oldStrategy: existing.elite.strategy,
-            oldFitness: existing.elite.fitness.toFixed(4),
-            newStrategy: config.strategy,
-            newFitness: fitness.toFixed(4),
-          }, 'Elite replaced in archive');
+          log.debug(
+            {
+              taskType,
+              complexity,
+              dimension,
+              oldStrategy: existing.elite.strategy,
+              oldFitness: existing.elite.fitness.toFixed(4),
+              newStrategy: config.strategy,
+              newFitness: fitness.toFixed(4),
+            },
+            'Elite replaced in archive'
+          );
         }
       }
     }
@@ -263,7 +278,7 @@ class ConfigurationArchive {
   getElite(
     taskType: string,
     complexity: string,
-    dimension: OptimizationDimension,
+    dimension: OptimizationDimension
   ): EliteConfig | null {
     const key = cellKey({ taskType, complexity, dimension });
     return this.elites.get(key)?.elite ?? null;
@@ -276,15 +291,15 @@ class ConfigurationArchive {
   getRecommendation(
     taskType: string,
     complexity: string,
-    triagePreference: string,
+    triagePreference: string
   ): { strategy: string; fitness: number; dimension: OptimizationDimension } | null {
     // Map triage strategy to archive dimension
     const dimensionMap: Record<string, OptimizationDimension> = {
-      'speed': 'speed',
-      'cost': 'cost-efficient',
-      'quality': 'quality',
-      'balanced': 'balanced',
-      'adaptive': 'quality',  // Adaptive defaults to quality, adjusted dynamically
+      speed: 'speed',
+      cost: 'cost-efficient',
+      quality: 'quality',
+      balanced: 'balanced',
+      adaptive: 'quality', // Adaptive defaults to quality, adjusted dynamically
     };
 
     const dimension = dimensionMap[triagePreference] ?? 'balanced';
@@ -305,7 +320,7 @@ class ConfigurationArchive {
    */
   getAlternatives(
     taskType: string,
-    complexity: string,
+    complexity: string
   ): Array<{ dimension: OptimizationDimension; elite: EliteConfig }> {
     const results: Array<{ dimension: OptimizationDimension; elite: EliteConfig }> = [];
 
@@ -322,17 +337,19 @@ class ConfigurationArchive {
   /**
    * Ingest results from a benchmark run — batch insert all strategy scores.
    */
-  ingestBenchmarkResults(results: Array<{
-    taskType: string;
-    complexity: string;
-    strategy: string;
-    avgQuality: number;
-    avgCost: number;
-    avgLatency: number;
-    successRate: number;
-    sampleCount: number;
-    avgTokens?: number;
-  }>): { totalInserted: number; cellsUpdated: number } {
+  ingestBenchmarkResults(
+    results: Array<{
+      taskType: string;
+      complexity: string;
+      strategy: string;
+      avgQuality: number;
+      avgCost: number;
+      avgLatency: number;
+      successRate: number;
+      sampleCount: number;
+      avgTokens?: number;
+    }>
+  ): { totalInserted: number; cellsUpdated: number } {
     let totalInserted = 0;
     let cellsUpdated = 0;
 
@@ -352,7 +369,7 @@ class ConfigurationArchive {
           promotionSource: 'benchmark',
         },
         // Exclude quality-per-token if no real token data provided
-        hasTokenData ? undefined : { excludeDimensions: ['quality-per-token'] },
+        hasTokenData ? undefined : { excludeDimensions: ['quality-per-token'] }
       );
 
       if (inserted) {
@@ -361,8 +378,10 @@ class ConfigurationArchive {
       }
     }
 
-    log.info({ totalInserted, cellsUpdated, inputCount: results.length },
-      'Benchmark results ingested into configuration archive');
+    log.info(
+      { totalInserted, cellsUpdated, inputCount: results.length },
+      'Benchmark results ingested into configuration archive'
+    );
 
     return { totalInserted, cellsUpdated };
   }
@@ -383,10 +402,10 @@ class ConfigurationArchive {
   }): void {
     // For production results, we need to merge with existing data incrementally.
     // Check if there's already an elite for this strategy in any dimension.
-    const existingEntries = ALL_DIMENSIONS.map(dim => {
+    const existingEntries = ALL_DIMENSIONS.map((dim) => {
       const elite = this.getElite(params.taskType, params.complexity, dim);
       return { dim, elite };
-    }).filter(e => e.elite?.strategy === params.strategy);
+    }).filter((e) => e.elite?.strategy === params.strategy);
 
     if (existingEntries.length > 0) {
       // Update existing elite with exponential moving average
@@ -410,7 +429,11 @@ class ConfigurationArchive {
           lastUpdated: Date.now(),
         });
 
-        const key = cellKey({ taskType: params.taskType, complexity: params.complexity, dimension: dim });
+        const key = cellKey({
+          taskType: params.taskType,
+          complexity: params.complexity,
+          dimension: dim,
+        });
         const entry = {
           cell: { taskType: params.taskType, complexity: params.complexity, dimension: dim },
           elite: { ...updated, fitness, lastUpdated: Date.now() },
@@ -458,16 +481,17 @@ class ConfigurationArchive {
           {
             strategy: row.strategy,
             avgQuality: Number(row.avgQuality),
-            avgCost: Number(row.avgCostEfficiency) > 0
-              ? Number(row.avgQuality) / Number(row.avgCostEfficiency)
-              : 0.01,
+            avgCost:
+              Number(row.avgCostEfficiency) > 0
+                ? Number(row.avgQuality) / Number(row.avgCostEfficiency)
+                : 0.01,
             avgLatency: 0,
             successRate: Number(row.successRate),
             sampleCount: row.sampleCount,
             avgTokens: 0,
             promotionSource: 'champion-challenger',
           },
-          { excludeDimensions: ['speed', 'quality-per-token'] },
+          { excludeDimensions: ['speed', 'quality-per-token'] }
         );
         if (inserted) seeded++;
       }
@@ -523,8 +547,7 @@ class ConfigurationArchive {
     for (const entry of this.elites.values()) {
       coverageByDimension[entry.cell.dimension] =
         (coverageByDimension[entry.cell.dimension] ?? 0) + 1;
-      coverageByTaskType[entry.cell.taskType] =
-        (coverageByTaskType[entry.cell.taskType] ?? 0) + 1;
+      coverageByTaskType[entry.cell.taskType] = (coverageByTaskType[entry.cell.taskType] ?? 0) + 1;
 
       topElites.push({
         ...entry.cell,
@@ -541,9 +564,7 @@ class ConfigurationArchive {
       coverageByDimension: coverageByDimension as Record<OptimizationDimension, number>,
       coverageByTaskType,
       topElites: topElites.slice(0, 50), // Cap at 50 for API response
-      lastSyncedAt: this.lastSyncedAt
-        ? new Date(this.lastSyncedAt).toISOString()
-        : null,
+      lastSyncedAt: this.lastSyncedAt ? new Date(this.lastSyncedAt).toISOString() : null,
     };
   }
 
@@ -587,17 +608,20 @@ class ConfigurationArchive {
     this.applyDecay();
     this.lastSyncedAt = Date.now();
     const stats = this.getStats();
-    log.info({
-      cellCount: stats.cellCount,
-      uniqueStrategies: stats.uniqueStrategies,
-      avgFitness: stats.avgFitness.toFixed(4),
-    }, 'Configuration archive periodic sync completed');
+    log.info(
+      {
+        cellCount: stats.cellCount,
+        uniqueStrategies: stats.uniqueStrategies,
+        avgFitness: stats.avgFitness.toFixed(4),
+      },
+      'Configuration archive periodic sync completed'
+    );
   }
 
   private startSyncTimer(): void {
     if (this.syncTimer) return;
     this.syncTimer = setInterval(() => {
-      this.periodicSync().catch(err => {
+      this.periodicSync().catch((err) => {
         log.warn({ error: String(err) }, 'Archive sync failed');
       });
     }, ConfigurationArchive.SYNC_INTERVAL_MS);

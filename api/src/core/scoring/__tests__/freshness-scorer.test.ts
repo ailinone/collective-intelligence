@@ -37,13 +37,14 @@ describe('scoreFreshness — current lifecycle, healthy route', () => {
 
   it('score increases monotonically with generationRank', () => {
     const ranks = [1, 2, 3, 5, 10, 20, 50];
-    const scores = ranks.map((r) =>
-      scoreFreshness({
-        family: 'claude',
-        generationRank: r,
-        lifecycle: 'current',
-        routeReadiness: HEALTHY_READINESS,
-      }).score,
+    const scores = ranks.map(
+      (r) =>
+        scoreFreshness({
+          family: 'claude',
+          generationRank: r,
+          lifecycle: 'current',
+          routeReadiness: HEALTHY_READINESS,
+        }).score
     );
     for (let i = 1; i < scores.length; i += 1) {
       expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1]);

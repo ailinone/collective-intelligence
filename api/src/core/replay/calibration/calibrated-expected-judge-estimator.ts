@@ -19,10 +19,7 @@
  */
 
 import type { ModelTaskPerformanceProfile } from '../../contribution/model-task-performance-profile';
-import type {
-  ExpectedJudgeEstimator,
-  TrainEvalDatum,
-} from './expected-judge-calibrator';
+import type { ExpectedJudgeEstimator, TrainEvalDatum } from './expected-judge-calibrator';
 
 export interface CalibratedEstimatorContext {
   readonly estimator: ExpectedJudgeEstimator;
@@ -38,7 +35,7 @@ export interface CalibratedEstimatorContext {
 export function estimateCalibratedJudge(
   ctx: CalibratedEstimatorContext,
   profile: ModelTaskPerformanceProfile,
-  modelId?: string,
+  modelId?: string
 ): number {
   const taskTypeOffset = ctx.taskTypeOffsetMap.get(profile.taskType);
   const pairLiftKey = modelId ? `${modelId}||${profile.taskType}` : undefined;
@@ -61,9 +58,7 @@ export function estimateCalibratedJudge(
  *
  * Output: { taskType → offset }. Apply as: estimated += offset.
  */
-export function learnTaskTypeOffsets(
-  data: readonly TrainEvalDatum[],
-): ReadonlyMap<string, number> {
+export function learnTaskTypeOffsets(data: readonly TrainEvalDatum[]): ReadonlyMap<string, number> {
   const buckets = new Map<string, { sumDelta: number; count: number }>();
   for (const d of data) {
     const taskType = d.profile.taskType;

@@ -109,7 +109,7 @@ export interface WalletGateResult {
  */
 export async function gateChatRequest(
   organizationId: string,
-  req: ChatRequest,
+  req: ChatRequest
 ): Promise<WalletGateResult> {
   if (!GATE_ENABLED) return { allowed: true };
   const tier = resolveTier(req);
@@ -120,7 +120,7 @@ export async function gateChatRequest(
     tier.inputPer1MUsd,
     tier.outputPer1MUsd,
     estimatePromptTokens(req),
-    maxOut,
+    maxOut
   );
 
   const holdId = `hold_${nanoid()}`;
@@ -144,7 +144,10 @@ export async function gateChatRequest(
     }
     return { allowed: true, holdId };
   } catch (error) {
-    log.error({ error, organizationId, model: req.model }, 'wallet gate reserve failed — allowing (fail-open)');
+    log.error(
+      { error, organizationId, model: req.model },
+      'wallet gate reserve failed — allowing (fail-open)'
+    );
     return { allowed: true };
   }
 }
@@ -183,8 +186,13 @@ export async function debitChatRequest(args: {
         await getWallet().release(args.organizationId, args.holdId);
       } catch (error) {
         log.error(
-          { error, organizationId: args.organizationId, requestId: args.requestId, holdId: args.holdId },
-          'wallet hold release failed',
+          {
+            error,
+            organizationId: args.organizationId,
+            requestId: args.requestId,
+            holdId: args.holdId,
+          },
+          'wallet hold release failed'
         );
       }
     }
@@ -204,7 +212,7 @@ export async function debitChatRequest(args: {
         requestId: args.requestId,
         holdId: args.holdId,
       },
-      'wallet debited tiered request',
+      'wallet debited tiered request'
     );
   } catch (error) {
     // DI-08: surface + enqueue for retry, never a silent swallow.
@@ -216,7 +224,7 @@ export async function debitChatRequest(args: {
         holdId: args.holdId,
         charge,
       },
-      'wallet debit failed — recording to failed-debit outbox for retry',
+      'wallet debit failed — recording to failed-debit outbox for retry'
     );
     try {
       await getWallet().recordFailedDebit({
@@ -229,7 +237,7 @@ export async function debitChatRequest(args: {
     } catch (recordError) {
       log.error(
         { error: recordError, organizationId: args.organizationId, requestId: args.requestId },
-        'failed to persist failed wallet debit to outbox',
+        'failed to persist failed wallet debit to outbox'
       );
     }
   }

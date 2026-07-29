@@ -84,7 +84,9 @@ describe('buildProviderFailureFromStructured', () => {
 
 describe('sanitizeErrorString', () => {
   it('redacts Bearer tokens', () => {
-    expect(sanitizeErrorString('Authorization: Bearer sk-abc123XYZ')).toContain('Bearer [redacted]');
+    expect(sanitizeErrorString('Authorization: Bearer sk-abc123XYZ')).toContain(
+      'Bearer [redacted]'
+    );
   });
 
   it('redacts api_key=', () => {

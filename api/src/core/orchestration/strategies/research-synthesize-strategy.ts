@@ -59,11 +59,17 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     const startTime = Date.now();
     return Promise.race([
       this.executeCore(request, context, startTime),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Research timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Research timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)
+      ),
     ]);
   }
 
-  private async executeCore(request: ChatRequest, context: OrchestrationContext, startTime: number): Promise<OrchestrationResult> {
+  private async executeCore(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    startTime: number
+  ): Promise<OrchestrationResult> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Research-Synthesize requires at least 3 models');
 
@@ -75,32 +81,48 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     const preference = resolvePreferredExecutor(models, context, []);
     if (preference.pinReason === 'pin-not-in-pool') {
       log.warn(
-        { requestId: context.requestId, requestedModel: preference.requestedId, poolSize: models.length },
-        'Research-synthesize: requested model not in operational pool — falling back to quality-sorted ranker',
+        {
+          requestId: context.requestId,
+          requestedModel: preference.requestedId,
+          poolSize: models.length,
+        },
+        'Research-synthesize: requested model not in operational pool — falling back to quality-sorted ranker'
       );
     }
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const rankerSynthesizer = sorted[0];
-    const researchers = this.selectDiverseResearchers(sorted.slice(1), Math.min(5, sorted.length - 1));
+    const researchers = this.selectDiverseResearchers(
+      sorted.slice(1),
+      Math.min(5, sorted.length - 1)
+    );
     const reasoningEnabled = this.isReasoningEnabled(request);
     const executions: ModelExecution[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
 
-    log.info({ ranker: rankerSynthesizer.id, researchers: researchers.map(r => r.id) }, 'Research-Synthesize: starting');
+    log.info(
+      { ranker: rankerSynthesizer.id, researchers: researchers.map((r) => r.id) },
+      'Research-Synthesize: starting'
+    );
 
     this.emitObserverEvent(context, {
       type: 'phase_start',
-      models: researchers.map(m => m.name || m.id),
+      models: researchers.map((m) => m.name || m.id),
       summary: `Research phase: ${researchers.length} investigators researching in parallel.`,
     });
 
     // Phase 1: Parallel research (blind)
     // Note: researchPrompt is shared but executeModelWithReasoning handles per-model native thinking
-    const researchPrompt = this.withReasoningPrompt(PROMPTS.researchInvestigator(originalQ), request);
+    const researchPrompt = this.withReasoningPrompt(
+      PROMPTS.researchInvestigator(originalQ),
+      request
+    );
     const researchResults: Array<{ model: Model; content: string; exec: ModelExecution }> = [];
 
     const promises = researchers.map(async (model) => {
@@ -136,7 +158,9 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     if (researchResults.length === 0) throw new Error('All researchers failed');
 
     this.emitObserverEvent(context, {
-      type: 'round_complete', round: 1, totalRounds: 3,
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 3,
       summary: `${researchResults.length} research reports received. Ranking evidence.`,
     });
 
@@ -145,45 +169,79 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     const rankerAdapter = await this.getAdapterForModel(rankerSynthesizer, context);
     if (!rankerAdapter) throw new Error(`No adapter for ranker`);
 
-    const researchText = researchResults.map((r, i) =>
-      `### Researcher ${i + 1} (${r.model.displayName || r.model.id}):\n${r.content}`
-    ).join('\n\n---\n\n');
+    const researchText = researchResults
+      .map(
+        (r, i) => `### Researcher ${i + 1} (${r.model.displayName || r.model.id}):\n${r.content}`
+      )
+      .join('\n\n---\n\n');
 
     const rankerReq: ChatRequest = {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.researchEvidenceRanker(researchResults.length) },
-        { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nRESEARCH FINDINGS:\n${researchText}` },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nRESEARCH FINDINGS:\n${researchText}`,
+        },
       ],
       max_tokens: 2000,
     };
-    const rankerExec = await this.executeModel(rankerAdapter, rankerSynthesizer, rankerReq, 'evidence-ranker');
+    const rankerExec = await this.executeModel(
+      rankerAdapter,
+      rankerSynthesizer,
+      rankerReq,
+      'evidence-ranker'
+    );
     executions.push(rankerExec);
     const rankedEvidence = rankerExec.response?.choices?.[0]?.message?.content ?? '';
 
     this.emitObserverEvent(context, {
-      type: 'round_complete', round: 2, totalRounds: 3,
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 3,
       summary: 'Evidence ranked by confidence. Synthesizing final report.',
     });
 
     // Phase 3: Synthesis
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizer producing definitive research summary.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizer producing definitive research summary.',
+    });
 
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
     const synthReq: ChatRequest = {
       ...request,
       messages: [
         { role: 'system', content: PROMPTS.researchSynthesizer },
-        { role: 'user', content: `ORIGINAL QUESTION:\n${originalQ}\n\nRANKED EVIDENCE:\n${rankedEvidence}${reasoningTraces}\n\nProduce the definitive research summary.` },
+        {
+          role: 'user',
+          content: `ORIGINAL QUESTION:\n${originalQ}\n\nRANKED EVIDENCE:\n${rankedEvidence}${reasoningTraces}\n\nProduce the definitive research summary.`,
+        },
       ],
     };
-    const synthExec = await this.executeModel(rankerAdapter, rankerSynthesizer, synthReq, 'synthesizer');
+    const synthExec = await this.executeModel(
+      rankerAdapter,
+      rankerSynthesizer,
+      synthReq,
+      'synthesizer'
+    );
     executions.push(synthExec);
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Research complete. ${researchResults.length} sources, evidence ranked, synthesis produced.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Research complete. ${researchResults.length} sources, evidence ranked, synthesis produced.`,
+    });
 
     const reasoningTracesMeta = reasoningEnabled
-      ? executions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens }))
+      ? executions
+          .filter((e) => e.reasoning)
+          .map((e) => ({
+            model_id: e.modelId,
+            model_name: e.modelName,
+            role: e.role,
+            reasoning: e.reasoning,
+            reasoning_tokens: e.reasoningTokens,
+          }))
       : undefined;
 
     return {
@@ -201,36 +259,57 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     };
   }
 
-  supportsStreaming(): boolean { return true; }
+  supportsStreaming(): boolean {
+    return true;
+  }
 
-  async *executeStream(request: ChatRequest, context: OrchestrationContext): AsyncGenerator<ChatResponse, void, unknown> {
+  async *executeStream(
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): AsyncGenerator<ChatResponse, void, unknown> {
     const models = this.getEligibleModels(context);
     if (models.length < 3) throw new Error('Research-Synthesize requires at least 3 models');
     const preference = resolvePreferredExecutor(models, context, []);
     const sorted = assembleExecutors(
       preference,
       models.length,
-      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5),
+      (a, b) => (b.performance?.quality ?? 0.5) - (a.performance?.quality ?? 0.5)
     );
     const rankerSynthesizer = sorted[0];
-    const researchers = this.selectDiverseResearchers(sorted.slice(1), Math.min(5, sorted.length - 1));
+    const researchers = this.selectDiverseResearchers(
+      sorted.slice(1),
+      Math.min(5, sorted.length - 1)
+    );
     const reasoningEnabled = this.isReasoningEnabled(request);
     const executions: ModelExecution[] = [];
-    const originalQ = request.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    const originalQ = request.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
 
     // Phase 1: Research
-    this.emitObserverEvent(context, { type: 'phase_start', models: researchers.map(m => m.name || m.id), summary: `${researchers.length} researchers investigating.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: researchers.map((m) => m.name || m.id),
+      summary: `${researchers.length} researchers investigating.`,
+    });
     yield this.progressChunk(`${researchers.length} researchers investigating...`, 0, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     // Note: researchPrompt is shared but executeModelWithReasoning handles per-model native thinking
-    const researchPrompt = this.withReasoningPrompt(PROMPTS.researchInvestigator(originalQ), request);
+    const researchPrompt = this.withReasoningPrompt(
+      PROMPTS.researchInvestigator(originalQ),
+      request
+    );
     const researchResults: Array<{ model: Model; content: string }> = [];
     const promises = researchers.map(async (model) => {
       if (!this.getAdapterForModel) throw new Error('getAdapterForModel not injected');
       const adapter = await this.getAdapterForModel(model, context);
       if (!adapter) throw new Error(`No adapter for ${model.id}`);
-      const researchReq: ChatRequest = { ...request, messages: [{ role: 'system', content: researchPrompt }, ...request.messages] };
+      const researchReq: ChatRequest = {
+        ...request,
+        messages: [{ role: 'system', content: researchPrompt }, ...request.messages],
+      };
       const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
       const exec = hasTools
         ? await this.executeModelWithTools(adapter, model, researchReq, 'researcher')
@@ -242,11 +321,18 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
       return { model, content: typeof rawC === 'string' ? rawC : '' };
     });
     const results = await Promise.allSettled(promises);
-    for (const r of results) { if (r.status === 'fulfilled' && r.value.content.trim()) researchResults.push(r.value); }
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.content.trim()) researchResults.push(r.value);
+    }
     if (researchResults.length === 0) throw new Error('All researchers failed');
 
     // Phase 2: Evidence ranking
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 3, summary: `${researchResults.length} reports. Ranking evidence.` });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 3,
+      summary: `${researchResults.length} reports. Ranking evidence.`,
+    });
     yield this.progressChunk(`Ranking evidence from ${researchResults.length} sources...`, 1, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
@@ -254,37 +340,76 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
     const rankerAdapter = await this.getAdapterForModel(rankerSynthesizer, context);
     if (!rankerAdapter) throw new Error(`No adapter for ranker`);
 
-    const researchText = researchResults.map((r, i) => `### Researcher ${i + 1}:\n${r.content}`).join('\n\n---\n\n');
-    const rankerReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.researchEvidenceRanker(researchResults.length) }, { role: 'user', content: `QUESTION:\n${originalQ}\n\nFINDINGS:\n${researchText}` }], max_tokens: 2000 };
-    const rankerExec = await this.executeModel(rankerAdapter, rankerSynthesizer, rankerReq, 'evidence-ranker');
+    const researchText = researchResults
+      .map((r, i) => `### Researcher ${i + 1}:\n${r.content}`)
+      .join('\n\n---\n\n');
+    const rankerReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.researchEvidenceRanker(researchResults.length) },
+        { role: 'user', content: `QUESTION:\n${originalQ}\n\nFINDINGS:\n${researchText}` },
+      ],
+      max_tokens: 2000,
+    };
+    const rankerExec = await this.executeModel(
+      rankerAdapter,
+      rankerSynthesizer,
+      rankerReq,
+      'evidence-ranker'
+    );
     executions.push(rankerExec);
     const rankedEvidence = rankerExec.response?.choices?.[0]?.message?.content ?? '';
 
     // Phase 3: Stream synthesis
-    this.emitObserverEvent(context, { type: 'round_complete', round: 2, totalRounds: 3, summary: 'Evidence ranked. Synthesizing.' });
-    this.emitObserverEvent(context, { type: 'synthesis_start', summary: 'Synthesizing definitive research report.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 2,
+      totalRounds: 3,
+      summary: 'Evidence ranked. Synthesizing.',
+    });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_start',
+      summary: 'Synthesizing definitive research report.',
+    });
     yield this.progressChunk('Synthesizing research report...', 2, 3);
     for (const c of await this.drainObserverChunks(context)) yield c;
 
     const reasoningTraces = reasoningEnabled ? this.formatReasoningForSynthesizer(executions) : '';
-    const synthReq: ChatRequest = { ...request, messages: [{ role: 'system', content: PROMPTS.researchSynthesizer }, { role: 'user', content: `QUESTION:\n${originalQ}\n\nRANKED EVIDENCE:\n${rankedEvidence}${reasoningTraces}\n\nProduce definitive summary.` }] };
+    const synthReq: ChatRequest = {
+      ...request,
+      messages: [
+        { role: 'system', content: PROMPTS.researchSynthesizer },
+        {
+          role: 'user',
+          content: `QUESTION:\n${originalQ}\n\nRANKED EVIDENCE:\n${rankedEvidence}${reasoningTraces}\n\nProduce definitive summary.`,
+        },
+      ],
+    };
     // Resilient synthesis: degrade to the ranked evidence if the synthesizer's
     // provider fails, instead of killing the whole collective stream.
     yield* this.streamSynthesisWithFallback(
       synthReq,
       [{ adapter: rankerAdapter, model: rankerSynthesizer }],
-      () => (typeof rankedEvidence === 'string' && rankedEvidence.trim().length > 0
-        ? rankedEvidence
-        : 'Research synthesis was unavailable (all providers failed).'),
+      () =>
+        typeof rankedEvidence === 'string' && rankedEvidence.trim().length > 0
+          ? rankedEvidence
+          : 'Research synthesis was unavailable (all providers failed).'
     );
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Research synthesis complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Research synthesis complete.',
+    });
     for (const c of await this.drainObserverChunks(context)) yield c;
   }
 
   private selectDiverseResearchers(models: Model[], count: number): Model[] {
     const byProvider = new Map<string, Model[]>();
-    for (const m of models) { const p = m.provider || 'unknown'; if (!byProvider.has(p)) byProvider.set(p, []); byProvider.get(p)!.push(m); }
+    for (const m of models) {
+      const p = m.provider || 'unknown';
+      if (!byProvider.has(p)) byProvider.set(p, []);
+      byProvider.get(p)!.push(m);
+    }
     const queues = [...byProvider.values()];
     const selected: Model[] = [];
     let qi = 0;

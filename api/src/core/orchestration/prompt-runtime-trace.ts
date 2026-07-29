@@ -48,12 +48,7 @@ import { createHash } from 'node:crypto';
 // ──────────────────────────────────────────────────────────────────────
 
 export type PromptRuntimeTraceRole =
-  | 'participant'
-  | 'synthesizer'
-  | 'judge'
-  | 'fallback'
-  | 'fallbackSingle'
-  | 'unknown';
+  'participant' | 'synthesizer' | 'judge' | 'fallback' | 'fallbackSingle' | 'unknown';
 
 export interface PromptRuntimeTraceMessageShape {
   readonly role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
@@ -121,7 +116,10 @@ export interface PromptTemplateRegistryEntry {
 /** Default-empty registry — the dry-run service injects role entries at
  *  trace time. Tests can also inject custom registries to verify behavior
  *  without depending on the production `sota-system-prompts` module. */
-export type PromptTemplateRegistry = ReadonlyMap<PromptRuntimeTraceRole, PromptTemplateRegistryEntry>;
+export type PromptTemplateRegistry = ReadonlyMap<
+  PromptRuntimeTraceRole,
+  PromptTemplateRegistryEntry
+>;
 
 // ──────────────────────────────────────────────────────────────────────
 // Canonical JSON (mirrors consensus-plan-fingerprint.canonicalJsonStringify)
@@ -188,7 +186,9 @@ export interface BuildTraceInput {
  */
 export function buildPromptRuntimeTrace(input: BuildTraceInput): PromptRuntimeTrace {
   const required = input.registryEntry.variablesRequired;
-  const resolvedKeys = Object.keys(input.variables).filter((k) => input.variables[k] !== undefined && input.variables[k] !== null);
+  const resolvedKeys = Object.keys(input.variables).filter(
+    (k) => input.variables[k] !== undefined && input.variables[k] !== null
+  );
   const missingVariables = required.filter((name) => !resolvedKeys.includes(name));
 
   // Render the system body — we never surface its raw text.
@@ -196,7 +196,7 @@ export function buildPromptRuntimeTrace(input: BuildTraceInput): PromptRuntimeTr
   try {
     systemBody = input.registryEntry.getBody(input.variables);
   } catch {
-    systemBody = '';  // treat render failure as empty system (it propagates to missing vars)
+    systemBody = ''; // treat render failure as empty system (it propagates to missing vars)
   }
 
   // Build the materialized messages shape: system + user turns.
@@ -210,8 +210,14 @@ export function buildPromptRuntimeTrace(input: BuildTraceInput): PromptRuntimeTr
   }
   for (const m of input.userMessages) {
     const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-    const role = (m.role === 'system' || m.role === 'user' || m.role === 'assistant' ||
-                  m.role === 'tool' || m.role === 'function') ? m.role : 'user';
+    const role =
+      m.role === 'system' ||
+      m.role === 'user' ||
+      m.role === 'assistant' ||
+      m.role === 'tool' ||
+      m.role === 'function'
+        ? m.role
+        : 'user';
     messagesShape.push({
       role,
       contentHash: sha256Hex(content),
@@ -254,12 +260,15 @@ export function buildPromptRuntimeTrace(input: BuildTraceInput): PromptRuntimeTr
 export interface BuildMultiRoleTraceInput {
   readonly strategy: string;
   readonly registry: PromptTemplateRegistry;
-  readonly selectedRoles: ReadonlyMap<PromptRuntimeTraceRole, {
-    readonly modelId?: string;
-    readonly providerId?: string;
-    readonly routeId?: string;
-    readonly variables: Readonly<Record<string, unknown>>;
-  }>;
+  readonly selectedRoles: ReadonlyMap<
+    PromptRuntimeTraceRole,
+    {
+      readonly modelId?: string;
+      readonly providerId?: string;
+      readonly routeId?: string;
+      readonly variables: Readonly<Record<string, unknown>>;
+    }
+  >;
   readonly userMessages: readonly { readonly role: string; readonly content: string | unknown }[];
   /** Roles for which the plan did NOT pick a model (e.g., no live-ready judge).
    *  Each such role yields a `PromptIssue.role_not_selected_due_to_plan_blocker`. */
@@ -274,7 +283,9 @@ export interface BuildMultiRoleTraceResult {
   readonly aggregatePromptFingerprint: string;
 }
 
-export function buildMultiRolePromptTrace(input: BuildMultiRoleTraceInput): BuildMultiRoleTraceResult {
+export function buildMultiRolePromptTrace(
+  input: BuildMultiRoleTraceInput
+): BuildMultiRoleTraceResult {
   const traces: PromptRuntimeTrace[] = [];
   const issues: PromptIssue[] = [];
 

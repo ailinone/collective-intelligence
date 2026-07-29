@@ -83,7 +83,7 @@ describe('profileTask — policy override for thresholds', () => {
         requestId: 'r-1',
         approximateInputTokens: 5_000,
       },
-      { tokenThresholds: { low: 500, medium: 4_000, high: 50_000, longContext: 1_000 } },
+      { tokenThresholds: { low: 500, medium: 4_000, high: 50_000, longContext: 1_000 } }
     );
     expect(profile.requiredCapabilities).toContain('long_context');
   });

@@ -79,7 +79,7 @@ describe('consolidation-matrix: single authoritative classification', () => {
       // even start the per-invariant assertions.
       if (bucketOf.has(id)) {
         throw new Error(
-          `Matrix corruption: '${id}' appears in both '${bucketOf.get(id)}' and '${bucket}'`,
+          `Matrix corruption: '${id}' appears in both '${bucketOf.get(id)}' and '${bucket}'`
         );
       }
       bucketOf.set(id, bucket);
@@ -107,7 +107,7 @@ describe('consolidation-matrix: single authoritative classification', () => {
     // invariant is visible in CI output.
     const flatSize = [...CONSOLIDATION_BUCKETS].reduce(
       (sum, b) => sum + CONSOLIDATION_MATRIX[b].length,
-      0,
+      0
     );
     expect(flatSize).toBe(classifiedIds.size);
   });

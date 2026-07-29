@@ -313,7 +313,10 @@ export class JinaAdapter extends ProviderAdapter {
         const response = await fetch(url, {
           method,
           headers,
-          body: method === 'GET' || options.body === undefined ? undefined : JSON.stringify(options.body),
+          body:
+            method === 'GET' || options.body === undefined
+              ? undefined
+              : JSON.stringify(options.body),
           signal: AbortSignal.timeout(timeoutMs),
         });
 

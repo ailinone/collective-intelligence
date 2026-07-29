@@ -78,7 +78,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
           p99LatencyMs: r.p99LatencyMs,
         })),
       });
-    },
+    }
   );
 
   // ─── GET /v1/admin/operability/discovery ──────────────────────────────
@@ -115,7 +115,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
           probeLatencyMs: r.probeLatencyMs,
         })),
       });
-    },
+    }
   );
 
   // ─── GET /v1/admin/operability/pool ───────────────────────────────────
@@ -163,7 +163,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
           addedAt: c.addedAt,
         })),
       });
-    },
+    }
   );
 
   // ─── GET /v1/admin/operability/traces ─────────────────────────────────
@@ -190,7 +190,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
         limit,
       });
       return reply.send({ count: traces.length, traces });
-    },
+    }
   );
 
   // ─── GET /v1/admin/operability/semantic-index ─────────────────────────
@@ -198,7 +198,8 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
     '/v1/admin/operability/semantic-index',
     { preHandler: adminPreHandler },
     async (_req: FastifyRequest, reply: FastifyReply) => {
-      const { getSemanticIndex, getEmbeddingPipeline, getTEIClient } = await import('@/core/operability');
+      const { getSemanticIndex, getEmbeddingPipeline, getTEIClient } =
+        await import('@/core/operability');
       const idx = getSemanticIndex();
       const pipeline = getEmbeddingPipeline();
       const tei = getTEIClient();
@@ -211,7 +212,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
         teiUrl: process.env.HCRA_EMBEDDER_URL ?? 'http://tei-embedder:8080',
         semanticRetryEnabled: process.env.OPERABILITY_SEMANTIC_RETRY === 'true',
       });
-    },
+    }
   );
 
   // ─── POST /v1/admin/operability/discover-now ──────────────────────────
@@ -239,7 +240,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
         log.error({ err: String(err) }, 'discover-now failed');
         return reply.status(500).send({ error: 'internal_error', message: String(err) });
       }
-    },
+    }
   );
 
   // ─── POST /v1/admin/operability/rebuild-index ─────────────────────────
@@ -261,7 +262,7 @@ export async function registerOperabilityAdminRoutes(server: FastifyInstance): P
         log.error({ err: String(err) }, 'rebuild-index failed');
         return reply.status(500).send({ error: 'internal_error', message: String(err) });
       }
-    },
+    }
   );
 
   log.info('✅ Operability admin routes registered');

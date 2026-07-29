@@ -92,7 +92,10 @@ describe('hub videoGenerate — async job-queue protocol', () => {
       )
       // poll 1: still processing
       .mockResolvedValueOnce(
-        jsonResponse({ code: 'processing', data: { taskId: 'fr_TASK123', status: 'processing', generations: [] } })
+        jsonResponse({
+          code: 'processing',
+          data: { taskId: 'fr_TASK123', status: 'processing', generations: [] },
+        })
       )
       // poll 2: finished with a generation
       .mockResolvedValueOnce(
@@ -126,9 +129,7 @@ describe('hub videoGenerate — async job-queue protocol', () => {
   it('extracts fastrouter_assets.urls when generations are absent', async () => {
     mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('kling-ai/kling-v3')] as never);
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        jsonResponse({ data: { taskId: 't2', status: 'processing' } })
-      )
+      .mockResolvedValueOnce(jsonResponse({ data: { taskId: 't2', status: 'processing' } }))
       .mockResolvedValueOnce(
         jsonResponse({
           code: 'success',
@@ -171,9 +172,11 @@ describe('hub videoGenerate — async job-queue protocol', () => {
 
   it('still returns sync data[] responses without any polling (regression)', async () => {
     mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('veo-3')] as never);
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/sync.mp4' }] })
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/sync.mp4' }] })
+      );
 
     const adapter = createAdapter();
     const response = await adapter.videoGenerate(
@@ -234,9 +237,7 @@ describe('hub videoGenerate — async job-queue protocol', () => {
     mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('openai/sora-2')] as never);
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        jsonResponse({ data: { taskId: 't5', status: 'processing' } })
-      )
+      .mockResolvedValueOnce(jsonResponse({ data: { taskId: 't5', status: 'processing' } }))
       // poll 1: still processing
       .mockResolvedValueOnce(
         jsonResponse({ data: { taskId: 't5', status: 'processing', generations: [] } })
@@ -298,9 +299,7 @@ describe('hub videoGenerate — paid-submit protections', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('flaky', { status: 500 }))
       // A retry would land here and start a SECOND billed generation.
-      .mockResolvedValue(
-        jsonResponse({ data: { taskId: 'dup_TASK', status: 'processing' } })
-      );
+      .mockResolvedValue(jsonResponse({ data: { taskId: 'dup_TASK', status: 'processing' } }));
 
     const adapter = createAdapter({ videosPath: '/videos', videoPollPath: '/videos/{taskId}' });
     await expect(
@@ -324,9 +323,11 @@ describe('hub videoGenerate — payload-wrap request style (Together)', () => {
 
   it('nests everything except model under payload when videoRequestStyle=payload-wrap', async () => {
     mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('openai/sora-2')] as never);
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.together.example/v.mp4' }] })
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.together.example/v.mp4' }] })
+      );
 
     const adapter = createAdapter({ videoRequestStyle: 'payload-wrap' });
     await adapter.videoGenerate(
@@ -348,9 +349,11 @@ describe('hub videoGenerate — payload-wrap request style (Together)', () => {
 
   it('keeps the flat body by default (regression)', async () => {
     mockedGetModelsByProvider.mockResolvedValue([buildCatalogModel('veo-3')] as never);
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/flat.mp4' }] })
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: 'v1', url: 'https://cdn.example.com/flat.mp4' }] })
+      );
 
     const adapter = createAdapter();
     await adapter.videoGenerate(

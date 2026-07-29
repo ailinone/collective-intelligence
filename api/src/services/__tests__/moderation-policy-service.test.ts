@@ -62,40 +62,42 @@ vi.mock('@/utils/logger', () => {
 vi.mock('@/database/client', () => {
   const prisma = {
     moderationPolicy: {
-      create: vi.fn(async ({ data }: { data: Omit<PolicyRow, 'id' | 'createdAt' | 'updatedAt'> }) => {
-        // FK check (P2003) — org must be known.
-        if (!db.knownOrgs.has(data.organizationId)) {
-          throw new Prisma.PrismaClientKnownRequestError('FK violation', {
-            code: 'P2003',
-            clientVersion: 'test',
-          });
-        }
-        // Unique (organizationId, name) — P2002.
-        for (const row of db.policies.values()) {
-          if (row.organizationId === data.organizationId && row.name === data.name) {
-            throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-              code: 'P2002',
+      create: vi.fn(
+        async ({ data }: { data: Omit<PolicyRow, 'id' | 'createdAt' | 'updatedAt'> }) => {
+          // FK check (P2003) — org must be known.
+          if (!db.knownOrgs.has(data.organizationId)) {
+            throw new Prisma.PrismaClientKnownRequestError('FK violation', {
+              code: 'P2003',
               clientVersion: 'test',
-              meta: { target: ['organization_id', 'name'] },
             });
           }
+          // Unique (organizationId, name) — P2002.
+          for (const row of db.policies.values()) {
+            if (row.organizationId === data.organizationId && row.name === data.name) {
+              throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+                code: 'P2002',
+                clientVersion: 'test',
+                meta: { target: ['organization_id', 'name'] },
+              });
+            }
+          }
+          const id = `pol-${++db.seq}`;
+          const now = new Date(Date.UTC(2026, 5, 13, 0, 0, db.seq));
+          const row: PolicyRow = {
+            id,
+            organizationId: data.organizationId,
+            name: data.name,
+            thresholds: data.thresholds,
+            customCategories: data.customCategories,
+            action: data.action,
+            enabled: data.enabled,
+            createdAt: now,
+            updatedAt: now,
+          };
+          db.policies.set(id, row);
+          return row;
         }
-        const id = `pol-${++db.seq}`;
-        const now = new Date(Date.UTC(2026, 5, 13, 0, 0, db.seq));
-        const row: PolicyRow = {
-          id,
-          organizationId: data.organizationId,
-          name: data.name,
-          thresholds: data.thresholds,
-          customCategories: data.customCategories,
-          action: data.action,
-          enabled: data.enabled,
-          createdAt: now,
-          updatedAt: now,
-        };
-        db.policies.set(id, row);
-        return row;
-      }),
+      ),
       findMany: vi.fn(
         async ({ where }: { where: { organizationId: string }; orderBy?: unknown }) => {
           return [...db.policies.values()]
@@ -103,21 +105,17 @@ vi.mock('@/database/client', () => {
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         }
       ),
-      findFirst: vi.fn(
-        async ({ where }: { where: { id: string; organizationId: string } }) => {
-          const row = db.policies.get(where.id);
-          if (!row || row.organizationId !== where.organizationId) return null;
-          return row;
-        }
-      ),
-      deleteMany: vi.fn(
-        async ({ where }: { where: { id: string; organizationId: string } }) => {
-          const row = db.policies.get(where.id);
-          if (!row || row.organizationId !== where.organizationId) return { count: 0 };
-          db.policies.delete(where.id);
-          return { count: 1 };
-        }
-      ),
+      findFirst: vi.fn(async ({ where }: { where: { id: string; organizationId: string } }) => {
+        const row = db.policies.get(where.id);
+        if (!row || row.organizationId !== where.organizationId) return null;
+        return row;
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: { id: string; organizationId: string } }) => {
+        const row = db.policies.get(where.id);
+        if (!row || row.organizationId !== where.organizationId) return { count: 0 };
+        db.policies.delete(where.id);
+        return { count: 1 };
+      }),
     },
   };
   return { prisma, Prisma };
@@ -319,7 +317,10 @@ describe('applyPolicyToItem — custom thresholds change flagged', () => {
   });
 
   it('keeps the base flag when the base already flagged (no threshold change)', () => {
-    const base = baseItem({ flagged: true, categories: { hate: true, violence: false, harassment: false } });
+    const base = baseItem({
+      flagged: true,
+      categories: { hate: true, violence: false, harassment: false },
+    });
     const p = policy({ thresholds: {} });
 
     const out = applyPolicyToItem(p, base, 'text');
@@ -342,7 +343,9 @@ describe('applyPolicyToItem — disabled policy is a no-op', () => {
 describe('applyPolicyToItem — custom categories (keyword match)', () => {
   it('flags an org-defined custom category when a keyword is present', () => {
     const base = baseItem();
-    const p = policy({ customCategories: [{ name: 'company_secrets', keywords: ['roadmap', 'internal'] }] });
+    const p = policy({
+      customCategories: [{ name: 'company_secrets', keywords: ['roadmap', 'internal'] }],
+    });
 
     const out = applyPolicyToItem(p, base, 'Here is our internal roadmap for Q3');
     expect(out.categories.company_secrets).toBe(true);

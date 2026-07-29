@@ -67,7 +67,7 @@ describe('Adaptive Quality Targets (OI-08)', () => {
       // minSamplesForLearned = 15. Total sampleCount across rows must be >= 15.
       mockFindMany.mockResolvedValue([
         makeWeightRow({ strategy: 'single', avgQuality: 0.78, successRate: 0.85, sampleCount: 30 }),
-        makeWeightRow({ strategy: 'debate', avgQuality: 0.92, successRate: 0.90, sampleCount: 25 }),
+        makeWeightRow({ strategy: 'debate', avgQuality: 0.92, successRate: 0.9, sampleCount: 25 }),
       ]);
 
       const { getAdaptiveQualityTarget } = await import('../../quality/adaptive-quality-targets');

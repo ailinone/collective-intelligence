@@ -19,12 +19,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ConsensusStrategy } from '../consensus-strategy';
-import {
-  createStrategyOutputEvaluator,
-} from '../evaluation/evaluator-factory';
-import {
-  loadEvaluatorConfigFromEnv,
-} from '../evaluation/evaluator-config';
+import { createStrategyOutputEvaluator } from '../evaluation/evaluator-factory';
+import { loadEvaluatorConfigFromEnv } from '../evaluation/evaluator-config';
 import type { ConsensusStrategyArtifacts } from '../consensus/consensus-artifacts';
 import {
   healthyResponses,

@@ -79,9 +79,8 @@ export async function bootstrapForScripts(): Promise<BootstrapResult> {
   const secretsSkipped = -1;
 
   // Phase 3: Provider registry
-  const { initializeProviderRegistry, setProviderRegistry } = await import(
-    '@/providers/provider-registry'
-  );
+  const { initializeProviderRegistry, setProviderRegistry } =
+    await import('@/providers/provider-registry');
   const registry = await initializeProviderRegistry(config.providers);
   setProviderRegistry(registry);
 
@@ -89,10 +88,7 @@ export async function bootstrapForScripts(): Promise<BootstrapResult> {
 
   _bootstrapped = true;
 
-  log.info(
-    { secretsLoaded, secretsSkipped, providersEnabled },
-    'bootstrapForScripts: infra ready',
-  );
+  log.info({ secretsLoaded, secretsSkipped, providersEnabled }, 'bootstrapForScripts: infra ready');
   return { secretsLoaded, secretsSkipped, providersEnabled };
 }
 

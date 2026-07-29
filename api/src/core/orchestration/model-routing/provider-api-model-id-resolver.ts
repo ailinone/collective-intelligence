@@ -30,12 +30,10 @@
  * The resolver only knows STRUCTURAL rules — never specific models.
  */
 
-import {
-  resolveProviderApiModelId,
-} from '@/core/operability/provider-model-aliases';
+import { resolveProviderApiModelId } from '@/core/operability/provider-model-aliases';
 
 export type ApiModelIdResolutionSource =
-  | 'discovery_alias_snapshot'   // J1F: fresh-discovered, top priority
+  | 'discovery_alias_snapshot' // J1F: fresh-discovered, top priority
   | 'provider_explicit_alias'
   | 'route_explicit_alias'
   | 'catalog_provider_model_id'
@@ -48,13 +46,13 @@ export type ApiModelIdResolutionSource =
   | 'unresolved';
 
 export type ApiModelIdResolutionConfidence =
-  | 'exact'             // provider returned this exact id at discovery
+  | 'exact' // provider returned this exact id at discovery
   | 'provider_specific' // explicit alias entry
-  | 'catalog'           // catalog row carries provider-specific id
-  | 'discovery'         // observed via /v1/models
-  | 'derived'           // conservative derivation, no positive evidence
-  | 'legacy_low'        // naive concat — likely wrong, kept for back-compat in non-strict
-  | 'unresolved';       // strict refused to fabricate
+  | 'catalog' // catalog row carries provider-specific id
+  | 'discovery' // observed via /v1/models
+  | 'derived' // conservative derivation, no positive evidence
+  | 'legacy_low' // naive concat — likely wrong, kept for back-compat in non-strict
+  | 'unresolved'; // strict refused to fabricate
 
 export interface ProviderApiModelIdResolutionInput {
   readonly providerId: string;
@@ -80,7 +78,9 @@ export interface ProviderApiModelIdResolutionInput {
   readonly discoverySnapshotLookup?: (input: {
     providerId: string;
     logicalModelId: string;
-  }) => { apiModelId: string; confidence: 'exact' | 'high' | 'medium' | 'low'; matchKind: string } | undefined;
+  }) =>
+    | { apiModelId: string; confidence: 'exact' | 'high' | 'medium' | 'low'; matchKind: string }
+    | undefined;
 }
 
 export interface ProviderApiModelIdResolution {
@@ -107,16 +107,12 @@ export interface ProviderApiModelIdResolution {
  */
 export function detectsDuplicateProviderPrefix(
   nativeProviderId: string | undefined,
-  logicalModelId: string,
+  logicalModelId: string
 ): boolean {
   if (!nativeProviderId) return false;
   const native = nativeProviderId.toLowerCase();
   const id = logicalModelId.toLowerCase();
-  return (
-    id.startsWith(`${native}-`) ||
-    id.startsWith(`${native}_`) ||
-    id.startsWith(`${native}/`)
-  );
+  return id.startsWith(`${native}-`) || id.startsWith(`${native}_`) || id.startsWith(`${native}/`);
 }
 
 /**
@@ -130,7 +126,7 @@ export function detectsDuplicateProviderPrefix(
  */
 export function stripDuplicateProviderPrefix(
   nativeProviderId: string,
-  logicalModelId: string,
+  logicalModelId: string
 ): string {
   const native = nativeProviderId.toLowerCase();
   const id = logicalModelId;
@@ -155,7 +151,7 @@ export function stripDuplicateProviderPrefix(
  *     prefix) would remain, returns `unresolved`.
  */
 export function resolveApiModelId(
-  input: ProviderApiModelIdResolutionInput,
+  input: ProviderApiModelIdResolutionInput
 ): ProviderApiModelIdResolution {
   const warnings: string[] = [];
   const providerId = input.providerId.toLowerCase();
@@ -192,7 +188,12 @@ export function resolveApiModelId(
         nativeProviderId,
         apiModelId: hit.apiModelId,
         source: 'discovery_alias_snapshot',
-        confidence: hit.confidence === 'exact' ? 'exact' : hit.confidence === 'high' ? 'discovery' : 'derived',
+        confidence:
+          hit.confidence === 'exact'
+            ? 'exact'
+            : hit.confidence === 'high'
+              ? 'discovery'
+              : 'derived',
         aliasApplied: true,
         aliasReason: `J1F discovery snapshot match (${hit.matchKind}, ${hit.confidence})`,
         warnings,
@@ -205,8 +206,11 @@ export function resolveApiModelId(
   // 3. route_explicit_alias — when router needs the native-stripped form
   // as the catalog key in the alias map (e.g., openrouter has
   // `claude-3.7-sonnet` → `anthropic/claude-3.7-sonnet`).
-  if (nativeProviderId && providerId !== nativeProviderId &&
-      detectsDuplicateProviderPrefix(nativeProviderId, logicalModelId)) {
+  if (
+    nativeProviderId &&
+    providerId !== nativeProviderId &&
+    detectsDuplicateProviderPrefix(nativeProviderId, logicalModelId)
+  ) {
     const stripped = stripDuplicateProviderPrefix(nativeProviderId, logicalModelId);
     const routerAlias = resolveProviderApiModelId(providerId, stripped);
     if (routerAlias.aliasUsed) {
@@ -344,7 +348,8 @@ export function resolveApiModelId(
       source: 'unresolved',
       confidence: 'unresolved',
       aliasApplied: false,
-      aliasReason: 'strict mode rejected legacy_native_prefix — no explicit/catalog/discovery evidence for this router',
+      aliasReason:
+        'strict mode rejected legacy_native_prefix — no explicit/catalog/discovery evidence for this router',
       warnings: [
         ...warnings,
         `unresolved (strict): no explicit alias for ('${providerId}', '${logicalModelId}'). Naive concat '${naive}' may or may not be accepted; refusing to silently use it.`,

@@ -9,12 +9,7 @@
 
 import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
-import type {
-  ChatRequest,
-  OrchestrationContext,
-  OrchestrationResult,
-  Model,
-} from '@/types';
+import type { ChatRequest, OrchestrationContext, OrchestrationResult, Model } from '@/types';
 import { narrowAs } from '@/utils/type-guards';
 import { modelPerformanceTracker } from '@/core/selection/model-performance-tracker';
 
@@ -66,7 +61,11 @@ export class ReinforcementStrategy extends BaseStrategy {
     if (!adapter) {
       throw new Error(`No adapter found for model: ${selectedModel.id}`);
     }
-    this.emitObserverEvent(context, { type: 'phase_start', models: [selectedModel.name || selectedModel.id], summary: `Reinforcement: selected ${selectedModel.name} via weighted scoring.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [selectedModel.name || selectedModel.id],
+      summary: `Reinforcement: selected ${selectedModel.name} via weighted scoring.`,
+    });
 
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     const reasoningEnabled = this.isReasoningEnabled(request);
@@ -76,7 +75,10 @@ export class ReinforcementStrategy extends BaseStrategy {
         ? await this.executeModelWithReasoning(adapter, selectedModel, request, 'primary')
         : await this.executeModel(adapter, selectedModel, request, 'primary');
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Reinforcement execution complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Reinforcement execution complete.',
+    });
 
     return {
       strategyUsed: this.getMetadata().name,
@@ -88,9 +90,25 @@ export class ReinforcementStrategy extends BaseStrategy {
       metadata: {
         selectedModel: selectedModel.id,
         selectionMethod: 'quality-weighted',
-        empiricalScoreApplied: !!(narrowAs<Record<string, unknown> | undefined>(selectedModel.performance))?._empirical,
-        sampleCount: ((narrowAs<Record<string, unknown> | undefined>(selectedModel.performance))?._sampleCount as number) ?? 0,
-        ...(execution.reasoning ? { reasoning_traces: [{ model_id: execution.modelId, model_name: execution.modelName, role: execution.role, reasoning: execution.reasoning, reasoning_tokens: execution.reasoningTokens }] } : {}),
+        empiricalScoreApplied: !!narrowAs<Record<string, unknown> | undefined>(
+          selectedModel.performance
+        )?._empirical,
+        sampleCount:
+          (narrowAs<Record<string, unknown> | undefined>(selectedModel.performance)
+            ?._sampleCount as number) ?? 0,
+        ...(execution.reasoning
+          ? {
+              reasoning_traces: [
+                {
+                  model_id: execution.modelId,
+                  model_name: execution.modelName,
+                  role: execution.role,
+                  reasoning: execution.reasoning,
+                  reasoning_tokens: execution.reasoningTokens,
+                },
+              ],
+            }
+          : {}),
       },
     };
   }
@@ -115,7 +133,7 @@ export class ReinforcementStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible (cost-filtered or not in pool) — using weighted scoring.',
+        'Preferred model not eligible (cost-filtered or not in pool) — using weighted scoring.'
       );
     }
     if (preference.pinnedExecutor) {

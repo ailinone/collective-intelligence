@@ -31,7 +31,7 @@ import {
 describe('ConsensusStrategy — best-individual fallback', () => {
   it('falls back when synthesisScore < bestIndividualScore (synth still passes verdict, just lower)', async () => {
     setAggregatorOverride({
-      content: 'A'.repeat(120),  // long enough that structural is fine
+      content: 'A'.repeat(120), // long enough that structural is fine
       confidence: 0.6,
     });
     const models = threeHealthyModels();
@@ -55,7 +55,7 @@ describe('ConsensusStrategy — best-individual fallback', () => {
     expect(artifacts.finalSelection.source).toBe('best_individual');
     expect(artifacts.finalSelection.fallbackTriggered).toBe(true);
     expect(artifacts.finalSelection.fallbackReason).toBe(
-      'synthesis_underperformed_best_individual',
+      'synthesis_underperformed_best_individual'
     );
     expect(artifacts.finalSelection.comparable).toBe(true);
     expect(artifacts.finalSelection.deltaVsBestIndividual).toBeLessThan(0);

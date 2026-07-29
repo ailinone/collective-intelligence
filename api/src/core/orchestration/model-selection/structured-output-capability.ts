@@ -152,7 +152,7 @@ function normalizeCapList(caps: ReadonlyArray<string> | undefined): ReadonlyArra
 
 function matchTerms(
   caps: ReadonlyArray<string>,
-  terms: ReadonlyArray<string>,
+  terms: ReadonlyArray<string>
 ): ReadonlyArray<string> {
   const out: string[] = [];
   for (const c of caps) {
@@ -163,7 +163,7 @@ function matchTerms(
 
 function matchMetadataKeys(
   metadata: Record<string, unknown> | undefined,
-  keys: ReadonlyArray<string>,
+  keys: ReadonlyArray<string>
 ): ReadonlyArray<string> {
   if (!metadata) return [];
   const matched: string[] = [];
@@ -197,7 +197,7 @@ function matchMetadataKeys(
 
 function lookupBackfill(
   backfill: ReadonlyArray<StructuredOutputBackfillEntry>,
-  input: DetectStructuredOutputInput,
+  input: DetectStructuredOutputInput
 ): StructuredOutputBackfillEntry | undefined {
   const providerId = String(input.providerId || '').toLowerCase();
   const idCandidates = [input.modelId, input.apiModelId, input.canonicalModelId]
@@ -213,9 +213,10 @@ function lookupBackfill(
   return undefined;
 }
 
-function classifyFromCaps(
-  caps: ReadonlyArray<string>,
-): { class: StructuredOutputSupport; matched: ReadonlyArray<string> } {
+function classifyFromCaps(caps: ReadonlyArray<string>): {
+  class: StructuredOutputSupport;
+  matched: ReadonlyArray<string>;
+} {
   const matchedStrong = matchTerms(caps, STRONG_CAPABILITY_TERMS);
   if (matchedStrong.length > 0) return { class: 'strong', matched: matchedStrong };
   const matchedMedium = matchTerms(caps, MEDIUM_CAPABILITY_TERMS);
@@ -225,9 +226,10 @@ function classifyFromCaps(
   return { class: 'none', matched: [] };
 }
 
-function classifyFromMetadata(
-  metadata: Record<string, unknown> | undefined,
-): { class: StructuredOutputSupport; matched: ReadonlyArray<string> } {
+function classifyFromMetadata(metadata: Record<string, unknown> | undefined): {
+  class: StructuredOutputSupport;
+  matched: ReadonlyArray<string>;
+} {
   const strong = matchMetadataKeys(metadata, STRONG_METADATA_KEYS);
   if (strong.length > 0) return { class: 'strong', matched: strong };
   const medium = matchMetadataKeys(metadata, MEDIUM_METADATA_KEYS);
@@ -243,7 +245,7 @@ function classifyFromMetadata(
  * Pure: identical input → identical output. No I/O. Never throws.
  */
 export function detectStructuredOutputSupport(
-  input: DetectStructuredOutputInput,
+  input: DetectStructuredOutputInput
 ): StructuredOutputEvidence {
   const caps = normalizeCapList(input.capabilities);
   const fromCaps = classifyFromCaps(caps);
@@ -285,7 +287,11 @@ export function detectStructuredOutputSupport(
   let reason: string;
   if (bestClass === 'none') {
     reason = 'no_structured_output_evidence';
-  } else if (sources.includes('backfill') && bestClass !== fromCaps.class && bestClass !== fromMd.class) {
+  } else if (
+    sources.includes('backfill') &&
+    bestClass !== fromCaps.class &&
+    bestClass !== fromMd.class
+  ) {
     reason = `structured_output_via_backfill:${matchedBackfillReason ?? 'unknown'}`;
   } else if (sources.length === 1 && sources[0] === 'capability') {
     reason = `structured_output_via_capability:${fromCaps.matched.join(',')}`;

@@ -18,12 +18,12 @@
  * user's language cohesively.
  */
 export const LANGUAGE_MIRROR_DIRECTIVE =
-  "LANGUAGE — write your ENTIRE response (the final answer AND any <reasoning>/<think> " +
-  "content) in the SAME language the user used in their most recent message. Detect it " +
+  'LANGUAGE — write your ENTIRE response (the final answer AND any <reasoning>/<think> ' +
+  'content) in the SAME language the user used in their most recent message. Detect it ' +
   "from the user's own words and mirror it exactly, including script and regional variety. " +
-  "Do NOT translate to English unless the user wrote in English or explicitly requested " +
-  "another language. Do NOT mention, explain, acknowledge, or restate this rule — just " +
-  "write in that language. Keep code identifiers, API names, URLs, and literal quotes verbatim.";
+  'Do NOT translate to English unless the user wrote in English or explicitly requested ' +
+  'another language. Do NOT mention, explain, acknowledge, or restate this rule — just ' +
+  'write in that language. Keep code identifiers, API names, URLs, and literal quotes verbatim.';
 
 /**
  * Builds the user-TURN prefix that anchors the observer narrator to the user's
@@ -46,10 +46,15 @@ export const LANGUAGE_MIRROR_DIRECTIVE =
  * system directive.
  */
 export function mirrorLanguageFromSample(userSample: string | undefined): string {
-  const s = (userSample ?? '').replace(/```[\s\S]*?```/g, ' ').trim().slice(0, 240);
+  const s = (userSample ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .trim()
+    .slice(0, 240);
   if (!s) return '';
   return (
-    'My request: "' + s + '"\n\n' +
+    'My request: "' +
+    s +
+    '"\n\n' +
     'Now narrate the following internal event for me. The notes below are internal system ' +
     'metadata and may be written in a different language than mine — reply in MY language ' +
     '(the language of "My request" above), and do not repeat or quote my request.\n\n'

@@ -83,9 +83,8 @@ export function createAblationFlags(
   return {
     disabled: new Set(disableComponents),
     isAblation: disableComponents.length > 0,
-    conditionLabel: conditionLabel ?? (disableComponents.length > 0
-      ? `-${disableComponents.join('-')}`
-      : 'full'),
+    conditionLabel:
+      conditionLabel ?? (disableComponents.length > 0 ? `-${disableComponents.join('-')}` : 'full'),
   };
 }
 

@@ -123,22 +123,22 @@ const STRATEGY_DEFAULT_ROLES: Readonly<
 > = Object.freeze({
   'expert-panel': ['expert', 'expert', 'expert', 'aggregator'],
   'tri-role-collective': ['expert', 'critic', 'aggregator'],
-  'debate': ['expert', 'critic', 'aggregator'],
+  debate: ['expert', 'critic', 'aggregator'],
   'war-room': ['expert', 'expert', 'critic', 'aggregator'],
   'blind-debate': ['expert', 'expert', 'aggregator'],
   'devil-advocate-consensus': ['expert', 'critic', 'aggregator'],
   'safety-quorum': ['expert', 'expert', 'expert', 'critic'],
   'critique-repair': ['primary', 'critic'],
-  'consensus': ['expert', 'expert', 'aggregator'],
+  consensus: ['expert', 'expert', 'aggregator'],
   'sensitivity-consensus': ['expert', 'expert', 'aggregator'],
-  'judge': ['primary', 'judge'],
+  judge: ['primary', 'judge'],
   'cost-cascade': ['primary', 'fallback', 'fallback'],
   'quality-multipass': ['primary', 'critic'],
 });
 
 function deriveRequiredRoles(
   mode: ResolvedExperimentMode,
-  strategy: CollectiveStrategy | null,
+  strategy: CollectiveStrategy | null
 ): ReadonlyArray<AttemptRoleInStrategy> {
   if (mode === 'single-model' || mode === 'single-budget') return ['primary'];
   if (mode === 'adaptive') return ['primary'];
@@ -157,7 +157,7 @@ interface IdentitySlots {
 function extractIdentitySlots(
   mode: ModeConfig,
   identityLevel: IdentityLevel,
-  hints: ArmPolicyHints | undefined,
+  hints: ArmPolicyHints | undefined
 ): IdentitySlots {
   // ModelId is present on single-model / single-budget / forced-pool / ablation
   const modelId = extractModelId(mode);
@@ -296,14 +296,11 @@ export function deriveArmId(mode: ModeConfig): string {
  *   - identity slots are populated according to identityLevel
  *   - strategy roles fall back to defaults if hints.requiredRoles absent
  */
-export function resolveExperimentArm(
-  mode: ModeConfigWithHints,
-): ResolvedExperimentArm {
+export function resolveExperimentArm(mode: ModeConfigWithHints): ResolvedExperimentArm {
   const hints: ArmPolicyHints | undefined = mode.policyHints;
 
   const role: ArmRole = hints?.role ?? deriveDefaultRole(mode.mode);
-  const identityLevel: IdentityLevel =
-    hints?.identityLevel ?? deriveDefaultIdentityLevel(role);
+  const identityLevel: IdentityLevel = hints?.identityLevel ?? deriveDefaultIdentityLevel(role);
 
   const basePolicy = resolveBasePolicy(role);
   const policy: ArmEvaluationPolicy = hints?.policyOverrides
@@ -313,7 +310,8 @@ export function resolveExperimentArm(
   const slots = extractIdentitySlots(mode, identityLevel, hints);
   const strategy = extractStrategy(mode);
   const requiredRoles =
-    hints?.requiredRoles ?? deriveRequiredRoles(mode.mode, strategy === 'auto' || strategy === 'single' ? null : strategy);
+    hints?.requiredRoles ??
+    deriveRequiredRoles(mode.mode, strategy === 'auto' || strategy === 'single' ? null : strategy);
 
   return Object.freeze({
     armId: deriveArmId(mode),
@@ -365,7 +363,7 @@ function resolveBasePolicy(role: ArmRole): ArmEvaluationPolicy {
  */
 function mergePolicy(
   base: ArmEvaluationPolicy,
-  overrides: NonNullable<ArmPolicyHints['policyOverrides']>,
+  overrides: NonNullable<ArmPolicyHints['policyOverrides']>
 ): ArmEvaluationPolicy {
   const merged: ArmEvaluationPolicy = {
     ...base,
@@ -375,22 +373,22 @@ function mergePolicy(
   // Internal consistency
   if (merged.maxFallbackDepth < 1) {
     throw new Error(
-      `policyOverrides invalid: maxFallbackDepth must be ≥ 1, got ${merged.maxFallbackDepth}`,
+      `policyOverrides invalid: maxFallbackDepth must be ≥ 1, got ${merged.maxFallbackDepth}`
     );
   }
   if (merged.maxConcurrentInferences < 1) {
     throw new Error(
-      `policyOverrides invalid: maxConcurrentInferences must be ≥ 1, got ${merged.maxConcurrentInferences}`,
+      `policyOverrides invalid: maxConcurrentInferences must be ≥ 1, got ${merged.maxConcurrentInferences}`
     );
   }
   if (merged.totalArmBudgetUsd < merged.perAttemptBudgetUsd) {
     throw new Error(
-      `policyOverrides invalid: totalArmBudgetUsd (${merged.totalArmBudgetUsd}) < perAttemptBudgetUsd (${merged.perAttemptBudgetUsd})`,
+      `policyOverrides invalid: totalArmBudgetUsd (${merged.totalArmBudgetUsd}) < perAttemptBudgetUsd (${merged.perAttemptBudgetUsd})`
     );
   }
   if (merged.totalArmTimeoutMs < merged.perAttemptTimeoutMs) {
     throw new Error(
-      `policyOverrides invalid: totalArmTimeoutMs (${merged.totalArmTimeoutMs}) < perAttemptTimeoutMs (${merged.perAttemptTimeoutMs})`,
+      `policyOverrides invalid: totalArmTimeoutMs (${merged.totalArmTimeoutMs}) < perAttemptTimeoutMs (${merged.perAttemptTimeoutMs})`
     );
   }
 

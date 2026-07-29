@@ -42,7 +42,7 @@ export class LLMJudgeEvaluator implements StrategyOutputEvaluator {
 
   constructor(
     private readonly config: LLMJudgeEvaluatorConfig,
-    private readonly client?: LLMJudgeClient,
+    private readonly client?: LLMJudgeClient
   ) {
     this.id = `llm-judge-${config.rubricVersion}`;
   }
@@ -146,7 +146,8 @@ export class LLMJudgeEvaluator implements StrategyOutputEvaluator {
       // Cost-accounting integrity: carry the judge's billable cost forward so
       // consumers can fold it into the request total instead of dropping it.
       judgeCostUsd: raw.costUsd ?? 0,
-      notes: `${raw.shortRationale ?? ''} (rubric=${this.config.rubricVersion}, judgeModel=${effectiveJudgeModelId}, judgeSource=${judgeSource})`.trim(),
+      notes:
+        `${raw.shortRationale ?? ''} (rubric=${this.config.rubricVersion}, judgeModel=${effectiveJudgeModelId}, judgeSource=${judgeSource})`.trim(),
       validationStatus: 'fully_validated',
       subScores: raw.subScores
         ? {
@@ -200,5 +201,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error(`judge_timeout_after_${ms}ms`)), ms);
   });
-  return Promise.race([p.finally(() => { if (timeoutId) clearTimeout(timeoutId); }), timeout]);
+  return Promise.race([
+    p.finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    }),
+    timeout,
+  ]);
 }

@@ -33,11 +33,11 @@ export type BenchmarkCategory =
 export type BenchmarkDifficulty = 'easy' | 'medium' | 'hard';
 
 export type EvaluationMethod =
-  | 'pattern-match'     // exact/regex match against expected output
-  | 'llm-judge'         // LLM evaluates quality (subjective tasks)
-  | 'rubric-checklist'  // LLM checks specific rubric items (structured)
-  | 'diff-format'       // validates diff format compliance (coding edits)
-  | 'composite';        // combines multiple methods
+  | 'pattern-match' // exact/regex match against expected output
+  | 'llm-judge' // LLM evaluates quality (subjective tasks)
+  | 'rubric-checklist' // LLM checks specific rubric items (structured)
+  | 'diff-format' // validates diff format compliance (coding edits)
+  | 'composite'; // combines multiple methods
 
 export interface BenchmarkTask {
   /** Unique task identifier (e.g., "coding-gen-001") */

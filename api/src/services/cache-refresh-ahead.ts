@@ -64,11 +64,16 @@ export function startCacheRefreshAhead(engine: SelectionPrewarmable): void {
     } catch (error) {
       // Never let a failed refresh disturb anything — the caches simply fall
       // back to their normal TTL-expiry behavior until the next tick.
-      log.warn({ error, durationMs: Date.now() - startedAt }, 'Cache refresh-ahead tick failed (caches fall back to TTL expiry)');
+      log.warn(
+        { error, durationMs: Date.now() - startedAt },
+        'Cache refresh-ahead tick failed (caches fall back to TTL expiry)'
+      );
     }
   };
 
-  timer = setInterval(() => { void tick(); }, intervalMs);
+  timer = setInterval(() => {
+    void tick();
+  }, intervalMs);
   timer.unref();
   log.info({ intervalMs }, 'Cache refresh-ahead started (catalog + selection pre-warm)');
 }

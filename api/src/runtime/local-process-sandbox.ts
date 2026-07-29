@@ -507,7 +507,12 @@ export class LocalProcessSandbox implements CodeSandbox {
     let parsed: { success: boolean; output?: string; error?: string; [key: string]: unknown };
 
     try {
-      parsed = JSON.parse(stdout) as { success: boolean; output?: string; error?: string; [key: string]: unknown };
+      parsed = JSON.parse(stdout) as {
+        success: boolean;
+        output?: string;
+        error?: string;
+        [key: string]: unknown;
+      };
     } catch (err) {
       return {
         passed: false,

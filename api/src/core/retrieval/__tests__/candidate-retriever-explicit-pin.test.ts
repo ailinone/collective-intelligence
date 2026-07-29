@@ -27,11 +27,9 @@ import type { ExplicitPinInfo } from '../../registry/types';
 function findRouteId(
   registry: ReturnType<typeof buildFixtureRegistry>,
   providerId: string,
-  modelId: string,
+  modelId: string
 ): string {
-  const snap = LEGACY_MODELS_FIXTURE.find(
-    (m) => m.providerId === providerId && m.id === modelId,
-  );
+  const snap = LEGACY_MODELS_FIXTURE.find((m) => m.providerId === providerId && m.id === modelId);
   const oid = snap?.uid ?? `${providerId}:${modelId}`;
   const routes = registry.routesForOffering(oid);
   if (routes.length === 0) throw new Error('no routes found');
@@ -56,7 +54,7 @@ describe('retriever — explicit pin by routeId', () => {
 
     const result = retrieveCandidates(
       { requiredCapabilities: ['chat'], explicitModelPin: pin },
-      { registry },
+      { registry }
     );
 
     // Every non-rejected candidate must match the pin.
@@ -64,9 +62,7 @@ describe('retriever — explicit pin by routeId', () => {
       expect(c.routeId).toBe(pinnedRouteId);
     }
     // Other routes go to rejectedByStage with pin mismatch reason.
-    const mismatched = result.rejectedByStage.filter(
-      (r) => r.reason === 'pin_route_mismatch',
-    );
+    const mismatched = result.rejectedByStage.filter((r) => r.reason === 'pin_route_mismatch');
     expect(mismatched.length).toBeGreaterThan(0);
   });
 });
@@ -75,7 +71,7 @@ describe('retriever — explicit pin by offeringId', () => {
   it('only candidates of the pinned offering pass', () => {
     const registry = buildFixtureRegistry();
     const snap = LEGACY_MODELS_FIXTURE.find(
-      (m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7',
+      (m) => m.providerId === 'anthropic' && m.id === 'claude-opus-4-7'
     );
     const pinnedOfferingId = snap?.uid ?? 'anthropic:claude-opus-4-7';
 
@@ -87,7 +83,7 @@ describe('retriever — explicit pin by offeringId', () => {
 
     const result = retrieveCandidates(
       { requiredCapabilities: ['chat'], explicitModelPin: pin },
-      { registry },
+      { registry }
     );
     for (const c of result.candidates) {
       expect(c.offeringId).toBe(pinnedOfferingId);
@@ -108,7 +104,7 @@ describe('retriever — explicit pin by canonicalModelId', () => {
 
     const result = retrieveCandidates(
       { requiredCapabilities: ['chat'], explicitModelPin: pin },
-      { registry },
+      { registry }
     );
     for (const c of result.candidates) {
       expect(c.canonicalModelId).toBe(pinnedCanonicalId);
@@ -161,15 +157,15 @@ describe('retriever — pin to unhealthy route does NOT substitute', () => {
 
     const result = retrieveCandidates(
       { requiredCapabilities: ['chat'], explicitModelPin: pin },
-      { registry },
+      { registry }
     );
     // Only the pinned route can be selected.
     for (const c of result.candidates) {
       expect(c.routeId).toBe(pinnedRouteId);
     }
     // The alternative is rejected by pin filter.
-    const altRejection = result.rejectedByStage.find(
-      (r) => r.routeId.includes('alternative-model'),
+    const altRejection = result.rejectedByStage.find((r) =>
+      r.routeId.includes('alternative-model')
     );
     expect(altRejection).toBeDefined();
     expect(altRejection?.reason).toBe('pin_route_mismatch');
@@ -190,7 +186,7 @@ describe('retriever — allowSubstitution=true still does NOT substitute (MVP 5A
 
     const result = retrieveCandidates(
       { requiredCapabilities: ['chat'], explicitModelPin: pin },
-      { registry },
+      { registry }
     );
     // Every returned candidate must be the pinned one.
     for (const c of result.candidates) {

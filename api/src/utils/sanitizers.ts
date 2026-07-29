@@ -577,7 +577,7 @@ export function sanitizeRequestBody(body: unknown, options: SanitizeOptions = {}
 
 /**
  * Recursively sanitize values with depth limit to prevent stack overflow
- * 
+ *
  * @param obj - Object to sanitize
  * @param options - Sanitization options
  * @param depth - Current recursion depth (internal use)

@@ -115,6 +115,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-credentials.json
       GCP_SECRETS_PROJECT_ID: ${GCP_SECRETS_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID:-YOUR_GCP_PROJECT_ID}
+      # BREAKING (2026-07-20): no more committed dev default. Set JWT_SECRET
+      # in docker/.env (gitignored) or the host shell before `docker compose up`.
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a strong random value - openssl rand -base64 48 - the app refuses weak or default secrets}
       # WHY: Federated auth with ailin-accounts uses a dedicated shared secret
       # instead of reusing ci-api primary JWT secret across services.

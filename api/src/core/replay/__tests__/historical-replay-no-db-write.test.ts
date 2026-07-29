@@ -44,14 +44,9 @@ const SCRIPT_SOURCES: Record<string, string> = {
     __dirname,
     '..',
     'scripts',
-    'export-c3-history-readonly.ts',
+    'export-c3-history-readonly.ts'
   ),
-  'run-historical-replay.ts': resolve(
-    __dirname,
-    '..',
-    'scripts',
-    'run-historical-replay.ts',
-  ),
+  'run-historical-replay.ts': resolve(__dirname, '..', 'scripts', 'run-historical-replay.ts'),
 };
 
 const libContent: Record<string, string> = {};

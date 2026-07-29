@@ -25,7 +25,11 @@ import {
   C3_TOTAL_COST_USD,
 } from '@/core/experiment/c3-dryrun-controlled-runtime-smoke-contract';
 
-const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-controlled-runtime-smoke-input-lock.json');
+const ART = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-dryrun-controlled-runtime-smoke-input-lock.json'
+);
 const artifact = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — input lock', () => {

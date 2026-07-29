@@ -45,10 +45,7 @@ afterEach(() => {
 
 function setup() {
   const registry = buildFixtureRegistry();
-  const structural = retrieveCandidates(
-    { requiredCapabilities: ['chat'] },
-    { registry },
-  );
+  const structural = retrieveCandidates({ requiredCapabilities: ['chat'] }, { registry });
   const { profile } = profileTask({ requestId: 'r-1', text: 'analyse data' });
   const history = scoreHistoricalContribution({
     executions: HISTORICAL_EXECUTIONS_FIXTURE,
@@ -65,7 +62,7 @@ describe('rescoreCandidates — happy path', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(r.contributionScores.length).toBe(structural.candidates.length);
     for (let i = 0; i < r.contributionScores.length; i += 1) {
@@ -81,7 +78,7 @@ describe('rescoreCandidates — happy path', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(Object.isFrozen(r)).toBe(true);
     expect(Object.isFrozen(r.contributionScores)).toBe(true);
@@ -99,7 +96,7 @@ describe('rescoreCandidates — does not search for new candidates', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(r.contributionScores.length).toBe(0);
     expect(r.rejectedByContribution.length).toBe(0);
@@ -116,7 +113,7 @@ describe('rescoreCandidates — preserves order, does not mutate input', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(JSON.stringify(structural.candidates)).toBe(before);
   });
@@ -135,8 +132,7 @@ describe('rescoreCandidates — historical signal applied', () => {
     const synthetic = [
       ...fakeHistory.modelProfiles,
       Object.freeze({
-        modelId:
-          registry.lookupRoute(structural.candidates[0].routeId)!.providerModelId,
+        modelId: registry.lookupRoute(structural.candidates[0].routeId)!.providerModelId,
         taskType: profile.taskType,
         sampleCount: 10,
         judgeMean: 0.08,
@@ -165,11 +161,9 @@ describe('rescoreCandidates — historical signal applied', () => {
         taskProfile: profile,
         historicalContributionResult: historyWithAvoid,
       },
-      { registry },
+      { registry }
     );
-    const target = r.contributionScores.find(
-      (s) => s.routeId === structural.candidates[0].routeId,
-    );
+    const target = r.contributionScores.find((s) => s.routeId === structural.candidates[0].routeId);
     expect(target).toBeDefined();
     expect(target!.rejected).toBe(true);
     expect(target!.rejectionReasons.length).toBeGreaterThan(0);
@@ -188,10 +182,10 @@ describe('rescoreCandidates — historical signal applied', () => {
         taskProfile: profile,
         historicalContributionResult: emptyHistory,
       },
-      { registry },
+      { registry }
     );
     const hasInsufficient = r.contributionScores.some(
-      (s) => s.rejected && s.rejectionReasons.indexOf('insufficient_data') !== -1,
+      (s) => s.rejected && s.rejectionReasons.indexOf('insufficient_data') !== -1
     );
     expect(hasInsufficient).toBe(true);
   });
@@ -206,7 +200,7 @@ describe('rescoreCandidates — historical signal applied', () => {
         historicalContributionResult: emptyHistory,
         policy: { allowExplorationCandidates: true },
       },
-      { registry },
+      { registry }
     );
     const accepted = r.contributionScores.filter((s) => !s.rejected);
     expect(accepted.length).toBeGreaterThan(0);
@@ -223,8 +217,8 @@ describe('rescoreCandidates — does not call fetch / DB / Redis', () => {
           taskProfile: profile,
           historicalContributionResult: history,
         },
-        { registry },
-      ),
+        { registry }
+      )
     ).not.toThrow();
   });
 });
@@ -252,7 +246,7 @@ describe('rescoreCandidates — determinism', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(spy).not.toHaveBeenCalled();
   });
@@ -266,7 +260,7 @@ describe('rescoreCandidates — determinism', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     expect(spy).not.toHaveBeenCalled();
   });
@@ -284,7 +278,7 @@ describe('rescoreCandidates — explicit pin preserved at scorer level', () => {
         taskProfile: profile,
         historicalContributionResult: history,
       },
-      { registry },
+      { registry }
     );
     for (let i = 0; i < r.contributionScores.length; i += 1) {
       expect(r.contributionScores[i].routeId).toBe(structural.candidates[i].routeId);
@@ -304,7 +298,7 @@ describe('rescoreCandidates — local_required propagation', () => {
         historicalContributionResult: history,
         policy: { modalityStrict: true },
       },
-      { registry },
+      { registry }
     );
     expect(r.contributionScores.length).toBe(structural.candidates.length);
   });

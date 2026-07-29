@@ -90,8 +90,8 @@ export class GcpSecretsProvider implements SecretsProvider {
           );
           throw new Error(
             `GCP Secret Manager ADC preflight failed: ${adcErrorMessage}\n` +
-            `SOLUTION (local): Run 'gcloud auth application-default login' to configure Application Default Credentials.\n` +
-            `SOLUTION (production): Use Workload Identity Federation / attached Service Account for ADC.`
+              `SOLUTION (local): Run 'gcloud auth application-default login' to configure Application Default Credentials.\n` +
+              `SOLUTION (production): Use Workload Identity Federation / attached Service Account for ADC.`
           );
         }
       }
@@ -102,7 +102,8 @@ export class GcpSecretsProvider implements SecretsProvider {
         : this.credentialsFile
           ? 'credentials_file'
           : 'adc';
-      const gcpPrimary = (process.env.SECRETS_PROVIDER_PRIMARY || '').trim().toLowerCase() === 'gcp';
+      const gcpPrimary =
+        (process.env.SECRETS_PROVIDER_PRIMARY || '').trim().toLowerCase() === 'gcp';
       const failFastEnv = (process.env.SECRETS_GCP_FAIL_FAST || '').trim().toLowerCase();
       const failFast = failFastEnv === 'true' || (failFastEnv !== 'false' && gcpPrimary);
 
@@ -118,7 +119,7 @@ export class GcpSecretsProvider implements SecretsProvider {
         );
       } catch (authError: unknown) {
         const errorMessage = authError instanceof Error ? authError.message : String(authError);
-        const isAuthError = 
+        const isAuthError =
           errorMessage.includes('Could not load the default credentials') ||
           errorMessage.includes('Could not refresh access token') ||
           errorMessage.includes('Could not automatically determine credentials') ||
@@ -127,27 +128,30 @@ export class GcpSecretsProvider implements SecretsProvider {
           errorMessage.includes('invalid_rapt') ||
           errorMessage.includes('reauth') ||
           errorMessage.includes('cannot prompt during non-interactive execution') ||
-          (typeof authError === 'object' && authError !== null && 'code' in authError && 
-           (() => {
-             const codeDescriptor = Object.getOwnPropertyDescriptor(authError, 'code');
-             return codeDescriptor?.value === 7;
-           })()); // UNAUTHENTICATED
-        
+          (typeof authError === 'object' &&
+            authError !== null &&
+            'code' in authError &&
+            (() => {
+              const codeDescriptor = Object.getOwnPropertyDescriptor(authError, 'code');
+              return codeDescriptor?.value === 7;
+            })()); // UNAUTHENTICATED
+
         if (isAuthError) {
           logger.error(
             {
               provider: this.id,
               projectId: this.projectId,
               error: errorMessage,
-              solution: 'Local: gcloud auth application-default login | Prod: Workload Identity Federation/Service Account',
+              solution:
+                'Local: gcloud auth application-default login | Prod: Workload Identity Federation/Service Account',
             },
             'GCP Secret Manager authentication failed. Application Default Credentials not configured.'
           );
           throw new Error(
             `GCP Secret Manager authentication failed: ${errorMessage}\n` +
-            `SOLUTION (local): Run 'gcloud auth application-default login' to configure Application Default Credentials.\n` +
-            `SOLUTION (production): Use Workload Identity Federation / attached Service Account for ADC.\n` +
-            `Note: Google API key does not authenticate Secret Manager.`
+              `SOLUTION (local): Run 'gcloud auth application-default login' to configure Application Default Credentials.\n` +
+              `SOLUTION (production): Use Workload Identity Federation / attached Service Account for ADC.\n` +
+              `Note: Google API key does not authenticate Secret Manager.`
           );
         }
 
@@ -219,14 +223,16 @@ export class GcpSecretsProvider implements SecretsProvider {
         const msg = error instanceof Error ? error.message : String(error);
         const isTransient =
           (typeof code === 'number' && TRANSIENT_GRPC.has(code)) ||
-          /ECONNRESET|ETIMEDOUT|socket hang up|UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|\bINTERNAL\b|\bABORTED\b/i.test(msg);
+          /ECONNRESET|ETIMEDOUT|socket hang up|UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|\bINTERNAL\b|\bABORTED\b/i.test(
+            msg
+          );
         if (!isTransient || attempt === maxAttempts) {
           throw error;
         }
         const backoffMs = Math.min(2000, 150 * 2 ** (attempt - 1));
         logger.warn(
           { key, attempt, maxAttempts, code, error: msg },
-          'GCP secret fetch transient error — retrying',
+          'GCP secret fetch transient error — retrying'
         );
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
@@ -459,10 +465,7 @@ export class GcpSecretsProvider implements SecretsProvider {
     this.validateCredentialType(credentials, `GCP credentials file (${filePath})`);
   }
 
-  private validateCredentialType(
-    credentials: Record<string, unknown>,
-    source: string
-  ): void {
+  private validateCredentialType(credentials: Record<string, unknown>, source: string): void {
     const credentialTypeRaw = credentials.type;
     const credentialType =
       typeof credentialTypeRaw === 'string' ? credentialTypeRaw.trim().toLowerCase() : '';
@@ -526,7 +529,9 @@ export class GcpSecretsProvider implements SecretsProvider {
       .flatMap((value) => value.split(','))
       .map((value) => value.trim())
       .filter((value) => value.length > 0);
-    const mergedNoProxy = Array.from(new Set([...noProxyValues, ...expectedNoProxyHosts])).join(',');
+    const mergedNoProxy = Array.from(new Set([...noProxyValues, ...expectedNoProxyHosts])).join(
+      ','
+    );
 
     if (process.env.NO_PROXY !== mergedNoProxy || process.env.no_proxy !== mergedNoProxy) {
       process.env.NO_PROXY = mergedNoProxy;
@@ -608,4 +613,3 @@ export class GcpSecretsProvider implements SecretsProvider {
     );
   }
 }
-

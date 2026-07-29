@@ -40,7 +40,10 @@ import type {
 } from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
-import { distributedBulkheadManager, type BulkheadLike } from '@/core/resilience/distributed-bulkhead';
+import {
+  distributedBulkheadManager,
+  type BulkheadLike,
+} from '@/core/resilience/distributed-bulkhead';
 import { distributedCircuitBreakerManager } from '@/core/resilience/distributed-circuit-breaker';
 import { tokenBucketManager } from '@/core/resilience/token-bucket-limiter';
 import { providerTpmRejectedTotal } from '@/observability/ci-metrics';
@@ -87,7 +90,11 @@ export abstract class ProviderAdapter {
   protected displayName: string;
   protected bulkhead!: BulkheadLike; // Bulkhead instance for resource isolation — distributed (fleet-wide), scale-to-100k Phase 2
   protected circuitBreaker!: ReturnType<typeof distributedCircuitBreakerManager.getBreaker>; // Circuit breaker for failure protection (v5.0)
-  protected adaptiveTimeout: { currentTimeout: number; lastUpdate: number; recordLatency?: (latency: number) => Promise<void> } | null = null; // Adaptive timeout tracker (v5.0)
+  protected adaptiveTimeout: {
+    currentTimeout: number;
+    lastUpdate: number;
+    recordLatency?: (latency: number) => Promise<void>;
+  } | null = null; // Adaptive timeout tracker (v5.0)
 
   constructor(name: string, displayName: string, config: ProviderConfig) {
     this.name = name;
@@ -176,7 +183,10 @@ export abstract class ProviderAdapter {
     queueTimeout: number;
   } {
     // Tier-based configuration
-    const tierConfigs: Record<string, { maxConcurrent: number; maxQueueSize: number; queueTimeout: number }> = {
+    const tierConfigs: Record<
+      string,
+      { maxConcurrent: number; maxQueueSize: number; queueTimeout: number }
+    > = {
       openai: { maxConcurrent: 20, maxQueueSize: 100, queueTimeout: 60000 },
       anthropic: { maxConcurrent: 20, maxQueueSize: 100, queueTimeout: 60000 },
       google: { maxConcurrent: 20, maxQueueSize: 100, queueTimeout: 60000 },
@@ -224,11 +234,14 @@ export abstract class ProviderAdapter {
     const raw = process.env.PROVIDER_BULKHEAD_LIMITS;
     if (!raw) return null;
     try {
-      const parsed = JSON.parse(raw) as Record<string, Partial<{
-        maxConcurrent: number;
-        maxQueueSize: number;
-        queueTimeout: number;
-      }>>;
+      const parsed = JSON.parse(raw) as Record<
+        string,
+        Partial<{
+          maxConcurrent: number;
+          maxQueueSize: number;
+          queueTimeout: number;
+        }>
+      >;
       return parsed[this.name] ?? null;
     } catch (error) {
       logger.warn(
@@ -269,7 +282,10 @@ export abstract class ProviderAdapter {
       >;
       return parsed[this.name] ?? null;
     } catch (error) {
-      logger.warn({ provider: this.name, error }, 'PROVIDER_TPM_LIMITS is not valid JSON — ignoring override');
+      logger.warn(
+        { provider: this.name, error },
+        'PROVIDER_TPM_LIMITS is not valid JSON — ignoring override'
+      );
       return null;
     }
   }
@@ -429,7 +445,7 @@ export abstract class ProviderAdapter {
   /**
    * Text-to-Speech (TTS)
    * Converts text to audio
-   * 
+   *
    * @returns AudioTTSResponse with audio buffer
    * @throws Error if provider doesn't support TTS or if request fails
    */
@@ -438,7 +454,9 @@ export abstract class ProviderAdapter {
   // layer (subclasses that override use them with non-prefixed names —
   // TypeScript permits parameter renaming in overrides).
   async textToSpeech(_model: Model, _request: AudioTTSRequest): Promise<AudioTTSResponse> {
-    throw new Error(`${this.name}: textToSpeech not implemented. Provider does not support TTS capability.`);
+    throw new Error(
+      `${this.name}: textToSpeech not implemented. Provider does not support TTS capability.`
+    );
   }
 
   /**
@@ -449,7 +467,9 @@ export abstract class ProviderAdapter {
    * @throws Error if provider doesn't support STT or if request fails
    */
   async speechToText(_model: Model, _request: AudioSTTRequest): Promise<AudioSTTResponse> {
-    throw new Error(`${this.name}: speechToText not implemented. Provider does not support STT capability.`);
+    throw new Error(
+      `${this.name}: speechToText not implemented. Provider does not support STT capability.`
+    );
   }
 
   /**
@@ -460,13 +480,15 @@ export abstract class ProviderAdapter {
    * @throws Error if provider doesn't support image generation or if request fails
    */
   async imageGenerate(_model: Model, _request: ImageGenRequest): Promise<ImageGenResponse> {
-    throw new Error(`${this.name}: imageGenerate not implemented. Provider does not support image generation capability.`);
+    throw new Error(
+      `${this.name}: imageGenerate not implemented. Provider does not support image generation capability.`
+    );
   }
 
   /**
    * Image Edit
    * Edits images based on prompt and optional mask
-   * 
+   *
    * @param model Model to use
    * @param request Request with image, mask, and prompt
    * @returns ImageEditResponse with edited image
@@ -477,39 +499,49 @@ export abstract class ProviderAdapter {
   /**
    * Image Variations
    * Creates variations of an existing image
-   * 
+   *
    * @param model Model to use
    * @param request Request with source image
    * @returns ImageVariationResponse with variation images
    * @throws Error if provider doesn't support image variations
    */
-  abstract imageVariation(model: Model, request: ImageVariationRequest): Promise<ImageVariationResponse>;
+  abstract imageVariation(
+    model: Model,
+    request: ImageVariationRequest
+  ): Promise<ImageVariationResponse>;
 
   /**
    * Video Generation
    * Generates videos from prompt and optional conditioning media
    */
   async videoGenerate(_model: Model, _request: VideoGenRequest): Promise<VideoGenResponse> {
-    throw new Error(`${this.name}: videoGenerate not implemented. Provider does not support video generation capability.`);
+    throw new Error(
+      `${this.name}: videoGenerate not implemented. Provider does not support video generation capability.`
+    );
   }
 
   /**
    * Web Search
    * Performs web search for grounding
-   * 
+   *
    * @param model Model with web_search capability
    * @param request Search request
    * @returns Search results
    * @throws Error if provider doesn't support web search
    */
-  async webSearch(_model: Model, _request: { query: string; maxResults?: number; options?: Record<string, unknown> }): Promise<{ text: string; raw: unknown }> {
-    throw new Error(`${this.name}: webSearch not implemented. Provider does not support web search capability.`);
+  async webSearch(
+    _model: Model,
+    _request: { query: string; maxResults?: number; options?: Record<string, unknown> }
+  ): Promise<{ text: string; raw: unknown }> {
+    throw new Error(
+      `${this.name}: webSearch not implemented. Provider does not support web search capability.`
+    );
   }
 
   /**
    * Content Moderation
    * Classifies content for policy violations
-   * 
+   *
    * @param model Model with moderation capability
    * @param request Moderation request
    * @returns Moderation result
@@ -520,7 +552,7 @@ export abstract class ProviderAdapter {
   /**
    * Vision (Image Understanding)
    * Analyzes images and answers questions
-   * 
+   *
    * @param model Model with vision capability
    * @param request Vision request with image and prompt
    * @returns VisionResponse with analysis
@@ -645,36 +677,40 @@ export abstract class ProviderAdapter {
     operationName: string,
     estimatedTokens?: number
   ): Promise<T> {
-    return this.executeThroughBulkhead(async () => {
-      const maxRetries = this.config.maxRetries || 3;
-      let lastError: Error | undefined;
+    return this.executeThroughBulkhead(
+      async () => {
+        const maxRetries = this.config.maxRetries || 3;
+        let lastError: Error | undefined;
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          return await operation();
-        } catch (error) {
-          lastError = error as Error;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            return await operation();
+          } catch (error) {
+            lastError = error as Error;
 
-          // Don't retry on client errors (4xx)
-          if (this.isClientError(error)) {
-            throw error;
+            // Don't retry on client errors (4xx)
+            if (this.isClientError(error)) {
+              throw error;
+            }
+
+            // Don't retry if we've exhausted attempts
+            if (attempt === maxRetries) {
+              break;
+            }
+
+            // Exponential backoff
+            const delay = this.config.retryDelay! * Math.pow(2, attempt);
+            await this.sleep(delay);
           }
-
-          // Don't retry if we've exhausted attempts
-          if (attempt === maxRetries) {
-            break;
-          }
-
-          // Exponential backoff
-          const delay = this.config.retryDelay! * Math.pow(2, attempt);
-          await this.sleep(delay);
         }
-      }
 
-      throw new Error(
-        `${this.name}: ${operationName} failed after ${maxRetries + 1} attempts: ${lastError?.message}`
-      );
-    }, operationName, estimatedTokens);
+        throw new Error(
+          `${this.name}: ${operationName} failed after ${maxRetries + 1} attempts: ${lastError?.message}`
+        );
+      },
+      operationName,
+      estimatedTokens
+    );
   }
 
   /**
@@ -684,19 +720,19 @@ export abstract class ProviderAdapter {
     if (typeof error === 'object' && error !== null) {
       // Safely extract status/statusCode without type assertions
       let statusCode: number | null = null;
-      
+
       const statusDescriptor = Object.getOwnPropertyDescriptor(error, 'status');
       if (statusDescriptor && typeof statusDescriptor.value === 'number') {
         statusCode = statusDescriptor.value;
       }
-      
+
       if (statusCode === null) {
         const statusCodeDescriptor = Object.getOwnPropertyDescriptor(error, 'statusCode');
         if (statusCodeDescriptor && typeof statusCodeDescriptor.value === 'number') {
           statusCode = statusCodeDescriptor.value;
         }
       }
-      
+
       return statusCode !== null && statusCode >= 400 && statusCode < 500;
     }
     return false;

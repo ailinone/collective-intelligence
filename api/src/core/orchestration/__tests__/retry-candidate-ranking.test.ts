@@ -54,12 +54,7 @@ describe('rankRetryCandidates', () => {
     ]);
 
     const sorted = rankRetryCandidates(candidates, banditScores);
-    expect(sorted.map((c) => c.provider)).toEqual([
-      'nativeA',
-      'cloudA',
-      'routerA',
-      'aggA',
-    ]);
+    expect(sorted.map((c) => c.provider)).toEqual(['nativeA', 'cloudA', 'routerA', 'aggA']);
   });
 
   it('uses bandit-sampled score (desc) as tiebreaker WITHIN the same tier', () => {
@@ -75,11 +70,7 @@ describe('rankRetryCandidates', () => {
     ]);
 
     const sorted = rankRetryCandidates(candidates, banditScores);
-    expect(sorted.map((c) => c.provider)).toEqual([
-      'nativeHigh',
-      'nativeMid',
-      'nativeLow',
-    ]);
+    expect(sorted.map((c) => c.provider)).toEqual(['nativeHigh', 'nativeMid', 'nativeLow']);
   });
 
   it('falls back to sourcePriority when bandit scores are equal (cold arms)', () => {
@@ -207,7 +198,10 @@ describe('rankRetryCandidates — operability/hot ranking (determinism)', () => 
   });
 
   it('preserves tier ordering when no operability map is given', () => {
-    const candidates: RankableCandidate[] = [entry('agg', 'aggregator'), entry('native', 'native_api')];
+    const candidates: RankableCandidate[] = [
+      entry('agg', 'aggregator'),
+      entry('native', 'native_api'),
+    ];
     const sorted = rankRetryCandidates(candidates, new Map());
     expect(sorted.map((c) => c.provider)).toEqual(['native', 'agg']);
   });

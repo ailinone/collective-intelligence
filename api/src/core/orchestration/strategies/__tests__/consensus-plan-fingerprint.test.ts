@@ -71,7 +71,10 @@ describe('computePlanFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint({ plan, strict: true, roleSpecificRetrieval: true });
     const plan2 = makePlan({
-      judge: makeCandidate({ id: 'judge-2', model: makeModel({ id: 'judge-2', provider: 'prov-judge-x' }) }),
+      judge: makeCandidate({
+        id: 'judge-2',
+        model: makeModel({ id: 'judge-2', provider: 'prov-judge-x' }),
+      }),
     });
     const f2 = computePlanFingerprint({ plan: plan2, strict: true, roleSpecificRetrieval: true });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
@@ -129,7 +132,7 @@ describe('computePlanFingerprint', () => {
     // Per-role projection only has: role, promptTemplateId, promptVersion,
     // promptFingerprint (hex). No `body`, `text`, `content`, or `messagesShape.content`.
     expect(serialized).not.toMatch(/"body"|"text"|"rawPrompt"|"promptBody"/);
-    expect(serialized).not.toMatch(/You are an expert/i);  // canonical wording from sota-system-prompts
+    expect(serialized).not.toMatch(/You are an expert/i); // canonical wording from sota-system-prompts
     expect(serialized).not.toMatch(/Critical guidelines/i);
     expect(snap.plannerVersion).toBe(PLANNER_VERSION);
     expect(snap.registryScope).toBe('full_system_registry');
@@ -146,12 +149,12 @@ describe('computePlanFingerprint', () => {
     const plan = makePlan();
     const f1 = computePlanFingerprint(
       { plan, strict: true, roleSpecificRetrieval: true },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(f1.planSource).toBe('dry_run');
     const f2 = computePlanFingerprint(
       { plan, strict: true, roleSpecificRetrieval: true },
-      { planSource: 'runtime_planner' },
+      { planSource: 'runtime_planner' }
     );
     expect(f2.planSource).toBe('runtime_planner');
   });
@@ -163,7 +166,7 @@ describe('diffPlanFingerprints', () => {
     const f1 = computePlanFingerprint({ plan, strict: true, roleSpecificRetrieval: true });
     const diff = diffPlanFingerprints(
       { fingerprint: f1.planFingerprint, snapshot: f1.snapshot },
-      { fingerprint: f1.planFingerprint, snapshot: f1.snapshot },
+      { fingerprint: f1.planFingerprint, snapshot: f1.snapshot }
     );
     expect(diff.matched).toBe(true);
     expect(Object.keys(diff.mismatches)).toHaveLength(0);
@@ -172,13 +175,16 @@ describe('diffPlanFingerprints', () => {
   it('isolates the judge-mismatch into the diff', () => {
     const planA = makePlan();
     const planB = makePlan({
-      judge: makeCandidate({ id: 'judge-other', model: makeModel({ id: 'judge-other', provider: 'prov-other' }) }),
+      judge: makeCandidate({
+        id: 'judge-other',
+        model: makeModel({ id: 'judge-other', provider: 'prov-other' }),
+      }),
     });
     const fA = computePlanFingerprint({ plan: planA, strict: true, roleSpecificRetrieval: true });
     const fB = computePlanFingerprint({ plan: planB, strict: true, roleSpecificRetrieval: true });
     const diff = diffPlanFingerprints(
       { fingerprint: fA.planFingerprint, snapshot: fA.snapshot },
-      { fingerprint: fB.planFingerprint, snapshot: fB.snapshot },
+      { fingerprint: fB.planFingerprint, snapshot: fB.snapshot }
     );
     expect(diff.matched).toBe(false);
     expect(diff.mismatches.judge).toEqual({
@@ -204,7 +210,7 @@ describe('diffPlanFingerprints', () => {
     const fB = computePlanFingerprint({ plan: planB, strict: true, roleSpecificRetrieval: true });
     const diff = diffPlanFingerprints(
       { fingerprint: fA.planFingerprint, snapshot: fA.snapshot },
-      { fingerprint: fB.planFingerprint, snapshot: fB.snapshot },
+      { fingerprint: fB.planFingerprint, snapshot: fB.snapshot }
     );
     expect(diff.matched).toBe(false);
     expect(diff.mismatches.participants).toBeDefined();

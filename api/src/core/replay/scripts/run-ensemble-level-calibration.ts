@@ -24,20 +24,16 @@ import {
   evaluateEnsembleEstimator,
   pickBestEnsembleEstimator,
 } from '../../pareto/calibration/ensemble-expected-judge-estimator';
-import {
-  calibratePeerLift,
-  lookupPeerLift,
-} from '../../pareto/calibration/peer-lift-calibrator';
+import { calibratePeerLift, lookupPeerLift } from '../../pareto/calibration/peer-lift-calibrator';
 import { splitTrainHoldout } from '../historical-replay-split';
 import { buildCalibrationExamplesFromTrain } from './ensemble-calibration-shared';
 import type { HistoricalReplayExecution } from '../historical-replay-types';
-
 
 const NORMALIZED_PATH = resolve(
   __dirname,
   '..',
   'artifacts',
-  'c3-history-full-export.normalized.jsonl',
+  'c3-history-full-export.normalized.jsonl'
 );
 
 function main(): void {
@@ -58,12 +54,7 @@ function main(): void {
     strategy: 'by_experiment_id',
     holdoutFraction: 0.3,
   });
-  console.log(
-    '[calib-only] train=',
-    split.train.length,
-    'holdout=',
-    split.holdout.length,
-  );
+  console.log('[calib-only] train=', split.train.length, 'holdout=', split.holdout.length);
 
   const trainHistory = scoreHistoricalContribution({
     executions: split.train.map((e) => ({
@@ -82,14 +73,8 @@ function main(): void {
     })),
   });
 
-  const calibrationExamples = buildCalibrationExamplesFromTrain(
-    split.train,
-    trainHistory,
-  );
-  console.log(
-    '[calib-only] calibration examples (ensembles only):',
-    calibrationExamples.length,
-  );
+  const calibrationExamples = buildCalibrationExamplesFromTrain(split.train, trainHistory);
+  console.log('[calib-only] calibration examples (ensembles only):', calibrationExamples.length);
 
   const peerLift = calibratePeerLift({
     trainExamples: calibrationExamples,
@@ -97,14 +82,13 @@ function main(): void {
   console.log('[calib-only] globalPeerLift:', peerLift.globalPeerLift.toFixed(4));
   for (const [k, v] of Object.entries(peerLift.peerLiftByTaskType)) {
     console.log(
-      `[calib-only]   peerLift[${k}]=${v.toFixed(4)} (n=${peerLift.sampleCountByTaskType[k]})`,
+      `[calib-only]   peerLift[${k}]=${v.toFixed(4)} (n=${peerLift.sampleCountByTaskType[k]})`
     );
   }
 
   const selection = pickBestEnsembleEstimator({
     examples: calibrationExamples,
-    peerLiftLookup: (ex) =>
-      lookupPeerLift(peerLift, ex.taskType, ex.effectiveStrategyId),
+    peerLiftLookup: (ex) => lookupPeerLift(peerLift, ex.taskType, ex.effectiveStrategyId),
     uncertaintyPenaltyWeight: 0.5,
   });
   console.log('[calib-only] BEST estimator:', selection.chosen.name);
@@ -112,12 +96,11 @@ function main(): void {
     const ev = evaluateEnsembleEstimator({
       estimator: est,
       examples: calibrationExamples,
-      peerLiftLookup: (ex) =>
-        lookupPeerLift(peerLift, ex.taskType, ex.effectiveStrategyId),
+      peerLiftLookup: (ex) => lookupPeerLift(peerLift, ex.taskType, ex.effectiveStrategyId),
       uncertaintyPenaltyWeight: 0.5,
     });
     console.log(
-      `[calib-only]   ${est.name.padEnd(34)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)} nonFallback=${ev.nonFallbackRate.toFixed(3)}`,
+      `[calib-only]   ${est.name.padEnd(34)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)} nonFallback=${ev.nonFallbackRate.toFixed(3)}`
     );
   }
 }

@@ -107,9 +107,12 @@ export class RequestLoggerService {
     // rolls past the last pre-created partition — exactly how request logging
     // silently broke for ~a month. Fire-and-forget.
     void this.ensureUpcomingPartitions();
-    this.partitionInterval = setInterval(() => {
-      void this.ensureUpcomingPartitions();
-    }, 24 * 60 * 60 * 1000); // daily
+    this.partitionInterval = setInterval(
+      () => {
+        void this.ensureUpcomingPartitions();
+      },
+      24 * 60 * 60 * 1000
+    ); // daily
   }
 
   /**
@@ -439,7 +442,9 @@ export class RequestLoggerService {
       id: response.id,
       model: response.model,
       choiceCount: response.choices.length,
-      finish_reason: response.choices[0]?.finish_reason ? String(response.choices[0].finish_reason) : undefined,
+      finish_reason: response.choices[0]?.finish_reason
+        ? String(response.choices[0].finish_reason)
+        : undefined,
       usage: response.usage,
       // Don't store full response content for privacy
     };

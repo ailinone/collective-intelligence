@@ -31,9 +31,21 @@ async function ensureMetrics() {
   if (dlqSizeGauge) return;
   try {
     const promClient = await import('prom-client');
-    dlqSizeGauge = new promClient.Gauge({ name: 'ailin_dev_dlq_size', help: 'Number of jobs in DLQ', labelNames: ['queue'] });
-    dlqReplayTotal = new promClient.Counter({ name: 'ailin_dev_dlq_replay_total', help: 'DLQ replay attempts', labelNames: ['queue', 'status'] });
-    dlqRoutedTotal = new promClient.Counter({ name: 'ailin_dev_dlq_routed_total', help: 'Jobs routed to DLQ', labelNames: ['queue'] });
+    dlqSizeGauge = new promClient.Gauge({
+      name: 'ailin_dev_dlq_size',
+      help: 'Number of jobs in DLQ',
+      labelNames: ['queue'],
+    });
+    dlqReplayTotal = new promClient.Counter({
+      name: 'ailin_dev_dlq_replay_total',
+      help: 'DLQ replay attempts',
+      labelNames: ['queue', 'status'],
+    });
+    dlqRoutedTotal = new promClient.Counter({
+      name: 'ailin_dev_dlq_routed_total',
+      help: 'Jobs routed to DLQ',
+      labelNames: ['queue'],
+    });
   } catch {
     // Metrics unavailable — non-fatal
   }
@@ -100,9 +112,10 @@ export async function setupDLQ(sourceQueue: Queue): Promise<void> {
       // R6 fix: Only route to DLQ if all retries are exhausted.
       // job.opts.attempts may be undefined when inherited from defaultJobOptions.
       // Fall back to the source queue's defaultJobOptions, then to 1.
-      const maxAttempts = job.opts?.attempts
-        ?? (sourceQueue.defaultJobOptions as { attempts?: number } | undefined)?.attempts
-        ?? 1;
+      const maxAttempts =
+        job.opts?.attempts ??
+        (sourceQueue.defaultJobOptions as { attempts?: number } | undefined)?.attempts ??
+        1;
       if (job.attemptsMade < maxAttempts) return;
 
       await dlqQueue.add('dead-letter', {
@@ -118,7 +131,13 @@ export async function setupDLQ(sourceQueue: Queue): Promise<void> {
 
       dlqRoutedTotal?.inc({ queue: queueName });
       log.warn(
-        { queue: queueName, jobId, jobName: job.name, attempts: job.attemptsMade, error: failedReason },
+        {
+          queue: queueName,
+          jobId,
+          jobName: job.name,
+          attempts: job.attemptsMade,
+          error: failedReason,
+        },
         'Job moved to DLQ after exhausting retries'
       );
     } catch (err) {
@@ -149,7 +168,7 @@ export interface DLQJobInfo {
 export async function listDLQJobs(
   queueName: string,
   page = 1,
-  limit = 20,
+  limit = 20
 ): Promise<{ jobs: DLQJobInfo[]; total: number }> {
   const pair = dlqPairs.get(queueName);
   if (!pair) {
@@ -186,7 +205,7 @@ export async function listDLQJobs(
  */
 export async function replayDLQJob(
   queueName: string,
-  dlqJobId: string,
+  dlqJobId: string
 ): Promise<{ success: boolean; newJobId?: string; error?: string }> {
   const pair = dlqPairs.get(queueName);
   if (!pair) {
@@ -205,7 +224,7 @@ export async function replayDLQJob(
     const newJob = await pair.sourceQueue.add(
       data.originalJobName || 'replayed',
       data.originalData,
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } }
     );
 
     // Remove from DLQ after successful re-enqueue

@@ -10,14 +10,14 @@
 /**
  * Search Orchestration Service
  * Orchestrates web search and grounding across multiple providers
- * 
+ *
  * Features:
  * - Dynamic provider selection (Tavily, Perplexity, Google Search Grounding, etc.)
  * - Models with web_search capability automatically included
  * - Automatic failover between providers
  * - Content extraction for RAG
  * - Google Maps integration (when available)
- * 
+ *
  * NO HARDCODED PROVIDERS - All selection is dynamic via capabilities
  */
 
@@ -134,7 +134,20 @@ export class SearchOrchestrationService {
    */
   async performSearch(options: SearchOptions): Promise<SearchResult> {
     const startTime = Date.now();
-    const { query, model, searchDepth, maxResults, includeImages, includeAnswer, includeRawContent, includeDomains, excludeDomains, topic, userContext, requestId } = options;
+    const {
+      query,
+      model,
+      searchDepth,
+      maxResults,
+      includeImages,
+      includeAnswer,
+      includeRawContent,
+      includeDomains,
+      excludeDomains,
+      topic,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, query, model, searchDepth, maxResults }, 'Search orchestration started');
 
@@ -175,8 +188,11 @@ export class SearchOrchestrationService {
       } else if (searchStrategy.type === 'model') {
         // Use model with web_search capability
         const selectedModel = searchStrategy.model!;
-        
-        log.info({ requestId, model: selectedModel.name, provider: selectedModel.provider }, 'Using model with web_search capability');
+
+        log.info(
+          { requestId, model: selectedModel.name, provider: selectedModel.provider },
+          'Using model with web_search capability'
+        );
 
         const providerRegistry = this.getRegistry();
         const resolution = providerRegistry.resolveAdapterForModel(selectedModel);
@@ -192,8 +208,11 @@ export class SearchOrchestrationService {
         // Execute search via model
         if (!isAdapterMethodOverridden(adapter, 'webSearch')) {
           // Fallback to Tavily if model doesn't implement webSearch method yet
-          log.warn({ requestId, model: selectedModel.name }, 'Model has web_search capability but adapter does not implement webSearch method, falling back to Tavily');
-          
+          log.warn(
+            { requestId, model: selectedModel.name },
+            'Model has web_search capability but adapter does not implement webSearch method, falling back to Tavily'
+          );
+
           return this.performSearch({
             ...options,
             model: undefined, // Force Tavily
@@ -248,11 +267,20 @@ export class SearchOrchestrationService {
           'Model-based web search completed'
         );
 
-        const rawData = modelResult.raw as {
-          answer?: string;
-          results?: Array<{ title: string; url: string; content: string; rawContent?: string; score: number; publishedDate?: string }>;
-          images?: string[]
-        } | undefined;
+        const rawData = modelResult.raw as
+          | {
+              answer?: string;
+              results?: Array<{
+                title: string;
+                url: string;
+                content: string;
+                rawContent?: string;
+                score: number;
+                publishedDate?: string;
+              }>;
+              images?: string[];
+            }
+          | undefined;
 
         return {
           answer: rawData?.answer,
@@ -264,7 +292,9 @@ export class SearchOrchestrationService {
           durationMs,
         };
       } else {
-        throw new Error('No search providers available (Tavily or models with web_search capability)');
+        throw new Error(
+          'No search providers available (Tavily or models with web_search capability)'
+        );
       }
     } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
@@ -291,20 +321,23 @@ export class SearchOrchestrationService {
         capabilities: ['web_scraping' as ModelCapability, 'content_extraction' as ModelCapability],
         status: 'active',
       });
-      
+
       let tavilyResult;
-      
+
       if (extractionModels.length > 0 && urls.length <= 3) {
         // For small batches, try model-based extraction using chat completion
         // This uses models with web_search capability to extract content
         try {
           const selectedModel = extractionModels[0];
-          log.info({ requestId, model: selectedModel.name, provider: selectedModel.provider }, 'Attempting model-based extraction');
-          
+          log.info(
+            { requestId, model: selectedModel.name, provider: selectedModel.provider },
+            'Attempting model-based extraction'
+          );
+
           const providerRegistry = this.getRegistry();
           const resolution = providerRegistry.resolveAdapterForModel(selectedModel);
           const adapter = resolution.adapter;
-          
+
           if (!adapter) {
             throw this.createCapabilityNotOperationalError({
               capability: 'web_search',
@@ -340,7 +373,7 @@ Format your response as plain text, focusing on factual information.`;
               // Extract content from chat response with proper type guards
               const messageContent = chatResponse.choices[0]?.message?.content;
               let content = '';
-              
+
               if (typeof messageContent === 'string') {
                 content = messageContent;
               } else if (Array.isArray(messageContent)) {
@@ -373,7 +406,10 @@ Format your response as plain text, focusing on factual information.`;
               });
             } catch (urlError: unknown) {
               const errorMessage = urlError instanceof Error ? urlError.message : String(urlError);
-              log.warn({ requestId, url, error: errorMessage }, 'Failed to extract content from URL using model');
+              log.warn(
+                { requestId, url, error: errorMessage },
+                'Failed to extract content from URL using model'
+              );
               failedResults.push({
                 url,
                 error: errorMessage,
@@ -396,8 +432,12 @@ Format your response as plain text, focusing on factual information.`;
             throw new Error('All model-based extractions failed');
           }
         } catch (modelError: unknown) {
-          const errorMessage = modelError instanceof Error ? modelError.message : String(modelError);
-          log.warn({ requestId, error: errorMessage }, 'Model extraction failed, falling back to Tavily');
+          const errorMessage =
+            modelError instanceof Error ? modelError.message : String(modelError);
+          log.warn(
+            { requestId, error: errorMessage },
+            'Model extraction failed, falling back to Tavily'
+          );
           tavilyResult = await this.tavilyService.extract({
             urls,
             includeImages,
@@ -418,7 +458,7 @@ Format your response as plain text, focusing on factual information.`;
       }
 
       return {
-        results: tavilyResult.results.map(r => ({
+        results: tavilyResult.results.map((r) => ({
           url: r.url,
           content: r.content,
           images: r.images,
@@ -431,7 +471,10 @@ Format your response as plain text, focusing on factual information.`;
     } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error({ requestId, error: errorMessage, durationMs }, 'Content extraction orchestration failed');
+      log.error(
+        { requestId, error: errorMessage, durationMs },
+        'Content extraction orchestration failed'
+      );
       throw error;
     }
   }
@@ -454,8 +497,8 @@ Format your response as plain text, focusing on factual information.`;
     // If explicit model specified, try to use it
     if (explicitModel) {
       const models = await this.modelRepo.searchModels({ providers: [], capabilities: [] });
-      const model = models.find(m => m.name === explicitModel);
-      
+      const model = models.find((m) => m.name === explicitModel);
+
       if (model && this.hasWebSearchCapability(model)) {
         const resolution = providerRegistry.resolveAdapterForModel(model);
         if (resolution.adapter) {
@@ -472,9 +515,12 @@ Format your response as plain text, focusing on factual information.`;
           'Explicit model has web_search capability but is not operational'
         );
       }
-      
+
       // If explicit model doesn't support web_search, fallback to Tavily
-      log.warn({ explicitModel }, 'Explicit model does not support web_search, falling back to Tavily');
+      log.warn(
+        { explicitModel },
+        'Explicit model does not support web_search, falling back to Tavily'
+      );
     }
 
     // Auto-select: prefer Tavily for deep search, models for basic search
@@ -507,8 +553,9 @@ Format your response as plain text, focusing on factual information.`;
    * Check if model has web search capability
    */
   private hasWebSearchCapability(model: Model): boolean {
-    return model.capabilities.includes('web_search' as ModelCapability) ||
-           model.capabilities.includes('deep_research' as ModelCapability);
+    return (
+      model.capabilities.includes('web_search' as ModelCapability) ||
+      model.capabilities.includes('deep_research' as ModelCapability)
+    );
   }
 }
-

@@ -84,7 +84,10 @@ export async function projectsRoutesClean(server: FastifyInstance): Promise<void
   // + Token Bucket) — matches the convention already applied to every sibling
   // authorization+DB-write route file (org-governance, collective, auth, tools,
   // hcra-search, internal-api-keys). See route-rate-limit.ts.
-  const projectsPreHandler = [authenticate, createRouteRateLimit('projects', { capacity: 60, refillRate: 1 })];
+  const projectsPreHandler = [
+    authenticate,
+    createRouteRateLimit('projects', { capacity: 60, refillRate: 1 }),
+  ];
 
   // ─── GET /v1/projects ──────────────────────────────────────────────────
   server.get<{

@@ -68,7 +68,7 @@ export interface EnsembleCalibratedOptimizerResult {
 // ─── Main entry ─────────────────────────────────────────────────────────
 
 export function optimizeEnsembleCalibrated(
-  input: EnsembleCalibratedOptimizerInput,
+  input: EnsembleCalibratedOptimizerInput
 ): EnsembleCalibratedOptimizerResult {
   const policy = input.liftPolicy;
   const rejected: RejectedCandidateRecord[] = [];
@@ -79,22 +79,14 @@ export function optimizeEnsembleCalibrated(
     if (c.rejected) {
       rejected.push({
         modelId: c.modelId,
-        reason:
-          c.rejectionReasons.length > 0
-            ? c.rejectionReasons.join(',')
-            : 'rejected_by_scorer',
+        reason: c.rejectionReasons.length > 0 ? c.rejectionReasons.join(',') : 'rejected_by_scorer',
       });
       continue;
     }
     accepted.push(c);
   }
   if (accepted.length === 0) {
-    return wrapFallback(
-      input,
-      input.candidates,
-      rejected,
-      'no_accepted_candidates',
-    );
+    return wrapFallback(input, input.candidates, rejected, 'no_accepted_candidates');
   }
 
   // 2. Sort by totalScore desc (with deterministic tiebreakers).
@@ -110,11 +102,7 @@ export function optimizeEnsembleCalibrated(
   const frontierIds = new Set(frontier.map((f) => f.routeId));
 
   // 4. Greedy growth with BOUNDED marginal-gain caps.
-  const peerLift = lookupPeerLift(
-    input.peerLiftCalibration,
-    input.taskType,
-    input.strategyId,
-  );
+  const peerLift = lookupPeerLift(input.peerLiftCalibration, input.taskType, input.strategyId);
   const seed = sorted[0];
   const members: ContributionAwareScore[] = [seed];
   const marginal: MarginalContributionRecord[] = [
@@ -156,10 +144,7 @@ export function optimizeEnsembleCalibrated(
       continue;
     }
     // Bounded per-model lift.
-    const candidateLift = Math.min(
-      policy.maxPerAdditionalModelLift,
-      Math.max(0, peerLift),
-    );
+    const candidateLift = Math.min(policy.maxPerAdditionalModelLift, Math.max(0, peerLift));
     // Bounded total lift.
     if (totalLift + candidateLift > policy.maxTotalLift) {
       marginal.push({
@@ -220,16 +205,17 @@ export function optimizeEnsembleCalibrated(
     if (!enoughMembers) reasons.push('below_min_members');
     if (!judgeOk) reasons.push('expected_judge_below_baseline');
     if (!costOk) reasons.push('ensemble_cost_above_ceiling');
-    return wrapFallback(input, input.candidates, rejected, reasons.join(','), nonFallbackCandidateConsidered);
+    return wrapFallback(
+      input,
+      input.candidates,
+      rejected,
+      reasons.join(','),
+      nonFallbackCandidateConsidered
+    );
   }
 
   // 7. Final plan — paretoStatus driven by calibrated metrics.
-  const status = classifyParetoStatus(
-    estimate.expectedJudge,
-    runningCost,
-    input.baseline,
-    policy,
-  );
+  const status = classifyParetoStatus(estimate.expectedJudge, runningCost, input.baseline, policy);
   const strategyId: EnsembleStrategyId = 'parallel';
   const plan: EnsemblePlan = {
     strategyId,
@@ -244,13 +230,7 @@ export function optimizeEnsembleCalibrated(
     paretoStatus: status,
     marginalContributions: Object.freeze(marginal),
     rejectedCandidates: Object.freeze(rejected),
-    explanation: buildExplanation(
-      estimate,
-      runningCost,
-      members.length,
-      input.baseline,
-      policy,
-    ),
+    explanation: buildExplanation(estimate, runningCost, members.length, input.baseline, policy),
   };
   return Object.freeze({
     ensemblePlan: Object.freeze(plan),
@@ -267,7 +247,7 @@ function wrapFallback(
   allCandidates: readonly ContributionAwareScore[],
   rejected: readonly RejectedCandidateRecord[],
   reason: string,
-  nonFallbackCandidateConsidered = false,
+  nonFallbackCandidateConsidered = false
 ): EnsembleCalibratedOptimizerResult {
   const usable = allCandidates.filter((c) => !c.rejected);
   const sorted = [...usable].sort(compareScores);
@@ -330,7 +310,7 @@ function wrapFallback(
 function lookupPairProfile(
   members: readonly ContributionAwareScore[],
   taskType: string,
-  pairProfiles: ReadonlyMap<string, PairContributionProfile> | undefined,
+  pairProfiles: ReadonlyMap<string, PairContributionProfile> | undefined
 ): import('./ensemble-calibration-types').EnsembleCalibrationExamplePairProfile | undefined {
   if (!pairProfiles || members.length !== 2) return undefined;
   const key = pairKey(members[0].modelId, members[1].modelId);
@@ -351,12 +331,10 @@ function classifyParetoStatus(
   expectedJudge: number,
   expectedCost: number,
   baseline: ParetoEnsembleBaselines,
-  policy: EnsembleLiftPolicy,
+  policy: EnsembleLiftPolicy
 ): EnsembleParetoStatus {
-  const judgeOk =
-    expectedJudge >= baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
-  const costOk =
-    expectedCost <= baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
+  const judgeOk = expectedJudge >= baseline.singleModelJudge * policy.minExpectedJudgeRatioVsSingle;
+  const costOk = expectedCost <= baseline.singleModelCostUsd * policy.maxCostRatioVsSingle;
   if (judgeOk && costOk) return 'beats_baseline';
   if (judgeOk && !costOk) return 'cost_tradeoff';
   if (!judgeOk && costOk) return 'quality_tradeoff';
@@ -368,7 +346,7 @@ function buildExplanation(
   expectedCost: number,
   memberCount: number,
   baseline: ParetoEnsembleBaselines,
-  policy: EnsembleLiftPolicy,
+  policy: EnsembleLiftPolicy
 ): string {
   return [
     `strategy=parallel`,

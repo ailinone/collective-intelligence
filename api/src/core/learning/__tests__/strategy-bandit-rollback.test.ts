@@ -61,10 +61,10 @@ async function importBandit() {
   }));
   vi.mock('@/utils/logger', () => ({
     logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
       child: () => ({
         info: vi.fn(),
         debug: vi.fn(),
@@ -87,7 +87,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
   describe('update', () => {
     it('increments alpha on high quality', async () => {
       const bandit = await importBandit();
-      bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.9 });
+      bandit.update({
+        taskType: 'code-gen',
+        complexity: 'medium',
+        strategy: 'single',
+        qualityScore: 0.9,
+      });
       const winRates = bandit.getWinRates('code-gen', 'medium', ['single']);
       // After one success: alpha=2, beta=1 → win rate = 2/3 ≈ 0.667
       expect(winRates['single']).toBeGreaterThan(0.5);
@@ -95,7 +100,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
 
     it('increments beta on low quality', async () => {
       const bandit = await importBandit();
-      bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.3 });
+      bandit.update({
+        taskType: 'code-gen',
+        complexity: 'medium',
+        strategy: 'single',
+        qualityScore: 0.3,
+      });
       const winRates = bandit.getWinRates('code-gen', 'medium', ['single']);
       // After one failure: alpha=1, beta=2 → win rate = 1/3 ≈ 0.333
       expect(winRates['single']).toBeLessThan(0.5);
@@ -103,7 +113,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
 
     it('applies partial update for scores between thresholds', async () => {
       const bandit = await importBandit();
-      bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.625 });
+      bandit.update({
+        taskType: 'code-gen',
+        complexity: 'medium',
+        strategy: 'single',
+        qualityScore: 0.625,
+      });
       const winRates = bandit.getWinRates('code-gen', 'medium', ['single']);
       // Partial update: 0.625 is midway between 0.50 and 0.75 → 0.5 success fraction
       // alpha = 1 + 0.5 = 1.5, beta = 1 + 0.5 = 1.5 → win rate ≈ 0.5
@@ -130,8 +145,18 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
 
       // Train: 'debate' is consistently better
       for (let i = 0; i < 20; i++) {
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'debate', qualityScore: 0.95 });
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.4 });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'debate',
+          qualityScore: 0.95,
+        });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'single',
+          qualityScore: 0.4,
+        });
       }
 
       // Sample many times and check 'debate' wins most
@@ -155,7 +180,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
     it('returns true after enough observations', async () => {
       const bandit = await importBandit();
       for (let i = 0; i < 6; i++) {
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.8 });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'single',
+          qualityScore: 0.8,
+        });
       }
       expect(bandit.hasConfidence('code-gen', 'medium', 'single')).toBe(true);
     });
@@ -216,8 +246,18 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
       const bandit = await importBandit();
 
       for (let i = 0; i < 10; i++) {
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'good', qualityScore: 0.9 });
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'bad', qualityScore: 0.3 });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'good',
+          qualityScore: 0.9,
+        });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'bad',
+          qualityScore: 0.3,
+        });
       }
 
       const rates = bandit.getWinRates('code-gen', 'medium', ['good', 'bad']);
@@ -231,7 +271,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
 
       // Phase 1: Build a strong baseline
       for (let i = 0; i < 10; i++) {
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.9 });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'single',
+          qualityScore: 0.9,
+        });
       }
 
       // Record high-quality executions for reward rate (need >= 50 for check)
@@ -250,7 +295,12 @@ describe('StrategyBandit — Success-Story Auto-Rollback (OI-03)', () => {
 
       // Phase 2: Degrade the bandit by training with bad data
       for (let i = 0; i < 20; i++) {
-        bandit.update({ taskType: 'code-gen', complexity: 'medium', strategy: 'single', qualityScore: 0.2 });
+        bandit.update({
+          taskType: 'code-gen',
+          complexity: 'medium',
+          strategy: 'single',
+          qualityScore: 0.2,
+        });
       }
       const ratesAfterBad = bandit.getWinRates('code-gen', 'medium', ['single']);
       expect(ratesAfterBad['single']).toBeLessThan(ratesBefore['single']);

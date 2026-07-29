@@ -39,7 +39,8 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
     super();
     this.apiKey = config?.apiKey ?? process.env.AZURE_OPENAI_API_KEY;
     this.endpoint = config?.endpoint ?? process.env.AZURE_OPENAI_ENDPOINT;
-    this.apiVersion = config?.apiVersion ?? process.env.AZURE_OPENAI_API_VERSION ?? '2023-12-01-preview';
+    this.apiVersion =
+      config?.apiVersion ?? process.env.AZURE_OPENAI_API_VERSION ?? '2023-12-01-preview';
     this.defaultDeployment = config?.defaultDeployment ?? process.env.AZURE_OPENAI_DEPLOYMENT;
   }
 
@@ -75,7 +76,9 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
         return models;
       }
 
-      this.log.warn('Azure OpenAI SDK returned zero models - returning empty list (100% dynamic discovery)');
+      this.log.warn(
+        'Azure OpenAI SDK returned zero models - returning empty list (100% dynamic discovery)'
+      );
       return [];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -121,8 +124,9 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
       // Convert OpenAI Model type to our expected format
       // Model from OpenAI SDK has id, model, object properties
       // Create a new object to avoid type conversion issues
-      const modelData: { id?: string; model?: string; object?: string; [key: string]: unknown } = {};
-      
+      const modelData: { id?: string; model?: string; object?: string; [key: string]: unknown } =
+        {};
+
       if (model && typeof model === 'object') {
         // Type guard: verify model has expected structure
         // Create a safe copy without direct type assertion
@@ -135,7 +139,7 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
             modelObj[key] = value;
           }
         }
-        
+
         if ('id' in modelObj && modelObj.id !== null && modelObj.id !== undefined) {
           modelData.id = String(modelObj.id);
         }
@@ -147,12 +151,17 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
         }
         // Copy other properties if they exist
         for (const key in modelObj) {
-          if (key !== 'id' && key !== 'model' && key !== 'object' && Object.prototype.hasOwnProperty.call(modelObj, key)) {
+          if (
+            key !== 'id' &&
+            key !== 'model' &&
+            key !== 'object' &&
+            Object.prototype.hasOwnProperty.call(modelObj, key)
+          ) {
             modelData[key] = modelObj[key];
           }
         }
       }
-      
+
       const providerModel = this.convertAzureModel(modelData);
       if (providerModel) {
         providerModels.push(providerModel);
@@ -170,7 +179,12 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
   /**
    * Convert Azure OpenAI model to our ProviderModel format
    */
-  private convertAzureModel(model: { id?: string; model?: string; object?: string; [key: string]: unknown }): ProviderModel | null {
+  private convertAzureModel(model: {
+    id?: string;
+    model?: string;
+    object?: string;
+    [key: string]: unknown;
+  }): ProviderModel | null {
     try {
       const modelId = model.id || model.model || model.object || this.defaultDeployment;
       if (!modelId) {
@@ -249,8 +263,14 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
     }
 
     // Function calling - infer from generic patterns (modern models typically support it)
-    const isModernModel = name.includes('gpt') || name.includes('claude') || name.includes('gemini');
-    if (isModernModel && !name.includes('tts') && !name.includes('whisper') && !name.includes('embedding')) {
+    const isModernModel =
+      name.includes('gpt') || name.includes('claude') || name.includes('gemini');
+    if (
+      isModernModel &&
+      !name.includes('tts') &&
+      !name.includes('whisper') &&
+      !name.includes('embedding')
+    ) {
       capabilities.push('function_calling', 'tool_use');
     }
 
@@ -276,8 +296,12 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
 
     // Use generic tier/keyword patterns, not specific model names
     const isPremium = name.includes('pro') || name.includes('turbo') || name.includes('max');
-    const isFast = name.includes('mini') || name.includes('nano') || name.includes('lite') || name.includes('flash');
-    
+    const isFast =
+      name.includes('mini') ||
+      name.includes('nano') ||
+      name.includes('lite') ||
+      name.includes('flash');
+
     if (isPremium && !isFast) {
       // Premium models - larger context, higher cost
       contextWindow = 128000;

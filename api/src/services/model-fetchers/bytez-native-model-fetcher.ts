@@ -46,10 +46,10 @@ interface BytezListResponse {
 const TASK_TO_CAPABILITIES: Record<string, ModelCapability[]> = {
   'text-generation': ['chat', 'completions'],
   'text2text-generation': ['chat', 'completions'],
-  'conversational': ['chat'],
+  conversational: ['chat'],
   'question-answering': ['chat'],
-  'summarization': ['chat'],
-  'translation': ['chat'],
+  summarization: ['chat'],
+  translation: ['chat'],
   'fill-mask': ['completions'],
   'feature-extraction': ['embedding'],
   'sentence-similarity': ['embedding'],
@@ -78,7 +78,7 @@ export class BytezNativeModelFetcher extends BaseProviderModelFetcher {
     apiKey: string,
     baseUrl = 'https://api.bytez.com/models/v2/list/models',
     maxModels = Number(process.env.BYTEZ_DISCOVERY_MAX_MODELS || '100000'),
-    requestTimeoutMs = Number(process.env.BYTEZ_DISCOVERY_TIMEOUT_MS || '30000'),
+    requestTimeoutMs = Number(process.env.BYTEZ_DISCOVERY_TIMEOUT_MS || '30000')
   ) {
     super();
     this.apiKey = apiKey;
@@ -89,7 +89,10 @@ export class BytezNativeModelFetcher extends BaseProviderModelFetcher {
 
   async getModels(): Promise<ProviderModel[]> {
     if (!this.apiKey || this.isMockKey(this.apiKey)) {
-      this.log.warn({ keyPresent: Boolean(this.apiKey) }, 'Bytez native discovery skipped: no/mock API key');
+      this.log.warn(
+        { keyPresent: Boolean(this.apiKey) },
+        'Bytez native discovery skipped: no/mock API key'
+      );
       return [];
     }
 
@@ -119,8 +122,8 @@ export class BytezNativeModelFetcher extends BaseProviderModelFetcher {
       const list = Array.isArray(body.output) ? body.output : [];
       const truncated = list.length > this.maxModels ? list.slice(0, this.maxModels) : list;
       const out = truncated
-        .filter(m => typeof m.modelId === 'string' && m.modelId.length > 0)
-        .map(m => this.transform(m));
+        .filter((m) => typeof m.modelId === 'string' && m.modelId.length > 0)
+        .map((m) => this.transform(m));
 
       this.log.info(
         {
@@ -129,7 +132,7 @@ export class BytezNativeModelFetcher extends BaseProviderModelFetcher {
           capped: list.length > this.maxModels,
           durationMs: Date.now() - start,
         },
-        'Bytez native discovery completed',
+        'Bytez native discovery completed'
       );
       return out;
     } catch (error) {

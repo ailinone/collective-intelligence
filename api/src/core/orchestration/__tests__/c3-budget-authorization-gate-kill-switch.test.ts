@@ -16,7 +16,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { C3_GLOBAL_KILL_SWITCH_REQUIRED } from '@/core/experiment/c3-budget-authorization-gate-contract';
 
-const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-budget-authorization-gate-kill-switch-policy.json');
+const ART = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-budget-authorization-gate-kill-switch-policy.json'
+);
 const ks = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — kill switch', () => {
@@ -33,7 +37,18 @@ describe('01C.1B-C3-BUDGET-AUTHORIZATION-GATE — kill switch', () => {
     });
     it('all required runtime guards present', () => {
       const g = ks.requiredRuntimeGuards;
-      for (const k of ['providerBoundarySentry', 'externalNetworkSentry', 'costAnomalyAbort', 'usageAnomalyAbort', 'fingerprintDriftAbort', 'fallbackAbort', 'providerOutsideAllowlistAbort', 'modelOutsideAllowlistAbort', 'maxRetriesZero', 'nonStreamingOnly']) {
+      for (const k of [
+        'providerBoundarySentry',
+        'externalNetworkSentry',
+        'costAnomalyAbort',
+        'usageAnomalyAbort',
+        'fingerprintDriftAbort',
+        'fallbackAbort',
+        'providerOutsideAllowlistAbort',
+        'modelOutsideAllowlistAbort',
+        'maxRetriesZero',
+        'nonStreamingOnly',
+      ]) {
         expect(g[k]).toBe(true);
       }
     });

@@ -58,7 +58,9 @@ export function validateSecurityConfig(): void {
     }
 
     if (hasEmbeddedCredentials) {
-      warnings.push('DATABASE_URL includes embedded credentials. Ensure logs always redact connection strings.');
+      warnings.push(
+        'DATABASE_URL includes embedded credentials. Ensure logs always redact connection strings.'
+      );
     }
   }
 
@@ -71,8 +73,8 @@ export function validateSecurityConfig(): void {
   // Check if at least ONE provider API key is configured
   // Providers are discovered dynamically, not hardcoded
   const providerKeyPatterns = ['_API_KEY', '_SECRET_KEY', '_ACCESS_KEY'];
-  const configuredProviders = Object.keys(process.env).filter(key =>
-    providerKeyPatterns.some(pattern => key.endsWith(pattern)) && process.env[key]
+  const configuredProviders = Object.keys(process.env).filter(
+    (key) => providerKeyPatterns.some((pattern) => key.endsWith(pattern)) && process.env[key]
   );
 
   if (configuredProviders.length === 0) {

@@ -53,16 +53,12 @@ export interface StrategyPlanValidationResult {
 
 export function validateStrategyPlan(
   plan: StrategyPlan,
-  ctx: StrategyPlanValidationContext = {},
+  ctx: StrategyPlanValidationContext = {}
 ): StrategyPlanValidationResult {
   const errors: string[] = [];
 
   // 1. confidence in [0, 1]
-  if (
-    !Number.isFinite(plan.confidence) ||
-    plan.confidence < 0 ||
-    plan.confidence > 1
-  ) {
+  if (!Number.isFinite(plan.confidence) || plan.confidence < 0 || plan.confidence > 1) {
     errors.push(`confidence_out_of_range:${plan.confidence}`);
   }
 
@@ -92,9 +88,7 @@ export function validateStrategyPlan(
 
   // 6. single_best must have at most 1 selected
   if (plan.strategy === 'single_best' && plan.selectedRouteIds.length > 1) {
-    errors.push(
-      `single_best_too_many_selected:${plan.selectedRouteIds.length}`,
-    );
+    errors.push(`single_best_too_many_selected:${plan.selectedRouteIds.length}`);
   }
 
   // 7. local_first must have at most 1 selected
@@ -106,7 +100,7 @@ export function validateStrategyPlan(
   if (COLLECTIVE_STRATEGIES.has(plan.strategy)) {
     if (plan.selectedRouteIds.length > plan.maxParallelism) {
       errors.push(
-        `collective_exceeds_maxParallelism:${plan.selectedRouteIds.length}>${plan.maxParallelism}`,
+        `collective_exceeds_maxParallelism:${plan.selectedRouteIds.length}>${plan.maxParallelism}`
       );
     }
     if (plan.maxParallelism < 1) {

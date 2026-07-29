@@ -26,7 +26,7 @@ export function computeDynamicFirstChunkTimeoutMs<T>(
   index: number,
   ranks: ReadonlyMap<T, number> | null,
   staticTimeoutMs: number,
-  fallbackTimeoutMs: number,
+  fallbackTimeoutMs: number
 ): number {
   const currentRank = ranks?.get(candidates[index]) ?? 1;
   // Candidate is itself hot, or no rank data at all: full window. A hot
@@ -35,8 +35,6 @@ export function computeDynamicFirstChunkTimeoutMs<T>(
   if (currentRank === 3 || !ranks) {
     return staticTimeoutMs;
   }
-  const hasHotFallbackAhead = candidates
-    .slice(index + 1)
-    .some((c) => (ranks.get(c) ?? 1) === 3);
+  const hasHotFallbackAhead = candidates.slice(index + 1).some((c) => (ranks.get(c) ?? 1) === 3);
   return hasHotFallbackAhead ? fallbackTimeoutMs : staticTimeoutMs;
 }

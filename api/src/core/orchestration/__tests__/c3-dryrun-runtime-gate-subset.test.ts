@@ -55,7 +55,11 @@ describe('01C.1B-C3-DRYRUN-RUNTIME-GATE — subset manifest', () => {
       expect(subset.coverage.includesCritiqueOrMultipass).toBe(true);
     });
     it('every subset entry carries a selectionReason', () => {
-      expect(subset.subset.every((e: any) => Array.isArray(e.selectionReason) && e.selectionReason.length > 0)).toBe(true);
+      expect(
+        subset.subset.every(
+          (e: any) => Array.isArray(e.selectionReason) && e.selectionReason.length > 0
+        )
+      ).toBe(true);
     });
   });
 });

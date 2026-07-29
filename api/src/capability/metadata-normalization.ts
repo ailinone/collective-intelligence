@@ -36,7 +36,7 @@ import { withInferredTools } from './tools-inference';
 
 export function withNormalizedMetadata<T extends Record<string, unknown>>(
   metadata: T,
-  capabilities: readonly string[],
+  capabilities: readonly string[]
 ): T & { endpoint: string; tools: string[] } {
   return withInferredTools(withInferredEndpoint(metadata, capabilities), capabilities);
 }

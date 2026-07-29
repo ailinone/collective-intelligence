@@ -45,9 +45,7 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
     this.deepSearchBaseUrl = config.deepSearchBaseUrl || 'https://deepsearch.jina.ai/v1';
     this.seedModels =
       config.seedModels && config.seedModels.length > 0
-        ? config.seedModels
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0)
+        ? config.seedModels.map((item) => item.trim()).filter((item) => item.length > 0)
         : [...DEFAULT_JINA_SEED_MODELS];
   }
 
@@ -96,7 +94,10 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
           if (response.status === 404 || response.status === 405) {
             continue;
           }
-          this.log.warn({ status: response.status, url }, 'Jina model endpoint returned non-success');
+          this.log.warn(
+            { status: response.status, url },
+            'Jina model endpoint returned non-success'
+          );
           continue;
         }
 
@@ -121,8 +122,8 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
 
   private extractRawModels(payload: unknown): RawModelRecord[] {
     if (Array.isArray(payload)) {
-      return payload.filter(
-        (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+      return payload.filter((item): item is RawModelRecord =>
+        Boolean(item && typeof item === 'object')
       );
     }
 
@@ -134,8 +135,8 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
     const arrays = [record.data, record.models, record.items, record.results];
     for (const candidate of arrays) {
       if (Array.isArray(candidate)) {
-        return candidate.filter(
-          (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+        return candidate.filter((item): item is RawModelRecord =>
+          Boolean(item && typeof item === 'object')
         );
       }
     }
@@ -144,8 +145,7 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
   }
 
   private convertRawModel(rawModel: RawModelRecord, sourceUrl: string): ProviderModel | null {
-    const modelId =
-      this.extractString(rawModel, ['id', 'model', 'model_id', 'name']) || undefined;
+    const modelId = this.extractString(rawModel, ['id', 'model', 'model_id', 'name']) || undefined;
     if (!modelId) {
       return null;
     }
@@ -163,8 +163,11 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
       ]) || this.inferContextWindow(normalizedId);
 
     const maxOutputTokens =
-      this.extractNumber(rawModel, ['max_output_tokens', 'maxOutputTokens', 'max_completion_tokens']) ||
-      this.inferMaxOutputTokens(normalizedId);
+      this.extractNumber(rawModel, [
+        'max_output_tokens',
+        'maxOutputTokens',
+        'max_completion_tokens',
+      ]) || this.inferMaxOutputTokens(normalizedId);
 
     return {
       id: normalizedId,
@@ -264,7 +267,10 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
       metadata.capabilities = declaredCapabilities;
     }
 
-    const inputModalities = this.extractStringArray(rawModel, ['input_modalities', 'inputModalities']);
+    const inputModalities = this.extractStringArray(rawModel, [
+      'input_modalities',
+      'inputModalities',
+    ]);
     const outputModalities = this.extractStringArray(rawModel, [
       'output_modalities',
       'outputModalities',
@@ -286,7 +292,8 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
 
   private extractPricing(rawModel: RawModelRecord): ProviderModel['pricing'] {
     const inputCostPer1M =
-      this.extractNumber(rawModel, ['inputCostPer1M', 'input_cost_per_1m', 'prompt_cost_per_1m']) || 0;
+      this.extractNumber(rawModel, ['inputCostPer1M', 'input_cost_per_1m', 'prompt_cost_per_1m']) ||
+      0;
     const outputCostPer1M =
       this.extractNumber(rawModel, [
         'outputCostPer1M',
@@ -349,4 +356,3 @@ export class JinaModelFetcher extends BaseProviderModelFetcher {
     return `${normalizedBase}${normalizedPath}`;
   }
 }
-

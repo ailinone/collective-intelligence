@@ -61,8 +61,8 @@ export function uriToLegacy(uri: string): ModelCapability | undefined {
   if (URI_TO_LEGACY_CACHE === null) {
     URI_TO_LEGACY_CACHE = Object.freeze(
       Object.fromEntries(
-        Object.entries(LEGACY_CAPABILITY_TO_URI).map(([slug, u]) => [u, slug as ModelCapability]),
-      ),
+        Object.entries(LEGACY_CAPABILITY_TO_URI).map(([slug, u]) => [u, slug as ModelCapability])
+      )
     );
   }
   return URI_TO_LEGACY_CACHE[uri];
@@ -144,7 +144,7 @@ export interface CapabilityWithProvenance {
  */
 export function getEffectiveCapabilities(
   model: CapabilityReadable,
-  opts: CapabilityReadOptions = {},
+  opts: CapabilityReadOptions = {}
 ): ModelCapability[] {
   const mode = opts.mode ?? 'union';
   const minConfidence = opts.minConfidence ?? 0;
@@ -183,7 +183,7 @@ export function getEffectiveCapabilities(
 export function hasCapability(
   model: CapabilityReadable,
   capability: ModelCapability | string,
-  opts: CapabilityReadOptions = {},
+  opts: CapabilityReadOptions = {}
 ): boolean {
   const mode = opts.mode ?? 'union';
   const minConfidence = opts.minConfidence ?? 0;
@@ -217,7 +217,7 @@ export function hasCapability(
  */
 export function getEffectiveCapabilitiesWithConfidence(
   model: CapabilityReadable,
-  opts: CapabilityReadOptions = {},
+  opts: CapabilityReadOptions = {}
 ): CapabilityWithProvenance[] {
   const mode = opts.mode ?? 'union';
   const minConfidence = opts.minConfidence ?? 0;

@@ -30,7 +30,9 @@ import type { ChatRequest } from '@/types';
 
 function basePool() {
   return [
-    ...diversePool().filter((c) => c.hasCredits).map((c) => c.model),
+    ...diversePool()
+      .filter((c) => c.hasCredits)
+      .map((c) => c.model),
     makeCandidate({
       id: 'judge-candidate',
       model: makeModel({
@@ -69,7 +71,11 @@ describe('runtime wiring — promptTrace in consensus dry-run', () => {
     });
     const ext = plan as typeof plan & {
       promptTrace?: ReadonlyArray<unknown>;
-      promptFingerprints?: { aggregate: string; perRole: ReadonlyArray<unknown>; includedInPlanFingerprint: boolean };
+      promptFingerprints?: {
+        aggregate: string;
+        perRole: ReadonlyArray<unknown>;
+        includedInPlanFingerprint: boolean;
+      };
       promptIssues?: ReadonlyArray<unknown>;
       promptIncludedInPlanFingerprint?: boolean;
     };
@@ -78,7 +84,7 @@ describe('runtime wiring — promptTrace in consensus dry-run', () => {
     expect(Array.isArray(ext.promptTrace)).toBe(true);
     expect(ext.promptFingerprints).toBeDefined();
     expect(typeof ext.promptFingerprints!.aggregate).toBe('string');
-    expect(ext.promptFingerprints!.aggregate.length).toBeGreaterThan(20);  // sha256 hex
+    expect(ext.promptFingerprints!.aggregate.length).toBeGreaterThan(20); // sha256 hex
     expect(ext.promptFingerprints!.includedInPlanFingerprint).toBe(true);
   });
 
@@ -115,10 +121,9 @@ describe('runtime wiring — promptTrace in consensus dry-run', () => {
     for (const role of expected) {
       const inTrace = ext.promptTrace?.some((t) => t.role === role);
       const inIssues = ext.promptIssues?.some((i) => i.role === role);
-      expect(
-        inTrace || inIssues,
-        `role ${role} must appear in promptTrace OR promptIssues`,
-      ).toBe(true);
+      expect(inTrace || inIssues, `role ${role} must appear in promptTrace OR promptIssues`).toBe(
+        true
+      );
     }
   });
 
@@ -175,7 +180,7 @@ describe('runtime wiring — promptTrace in consensus dry-run', () => {
       expect(typeof r.promptTemplateId).toBe('string');
       expect(r.promptTemplateId.length).toBeGreaterThan(0);
       expect(typeof r.promptFingerprint).toBe('string');
-      expect(r.promptFingerprint).toMatch(/^[a-f0-9]{64}$/);  // sha256 hex
+      expect(r.promptFingerprint).toMatch(/^[a-f0-9]{64}$/); // sha256 hex
     }
   });
 });

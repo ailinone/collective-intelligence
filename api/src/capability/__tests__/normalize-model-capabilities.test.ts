@@ -137,7 +137,9 @@ describe('resolveModelCapabilities — flag derivation', () => {
   it('vision flag from various aliases', () => {
     expect(resolveModelCapabilities({ capabilityUris: ['vision'] }).hasVision).toBe(true);
     expect(resolveModelCapabilities({ capabilityUris: ['image-input'] }).hasVision).toBe(true);
-    expect(resolveModelCapabilities({ capabilityUris: ['multimodal-vision'] }).hasVision).toBe(true);
+    expect(resolveModelCapabilities({ capabilityUris: ['multimodal-vision'] }).hasVision).toBe(
+      true
+    );
   });
 
   it('tools flag from function_calling alias', () => {

@@ -29,7 +29,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 const { userHasPermissionMock } = vi.hoisted(() => ({
-  userHasPermissionMock: vi.fn<(userId: string, organizationId: string, permission: string) => Promise<boolean>>(),
+  userHasPermissionMock:
+    vi.fn<(userId: string, organizationId: string, permission: string) => Promise<boolean>>(),
 }));
 
 vi.mock('@/services/rbac-service', () => ({
@@ -193,7 +194,9 @@ describe('requirePermission', () => {
 
 describe('requireAnyPermission', () => {
   it('allows when the principal holds AT LEAST ONE of the permissions', async () => {
-    userHasPermissionMock.mockImplementation(async (_u, _o, permission) => permission === 'billing:read');
+    userHasPermissionMock.mockImplementation(
+      async (_u, _o, permission) => permission === 'billing:read'
+    );
     const { reply, captured } = makeReply();
 
     await requireAnyPermission(['billing:update', 'billing:read'])(makeRequest(MEMBER), reply);

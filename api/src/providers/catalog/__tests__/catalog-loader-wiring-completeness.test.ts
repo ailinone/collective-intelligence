@@ -115,12 +115,10 @@ function isLlmClass(entry: (typeof PROVIDER_CATALOG)[number]): boolean {
 
 function extractEnvVarToProviderKeys(src: string): Set<string> {
   const blockMatch = src.match(
-    /const\s+ENV_VAR_TO_PROVIDER\s*:\s*Record<[^>]+>\s*=\s*\{([\s\S]*?)\};/,
+    /const\s+ENV_VAR_TO_PROVIDER\s*:\s*Record<[^>]+>\s*=\s*\{([\s\S]*?)\};/
   );
   if (!blockMatch) {
-    throw new Error(
-      'Could not locate ENV_VAR_TO_PROVIDER declaration in load-secrets-into-env.ts',
-    );
+    throw new Error('Could not locate ENV_VAR_TO_PROVIDER declaration in load-secrets-into-env.ts');
   }
   const body = blockMatch[1];
   const keys = new Set<string>();
@@ -133,12 +131,10 @@ function extractEnvVarToProviderKeys(src: string): Set<string> {
 }
 
 function extractLlmProviderEnvVars(src: string): Set<string> {
-  const blockMatch = src.match(
-    /const\s+LLM_PROVIDER_ENV_VARS\s*=\s*\[([\s\S]*?)\]\s*as\s+const/,
-  );
+  const blockMatch = src.match(/const\s+LLM_PROVIDER_ENV_VARS\s*=\s*\[([\s\S]*?)\]\s*as\s+const/);
   if (!blockMatch) {
     throw new Error(
-      'Could not locate LLM_PROVIDER_ENV_VARS declaration in load-secrets-into-env.ts',
+      'Could not locate LLM_PROVIDER_ENV_VARS declaration in load-secrets-into-env.ts'
     );
   }
   const body = blockMatch[1];

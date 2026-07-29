@@ -27,11 +27,7 @@ import type { ConsensusExecutionPlan } from '../consensus-execution-planner';
 import { ConsensusExecutionPlanner } from '../consensus-execution-planner';
 import { ModelRoleResolver } from '../../model-selection/model-role-resolver';
 import { fullConsensusPool } from '../../model-selection/__tests__/role-resolver.fixtures';
-import {
-  makeContext,
-  makeRequest,
-  wireStrategy,
-} from './consensus-strategy.fixtures';
+import { makeContext, makeRequest, wireStrategy } from './consensus-strategy.fixtures';
 import type { ChatRequest } from '@/types';
 
 async function planFor(): Promise<ConsensusExecutionPlan> {
@@ -46,7 +42,7 @@ describe('ConsensusStrategy — synthesizer enforcement', () => {
     const plan = await planFor();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,

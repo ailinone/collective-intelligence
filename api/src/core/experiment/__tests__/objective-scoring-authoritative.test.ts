@@ -78,7 +78,7 @@ describe('task 122 (string_equals Canberra) — trailing punctuation must not ze
     'still grades the wrong city %j as 0',
     (answer) => {
       expect(gradeObjectiveAnswer(answer, t122)).toBe(0);
-    },
+    }
   );
 });
 
@@ -114,7 +114,7 @@ describe('canvas structural check (tasks 136-145) — completeness gates the gra
   // bytes), but the file is non-runnable and has no closing tag.
   const clippedFile = completeFile.slice(
     0,
-    completeFile.indexOf('requestAnimationFrame(loop);') + 'requestAnimationFrame(loop);'.length,
+    completeFile.indexOf('requestAnimationFrame(loop);') + 'requestAnimationFrame(loop);'.length
   );
 
   it('scores a complete canvas file 1', () => {

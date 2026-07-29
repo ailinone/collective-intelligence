@@ -14,10 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  buildPairContributionProfile,
-  pairKey,
-} from '../pair-contribution-profile';
+import { buildPairContributionProfile, pairKey } from '../pair-contribution-profile';
 import type { HistoricalExecution } from '../historical-execution-types';
 
 function pairExec(judge: number, cost: number): HistoricalExecution {
@@ -44,7 +41,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       [],
       { singleJudgeMean: 0.5, singleCostMean: 0.02 },
-      {},
+      {}
     );
     expect(p.sampleCount).toBe(0);
     expect(p.judgeMean).toBe(0);
@@ -58,7 +55,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       [pairExec(0.5, 0.01)],
       { singleJudgeMean: 0.4, singleCostMean: 0.02 },
-      {},
+      {}
     );
     expect(a.modelA).toBe('A');
     expect(a.modelB).toBe('B');
@@ -72,7 +69,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       execs,
       { singleJudgeMean: 0.5, singleCostMean: 0.025 },
-      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.45, harmScore: 0 } },
+      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.45, harmScore: 0 } }
     );
     expect(p.beatsSingleBaselineRate).toBe(1);
     expect(p.paretoWinRate).toBeGreaterThan(0); // judge>= AND cost<=
@@ -86,7 +83,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       execs,
       { singleJudgeMean: 0.5, singleCostMean: 0.025 },
-      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.45, harmScore: 0 } },
+      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.45, harmScore: 0 } }
     );
     expect(p.complementarityScore).toBeGreaterThan(0);
   });
@@ -99,7 +96,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       execs,
       { singleJudgeMean: 0.5, singleCostMean: 0.025 },
-      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.5, harmScore: 0 } },
+      { A: { judgeMean: 0.5, harmScore: 0 }, B: { judgeMean: 0.5, harmScore: 0 } }
     );
     expect(p.redundancyPenalty).toBeGreaterThan(0);
   });
@@ -112,7 +109,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       execs,
       { singleJudgeMean: 0.5, singleCostMean: 0.025 },
-      {},
+      {}
     );
     expect(p.qualityPerDollar).toBeGreaterThan(0);
     expect(Number.isFinite(p.qualityPerDollar)).toBe(true);
@@ -125,7 +122,7 @@ describe('buildPairContributionProfile', () => {
       'code-generation',
       [pairExec(0.5, 0.02)],
       { singleJudgeMean: 0.5, singleCostMean: 0.025 },
-      {},
+      {}
     );
     expect(Object.isFrozen(p)).toBe(true);
   });

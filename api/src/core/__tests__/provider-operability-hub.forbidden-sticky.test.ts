@@ -30,7 +30,7 @@ describe('provider-operability-hub: non-credit 403 forbidden/ban sticks as auth_
       key,
       false,
       403,
-      'routeway chat completion failed: HTTP 403 Access denied | Error 1006 | The owner of this website has banned your IP address',
+      'routeway chat completion failed: HTTP 403 Access denied | Error 1006 | The owner of this website has banned your IP address'
     );
     expect(hub.getProviderState(key).operabilityState).toBe('auth_failed');
   });

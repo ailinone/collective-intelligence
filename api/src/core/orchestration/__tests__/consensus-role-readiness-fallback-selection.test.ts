@@ -49,7 +49,13 @@ function projectFallback(input: {
   readonly allowModelFallback: boolean;
   readonly eligibleAlternatives: ReadonlyArray<{ logicalModelId: string; liveReadyCount: number }>;
 }): RoleReadinessFallbackProjection {
-  const { role, preferredLogicalModelId, preferredLiveReadyCount, allowModelFallback, eligibleAlternatives } = input;
+  const {
+    role,
+    preferredLogicalModelId,
+    preferredLiveReadyCount,
+    allowModelFallback,
+    eligibleAlternatives,
+  } = input;
   // No fallback needed.
   if (preferredLiveReadyCount > 0) {
     return {

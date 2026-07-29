@@ -10,11 +10,11 @@
 /**
  * JWKS Routes
  * Exposes public keys for RS256 JWT verification
- * 
+ *
  * Endpoints:
  * - GET /.well-known/jwks.json - Standard JWKS endpoint
  * - GET /console/api/v1/jwks - Tenant-aware JWKS endpoint (for signature-verifier)
- * 
+ *
  * Security:
  * - Only exposes public keys (private keys never leave the server)
  * - Cache-Control headers for efficient caching

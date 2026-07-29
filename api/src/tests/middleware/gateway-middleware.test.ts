@@ -311,4 +311,3 @@ describe('Gateway middleware', () => {
     expect(harness.payload).toBeUndefined();
   });
 });
-

@@ -30,9 +30,7 @@ describe('metadata-backfill job ↔ scheduled-jobs registry wiring', () => {
   });
 
   it('handler imports from `./metadata-backfill-job`', () => {
-    expect(registrySource).toMatch(
-      /import\(\s*['"]\.\/metadata-backfill-job(\.js)?['"]\s*\)/,
-    );
+    expect(registrySource).toMatch(/import\(\s*['"]\.\/metadata-backfill-job(\.js)?['"]\s*\)/);
   });
 
   it('schedules the cron under the same name', () => {

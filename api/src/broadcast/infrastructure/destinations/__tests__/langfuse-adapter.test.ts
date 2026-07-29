@@ -86,7 +86,7 @@ interface CapturedRequest {
 }
 
 function startTestServer(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
+  handler: (req: IncomingMessage, res: ServerResponse) => void
 ): Promise<{ server: Server; port: number; calls: CapturedRequest[] }> {
   const calls: CapturedRequest[] = [];
   const server = createServer((req, res) => {
@@ -97,7 +97,7 @@ function startTestServer(
         method: req.method ?? 'GET',
         url: req.url ?? '/',
         headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)]),
+          Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)])
         ),
         body,
       });
@@ -137,7 +137,9 @@ describe('buildLangfusePayload', () => {
   it('propagates sessionId from envelope.custom', () => {
     const ctx = makeCtx('http://127.0.0.1:1');
     const payload = buildLangfusePayload(ctx);
-    const trace = payload.batch.find((e) => e.type === 'trace-create') as { body: { sessionId?: string } };
+    const trace = payload.batch.find((e) => e.type === 'trace-create') as {
+      body: { sessionId?: string };
+    };
     expect(trace.body.sessionId).toBe('sess-123');
   });
 });

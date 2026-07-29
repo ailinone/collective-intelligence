@@ -61,10 +61,10 @@ describe('01C.1B-J1D-R4C §9 — computeDynamicContextBudget', () => {
 
   it('synthesizer budget scales with participantMaxOutputTokens', () => {
     const small = computeDynamicContextBudget(
-      baseInput({ role: 'synthesizer', participantMaxOutputTokens: 2048 }),
+      baseInput({ role: 'synthesizer', participantMaxOutputTokens: 2048 })
     );
     const big = computeDynamicContextBudget(
-      baseInput({ role: 'synthesizer', participantMaxOutputTokens: 8192 }),
+      baseInput({ role: 'synthesizer', participantMaxOutputTokens: 8192 })
     );
     expect(big.minContextWindow).toBeGreaterThan(small.minContextWindow);
   });
@@ -83,7 +83,7 @@ describe('01C.1B-J1D-R4C §9 — computeDynamicContextBudget', () => {
         roleInstructionTokensEstimate: 10,
         overheadTokens: 10,
         absoluteSafetyMarginTokens: 0,
-      }),
+      })
     );
     expect(b.safetyMarginTokens).toBeGreaterThanOrEqual(MIN_ABSOLUTE_SAFETY_MARGIN_TOKENS);
   });
@@ -145,7 +145,7 @@ describe('01C.1B-J1D-R4C §9 — computeDynamicContextBudget', () => {
         overheadTokens: 100,
         participantCount: 3,
         participantMaxOutputTokens: 4096,
-      }),
+      })
     );
     // Required: 100 + 100 + 50 + (3*4096) + 4096 + 100 = 16734
     // Safety: max(1024, ceil(16734*0.2)) = 3347

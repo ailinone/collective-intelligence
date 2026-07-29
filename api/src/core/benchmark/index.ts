@@ -15,7 +15,13 @@
  */
 
 export { BenchmarkEvaluator, loadBenchmarkConfig } from './benchmark-evaluator';
-export { BENCHMARK_SUITE, getTasksByCategory, getTasksByDifficulty, getBalancedSample, getSuiteStats } from './benchmark-suite';
+export {
+  BENCHMARK_SUITE,
+  getTasksByCategory,
+  getTasksByDifficulty,
+  getBalancedSample,
+  getSuiteStats,
+} from './benchmark-suite';
 export type {
   BenchmarkTask,
   BenchmarkExecutionResult,

@@ -52,7 +52,7 @@ export interface BenchmarkJudgeConfig {
  * pure function of `process.env` so tests can pass a fake env object.
  */
 export function resolveBenchmarkJudgeConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): BenchmarkJudgeConfig {
   const model = env.EXPERIMENT_JUDGE_MODEL?.trim();
   const provider = env.EXPERIMENT_JUDGE_PROVIDER?.trim() || undefined;
@@ -90,7 +90,7 @@ export function warnIfJudgeUnpinned(config: BenchmarkJudgeConfig): void {
       remediation:
         'Set EXPERIMENT_JUDGE_MODEL=<a JSON-mode-capable model id> to stabilize judge path.',
     },
-    'Benchmark judge is running with model=auto. Results may be contaminated by selector bias.',
+    'Benchmark judge is running with model=auto. Results may be contaminated by selector bias.'
   );
 }
 
@@ -100,18 +100,18 @@ export function warnIfJudgeUnpinned(config: BenchmarkJudgeConfig): void {
  * enum keeps downstream aggregation queries stable.
  */
 export type JudgePathFailureCause =
-  | 'judge-no-response'        // engine returned nothing
-  | 'judge-empty-content'      // response with empty content string
-  | 'judge-parse-error'        // JSON parse crash
-  | 'judge-schema-error'       // JSON parsed but failed JudgeVerdictSchema
-  | 'judge-normalize-error'    // JSON valid but no legacy adapter recognized it
-  | 'judge-transport-error'    // network/provider exception
-  | 'judge-timeout'            // exceeded configured deadline
+  | 'judge-no-response' // engine returned nothing
+  | 'judge-empty-content' // response with empty content string
+  | 'judge-parse-error' // JSON parse crash
+  | 'judge-schema-error' // JSON parsed but failed JudgeVerdictSchema
+  | 'judge-normalize-error' // JSON valid but no legacy adapter recognized it
+  | 'judge-transport-error' // network/provider exception
+  | 'judge-timeout' // exceeded configured deadline
   | 'judge-unknown';
 
 export function recordJudgePathFailure(
   cause: JudgePathFailureCause,
-  attributes: Record<string, string | number>,
+  attributes: Record<string, string | number>
 ): void {
   incrementPromptMetric('ailin_benchmark_judge_path_failure_total', {
     cause,

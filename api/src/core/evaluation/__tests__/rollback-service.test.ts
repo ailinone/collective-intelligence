@@ -40,7 +40,7 @@ function makeDriftEvent(overrides: Partial<DriftEventInput> = {}): DriftEventInp
     scopeKey: 'debate|code-generation',
     severity: 'high',
     baselineValue: 0.85,
-    currentValue: 0.60,
+    currentValue: 0.6,
     deltaPercent: -29.4,
     evidence: { metric: 'quality', baselineSamples: 50, currentSamples: 20 },
     ...overrides,
@@ -69,7 +69,9 @@ describe('Rollback Service', () => {
     it('executes rollback for critical severity', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ count: BigInt(0) }]) // daily count
-        .mockResolvedValueOnce([{ task_type: 'code-generation', complexity: 'medium', weight: 1.0, avg_quality: 0.80 }]);
+        .mockResolvedValueOnce([
+          { task_type: 'code-generation', complexity: 'medium', weight: 1.0, avg_quality: 0.8 },
+        ]);
 
       const { processRollbacks } = await import('../rollback-service');
       const result = await processRollbacks([makeDriftEvent({ severity: 'critical' })]);
@@ -93,7 +95,9 @@ describe('Rollback Service', () => {
     it('respects daily rollback limit', async () => {
       // First drift event: daily count = 0 → executes
       mockQueryRaw
-        .mockResolvedValueOnce([{ task_type: 'code-generation', complexity: 'medium', weight: 1.0, avg_quality: 0.8 }])
+        .mockResolvedValueOnce([
+          { task_type: 'code-generation', complexity: 'medium', weight: 1.0, avg_quality: 0.8 },
+        ])
         .mockResolvedValueOnce([{ count: BigInt(0) }]);
 
       const { processRollbacks } = await import('../rollback-service');
@@ -106,7 +110,9 @@ describe('Rollback Service', () => {
       mockQueryRaw.mockResolvedValueOnce([{ count: BigInt(3) }]);
       mockExecuteRaw.mockReset();
 
-      const result2 = await processRollbacks([makeDriftEvent({ severity: 'high', scopeKey: 'test|scope1' })]);
+      const result2 = await processRollbacks([
+        makeDriftEvent({ severity: 'high', scopeKey: 'test|scope1' }),
+      ]);
       expect(result2.skipped).toBe(1);
       expect(result2.rollbacksExecuted).toBe(0);
     });
@@ -125,13 +131,15 @@ describe('Rollback Service', () => {
 
   describe('getRecentRollbacks', () => {
     it('returns mapped rollback events', async () => {
-      mockQueryRaw.mockResolvedValue([{
-        id: 'rb-1',
-        scope_key: 'debate|code-generation',
-        reason: 'Drift detected: quality degraded by -29.4%',
-        executed_at: new Date(),
-        validated_at: null,
-      }]);
+      mockQueryRaw.mockResolvedValue([
+        {
+          id: 'rb-1',
+          scope_key: 'debate|code-generation',
+          reason: 'Drift detected: quality degraded by -29.4%',
+          executed_at: new Date(),
+          validated_at: null,
+        },
+      ]);
 
       const { getRecentRollbacks } = await import('../rollback-service');
       const rollbacks = await getRecentRollbacks();

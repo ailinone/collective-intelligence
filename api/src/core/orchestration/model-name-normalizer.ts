@@ -166,7 +166,8 @@ export function compareModelIds(a: string, b: string): ModelMatchConfidence {
   if (!na || !nb) return 'no_match';
   // Version-aware: `3.2` and `3-2` refer to the same model version.
   const dotless = (s: string) => s.replace(/\./g, '-');
-  if (dotless(na) === dotless(nb)) return a.toLowerCase() === b.toLowerCase() ? 'exact' : 'normalized';
+  if (dotless(na) === dotless(nb))
+    return a.toLowerCase() === b.toLowerCase() ? 'exact' : 'normalized';
   // Strict-suffix alias relation: one core extends the other with a known
   // tag (e.g., `-vision`, `-vision-instruct`). The shorter must be a
   // hyphen-bounded prefix of the longer to qualify. We compare using
@@ -229,7 +230,19 @@ export function buildCatalogMatchPatterns(logicalModelId: string): readonly stri
   }
   // Single-vendor prefixed forms (no compound suffixes here — those are
   // covered by the `contains` query in the lookup adapter).
-  const COMMON_VENDORS = ['meta', 'meta-llama', 'google', 'amazon', 'aws', 'anthropic', 'openai', 'mistralai', 'microsoft', 'qwen', 'deepseek-ai'];
+  const COMMON_VENDORS = [
+    'meta',
+    'meta-llama',
+    'google',
+    'amazon',
+    'aws',
+    'anthropic',
+    'openai',
+    'mistralai',
+    'microsoft',
+    'qwen',
+    'deepseek-ai',
+  ];
   if (core) {
     for (const v of COMMON_VENDORS) {
       for (const c of expandVersions(core)) {

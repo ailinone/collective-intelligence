@@ -101,7 +101,8 @@ function toRegistryEntry(model: OwnModelInfo): OwnModelRegistryEntry {
     costPer1kOutput: 0.0003,
     maxOutputTokens: model.context_window,
     version: model.version,
-    status: model.status === 'ready' ? 'active' : model.status === 'loading' ? 'loading' : 'unavailable',
+    status:
+      model.status === 'ready' ? 'active' : model.status === 'loading' ? 'loading' : 'unavailable',
     metadata: {
       architecture: 'ailin-transformer',
       paramCount: '1.28B',

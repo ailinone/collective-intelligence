@@ -35,14 +35,14 @@ export interface EnsemblePlanValidationResult {
 
 export function validateEnsemblePlan(
   plan: EnsemblePlan,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): EnsemblePlanValidationResult {
   const errors: string[] = [];
 
   // 1. Routes/models length consistency.
   if (plan.selectedRouteIds.length !== plan.selectedModelIds.length) {
     errors.push(
-      `route_model_length_mismatch:${plan.selectedRouteIds.length}!=${plan.selectedModelIds.length}`,
+      `route_model_length_mismatch:${plan.selectedRouteIds.length}!=${plan.selectedModelIds.length}`
     );
   }
 
@@ -106,13 +106,12 @@ export function validateEnsemblePlan(
 
 function classifyPareto(
   plan: EnsemblePlan,
-  policy: CollectiveSelectionPolicy,
+  policy: CollectiveSelectionPolicy
 ): EnsembleParetoStatus | null {
   if (plan.strategyId === 'single_fallback') return 'single_fallback';
   const baselineJudge = plan.baselineJudge;
   const baselineCost = plan.baselineCostUsd;
-  const judgeOk =
-    plan.expectedJudge >= baselineJudge * policy.minExpectedJudgeRatioVsSingle;
+  const judgeOk = plan.expectedJudge >= baselineJudge * policy.minExpectedJudgeRatioVsSingle;
   const costOk = plan.expectedCostUsd <= baselineCost * policy.maxCostRatioVsSingle;
   if (judgeOk && costOk) return 'beats_baseline';
   if (judgeOk && !costOk) return 'cost_tradeoff';

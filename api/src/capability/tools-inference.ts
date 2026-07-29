@@ -43,10 +43,13 @@ const TOOL_CAPABILITY_TO_TOOL_NAME: ReadonlyArray<readonly [string, string]> = [
   ['mcp', 'mcp'],
 ];
 
-type LooseMetadata = {
-  tools?: unknown;
-  [key: string]: unknown;
-} | null | undefined;
+type LooseMetadata =
+  | {
+      tools?: unknown;
+      [key: string]: unknown;
+    }
+  | null
+  | undefined;
 
 /**
  * Returns the tool slugs for a model given its capabilities and (optional)
@@ -59,10 +62,7 @@ type LooseMetadata = {
  * the order in `capabilities`. Stable order makes diff-based change
  * detection in downstream consumers simpler.
  */
-export function inferTools(
-  capabilities: readonly string[],
-  metadata?: LooseMetadata,
-): string[] {
+export function inferTools(capabilities: readonly string[], metadata?: LooseMetadata): string[] {
   if (Array.isArray(metadata?.tools)) {
     return metadata.tools.filter((t): t is string => typeof t === 'string');
   }
@@ -89,7 +89,7 @@ export function inferTools(
  */
 export function withInferredTools<T extends Record<string, unknown>>(
   metadata: T,
-  capabilities: readonly string[],
+  capabilities: readonly string[]
 ): T & { tools: string[] } {
   if (Array.isArray(metadata.tools)) {
     return metadata as T & { tools: string[] };

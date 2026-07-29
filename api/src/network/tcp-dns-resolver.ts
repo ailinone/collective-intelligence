@@ -167,7 +167,10 @@ export class TcpDnsResolver {
   private timeoutMs: number;
   private tries: number;
   // Simple positive cache so we don't hammer 8.8.8.8 on every fetch.
-  private cache = new Map<string, { addresses: { address: string; family: 4 | 6 }[]; expiresAt: number }>();
+  private cache = new Map<
+    string,
+    { addresses: { address: string; family: 4 | 6 }[]; expiresAt: number }
+  >();
 
   constructor(cfg: TcpDnsConfig) {
     this.servers = cfg.servers;
@@ -192,7 +195,7 @@ export class TcpDnsResolver {
       for (const server of this.servers) {
         if (attempts >= this.tries) break;
         attempts += 1;
-        const id = (nextQueryId++) & 0xffff;
+        const id = nextQueryId++ & 0xffff;
         const packet = (() => {
           const q = encodeQuery(hostname, qtype, id);
           const len = Buffer.alloc(2);
@@ -224,13 +227,18 @@ export class TcpDnsResolver {
           }
         } catch (err) {
           lastErr = err instanceof Error ? err : new Error(String(err));
-          log.debug({ server, hostname, err: lastErr.message }, 'TCP DNS server failed; trying next');
+          log.debug(
+            { server, hostname, err: lastErr.message },
+            'TCP DNS server failed; trying next'
+          );
         }
       }
     }
 
     if (addresses.length === 0) {
-      const err = new Error(`TCP DNS: no addresses for ${hostname}${lastErr ? ` (${lastErr.message})` : ''}`);
+      const err = new Error(
+        `TCP DNS: no addresses for ${hostname}${lastErr ? ` (${lastErr.message})` : ''}`
+      );
       // Mark as ENOTFOUND so undici/clients treat it like a normal DNS failure
       (err as NodeJS.ErrnoException).code = 'ENOTFOUND';
       throw err;
@@ -257,22 +265,19 @@ export class TcpDnsResolver {
    *   fail with ENOTFOUND. The original Node dns.lookup is preserved
    *   under a Symbol so we can defer to it here.
    */
-  lookupCb = (
-    hostname: string,
-    optionsOrCallback: unknown,
-    maybeCallback?: unknown,
-  ): void => {
+  lookupCb = (hostname: string, optionsOrCallback: unknown, maybeCallback?: unknown): void => {
     // 1. IP literal — no DNS needed.
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) || hostname.includes(':')) {
       const family = hostname.includes(':') ? 6 : 4;
       const cb = (typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback) as (
         e: NodeJS.ErrnoException | null,
         a?: string | { address: string; family: 4 | 6 }[],
-        f?: number,
+        f?: number
       ) => void;
-      const opts = typeof optionsOrCallback === 'object' && optionsOrCallback !== null
-        ? optionsOrCallback as { all?: boolean }
-        : {};
+      const opts =
+        typeof optionsOrCallback === 'object' && optionsOrCallback !== null
+          ? (optionsOrCallback as { all?: boolean })
+          : {};
       if (opts.all) cb(null, [{ address: hostname, family }]);
       else cb(null, hostname, family);
       return;
@@ -282,13 +287,12 @@ export class TcpDnsResolver {
     //    embedded resolver. Without this fallback, localhost / redis /
     //    postgres / ci-api etc. would all hit TCP-DNS-to-8.8.8.8 and
     //    either NXDOMAIN or get the public-internet record (wrong).
-    const isLocalName = (
-      hostname === 'localhost'
-      || hostname === 'localhost.localdomain'
-      || /^[a-z0-9_-]+$/i.test(hostname) // single-label name (no dots)
-      || hostname.endsWith('.local')
-      || hostname.endsWith('.internal')
-    );
+    const isLocalName =
+      hostname === 'localhost' ||
+      hostname === 'localhost.localdomain' ||
+      /^[a-z0-9_-]+$/i.test(hostname) || // single-label name (no dots)
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal');
     if (isLocalName) {
       const ORIG = Symbol.for('ailin.network.original-dns-lookup');
       const dnsAny = narrowAs<{ [k: symbol]: unknown }>(dnsModule);
@@ -301,11 +305,12 @@ export class TcpDnsResolver {
     const cb = (typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback) as (
       err: NodeJS.ErrnoException | null,
       address?: string | { address: string; family: 4 | 6 }[],
-      family?: number,
+      family?: number
     ) => void;
-    const optsRaw = typeof optionsOrCallback === 'object' && optionsOrCallback !== null
-      ? optionsOrCallback as { family?: number | string; all?: boolean }
-      : {};
+    const optsRaw =
+      typeof optionsOrCallback === 'object' && optionsOrCallback !== null
+        ? (optionsOrCallback as { family?: number | string; all?: boolean })
+        : {};
 
     let wantFamily: 4 | 6 | undefined;
     if (optsRaw.family === 4 || optsRaw.family === 'IPv4') wantFamily = 4;
@@ -315,7 +320,9 @@ export class TcpDnsResolver {
       .then((addresses) => {
         const filtered = wantFamily ? addresses.filter((a) => a.family === wantFamily) : addresses;
         if (filtered.length === 0) {
-          const err = new Error(`No address (family=${optsRaw.family ?? 'any'})`) as NodeJS.ErrnoException;
+          const err = new Error(
+            `No address (family=${optsRaw.family ?? 'any'})`
+          ) as NodeJS.ErrnoException;
           err.code = 'ENOTFOUND';
           cb(err);
           return;

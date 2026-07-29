@@ -51,7 +51,7 @@ import { legacyArrayToUriArray } from '@/capability/legacy-capability-uri';
  */
 function calculateCapabilityConfidenceScore(
   confidence: Record<string, number> | undefined,
-  requiredCapabilities: readonly ModelCapability[] | undefined,
+  requiredCapabilities: readonly ModelCapability[] | undefined
 ): number {
   if (!requiredCapabilities || requiredCapabilities.length === 0) {
     return 1.0;
@@ -74,18 +74,12 @@ const URI = (slug: string) => `http://ailin.dev/cap/v1/${slug}`;
 describe('HCRA capability-confidence ranking', () => {
   describe('Invariant 1: neutral cases', () => {
     it('returns 1.0 when there are no required capabilities', () => {
-      const score = calculateCapabilityConfidenceScore(
-        { [URI('chat')]: 0.5 },
-        [],
-      );
+      const score = calculateCapabilityConfidenceScore({ [URI('chat')]: 0.5 }, []);
       expect(score).toBe(1.0);
     });
 
     it('returns 1.0 when requiredCapabilities is undefined', () => {
-      const score = calculateCapabilityConfidenceScore(
-        { [URI('chat')]: 0.5 },
-        undefined,
-      );
+      const score = calculateCapabilityConfidenceScore({ [URI('chat')]: 0.5 }, undefined);
       expect(score).toBe(1.0);
     });
 
@@ -100,7 +94,7 @@ describe('HCRA capability-confidence ranking', () => {
     it('returns ~1.0 when confidence is perfect across all required URIs', () => {
       const score = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 1.0, [URI('vision')]: 1.0 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       expect(score).toBeCloseTo(1.0, 5);
     });
@@ -110,11 +104,11 @@ describe('HCRA capability-confidence ranking', () => {
     it('ranks [0.6, 0.6] above [1.0, 0.1] despite equal arithmetic means', () => {
       const balanced = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 0.6, [URI('vision')]: 0.6 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       const skewed = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 1.0, [URI('vision')]: 0.1 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       // Both have arithmetic mean 0.55, but geometric mean of [0.6, 0.6]
       // is 0.6 vs sqrt(1.0 * 0.1) ≈ 0.316.
@@ -126,11 +120,11 @@ describe('HCRA capability-confidence ranking', () => {
     it('higher uniform confidence ranks strictly above lower uniform confidence', () => {
       const high = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 0.9, [URI('streaming')]: 0.9 },
-        ['chat', 'streaming'],
+        ['chat', 'streaming']
       );
       const low = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 0.4, [URI('streaming')]: 0.4 },
-        ['chat', 'streaming'],
+        ['chat', 'streaming']
       );
       expect(high).toBeGreaterThan(low);
     });
@@ -142,7 +136,7 @@ describe('HCRA capability-confidence ranking', () => {
       // confidently support a required capability should rank low.
       const partial = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 1.0, [URI('vision')]: 1.0 },
-        ['chat', 'vision', 'tool_use'],
+        ['chat', 'vision', 'tool_use']
       );
       expect(partial).toBeLessThan(0.3);
     });
@@ -152,7 +146,7 @@ describe('HCRA capability-confidence ranking', () => {
     it('missing URI in confidence map degrades smoothly, not to zero', () => {
       const score = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 1.0 },
-        ['chat', 'vision'], // vision is missing from confidence
+        ['chat', 'vision'] // vision is missing from confidence
       );
       // sqrt(1.0 * 0.01) = 0.1 — small but finite.
       expect(score).toBeCloseTo(0.1, 2);
@@ -163,7 +157,7 @@ describe('HCRA capability-confidence ranking', () => {
       const score = calculateCapabilityConfidenceScore(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { [URI('chat')]: 'high' as any, [URI('vision')]: 0.8 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       // chat clamps to 0.01, vision is 0.8 → sqrt(0.008) ≈ 0.0894.
       expect(score).toBeGreaterThan(0);
@@ -171,10 +165,10 @@ describe('HCRA capability-confidence ranking', () => {
     });
 
     it('out-of-range numeric values are clamped to [0.01, 1]', () => {
-      const score = calculateCapabilityConfidenceScore(
-        { [URI('chat')]: 5, [URI('vision')]: -1 },
-        ['chat', 'vision'],
-      );
+      const score = calculateCapabilityConfidenceScore({ [URI('chat')]: 5, [URI('vision')]: -1 }, [
+        'chat',
+        'vision',
+      ]);
       // chat clamps to 1, vision clamps to 0.01 → sqrt(0.01) = 0.1.
       expect(score).toBeCloseTo(0.1, 2);
     });
@@ -191,11 +185,11 @@ describe('HCRA capability-confidence ranking', () => {
     it('high-confidence model outranks low-confidence model with identical capabilities', () => {
       const highConfidence = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 0.95, [URI('vision')]: 0.92 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       const lowConfidence = calculateCapabilityConfidenceScore(
         { [URI('chat')]: 0.55, [URI('vision')]: 0.5 },
-        ['chat', 'vision'],
+        ['chat', 'vision']
       );
       expect(highConfidence).toBeGreaterThan(lowConfidence);
     });
@@ -207,19 +201,13 @@ describe('HCRA capability-confidence ranking', () => {
       // design: legacy rows are the proven default; HCRA is additive
       // and only useful when it surfaces strong positive evidence.
       const legacyNeutral = calculateCapabilityConfidenceScore(undefined, ['chat']);
-      const lowMigrated = calculateCapabilityConfidenceScore(
-        { [URI('chat')]: 0.4 },
-        ['chat'],
-      );
+      const lowMigrated = calculateCapabilityConfidenceScore({ [URI('chat')]: 0.4 }, ['chat']);
       expect(legacyNeutral).toBeGreaterThan(lowMigrated);
     });
 
     it('migrated row with strong confidence outranks legacy neutral', () => {
       const legacyNeutral = calculateCapabilityConfidenceScore(undefined, ['chat']);
-      const highMigrated = calculateCapabilityConfidenceScore(
-        { [URI('chat')]: 0.9 },
-        ['chat'],
-      );
+      const highMigrated = calculateCapabilityConfidenceScore({ [URI('chat')]: 0.9 }, ['chat']);
       expect(highMigrated).toBeGreaterThan(legacyNeutral);
     });
   });

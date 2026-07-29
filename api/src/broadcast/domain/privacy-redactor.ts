@@ -215,7 +215,7 @@ export function redactEnvelope(envelope: TraceEnvelope, policy: PrivacyPolicy): 
   // Marker attribute: downstream auditors can detect redacted envelopes.
   const applied = isRedactingAnything(policy);
   const markedCustom: CustomTraceMetadata = applied
-    ? (narrowAs<CustomTraceMetadata>({ ...custom, 'broadcast.privacy_mode_applied': true }))
+    ? narrowAs<CustomTraceMetadata>({ ...custom, 'broadcast.privacy_mode_applied': true })
     : custom;
 
   return {
@@ -238,13 +238,11 @@ export function redactEnvelope(envelope: TraceEnvelope, policy: PrivacyPolicy): 
  * If privacy_mode is OFF → PRIVACY_POLICY_PASSTHROUGH (but still strips multimodal, etc.).
  * If privacy_mode is ON  → PRIVACY_POLICY_SOTA + per-destination overrides.
  */
-export function buildDefaultPrivacyPolicy(
-  destination: {
-    privacyMode: boolean;
-    pseudonymizationKey?: Buffer;
-    customFieldOverrides?: Readonly<Record<string, FieldMode>>;
-  }
-): PrivacyPolicy {
+export function buildDefaultPrivacyPolicy(destination: {
+  privacyMode: boolean;
+  pseudonymizationKey?: Buffer;
+  customFieldOverrides?: Readonly<Record<string, FieldMode>>;
+}): PrivacyPolicy {
   if (!destination.privacyMode) {
     return { ...PRIVACY_POLICY_PASSTHROUGH, pseudonymizationKey: destination.pseudonymizationKey };
   }
@@ -344,9 +342,7 @@ function redactContent(content: Content, policy: PrivacyPolicy): Content {
       : content.messages.map((m) => ({ ...m, content: redactBody(m.content) })),
     choices: content.choices.map((c) => ({
       ...c,
-      message: passContent
-        ? c.message
-        : { ...c.message, content: redactBody(c.message.content) },
+      message: passContent ? c.message : { ...c.message, content: redactBody(c.message.content) },
       toolCalls: c.toolCalls?.map((tc) => ({
         ...tc,
         function: { ...tc.function, arguments: redactArgs(tc.function.arguments) },
@@ -372,14 +368,10 @@ function redactCustom(custom: CustomTraceMetadata, policy: PrivacyPolicy): Custo
       out[key] = applyMode(value, mode, policy, key);
     } else if (Array.isArray(value)) {
       out[key] =
-        mode === 'redact'
-          ? REDACTED_STRING
-          : applyMode(JSON.stringify(value), mode, policy, key);
+        mode === 'redact' ? REDACTED_STRING : applyMode(JSON.stringify(value), mode, policy, key);
     } else if (typeof value === 'object') {
       out[key] =
-        mode === 'redact'
-          ? REDACTED_STRING
-          : applyMode(JSON.stringify(value), mode, policy, key);
+        mode === 'redact' ? REDACTED_STRING : applyMode(JSON.stringify(value), mode, policy, key);
     } else {
       // number, boolean — low PII risk, but we respect the mode
       out[key] = mode === 'redact' ? REDACTED_STRING : applyMode(String(value), mode, policy, key);
@@ -423,7 +415,10 @@ function redactRouting(routing: Routing, policy: PrivacyPolicy): Routing {
   };
 }
 
-function redactStatus(status: TraceEnvelope['status'], policy: PrivacyPolicy): TraceEnvelope['status'] {
+function redactStatus(
+  status: TraceEnvelope['status'],
+  policy: PrivacyPolicy
+): TraceEnvelope['status'] {
   if (policy.errorMessageMode === 'pass' || !status.errorMessage) return status;
   const redacted =
     policy.errorMessageMode === 'redact'

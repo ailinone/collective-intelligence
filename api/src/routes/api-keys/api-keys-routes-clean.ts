@@ -130,7 +130,10 @@ export async function apiKeysRoutesClean(server: FastifyInstance): Promise<void>
         const command = new RotateApiKeyCommand({
           userId,
           apiKeyId: keyId,
-          reason: (typeof reason === 'string' && (reason === 'manual' || reason === 'auto-rotation' || reason === 'security') ? reason : 'manual') as 'manual' | 'auto-rotation' | 'security',
+          reason: (typeof reason === 'string' &&
+          (reason === 'manual' || reason === 'auto-rotation' || reason === 'security')
+            ? reason
+            : 'manual') as 'manual' | 'auto-rotation' | 'security',
         });
         const result = await rotateApiKeyHandler.execute(command);
 

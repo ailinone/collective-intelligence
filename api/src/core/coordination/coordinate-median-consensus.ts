@@ -73,9 +73,7 @@ function numericMedian(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 function medianAbsoluteDeviation(values: number[], median: number): number {
@@ -131,7 +129,7 @@ interface PerVariableSample {
 }
 
 function collectSamplesByVariable(
-  perAgentStates: PerAgentStateMap,
+  perAgentStates: PerAgentStateMap
 ): Map<string, PerVariableSample[]> {
   const map = new Map<string, PerVariableSample[]>();
   for (const [agentId, state] of perAgentStates) {
@@ -155,7 +153,7 @@ function collectSamplesByVariable(
  */
 export function coordinateMedianConsensus(
   perAgentStates: PerAgentStateMap,
-  options: CoordinateMedianOptions = {},
+  options: CoordinateMedianOptions = {}
 ): CoordinateMedianResult {
   const tolerance = Math.max(0, options.agreementTolerance ?? 1.0);
   const samples = collectSamplesByVariable(perAgentStates);
@@ -211,9 +209,7 @@ export function coordinateMedianConsensus(
     const matching = entries.filter((e) => e.key === modeKey);
     const agreement = perAgentSamples.length > 0 ? matching.length / perAgentSamples.length : 0;
     const confidence =
-      matching.length > 0
-        ? matching.reduce((acc, m) => acc + m.weight, 0) / matching.length
-        : 0;
+      matching.length > 0 ? matching.reduce((acc, m) => acc + m.weight, 0) / matching.length : 0;
     const updatedBy = Array.from(new Set(perAgentSamples.map((s) => s.agentId)));
     const value = matching.length > 0 ? matching[0].original : perAgentSamples[0].state.value;
 

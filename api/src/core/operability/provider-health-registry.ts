@@ -38,11 +38,7 @@ import {
   type ProviderHealthRecord,
   type ProviderHealthState,
 } from './types';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  setGauge,
-} from './metrics';
+import { METRIC_NAMES, incrementCounter, setGauge } from './metrics';
 import { getHealthSyncBus, type HealthSyncMessage } from './health-sync-bus';
 
 const log = logger.child({ component: 'provider-health-registry' });
@@ -112,15 +108,24 @@ class ProviderHealthRegistry {
       reason: input.reason,
       errorClass: input.errorClass,
       lastProbeAt: new Date(now).toISOString(),
-      lastSuccessAt: input.state === 'healthy' ? new Date(now).toISOString() : existing?.lastSuccessAt,
-      lastFailureAt: input.state !== 'healthy' && input.state !== 'probing'
-        ? new Date(now).toISOString()
-        : existing?.lastFailureAt,
+      lastSuccessAt:
+        input.state === 'healthy' ? new Date(now).toISOString() : existing?.lastSuccessAt,
+      lastFailureAt:
+        input.state !== 'healthy' && input.state !== 'probing'
+          ? new Date(now).toISOString()
+          : existing?.lastFailureAt,
       nextProbeAfter: new Date(now + ttlMs).toISOString(),
       ttlMs,
-      consecutiveFailures: input.state === 'healthy' ? 0 : (existing?.consecutiveFailures ?? 0) + (input.state === 'probing' ? 0 : 1),
-      consecutiveSuccesses: input.state === 'healthy' ? (existing?.consecutiveSuccesses ?? 0) + 1 : 0,
-      p50LatencyMs: input.latencyMs !== undefined ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.2) : existing?.p50LatencyMs,
+      consecutiveFailures:
+        input.state === 'healthy'
+          ? 0
+          : (existing?.consecutiveFailures ?? 0) + (input.state === 'probing' ? 0 : 1),
+      consecutiveSuccesses:
+        input.state === 'healthy' ? (existing?.consecutiveSuccesses ?? 0) + 1 : 0,
+      p50LatencyMs:
+        input.latencyMs !== undefined
+          ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.2)
+          : existing?.p50LatencyMs,
       p95LatencyMs: existing?.p95LatencyMs,
       p99LatencyMs: existing?.p99LatencyMs,
     };
@@ -157,9 +162,8 @@ class ProviderHealthRegistry {
       const consecutiveSuccesses = (existing?.consecutiveSuccesses ?? 0) + 1;
       // Recover from non-healthy states after 3 consecutive successes.
       const recovered = existing && existing.state !== 'healthy' && consecutiveSuccesses >= 3;
-      const newState: ProviderHealthState = recovered || !existing || existing.state === 'healthy'
-        ? 'healthy'
-        : existing.state;
+      const newState: ProviderHealthState =
+        recovered || !existing || existing.state === 'healthy' ? 'healthy' : existing.state;
       const ttlMs = STATE_TTL_MS[newState] ?? DEFAULT_TTL_MS;
       const record: ProviderHealthRecord = {
         ...input.key,
@@ -172,9 +176,10 @@ class ProviderHealthRegistry {
         ttlMs,
         consecutiveFailures: 0,
         consecutiveSuccesses,
-        p50LatencyMs: input.latencyMs !== undefined
-          ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.1)
-          : existing?.p50LatencyMs,
+        p50LatencyMs:
+          input.latencyMs !== undefined
+            ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.1)
+            : existing?.p50LatencyMs,
       };
       this.records.set(buildHealthKey(input.key), record);
       this.emitGauges(record);
@@ -203,9 +208,10 @@ class ProviderHealthRegistry {
       ttlMs,
       consecutiveFailures,
       consecutiveSuccesses: 0,
-      p50LatencyMs: input.latencyMs !== undefined
-        ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.1)
-        : existing?.p50LatencyMs,
+      p50LatencyMs:
+        input.latencyMs !== undefined
+          ? emaUpdate(existing?.p50LatencyMs, input.latencyMs, 0.1)
+          : existing?.p50LatencyMs,
     };
     this.records.set(buildHealthKey(input.key), record);
     this.emitGauges(record);
@@ -257,9 +263,8 @@ class ProviderHealthRegistry {
       const existing = this.records.get(buildHealthKey(msg.key));
       const consecutiveSuccesses = (existing?.consecutiveSuccesses ?? 0) + 1;
       const recovered = existing && existing.state !== 'healthy' && consecutiveSuccesses >= 3;
-      const newState: ProviderHealthState = recovered || !existing || existing.state === 'healthy'
-        ? 'healthy'
-        : existing.state;
+      const newState: ProviderHealthState =
+        recovered || !existing || existing.state === 'healthy' ? 'healthy' : existing.state;
       const ttlMs = STATE_TTL_MS[newState] ?? DEFAULT_TTL_MS;
       const record: ProviderHealthRecord = {
         ...msg.key,
@@ -330,17 +335,16 @@ class ProviderHealthRegistry {
 
   private emitGauges(record: ProviderHealthRecord): void {
     if (record.modelId) {
-      setGauge(
-        METRIC_NAMES.PROVIDER_MODEL_HEALTH_STATE,
-        STATE_NUMERIC[record.state],
-        { providerId: record.providerId, modelId: record.modelId, state: record.state },
-      );
+      setGauge(METRIC_NAMES.PROVIDER_MODEL_HEALTH_STATE, STATE_NUMERIC[record.state], {
+        providerId: record.providerId,
+        modelId: record.modelId,
+        state: record.state,
+      });
     } else {
-      setGauge(
-        METRIC_NAMES.PROVIDER_HEALTH_STATE,
-        STATE_NUMERIC[record.state],
-        { providerId: record.providerId, state: record.state },
-      );
+      setGauge(METRIC_NAMES.PROVIDER_HEALTH_STATE, STATE_NUMERIC[record.state], {
+        providerId: record.providerId,
+        state: record.state,
+      });
     }
   }
 }

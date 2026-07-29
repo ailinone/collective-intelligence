@@ -47,23 +47,66 @@ function makePlan(): ConsensusExecutionPlan {
   const m3 = makeModel('gamma-1', 'providerC');
   return {
     participants: [
-      { model: m1, providerId: 'providerA', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
-      { model: m2, providerId: 'providerB', taskFitScore: 0.8, selectionSource: 'dynamic' } as never,
-      { model: m3, providerId: 'providerC', taskFitScore: 0.85, selectionSource: 'dynamic' } as never,
+      {
+        model: m1,
+        providerId: 'providerA',
+        taskFitScore: 0.9,
+        selectionSource: 'dynamic',
+      } as never,
+      {
+        model: m2,
+        providerId: 'providerB',
+        taskFitScore: 0.8,
+        selectionSource: 'dynamic',
+      } as never,
+      {
+        model: m3,
+        providerId: 'providerC',
+        taskFitScore: 0.85,
+        selectionSource: 'dynamic',
+      } as never,
     ],
-    synthesizer: { model: m1, providerId: 'providerA', taskFitScore: 0.9, selectionSource: 'dynamic' } as never,
-    judge: { model: m2, providerId: 'providerB', taskFitScore: 0.8, selectionSource: 'dynamic' } as never,
-    fallbackSingle: { model: m3, providerId: 'providerC', taskFitScore: 0.85, selectionSource: 'dynamic' } as never,
+    synthesizer: {
+      model: m1,
+      providerId: 'providerA',
+      taskFitScore: 0.9,
+      selectionSource: 'dynamic',
+    } as never,
+    judge: {
+      model: m2,
+      providerId: 'providerB',
+      taskFitScore: 0.8,
+      selectionSource: 'dynamic',
+    } as never,
+    fallbackSingle: {
+      model: m3,
+      providerId: 'providerC',
+      taskFitScore: 0.85,
+      selectionSource: 'dynamic',
+    } as never,
     selectionSource: 'dynamic',
   } as ConsensusExecutionPlan;
 }
 
-function makePromptFingerprints(aggregate: string, includedInPlanFingerprint = true): PromptFingerprintsSnapshot {
+function makePromptFingerprints(
+  aggregate: string,
+  includedInPlanFingerprint = true
+): PromptFingerprintsSnapshot {
   return {
     aggregate,
     perRole: [
-      { role: 'participant', promptTemplateId: 'consensusVoter', promptVersion: 'v1', promptFingerprint: 'aaaa' },
-      { role: 'synthesizer', promptTemplateId: 'consensusSynthesizer', promptVersion: 'v1', promptFingerprint: 'bbbb' },
+      {
+        role: 'participant',
+        promptTemplateId: 'consensusVoter',
+        promptVersion: 'v1',
+        promptFingerprint: 'aaaa',
+      },
+      {
+        role: 'synthesizer',
+        promptTemplateId: 'consensusSynthesizer',
+        promptVersion: 'v1',
+        promptFingerprint: 'bbbb',
+      },
     ],
     includedInPlanFingerprint,
   };
@@ -133,13 +176,33 @@ describe('promptFingerprint inclusion in planFingerprint', () => {
     const pf2: PromptFingerprintsSnapshot = {
       aggregate: 'agg-same',
       perRole: [
-        { role: 'participant', promptTemplateId: 'consensusVoter', promptVersion: 'v2', promptFingerprint: 'AAAA' },
-        { role: 'synthesizer', promptTemplateId: 'consensusSynthesizer', promptVersion: 'v1', promptFingerprint: 'bbbb' },
+        {
+          role: 'participant',
+          promptTemplateId: 'consensusVoter',
+          promptVersion: 'v2',
+          promptFingerprint: 'AAAA',
+        },
+        {
+          role: 'synthesizer',
+          promptTemplateId: 'consensusSynthesizer',
+          promptVersion: 'v1',
+          promptFingerprint: 'bbbb',
+        },
       ],
       includedInPlanFingerprint: true,
     };
-    const f1 = computePlanFingerprint({ plan, strict: true, roleSpecificRetrieval: true, promptFingerprints: pf1 });
-    const f2 = computePlanFingerprint({ plan, strict: true, roleSpecificRetrieval: true, promptFingerprints: pf2 });
+    const f1 = computePlanFingerprint({
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
+      promptFingerprints: pf1,
+    });
+    const f2 = computePlanFingerprint({
+      plan,
+      strict: true,
+      roleSpecificRetrieval: true,
+      promptFingerprints: pf2,
+    });
     expect(f1.planFingerprint).not.toBe(f2.planFingerprint);
   });
 

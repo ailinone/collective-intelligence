@@ -9,7 +9,7 @@
 
 /**
  * Type Guards Utilities
- * 
+ *
  * Type-safe utilities for narrowing unknown types without using 'as any' or 'unknown as'
  * All type guards follow TypeScript best practices for type narrowing
  */
@@ -18,11 +18,7 @@
  * Type guard to check if a value is an Error object
  */
 export function isError(value: unknown): value is Error {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    value instanceof Error
-  );
+  return typeof value === 'object' && value !== null && value instanceof Error;
 }
 
 /**
@@ -32,11 +28,11 @@ export function isErrorLike(value: unknown): value is { message: string } {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
-  
+
   if (!('message' in value)) {
     return false;
   }
-  
+
   // Use Object.getOwnPropertyDescriptor to safely access property without type assertion
   const descriptor = Object.getOwnPropertyDescriptor(value, 'message');
   if (descriptor === undefined) {
@@ -79,11 +75,7 @@ export function isString(value: unknown): value is string {
  * Type guard to check if a value is an object (not null, not array)
  */
 export function isObject(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -94,10 +86,7 @@ export function hasProperty<T extends string>(
   obj: unknown,
   prop: T
 ): obj is Record<T, unknown> & Record<string, unknown> {
-  return (
-    isObject(obj) &&
-    prop in obj
-  );
+  return isObject(obj) && prop in obj;
 }
 
 /**
@@ -107,20 +96,20 @@ export function hasErrorWithCode(obj: unknown): obj is { error?: { code?: string
   if (!isObject(obj)) {
     return false;
   }
-  
+
   if (!('error' in obj)) {
     return false;
   }
-  
+
   const errorProp = obj.error;
   if (!isObject(errorProp)) {
     return false;
   }
-  
+
   if (!('code' in errorProp)) {
     return true; // error object without code is still valid
   }
-  
+
   const codeProp = errorProp.code;
   return typeof codeProp === 'string' || codeProp === undefined;
 }
@@ -175,15 +164,15 @@ export function getErrorMessage(value: unknown): string {
   if (isError(value)) {
     return value.message;
   }
-  
+
   if (isErrorLike(value)) {
     return value.message;
   }
-  
+
   if (typeof value === 'string') {
     return value;
   }
-  
+
   return 'An unknown error occurred';
 }
 
@@ -194,13 +183,13 @@ export function getErrorCode(value: unknown): string | undefined {
   if (isNodeError(value)) {
     return value.code;
   }
-  
+
   if (hasErrorWithCode(value) && value.error && isObject(value.error)) {
-    return 'code' in value.error && typeof value.error.code === 'string' 
-      ? value.error.code 
+    return 'code' in value.error && typeof value.error.code === 'string'
+      ? value.error.code
       : undefined;
   }
-  
+
   return undefined;
 }
 
@@ -216,7 +205,7 @@ export function isFastifyError(value: unknown): value is Error & {
   if (!isError(value)) {
     return false;
   }
-  
+
   // FastifyError extends Error and may carry `statusCode`, `code`, or
   // `validation` properties. Any of those further confirms the type, but
   // even an Error-only shape is acceptable because FastifyError's extras
@@ -239,7 +228,7 @@ export function extractFastifyErrorProperties(value: unknown): {
 } {
   const message = getErrorMessage(value);
   const code = getErrorCode(value);
-  
+
   let statusCode: number | undefined;
   if (isObject(value) && 'statusCode' in value) {
     const statusCodeValue = value.statusCode;
@@ -247,14 +236,14 @@ export function extractFastifyErrorProperties(value: unknown): {
       statusCode = statusCodeValue;
     }
   }
-  
+
   let validation: unknown;
   if (isObject(value) && 'validation' in value) {
     validation = value.validation;
   }
-  
+
   const stack = isError(value) ? value.stack : undefined;
-  
+
   return {
     message,
     statusCode,
@@ -315,7 +304,7 @@ export function extractErrorCodeFromObject(value: unknown): string | undefined {
   if (nodeErrorCode !== undefined) {
     return nodeErrorCode;
   }
-  
+
   // Then check if it's an object with a code property
   if (isObject(value) && 'code' in value) {
     const codeValue = value.code;
@@ -323,7 +312,7 @@ export function extractErrorCodeFromObject(value: unknown): string | undefined {
       return codeValue;
     }
   }
-  
+
   return undefined;
 }
 

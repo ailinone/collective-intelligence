@@ -50,9 +50,9 @@ const REQ = {
 };
 
 function getCRResult() {
-  return buildPlanOnlyResult(
-    'critique-repair', 'explicit', 'request-flag', REQ, CTX, null, 0.88, { registered: true },
-  );
+  return buildPlanOnlyResult('critique-repair', 'explicit', 'request-flag', REQ, CTX, null, 0.88, {
+    registered: true,
+  });
 }
 
 function getCRPlan() {
@@ -215,12 +215,12 @@ describe('01C.1B-SM-R6 FIX-003 — critique-repair semantic depth (3-step pipeli
   describe('dry-run invariants', () => {
     it('no providerCallExecuted in any step', () => {
       const steps = getCRPlan().steps;
-      expect(steps.every(s => s.providerCallExecuted === false)).toBe(true);
+      expect(steps.every((s) => s.providerCallExecuted === false)).toBe(true);
     });
 
     it('all actions carry the critique-repair/ prefix', () => {
-      const actions = getCRPlan().steps.map(s => s.action);
-      expect(actions.every(a => a.startsWith('critique-repair/'))).toBe(true);
+      const actions = getCRPlan().steps.map((s) => s.action);
+      expect(actions.every((a) => a.startsWith('critique-repair/'))).toBe(true);
     });
 
     it('totalCost is 0', () => {

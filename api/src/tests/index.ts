@@ -86,7 +86,11 @@ function fallbackTesterForCapability(capability: ModelCapability): CapabilityTes
   ) {
     return visionTest;
   }
-  if (capability.includes('audio') || capability.includes('speech') || capability === 'diarization') {
+  if (
+    capability.includes('audio') ||
+    capability.includes('speech') ||
+    capability === 'diarization'
+  ) {
     return speechToTextTest;
   }
   if (capability.includes('search') || capability === 'research') {

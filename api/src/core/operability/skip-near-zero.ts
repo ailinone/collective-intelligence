@@ -39,20 +39,9 @@
  *      record back to `healthy`.
  */
 
-import {
-  type HealthKey,
-  type ProviderHealthState,
-  type SkipDecision,
-} from './types';
-import {
-  getProviderHealthRegistry,
-  type ProviderHealthRegistry,
-} from './provider-health-registry';
-import {
-  METRIC_NAMES,
-  incrementCounter,
-  observeHistogram,
-} from './metrics';
+import { type HealthKey, type ProviderHealthState, type SkipDecision } from './types';
+import { getProviderHealthRegistry, type ProviderHealthRegistry } from './provider-health-registry';
+import { METRIC_NAMES, incrementCounter, observeHistogram } from './metrics';
 
 // ─── State classification ──────────────────────────────────────────────────
 
@@ -96,7 +85,7 @@ export interface ShouldSkipNearZeroOptions {
  */
 export function shouldSkipNearZero(
   key: HealthKey,
-  options: ShouldSkipNearZeroOptions = {},
+  options: ShouldSkipNearZeroOptions = {}
 ): SkipDecision {
   const t0 = performance.now();
   const registry = options.registry ?? getProviderHealthRegistry();

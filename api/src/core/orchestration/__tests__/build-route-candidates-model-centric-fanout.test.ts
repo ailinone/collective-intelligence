@@ -26,8 +26,14 @@ import { STRICT_DEFAULT_ROUTE_SELECTION_POLICY } from '@/core/orchestration/rout
 import type { ServingProviderEntry } from '@/core/orchestration/lookup-serving-providers';
 
 const defaultLookups = {
-  resolveApiModelId: (args: { providerId: string; logicalModelId: string; nativeProviderId: string }) =>
-    args.providerId === args.nativeProviderId ? args.logicalModelId : `${args.nativeProviderId}/${args.logicalModelId}`,
+  resolveApiModelId: (args: {
+    providerId: string;
+    logicalModelId: string;
+    nativeProviderId: string;
+  }) =>
+    args.providerId === args.nativeProviderId
+      ? args.logicalModelId
+      : `${args.nativeProviderId}/${args.logicalModelId}`,
   lookupLiveOperability: () => ({ chatReady: false }),
   lookupEconomics: () => ({}),
   lookupAuthHandle: () => 'env:TEST_KEY',
@@ -46,9 +52,30 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
     // Taxonomy would return only [routeway]. With servingProviders, we
     // expect catalog entries to add deepinfra, openrouter, huggingface, etc.
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'deepinfra', apiModelId: 'google/gemma-3-4b-it', source: 'model_catalog', confidence: 'normalized', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'openrouter', apiModelId: 'google/gemma-3-4b-it', source: 'model_catalog', confidence: 'normalized', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'aiml', apiModelId: 'gemma-3-4b-it', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'deepinfra',
+        apiModelId: 'google/gemma-3-4b-it',
+        source: 'model_catalog',
+        confidence: 'normalized',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'openrouter',
+        apiModelId: 'google/gemma-3-4b-it',
+        source: 'model_catalog',
+        confidence: 'normalized',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'aiml',
+        apiModelId: 'gemma-3-4b-it',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const result = buildRouteCandidatesForModel({
@@ -72,9 +99,30 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
     // The J1R fix made router-as-native return 1 candidate at minimum.
     // J1R2 expands this to ALL catalog rows for the same logical model.
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'deepinfra', apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct', source: 'model_catalog', confidence: 'alias', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'openrouter', apiModelId: 'meta-llama/llama-3.2-11b-vision-instruct', source: 'model_catalog', confidence: 'alias', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'nvidia', apiModelId: 'meta/llama-3.2-11b-vision-instruct', source: 'model_catalog', confidence: 'alias', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'deepinfra',
+        apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        source: 'model_catalog',
+        confidence: 'alias',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'openrouter',
+        apiModelId: 'meta-llama/llama-3.2-11b-vision-instruct',
+        source: 'model_catalog',
+        confidence: 'alias',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'nvidia',
+        apiModelId: 'meta/llama-3.2-11b-vision-instruct',
+        source: 'model_catalog',
+        confidence: 'alias',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const result = buildRouteCandidatesForModel({
@@ -97,8 +145,22 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
     // entry for the same provider+model should produce ONE final route.
     const servingProviders: ServingProviderEntry[] = [
       // Same providerId as the taxonomy self-route — should dedup.
-      { providerId: 'vercel-ai-gateway', apiModelId: 'meta/llama-3.2-11b', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'deepinfra', apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct', source: 'model_catalog', confidence: 'alias', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'vercel-ai-gateway',
+        apiModelId: 'meta/llama-3.2-11b',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'deepinfra',
+        apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        source: 'model_catalog',
+        confidence: 'alias',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const result = buildRouteCandidatesForModel({
@@ -121,7 +183,14 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
 
   it('catalog-sourced routes are tagged source=catalog_binding', () => {
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'deepinfra', apiModelId: 'google/gemma-3-4b-it', source: 'model_catalog', confidence: 'normalized', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'deepinfra',
+        apiModelId: 'google/gemma-3-4b-it',
+        source: 'model_catalog',
+        confidence: 'normalized',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const result = buildRouteCandidatesForModel({
@@ -147,7 +216,14 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
     // The default resolver would produce `vercel-ai-gateway/meta/llama-3.2-11b`
     // (wrong for deepinfra). The builder must trust the catalog.
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'deepinfra', apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct', source: 'model_catalog', confidence: 'alias', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'deepinfra',
+        apiModelId: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        source: 'model_catalog',
+        confidence: 'alias',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
 
     const result = buildRouteCandidatesForModel({
@@ -182,10 +258,38 @@ describe('01C.1B-J1R2 — model-centric multi-provider fanout', () => {
 
   it('approvedForExecution is non-empty when approved is non-empty', () => {
     const servingProviders: ServingProviderEntry[] = [
-      { providerId: 'p1', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p2', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p3', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
-      { providerId: 'p4', apiModelId: 'm', source: 'model_catalog', confidence: 'exact', capabilities: ['chat'], chatCapable: true },
+      {
+        providerId: 'p1',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p2',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p3',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
+      {
+        providerId: 'p4',
+        apiModelId: 'm',
+        source: 'model_catalog',
+        confidence: 'exact',
+        capabilities: ['chat'],
+        chatCapable: true,
+      },
     ];
     const result = buildRouteCandidatesForModel({
       role: 'judge',

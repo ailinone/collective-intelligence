@@ -140,9 +140,7 @@ export class ProjectEntity {
       );
     }
     if (props.description && props.description.length > DESCRIPTION_MAX_LENGTH) {
-      throw new Error(
-        `Project description cannot exceed ${DESCRIPTION_MAX_LENGTH} characters`
-      );
+      throw new Error(`Project description cannot exceed ${DESCRIPTION_MAX_LENGTH} characters`);
     }
   }
 
@@ -171,9 +169,7 @@ export class ProjectEntity {
     } else {
       const trimmed = newDescription.trim();
       if (trimmed.length > DESCRIPTION_MAX_LENGTH) {
-        throw new Error(
-          `Project description cannot exceed ${DESCRIPTION_MAX_LENGTH} characters`
-        );
+        throw new Error(`Project description cannot exceed ${DESCRIPTION_MAX_LENGTH} characters`);
       }
       this.props.description = trimmed || null;
     }

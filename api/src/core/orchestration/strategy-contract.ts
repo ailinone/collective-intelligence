@@ -7,11 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import type {
-  CanonicalStrategyName,
-  ExecutionStrategyName,
-  StrategyInputName,
-} from '@/types';
+import type { CanonicalStrategyName, ExecutionStrategyName, StrategyInputName } from '@/types';
 
 export const STRATEGY_INPUT_VALUES: readonly StrategyInputName[] = [
   'single',
@@ -99,16 +95,16 @@ const aliasToCanonical: Record<string, CanonicalStrategyName> = {
   'stigmergic-refinement': 'stigmergic-refinement',
   'swarm-explore': 'swarm-explore',
   'clarification-first': 'clarification-first',
-  'clarify': 'clarification-first',
+  clarify: 'clarification-first',
   'research-synthesize': 'research-synthesize',
-  'research': 'research-synthesize',
+  research: 'research-synthesize',
   'critique-repair': 'critique-repair',
   'double-diamond': 'double-diamond',
   'multi-hop-qa': 'multi-hop-qa',
   'multi-hop': 'multi-hop-qa',
   'persona-exploration': 'persona-exploration',
-  'personas': 'persona-exploration',
-  'agentic': 'agentic',
+  personas: 'persona-exploration',
+  agentic: 'agentic',
   fast: 'sensitivity-consensus',
   dynamic: 'dynamic',
   auto: 'dynamic',
@@ -148,8 +144,8 @@ const canonicalToExecution: Record<CanonicalStrategyName, ExecutionStrategyName>
   'double-diamond': 'double-diamond',
   'multi-hop-qa': 'multi-hop-qa',
   'persona-exploration': 'persona-exploration',
-  'agentic': 'agentic',
-  'compositor': 'compositor',
+  agentic: 'agentic',
+  compositor: 'compositor',
   'sensitivity-consensus': 'sensitivity-consensus',
   'tri-role-collective': 'tri-role-collective',
   dynamic: 'auto',
@@ -185,8 +181,8 @@ const executionToCanonical: Record<ExecutionStrategyName, CanonicalStrategyName>
   'double-diamond': 'double-diamond',
   'multi-hop-qa': 'multi-hop-qa',
   'persona-exploration': 'persona-exploration',
-  'agentic': 'agentic',
-  'compositor': 'compositor',
+  agentic: 'agentic',
+  compositor: 'compositor',
   'sensitivity-consensus': 'sensitivity-consensus',
   'tri-role-collective': 'tri-role-collective',
   cached: 'dynamic',
@@ -233,4 +229,3 @@ export function mapExecutionToCanonical(
 export function getStrategyValidationMessage(): string {
   return `Invalid strategy. Allowed values: ${STRATEGY_INPUT_VALUES.join(', ')}`;
 }
-

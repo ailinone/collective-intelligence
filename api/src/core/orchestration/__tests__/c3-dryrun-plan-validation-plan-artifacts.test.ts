@@ -45,13 +45,19 @@ describe('01C.1B-C3-DRYRUN-PLAN-VALIDATION — plan artifacts', () => {
     });
 
     it('isC3PlaceholderModel is precise (catalog placeholders only, not probe-validated sentinels)', () => {
-      expect(isC3PlaceholderModel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')).toBe(false);
+      expect(isC3PlaceholderModel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')).toBe(
+        false
+      );
     });
 
     it('isC3NonResolvableSentinel covers BOTH sentinel forms (runtime-gate safety predicate)', () => {
       expect(isC3NonResolvableSentinel('__C3_DRYRUN_DESIGN_PLACEHOLDER_MODEL_groq_1__')).toBe(true);
-      expect(isC3NonResolvableSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')).toBe(true);
-      expect(isC3NonResolvableSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_infermatic__')).toBe(true);
+      expect(isC3NonResolvableSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_inworld__')).toBe(
+        true
+      );
+      expect(
+        isC3NonResolvableSentinel('__C3_DRYRUN_DESIGN_MODEL_PROBE_VALIDATED_infermatic__')
+      ).toBe(true);
       // The one genuinely resolvable model id must NOT be flagged
       expect(isC3NonResolvableSentinel('Qwen/Qwen2.5-7B-Instruct')).toBe(false);
     });

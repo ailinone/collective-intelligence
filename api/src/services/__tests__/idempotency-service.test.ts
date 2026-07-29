@@ -110,9 +110,7 @@ describe('computeRequestHash', () => {
 describe('buildIdempotencyRedisKey', () => {
   it('scopes the key by tenant', () => {
     expect(buildIdempotencyRedisKey('org-A', 'k')).toBe('idem:org-A:k');
-    expect(buildIdempotencyRedisKey('org-B', 'k')).not.toBe(
-      buildIdempotencyRedisKey('org-A', 'k')
-    );
+    expect(buildIdempotencyRedisKey('org-B', 'k')).not.toBe(buildIdempotencyRedisKey('org-A', 'k'));
   });
 
   it('throws when organizationId is empty (no shared bucket collapse)', () => {

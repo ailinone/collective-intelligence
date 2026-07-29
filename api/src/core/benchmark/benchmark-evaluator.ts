@@ -23,10 +23,7 @@
  */
 
 import { logger } from '@/utils/logger';
-import {
-  recordBenchmarkRun,
-  recordBenchmarkTask,
-} from '@/observability/ci-metrics';
+import { recordBenchmarkRun, recordBenchmarkTask } from '@/observability/ci-metrics';
 import type {
   BenchmarkTask,
   BenchmarkExecutionResult,
@@ -49,8 +46,9 @@ export function loadBenchmarkConfig(): BenchmarkConfig {
   return {
     enabled: process.env.CI_BENCHMARK_HARNESS_ENABLED !== 'false',
     cronSchedule: process.env.CI_BENCHMARK_HARNESS_CRON || '0 4 * * *',
-    apiBase: process.env.BOOTSTRAP_API_BASE
-      ?? (process.env.EVAL_API_BASE_URL
+    apiBase:
+      process.env.BOOTSTRAP_API_BASE ??
+      (process.env.EVAL_API_BASE_URL
         ? `${process.env.EVAL_API_BASE_URL}/v1/chat/completions`
         : 'http://localhost:3000/v1/chat/completions'),
     bearerToken: process.env.BOOTSTRAP_BEARER_TOKEN ?? process.env.EVAL_BEARER_TOKEN ?? '',
@@ -77,10 +75,7 @@ export class BenchmarkEvaluator {
   /**
    * Execute a full benchmark run
    */
-  async executeRun(
-    tasks: BenchmarkTask[],
-    previousRun?: BenchmarkRun
-  ): Promise<BenchmarkRun> {
+  async executeRun(tasks: BenchmarkTask[], previousRun?: BenchmarkRun): Promise<BenchmarkRun> {
     const runId = `bench-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const startedAt = new Date().toISOString();
     this.totalCostAccumulated = 0;
@@ -92,8 +87,10 @@ export class BenchmarkEvaluator {
     for (const task of tasks) {
       // Budget guard
       if (this.totalCostAccumulated >= this.config.maxBudgetPerRun) {
-        log.warn({ accumulated: this.totalCostAccumulated, budget: this.config.maxBudgetPerRun },
-          'Budget limit reached — stopping benchmark run');
+        log.warn(
+          { accumulated: this.totalCostAccumulated, budget: this.config.maxBudgetPerRun },
+          'Budget limit reached — stopping benchmark run'
+        );
         break;
       }
 
@@ -137,14 +134,17 @@ export class BenchmarkEvaluator {
       trend,
     };
 
-    log.info({
-      runId,
-      overallScore: overallScore.toFixed(3),
-      totalCost: this.totalCostAccumulated.toFixed(4),
-      resultsCount: results.length,
-      driftDetected: rewardIntegrity?.driftDetected,
-      trend: trend?.verdict,
-    }, 'Benchmark run completed');
+    log.info(
+      {
+        runId,
+        overallScore: overallScore.toFixed(3),
+        totalCost: this.totalCostAccumulated.toFixed(4),
+        resultsCount: results.length,
+        driftDetected: rewardIntegrity?.driftDetected,
+        trend: trend?.verdict,
+      },
+      'Benchmark run completed'
+    );
 
     // ─── Emit Prometheus metrics ──────────────────────────────────────────────
     try {
@@ -153,13 +153,13 @@ export class BenchmarkEvaluator {
         overallScore,
         durationMs: run.durationMs,
         totalCostUsd: run.totalCostUsd,
-        categoryScores: categoryScores.map(cs => ({
+        categoryScores: categoryScores.map((cs) => ({
           category: cs.category,
           averageScore: cs.avgQuality,
         })),
         rewardCorrelation: rewardIntegrity?.correlation,
         driftDetected: rewardIntegrity?.driftDetected,
-        gamingSignals: rewardIntegrity?.gamingSignals?.map(gs => ({
+        gamingSignals: rewardIntegrity?.gamingSignals?.map((gs) => ({
           type: gs.type,
           severity: gs.severity,
         })),
@@ -170,10 +170,17 @@ export class BenchmarkEvaluator {
         if (!result.success) continue;
         const prefix = result.taskId.split('-')[0];
         const catMap: Record<string, string> = {
-          'cg': 'coding-generate', 'ce': 'coding-edit', 'cd': 'coding-debug',
-          'cr': 'coding-review', 'at': 'analysis-technical', 'ad': 'analysis-data',
-          'ax': 'analysis-text', 'fq': 'factual-qa', 'cv': 'creative',
-          'ms': 'multi-step', 'rs': 'reasoning',
+          cg: 'coding-generate',
+          ce: 'coding-edit',
+          cd: 'coding-debug',
+          cr: 'coding-review',
+          at: 'analysis-technical',
+          ad: 'analysis-data',
+          ax: 'analysis-text',
+          fq: 'factual-qa',
+          cv: 'creative',
+          ms: 'multi-step',
+          rs: 'reasoning',
         };
         recordBenchmarkTask({
           category: catMap[prefix] ?? 'unknown',
@@ -223,7 +230,7 @@ export class BenchmarkEvaluator {
       });
 
       const durationMs = Date.now() - startMs;
-      const json = await resp.json() as {
+      const json = (await resp.json()) as {
         error?: { message: string };
         choices?: Array<{ message?: { content?: string } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
@@ -231,7 +238,12 @@ export class BenchmarkEvaluator {
       };
 
       if (json.error || !resp.ok) {
-        return this.failedResult(task, strategy, durationMs, json.error?.message ?? `HTTP ${resp.status}`);
+        return this.failedResult(
+          task,
+          strategy,
+          durationMs,
+          json.error?.message ?? `HTTP ${resp.status}`
+        );
       }
 
       const content = json.choices?.[0]?.message?.content ?? '';
@@ -257,23 +269,32 @@ export class BenchmarkEvaluator {
         success: true,
         durationMs,
         costUsd,
-        tokenUsage: json.usage ? {
-          prompt: json.usage.prompt_tokens ?? 0,
-          completion: json.usage.completion_tokens ?? 0,
-          total: json.usage.total_tokens ?? 0,
-        } : undefined,
+        tokenUsage: json.usage
+          ? {
+              prompt: json.usage.prompt_tokens ?? 0,
+              completion: json.usage.completion_tokens ?? 0,
+              total: json.usage.total_tokens ?? 0,
+            }
+          : undefined,
         timestamp: new Date().toISOString(),
       };
     } catch (err) {
-      return this.failedResult(task, strategy, Date.now() - startMs,
-        err instanceof Error ? err.message : String(err));
+      return this.failedResult(
+        task,
+        strategy,
+        Date.now() - startMs,
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 
   /**
    * Evaluate a response using the task's specified method
    */
-  private async evaluateResponse(task: BenchmarkTask, content: string): Promise<{
+  private async evaluateResponse(
+    task: BenchmarkTask,
+    content: string
+  ): Promise<{
     heuristicScore: number;
     llmJudgeScore?: number;
     dimensions?: BenchmarkExecutionResult['dimensions'];
@@ -304,7 +325,10 @@ export class BenchmarkEvaluator {
   /**
    * Pattern match evaluation — exact or regex match
    */
-  private evaluatePatternMatch(task: BenchmarkTask, content: string): {
+  private evaluatePatternMatch(
+    task: BenchmarkTask,
+    content: string
+  ): {
     heuristicScore: number;
   } {
     if (!task.expectedPattern) return { heuristicScore: 0 };
@@ -318,7 +342,10 @@ export class BenchmarkEvaluator {
    * Rubric checklist evaluation — LLM checks specific items
    * This is the most reproducible LLM-based evaluation method.
    */
-  private async evaluateChecklist(task: BenchmarkTask, content: string): Promise<{
+  private async evaluateChecklist(
+    task: BenchmarkTask,
+    content: string
+  ): Promise<{
     heuristicScore: number;
     llmJudgeScore: number;
     checklistResults: ChecklistResult[];
@@ -328,9 +355,7 @@ export class BenchmarkEvaluator {
     }
 
     // Build checklist prompt
-    const itemsList = task.checklistItems
-      .map((item, i) => `${i + 1}. ${item}`)
-      .join('\n');
+    const itemsList = task.checklistItems.map((item, i) => `${i + 1}. ${item}`).join('\n');
 
     const checkPrompt = `You are evaluating an AI response against a specific checklist.
 
@@ -368,7 +393,7 @@ Respond ONLY with JSON in this exact format:
         }),
       });
 
-      const json = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const judgeContent = json.choices?.[0]?.message?.content ?? '';
 
       const parsed = this.parseJSONFromContent(judgeContent) as {
@@ -380,7 +405,7 @@ Respond ONLY with JSON in this exact format:
       }
 
       const checklistResults: ChecklistResult[] = task.checklistItems.map((item, i) => {
-        const result = parsed.items?.find(r => r.index === i + 1);
+        const result = parsed.items?.find((r) => r.index === i + 1);
         return {
           item,
           passed: result?.passed ?? false,
@@ -388,7 +413,7 @@ Respond ONLY with JSON in this exact format:
         };
       });
 
-      const passedCount = checklistResults.filter(r => r.passed).length;
+      const passedCount = checklistResults.filter((r) => r.passed).length;
       const score = passedCount / checklistResults.length;
 
       return {
@@ -405,7 +430,10 @@ Respond ONLY with JSON in this exact format:
   /**
    * Open LLM judge evaluation — for creative/subjective tasks
    */
-  private async evaluateLLMJudge(task: BenchmarkTask, content: string): Promise<{
+  private async evaluateLLMJudge(
+    task: BenchmarkTask,
+    content: string
+  ): Promise<{
     heuristicScore: number;
     llmJudgeScore: number;
     dimensions: BenchmarkExecutionResult['dimensions'];
@@ -428,7 +456,7 @@ Respond ONLY with JSON in this exact format:
         }),
       });
 
-      const json = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const judgeContent = json.choices?.[0]?.message?.content ?? '';
 
       const parsed = this.parseJSONFromContent(judgeContent) as {
@@ -456,7 +484,13 @@ Respond ONLY with JSON in this exact format:
       return {
         heuristicScore: 0.5,
         llmJudgeScore: 0.5,
-        dimensions: { correctness: 0.5, completeness: 0.5, clarity: 0.5, efficiency: 0.5, relevance: 0.5 },
+        dimensions: {
+          correctness: 0.5,
+          completeness: 0.5,
+          clarity: 0.5,
+          efficiency: 0.5,
+          relevance: 0.5,
+        },
       };
     }
   }
@@ -464,7 +498,10 @@ Respond ONLY with JSON in this exact format:
   /**
    * Diff format compliance evaluation — for coding edit tasks
    */
-  private evaluateDiffFormat(task: BenchmarkTask, content: string): {
+  private evaluateDiffFormat(
+    task: BenchmarkTask,
+    content: string
+  ): {
     heuristicScore: number;
     diffFormatCompliance: number;
   } {
@@ -487,7 +524,10 @@ Respond ONLY with JSON in this exact format:
   /**
    * Composite evaluation — combines diff-format + checklist
    */
-  private async evaluateComposite(task: BenchmarkTask, content: string): Promise<{
+  private async evaluateComposite(
+    task: BenchmarkTask,
+    content: string
+  ): Promise<{
     heuristicScore: number;
     llmJudgeScore?: number;
     checklistResults?: ChecklistResult[];
@@ -518,7 +558,7 @@ Respond ONLY with JSON in this exact format:
   ): Promise<RewardIntegrityResult> {
     // Select results that have BOTH heuristic and LLM judge scores
     const crossValidatable = results.filter(
-      r => r.success && r.heuristicScore !== undefined && r.llmJudgeScore !== undefined
+      (r) => r.success && r.heuristicScore !== undefined && r.llmJudgeScore !== undefined
     );
 
     if (crossValidatable.length < 5) {
@@ -533,18 +573,20 @@ Respond ONLY with JSON in this exact format:
     }
 
     // Calculate Pearson correlation
-    const hScores = crossValidatable.map(r => r.heuristicScore);
-    const jScores = crossValidatable.map(r => r.llmJudgeScore!);
+    const hScores = crossValidatable.map((r) => r.heuristicScore);
+    const jScores = crossValidatable.map((r) => r.llmJudgeScore!);
     const correlation = this.pearsonCorrelation(hScores, jScores);
 
     // Calculate mean absolute difference
-    const diffs = crossValidatable.map(r => Math.abs(r.heuristicScore - (r.llmJudgeScore ?? r.heuristicScore)));
+    const diffs = crossValidatable.map((r) =>
+      Math.abs(r.heuristicScore - (r.llmJudgeScore ?? r.heuristicScore))
+    );
     const meanAbsoluteDiff = diffs.reduce((s, d) => s + d, 0) / diffs.length;
 
     // Find divergent tasks (diff > 0.3)
     const divergentTasks = crossValidatable
-      .filter(r => Math.abs(r.heuristicScore - (r.llmJudgeScore ?? r.heuristicScore)) > 0.3)
-      .map(r => ({
+      .filter((r) => Math.abs(r.heuristicScore - (r.llmJudgeScore ?? r.heuristicScore)) > 0.3)
+      .map((r) => ({
         taskId: r.taskId,
         heuristicScore: r.heuristicScore,
         llmJudgeScore: r.llmJudgeScore!,
@@ -557,12 +599,15 @@ Respond ONLY with JSON in this exact format:
     const driftDetected = correlation < this.config.driftCorrelationThreshold;
 
     if (driftDetected) {
-      log.error({
-        correlation: correlation.toFixed(3),
-        threshold: this.config.driftCorrelationThreshold,
-        divergentCount: divergentTasks.length,
-        gamingSignalCount: gamingSignals.length,
-      }, 'REWARD INTEGRITY DRIFT DETECTED — heuristic scores diverge from LLM judge');
+      log.error(
+        {
+          correlation: correlation.toFixed(3),
+          threshold: this.config.driftCorrelationThreshold,
+          divergentCount: divergentTasks.length,
+          gamingSignalCount: gamingSignals.length,
+        },
+        'REWARD INTEGRITY DRIFT DETECTED — heuristic scores diverge from LLM judge'
+      );
     }
 
     return {
@@ -596,19 +641,20 @@ Respond ONLY with JSON in this exact format:
       }
 
       // Repetitive padding: same phrases repeated
-      const sentences = content.split(/[.!?\n]/).filter(s => s.trim().length > 20);
-      const uniqueSentences = new Set(sentences.map(s => s.trim().toLowerCase()));
+      const sentences = content.split(/[.!?\n]/).filter((s) => s.trim().length > 20);
+      const uniqueSentences = new Set(sentences.map((s) => s.trim().toLowerCase()));
       if (sentences.length > 5 && uniqueSentences.size < sentences.length * 0.6) {
         signals.push({
           type: 'repetitive-padding',
           taskId: result.taskId,
-          evidence: `${sentences.length} sentences but only ${uniqueSentences.size} unique (${(uniqueSentences.size / sentences.length * 100).toFixed(0)}%)`,
+          evidence: `${sentences.length} sentences but only ${uniqueSentences.size} unique (${((uniqueSentences.size / sentences.length) * 100).toFixed(0)}%)`,
           severity: 'medium',
         });
       }
 
       // Keyword stuffing: excessive use of scoring-trigger keywords
-      const keywordPattern = /\b(correct|comprehensive|complete|accurate|efficient|relevant|clear|robust|secure|optimal)\b/gi;
+      const keywordPattern =
+        /\b(correct|comprehensive|complete|accurate|efficient|relevant|clear|robust|secure|optimal)\b/gi;
       const keywordMatches = content.match(keywordPattern);
       if (keywordMatches && keywordMatches.length > 15) {
         signals.push({
@@ -626,7 +672,7 @@ Respond ONLY with JSON in this exact format:
         signals.push({
           type: 'format-without-substance',
           taskId: result.taskId,
-          evidence: `${(formattingChars / totalChars * 100).toFixed(1)}% formatting characters`,
+          evidence: `${((formattingChars / totalChars) * 100).toFixed(1)}% formatting characters`,
           severity: 'low',
         });
       }
@@ -643,10 +689,17 @@ Respond ONLY with JSON in this exact format:
       const _category = r.taskId.split('-').slice(0, 2).join('-') as string;
       // Map task ID prefix to category
       const categoryMap: Record<string, BenchmarkCategory> = {
-        'cg': 'coding-generate', 'ce': 'coding-edit', 'cd': 'coding-debug',
-        'cr': 'coding-review', 'at': 'analysis-technical', 'ad': 'analysis-data',
-        'ax': 'analysis-text', 'fq': 'factual-qa', 'cv': 'creative',
-        'ms': 'multi-step', 'rs': 'reasoning',
+        cg: 'coding-generate',
+        ce: 'coding-edit',
+        cd: 'coding-debug',
+        cr: 'coding-review',
+        at: 'analysis-technical',
+        ad: 'analysis-data',
+        ax: 'analysis-text',
+        fq: 'factual-qa',
+        cv: 'creative',
+        ms: 'multi-step',
+        rs: 'reasoning',
       };
       const prefix = r.taskId.split('-')[0];
       const cat = categoryMap[prefix] ?? 'coding-generate';
@@ -657,10 +710,12 @@ Respond ONLY with JSON in this exact format:
 
     return [...byCategory.entries()].map(([category, categoryResults]) => ({
       category: category as BenchmarkCategory,
-      avgQuality: this.avg(categoryResults.filter(r => r.success).map(r => r.llmJudgeScore ?? r.heuristicScore)),
-      avgLatencyMs: this.avg(categoryResults.map(r => r.durationMs)),
-      avgCostUsd: this.avg(categoryResults.map(r => r.costUsd)),
-      successRate: categoryResults.filter(r => r.success).length / categoryResults.length,
+      avgQuality: this.avg(
+        categoryResults.filter((r) => r.success).map((r) => r.llmJudgeScore ?? r.heuristicScore)
+      ),
+      avgLatencyMs: this.avg(categoryResults.map((r) => r.durationMs)),
+      avgCostUsd: this.avg(categoryResults.map((r) => r.costUsd)),
+      successRate: categoryResults.filter((r) => r.success).length / categoryResults.length,
       taskCount: categoryResults.length,
     }));
   }
@@ -675,18 +730,20 @@ Respond ONLY with JSON in this exact format:
 
     return [...byStrategy.entries()].map(([strategy, stratResults]) => ({
       strategy,
-      avgQuality: this.avg(stratResults.filter(r => r.success).map(r => r.llmJudgeScore ?? r.heuristicScore)),
-      avgLatencyMs: this.avg(stratResults.map(r => r.durationMs)),
-      avgCostUsd: this.avg(stratResults.map(r => r.costUsd)),
-      successRate: stratResults.filter(r => r.success).length / stratResults.length,
+      avgQuality: this.avg(
+        stratResults.filter((r) => r.success).map((r) => r.llmJudgeScore ?? r.heuristicScore)
+      ),
+      avgLatencyMs: this.avg(stratResults.map((r) => r.durationMs)),
+      avgCostUsd: this.avg(stratResults.map((r) => r.costUsd)),
+      successRate: stratResults.filter((r) => r.success).length / stratResults.length,
       taskCount: stratResults.length,
     }));
   }
 
   private calculateOverallScore(results: BenchmarkExecutionResult[]): number {
-    const successful = results.filter(r => r.success);
+    const successful = results.filter((r) => r.success);
     if (successful.length === 0) return 0;
-    return this.avg(successful.map(r => r.llmJudgeScore ?? r.heuristicScore));
+    return this.avg(successful.map((r) => r.llmJudgeScore ?? r.heuristicScore));
   }
 
   private calculateTrend(
@@ -697,8 +754,8 @@ Respond ONLY with JSON in this exact format:
     const delta = currentOverall - previous.overallScore;
     const alerts: string[] = [];
 
-    const categoryDeltas = currentCategories.map(current => {
-      const prev = previous.categoryScores.find(p => p.category === current.category);
+    const categoryDeltas = currentCategories.map((current) => {
+      const prev = previous.categoryScores.find((p) => p.category === current.category);
       const prevScore = prev?.avgQuality ?? 0;
       const catDelta = current.avgQuality - prevScore;
 
@@ -752,7 +809,8 @@ Respond ONLY with JSON in this exact format:
 
   private parseJSONFromContent(content: string): unknown {
     try {
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ?? content.match(/\{[\s\S]*\}/);
+      const jsonMatch =
+        content.match(/```(?:json)?\s*([\s\S]*?)```/) ?? content.match(/\{[\s\S]*\}/);
       const jsonStr = jsonMatch ? (jsonMatch[1] ?? jsonMatch[0]) : content;
       return JSON.parse(jsonStr);
     } catch {
@@ -762,7 +820,7 @@ Respond ONLY with JSON in this exact format:
 
   private estimateCost(usage?: { prompt_tokens?: number; completion_tokens?: number }): number {
     if (!usage) return 0.001; // Minimum estimate
-    const promptCost = (usage.prompt_tokens ?? 0) * 0.000003;  // ~$3/M tokens avg
+    const promptCost = (usage.prompt_tokens ?? 0) * 0.000003; // ~$3/M tokens avg
     const completionCost = (usage.completion_tokens ?? 0) * 0.000015; // ~$15/M tokens avg
     return promptCost + completionCost;
   }
@@ -801,6 +859,6 @@ Respond ONLY with JSON in this exact format:
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise(r => setTimeout(r, ms));
+    return new Promise((r) => setTimeout(r, ms));
   }
 }

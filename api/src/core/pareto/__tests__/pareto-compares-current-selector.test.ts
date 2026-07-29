@@ -35,7 +35,7 @@ import {
 
 function naiveSelector(
   candidates: readonly ContributionAwareScore[],
-  topN: number,
+  topN: number
 ): readonly ContributionAwareScore[] {
   // "Old" selector: just sort by structural score desc + cost asc.
   const sorted = [...candidates].sort((a, b) => {
@@ -133,8 +133,6 @@ describe('selector comparison — naive vs Pareto-aware', () => {
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
     });
-    expect(plan.expectedCostUsd).toBeLessThanOrEqual(
-      STANDARD_BASELINE.singleModelCostUsd + 1e-9,
-    );
+    expect(plan.expectedCostUsd).toBeLessThanOrEqual(STANDARD_BASELINE.singleModelCostUsd + 1e-9);
   });
 });

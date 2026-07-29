@@ -81,11 +81,11 @@ export interface DiscoveryAliasLearningResult {
  * to enforce family safety guards without fuzzy matching.
  */
 export interface LogicalModelTokens {
-  readonly family: string;          // 'claude'
-  readonly versionMajor: string;    // '3'
-  readonly versionMinor?: string;   // '7'
-  readonly variant?: string;        // 'sonnet' | 'opus' | 'haiku' | 'instruct' | 'vision'
-  readonly generation?: string;     // optional generation marker like '-4'
+  readonly family: string; // 'claude'
+  readonly versionMajor: string; // '3'
+  readonly versionMinor?: string; // '7'
+  readonly variant?: string; // 'sonnet' | 'opus' | 'haiku' | 'instruct' | 'vision'
+  readonly generation?: string; // optional generation marker like '-4'
 }
 
 /**
@@ -102,9 +102,14 @@ export function parseLogicalModelTokens(logicalModelId: string): LogicalModelTok
   //   meta/llama-3.2-11b           → family=llama, v=3.2, variant=11b
   //   gpt-4o                       → family=gpt, v=4o, variant=(none)
   //   gemini-2.5-pro               → family=gemini, v=2.5, variant=pro
-  const stripped = lower.replace(/^(anthropic|openai|google|meta|meta-llama|mistral|qwen|deepseek)[-/]/, '');
+  const stripped = lower.replace(
+    /^(anthropic|openai|google|meta|meta-llama|mistral|qwen|deepseek)[-/]/,
+    ''
+  );
   // Match: <family>-<v.major>(.<v.minor>)?-<variant>?
-  const m = stripped.match(/^(claude|gpt|gemini|llama|mistral|qwen|deepseek)[-_]?(\d+)(?:[._-](\d+))?(?:-([a-z0-9-]+))?$/);
+  const m = stripped.match(
+    /^(claude|gpt|gemini|llama|mistral|qwen|deepseek)[-_]?(\d+)(?:[._-](\d+))?(?:-([a-z0-9-]+))?$/
+  );
   if (!m) return null;
   return {
     family: m[1],
@@ -121,7 +126,7 @@ export function parseLogicalModelTokens(logicalModelId: string): LogicalModelTok
  */
 function scoreRow(
   tokens: LogicalModelTokens,
-  row: DiscoveredModelRow,
+  row: DiscoveredModelRow
 ): { matchKind: DiscoveryAliasMatchKind; confidence: DiscoveryAliasConfidence } | null {
   const idLower = row.id.toLowerCase();
   const nameLower = row.name.toLowerCase();
@@ -132,7 +137,10 @@ function scoreRow(
 
   // Version guard — must contain version major + minor (in any separator form)
   const v = tokens.versionMinor
-    ? [`${tokens.versionMajor}.${tokens.versionMinor}`, `${tokens.versionMajor}-${tokens.versionMinor}`]
+    ? [
+        `${tokens.versionMajor}.${tokens.versionMinor}`,
+        `${tokens.versionMajor}-${tokens.versionMinor}`,
+      ]
     : [tokens.versionMajor];
   if (!v.some((vv) => target.includes(vv))) return null;
 
@@ -157,10 +165,21 @@ function scoreRow(
   }
 
   // Now scoring
-  if (idLower === tokens.family + '-' + (tokens.versionMinor ? `${tokens.versionMajor}.${tokens.versionMinor}` : tokens.versionMajor) + (tokens.variant ? `-${tokens.variant}` : '')) {
+  if (
+    idLower ===
+    tokens.family +
+      '-' +
+      (tokens.versionMinor
+        ? `${tokens.versionMajor}.${tokens.versionMinor}`
+        : tokens.versionMajor) +
+      (tokens.variant ? `-${tokens.variant}` : '')
+  ) {
     return { matchKind: 'exact_canonical', confidence: 'exact' };
   }
-  if (idLower.includes(`anthropic/${tokens.family}`) || idLower.includes(`anthropic.${tokens.family}`)) {
+  if (
+    idLower.includes(`anthropic/${tokens.family}`) ||
+    idLower.includes(`anthropic.${tokens.family}`)
+  ) {
     return { matchKind: 'native_family_match', confidence: 'high' };
   }
   return { matchKind: 'contains_family_and_version', confidence: 'medium' };
@@ -236,7 +255,11 @@ export function learnAliasForProvider(input: {
   }
   // Sort by (confidence rank, tie-break)
   const confidenceRank: Record<DiscoveryAliasConfidence, number> = {
-    exact: 0, high: 1, medium: 2, low: 3, none: 4,
+    exact: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+    none: 4,
   };
   const sorted = [...candidates].sort((a, b) => {
     const r = confidenceRank[a.confidence] - confidenceRank[b.confidence];

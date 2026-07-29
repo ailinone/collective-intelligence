@@ -72,7 +72,9 @@ import { isOpenAICompatibleEntry } from '../provider-catalog.types';
 describe('Phase 5 invariant: no-static-models', () => {
   it('no entry carries the deprecated `staticModels` field (Phase 4d migration is complete)', () => {
     const offenders = PROVIDER_CATALOG.filter(
-      (e) => 'staticModels' in e && (e as { staticModels?: readonly string[] }).staticModels !== undefined,
+      (e) =>
+        'staticModels' in e &&
+        (e as { staticModels?: readonly string[] }).staticModels !== undefined
     ).map((e) => e.providerId);
 
     expect(offenders).toEqual([]);
@@ -90,12 +92,18 @@ describe('Phase 5 invariant: no-static-models', () => {
     const violators: Array<{ providerId: string; reason: string }> = [];
 
     for (const entry of PROVIDER_CATALOG) {
-      const pf = (entry as { pinnedFallback?: { models?: readonly string[]; reason?: string; lastReviewedAt?: string } })
-        .pinnedFallback;
+      const pf = (
+        entry as {
+          pinnedFallback?: { models?: readonly string[]; reason?: string; lastReviewedAt?: string };
+        }
+      ).pinnedFallback;
       if (!pf) continue;
 
       if (!Array.isArray(pf.models) || pf.models.length === 0) {
-        violators.push({ providerId: entry.providerId, reason: 'pinnedFallback.models empty or missing' });
+        violators.push({
+          providerId: entry.providerId,
+          reason: 'pinnedFallback.models empty or missing',
+        });
         continue;
       }
       if (!pf.reason || !ALLOWED_REASONS.has(pf.reason)) {
@@ -128,10 +136,7 @@ describe('Phase 5 invariant: enabled-by-default', () => {
    * structurally honest default. Catalog and switch self-hosted entries
    * both qualify.
    */
-  const SELF_HOSTED_CLASSES = new Set([
-    'self-hosted-oai-compat',
-    'self-hosted-native',
-  ]);
+  const SELF_HOSTED_CLASSES = new Set(['self-hosted-oai-compat', 'self-hosted-native']);
 
   it('every `enabledByDefault: false` row is self-hosted or `apiKeyOptional: true`', () => {
     const violators: Array<{ providerId: string; reason: string }> = [];
@@ -158,7 +163,7 @@ describe('Phase 5 invariant: enabled-by-default', () => {
 describe('Phase 5 invariant: no-deny-by-default', () => {
   it('no catalog row carries `denyByDefault: true` (Phase 4b retired the gate)', () => {
     const offenders = PROVIDER_CATALOG.filter(
-      (e) => (e as { denyByDefault?: boolean }).denyByDefault === true,
+      (e) => (e as { denyByDefault?: boolean }).denyByDefault === true
     ).map((e) => e.providerId);
 
     expect(offenders).toEqual([]);
@@ -178,7 +183,10 @@ describe('Phase 5 invariant: no-deny-by-default', () => {
         continue;
       }
       if (entry.enabledByDefault !== true) {
-        violators.push({ providerId: id, reason: `enabledByDefault=${entry.enabledByDefault}, expected true` });
+        violators.push({
+          providerId: id,
+          reason: `enabledByDefault=${entry.enabledByDefault}, expected true`,
+        });
       }
       const cpc = (entry as { contentPolicyClass?: string }).contentPolicyClass;
       if (cpc !== 'uncensored') {
@@ -207,7 +215,7 @@ describe('Phase 5 invariant: integration-mode-canonical', () => {
 
   it('every catalog row uses an allowed `integrationMode`', () => {
     const violators = PROVIDER_CATALOG.filter((e) => !ALLOWED_MODES.has(e.integrationMode)).map(
-      (e) => ({ providerId: e.providerId, integrationMode: e.integrationMode }),
+      (e) => ({ providerId: e.providerId, integrationMode: e.integrationMode })
     );
     expect(violators).toEqual([]);
   });
@@ -219,9 +227,12 @@ describe('Phase 5 invariant: integration-mode-canonical', () => {
     const violators: Array<{ providerId: string; reason: string }> = [];
     for (const entry of PROVIDER_CATALOG) {
       if (entry.integrationMode !== 'execution-only') continue;
-      const pinned = (entry as { pinnedFallback?: { models?: readonly string[] } }).pinnedFallback?.models;
+      const pinned = (entry as { pinnedFallback?: { models?: readonly string[] } }).pinnedFallback
+        ?.models;
       const legacy = (entry as { staticModels?: readonly string[] }).staticModels;
-      const hasInventory = (Array.isArray(pinned) && pinned.length > 0) || (Array.isArray(legacy) && legacy.length > 0);
+      const hasInventory =
+        (Array.isArray(pinned) && pinned.length > 0) ||
+        (Array.isArray(legacy) && legacy.length > 0);
       if (!hasInventory) {
         violators.push({
           providerId: entry.providerId,
@@ -278,9 +289,7 @@ describe('Phase 5 invariant: every-provider-reaches-discovery', () => {
    * For these classes, presence of a dedicated factory or adapterClass
    * IS the discovery contract.
    */
-  const PER_ADAPTER_DISCOVERY_CLASSES = new Set([
-    'first-party-native',
-  ]);
+  const PER_ADAPTER_DISCOVERY_CLASSES = new Set(['first-party-native']);
 
   /**
    * Self-hosted-native runtimes (e.g. Triton HTTP, Petals) discover
@@ -288,10 +297,7 @@ describe('Phase 5 invariant: every-provider-reaches-discovery', () => {
    * covered by central-discovery; the per-plugin health check is the
    * effective discovery surface. These rows are honest runtime-bound.
    */
-  const RUNTIME_BOUND_CLASSES = new Set([
-    'self-hosted-native',
-    'self-hosted-oai-compat',
-  ]);
+  const RUNTIME_BOUND_CLASSES = new Set(['self-hosted-native', 'self-hosted-oai-compat']);
 
   it('every `discovery+execution` row is reachable by hardcoded source OR catalog-bridge OR per-adapter path', () => {
     const violators: Array<{ providerId: string; reason: string }> = [];

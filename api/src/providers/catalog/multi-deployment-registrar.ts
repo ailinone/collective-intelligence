@@ -70,14 +70,8 @@
 import { logger } from '@/utils/logger';
 import type { ProviderRegistry } from '../provider-registry';
 import type { ProviderAdapter } from '../base/provider-adapter';
-import {
-  AzureOpenAIAdapter,
-  type AzureOpenAIAdapterConfig,
-} from '../azure/azure-openai-adapter';
-import {
-  DatabricksAdapter,
-  type DatabricksAdapterConfig,
-} from '../databricks/databricks-adapter';
+import { AzureOpenAIAdapter, type AzureOpenAIAdapterConfig } from '../azure/azure-openai-adapter';
+import { DatabricksAdapter, type DatabricksAdapterConfig } from '../databricks/databricks-adapter';
 import {
   AWSSageMakerAdapter,
   type AWSSageMakerAdapterConfig,
@@ -112,7 +106,7 @@ interface SharedProviderConfig {
 
 export function buildAzureAdaptersFromSpecs(
   specs: readonly AzureDeploymentSpec[],
-  shared: SharedProviderConfig,
+  shared: SharedProviderConfig
 ): AzureOpenAIAdapter[] {
   const adapters: AzureOpenAIAdapter[] = [];
   for (const spec of specs) {
@@ -136,7 +130,7 @@ export function buildAzureAdaptersFromSpecs(
       adapters.push(new AzureOpenAIAdapter(config));
       log.info(
         { providerName, deployment: spec.deployment, hasResourceName: Boolean(spec.resourceName) },
-        'Built multi-deployment AzureOpenAIAdapter',
+        'Built multi-deployment AzureOpenAIAdapter'
       );
     } catch (err) {
       log.warn(
@@ -145,7 +139,7 @@ export function buildAzureAdaptersFromSpecs(
           alias: spec.alias,
           err: err instanceof Error ? err.message : String(err),
         },
-        'Failed to build Azure adapter from spec — skipping',
+        'Failed to build Azure adapter from spec — skipping'
       );
     }
   }
@@ -156,7 +150,7 @@ export function buildAzureAdaptersFromSpecs(
 
 export function buildDatabricksAdaptersFromSpecs(
   specs: readonly DatabricksEndpointSpec[],
-  shared: SharedProviderConfig,
+  shared: SharedProviderConfig
 ): DatabricksAdapter[] {
   const adapters: DatabricksAdapter[] = [];
   for (const spec of specs) {
@@ -180,7 +174,7 @@ export function buildDatabricksAdaptersFromSpecs(
           endpoint: spec.endpoint,
           hasWorkspaceHost: Boolean(spec.workspaceHost),
         },
-        'Built multi-deployment DatabricksAdapter',
+        'Built multi-deployment DatabricksAdapter'
       );
     } catch (err) {
       log.warn(
@@ -189,7 +183,7 @@ export function buildDatabricksAdaptersFromSpecs(
           alias: spec.alias,
           err: err instanceof Error ? err.message : String(err),
         },
-        'Failed to build Databricks adapter from spec — skipping',
+        'Failed to build Databricks adapter from spec — skipping'
       );
     }
   }
@@ -200,7 +194,7 @@ export function buildDatabricksAdaptersFromSpecs(
 
 export function buildSageMakerAdaptersFromSpecs(
   specs: readonly SageMakerEndpointSpec[],
-  shared: SharedProviderConfig,
+  shared: SharedProviderConfig
 ): AWSSageMakerAdapter[] {
   const adapters: AWSSageMakerAdapter[] = [];
   for (const spec of specs) {
@@ -227,7 +221,7 @@ export function buildSageMakerAdaptersFromSpecs(
           endpointName: spec.endpointName,
           payloadSchema: spec.payloadSchema ?? 'openai',
         },
-        'Built multi-deployment AWSSageMakerAdapter',
+        'Built multi-deployment AWSSageMakerAdapter'
       );
     } catch (err) {
       log.warn(
@@ -236,7 +230,7 @@ export function buildSageMakerAdaptersFromSpecs(
           alias: spec.alias,
           err: err instanceof Error ? err.message : String(err),
         },
-        'Failed to build SageMaker adapter from spec — skipping',
+        'Failed to build SageMaker adapter from spec — skipping'
       );
     }
   }
@@ -287,17 +281,13 @@ function sniffSageMakerSharedConfig(): SharedProviderConfig {
  * provider names were added.
  */
 export async function registerMultiDeploymentProviders(
-  registry: ProviderRegistry,
+  registry: ProviderRegistry
 ): Promise<RegisterMultiDeploymentResult> {
   const azureSpecs = parseAzureDeployments(process.env.AZURE_OPENAI_DEPLOYMENTS);
   const databricksSpecs = parseDatabricksEndpoints(process.env.DATABRICKS_SERVING_ENDPOINTS);
   const sagemakerSpecs = parseSageMakerEndpoints(process.env.AWS_SAGEMAKER_ENDPOINTS);
 
-  if (
-    azureSpecs.length === 0 &&
-    databricksSpecs.length === 0 &&
-    sagemakerSpecs.length === 0
-  ) {
+  if (azureSpecs.length === 0 && databricksSpecs.length === 0 && sagemakerSpecs.length === 0) {
     log.debug('No multi-deployment env vars set — skipping multi-deployment registration');
     return {
       azure: [],
@@ -310,19 +300,18 @@ export async function registerMultiDeploymentProviders(
   const azureAdapters = buildAzureAdaptersFromSpecs(azureSpecs, sniffAzureSharedConfig());
   const databricksAdapters = buildDatabricksAdaptersFromSpecs(
     databricksSpecs,
-    sniffDatabricksSharedConfig(),
+    sniffDatabricksSharedConfig()
   );
   const sagemakerAdapters = buildSageMakerAdaptersFromSpecs(
     sagemakerSpecs,
-    sniffSageMakerSharedConfig(),
+    sniffSageMakerSharedConfig()
   );
 
   const azureNames = registerAdapters(registry, azureAdapters);
   const databricksNames = registerAdapters(registry, databricksAdapters);
   const sagemakerNames = registerAdapters(registry, sagemakerAdapters);
 
-  const totalRegistered =
-    azureNames.length + databricksNames.length + sagemakerNames.length;
+  const totalRegistered = azureNames.length + databricksNames.length + sagemakerNames.length;
 
   log.info(
     {
@@ -331,7 +320,7 @@ export async function registerMultiDeploymentProviders(
       sagemaker: sagemakerNames,
       totalRegistered,
     },
-    'Multi-deployment registration complete',
+    'Multi-deployment registration complete'
   );
 
   return {
@@ -348,7 +337,7 @@ export async function registerMultiDeploymentProviders(
  */
 function registerAdapters(
   registry: ProviderRegistry,
-  adapters: readonly ProviderAdapter[],
+  adapters: readonly ProviderAdapter[]
 ): string[] {
   const names: string[] = [];
   for (const adapter of adapters) {
@@ -361,7 +350,7 @@ function registerAdapters(
           name: adapter.getName(),
           err: err instanceof Error ? err.message : String(err),
         },
-        'Multi-deployment adapter registration threw — skipping',
+        'Multi-deployment adapter registration threw — skipping'
       );
     }
   }

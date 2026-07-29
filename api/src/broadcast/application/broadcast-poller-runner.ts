@@ -108,7 +108,7 @@ export function startBroadcastPoller(): void {
       metricsIntervalMs: METRICS_INTERVAL_MS,
       reclaimIntervalMs: RECLAIM_INTERVAL_MS,
     },
-    'Broadcast poller started',
+    'Broadcast poller started'
   );
 }
 

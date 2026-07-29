@@ -37,7 +37,16 @@ const FORBIDDEN_KEYS = [
   'userName',
 ];
 
-function runWithSensitiveText(mode: 'shadow_structural_full' | 'legacy' | 'shadow_trace_only' | 'shadow_registry_only' | 'registry_cache' | 'shadow_semantic_full' | 'semantic_primary') {
+function runWithSensitiveText(
+  mode:
+    | 'shadow_structural_full'
+    | 'legacy'
+    | 'shadow_trace_only'
+    | 'shadow_registry_only'
+    | 'registry_cache'
+    | 'shadow_semantic_full'
+    | 'semantic_primary'
+) {
   return composeRoutingPipeline({
     requestId: 'r-redact',
     profilerInput: {
@@ -115,15 +124,9 @@ describe('routing-pipeline — trace categorical-only contents', () => {
     expect(typeof summary.privacyMode).toBe('string');
     expect(Array.isArray(summary.modalities)).toBe(true);
     // Should NOT contain confidenceNeeded, strategyHints, etc.
-    expect(
-      'confidenceNeeded' in (summary as Record<string, unknown>),
-    ).toBe(false);
-    expect(
-      'strategyHints' in (summary as Record<string, unknown>),
-    ).toBe(false);
-    expect(
-      'requiredCapabilities' in (summary as Record<string, unknown>),
-    ).toBe(false);
+    expect('confidenceNeeded' in (summary as Record<string, unknown>)).toBe(false);
+    expect('strategyHints' in (summary as Record<string, unknown>)).toBe(false);
+    expect('requiredCapabilities' in (summary as Record<string, unknown>)).toBe(false);
   });
 
   it('attachments are NOT propagated to the trace', () => {

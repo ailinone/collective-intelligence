@@ -32,7 +32,10 @@ beforeEach(() => {
   vi.doMock('@/utils/logger', () => ({
     logger: {
       child: () => ({
-        info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       }),
     },
   }));
@@ -45,23 +48,27 @@ describe('Drift Detection', () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ strategy: 'debate', task_type: 'general' }])
         // Second call: baseline window metrics
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(50),
-          avg_quality: 0.85,
-          avg_latency_ms: 3000,
-          avg_cost_usd: 0.03,
-          success_rate: 0.95,
-          quality_p90: 0.93,
-        }])
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(50),
+            avg_quality: 0.85,
+            avg_latency_ms: 3000,
+            avg_cost_usd: 0.03,
+            success_rate: 0.95,
+            quality_p90: 0.93,
+          },
+        ])
         // Third call: current window metrics (degraded quality)
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(20),
-          avg_quality: 0.60, // 29% degradation — should trigger critical
-          avg_latency_ms: 3200,
-          avg_cost_usd: 0.035,
-          success_rate: 0.80,
-          quality_p90: 0.75,
-        }]);
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(20),
+            avg_quality: 0.6, // 29% degradation — should trigger critical
+            avg_latency_ms: 3200,
+            avg_cost_usd: 0.035,
+            success_rate: 0.8,
+            quality_p90: 0.75,
+          },
+        ]);
 
       const { detectDrift } = await import('../drift-detection');
       const result = await detectDrift();
@@ -71,7 +78,9 @@ describe('Drift Detection', () => {
 
       // Should have detected quality drift
       const qualityDrift = result.driftsDetected.find(
-        d => d.driftType === 'performance' && (d.evidence as Record<string, unknown>).metric === 'quality'
+        (d) =>
+          d.driftType === 'performance' &&
+          (d.evidence as Record<string, unknown>).metric === 'quality'
       );
       expect(qualityDrift).toBeDefined();
       expect(qualityDrift!.severity).toBe('critical'); // -29% exceeds critical threshold (-25%)
@@ -80,22 +89,26 @@ describe('Drift Detection', () => {
     it('returns no drifts when metrics are stable', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ strategy: 'single', task_type: 'general' }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(50),
-          avg_quality: 0.82,
-          avg_latency_ms: 2000,
-          avg_cost_usd: 0.02,
-          success_rate: 0.92,
-          quality_p90: 0.90,
-        }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(20),
-          avg_quality: 0.83, // Slightly better — no drift
-          avg_latency_ms: 1900,
-          avg_cost_usd: 0.019,
-          success_rate: 0.93,
-          quality_p90: 0.91,
-        }]);
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(50),
+            avg_quality: 0.82,
+            avg_latency_ms: 2000,
+            avg_cost_usd: 0.02,
+            success_rate: 0.92,
+            quality_p90: 0.9,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(20),
+            avg_quality: 0.83, // Slightly better — no drift
+            avg_latency_ms: 1900,
+            avg_cost_usd: 0.019,
+            success_rate: 0.93,
+            quality_p90: 0.91,
+          },
+        ]);
 
       const { detectDrift } = await import('../drift-detection');
       const result = await detectDrift();
@@ -107,22 +120,26 @@ describe('Drift Detection', () => {
     it('skips niches with insufficient samples', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ strategy: 'single', task_type: 'general' }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(3), // Below minSamples (10)
-          avg_quality: 0.85,
-          avg_latency_ms: 2000,
-          avg_cost_usd: 0.02,
-          success_rate: 0.92,
-          quality_p90: 0.90,
-        }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(2),
-          avg_quality: 0.50,
-          avg_latency_ms: 5000,
-          avg_cost_usd: 0.10,
-          success_rate: 0.40,
-          quality_p90: 0.60,
-        }]);
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(3), // Below minSamples (10)
+            avg_quality: 0.85,
+            avg_latency_ms: 2000,
+            avg_cost_usd: 0.02,
+            success_rate: 0.92,
+            quality_p90: 0.9,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(2),
+            avg_quality: 0.5,
+            avg_latency_ms: 5000,
+            avg_cost_usd: 0.1,
+            success_rate: 0.4,
+            quality_p90: 0.6,
+          },
+        ]);
 
       const { detectDrift } = await import('../drift-detection');
       const result = await detectDrift();
@@ -135,28 +152,32 @@ describe('Drift Detection', () => {
     it('detects latency degradation', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ strategy: 'debate', task_type: 'general' }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(50),
-          avg_quality: 0.85,
-          avg_latency_ms: 2000,
-          avg_cost_usd: 0.02,
-          success_rate: 0.95,
-          quality_p90: 0.93,
-        }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(20),
-          avg_quality: 0.84, // Quality stable
-          avg_latency_ms: 5000, // 150% latency increase — critical
-          avg_cost_usd: 0.02,
-          success_rate: 0.94,
-          quality_p90: 0.92,
-        }]);
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(50),
+            avg_quality: 0.85,
+            avg_latency_ms: 2000,
+            avg_cost_usd: 0.02,
+            success_rate: 0.95,
+            quality_p90: 0.93,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(20),
+            avg_quality: 0.84, // Quality stable
+            avg_latency_ms: 5000, // 150% latency increase — critical
+            avg_cost_usd: 0.02,
+            success_rate: 0.94,
+            quality_p90: 0.92,
+          },
+        ]);
 
       const { detectDrift } = await import('../drift-detection');
       const result = await detectDrift();
 
       const latencyDrift = result.driftsDetected.find(
-        d => (d.evidence as Record<string, unknown>).metric === 'latency'
+        (d) => (d.evidence as Record<string, unknown>).metric === 'latency'
       );
       expect(latencyDrift).toBeDefined();
       expect(latencyDrift!.severity).toBe('critical');
@@ -165,14 +186,26 @@ describe('Drift Detection', () => {
     it('persists drift events to database', async () => {
       mockQueryRaw
         .mockResolvedValueOnce([{ strategy: 'single', task_type: 'general' }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(50), avg_quality: 0.85, avg_latency_ms: 2000,
-          avg_cost_usd: 0.02, success_rate: 0.95, quality_p90: 0.93,
-        }])
-        .mockResolvedValueOnce([{
-          sample_size: BigInt(20), avg_quality: 0.60, avg_latency_ms: 2000,
-          avg_cost_usd: 0.02, success_rate: 0.70, quality_p90: 0.72,
-        }]);
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(50),
+            avg_quality: 0.85,
+            avg_latency_ms: 2000,
+            avg_cost_usd: 0.02,
+            success_rate: 0.95,
+            quality_p90: 0.93,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            sample_size: BigInt(20),
+            avg_quality: 0.6,
+            avg_latency_ms: 2000,
+            avg_cost_usd: 0.02,
+            success_rate: 0.7,
+            quality_p90: 0.72,
+          },
+        ]);
 
       const { detectDrift } = await import('../drift-detection');
       await detectDrift();

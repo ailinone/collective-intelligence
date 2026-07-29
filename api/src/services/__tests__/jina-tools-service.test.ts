@@ -95,14 +95,12 @@ describe('JinaToolsService', () => {
   it('normalizes upstream errors with status and metadata', async () => {
     setJinaTestEnv();
 
-    const fetchMock = vi
-      .fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>()
-      .mockResolvedValue(
-        new Response('resource missing', {
-          status: 404,
-          headers: { 'content-type': 'text/plain' },
-        })
-      );
+    const fetchMock = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(
+      new Response('resource missing', {
+        status: 404,
+        headers: { 'content-type': 'text/plain' },
+      })
+    );
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -126,14 +124,12 @@ describe('JinaToolsService', () => {
   it('defaults deepsearch model when model is omitted', async () => {
     setJinaTestEnv();
 
-    const fetchMock = vi
-      .fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ id: 'resp_1', choices: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        })
-      );
+    const fetchMock = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'resp_1', choices: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -154,4 +150,3 @@ describe('JinaToolsService', () => {
     expect(body?.model).toBe('jina-deepsearch-v1');
   });
 });
-

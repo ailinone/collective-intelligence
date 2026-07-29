@@ -62,7 +62,7 @@ describe('SnowflakeCortexAdapter — baseUrl resolution', () => {
       privateKeyPem: KEY_PEM,
     });
     expect((adapter as unknown as { baseUrl: string }).baseUrl).toBe(
-      'https://custom.example.snowflakecomputing.com',
+      'https://custom.example.snowflakecomputing.com'
     );
   });
 
@@ -74,7 +74,7 @@ describe('SnowflakeCortexAdapter — baseUrl resolution', () => {
       privateKeyPem: KEY_PEM,
     });
     expect((adapter as unknown as { baseUrl: string }).baseUrl).toBe(
-      'https://myorg-myacc.snowflakecomputing.com',
+      'https://myorg-myacc.snowflakecomputing.com'
     );
   });
 
@@ -86,7 +86,7 @@ describe('SnowflakeCortexAdapter — baseUrl resolution', () => {
       privateKeyPem: '',
     });
     expect((adapter as unknown as { baseUrl: string }).baseUrl).toBe(
-      'https://snowflake.example.snowflakecomputing.com',
+      'https://snowflake.example.snowflakecomputing.com'
     );
   });
 });
@@ -134,7 +134,12 @@ describe('SnowflakeCortexAdapter — getModels (static catalog, no network)', ()
     const original = globalThis.fetch;
     globalThis.fetch = (() => {
       sentinel.count++;
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}), text: async () => '' } as Response);
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+        text: async () => '',
+      } as Response);
     }) as unknown as typeof fetch;
     try {
       const adapter = new SnowflakeCortexAdapter({
@@ -176,7 +181,7 @@ describe('SnowflakeCortexAdapter — chatCompletion wire', () => {
       });
       expect(res.choices[0].message.content).toBe('hi');
       expect(calls[0].url).toBe(
-        'https://myacc.snowflakecomputing.com/api/v2/cortex/inference:complete',
+        'https://myacc.snowflakecomputing.com/api/v2/cortex/inference:complete'
       );
       const headers = calls[0].init.headers as Record<string, string>;
       expect(headers.Authorization).toMatch(/^Bearer /);
@@ -197,7 +202,7 @@ describe('SnowflakeCortexAdapter — chatCompletion wire', () => {
       adapter.chatCompletion({
         model: 'e5-base-v2',
         messages: [{ role: 'user', content: 'x' }],
-      }),
+      })
     ).rejects.toThrow(/embeddings-only/);
   });
 });
@@ -238,7 +243,7 @@ describe('SnowflakeCortexAdapter — embeddings wire', () => {
       privateKeyPem: KEY_PEM,
     });
     await expect(
-      adapter.generateEmbeddings({ model: 'mistral-large2', input: 'x' }),
+      adapter.generateEmbeddings({ model: 'mistral-large2', input: 'x' })
     ).rejects.toThrow(/not an embedding/);
   });
 });
@@ -252,7 +257,11 @@ describe('SnowflakeCortexAdapter — unsupported surfaces', () => {
       privateKeyPem: KEY_PEM,
     });
     const dummyModel = { id: 'm' } as never;
-    await expect(adapter.imageGenerate(dummyModel, { prompt: 'x' })).rejects.toThrow(/not supported/);
-    await expect(adapter.imageEdit(dummyModel, { image: Buffer.from([0]), prompt: 'x' })).rejects.toThrow(/not supported/);
+    await expect(adapter.imageGenerate(dummyModel, { prompt: 'x' })).rejects.toThrow(
+      /not supported/
+    );
+    await expect(
+      adapter.imageEdit(dummyModel, { image: Buffer.from([0]), prompt: 'x' })
+    ).rejects.toThrow(/not supported/);
   });
 });

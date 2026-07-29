@@ -120,10 +120,7 @@ export class TaskSpecificEvaluator implements StrategyOutputEvaluator {
 
   // ─── code-generation ────────────────────────────────────────────────
 
-  private async evaluateCode(
-    input: EvaluatorInput,
-    trimmed: string,
-  ): Promise<EvaluationResult> {
+  private async evaluateCode(input: EvaluatorInput, trimmed: string): Promise<EvaluationResult> {
     const hasCodeBlock = /```[\s\S]*?```/.test(trimmed);
 
     // Hard rule: if the task explicitly asks for code, missing fence → fail.
@@ -174,17 +171,15 @@ export class TaskSpecificEvaluator implements StrategyOutputEvaluator {
         executionError: false,
         codeBlockPresent: hasCodeBlock,
       },
-      notes: 'code structure present but no objective check (compile/test/lint) available — staying structural-only',
+      notes:
+        'code structure present but no objective check (compile/test/lint) available — staying structural-only',
       validationStatus: 'structurally_validated_only',
     });
   }
 
   // ─── json ──────────────────────────────────────────────────────────
 
-  private async evaluateJson(
-    input: EvaluatorInput,
-    trimmed: string,
-  ): Promise<EvaluationResult> {
+  private async evaluateJson(input: EvaluatorInput, trimmed: string): Promise<EvaluationResult> {
     let parsed: unknown;
     try {
       parsed = JSON.parse(trimmed);
@@ -239,7 +234,7 @@ export class TaskSpecificEvaluator implements StrategyOutputEvaluator {
 
   private async evaluatePlainText(
     _input: EvaluatorInput,
-    trimmed: string,
+    trimmed: string
   ): Promise<EvaluationResult> {
     const minLength = this.opts.defaultMinLength ?? 50;
     const meets = trimmed.length >= minLength;
@@ -262,7 +257,7 @@ export class TaskSpecificEvaluator implements StrategyOutputEvaluator {
 
   private async evaluateUnknown(
     _input: EvaluatorInput,
-    trimmed: string,
+    trimmed: string
   ): Promise<EvaluationResult> {
     const minLength = this.opts.defaultMinLength ?? 50;
     const meets = trimmed.length >= minLength;
@@ -340,7 +335,10 @@ export function matchesMinimalSchema(parsed: unknown, schema: unknown): boolean 
   const s = schema as { type?: unknown; required?: unknown };
   if (s.type !== undefined) {
     const t = typeof s.type === 'string' ? s.type : '';
-    if (t === 'object' && (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))) {
+    if (
+      t === 'object' &&
+      (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    ) {
       return false;
     }
     if (t === 'array' && !Array.isArray(parsed)) return false;
@@ -348,7 +346,12 @@ export function matchesMinimalSchema(parsed: unknown, schema: unknown): boolean 
     if (t === 'number' && typeof parsed !== 'number') return false;
     if (t === 'boolean' && typeof parsed !== 'boolean') return false;
   }
-  if (Array.isArray(s.required) && typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+  if (
+    Array.isArray(s.required) &&
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    !Array.isArray(parsed)
+  ) {
     const obj = parsed as Record<string, unknown>;
     for (const k of s.required) {
       if (typeof k !== 'string') continue;

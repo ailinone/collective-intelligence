@@ -24,7 +24,12 @@ import {
 describe('01C.1B-J1F §12.1 — parseLogicalModelTokens', () => {
   it('parses anthropic-claude-3.7-sonnet', () => {
     const t = parseLogicalModelTokens('anthropic-claude-3.7-sonnet');
-    expect(t).toEqual({ family: 'claude', versionMajor: '3', versionMinor: '7', variant: 'sonnet' });
+    expect(t).toEqual({
+      family: 'claude',
+      versionMajor: '3',
+      versionMinor: '7',
+      variant: 'sonnet',
+    });
   });
 
   it('parses claude-3-7-sonnet (hyphen version)', () => {
@@ -45,9 +50,17 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
 
   it('SELECTS exact same family+version+variant from same provider', () => {
     const rows: DiscoveredModelRow[] = [
-      { providerId: 'phala', id: 'anthropic/claude-3.7-sonnet', name: 'anthropic/claude-3.7-sonnet' },
+      {
+        providerId: 'phala',
+        id: 'anthropic/claude-3.7-sonnet',
+        name: 'anthropic/claude-3.7-sonnet',
+      },
     ];
-    const r = learnAliasForProvider({ providerId: 'phala', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'phala',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected?.apiModelId).toBe('anthropic/claude-3.7-sonnet');
   });
 
@@ -55,7 +68,11 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'p', id: 'anthropic/claude-3.7-opus', name: 'claude-3.7-opus' },
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected).toBeUndefined();
     expect(r.unresolvedReason).toBeDefined();
   });
@@ -64,7 +81,11 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'p', id: 'anthropic/claude-3.7-haiku', name: 'claude-3.7-haiku' },
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected).toBeUndefined();
   });
 
@@ -72,7 +93,11 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'p', id: 'anthropic/claude-4.5-sonnet', name: 'claude-4.5-sonnet' },
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected).toBeUndefined();
   });
 
@@ -80,25 +105,53 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'p', id: 'anthropic/claude-3.5-sonnet', name: 'claude-3.5-sonnet' },
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected).toBeUndefined();
   });
 
   it('PREFERS -latest over date-pinned in tie-break', () => {
     const rows: DiscoveredModelRow[] = [
-      { providerId: 'orqai', id: 'anthropic/claude-3-7-sonnet-20250219', name: 'anthropic/claude-3-7-sonnet-20250219' },
-      { providerId: 'orqai', id: 'anthropic/claude-3-7-sonnet-latest', name: 'anthropic/claude-3-7-sonnet-latest' },
+      {
+        providerId: 'orqai',
+        id: 'anthropic/claude-3-7-sonnet-20250219',
+        name: 'anthropic/claude-3-7-sonnet-20250219',
+      },
+      {
+        providerId: 'orqai',
+        id: 'anthropic/claude-3-7-sonnet-latest',
+        name: 'anthropic/claude-3-7-sonnet-latest',
+      },
     ];
-    const r = learnAliasForProvider({ providerId: 'orqai', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'orqai',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected?.apiModelId).toBe('anthropic/claude-3-7-sonnet-latest');
   });
 
   it('PREFERS non-regional over regional', () => {
     const rows: DiscoveredModelRow[] = [
-      { providerId: 'requesty', id: 'bedrock/claude-3-7-sonnet@us-east-1', name: 'bedrock/claude-3-7-sonnet@us-east-1' },
-      { providerId: 'requesty', id: 'bedrock/claude-3-7-sonnet', name: 'bedrock/claude-3-7-sonnet' },
+      {
+        providerId: 'requesty',
+        id: 'bedrock/claude-3-7-sonnet@us-east-1',
+        name: 'bedrock/claude-3-7-sonnet@us-east-1',
+      },
+      {
+        providerId: 'requesty',
+        id: 'bedrock/claude-3-7-sonnet',
+        name: 'bedrock/claude-3-7-sonnet',
+      },
     ];
-    const r = learnAliasForProvider({ providerId: 'requesty', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'requesty',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected?.apiModelId).toBe('bedrock/claude-3-7-sonnet');
   });
 
@@ -106,7 +159,11 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'p', id: 'gpt-4o', name: 'gpt-4o' }, // wrong family
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.unresolvedReason).toBe('no_catalog_row_matches_family_version_variant');
   });
 
@@ -114,16 +171,28 @@ describe('01C.1B-J1F §12.1 — learner matching guards', () => {
     const rows: DiscoveredModelRow[] = [
       { providerId: 'X', id: 'anthropic/claude-3.7-sonnet', name: 'X' },
     ];
-    const r = learnAliasForProvider({ providerId: 'Y', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'Y',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected).toBeUndefined();
   });
 
   it('NEVER returns the bad anthropic/anthropic-claude-* form', () => {
     const rows: DiscoveredModelRow[] = [
-      { providerId: 'p', id: 'anthropic/anthropic-claude-3.7-sonnet', name: 'anthropic/anthropic-claude-3.7-sonnet' },
+      {
+        providerId: 'p',
+        id: 'anthropic/anthropic-claude-3.7-sonnet',
+        name: 'anthropic/anthropic-claude-3.7-sonnet',
+      },
       { providerId: 'p', id: 'anthropic/claude-3.7-sonnet', name: 'anthropic/claude-3.7-sonnet' },
     ];
-    const r = learnAliasForProvider({ providerId: 'p', logicalModelId: logical, discoveredRows: rows });
+    const r = learnAliasForProvider({
+      providerId: 'p',
+      logicalModelId: logical,
+      discoveredRows: rows,
+    });
     expect(r.selected?.apiModelId).toBe('anthropic/claude-3.7-sonnet');
   });
 });

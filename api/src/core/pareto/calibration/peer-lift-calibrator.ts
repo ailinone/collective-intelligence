@@ -43,13 +43,11 @@ export interface PeerLiftCalibrationResult {
 
 // ─── Calibrator ─────────────────────────────────────────────────────────
 
-export function calibratePeerLift(
-  input: PeerLiftCalibrationInput,
-): PeerLiftCalibrationResult {
+export function calibratePeerLift(input: PeerLiftCalibrationInput): PeerLiftCalibrationResult {
   const minSamples = input.minSamples ?? 8;
   const shrinkageK = input.shrinkageK ?? 8;
   const ensembleExamples = input.trainExamples.filter(
-    (e) => e.selectedModelIds.length >= 2 && Number.isFinite(e.observedJudge),
+    (e) => e.selectedModelIds.length >= 2 && Number.isFinite(e.observedJudge)
   );
 
   const reasons: string[] = [];
@@ -115,7 +113,7 @@ export function calibratePeerLift(
 export function lookupPeerLift(
   calibration: PeerLiftCalibrationResult,
   taskType: string,
-  strategyId?: string,
+  strategyId?: string
 ): number {
   const byTask = calibration.peerLiftByTaskType[taskType];
   if (typeof byTask === 'number') return byTask;

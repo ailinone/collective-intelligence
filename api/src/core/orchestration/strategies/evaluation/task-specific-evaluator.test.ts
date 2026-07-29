@@ -30,7 +30,16 @@ import {
   extractCode,
 } from './task-specific-evaluator';
 
-const baseInput = (overrides: Partial<{ output: string; taskType: string; expectedFormat: 'json' | 'code' | 'reasoning' | 'free_text'; jsonSchema: unknown; codeLanguage: string; executionFailed: boolean }> = {}) => ({
+const baseInput = (
+  overrides: Partial<{
+    output: string;
+    taskType: string;
+    expectedFormat: 'json' | 'code' | 'reasoning' | 'free_text';
+    jsonSchema: unknown;
+    codeLanguage: string;
+    executionFailed: boolean;
+  }> = {}
+) => ({
   task: {
     taskType: overrides.taskType,
     expectedFormat: overrides.expectedFormat,
@@ -68,10 +77,12 @@ describe('TaskSpecificEvaluator', () => {
   describe('code-generation', () => {
     it('expected code but no code block → fail (no high score from appearance)', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: 'I will explain how to do this but I am NOT giving you the code here.',
-        expectedFormat: 'code',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: 'I will explain how to do this but I am NOT giving you the code here.',
+          expectedFormat: 'code',
+        })
+      );
       expect(r.verdict).toBe('fail');
       expect(r.score).toBe(0);
       expect(r.structural.codeBlockPresent).toBe(false);
@@ -79,10 +90,12 @@ describe('TaskSpecificEvaluator', () => {
 
     it('code block present but NO runner → uncertain + score undefined + structural-only', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: 'Here:\n```js\nfunction f() { return 1; }\n```',
-        expectedFormat: 'code',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: 'Here:\n```js\nfunction f() { return 1; }\n```',
+          expectedFormat: 'code',
+        })
+      );
       expect(r.verdict).toBe('uncertain');
       expect(r.score).toBeUndefined();
       expect(r.validationStatus).toBe('structurally_validated_only');
@@ -94,10 +107,12 @@ describe('TaskSpecificEvaluator', () => {
         run: vi.fn(async () => ({ score: 0.85, verdict: 'pass', notes: '3/3 tests passed' })),
       };
       const ev = new TaskSpecificEvaluator({ codeRunner: runner });
-      const r = await ev.evaluate(baseInput({
-        output: '```js\nfunction f() { return 1; }\n```',
-        expectedFormat: 'code',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: '```js\nfunction f() { return 1; }\n```',
+          expectedFormat: 'code',
+        })
+      );
       expect(r.verdict).toBe('pass');
       expect(r.score).toBe(0.85);
       expect(r.validationStatus).toBe('fully_validated');
@@ -109,10 +124,12 @@ describe('TaskSpecificEvaluator', () => {
         run: async () => ({ score: undefined, verdict: 'uncertain', notes: 'no testable surface' }),
       };
       const ev = new TaskSpecificEvaluator({ codeRunner: runner });
-      const r = await ev.evaluate(baseInput({
-        output: '```js\nfunction f() { return 1; }\n```',
-        expectedFormat: 'code',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: '```js\nfunction f() { return 1; }\n```',
+          expectedFormat: 'code',
+        })
+      );
       expect(r.verdict).toBe('uncertain');
       expect(r.score).toBeUndefined();
       expect(r.validationStatus).toBe('structurally_validated_only');
@@ -122,10 +139,12 @@ describe('TaskSpecificEvaluator', () => {
   describe('json', () => {
     it('invalid JSON → fail, score=0', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: 'not json',
-        expectedFormat: 'json',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: 'not json',
+          expectedFormat: 'json',
+        })
+      );
       expect(r.verdict).toBe('fail');
       expect(r.score).toBe(0);
       expect(r.structural.jsonValid).toBe(false);
@@ -133,10 +152,12 @@ describe('TaskSpecificEvaluator', () => {
 
     it('valid JSON without schema → pass, score undefined, structural-only', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: '{"k": "v", "n": 1}',
-        expectedFormat: 'json',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: '{"k": "v", "n": 1}',
+          expectedFormat: 'json',
+        })
+      );
       expect(r.verdict).toBe('pass');
       expect(r.score).toBeUndefined();
       expect(r.structural.jsonValid).toBe(true);
@@ -145,11 +166,13 @@ describe('TaskSpecificEvaluator', () => {
 
     it('valid JSON with matching schema → fully_validated, numeric score', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: '{"name": "alice", "age": 30}',
-        expectedFormat: 'json',
-        jsonSchema: { type: 'object', required: ['name', 'age'] },
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: '{"name": "alice", "age": 30}',
+          expectedFormat: 'json',
+          jsonSchema: { type: 'object', required: ['name', 'age'] },
+        })
+      );
       expect(r.verdict).toBe('pass');
       expect(r.score).toBe(0.9);
       expect(r.structural.schemaValid).toBe(true);
@@ -158,11 +181,13 @@ describe('TaskSpecificEvaluator', () => {
 
     it('valid JSON with schema mismatch → fail', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: '{"name": "alice"}',
-        expectedFormat: 'json',
-        jsonSchema: { type: 'object', required: ['name', 'age'] },
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: '{"name": "alice"}',
+          expectedFormat: 'json',
+          jsonSchema: { type: 'object', required: ['name', 'age'] },
+        })
+      );
       expect(r.verdict).toBe('fail');
       expect(r.score).toBe(0);
       expect(r.structural.schemaValid).toBe(false);
@@ -172,10 +197,12 @@ describe('TaskSpecificEvaluator', () => {
   describe('plain_text and unknown', () => {
     it('plain_text without rubric → uncertain, no score, structural-only', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: 'A'.repeat(100),
-        expectedFormat: 'free_text',
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: 'A'.repeat(100),
+          expectedFormat: 'free_text',
+        })
+      );
       expect(r.verdict).toBe('uncertain');
       expect(r.score).toBeUndefined();
       expect(r.validationStatus).toBe('structurally_validated_only');
@@ -183,9 +210,11 @@ describe('TaskSpecificEvaluator', () => {
 
     it('unknown task kind → uncertain, structural-only', async () => {
       const ev = new TaskSpecificEvaluator();
-      const r = await ev.evaluate(baseInput({
-        output: 'A'.repeat(100),
-      }));
+      const r = await ev.evaluate(
+        baseInput({
+          output: 'A'.repeat(100),
+        })
+      );
       expect(r.verdict).toBe('uncertain');
       expect(r.score).toBeUndefined();
       expect(r.validationStatus).toBe('structurally_validated_only');

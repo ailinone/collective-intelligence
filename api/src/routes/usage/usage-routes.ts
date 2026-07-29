@@ -15,7 +15,10 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@/database/client';
 import { authenticate } from '@/middleware/auth-middleware';
-import { requireTenantContext, getTenantContext } from '@/api/middleware/tenant-isolation-middleware';
+import {
+  requireTenantContext,
+  getTenantContext,
+} from '@/api/middleware/tenant-isolation-middleware';
 import { logger } from '@/utils/logger';
 import { validateOrganizationId } from '@/utils/security';
 import type { UsageStats } from '@/types';
@@ -137,10 +140,14 @@ export async function registerUsageRoutes(server: FastifyInstance): Promise<void
     },
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
-      
+
       // Get organizationId from user context (set by authenticate middleware)
       let organizationId: string | undefined;
-      if (extendedRequest.user && typeof extendedRequest.user === 'object' && 'organizationId' in extendedRequest.user) {
+      if (
+        extendedRequest.user &&
+        typeof extendedRequest.user === 'object' &&
+        'organizationId' in extendedRequest.user
+      ) {
         organizationId = extendedRequest.user.organizationId as string;
       } else if (extendedRequest.organizationId) {
         organizationId = extendedRequest.organizationId;

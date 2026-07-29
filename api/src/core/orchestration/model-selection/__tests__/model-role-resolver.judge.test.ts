@@ -38,14 +38,23 @@ describe('ModelRoleResolver — judge', () => {
             id: 'json-capable',
             provider: 'p2',
             contextWindow: 64000,
-            capabilities: ['chat', 'text_generation', 'json_mode', 'function_calling'] as ModelCapability[],
+            capabilities: [
+              'chat',
+              'text_generation',
+              'json_mode',
+              'function_calling',
+            ] as ModelCapability[],
           }),
         }),
       ],
       constraints: { requireJsonOutput: true },
     });
     expect(r.selected[0]?.model.id).toBe('json-capable');
-    expect(r.rejected.some((rej) => rej.modelId === 'plain-chat' && rej.reason === 'json_output_not_supported')).toBe(true);
+    expect(
+      r.rejected.some(
+        (rej) => rej.modelId === 'plain-chat' && rej.reason === 'json_output_not_supported'
+      )
+    ).toBe(true);
   });
 
   it('prefers lower-cost candidates when quality is comparable', async () => {
@@ -62,7 +71,12 @@ describe('ModelRoleResolver — judge', () => {
             id: 'cheap',
             provider: 'p-cheap',
             contextWindow: 64000,
-            capabilities: ['chat', 'text_generation', 'json_mode', 'function_calling'] as ModelCapability[],
+            capabilities: [
+              'chat',
+              'text_generation',
+              'json_mode',
+              'function_calling',
+            ] as ModelCapability[],
             inputCostPer1k: 0.0001,
             outputCostPer1k: 0.0004,
             performance: { latencyMs: 500, throughput: 200, quality: 0.85, reliability: 0.93 },

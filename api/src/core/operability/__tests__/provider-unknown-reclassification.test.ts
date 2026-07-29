@@ -30,8 +30,26 @@
 import { describe, it, expect } from 'vitest';
 
 // Mirror the rule sets from the helper.
-const SPECIALIZED_NON_CHAT = new Set(['deepgram', 'cartesia', 'elevenlabs', 'palabraai', 'voyage', 'jina', 'cohere-embed']);
-const DEPLOYMENT_REQUIRED = new Set(['azure-openai', 'aws-bedrock', 'vertex-ai', 'gcp-vertex', 'vllm', 'lm-studio', 'ollama', 'xinference', 'triton']);
+const SPECIALIZED_NON_CHAT = new Set([
+  'deepgram',
+  'cartesia',
+  'elevenlabs',
+  'palabraai',
+  'voyage',
+  'jina',
+  'cohere-embed',
+]);
+const DEPLOYMENT_REQUIRED = new Set([
+  'azure-openai',
+  'aws-bedrock',
+  'vertex-ai',
+  'gcp-vertex',
+  'vllm',
+  'lm-studio',
+  'ollama',
+  'xinference',
+  'triton',
+]);
 
 interface ProviderClassifyInput {
   readonly providerId: string;
@@ -53,41 +71,73 @@ function classify(input: ProviderClassifyInput) {
 describe('01C.1B-J1C §11 — unknown reclassification rules', () => {
   it('specialty providers (audio/embedding) → S_specialized_non_chat', () => {
     for (const p of ['deepgram', 'cartesia', 'elevenlabs', 'voyage']) {
-      expect(classify({ providerId: p, hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: true }))
-        .toBe('S_specialized_non_chat');
+      expect(
+        classify({ providerId: p, hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: true })
+      ).toBe('S_specialized_non_chat');
     }
   });
 
   it('deployment-specific providers → T_deployment_required', () => {
     for (const p of ['azure-openai', 'aws-bedrock', 'vertex-ai', 'vllm', 'ollama']) {
-      expect(classify({ providerId: p, hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: true }))
-        .toBe('T_deployment_required');
+      expect(
+        classify({ providerId: p, hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: true })
+      ).toBe('T_deployment_required');
     }
   });
 
   it('self-hosted without endpoint → T_deployment_required', () => {
-    expect(classify({ providerId: 'xinference', hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: false }))
-      .toBe('T_deployment_required');
+    expect(
+      classify({
+        providerId: 'xinference',
+        hasCatalogEntry: true,
+        hasApiKeyEnvVar: true,
+        hasBaseUrl: false,
+      })
+    ).toBe('T_deployment_required');
   });
 
   it('provider missing from catalog → U_missing_catalog_entry', () => {
-    expect(classify({ providerId: 'novel-provider-xyz', hasCatalogEntry: false, hasApiKeyEnvVar: false, hasBaseUrl: false }))
-      .toBe('U_missing_catalog_entry');
+    expect(
+      classify({
+        providerId: 'novel-provider-xyz',
+        hasCatalogEntry: false,
+        hasApiKeyEnvVar: false,
+        hasBaseUrl: false,
+      })
+    ).toBe('U_missing_catalog_entry');
   });
 
   it('catalog entry without apiKeyEnvVar → O_auth_config_missing', () => {
-    expect(classify({ providerId: 'some-router', hasCatalogEntry: true, hasApiKeyEnvVar: false, hasBaseUrl: true }))
-      .toBe('O_auth_config_missing');
+    expect(
+      classify({
+        providerId: 'some-router',
+        hasCatalogEntry: true,
+        hasApiKeyEnvVar: false,
+        hasBaseUrl: true,
+      })
+    ).toBe('O_auth_config_missing');
   });
 
   it('catalog entry without baseUrl → P_base_url_missing', () => {
-    expect(classify({ providerId: 'some-router', hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: false }))
-      .toBe('P_base_url_missing');
+    expect(
+      classify({
+        providerId: 'some-router',
+        hasCatalogEntry: true,
+        hasApiKeyEnvVar: true,
+        hasBaseUrl: false,
+      })
+    ).toBe('P_base_url_missing');
   });
 
   it('router with complete catalog spec → W_router_supported_pending_probe', () => {
-    expect(classify({ providerId: 'togetherai', hasCatalogEntry: true, hasApiKeyEnvVar: true, hasBaseUrl: true }))
-      .toBe('W_router_supported_pending_probe');
+    expect(
+      classify({
+        providerId: 'togetherai',
+        hasCatalogEntry: true,
+        hasApiKeyEnvVar: true,
+        hasBaseUrl: true,
+      })
+    ).toBe('W_router_supported_pending_probe');
   });
 
   it('no provider HTTP call is implied by classification (pure function)', () => {

@@ -306,18 +306,15 @@ const azureOpenAIFactory: AdapterFactory = (ctx) => {
 };
 
 // Gemini OAI-compat — pure hub wrapper, no URL substitution needed.
-const geminiOpenAIFactory: AdapterFactory = (ctx) =>
-  new GeminiOpenAIAdapter(buildHubConfig(ctx));
+const geminiOpenAIFactory: AdapterFactory = (ctx) => new GeminiOpenAIAdapter(buildHubConfig(ctx));
 
 // GitHub Models — pure hub wrapper with modelListPath override.
-const githubModelsFactory: AdapterFactory = (ctx) =>
-  new GitHubModelsAdapter(buildHubConfig(ctx));
+const githubModelsFactory: AdapterFactory = (ctx) => new GitHubModelsAdapter(buildHubConfig(ctx));
 
 // Featherless — pure hub thin wrapper (OAI-compat). Long-tail HF marketplace.
 // No URL substitution, no custom auth; the adapter exists for per-provider
 // observability and for future provider-specific feature hooks.
-const featherlessFactory: AdapterFactory = (ctx) =>
-  new FeatherlessAdapter(buildHubConfig(ctx));
+const featherlessFactory: AdapterFactory = (ctx) => new FeatherlessAdapter(buildHubConfig(ctx));
 
 // Inworld — router + TTS/STT specialist. The adapter takes a narrow
 // { apiKey, baseUrl } shape (NOT the full hub config) because it owns its
@@ -377,10 +374,7 @@ const awsBedrockFactory: AdapterFactory = (ctx) =>
     enabled: true,
     apiKey: ctx.apiKey, // AWS_ACCESS_KEY_ID for telemetry; SDK uses chain
     baseUrl: ctx.baseUrl, // informational; SDK builds per-region URL
-    region:
-      process.env.AWS_BEDROCK_REGION ||
-      process.env.AWS_REGION ||
-      'us-east-1',
+    region: process.env.AWS_BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1',
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     sessionToken: process.env.AWS_SESSION_TOKEN,

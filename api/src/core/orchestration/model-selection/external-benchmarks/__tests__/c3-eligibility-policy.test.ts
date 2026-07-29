@@ -20,7 +20,9 @@ import {
   type C3EligibilityInput,
 } from '@/core/orchestration/model-selection/external-benchmarks/c3-eligibility-policy';
 
-function input(overrides: Partial<C3EligibilityInput> & Pick<C3EligibilityInput, 'modelId'>): C3EligibilityInput {
+function input(
+  overrides: Partial<C3EligibilityInput> & Pick<C3EligibilityInput, 'modelId'>
+): C3EligibilityInput {
   return {
     externalBenchmarkUsed: true,
     matchConfidence: 'high',
@@ -34,13 +36,15 @@ function input(overrides: Partial<C3EligibilityInput> & Pick<C3EligibilityInput,
 describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
   // ── Case 1: high + confirmed → C3_ELIGIBLE ───────────────────────────────
   it('high confidence + confirmed variant → C3_ELIGIBLE', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'deepseek-ai/DeepSeek-R1-0528',
-      matchConfidence: 'high',
-      variantEvidence: 'confirmed',
-      aaSlug: 'deepseek-r1',
-      aaName: "DeepSeek R1 0528 (May '25)",
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'deepseek-ai/DeepSeek-R1-0528',
+        matchConfidence: 'high',
+        variantEvidence: 'confirmed',
+        aaSlug: 'deepseek-r1',
+        aaName: "DeepSeek R1 0528 (May '25)",
+      })
+    );
     expect(r.c3Eligible).toBe(true);
     expect(r.status).toBe('C3_ELIGIBLE');
     expect(r.reason).toBe('eligible');
@@ -48,24 +52,28 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
 
   // ── Case 2: exact + confirmed → C3_ELIGIBLE ──────────────────────────────
   it('exact confidence + confirmed variant → C3_ELIGIBLE', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'anthropic/claude-opus-4-7',
-      matchConfidence: 'exact',
-      variantEvidence: 'confirmed',
-      aaSlug: 'claude-opus-4-7',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'anthropic/claude-opus-4-7',
+        matchConfidence: 'exact',
+        variantEvidence: 'confirmed',
+        aaSlug: 'claude-opus-4-7',
+      })
+    );
     expect(r.c3Eligible).toBe(true);
     expect(r.status).toBe('C3_ELIGIBLE');
   });
 
   // ── Case 3: high + not_applicable → C3_ELIGIBLE ─────────────────────────
   it('high confidence + not_applicable variant → C3_ELIGIBLE', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'anthropic/claude-opus-4-7',
-      matchConfidence: 'high',
-      variantEvidence: 'not_applicable',
-      aaSlug: 'claude-opus-4-7',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'anthropic/claude-opus-4-7',
+        matchConfidence: 'high',
+        variantEvidence: 'not_applicable',
+        aaSlug: 'claude-opus-4-7',
+      })
+    );
     expect(r.c3Eligible).toBe(true);
     expect(r.status).toBe('C3_ELIGIBLE');
     expect(r.reason).toBe('eligible');
@@ -73,12 +81,14 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
 
   // ── Case 4: high + probable → BLOCKED (variant_probable) ─────────────────
   it('high confidence + probable variant → BLOCKED (variant_probable_requires_waiver)', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'accounts/fireworks/models/kimi-k2p5',
-      matchConfidence: 'high',
-      variantEvidence: 'probable',
-      aaSlug: 'kimi-k2-5-non-reasoning',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'accounts/fireworks/models/kimi-k2p5',
+        matchConfidence: 'high',
+        variantEvidence: 'probable',
+        aaSlug: 'kimi-k2-5-non-reasoning',
+      })
+    );
     expect(r.c3Eligible).toBe(false);
     expect(r.status).toBe('C3_BLOCKED');
     expect(r.reason).toBe('blocked_variant_probable_requires_waiver');
@@ -86,12 +96,14 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
 
   // ── Case 5: high + ambiguous → BLOCKED (variant_ambiguous) ───────────────
   it('high confidence + ambiguous variant → BLOCKED (variant_ambiguous)', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'some/model',
-      matchConfidence: 'high',
-      variantEvidence: 'ambiguous',
-      aaSlug: 'some-model-vague',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'some/model',
+        matchConfidence: 'high',
+        variantEvidence: 'ambiguous',
+        aaSlug: 'some-model-vague',
+      })
+    );
     expect(r.c3Eligible).toBe(false);
     expect(r.status).toBe('C3_BLOCKED');
     expect(r.reason).toBe('blocked_variant_ambiguous');
@@ -99,12 +111,14 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
 
   // ── Case 6: medium + confirmed → BLOCKED (medium_confidence) ─────────────
   it('medium confidence + confirmed variant → BLOCKED (medium_confidence_requires_waiver)', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'Qwen/Qwen3-235B-A22B-Thinking-2507',
-      matchConfidence: 'medium',
-      variantEvidence: 'confirmed',
-      aaSlug: 'qwen3-235b-a22b-instruct-2507-reasoning',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'Qwen/Qwen3-235B-A22B-Thinking-2507',
+        matchConfidence: 'medium',
+        variantEvidence: 'confirmed',
+        aaSlug: 'qwen3-235b-a22b-instruct-2507-reasoning',
+      })
+    );
     expect(r.c3Eligible).toBe(false);
     expect(r.status).toBe('C3_BLOCKED');
     expect(r.reason).toBe('blocked_medium_confidence_requires_waiver');
@@ -112,23 +126,27 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
 
   // ── Case 7: medium + probable → BLOCKED (medium takes priority) ───────────
   it('medium confidence + probable variant → BLOCKED (medium_confidence_requires_waiver, medium takes priority)', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'Qwen/Qwen3-235B-A22B-Thinking-2507',
-      matchConfidence: 'medium',
-      variantEvidence: 'probable',
-      aaSlug: 'qwen3-235b-a22b-instruct-2507-reasoning',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'Qwen/Qwen3-235B-A22B-Thinking-2507',
+        matchConfidence: 'medium',
+        variantEvidence: 'probable',
+        aaSlug: 'qwen3-235b-a22b-instruct-2507-reasoning',
+      })
+    );
     expect(r.c3Eligible).toBe(false);
     expect(r.reason).toBe('blocked_medium_confidence_requires_waiver');
   });
 
   // ── Case 8: low confidence → BLOCKED (low_confidence) ────────────────────
   it('low confidence → BLOCKED (low_confidence)', () => {
-    const r = evaluateC3Eligibility(input({
-      modelId: 'some/model',
-      matchConfidence: 'low',
-      variantEvidence: 'confirmed',
-    }));
+    const r = evaluateC3Eligibility(
+      input({
+        modelId: 'some/model',
+        matchConfidence: 'low',
+        variantEvidence: 'confirmed',
+      })
+    );
     expect(r.c3Eligible).toBe(false);
     expect(r.reason).toBe('blocked_low_confidence');
   });
@@ -201,10 +219,14 @@ describe('01C.1B-J2-C-R6-HARDEN — evaluateC3Eligibility', () => {
     expect(r1Result?.c3Eligible).toBe(true);
 
     // kimi and qwen are blocked
-    const kimiResult = summary.results.find((r) => r.modelId === 'accounts/fireworks/models/kimi-k2p5');
+    const kimiResult = summary.results.find(
+      (r) => r.modelId === 'accounts/fireworks/models/kimi-k2p5'
+    );
     expect(kimiResult?.c3Eligible).toBe(false);
     expect(kimiResult?.reason).toBe('blocked_variant_probable_requires_waiver');
-    const qwenResult = summary.results.find((r) => r.modelId === 'Qwen/Qwen3-235B-A22B-Thinking-2507');
+    const qwenResult = summary.results.find(
+      (r) => r.modelId === 'Qwen/Qwen3-235B-A22B-Thinking-2507'
+    );
     expect(qwenResult?.c3Eligible).toBe(false);
     expect(qwenResult?.reason).toBe('blocked_medium_confidence_requires_waiver');
   });

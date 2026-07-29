@@ -20,10 +20,7 @@
  * - Falls back gracefully when parsing fails.
  */
 
-import type {
-  CoordinationSignal,
-  CoordinationState,
-} from './coordination-types';
+import type { CoordinationSignal, CoordinationState } from './coordination-types';
 import { validateCoordinationSignal } from './signal-validator';
 import {
   sanitizeForPromptContext,
@@ -71,19 +68,19 @@ export function buildCoordinationSystemPrompt(
   role?: string,
   roundNumber?: number,
   state?: CoordinationState,
-  options?: CoordinationPromptOptions,
+  options?: CoordinationPromptOptions
 ): string {
   const roleInstruction = role
     ? `You are participating as "${role}".`
     : 'You are participating as an independent expert.';
 
-  const roundInfo = roundNumber && roundNumber > 1
-    ? `\n\nThis is round ${roundNumber}. Previous rounds have established a collective state. Review the updated variables and reconsider your position.`
-    : '';
+  const roundInfo =
+    roundNumber && roundNumber > 1
+      ? `\n\nThis is round ${roundNumber}. Previous rounds have established a collective state. Review the updated variables and reconsider your position.`
+      : '';
 
-  const stateContext = state && state.round > 0
-    ? `\n\nCurrent collective state:\n${formatStateForPrompt(state)}`
-    : '';
+  const stateContext =
+    state && state.round > 0 ? `\n\nCurrent collective state:\n${formatStateForPrompt(state)}` : '';
 
   // F1.1 — EntropySeed (anti-herding). Inserted as a leading instruction
   // when enabled. Kept short to bound token cost. The seed itself is
@@ -147,7 +144,7 @@ function formatStateForPrompt(state: CoordinationState): string {
       // `confidence` and `stability` are guaranteed numeric by the
       // VariableState contract — toFixed is safe here without sanitization.
       lines.push(
-        `  - ${safeName}: ${safeValue} (confidence: ${varState.confidence.toFixed(2)}, stability: ${varState.stability.toFixed(2)})`,
+        `  - ${safeName}: ${safeValue} (confidence: ${varState.confidence.toFixed(2)}, stability: ${varState.stability.toFixed(2)})`
       );
     }
   }
@@ -180,12 +177,12 @@ export { sanitizeForPromptContext };
  */
 export function buildCoordinationUserMessage(
   originalMessages: Array<{ role: string; content: string | unknown[] }>,
-  taskContext?: string,
+  taskContext?: string
 ): string {
   // Extract the core task from original messages
   const userMessages = originalMessages
-    .filter(m => m.role === 'user')
-    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+    .filter((m) => m.role === 'user')
+    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)));
 
   const lastUserMessage = userMessages[userMessages.length - 1] || '';
 
@@ -224,7 +221,7 @@ export function parseSignalResponse(
     inputTokens: number;
     outputTokens: number;
     estimatedCost: number;
-  },
+  }
 ): { signal: CoordinationSignal | null; parseError?: string } {
   if (!rawResponse || rawResponse.trim().length === 0) {
     return { signal: null, parseError: 'Empty response from model' };
@@ -271,10 +268,7 @@ export function parseSignalResponse(
   }
 
   if (validation.warnings.length > 0) {
-    log.debug(
-      { warnings: validation.warnings, modelId, round },
-      'Signal parsed with warnings',
-    );
+    log.debug({ warnings: validation.warnings, modelId, round }, 'Signal parsed with warnings');
   }
 
   return { signal: validation.sanitized! };

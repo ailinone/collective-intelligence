@@ -30,7 +30,8 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
       schema: {
         tags: ['Providers'],
         summary: 'List available AI providers',
-        description: 'Returns a list of all configured AI providers with their availability status, health, and capabilities',
+        description:
+          'Returns a list of all configured AI providers with their availability status, health, and capabilities',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         response: {
           200: {
@@ -58,11 +59,11 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
                       items: { type: 'string' },
                     },
                     modelsCount: { type: 'number' },
-            configured: { type: 'boolean' },
-            discovered: { type: 'boolean' },
-            source: { type: 'string' },
-            executionProvider: { type: 'string' },
-            routedVia: { type: 'string' },
+                    configured: { type: 'boolean' },
+                    discovered: { type: 'boolean' },
+                    source: { type: 'string' },
+                    executionProvider: { type: 'string' },
+                    routedVia: { type: 'string' },
                   },
                 },
               },
@@ -131,14 +132,20 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
           .filter((provider) => !configuredIds.has(provider.id))
           .map((provider) => {
             const models = allModels.filter((m) => m.providerId === provider.id);
-            const capabilities = Array.from(new Set(models.flatMap((model) => model.capabilities || [])));
+            const capabilities = Array.from(
+              new Set(models.flatMap((model) => model.capabilities || []))
+            );
             const metadata =
-              provider.metadata && typeof provider.metadata === 'object' && !Array.isArray(provider.metadata)
+              provider.metadata &&
+              typeof provider.metadata === 'object' &&
+              !Array.isArray(provider.metadata)
                 ? (provider.metadata as Record<string, unknown>)
                 : {};
 
             const source =
-              typeof metadata.discoveredBy === 'string' ? (metadata.discoveredBy as string) : undefined;
+              typeof metadata.discoveredBy === 'string'
+                ? (metadata.discoveredBy as string)
+                : undefined;
             const executionProvider =
               typeof metadata.executionProvider === 'string'
                 ? (metadata.executionProvider as string)
@@ -270,11 +277,13 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
             modelsCount: models.length,
             configured: availability?.status === 'available',
             discovered: false,
-            models: models.slice(0, 20).map((model: { id: string; name: string; status: string }) => ({
-              id: model.id,
-              name: model.name,
-              status: model.status,
-            })),
+            models: models
+              .slice(0, 20)
+              .map((model: { id: string; name: string; status: string }) => ({
+                id: model.id,
+                name: model.name,
+                status: model.status,
+              })),
           });
         }
 
@@ -324,11 +333,13 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
           source,
           executionProvider,
           routedVia,
-          models: models.slice(0, 20).map((model: { id: string; name: string; status: string }) => ({
-            id: model.id,
-            name: model.name,
-            status: model.status,
-          })),
+          models: models
+            .slice(0, 20)
+            .map((model: { id: string; name: string; status: string }) => ({
+              id: model.id,
+              name: model.name,
+              status: model.status,
+            })),
         });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -341,4 +352,3 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
     }
   );
 }
-

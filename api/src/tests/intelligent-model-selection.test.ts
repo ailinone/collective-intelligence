@@ -10,7 +10,7 @@
 /**
  * Tests for Intelligent Model Selection Service
  * Tests the core logic without requiring running API or providers
- * 
+ *
  * @vitest-environment node
  */
 
@@ -47,9 +47,7 @@ describe('IntelligentModelSelectionService', () => {
     it('should detect simple complexity for short messages without tools', async () => {
       const request: ChatRequest = {
         model: 'auto',
-        messages: [
-          { role: 'user', content: 'Hello!' },
-        ],
+        messages: [{ role: 'user', content: 'Hello!' }],
       };
 
       const requirements = await service.analyzeRequirements(request);
@@ -63,7 +61,11 @@ describe('IntelligentModelSelectionService', () => {
       const request: ChatRequest = {
         model: 'auto',
         messages: [
-          { role: 'user', content: 'Explain the concept of dependency injection in software engineering and provide examples in TypeScript. Also discuss when to use it versus other patterns.' },
+          {
+            role: 'user',
+            content:
+              'Explain the concept of dependency injection in software engineering and provide examples in TypeScript. Also discuss when to use it versus other patterns.',
+          },
         ],
       };
 
@@ -77,7 +79,10 @@ describe('IntelligentModelSelectionService', () => {
       const request: ChatRequest = {
         model: 'auto',
         messages: [
-          { role: 'user', content: 'Write a function in Python to sort a list using quicksort algorithm.' },
+          {
+            role: 'user',
+            content: 'Write a function in Python to sort a list using quicksort algorithm.',
+          },
         ],
       };
 
@@ -89,9 +94,7 @@ describe('IntelligentModelSelectionService', () => {
     it('should require function_calling when tools are provided', async () => {
       const request: ChatRequest = {
         model: 'auto',
-        messages: [
-          { role: 'user', content: 'List files in current directory' },
-        ],
+        messages: [{ role: 'user', content: 'List files in current directory' }],
         tools: [
           {
             type: 'function',
@@ -115,9 +118,7 @@ describe('IntelligentModelSelectionService', () => {
     it('should require streaming when stream is true', async () => {
       const request: ChatRequest = {
         model: 'auto',
-        messages: [
-          { role: 'user', content: 'Hello' },
-        ],
+        messages: [{ role: 'user', content: 'Hello' }],
         stream: true,
       };
 
@@ -130,7 +131,11 @@ describe('IntelligentModelSelectionService', () => {
       const request: ChatRequest = {
         model: 'auto',
         messages: [
-          { role: 'user', content: 'I have a bug in my code. The function returns undefined instead of the expected value.' },
+          {
+            role: 'user',
+            content:
+              'I have a bug in my code. The function returns undefined instead of the expected value.',
+          },
         ],
       };
 
@@ -143,7 +148,10 @@ describe('IntelligentModelSelectionService', () => {
       const request: ChatRequest = {
         model: 'auto',
         messages: [
-          { role: 'user', content: 'Please refactor this code to improve readability and performance.' },
+          {
+            role: 'user',
+            content: 'Please refactor this code to improve readability and performance.',
+          },
         ],
       };
 
@@ -210,7 +218,7 @@ describe('IntelligentModelSelectionService', () => {
 
       // Model should score high when it matches all required capabilities
       const requiredCapabilities: ModelCapability[] = ['function_calling', 'streaming'];
-      const hasAllRequired = requiredCapabilities.every(cap => 
+      const hasAllRequired = requiredCapabilities.every((cap) =>
         modelWithCapabilities.capabilities.includes(cap)
       );
 
@@ -221,7 +229,7 @@ describe('IntelligentModelSelectionService', () => {
       // Use dynamic model discovery - find models without function_calling
       const { getModelRepository } = await import('@/services/model-repository.js');
       const repository = getModelRepository();
-      
+
       // Get all models
       const allModels = await repository.searchModels({
         status: 'active',
@@ -230,7 +238,7 @@ describe('IntelligentModelSelectionService', () => {
 
       // Find a model without function_calling capability
       const modelWithoutFunctionCalling = allModels.find(
-        model => !model.capabilities.includes('function_calling')
+        (model) => !model.capabilities.includes('function_calling')
       );
 
       if (!modelWithoutFunctionCalling) {
@@ -239,7 +247,7 @@ describe('IntelligentModelSelectionService', () => {
       }
 
       const requiredCapabilities: ModelCapability[] = ['function_calling'];
-      const hasAllRequired = requiredCapabilities.every(cap => 
+      const hasAllRequired = requiredCapabilities.every((cap) =>
         modelWithoutFunctionCalling.capabilities.includes(cap)
       );
 
@@ -250,7 +258,12 @@ describe('IntelligentModelSelectionService', () => {
   describe('Complexity Detection', () => {
     const testCases = [
       { tokens: 100, tools: 0, expected: 'simple', allowedComplexities: ['simple', 'moderate'] },
-      { tokens: 1000, tools: 2, expected: 'moderate', allowedComplexities: ['moderate', 'complex'] },
+      {
+        tokens: 1000,
+        tools: 2,
+        expected: 'moderate',
+        allowedComplexities: ['moderate', 'complex'],
+      },
       { tokens: 5000, tools: 5, expected: 'complex', allowedComplexities: ['moderate', 'complex'] },
       { tokens: 15000, tools: 15, expected: 'expert', allowedComplexities: ['complex', 'expert'] },
     ];
@@ -259,7 +272,7 @@ describe('IntelligentModelSelectionService', () => {
       it(`should detect ~${expected} complexity for ~${tokens} tokens and ${tools} tools`, async () => {
         // Generate content with approximate token count (4 chars per token)
         const content = 'a'.repeat(tokens * 4);
-        
+
         const request: ChatRequest = {
           model: 'auto',
           messages: [{ role: 'user', content }],
@@ -285,7 +298,10 @@ describe('IntelligentModelSelectionService', () => {
     const taskTypeCases = [
       { content: 'Create a function in Python to sort a list', expectedType: 'code-generation' },
       { content: 'Fix this bug in my function, it returns undefined', expectedType: 'debugging' },
-      { content: 'Refactor this class to use composition instead of inheritance', expectedType: 'refactoring' },
+      {
+        content: 'Refactor this class to use composition instead of inheritance',
+        expectedType: 'refactoring',
+      },
       { content: 'Review this pull request for security issues', expectedType: 'code-review' },
       { content: 'Write documentation for this API module', expectedType: 'documentation' },
       { content: 'Generate unit tests for this service', expectedType: 'testing' },
@@ -336,4 +352,3 @@ describe('Error Parsing', () => {
     expect(anthropicError.error.message).toContain('at least one message');
   });
 });
-

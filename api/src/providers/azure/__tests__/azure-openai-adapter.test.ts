@@ -73,9 +73,9 @@ function getInternals(adapter: AzureOpenAIAdapter): {
 
 describe('buildAzureOpenAIBaseUrl helper', () => {
   it('composes a canonical Azure URL from resource + deployment', () => {
-    expect(
-      buildAzureOpenAIBaseUrl({ resourceName: 'my-aoai', deployment: 'gpt-4o-prod' }),
-    ).toBe('https://my-aoai.openai.azure.com/openai/deployments/gpt-4o-prod');
+    expect(buildAzureOpenAIBaseUrl({ resourceName: 'my-aoai', deployment: 'gpt-4o-prod' })).toBe(
+      'https://my-aoai.openai.azure.com/openai/deployments/gpt-4o-prod'
+    );
   });
 
   it('honors an explicit endpoint over resourceName (sovereign cloud / private link)', () => {
@@ -84,7 +84,7 @@ describe('buildAzureOpenAIBaseUrl helper', () => {
         endpoint: 'https://my-aoai.openai.azure.us',
         deployment: 'gov-deployment',
         resourceName: 'ignored',
-      }),
+      })
     ).toBe('https://my-aoai.openai.azure.us/openai/deployments/gov-deployment');
   });
 
@@ -94,19 +94,19 @@ describe('buildAzureOpenAIBaseUrl helper', () => {
       buildAzureOpenAIBaseUrl({
         endpoint: 'https://my-aoai.openai.azure.com/openai/',
         deployment: 'gpt-4',
-      }),
+      })
     ).toBe('https://my-aoai.openai.azure.com/openai/deployments/gpt-4');
   });
 
   it('throws when deployment is missing (no silent fallback)', () => {
     expect(() =>
-      buildAzureOpenAIBaseUrl({ resourceName: 'x' } as unknown as { resourceName: string }),
+      buildAzureOpenAIBaseUrl({ resourceName: 'x' } as unknown as { resourceName: string })
     ).toThrow(/deployment is required/);
   });
 
   it('throws when neither resourceName nor endpoint is provided', () => {
     expect(() => buildAzureOpenAIBaseUrl({ deployment: 'x' })).toThrow(
-      /resourceName \(or explicit endpoint\) is required/,
+      /resourceName \(or explicit endpoint\) is required/
     );
   });
 });
@@ -141,7 +141,7 @@ describe('AzureOpenAIAdapter — URL resolution', () => {
 
     const internals = getInternals(adapter);
     expect(internals.baseUrl).toBe(
-      'https://env-resource.openai.azure.com/openai/deployments/env-deployment',
+      'https://env-resource.openai.azure.com/openai/deployments/env-deployment'
     );
     expect(internals.chatPath).toContain('api-version=2024-12-01-preview');
   });
@@ -156,7 +156,7 @@ describe('AzureOpenAIAdapter — URL resolution', () => {
       deployment: 'ignored',
     });
     expect(getInternals(adapter).baseUrl).toBe(
-      'https://gateway.example.com/openai/deployments/custom',
+      'https://gateway.example.com/openai/deployments/custom'
     );
   });
 
@@ -170,7 +170,7 @@ describe('AzureOpenAIAdapter — URL resolution', () => {
       deployment: 'dep',
     });
     expect(getInternals(adapter).chatPath).toContain(
-      `api-version=${encodeURIComponent(AZURE_OPENAI_DEFAULT_API_VERSION)}`,
+      `api-version=${encodeURIComponent(AZURE_OPENAI_DEFAULT_API_VERSION)}`
     );
     expect(adapter.getApiVersion()).toBe(AZURE_OPENAI_DEFAULT_API_VERSION);
   });

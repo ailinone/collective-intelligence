@@ -90,14 +90,28 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
     id: 'huggingface',
     routesTo: [
       'hf-inference',
-      'replicate', 'scaleway',
-      'groq', 'novita', 'cerebras', 'sambanova', 'nscale', 'fal',
-      'hyperbolic', 'togetherai', 'fireworks-ai', 'featherless-ai',
-      'zai', 'cohere', 'public-ai', 'ovhcloud', 'deepinfra', 'wavespeed',
+      'replicate',
+      'scaleway',
+      'groq',
+      'novita',
+      'cerebras',
+      'sambanova',
+      'nscale',
+      'fal',
+      'hyperbolic',
+      'togetherai',
+      'fireworks-ai',
+      'featherless-ai',
+      'zai',
+      'cohere',
+      'public-ai',
+      'ovhcloud',
+      'deepinfra',
+      'wavespeed',
       'nvidia',
     ],
     slugOverrides: {
-      'togetherai': 'together',
+      togetherai: 'together',
       'fireworks-ai': 'fireworks-ai',
     },
   },
@@ -108,14 +122,32 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'openrouter',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-      'cohere', 'alibaba', 'minimax', 'moonshot', 'perplexity',
-      'groq', 'cerebras', 'fireworks-ai', 'togetherai', 'novita',
-      'hyperbolic', 'deepinfra', 'sambanova', 'featherless-ai',
-      'nvidia', 'inflection', 'inworld',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'xai',
+      'cohere',
+      'alibaba',
+      'minimax',
+      'moonshot',
+      'perplexity',
+      'groq',
+      'cerebras',
+      'fireworks-ai',
+      'togetherai',
+      'novita',
+      'hyperbolic',
+      'deepinfra',
+      'sambanova',
+      'featherless-ai',
+      'nvidia',
+      'inflection',
+      'inworld',
     ],
     slugOverrides: {
-      'togetherai': 'together',
+      togetherai: 'together',
     },
   },
 
@@ -124,9 +156,20 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'aihubmix',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-      'cohere', 'alibaba', 'minimax', 'moonshot',
-      'groq', 'cerebras', 'fireworks-ai', 'togetherai',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'xai',
+      'cohere',
+      'alibaba',
+      'minimax',
+      'moonshot',
+      'groq',
+      'cerebras',
+      'fireworks-ai',
+      'togetherai',
     ],
   },
 
@@ -135,8 +178,16 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'vercel-ai-gateway',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere',
-      'deepseek', 'groq', 'fireworks-ai', 'togetherai',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'xai',
+      'cohere',
+      'deepseek',
+      'groq',
+      'fireworks-ai',
+      'togetherai',
     ],
   },
 
@@ -144,10 +195,7 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   // GitHub's gateway to Azure-hosted models + some partners.
   {
     id: 'github-models',
-    routesTo: [
-      'openai', 'mistral', 'cohere', 'meta', 'azure-openai',
-      'deepseek',
-    ],
+    routesTo: ['openai', 'mistral', 'cohere', 'meta', 'azure-openai', 'deepseek'],
   },
 
   // ── EdenAI ──
@@ -155,8 +203,15 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'edenai',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'cohere',
-      'deepseek', 'xai', 'alibaba', 'minimax',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'cohere',
+      'deepseek',
+      'xai',
+      'alibaba',
+      'minimax',
     ],
   },
 
@@ -165,8 +220,16 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'cometapi',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-      'alibaba', 'minimax', 'moonshot', 'cohere',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'xai',
+      'alibaba',
+      'minimax',
+      'moonshot',
+      'cohere',
     ],
   },
 
@@ -174,25 +237,37 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'requesty',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek',
-      'groq', 'cerebras', 'fireworks-ai', 'togetherai',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'groq',
+      'cerebras',
+      'fireworks-ai',
+      'togetherai',
     ],
   },
 
   // ── Nano-GPT ──
   {
     id: 'nanogpt',
-    routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-    ],
+    routesTo: ['openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai'],
   },
 
   // ── AIML API ──
   {
     id: 'aiml',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-      'alibaba', 'groq', 'cerebras',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'xai',
+      'alibaba',
+      'groq',
+      'cerebras',
     ],
   },
 
@@ -200,8 +275,15 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'ai302',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'deepseek', 'xai',
-      'alibaba', 'moonshot', 'minimax',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'deepseek',
+      'xai',
+      'alibaba',
+      'moonshot',
+      'minimax',
     ],
   },
 
@@ -209,17 +291,21 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'routeway',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral',
-      'groq', 'cerebras', 'fireworks-ai', 'togetherai',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'groq',
+      'cerebras',
+      'fireworks-ai',
+      'togetherai',
     ],
   },
 
   // ── ORQ.AI ──
   {
     id: 'orqai',
-    routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'cohere',
-    ],
+    routesTo: ['openai', 'anthropic', 'google', 'mistral', 'cohere'],
   },
 
   // ── Helicone AI ──
@@ -227,25 +313,27 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
   {
     id: 'heliconeai',
     routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'cohere',
-      'deepseek', 'togetherai', 'groq',
+      'openai',
+      'anthropic',
+      'google',
+      'mistral',
+      'cohere',
+      'deepseek',
+      'togetherai',
+      'groq',
     ],
   },
 
   // ── Poe (Quora) ──
   {
     id: 'poe',
-    routesTo: [
-      'openai', 'anthropic', 'google', 'mistral', 'meta',
-    ],
+    routesTo: ['openai', 'anthropic', 'google', 'mistral', 'meta'],
   },
 
   // ── Venice ──
   {
     id: 'venice',
-    routesTo: [
-      'meta', 'mistral', 'deepseek', 'qwen',
-    ],
+    routesTo: ['meta', 'mistral', 'deepseek', 'qwen'],
   },
 
   // ── Gemini-OpenAI (Google's OpenAI-compatible gateway) ──
@@ -295,34 +383,99 @@ const ROUTER_DEFINITIONS: readonly RouterDefinition[] = [
 
 const NATIVE_PROVIDERS: readonly string[] = [
   // Tier-1 frontier
-  'openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere',
-  'deepseek', 'perplexity',
+  'openai',
+  'anthropic',
+  'google',
+  'mistral',
+  'xai',
+  'cohere',
+  'deepseek',
+  'perplexity',
   // Major hosts / hybrid backends from operator disclosure
-  'groq', 'cerebras', 'fireworks-ai', 'togetherai', 'novita',
-  'sambanova', 'nscale', 'fal', 'hyperbolic', 'featherless-ai',
-  'zai', 'replicate', 'scaleway', 'public-ai', 'ovhcloud',
-  'hf-inference', 'deepinfra', 'wavespeed', 'nvidia',
+  'groq',
+  'cerebras',
+  'fireworks-ai',
+  'togetherai',
+  'novita',
+  'sambanova',
+  'nscale',
+  'fal',
+  'hyperbolic',
+  'featherless-ai',
+  'zai',
+  'replicate',
+  'scaleway',
+  'public-ai',
+  'ovhcloud',
+  'hf-inference',
+  'deepinfra',
+  'wavespeed',
+  'nvidia',
   // Chinese-region
-  'alibaba', 'qwen', 'minimax', 'moonshot', 'zhipu', 'qianfan',
-  'stepfun', 'siliconflow', 'volcano', 'doubao', 'ark',
+  'alibaba',
+  'qwen',
+  'minimax',
+  'moonshot',
+  'zhipu',
+  'qianfan',
+  'stepfun',
+  'siliconflow',
+  'volcano',
+  'doubao',
+  'ark',
   // Less common
-  'inflection', 'inworld', 'writer', 'rekaai', 'upstage',
-  'arcee', 'atlascloud', 'avian', 'gmi', 'infermatic',
-  'phala', 'relace', 'morph', 'xiaomi-mimo', 'anyscale',
-  'lambda-ai', 'nebius', 'wandb', 'jina', 'v0', 'chutes',
+  'inflection',
+  'inworld',
+  'writer',
+  'rekaai',
+  'upstage',
+  'arcee',
+  'atlascloud',
+  'avian',
+  'gmi',
+  'infermatic',
+  'phala',
+  'relace',
+  'morph',
+  'xiaomi-mimo',
+  'anyscale',
+  'lambda-ai',
+  'nebius',
+  'wandb',
+  'jina',
+  'v0',
+  'chutes',
   'friendli',
   // Cloud-native
-  'azure-openai', 'aws-bedrock', 'aws-sagemaker', 'vertex-ai',
-  'databricks', 'sap-ai-core', 'snowflake', 'watsonx',
+  'azure-openai',
+  'aws-bedrock',
+  'aws-sagemaker',
+  'vertex-ai',
+  'databricks',
+  'sap-ai-core',
+  'snowflake',
+  'watsonx',
   // Misc upstream tags used in routers but also addressable as natives
-  'meta', 'meta-llama',
+  'meta',
+  'meta-llama',
   // Specialized non-chat (still natives)
-  'deepgram', 'cartesia', 'elevenlabs',
+  'deepgram',
+  'cartesia',
+  'elevenlabs',
   'voyage',
-  'recraft', 'runwayml', 'topaz', 'bfl',
+  'recraft',
+  'runwayml',
+  'topaz',
+  'bfl',
   // Local
-  'ollama', 'local-llama', 'local-kobold', 'local-embeddings',
-  'xinference', 'vllm', 'lm-studio', 'triton',
+  'ollama',
+  'local-llama',
+  'local-kobold',
+  'local-embeddings',
+  'xinference',
+  'vllm',
+  'lm-studio',
+  'triton',
 ];
 
 // ──────────────────────────────────────────────────────────────────────
@@ -358,15 +511,12 @@ function buildClassification(): ReadonlyMap<string, ProviderRoutingClassificatio
   // Iterate the union of NATIVE_PROVIDERS + any native referenced by a
   // router's routesTo (defensive — a router shouldn't reference a native
   // we haven't declared, but if it does, we still classify it).
-  const allNatives = new Set([
-    ...NATIVE_PROVIDERS,
-    ...Array.from(nativeToRouters.keys()),
-  ]);
+  const allNatives = new Set([...NATIVE_PROVIDERS, ...Array.from(nativeToRouters.keys())]);
   for (const id of allNatives) {
-    if (routerIds.has(id)) continue;  // routers already added
-    const peerings = (nativeToRouters.get(id) ?? []).slice().sort((a, b) =>
-      a.routerProviderId.localeCompare(b.routerProviderId),
-    );
+    if (routerIds.has(id)) continue; // routers already added
+    const peerings = (nativeToRouters.get(id) ?? [])
+      .slice()
+      .sort((a, b) => a.routerProviderId.localeCompare(b.routerProviderId));
     m.set(id, {
       kind: 'native',
       routesVia: peerings,
@@ -383,7 +533,9 @@ const CLASSIFICATION = buildClassification();
 // Public API
 // ──────────────────────────────────────────────────────────────────────
 
-export function classifyProviderRouting(providerId: string): ProviderRoutingClassification | undefined {
+export function classifyProviderRouting(
+  providerId: string
+): ProviderRoutingClassification | undefined {
   return CLASSIFICATION.get(providerId.toLowerCase());
 }
 
@@ -424,9 +576,7 @@ export function listModelRouteCandidates(nativeProviderId: string): readonly Mod
     return [{ providerId: nativeProviderId, kind: 'router' }];
   }
   // Native: self first, then each router.
-  const out: ModelRouteCandidate[] = [
-    { providerId: nativeProviderId, kind: 'native' },
-  ];
+  const out: ModelRouteCandidate[] = [{ providerId: nativeProviderId, kind: 'native' }];
   for (const p of cls.routesVia) {
     out.push({
       providerId: p.routerProviderId,
@@ -472,7 +622,7 @@ export function getRoutingTaxonomySnapshot(): {
     if (cls.kind === 'router') routers.push(id);
     else {
       natives.push(id);
-      routeCounts[id] = 1 + cls.routesVia.length;  // self + routers
+      routeCounts[id] = 1 + cls.routesVia.length; // self + routers
     }
   }
   return {

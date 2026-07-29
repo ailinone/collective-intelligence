@@ -56,14 +56,14 @@ export interface ScoringPolicy {
  * to produce sensible orderings on the fixture, not to optimise.
  */
 export const DEFAULT_SCORE_WEIGHTS: ScoreBreakdownWeights = Object.freeze({
-  capabilityFit: 0.20,
+  capabilityFit: 0.2,
   freshness: 0.15,
   routeReliability: 0.15,
-  latencyScore: 0.10,
-  costEfficiency: 0.10,
-  contextFit: 0.10,
-  localPreference: 0.10,
-  riskPenalty: 0.10,
+  latencyScore: 0.1,
+  costEfficiency: 0.1,
+  contextFit: 0.1,
+  localPreference: 0.1,
+  riskPenalty: 0.1,
 });
 
 export const DEFAULT_SCORING_POLICY: ScoringPolicy = Object.freeze({

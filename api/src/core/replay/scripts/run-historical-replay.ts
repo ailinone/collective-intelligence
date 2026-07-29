@@ -28,19 +28,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { scoreHistoricalContribution } from '../../contribution/historical-contribution-scorer';
 import { readJsonlFile } from '../historical-replay-loader';
-import {
-  computeMetricsByTaskType,
-  computeReplayMetrics,
-} from '../historical-replay-metrics';
+import { computeMetricsByTaskType, computeReplayMetrics } from '../historical-replay-metrics';
 import { buildReplayReport } from '../historical-replay-report';
 import { runHistoricalReplay } from '../historical-replay-runner';
 import { splitTrainHoldout } from '../historical-replay-split';
 import type { HistoricalExecution } from '../../contribution/historical-execution-types';
-import type {
-  HistoricalReplayExecution,
-  ReplayExportMetadata,
-} from '../historical-replay-types';
-
+import type { HistoricalReplayExecution, ReplayExportMetadata } from '../historical-replay-types';
 
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
 const JSONL_PATH = resolve(ARTIFACTS_DIR, 'c3-history-export.jsonl');
@@ -54,7 +47,7 @@ function main(): void {
     '[replay] loaded',
     loaded.executions.length,
     'executions; skipped',
-    loaded.skipped.length,
+    loaded.skipped.length
   );
 
   const meta = readMetadata();
@@ -69,21 +62,19 @@ function main(): void {
     split.train.length,
     'executions over',
     split.trainExperimentIds.length,
-    'experiments',
+    'experiments'
   );
   console.log(
     '[replay] holdout:',
     split.holdout.length,
     'executions over',
     split.holdoutExperimentIds.length,
-    'experiments',
+    'experiments'
   );
   for (const w of split.leakageWarnings) console.warn('[replay] leakage:', w);
 
   // Train the contribution scorer on TRAIN ONLY.
-  const trainAsContribution = split.train.map(
-    replayToContributionExecution,
-  );
+  const trainAsContribution = split.train.map(replayToContributionExecution);
   console.log('[replay] scoring contribution profiles on train…');
   const trainHistory = scoreHistoricalContribution({
     executions: trainAsContribution,
@@ -93,7 +84,7 @@ function main(): void {
     trainHistory.modelProfiles.length,
     'cells across',
     new Set(trainHistory.modelProfiles.map((p) => p.taskType)).size,
-    'task types',
+    'task types'
   );
 
   // Run replay on holdout.
@@ -106,8 +97,7 @@ function main(): void {
   console.log('[replay] evaluated rows:', runResult.rows.length);
 
   // Aggregate metrics.
-  const excludedDueToMissingBaseline =
-    split.holdout.length - runResult.rows.length;
+  const excludedDueToMissingBaseline = split.holdout.length - runResult.rows.length;
   const globalMetrics = computeReplayMetrics({
     rows: runResult.rows,
     totalHoldoutRows: split.holdout.length,
@@ -125,10 +115,7 @@ function main(): void {
 
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + '\n', 'utf-8');
   console.log('[replay] wrote report to', REPORT_PATH);
-  console.log(
-    '[replay] APPROVAL:',
-    report.approval.approved ? 'APPROVED' : 'REJECTED',
-  );
+  console.log('[replay] APPROVAL:', report.approval.approved ? 'APPROVED' : 'REJECTED');
   for (const r of report.approval.reasons) console.log('         -', r);
 }
 
@@ -152,9 +139,7 @@ function readMetadata(): ReplayExportMetadata {
  * expected by `scoreHistoricalContribution`. Lossy by design — judge
  * NULLs are filtered out upstream by the export query.
  */
-function replayToContributionExecution(
-  e: HistoricalReplayExecution,
-): HistoricalExecution {
+function replayToContributionExecution(e: HistoricalReplayExecution): HistoricalExecution {
   return {
     executionId: e.executionId,
     experimentId: e.experimentId,

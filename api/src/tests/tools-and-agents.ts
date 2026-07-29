@@ -257,8 +257,7 @@ export const fileSearchTest: CapabilityTester = async ({ client }) => {
 
 export const agentsTest: CapabilityTester = async ({ client }) => {
   const res = await client.text({
-    prompt:
-      'Crie um plano com 3 passos para investigar um incidente de API e finalize com "DONE".',
+    prompt: 'Crie um plano com 3 passos para investigar um incidente de API e finalize com "DONE".',
     system: 'Responda com plano objetivo e finalização explícita.',
     temperature: 0,
     maxTokens: 192,

@@ -79,7 +79,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
         strict: true,
         roleSpecificRetrieval: true,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const f2 = computePlanFingerprint(
       {
@@ -87,7 +87,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
         strict: true,
         roleSpecificRetrieval: true,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(f1.planFingerprint).toBe(f2.planFingerprint);
   });
@@ -99,7 +99,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
         strict: true,
         roleSpecificRetrieval: true,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const fWithBase = computePlanFingerprint(
       {
@@ -108,7 +108,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: basePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     // Passing a populated policy snapshot changes the canonical JSON
     // (basePolicy has non-empty fields vs EMPTY default), so the
@@ -125,7 +125,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
         roleSpecificRetrieval: true,
         roleSelectionPolicy: basePolicy,
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const fEnabled = computePlanFingerprint(
       {
@@ -153,7 +153,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
           ],
         },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(fDisabled.planFingerprint).not.toBe(fEnabled.planFingerprint);
   });
@@ -172,7 +172,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
             liveReadyInjectionByRoleProjection: [],
           },
         },
-        { planSource: 'dry_run' },
+        { planSource: 'dry_run' }
       );
     const fA = make('hash-A');
     const fB = make('hash-B');
@@ -207,7 +207,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
             ],
           },
         },
-        { planSource: 'dry_run' },
+        { planSource: 'dry_run' }
       );
     const fX = makeWithCandidate('openai/gpt-oss-120b');
     const fY = makeWithCandidate('Qwen/Qwen3-235B-A22B-Thinking-2507');
@@ -241,11 +241,11 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
     };
     const fA = computePlanFingerprint(
       { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: policy },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const fB = computePlanFingerprint(
       { plan: makePlan(), strict: true, roleSpecificRetrieval: true, roleSelectionPolicy: policy },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     expect(fA.planFingerprint).toBe(fB.planFingerprint);
   });
@@ -277,7 +277,7 @@ describe('01C.1B-J1D-R4A — live-ready injection × planFingerprint', () => {
           ],
         },
       },
-      { planSource: 'dry_run' },
+      { planSource: 'dry_run' }
     );
     const serialized = JSON.stringify(f.snapshot);
     expect(serialized).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);

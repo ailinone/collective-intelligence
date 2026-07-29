@@ -79,4 +79,3 @@ describe('jina-model-fetcher', () => {
     expect(models.find((model) => model.id === 'jina-clip-v2')).toBeTruthy();
   });
 });
-

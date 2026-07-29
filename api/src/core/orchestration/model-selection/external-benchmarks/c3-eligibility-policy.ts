@@ -241,7 +241,7 @@ export interface C3EligibilitySummary {
  * an aggregate summary used for plan fingerprinting and reporting.
  */
 export function evaluateC3EligibilityBatch(
-  inputs: readonly C3EligibilityInput[],
+  inputs: readonly C3EligibilityInput[]
 ): C3EligibilitySummary {
   const results = inputs.map(evaluateC3Eligibility);
   const eligible = results.filter((r) => r.c3Eligible);
@@ -255,12 +255,12 @@ export function evaluateC3EligibilityBatch(
     results,
     allEligible: blocked.length === 0,
     anyMediumConfidenceBlock: blocked.some(
-      (r) => r.reason === 'blocked_medium_confidence_requires_waiver',
+      (r) => r.reason === 'blocked_medium_confidence_requires_waiver'
     ),
     anyVariantBlock: blocked.some(
       (r) =>
         r.reason === 'blocked_variant_probable_requires_waiver' ||
-        r.reason === 'blocked_variant_ambiguous',
+        r.reason === 'blocked_variant_ambiguous'
     ),
   };
 }

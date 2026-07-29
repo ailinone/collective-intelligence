@@ -27,7 +27,9 @@ function chunk(content: string): ChatResponse {
     object: 'chat.completion.chunk',
     created: 0,
     model: 'm',
-    choices: [{ index: 0, delta: { role: 'assistant', content }, finish_reason: null, logprobs: null }],
+    choices: [
+      { index: 0, delta: { role: 'assistant', content }, finish_reason: null, logprobs: null },
+    ],
   } as ChatResponse;
 }
 
@@ -37,7 +39,9 @@ function mockAdapter(name: string, behavior: Behavior, onRequest?: (req: ChatReq
     async *chatCompletionStream(req: ChatRequest): AsyncGenerator<ChatResponse> {
       onRequest?.(req);
       if (behavior === 'fail-before') throw new Error(`${name} HTTP 403 insufficient_user_quota`);
-      if (behavior === 'hang') { await new Promise(() => {}); } // never yields a first chunk
+      if (behavior === 'hang') {
+        await new Promise(() => {});
+      } // never yields a first chunk
       yield chunk(`[${name}]hello`);
       if (behavior === 'fail-after') throw new Error(`${name} mid-stream network drop`);
       yield chunk(' world');
@@ -59,8 +63,12 @@ class TestSynthStrategy extends BaseStrategy {
   run(
     candidates: Array<{ adapter: ReturnType<typeof mockAdapter>; model: ReturnType<typeof model> }>,
     fallback: () => string,
-    opts?: { firstChunkTimeoutMs?: number; throwOnTotalFailure?: boolean; skipSynthesisCap?: boolean },
-    request: ChatRequest = req,
+    opts?: {
+      firstChunkTimeoutMs?: number;
+      throwOnTotalFailure?: boolean;
+      skipSynthesisCap?: boolean;
+    },
+    request: ChatRequest = req
   ): AsyncGenerator<ChatResponse, void, unknown> {
     // Cast through the helper's typed signature — the helper only calls
     // adapter.chatCompletionStream()/getName() and model.id/name.
@@ -82,43 +90,68 @@ describe('BaseStrategy.streamSynthesisWithFallback', () => {
   const s = new TestSynthStrategy();
 
   it('streams the first synthesizer when it succeeds (no fallback)', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'ok'), model: model('a') }, { adapter: mockAdapter('B', 'ok'), model: model('b') }],
-      () => 'DEGRADED',
-    ));
+    const out = await collect(
+      s.run(
+        [
+          { adapter: mockAdapter('A', 'ok'), model: model('a') },
+          { adapter: mockAdapter('B', 'ok'), model: model('b') },
+        ],
+        () => 'DEGRADED'
+      )
+    );
     expect(out).toBe('[A]hello world');
   });
 
   it('falls back to the next synthesizer when the first fails before any content', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'fail-before'), model: model('a') }, { adapter: mockAdapter('B', 'ok'), model: model('b') }],
-      () => 'DEGRADED',
-    ));
+    const out = await collect(
+      s.run(
+        [
+          { adapter: mockAdapter('A', 'fail-before'), model: model('a') },
+          { adapter: mockAdapter('B', 'ok'), model: model('b') },
+        ],
+        () => 'DEGRADED'
+      )
+    );
     expect(out).toBe('[B]hello world');
   });
 
   it('emits degraded content (does NOT throw) when all synthesizers fail before content', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'fail-before'), model: model('a') }, { adapter: mockAdapter('B', 'fail-before'), model: model('b') }],
-      () => 'DEGRADED-ANSWER',
-    ));
+    const out = await collect(
+      s.run(
+        [
+          { adapter: mockAdapter('A', 'fail-before'), model: model('a') },
+          { adapter: mockAdapter('B', 'fail-before'), model: model('b') },
+        ],
+        () => 'DEGRADED-ANSWER'
+      )
+    );
     expect(out).toBe('DEGRADED-ANSWER');
   });
 
   it('keeps partial output and stops (no answer splice) when a synthesizer fails AFTER the first chunk', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'fail-after'), model: model('a') }, { adapter: mockAdapter('B', 'ok'), model: model('b') }],
-      () => 'DEGRADED',
-    ));
+    const out = await collect(
+      s.run(
+        [
+          { adapter: mockAdapter('A', 'fail-after'), model: model('a') },
+          { adapter: mockAdapter('B', 'ok'), model: model('b') },
+        ],
+        () => 'DEGRADED'
+      )
+    );
     expect(out).toBe('[A]hello');
   });
 
   it('times out a hanging synthesizer (no first chunk) and falls back to the next', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'hang'), model: model('a') }, { adapter: mockAdapter('B', 'ok'), model: model('b') }],
-      () => 'DEGRADED',
-      { firstChunkTimeoutMs: 50 },
-    ));
+    const out = await collect(
+      s.run(
+        [
+          { adapter: mockAdapter('A', 'hang'), model: model('a') },
+          { adapter: mockAdapter('B', 'ok'), model: model('b') },
+        ],
+        () => 'DEGRADED',
+        { firstChunkTimeoutMs: 50 }
+      )
+    );
     expect(out).toBe('[B]hello world');
   });
 
@@ -127,18 +160,23 @@ describe('BaseStrategy.streamSynthesisWithFallback', () => {
   // a real error (matching execute()'s throw), not a silent empty "success".
   it('throws (does not degrade) when all candidates fail and throwOnTotalFailure is set', async () => {
     const gen = s.run(
-      [{ adapter: mockAdapter('A', 'fail-before'), model: model('a') }, { adapter: mockAdapter('B', 'fail-before'), model: model('b') }],
+      [
+        { adapter: mockAdapter('A', 'fail-before'), model: model('a') },
+        { adapter: mockAdapter('B', 'fail-before'), model: model('b') },
+      ],
       () => 'DEGRADED-ANSWER',
-      { throwOnTotalFailure: true },
+      { throwOnTotalFailure: true }
     );
     await expect(collect(gen)).rejects.toThrow(/All 2 candidates failed/);
   });
 
   it('still degrades gracefully (no throw) when throwOnTotalFailure is NOT set — existing collective contract unchanged', async () => {
-    const out = await collect(s.run(
-      [{ adapter: mockAdapter('A', 'fail-before'), model: model('a') }],
-      () => 'DEGRADED-ANSWER',
-    ));
+    const out = await collect(
+      s.run(
+        [{ adapter: mockAdapter('A', 'fail-before'), model: model('a') }],
+        () => 'DEGRADED-ANSWER'
+      )
+    );
     expect(out).toBe('DEGRADED-ANSWER');
   });
 
@@ -150,13 +188,14 @@ describe('BaseStrategy.streamSynthesisWithFallback', () => {
   // max_tokens silently modified just because they reuse this helper.
   it('leaves max_tokens unset when absent and no env cap is configured', async () => {
     let seenMaxTokens: number | undefined = -1 as unknown as number;
-    const adapter = mockAdapter('A', 'ok', (r) => { seenMaxTokens = r.max_tokens; });
-    await collect(s.run(
-      [{ adapter, model: model('a') }],
-      () => 'DEGRADED',
-      undefined,
-      { messages: [{ role: 'user', content: 'x' }] } as ChatRequest,
-    ));
+    const adapter = mockAdapter('A', 'ok', (r) => {
+      seenMaxTokens = r.max_tokens;
+    });
+    await collect(
+      s.run([{ adapter, model: model('a') }], () => 'DEGRADED', undefined, {
+        messages: [{ role: 'user', content: 'x' }],
+      } as ChatRequest)
+    );
     expect(seenMaxTokens).toBeUndefined();
   });
 
@@ -165,21 +204,39 @@ describe('BaseStrategy.streamSynthesisWithFallback', () => {
     process.env.COLLECTIVE_SYNTHESIS_MAX_TOKENS = '2048';
     try {
       let seenWithCap: number | undefined;
-      await collect(s.run(
-        [{ adapter: mockAdapter('A', 'ok', (r) => { seenWithCap = r.max_tokens; }), model: model('a') }],
-        () => 'DEGRADED',
-        undefined,
-        { messages: [{ role: 'user', content: 'x' }] } as ChatRequest,
-      ));
+      await collect(
+        s.run(
+          [
+            {
+              adapter: mockAdapter('A', 'ok', (r) => {
+                seenWithCap = r.max_tokens;
+              }),
+              model: model('a'),
+            },
+          ],
+          () => 'DEGRADED',
+          undefined,
+          { messages: [{ role: 'user', content: 'x' }] } as ChatRequest
+        )
+      );
       expect(seenWithCap).toBe(2048);
 
       let seenSkipped: number | undefined = -1 as unknown as number;
-      await collect(s.run(
-        [{ adapter: mockAdapter('A', 'ok', (r) => { seenSkipped = r.max_tokens; }), model: model('a') }],
-        () => 'DEGRADED',
-        { skipSynthesisCap: true },
-        { messages: [{ role: 'user', content: 'x' }] } as ChatRequest,
-      ));
+      await collect(
+        s.run(
+          [
+            {
+              adapter: mockAdapter('A', 'ok', (r) => {
+                seenSkipped = r.max_tokens;
+              }),
+              model: model('a'),
+            },
+          ],
+          () => 'DEGRADED',
+          { skipSynthesisCap: true },
+          { messages: [{ role: 'user', content: 'x' }] } as ChatRequest
+        )
+      );
       expect(seenSkipped).toBeUndefined();
     } finally {
       if (prev === undefined) delete process.env.COLLECTIVE_SYNTHESIS_MAX_TOKENS;

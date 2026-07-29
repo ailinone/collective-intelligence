@@ -261,7 +261,7 @@ describe('BroadcastAdminService — erasure cascade (integration)', () => {
       svc.eraseSubject({
         kind: 'organization',
         organizationId: 'not-a-uuid' as unknown as string,
-      }),
+      })
     ).rejects.toBeDefined();
 
     // Confirm nothing was deleted.

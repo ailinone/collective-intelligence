@@ -14,10 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  computeParetoFrontier,
-  isParetoDominated,
-} from '../cost-quality-frontier';
+import { computeParetoFrontier, isParetoDominated } from '../cost-quality-frontier';
 
 interface Point {
   readonly id: string;

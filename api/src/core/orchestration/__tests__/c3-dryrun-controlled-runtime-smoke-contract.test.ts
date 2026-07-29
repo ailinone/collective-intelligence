@@ -25,9 +25,17 @@ import {
 } from '@/core/experiment/c3-dryrun-controlled-runtime-smoke-contract';
 
 const safe = {
-  dryRun: true, planOnly: true, c3ExecutionAuthorized: false, billableProviderCallsAuthorized: false,
-  providerCallExecuted: false, providerCallsExecuted: 0, modelProbesExecuted: 0, providerProbesExecuted: 0,
-  cost_usd: 0, usage: { total_tokens: 0 }, hiddenFallbackDetected: false,
+  dryRun: true,
+  planOnly: true,
+  c3ExecutionAuthorized: false,
+  billableProviderCallsAuthorized: false,
+  providerCallExecuted: false,
+  providerCallsExecuted: 0,
+  modelProbesExecuted: 0,
+  providerProbesExecuted: 0,
+  cost_usd: 0,
+  usage: { total_tokens: 0 },
+  hiddenFallbackDetected: false,
 };
 
 describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — contract', () => {
@@ -55,7 +63,9 @@ describe('01C.1B-C3-DRYRUN-CONTROLLED-RUNTIME-SMOKE — contract', () => {
   });
   it('also false when provider call / exec auth flips', () => {
     expect(isC3ControlledSmokeExecutionLocked({ ...safe, providerCallExecuted: true })).toBe(false);
-    expect(isC3ControlledSmokeExecutionLocked({ ...safe, c3ExecutionAuthorized: true })).toBe(false);
+    expect(isC3ControlledSmokeExecutionLocked({ ...safe, c3ExecutionAuthorized: true })).toBe(
+      false
+    );
     expect(isC3ControlledSmokeExecutionLocked({ ...safe, dryRun: false })).toBe(false);
   });
 

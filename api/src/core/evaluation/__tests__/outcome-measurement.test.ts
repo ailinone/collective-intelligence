@@ -32,7 +32,10 @@ beforeEach(() => {
   vi.doMock('@/utils/logger', () => ({
     logger: {
       child: () => ({
-        info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       }),
     },
   }));
@@ -69,22 +72,24 @@ describe('Outcome Measurement', () => {
       const { recordOutcome } = await import('../outcome-measurement');
 
       // Should not throw
-      await expect(recordOutcome({
-        decisionTraceId: 'req-fail',
-        strategy: 'single',
-        startedAt: new Date(),
-        finishedAt: new Date(),
-        latencyMs: 1000,
-        costUsd: 0.01,
-        totalTokens: 500,
-        success: true,
-        retries: 0,
-        fallbackUsed: false,
-        escalationUsed: false,
-        qualityScore: 0.8,
-        feedbackIterations: 1,
-        modelsUsed: ['gpt-4o'],
-      })).resolves.not.toThrow();
+      await expect(
+        recordOutcome({
+          decisionTraceId: 'req-fail',
+          strategy: 'single',
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          latencyMs: 1000,
+          costUsd: 0.01,
+          totalTokens: 500,
+          success: true,
+          retries: 0,
+          fallbackUsed: false,
+          escalationUsed: false,
+          qualityScore: 0.8,
+          feedbackIterations: 1,
+          modelsUsed: ['gpt-4o'],
+        })
+      ).resolves.not.toThrow();
     });
 
     it('handles null quality score (missing data)', async () => {
@@ -150,16 +155,18 @@ describe('Outcome Measurement', () => {
 
   describe('getAggregatedMetrics', () => {
     it('returns aggregated metrics from DB', async () => {
-      mockQueryRaw.mockResolvedValue([{
-        sample_size: BigInt(50),
-        avg_quality: 0.82,
-        avg_latency_ms: 3000,
-        avg_cost_usd: 0.025,
-        success_rate: 0.92,
-        quality_p10: 0.65,
-        quality_p90: 0.95,
-        quality_stddev: 0.08,
-      }]);
+      mockQueryRaw.mockResolvedValue([
+        {
+          sample_size: BigInt(50),
+          avg_quality: 0.82,
+          avg_latency_ms: 3000,
+          avg_cost_usd: 0.025,
+          success_rate: 0.92,
+          quality_p10: 0.65,
+          quality_p90: 0.95,
+          quality_stddev: 0.08,
+        },
+      ]);
 
       const { getAggregatedMetrics } = await import('../outcome-measurement');
       const metrics = await getAggregatedMetrics({
@@ -177,7 +184,18 @@ describe('Outcome Measurement', () => {
     });
 
     it('returns null when no data', async () => {
-      mockQueryRaw.mockResolvedValue([{ sample_size: BigInt(0), avg_quality: null, avg_latency_ms: null, avg_cost_usd: null, success_rate: null, quality_p10: null, quality_p90: null, quality_stddev: null }]);
+      mockQueryRaw.mockResolvedValue([
+        {
+          sample_size: BigInt(0),
+          avg_quality: null,
+          avg_latency_ms: null,
+          avg_cost_usd: null,
+          success_rate: null,
+          quality_p10: null,
+          quality_p90: null,
+          quality_stddev: null,
+        },
+      ]);
 
       const { getAggregatedMetrics } = await import('../outcome-measurement');
       const metrics = await getAggregatedMetrics({

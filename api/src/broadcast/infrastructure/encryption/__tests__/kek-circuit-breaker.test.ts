@@ -24,10 +24,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import {
-  CircuitBreakerKekProvider,
-  KekUnwrapBreakerOpenError,
-} from '../kek-circuit-breaker';
+import { CircuitBreakerKekProvider, KekUnwrapBreakerOpenError } from '../kek-circuit-breaker';
 import type { KekProvider } from '../kek-provider';
 
 /**
@@ -130,9 +127,7 @@ describe('CircuitBreakerKekProvider', () => {
       expect(inner.unwrapCalls).toBe(3);
 
       // Next call must NOT reach the inner — breaker fast-fails.
-      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(
-        KekUnwrapBreakerOpenError,
-      );
+      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(KekUnwrapBreakerOpenError);
       expect(inner.unwrapCalls).toBe(3);
     });
 
@@ -190,9 +185,7 @@ describe('CircuitBreakerKekProvider', () => {
 
       // During cooldown, fast-fail (inner NOT called).
       const callsBefore = inner.unwrapCalls;
-      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(
-        KekUnwrapBreakerOpenError,
-      );
+      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(KekUnwrapBreakerOpenError);
       expect(inner.unwrapCalls).toBe(callsBefore);
 
       // Cooldown elapses → next call goes half_open and probes.
@@ -246,9 +239,7 @@ describe('CircuitBreakerKekProvider', () => {
 
       // Now cooldown = 1000 * 2^1 = 2000. Before that, fast-fail.
       clock.tick(1_500);
-      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(
-        KekUnwrapBreakerOpenError,
-      );
+      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(KekUnwrapBreakerOpenError);
       // After 2000ms total, probe again.
       clock.tick(600); // total 2100 since last open
       await expect(breaker.unwrap(DEK)).rejects.toThrow(/simulated/); // probe fails again
@@ -288,9 +279,7 @@ describe('CircuitBreakerKekProvider', () => {
       await expect(breaker.unwrap(DEK)).rejects.toThrow();
       // Just under 1000 → still open fast-fails.
       clock.tick(900);
-      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(
-        KekUnwrapBreakerOpenError,
-      );
+      await expect(breaker.unwrap(DEK)).rejects.toBeInstanceOf(KekUnwrapBreakerOpenError);
       // Just over 1000 → half_open probe.
       clock.tick(200);
       inner.shouldFail = false;

@@ -9,7 +9,10 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
-import { requireTenantContext, getTenantContext } from '@/api/middleware/tenant-isolation-middleware';
+import {
+  requireTenantContext,
+  getTenantContext,
+} from '@/api/middleware/tenant-isolation-middleware';
 import { getUsageMetrics, recordUsageEvents } from '@/services/usage-analytics-service';
 import type { UsageEvent, UsageMetrics, UsageMetricsRequest } from '@/types';
 import { recordSecurityEvent } from '@/services/security-audit-service';

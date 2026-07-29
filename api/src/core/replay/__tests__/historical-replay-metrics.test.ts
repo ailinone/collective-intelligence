@@ -14,17 +14,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  computeMetricsByTaskType,
-  computeReplayMetrics,
-} from '../historical-replay-metrics';
+import { computeMetricsByTaskType, computeReplayMetrics } from '../historical-replay-metrics';
 import type { ReplayRowResult, SelectorProjection } from '../historical-replay-types';
 
 function proj(
   selectorId: SelectorProjection['selectorId'],
   judge: number,
   cost: number,
-  fallback = false,
+  fallback = false
 ): SelectorProjection {
   return Object.freeze({
     selectorId,
@@ -45,7 +42,7 @@ function row(
     baselineJudge: number;
     baselineCost: number;
     fallback?: boolean;
-  },
+  }
 ): ReplayRowResult {
   return Object.freeze({
     executionId: 'e',
@@ -69,8 +66,7 @@ function row(
     pareto_meets_quality_thesis: args.paretoJudge >= args.baselineJudge,
     pareto_meets_cost_thesis: args.paretoCost <= args.baselineCost,
     pareto_meets_both:
-      args.paretoJudge >= args.baselineJudge &&
-      args.paretoCost <= args.baselineCost,
+      args.paretoJudge >= args.baselineJudge && args.paretoCost <= args.baselineCost,
     harmful_model_avoided: false,
     modality_mismatch_avoided: false,
     pareto_single_fallback: args.fallback ?? false,
@@ -93,9 +89,30 @@ describe('computeReplayMetrics', () => {
 
   it('aggregates pareto_meets_both into quality_and_cost_success_rate', () => {
     const rows = [
-      row({ paretoJudge: 0.8, paretoCost: 0.01, structuralJudge: 0.7, structuralCost: 0.02, baselineJudge: 0.6, baselineCost: 0.022 }),
-      row({ paretoJudge: 0.5, paretoCost: 0.01, structuralJudge: 0.7, structuralCost: 0.02, baselineJudge: 0.6, baselineCost: 0.022 }),
-      row({ paretoJudge: 0.8, paretoCost: 0.05, structuralJudge: 0.7, structuralCost: 0.02, baselineJudge: 0.6, baselineCost: 0.022 }),
+      row({
+        paretoJudge: 0.8,
+        paretoCost: 0.01,
+        structuralJudge: 0.7,
+        structuralCost: 0.02,
+        baselineJudge: 0.6,
+        baselineCost: 0.022,
+      }),
+      row({
+        paretoJudge: 0.5,
+        paretoCost: 0.01,
+        structuralJudge: 0.7,
+        structuralCost: 0.02,
+        baselineJudge: 0.6,
+        baselineCost: 0.022,
+      }),
+      row({
+        paretoJudge: 0.8,
+        paretoCost: 0.05,
+        structuralJudge: 0.7,
+        structuralCost: 0.02,
+        baselineJudge: 0.6,
+        baselineCost: 0.022,
+      }),
     ];
     const m = computeReplayMetrics({
       rows,
@@ -109,8 +126,22 @@ describe('computeReplayMetrics', () => {
 
   it('avg_expected_judge_delta + median_expected_judge_delta', () => {
     const rows = [
-      row({ paretoJudge: 0.8, paretoCost: 0.01, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02 }),
-      row({ paretoJudge: 0.9, paretoCost: 0.01, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02 }),
+      row({
+        paretoJudge: 0.8,
+        paretoCost: 0.01,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+      }),
+      row({
+        paretoJudge: 0.9,
+        paretoCost: 0.01,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+      }),
     ];
     const m = computeReplayMetrics({
       rows,
@@ -123,8 +154,24 @@ describe('computeReplayMetrics', () => {
 
   it('single_fallback_rate counts pareto_single_fallback rows', () => {
     const rows = [
-      row({ paretoJudge: 0.4, paretoCost: 0.02, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02, fallback: true }),
-      row({ paretoJudge: 0.6, paretoCost: 0.01, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02, fallback: false }),
+      row({
+        paretoJudge: 0.4,
+        paretoCost: 0.02,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+        fallback: true,
+      }),
+      row({
+        paretoJudge: 0.6,
+        paretoCost: 0.01,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+        fallback: false,
+      }),
     ];
     const m = computeReplayMetrics({
       rows,
@@ -138,9 +185,33 @@ describe('computeReplayMetrics', () => {
 describe('computeMetricsByTaskType', () => {
   it('groups rows by taskType and computes per-type means', () => {
     const rows = [
-      row({ taskType: 'code', paretoJudge: 0.8, paretoCost: 0.01, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02 }),
-      row({ taskType: 'code', paretoJudge: 0.7, paretoCost: 0.01, structuralJudge: 0.6, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02 }),
-      row({ taskType: 'analysis', paretoJudge: 0.5, paretoCost: 0.02, structuralJudge: 0.5, structuralCost: 0.02, baselineJudge: 0.5, baselineCost: 0.02 }),
+      row({
+        taskType: 'code',
+        paretoJudge: 0.8,
+        paretoCost: 0.01,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+      }),
+      row({
+        taskType: 'code',
+        paretoJudge: 0.7,
+        paretoCost: 0.01,
+        structuralJudge: 0.6,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+      }),
+      row({
+        taskType: 'analysis',
+        paretoJudge: 0.5,
+        paretoCost: 0.02,
+        structuralJudge: 0.5,
+        structuralCost: 0.02,
+        baselineJudge: 0.5,
+        baselineCost: 0.02,
+      }),
     ];
     const t = computeMetricsByTaskType(rows);
     expect(t.length).toBe(2);
@@ -155,8 +226,24 @@ describe('computeMetricsByTaskType', () => {
 
   it('output is sorted by taskType alphabetically (deterministic)', () => {
     const rows = [
-      row({ taskType: 'z', paretoJudge: 0.5, paretoCost: 0.01, structuralJudge: 0.5, structuralCost: 0.01, baselineJudge: 0.5, baselineCost: 0.01 }),
-      row({ taskType: 'a', paretoJudge: 0.5, paretoCost: 0.01, structuralJudge: 0.5, structuralCost: 0.01, baselineJudge: 0.5, baselineCost: 0.01 }),
+      row({
+        taskType: 'z',
+        paretoJudge: 0.5,
+        paretoCost: 0.01,
+        structuralJudge: 0.5,
+        structuralCost: 0.01,
+        baselineJudge: 0.5,
+        baselineCost: 0.01,
+      }),
+      row({
+        taskType: 'a',
+        paretoJudge: 0.5,
+        paretoCost: 0.01,
+        structuralJudge: 0.5,
+        structuralCost: 0.01,
+        baselineJudge: 0.5,
+        baselineCost: 0.01,
+      }),
     ];
     const t = computeMetricsByTaskType(rows);
     expect(t[0].taskType).toBe('a');

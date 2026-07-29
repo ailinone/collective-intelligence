@@ -15,7 +15,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getHealthSyncBus, resetHealthSyncBusForTesting, type HealthSyncMessage } from '../health-sync-bus';
+import {
+  getHealthSyncBus,
+  resetHealthSyncBusForTesting,
+  type HealthSyncMessage,
+} from '../health-sync-bus';
 import {
   getProviderHealthRegistry,
   resetProviderHealthRegistryForTesting,
@@ -95,14 +99,17 @@ describe('HealthSyncBus', () => {
     });
 
     // Publish a different-origin message manually (simulating instance B)
-    await pub.publish('operability:health:v1', JSON.stringify({
-      v: 1,
-      origin: 'other-instance',
-      ts: Date.now(),
-      kind: 'probe',
-      key: { providerId: 'foo' },
-      state: 'auth_failed',
-    }));
+    await pub.publish(
+      'operability:health:v1',
+      JSON.stringify({
+        v: 1,
+        origin: 'other-instance',
+        ts: Date.now(),
+        kind: 'probe',
+        key: { providerId: 'foo' },
+        state: 'auth_failed',
+      })
+    );
 
     // Wait for microtask
     await new Promise((r) => setTimeout(r, 5));
@@ -141,13 +148,16 @@ describe('HealthSyncBus', () => {
       onMessage: (msg) => received.push(msg),
     });
 
-    await pub.publish('operability:health:v1', JSON.stringify({
-      v: 99,
-      origin: 'other',
-      ts: Date.now(),
-      kind: 'probe',
-      key: { providerId: 'foo' },
-    }));
+    await pub.publish(
+      'operability:health:v1',
+      JSON.stringify({
+        v: 99,
+        origin: 'other',
+        ts: Date.now(),
+        kind: 'probe',
+        key: { providerId: 'foo' },
+      })
+    );
 
     await new Promise((r) => setTimeout(r, 5));
     expect(received).toHaveLength(0);
@@ -196,16 +206,19 @@ describe('Registry — remote delta application', () => {
     });
 
     // Simulate instance B publishing
-    await pub.publish('operability:health:v1', JSON.stringify({
-      v: 1,
-      origin: 'instance-b',
-      ts: Date.now(),
-      kind: 'probe',
-      key: { providerId: 'aihubmix' },
-      state: 'auth_failed',
-      reason: 'bad key',
-      errorClass: 'auth_failed',
-    }));
+    await pub.publish(
+      'operability:health:v1',
+      JSON.stringify({
+        v: 1,
+        origin: 'instance-b',
+        ts: Date.now(),
+        kind: 'probe',
+        key: { providerId: 'aihubmix' },
+        state: 'auth_failed',
+        reason: 'bad key',
+        errorClass: 'auth_failed',
+      })
+    );
 
     await new Promise((r) => setTimeout(r, 10));
 
@@ -226,16 +239,19 @@ describe('Registry — remote delta application', () => {
       onMessage: (msg) => getProviderHealthRegistry().applyRemoteDelta(msg),
     });
 
-    await pub.publish('operability:health:v1', JSON.stringify({
-      v: 1,
-      origin: 'instance-b',
-      ts: Date.now(),
-      kind: 'execution_failure',
-      key: { providerId: 'openai', modelId: 'gpt-4o-mini' },
-      state: 'rate_limited',
-      errorClass: 'rate_limited',
-      cooldownMs: 30_000,
-    }));
+    await pub.publish(
+      'operability:health:v1',
+      JSON.stringify({
+        v: 1,
+        origin: 'instance-b',
+        ts: Date.now(),
+        kind: 'execution_failure',
+        key: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+        state: 'rate_limited',
+        errorClass: 'rate_limited',
+        cooldownMs: 30_000,
+      })
+    );
 
     await new Promise((r) => setTimeout(r, 10));
 
@@ -256,7 +272,9 @@ describe('Registry — remote delta application', () => {
     await bus.connect({
       publisher: pub as never,
       subscriber: sub as never,
-      onMessage: () => { /* not used in this test */ },
+      onMessage: () => {
+        /* not used in this test */
+      },
     });
 
     // Hook a separate subscriber (instance B) onto the channel

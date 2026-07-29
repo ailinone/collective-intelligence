@@ -26,7 +26,14 @@ function getModelLanguage(ctx: CapabilityTestContext): SupportedLanguage {
       if (languages && typeof languages === 'object') {
         const primary = (languages as Record<string, unknown>).primary;
         if (typeof primary === 'string') {
-          const validLanguages: SupportedLanguage[] = ['javascript', 'typescript', 'python', 'go', 'java', 'csharp'];
+          const validLanguages: SupportedLanguage[] = [
+            'javascript',
+            'typescript',
+            'python',
+            'go',
+            'java',
+            'csharp',
+          ];
           if (validLanguages.includes(primary as SupportedLanguage)) {
             return primary as SupportedLanguage;
           }

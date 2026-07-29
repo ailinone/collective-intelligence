@@ -66,9 +66,8 @@ interface PinnedRow {
 function collectPinnedRows(): PinnedRow[] {
   const rows: PinnedRow[] = [];
   for (const entry of PROVIDER_CATALOG) {
-    const pinned = (
-      entry as { pinnedFallback?: { models?: readonly PinnedModelEntry[] } }
-    ).pinnedFallback?.models;
+    const pinned = (entry as { pinnedFallback?: { models?: readonly PinnedModelEntry[] } })
+      .pinnedFallback?.models;
     if (!pinned) continue;
 
     for (const raw of pinned) {
@@ -101,7 +100,7 @@ describe('pinnedFallback capability invariants (root-cause refactor 2026-04-28)'
         : `Pinned model entries must be structured \`{ id, capabilities: [...] }\`. ` +
             `Bare strings rely on name-regex inference (palliative weight ≈0.20). ` +
             `Convert these to operator-declared form:\n` +
-            bare.map((r) => `  - ${r.providerId}: '${r.modelId}'`).join('\n'),
+            bare.map((r) => `  - ${r.providerId}: '${r.modelId}'`).join('\n')
     ).toEqual([]);
   });
 
@@ -114,7 +113,7 @@ describe('pinnedFallback capability invariants (root-cause refactor 2026-04-28)'
         : `Pinned models must declare ≥1 capability (operator-declared signal). ` +
             `Empty arrays let the bridge fall through to name-regex which is exactly ` +
             `what the root-cause refactor eliminated:\n` +
-            empty.map((r) => `  - ${r.providerId}: ${r.modelId}`).join('\n'),
+            empty.map((r) => `  - ${r.providerId}: ${r.modelId}`).join('\n')
     ).toEqual([]);
   });
 
@@ -136,9 +135,7 @@ describe('pinnedFallback capability invariants (root-cause refactor 2026-04-28)'
             `new capability) or pick an existing one (palliative: typo). Valid ` +
             `values:\n  ${MODEL_CAPABILITIES.join(', ')}\n` +
             `Offenders:\n` +
-            unknown
-              .map((u) => `  - ${u.providerId}: ${u.modelId} → '${u.cap}'`)
-              .join('\n'),
+            unknown.map((u) => `  - ${u.providerId}: ${u.modelId} → '${u.cap}'`).join('\n')
     ).toEqual([]);
   });
 
@@ -153,18 +150,18 @@ describe('pinnedFallback capability invariants (root-cause refactor 2026-04-28)'
     // enforcement is "no bare strings" + "non-empty declared caps" above.
     const families = ['palmyra', 'sonar', 'ernie', 'inflection_3', 'pi-3', 'relace-apply'];
     const declared = rows.filter((r) =>
-      families.some((f) => r.modelId.toLowerCase().startsWith(f)),
+      families.some((f) => r.modelId.toLowerCase().startsWith(f))
     );
     // We assert structural shape; capability-content correctness is covered
     // by the `every pinned model declares ≥1 capability` test above.
     for (const r of declared) {
       expect(
         r.isStructured,
-        `${r.providerId}/${r.modelId} should be operator-declared (structured form)`,
+        `${r.providerId}/${r.modelId} should be operator-declared (structured form)`
       ).toBe(true);
       expect(
         r.capabilities.length,
-        `${r.providerId}/${r.modelId} should declare ≥1 capability`,
+        `${r.providerId}/${r.modelId} should declare ≥1 capability`
       ).toBeGreaterThan(0);
     }
   });

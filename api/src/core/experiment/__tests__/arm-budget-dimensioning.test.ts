@@ -26,15 +26,31 @@ import {
 } from '../experiment-runner';
 import type { ExperimentConfig, ModeConfig } from '../experiment-types';
 
-const single = (modelId: string): ModeConfig => ({ mode: 'single-model', modelId, displayName: modelId });
-const collective = (strategy: string): ModeConfig => ({ mode: 'collective', strategy: strategy as never });
+const single = (modelId: string): ModeConfig => ({
+  mode: 'single-model',
+  modelId,
+  displayName: modelId,
+});
+const collective = (strategy: string): ModeConfig => ({
+  mode: 'collective',
+  strategy: strategy as never,
+});
 
 function cfg(modes: ModeConfig[], maxBudgetUsd: number): ExperimentConfig {
-  return { name: 't', description: 't', taskIndices: [], modes, repetitions: 1, maxBudgetUsd } as ExperimentConfig;
+  return {
+    name: 't',
+    description: 't',
+    taskIndices: [],
+    modes,
+    repetitions: 1,
+    maxBudgetUsd,
+  } as ExperimentConfig;
 }
 
 const ORIGINAL_ENV = { ...process.env };
-afterEach(() => { process.env = { ...ORIGINAL_ENV }; });
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+});
 
 describe('armCostWeight', () => {
   it('weights single arms 1 and collective arms higher', () => {
@@ -65,7 +81,10 @@ describe('computeArmBudgets', () => {
     // 30 singles + 4 collectives, $100 budget.
     const modes = [
       ...Array.from({ length: 30 }, (_, i) => single(`m${i}`)),
-      collective('consensus'), collective('debate'), collective('expert-panel'), collective('hierarchical'),
+      collective('consensus'),
+      collective('debate'),
+      collective('expert-panel'),
+      collective('hierarchical'),
     ];
     const equalSplit = 100 / modes.length; // ~$2.94 — what the OLD code gave every arm
     const budgets = computeArmBudgets(cfg(modes, 100));

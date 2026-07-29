@@ -86,7 +86,7 @@ function getHeaderString(request: FastifyRequest, name: string): string | null {
 export function requireServiceAuth(scope: string) {
   return async function serviceAuthPreHandler(
     request: FastifyRequest,
-    reply: FastifyReply,
+    reply: FastifyReply
   ): Promise<void> {
     const token = extractBearer(request);
     if (!token) {
@@ -107,14 +107,18 @@ export function requireServiceAuth(scope: string) {
       const status = reason === 'client_not_allowed' || reason === 'wrong_token_type' ? 403 : 401;
       await reply
         .code(status)
-        .send({ error: status === 403 ? 'forbidden' : 'unauthorized', message: 'invalid internal service token', reason });
+        .send({
+          error: status === 403 ? 'forbidden' : 'unauthorized',
+          message: 'invalid internal service token',
+          reason,
+        });
       return;
     }
 
     if (!context.scopes.includes(scope)) {
       request.log.warn(
         { clientId: context.clientId, required: scope, granted: context.scopes },
-        'internal service token missing required scope',
+        'internal service token missing required scope'
       );
       await reply
         .code(403)
@@ -126,7 +130,8 @@ export function requireServiceAuth(scope: string) {
     // else the X-Acting-User header (safe to trust because the token already
     // proved this is our own M2M client holding an :on_behalf scope).
     const headerUser = getHeaderString(request, 'x-acting-user');
-    const actingUserId = context.tokenType === 'exchanged' ? context.subject ?? headerUser : headerUser;
+    const actingUserId =
+      context.tokenType === 'exchanged' ? (context.subject ?? headerUser) : headerUser;
 
     if (!actingUserId || !UUID_RE.test(actingUserId)) {
       await reply

@@ -89,7 +89,7 @@ function initRevokeExpiredKeysJob(): cron.ScheduledTask {
       const { apiKeyJobErrors } = await import('../utils/metrics.js');
       apiKeyJobErrors.inc({
         job: 'revoke-expired',
-        error_type: (isError(error) ? error.name : 'unknown'),
+        error_type: isError(error) ? error.name : 'unknown',
       });
 
       // Log alert-level event (monitored by external systems)
@@ -156,7 +156,7 @@ function initAutoRotationJob(): cron.ScheduledTask {
       const { apiKeyJobErrors } = await import('../utils/metrics.js');
       apiKeyJobErrors.inc({
         job: 'auto-rotation',
-        error_type: (isError(error) ? error.name : 'unknown'),
+        error_type: isError(error) ? error.name : 'unknown',
       });
 
       // Log alert-level event (monitored by external systems)

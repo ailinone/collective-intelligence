@@ -104,20 +104,34 @@ export class SequentialStrategy extends BaseStrategy {
     );
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', models: [analyzer.model.name, executor.model.name].filter(Boolean) as string[], summary: 'Sequential: analyzer → executor pipeline.' });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: [analyzer.model.name, executor.model.name].filter(Boolean) as string[],
+      summary: 'Sequential: analyzer → executor pipeline.',
+    });
 
     // PHASE 1: Pre-analysis
     const analysisRequest = this.createAnalysisRequest(request);
     const reasoningEnabled = this.isReasoningEnabled(request);
     const analysisExecution = reasoningEnabled
-      ? await this.executeModelWithReasoning(analyzer.adapter, analyzer.model, analysisRequest, 'pre-analyzer')
+      ? await this.executeModelWithReasoning(
+          analyzer.adapter,
+          analyzer.model,
+          analysisRequest,
+          'pre-analyzer'
+        )
       : await this.executeModel(analyzer.adapter, analyzer.model, analysisRequest, 'pre-analyzer');
 
     if (!analysisExecution.success) {
       this.log.warn('Pre-analysis failed, falling back to direct execution');
 
       // Fallback: execute directly with premium model
-      const directExecution = await this.executeModel(executor.adapter, executor.model, request, 'primary');
+      const directExecution = await this.executeModel(
+        executor.adapter,
+        executor.model,
+        request,
+        'primary'
+      );
 
       const totalDuration = Date.now() - startTime;
 
@@ -145,23 +159,47 @@ export class SequentialStrategy extends BaseStrategy {
       'Pre-analysis complete'
     );
 
-    this.emitObserverEvent(context, { type: 'round_complete', round: 1, totalRounds: 2, summary: 'Analysis complete. Executor running.' });
+    this.emitObserverEvent(context, {
+      type: 'round_complete',
+      round: 1,
+      totalRounds: 2,
+      summary: 'Analysis complete. Executor running.',
+    });
 
     // PHASE 2: Execution with plan
     const executionRequest = this.createExecutionRequest(request, analysisExecution.response);
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
     let executionExecution = hasTools
-      ? await this.executeModelWithTools(executor.adapter, executor.model, executionRequest, 'primary')
+      ? await this.executeModelWithTools(
+          executor.adapter,
+          executor.model,
+          executionRequest,
+          'primary'
+        )
       : reasoningEnabled
-        ? await this.executeModelWithReasoning(executor.adapter, executor.model, executionRequest, 'primary')
+        ? await this.executeModelWithReasoning(
+            executor.adapter,
+            executor.model,
+            executionRequest,
+            'primary'
+          )
         : await this.executeModel(executor.adapter, executor.model, executionRequest, 'primary');
 
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: 'Sequential execution complete.' });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: 'Sequential execution complete.',
+    });
 
     if (!executionExecution.success) {
       // Fallback: retry with alternate models before giving up
-      const retryExec = await this.executeModelWithRetry(executor.adapter, executor.model, executionRequest, 'primary', context);
+      const retryExec = await this.executeModelWithRetry(
+        executor.adapter,
+        executor.model,
+        executionRequest,
+        'primary',
+        context
+      );
       if (retryExec.success) {
         executionExecution = retryExec;
       } else {
@@ -193,7 +231,22 @@ export class SequentialStrategy extends BaseStrategy {
           analysis: analysisExecution.durationMs,
           execution: executionExecution.durationMs,
         },
-        ...(() => { const execs = [analysisExecution, executionExecution]; return this.isReasoningEnabled(request) && execs.some(e => e.reasoning) ? { reasoning_traces: execs.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) } : {}; })(),
+        ...(() => {
+          const execs = [analysisExecution, executionExecution];
+          return this.isReasoningEnabled(request) && execs.some((e) => e.reasoning)
+            ? {
+                reasoning_traces: execs
+                  .filter((e) => e.reasoning)
+                  .map((e) => ({
+                    model_id: e.modelId,
+                    model_name: e.modelName,
+                    role: e.role,
+                    reasoning: e.reasoning,
+                    reasoning_tokens: e.reasoningTokens,
+                  })),
+              }
+            : {};
+        })(),
       },
     };
 
@@ -280,21 +333,21 @@ export class SequentialStrategy extends BaseStrategy {
         // Pin biases the executor slot (the premium model). Analyzer
         // stays fast/cheap by design — pinning a premium model there
         // would defeat the strategy's cost-saving purpose.
-        const executorPool = executorModels.map(m => m.model);
+        const executorPool = executorModels.map((m) => m.model);
         const preference = resolvePreferredExecutor(executorPool, context, []);
         if (preference.pinReason === 'pin-not-in-pool') {
           this.log.warn(
             {
               attempted: context.preferredModelIds?.[0],
               reason: preference.pinReason,
-              executorPool: executorPool.map(m => m.id),
+              executorPool: executorPool.map((m) => m.id),
             },
-            'Preferred model not in executor pool — falling back to selector primary executor.',
+            'Preferred model not in executor pool — falling back to selector primary executor.'
           );
         }
         if (preference.pinnedExecutor) {
           const pinnedScored = executorModels.find(
-            m => m.model.id === preference.pinnedExecutor!.id,
+            (m) => m.model.id === preference.pinnedExecutor!.id
           );
           if (pinnedScored) executor = pinnedScored;
         }
@@ -404,7 +457,7 @@ export class SequentialStrategy extends BaseStrategy {
     }
 
     // Pin biases the executor slot in the fallback path too.
-    const executorPool = executorCandidates.map(c => c.model);
+    const executorPool = executorCandidates.map((c) => c.model);
     const fallbackPreference = resolvePreferredExecutor(executorPool, context, []);
     if (fallbackPreference.pinReason === 'pin-not-in-pool') {
       this.log.warn(
@@ -412,13 +465,13 @@ export class SequentialStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: fallbackPreference.pinReason,
         },
-        'Preferred model failed sequential-fallback executor eligibility — using highest-score executor.',
+        'Preferred model failed sequential-fallback executor eligibility — using highest-score executor.'
       );
     }
     let executor = executorCandidates[0];
     if (fallbackPreference.pinnedExecutor) {
       const pinnedCand = executorCandidates.find(
-        c => c.model.id === fallbackPreference.pinnedExecutor!.id,
+        (c) => c.model.id === fallbackPreference.pinnedExecutor!.id
       );
       if (pinnedCand) executor = pinnedCand;
     }
@@ -480,7 +533,11 @@ export class SequentialStrategy extends BaseStrategy {
    * Score model as executor
    * Prefer: high quality models
    */
-  private scoreAsExecutor(model: Model, request: ChatRequest, context: OrchestrationContext): number {
+  private scoreAsExecutor(
+    model: Model,
+    request: ChatRequest,
+    context: OrchestrationContext
+  ): number {
     let score = 0.5;
 
     // Check context window
@@ -497,7 +554,10 @@ export class SequentialStrategy extends BaseStrategy {
       case 'refactoring':
         // Prefer models with code generation capabilities
         // 100% dynamic - no hardcoded model names
-        if (model.capabilities.includes('code_generation') || model.capabilities.includes('code_interpreter')) {
+        if (
+          model.capabilities.includes('code_generation') ||
+          model.capabilities.includes('code_interpreter')
+        ) {
           score += 0.15;
         }
         if (model.capabilities.includes('function_calling')) {
@@ -633,12 +693,7 @@ export class SequentialStrategy extends BaseStrategy {
       const content = msg.content;
       if (typeof content === 'string') return false;
       if (Array.isArray(content)) {
-        return content.some(
-          (c) =>
-            typeof c === 'object' &&
-            c !== null &&
-            (this.isImageContent(c))
-        );
+        return content.some((c) => typeof c === 'object' && c !== null && this.isImageContent(c));
       }
       return false;
     });
@@ -691,19 +746,22 @@ export class SequentialStrategy extends BaseStrategy {
   private extractRequiredEndpoint(request: ChatRequest): string | undefined {
     const capabilities = this.extractRequiredCapabilities(request);
 
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && cap.includes('image_generation')
-    )) {
+    if (
+      capabilities?.some(
+        (cap): boolean => typeof cap === 'string' && cap.includes('image_generation')
+      )
+    ) {
       return 'images';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && (cap.includes('speech') || cap.includes('audio'))
-    )) {
+    if (
+      capabilities?.some(
+        (cap): boolean =>
+          typeof cap === 'string' && (cap.includes('speech') || cap.includes('audio'))
+      )
+    ) {
       return 'audio_speech';
     }
-    if (capabilities?.some((cap): boolean => 
-      typeof cap === 'string' && cap.includes('realtime')
-    )) {
+    if (capabilities?.some((cap): boolean => typeof cap === 'string' && cap.includes('realtime'))) {
       return 'realtime';
     }
 

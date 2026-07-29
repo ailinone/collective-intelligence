@@ -29,7 +29,7 @@ describe('VllmAdapter', () => {
           providerName: 'vllm',
           apiKey: '',
           baseUrl: 'http://localhost:8000/v1',
-        }),
+        })
     ).not.toThrow();
   });
 

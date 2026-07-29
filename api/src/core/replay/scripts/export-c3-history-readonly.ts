@@ -30,7 +30,6 @@ import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
 const JSONL_PATH = resolve(ARTIFACTS_DIR, 'c3-history-export.jsonl');
 const META_PATH = resolve(ARTIFACTS_DIR, 'c3-history-export.metadata.json');
@@ -79,9 +78,9 @@ ORDER BY t.created_at;
 `.trim();
 
 const COUNT_EXECUTIONS_SQL =
-  "SELECT COUNT(*) FROM experiment_executions WHERE judge_score IS NOT NULL;";
+  'SELECT COUNT(*) FROM experiment_executions WHERE judge_score IS NOT NULL;';
 const COUNT_EXPERIMENTS_SQL =
-  "SELECT COUNT(DISTINCT experiment_id) FROM experiment_executions WHERE judge_score IS NOT NULL;";
+  'SELECT COUNT(DISTINCT experiment_id) FROM experiment_executions WHERE judge_score IS NOT NULL;';
 
 // ─── Execute via docker exec (read-only) ────────────────────────────────
 
@@ -145,12 +144,7 @@ function main(): void {
     },
     schemaVersion: '8b5-v1',
     sanitisation: {
-      strippedColumns: [
-        'prompt',
-        'response_summary',
-        'judge_rubric',
-        'structured_metadata',
-      ],
+      strippedColumns: ['prompt', 'response_summary', 'judge_rubric', 'structured_metadata'],
     },
   };
   writeFileSync(META_PATH, JSON.stringify(meta, null, 2) + '\n', 'utf-8');

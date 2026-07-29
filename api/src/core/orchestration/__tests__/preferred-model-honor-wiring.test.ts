@@ -65,23 +65,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ENGINE_PATH = join(
-  __dirname,
-  '..',
-  'orchestration-engine.ts',
-);
-const HYBRID_PATH = join(
-  __dirname,
-  '..',
-  'strategies',
-  'hybrid-strategy.ts',
-);
-const HELPER_PATH = join(
-  __dirname,
-  '..',
-  'strategies',
-  'preferred-model-helper.ts',
-);
+const ENGINE_PATH = join(__dirname, '..', 'orchestration-engine.ts');
+const HYBRID_PATH = join(__dirname, '..', 'strategies', 'hybrid-strategy.ts');
+const HELPER_PATH = join(__dirname, '..', 'strategies', 'preferred-model-helper.ts');
 
 const engineSource = readFileSync(ENGINE_PATH, 'utf8');
 const hybridSource = readFileSync(HYBRID_PATH, 'utf8');
@@ -98,19 +84,19 @@ describe('Caminho-C Q2: user-specified model wiring contract', () => {
     // 'auto' guard — otherwise we'd capture 'auto' as a literal model
     // name and pin to a non-existent model.
     expect(engineSource).toMatch(
-      /if\s*\(\s*userSpecifiedModel\s*&&\s*request\.model\s*&&\s*request\.model\s*!==\s*['"]auto['"]\s*\)\s*\{[\s\S]{0,200}?preferredModelFromRequest\s*=\s*request\.model/,
+      /if\s*\(\s*userSpecifiedModel\s*&&\s*request\.model\s*&&\s*request\.model\s*!==\s*['"]auto['"]\s*\)\s*\{[\s\S]{0,200}?preferredModelFromRequest\s*=\s*request\.model/
     );
   });
 
   it('buildContext assigns preferredModelIds from the captured value', () => {
     expect(engineSource).toMatch(
-      /preferredModelIds:\s*preferredModelFromRequest[\s\S]{0,80}?\[\s*preferredModelFromRequest\s*\]/,
+      /preferredModelIds:\s*preferredModelFromRequest[\s\S]{0,80}?\[\s*preferredModelFromRequest\s*\]/
     );
   });
 
   it('buildContext populates semanticQuery from extractTaskSummary', () => {
     expect(engineSource).toMatch(
-      /const\s+semanticQuery\s*=\s*this\.extractTaskSummary\s*\(\s*request\s*\)/,
+      /const\s+semanticQuery\s*=\s*this\.extractTaskSummary\s*\(\s*request\s*\)/
     );
     // The field must appear on the OrchestrationContext literal — not
     // just be computed and discarded.
@@ -157,7 +143,7 @@ describe('Caminho-C Q2: user-specified model wiring contract', () => {
 
   it('HybridStrategy imports the shared helper', () => {
     expect(hybridSource).toMatch(
-      /import\s*\{[\s\S]{0,120}?(resolvePreferredExecutor|assembleExecutors)[\s\S]{0,120}?\}\s*from\s*['"]\.\/preferred-model-helper['"]/,
+      /import\s*\{[\s\S]{0,120}?(resolvePreferredExecutor|assembleExecutors)[\s\S]{0,120}?\}\s*from\s*['"]\.\/preferred-model-helper['"]/
     );
     // Both functions must be imported — the strategy uses both.
     expect(hybridSource).toMatch(/resolvePreferredExecutor/);
@@ -170,16 +156,14 @@ describe('Caminho-C Q2: user-specified model wiring contract', () => {
     // slot must come from the rest of the pool. That's what the
     // [analyzer.id] exclusion enforces.
     expect(hybridSource).toMatch(
-      /resolvePreferredExecutor\s*\(\s*models\s*,\s*context\s*,\s*\[\s*analyzer\.id\s*\]\s*\)/,
+      /resolvePreferredExecutor\s*\(\s*models\s*,\s*context\s*,\s*\[\s*analyzer\.id\s*\]\s*\)/
     );
   });
 
   it('HybridStrategy logs when the pinned model is absent from the pool', () => {
     // The warn message is the user-facing audit signal — keep the
     // string stable so log-grep alerting in prod doesn't break.
-    expect(hybridSource).toMatch(
-      /requested model not in operational pool/i,
-    );
+    expect(hybridSource).toMatch(/requested model not in operational pool/i);
     // And it must be branched on the pinReason from the resolution,
     // not on a manual `if (!pinnedExecutor)` re-derivation.
     expect(hybridSource).toMatch(/pinReason\s*===\s*['"]pin-not-in-pool['"]/);
@@ -197,7 +181,7 @@ describe('Caminho-C Q2: user-specified model wiring contract', () => {
     //       dropping to e.g. latency-sort.
     expect(hybridSource).toMatch(/assembleExecutors\s*\(/);
     expect(hybridSource).toMatch(
-      /\(a,\s*b\)\s*=>\s*b\.performance\.quality\s*-\s*a\.performance\.quality/,
+      /\(a,\s*b\)\s*=>\s*b\.performance\.quality\s*-\s*a\.performance\.quality/
     );
   });
 });

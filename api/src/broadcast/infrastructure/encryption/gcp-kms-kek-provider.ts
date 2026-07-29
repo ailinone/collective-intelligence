@@ -124,7 +124,9 @@ function isPackageMissingError(err: unknown): boolean {
   // to say "cannot find" don't get mis-classified.
   if (
     /@google-cloud\/kms/i.test(message) &&
-    /(cannot find|not installed|cannot resolve|does(n't| not) exist|unable to resolve)/i.test(message)
+    /(cannot find|not installed|cannot resolve|does(n't| not) exist|unable to resolve)/i.test(
+      message
+    )
   ) {
     return true;
   }
@@ -157,7 +159,7 @@ async function loadKmsModule(): Promise<KmsModuleShape> {
       throw new Error(
         "@google-cloud/kms loaded, but its 'KeyManagementServiceClient' export is " +
           'missing or not a constructor. The installed version may be incompatible ' +
-          'with this adapter.',
+          'with this adapter.'
       );
     }
     return mod as KmsModuleShape;
@@ -166,10 +168,10 @@ async function loadKmsModule(): Promise<KmsModuleShape> {
       throw new Error(
         "BROADCAST_KEK_PROVIDER='gcp-kms' is configured, but the optional dependency " +
           "'@google-cloud/kms' is not installed in this deployment.\n" +
-          "Resolution:\n" +
-          "  - Install the dependency: `pnpm add @google-cloud/kms`, OR\n" +
-          "  - Switch the backend (e.g., BROADCAST_KEK_PROVIDER=local, aws-kms, " +
-          "azure-keyvault) and set the corresponding resource env vars.",
+          'Resolution:\n' +
+          '  - Install the dependency: `pnpm add @google-cloud/kms`, OR\n' +
+          '  - Switch the backend (e.g., BROADCAST_KEK_PROVIDER=local, aws-kms, ' +
+          'azure-keyvault) and set the corresponding resource env vars.'
       );
     }
     throw err;
@@ -195,7 +197,7 @@ export class GcpKmsKekProvider implements KekProvider {
       throw new Error(
         `GcpKmsKekProvider: invalid KEK resource "${resource}" — must be a full ` +
           'KMS CryptoKey resource name (projects/{project}/locations/{location}/' +
-          'keyRings/{ring}/cryptoKeys/{key})',
+          'keyRings/{ring}/cryptoKeys/{key})'
       );
     }
   }
@@ -231,4 +233,3 @@ export class GcpKmsKekProvider implements KekProvider {
     return dek;
   }
 }
-

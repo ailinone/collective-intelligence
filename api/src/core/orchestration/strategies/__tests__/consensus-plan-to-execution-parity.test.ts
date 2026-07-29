@@ -48,23 +48,25 @@ describe('ConsensusStrategy — plan-to-execution parity', () => {
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,
       eligibleModels: plannedModels,
     });
-    const request = makeRequest('parity probe') as ChatRequest & { consensusPlan?: ConsensusExecutionPlan };
+    const request = makeRequest('parity probe') as ChatRequest & {
+      consensusPlan?: ConsensusExecutionPlan;
+    };
     request.consensusPlan = plan;
     const r = await strategy.execute(request, makeContext(plannedModels));
     const a = r.metadata?.consensusArtifacts as ConsensusStrategyArtifacts;
 
     expect(a.planParity.planSource).toBe('dynamic_role_resolver');
     expect(a.planParity.plannedParticipantModelIds).toEqual(
-      plan.participants.map((p) => p.model.id),
+      plan.participants.map((p) => p.model.id)
     );
     expect(new Set(a.planParity.executedParticipantModelIds)).toEqual(
-      new Set(a.planParity.plannedParticipantModelIds),
+      new Set(a.planParity.plannedParticipantModelIds)
     );
     expect(a.planParity.participantModelsMatchPlan).toBe(true);
   });
@@ -73,13 +75,15 @@ describe('ConsensusStrategy — plan-to-execution parity', () => {
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,
       eligibleModels: plannedModels,
     });
-    const request = makeRequest('parity judge') as ChatRequest & { consensusPlan?: ConsensusExecutionPlan };
+    const request = makeRequest('parity judge') as ChatRequest & {
+      consensusPlan?: ConsensusExecutionPlan;
+    };
     request.consensusPlan = plan;
     const r = await strategy.execute(request, makeContext(plannedModels));
     const a = r.metadata?.consensusArtifacts as ConsensusStrategyArtifacts;
@@ -93,13 +97,15 @@ describe('ConsensusStrategy — plan-to-execution parity', () => {
     const plan = await buildPlan();
     const plannedModels = plan.participants.map((p) => p.model);
     const responses = Object.fromEntries(
-      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }]),
+      plannedModels.map((m) => [m.id, { content: `output from ${m.id} `.repeat(8) }])
     );
     const { strategy } = wireStrategy({
       responses,
       eligibleModels: plannedModels,
     });
-    const request = makeRequest('fallback id') as ChatRequest & { consensusPlan?: ConsensusExecutionPlan };
+    const request = makeRequest('fallback id') as ChatRequest & {
+      consensusPlan?: ConsensusExecutionPlan;
+    };
     request.consensusPlan = plan;
     const r = await strategy.execute(request, makeContext(plannedModels));
     const a = r.metadata?.consensusArtifacts as ConsensusStrategyArtifacts;

@@ -33,10 +33,7 @@
  *   docker compose ... run --rm probe-runner sh -lc "pnpm tsx ... <args>"
  */
 import fs from 'node:fs';
-import {
-  evaluateTaskOutput,
-  type BenchmarkTask,
-} from './model-quality-evaluator';
+import { evaluateTaskOutput, type BenchmarkTask } from './model-quality-evaluator';
 import {
   buildSnapshot,
   computeSnapshotHash,
@@ -73,7 +70,10 @@ export function parseArgs(argv: readonly string[]): Cli {
     const key = a.substring(2);
     const next = argv[i + 1];
     if (!next || next.startsWith('--')) flags.add(key);
-    else { args.set(key, next); i++; }
+    else {
+      args.set(key, next);
+      i++;
+    }
   }
   function req(key: string): string {
     const v = args.get(key);
@@ -157,13 +157,20 @@ interface Ledger {
   realConsensusExecuted: boolean;
   benchmarkProviderCalls: number;
   status: string;
-  entries: Array<{ attemptId: string; modelId: string; taskId: string; costUsd: number; status: string }>;
+  entries: Array<{
+    attemptId: string;
+    modelId: string;
+    taskId: string;
+    costUsd: number;
+    status: string;
+  }>;
   [k: string]: unknown;
 }
 
 // ─── Sanitization ────────────────────────────────────────────────────────
 
-const SECRET_REDACTOR = /(sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}|password=\S+|token=\S+|secret=\S+)/gi;
+const SECRET_REDACTOR =
+  /(sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,}|password=\S+|token=\S+|secret=\S+)/gi;
 export function sanitize(s: string): string {
   return (s || '').replace(SECRET_REDACTOR, '[REDACTED]');
 }
@@ -188,9 +195,11 @@ export function validateCliSafety(cli: Cli): { ok: boolean; violations: readonly
   if (!cli.noConsensus) violations.push('--no-consensus required');
   if (!cli.noDryrunFalse) violations.push('--no-dryrun-false required');
   if (!cli.sanitize) violations.push('--sanitize required');
-  if (cli.maxTotalCostUsd > 0.03) violations.push(`--max-total-cost-usd ${cli.maxTotalCostUsd} exceeds 0.03 hard cap`);
+  if (cli.maxTotalCostUsd > 0.03)
+    violations.push(`--max-total-cost-usd ${cli.maxTotalCostUsd} exceeds 0.03 hard cap`);
   if (cli.maxTotalCostUsd <= 0) violations.push(`--max-total-cost-usd must be > 0`);
-  if (cli.maxTokens <= 0 || cli.maxTokens > 4096) violations.push(`--max-tokens ${cli.maxTokens} out of [1, 4096]`);
+  if (cli.maxTokens <= 0 || cli.maxTokens > 4096)
+    violations.push(`--max-tokens ${cli.maxTokens} out of [1, 4096]`);
   if (cli.maxModels <= 0) violations.push(`--max-models must be > 0`);
   if (cli.maxTasks <= 0) violations.push(`--max-tasks must be > 0`);
   return { ok: violations.length === 0, violations };
@@ -215,7 +224,7 @@ export function estimateWorstCaseUsd(opts: {
   let total = 0;
   for (const c of opts.candidates) {
     const costPer1M = c.outputCostPer1MUsd ?? fallback;
-    total += (costPer1M * opts.maxTokens / 1_000_000) * safety * opts.taskCount;
+    total += ((costPer1M * opts.maxTokens) / 1_000_000) * safety * opts.taskCount;
   }
   return total;
 }
@@ -274,7 +283,7 @@ async function callChatCompletion(opts: {
     const res = await fetch(`${opts.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${opts.apiKey}`,
+        Authorization: `Bearer ${opts.apiKey}`,
         'Content-Type': 'application/json',
         'X-Ailin-Eval-Trace': 'true',
       },
@@ -307,8 +316,16 @@ async function callChatCompletion(opts: {
     const obj = data as Record<string, unknown>;
     const choices = obj.choices as Array<{ message?: { content?: string } }> | undefined;
     const output = choices?.[0]?.message?.content ?? '';
-    const usage = obj.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost_usd?: number } | undefined;
-    const metadata = obj.ailin_metadata as { providerId?: string; modelId?: string; cost?: { totalUsd?: number } } | undefined;
+    const usage = obj.usage as
+      | {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          cost_usd?: number;
+        }
+      | undefined;
+    const metadata = obj.ailin_metadata as
+      { providerId?: string; modelId?: string; cost?: { totalUsd?: number } } | undefined;
     const costUsd = usage?.cost_usd ?? metadata?.cost?.totalUsd ?? 0;
     return {
       ok: true,
@@ -316,7 +333,11 @@ async function callChatCompletion(opts: {
       output,
       responseProviderId: metadata?.providerId,
       responseModelId: typeof obj.model === 'string' ? obj.model : metadata?.modelId,
-      tokens: { prompt: usage?.prompt_tokens, completion: usage?.completion_tokens, total: usage?.total_tokens },
+      tokens: {
+        prompt: usage?.prompt_tokens,
+        completion: usage?.completion_tokens,
+        total: usage?.total_tokens,
+      },
       costUsd,
       latencyMs: latency,
     };
@@ -436,7 +457,9 @@ async function main() {
   }
 
   // Load inputs
-  const candidateSetRaw = JSON.parse(fs.readFileSync(cli.candidateSet, 'utf8')) as { candidates?: CandidateRow[] };
+  const candidateSetRaw = JSON.parse(fs.readFileSync(cli.candidateSet, 'utf8')) as {
+    candidates?: CandidateRow[];
+  };
   const tasksRaw = JSON.parse(fs.readFileSync(cli.tasks, 'utf8')) as { tasks?: BenchmarkTask[] };
   const candidates: CandidateRow[] = (candidateSetRaw.candidates ?? []).slice(0, cli.maxModels);
   const tasks: BenchmarkTask[] = (tasksRaw.tasks ?? []).slice(0, cli.maxTasks);
@@ -482,7 +505,8 @@ async function main() {
       // (input cost is small; output cost dominates). We don't know exact
       // cost without making the call, so estimate at 2x input cost as a
       // safety margin and stop EARLY if we'd exceed budget.
-      const estimatedNextCallUsd = (cand.outputCostPer1MUsd ?? 5) * cli.maxTokens / 1_000_000 * 1.5;
+      const estimatedNextCallUsd =
+        (((cand.outputCostPer1MUsd ?? 5) * cli.maxTokens) / 1_000_000) * 1.5;
       if (ledger.spentUsd + estimatedNextCallUsd > effectiveMaxCost) {
         attempts.push({
           attemptId,
@@ -516,12 +540,14 @@ async function main() {
 
       // Detect hidden fallback: did the response come back from a DIFFERENT
       // provider/model than what we requested? If so, the route lock failed.
-      const hiddenFallback = call.ok && detectHiddenFallback({
-        requestedProviderId: cand.providerId,
-        requestedApiModelId: cand.apiModelId,
-        responseProviderId: call.responseProviderId,
-        responseModelId: call.responseModelId,
-      });
+      const hiddenFallback =
+        call.ok &&
+        detectHiddenFallback({
+          requestedProviderId: cand.providerId,
+          requestedApiModelId: cand.apiModelId,
+          responseProviderId: call.responseProviderId,
+          responseModelId: call.responseModelId,
+        });
 
       let evaluation: ReturnType<typeof evaluateTaskOutput> | undefined;
       if (call.ok && call.output) {
@@ -571,7 +597,9 @@ async function main() {
       // Stop on hidden fallback — failing closed protects against silent
       // route substitution that would invalidate the whole benchmark.
       if (hiddenFallback) {
-        console.error(`HIDDEN FALLBACK detected for ${cand.canonicalModelId} → response from ${call.responseModelId}@${call.responseProviderId}; stopping wave`);
+        console.error(
+          `HIDDEN FALLBACK detected for ${cand.canonicalModelId} → response from ${call.responseModelId}@${call.responseProviderId}; stopping wave`
+        );
         ledger.status = 'route_mismatch_aborted';
         fs.writeFileSync(cli.ledger, JSON.stringify(ledger, null, 2));
         break outer;
@@ -651,16 +679,24 @@ async function main() {
       .slice()
       .sort((a, b) => b.qualityScore - a.qualityScore)
       .slice(0, 16)
-      .map((e) =>
-        `| \`${e.modelId}\` | ${e.family ?? '—'} | ${e.qualityScore.toFixed(3)} | ${e.qualityScoreSource} | ${e.qualityConfidence} | ${e.sampleCount ?? 0} | $${(e.costUsd ?? 0).toFixed(6)} |`),
+      .map(
+        (e) =>
+          `| \`${e.modelId}\` | ${e.family ?? '—'} | ${e.qualityScore.toFixed(3)} | ${e.qualityScoreSource} | ${e.qualityConfidence} | ${e.sampleCount ?? 0} | $${(e.costUsd ?? 0).toFixed(6)} |`
+      ),
   ];
   fs.writeFileSync(cli.writeMd, md.join('\n'));
 
-  console.log(JSON.stringify({
-    totals: results.totals,
-    snapshotHash,
-    snapshotVersion: snapshot.version,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        totals: results.totals,
+        snapshotHash,
+        snapshotVersion: snapshot.version,
+      },
+      null,
+      2
+    )
+  );
 }
 
 // Only run main() when invoked as a script, NOT when imported by a test.

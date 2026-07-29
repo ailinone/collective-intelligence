@@ -77,7 +77,7 @@ export async function registerTrainingDataAdminRoutes(server: FastifyInstance): 
           message: msg,
         });
       }
-    },
+    }
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -106,6 +106,6 @@ export async function registerTrainingDataAdminRoutes(server: FastifyInstance): 
       }));
 
       return reply.send({ streams, count: streams.length });
-    },
+    }
   );
 }

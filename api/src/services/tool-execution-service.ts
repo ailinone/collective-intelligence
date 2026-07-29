@@ -105,16 +105,15 @@ export function assertSafeGitToken(value: string, label: string): void {
  * (blocking the related `ssh://-oProxyCommand=…` option-injection trick).
  */
 const SAFE_GIT_REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const SAFE_GIT_REMOTE_URL = /^(?:https:\/\/|ssh:\/\/|git:\/\/|git@)[A-Za-z0-9][A-Za-z0-9._~%!$&'()*+,;=:@/-]*$/;
+const SAFE_GIT_REMOTE_URL =
+  /^(?:https:\/\/|ssh:\/\/|git:\/\/|git@)[A-Za-z0-9][A-Za-z0-9._~%!$&'()*+,;=:@/-]*$/;
 
 export function assertSafeGitRemote(value: string, label: string): void {
   assertSafeGitToken(value, label);
   if (SAFE_GIT_REMOTE_NAME.test(value) || SAFE_GIT_REMOTE_URL.test(value)) {
     return;
   }
-  throw new Error(
-    `Invalid ${label}: must be a plain remote name or an https/ssh/git URL`
-  );
+  throw new Error(`Invalid ${label}: must be a plain remote name or an https/ssh/git URL`);
 }
 
 /**
@@ -443,9 +442,7 @@ export async function executeGrepSearchTool(
     if (regex) assertSafeUserRegex(pattern, 'pattern');
 
     const results: SearchResult[] = [];
-    const searchPattern = regex
-      ? new RegExp(pattern, case_sensitive ? '' : 'i')
-      : pattern;
+    const searchPattern = regex ? new RegExp(pattern, case_sensitive ? '' : 'i') : pattern;
 
     for (const file of files) {
       if (results.length >= max_results) break;
@@ -466,9 +463,12 @@ export async function executeGrepSearchTool(
           if (matches) {
             const contextBlock = include_context
               ? lines
-                .slice(Math.max(0, index - context_lines), Math.min(lines.length, index + 1 + context_lines))
-                .join('\n')
-                .trim()
+                  .slice(
+                    Math.max(0, index - context_lines),
+                    Math.min(lines.length, index + 1 + context_lines)
+                  )
+                  .join('\n')
+                  .trim()
               : undefined;
 
             results.push({
@@ -1172,7 +1172,9 @@ export async function executeListDirectoryTool(
           }
 
           // Skip common ignore patterns
-          if (['node_modules', '.git', 'dist', 'build', '.next', '__pycache__'].includes(item.name)) {
+          if (
+            ['node_modules', '.git', 'dist', 'build', '.next', '__pycache__'].includes(item.name)
+          ) {
             continue;
           }
 
@@ -1216,7 +1218,7 @@ export async function executeListDirectoryTool(
       } catch {
         // Skip directories we can't read
       }
-    }
+    };
 
     await scanDirectory(fullPath, 0);
 
@@ -1230,9 +1232,9 @@ export async function executeListDirectoryTool(
 
     // Format output
     let output = `Contents of ${targetPath}:\n\n`;
-    
-    const dirs = entries.filter(e => e.type === 'directory');
-    const files = entries.filter(e => e.type === 'file');
+
+    const dirs = entries.filter((e) => e.type === 'directory');
+    const files = entries.filter((e) => e.type === 'file');
 
     if (dirs.length > 0) {
       output += `Directories (${dirs.length}):\n`;
@@ -1248,9 +1250,7 @@ export async function executeListDirectoryTool(
     if (files.length > 0) {
       output += `Files (${files.length}):\n`;
       for (const file of files.slice(0, 100)) {
-        const sizeStr = file.size !== undefined 
-          ? ` (${formatFileSize(file.size)})`
-          : '';
+        const sizeStr = file.size !== undefined ? ` (${formatFileSize(file.size)})` : '';
         output += `  📄 ${file.path}${sizeStr}\n`;
       }
       if (files.length > 100) {
@@ -1455,7 +1455,10 @@ export async function executeGitRebaseTool(
     return {
       tool_call_id: toolCallId,
       success: true,
-      output: stdout || stderr || `Rebase ${abort ? 'aborted' : continue_rebase ? 'continued' : 'completed'}`,
+      output:
+        stdout ||
+        stderr ||
+        `Rebase ${abort ? 'aborted' : continue_rebase ? 'continued' : 'completed'}`,
       metadata: { branch, abort, continue_rebase },
     };
   } catch (error) {
@@ -1656,11 +1659,7 @@ export async function executeCheckTodoTool(
     };
   }
 
-  return executeUpdateTodoTool(
-    { id, status: 'completed' },
-    toolCallId,
-    context
-  );
+  return executeUpdateTodoTool({ id, status: 'completed' }, toolCallId, context);
 }
 
 interface ListTodosArgs {
@@ -1956,7 +1955,7 @@ export async function executeCodebaseSearchTool(
 
     log.info(
       { query, file_pattern, max_results, include_context, context_lines, workingDirectory },
-      'Codebase search initiated',
+      'Codebase search initiated'
     );
 
     // Perform search
@@ -2013,13 +2012,7 @@ export async function executeFindSymbolReferencesTool(
     const orgId = context.organizationId || 'default';
     const projId = project_id || context.projectId || 'default';
 
-    const references = await findSymbolReferences(
-      orgId,
-      projId,
-      symbol_name,
-      symbol_type,
-      branch
-    );
+    const references = await findSymbolReferences(orgId, projId, symbol_name, symbol_type, branch);
 
     if (references.length === 0) {
       return {
@@ -2040,7 +2033,10 @@ export async function executeFindSymbolReferencesTool(
       output += '\n';
     }
 
-    log.info({ symbolName: symbol_name, found: references.length }, 'Find symbol references completed');
+    log.info(
+      { symbolName: symbol_name, found: references.length },
+      'Find symbol references completed'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -2084,7 +2080,7 @@ export async function executeAnalyzeCodebaseTool(
 
     if (include_stats) {
       const stats = await getProjectStats(orgId, projId, branch);
-      
+
       if (stats) {
         output += `📊 Statistics:\n`;
         output += `   Total Files: ${stats.fileCount}\n`;
@@ -2100,7 +2096,11 @@ export async function executeAnalyzeCodebaseTool(
           output += '\n';
         }
 
-        if (include_symbols && stats.symbolTypeDistribution && Object.keys(stats.symbolTypeDistribution).length > 0) {
+        if (
+          include_symbols &&
+          stats.symbolTypeDistribution &&
+          Object.keys(stats.symbolTypeDistribution).length > 0
+        ) {
           output += `🔧 Symbol Types:\n`;
           for (const [type, count] of Object.entries(stats.symbolTypeDistribution)) {
             output += `   ${type}: ${count}\n`;
@@ -2180,7 +2180,7 @@ export async function executeGetDependencyGraphTool(
     }
 
     let output = `Dependency Graph${file_path ? ` for ${file_path}` : ''}${symbol_name ? ` for "${symbol_name}"` : ''}:\n\n`;
-    
+
     output += `📊 Summary: ${uniqueFiles.size} files, ${dependencies.length} dependencies\n\n`;
 
     output += `📄 Files involved:\n`;
@@ -2200,7 +2200,10 @@ export async function executeGetDependencyGraphTool(
       output += `   ... and ${dependencies.length - 20} more\n`;
     }
 
-    log.info({ files: uniqueFiles.size, dependencies: dependencies.length }, 'Get dependency graph completed');
+    log.info(
+      { files: uniqueFiles.size, dependencies: dependencies.length },
+      'Get dependency graph completed'
+    );
 
     return {
       tool_call_id: toolCallId,
@@ -2264,11 +2267,11 @@ export async function executeSemanticSearchTool(
       output += `${i + 1}. 📄 ${result.filePath}\n`;
       output += `   Relevance: ${(result.relevanceScore * 100).toFixed(1)}%\n`;
       output += `   Match Type: ${result.matchType}\n`;
-      
+
       if (result.symbolMatches && result.symbolMatches.length > 0) {
-        output += `   Symbols: ${result.symbolMatches.map(s => `${s.name} (${s.type})`).join(', ')}\n`;
+        output += `   Symbols: ${result.symbolMatches.map((s) => `${s.name} (${s.type})`).join(', ')}\n`;
       }
-      
+
       if (result.contentSnippet) {
         output += `   Snippet: ${result.contentSnippet.substring(0, 100)}...\n`;
       }
@@ -2324,4 +2327,3 @@ export const SUPPORTED_TOOLS = [
 ] as const;
 
 export type SupportedTool = (typeof SUPPORTED_TOOLS)[number];
-

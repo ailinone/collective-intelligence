@@ -23,7 +23,10 @@
 import { logger } from '@/utils/logger';
 import { getProviderBandit } from '@/core/learning/provider-bandit';
 import { getCreditMonitorService } from '@/services/credit-monitor-service';
-import { getPromptVariantBandit, isPromptVariantBanditEnabled } from '@/core/learning/prompt-variant-bandit';
+import {
+  getPromptVariantBandit,
+  isPromptVariantBanditEnabled,
+} from '@/core/learning/prompt-variant-bandit';
 
 const log = logger.child({ component: 'feedback-collector' });
 
@@ -38,7 +41,7 @@ export interface ExecutionFeedback {
   success: boolean;
   latencyMs: number;
   costUsd: number;
-  qualityScore?: number;  // 0-1 from judge
+  qualityScore?: number; // 0-1 from judge
   errorType?: string;
   errorCode?: string;
   timestamp: Date;
@@ -88,7 +91,7 @@ export class ExecutionFeedbackCollector {
   constructor() {
     // Start periodic flush
     this.flushIntervalHandle = setInterval(() => {
-      this.flushPerformanceUpdates().catch(err =>
+      this.flushPerformanceUpdates().catch((err) =>
         log.warn({ error: String(err) }, 'Feedback flush failed')
       );
     }, this.flushIntervalMs);
@@ -151,8 +154,13 @@ export class ExecutionFeedbackCollector {
 
     // 3. Propagate credit errors to Credit Monitor (L4).
     // `getCreditMonitorService` imported at module scope.
-    if (!feedback.success && (feedback.errorCode === '402' || feedback.errorCode === '403' ||
-        feedback.errorType === 'insufficient_quota' || feedback.errorType === 'insufficient_credits')) {
+    if (
+      !feedback.success &&
+      (feedback.errorCode === '402' ||
+        feedback.errorCode === '403' ||
+        feedback.errorType === 'insufficient_quota' ||
+        feedback.errorType === 'insufficient_credits')
+    ) {
       try {
         getCreditMonitorService().onCreditError(feedback.providerId);
       } catch {
@@ -205,8 +213,14 @@ export class ExecutionFeedbackCollector {
           // bufferKey is modelUid when available, modelId otherwise
           const isUid = bufferKey.length === 25 && !bufferKey.includes('/'); // uid = 25-char MD5 hash
           const model = isUid
-            ? await prisma.model.findUnique({ where: { uid: bufferKey }, select: { uid: true, performance: true } })
-            : await prisma.model.findFirst({ where: { id: bufferKey }, select: { uid: true, performance: true } });
+            ? await prisma.model.findUnique({
+                where: { uid: bufferKey },
+                select: { uid: true, performance: true },
+              })
+            : await prisma.model.findFirst({
+                where: { id: bufferKey },
+                select: { uid: true, performance: true },
+              });
 
           if (model) {
             const currentPerf = (model.performance as Record<string, unknown>) ?? {};
@@ -221,9 +235,12 @@ export class ExecutionFeedbackCollector {
                 performance: {
                   ...currentPerf,
                   quality: Math.round(emaQuality * 1000) / 1000, // 3 decimal places
-                  reliability: Math.round(
-                    (0.3 * (accumulator.count > 0 ? 1 : 0) + 0.7 * ((currentPerf.reliability as number) ?? 0.95)) * 1000
-                  ) / 1000,
+                  reliability:
+                    Math.round(
+                      (0.3 * (accumulator.count > 0 ? 1 : 0) +
+                        0.7 * ((currentPerf.reliability as number) ?? 0.95)) *
+                        1000
+                    ) / 1000,
                 },
               },
             });

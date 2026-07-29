@@ -377,4 +377,3 @@ export interface SearchVectorStoreResponse {
   has_more: boolean;
   next_page: string | null;
 }
-

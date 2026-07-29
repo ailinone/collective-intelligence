@@ -15,9 +15,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  DefaultShadowRoutingService,
-} from '../shadow-routing-service';
+import { DefaultShadowRoutingService } from '../shadow-routing-service';
 import { resolveShadowConfig } from '../shadow-routing-config';
 import type { ShadowRoutingInput } from '../shadow-routing-types';
 

@@ -66,9 +66,7 @@ describe('ProviderHealthRegistry', () => {
     reg.recordExecution({
       key: { providerId: 'aihubmix', modelId: 'gpt-4o-mini' },
       success: false,
-      classification: classifyProviderError(
-        new Error("Model 'gpt-4o-mini' not found"),
-      ),
+      classification: classifyProviderError(new Error("Model 'gpt-4o-mini' not found")),
     });
     // (aihubmix, claude-haiku-4-5) should be unaffected
     const otherModel = reg.lookupExact({

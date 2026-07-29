@@ -92,7 +92,9 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
     '/v1/internal/api-keys',
     { preHandler: [requireServiceAuth(SCOPE_READ)] },
     async (request, reply) => {
-      const user = await resolveOrProvisionActingUser((request as ServiceAuthedRequest).serviceAuth!);
+      const user = await resolveOrProvisionActingUser(
+        (request as ServiceAuthedRequest).serviceAuth!
+      );
       if (!user) {
         return reply.code(409).send({
           error: 'acting_user_not_provisioned',
@@ -116,7 +118,7 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
       });
 
       return reply.send({ apiKeys: keys.map(toSummary) });
-    },
+    }
   );
 
   /**
@@ -128,7 +130,9 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
     '/v1/internal/api-keys',
     { preHandler: [requireServiceAuth(SCOPE_WRITE)] },
     async (request, reply) => {
-      const user = await resolveOrProvisionActingUser((request as ServiceAuthedRequest).serviceAuth!);
+      const user = await resolveOrProvisionActingUser(
+        (request as ServiceAuthedRequest).serviceAuth!
+      );
       if (!user) {
         return reply.code(409).send({
           error: 'acting_user_not_provisioned',
@@ -200,7 +204,7 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
         expiresAt: apiKey.expiresAt ? apiKey.expiresAt.toISOString() : null,
         status: apiKey.status,
       });
-    },
+    }
   );
 
   /**
@@ -243,6 +247,6 @@ export async function internalApiKeysRoutes(server: FastifyInstance): Promise<vo
       }
 
       return reply.code(204).send();
-    },
+    }
   );
 }

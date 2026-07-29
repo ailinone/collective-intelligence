@@ -34,13 +34,9 @@
  *   - The script does not write to the DB.
  */
 import { ProviderCreditAuditService } from '@/core/operability/provider-credit-audit-service';
-import {
-  ProviderProbeRegistry,
-} from '@/core/operability/provider-probe-registry';
+import { ProviderProbeRegistry } from '@/core/operability/provider-probe-registry';
 import { registerDefaultProbes } from '@/core/operability/provider-probes/register-default-probes';
-import {
-  buildReconciledSnapshot,
-} from '@/core/operability/reconciled-operability-snapshot';
+import { buildReconciledSnapshot } from '@/core/operability/reconciled-operability-snapshot';
 import type {
   OperabilityHubView,
   CatalogView,
@@ -76,7 +72,11 @@ function parseArgs(): Args {
     const a = argv[i];
     if (a === '--mode') {
       const next = argv[++i];
-      if (next === 'metadata_only' || next === 'non_billable_probe' || next === 'minimal_billable_probe') {
+      if (
+        next === 'metadata_only' ||
+        next === 'non_billable_probe' ||
+        next === 'minimal_billable_probe'
+      ) {
         mode = next;
       }
     } else if (a === '--max-providers') {
@@ -91,7 +91,15 @@ function parseArgs(): Args {
       if (next === 'gcp-secret-manager') secretsSource = 'gcp-secret-manager';
     }
   }
-  return { mode, maxProviders, includeAggregators, includeRouters, includeLocal, bootstrapRuntime, secretsSource };
+  return {
+    mode,
+    maxProviders,
+    includeAggregators,
+    includeRouters,
+    includeLocal,
+    bootstrapRuntime,
+    secretsSource,
+  };
 }
 
 // ─── View adapters around real services ───────────────────────────────
@@ -131,7 +139,11 @@ async function buildCatalogView(): Promise<CatalogView> {
     return {
       countActiveModelsForProvider: async (id: string) => {
         try {
-          const models = await repo.searchModels({ providers: [id], status: 'active', limit: 1000 });
+          const models = await repo.searchModels({
+            providers: [id],
+            status: 'active',
+            limit: 1000,
+          });
           return models.length;
         } catch {
           return 0;
@@ -161,7 +173,16 @@ async function buildCatalogView(): Promise<CatalogView> {
 
 const AGGREGATOR_HINTS: readonly string[] = ['aihub', 'openrouter', 'eden', 'cometapi', 'aihubmix'];
 const ROUTER_HINTS: readonly string[] = ['router'];
-const LOCAL_HINTS: readonly string[] = ['ollama', 'xinference', 'own-model', 'own_model', 'self-hosted', 'self_hosted', 'localai', 'localhost'];
+const LOCAL_HINTS: readonly string[] = [
+  'ollama',
+  'xinference',
+  'own-model',
+  'own_model',
+  'self-hosted',
+  'self_hosted',
+  'localai',
+  'localhost',
+];
 
 function buildMetadataView(): ProviderMetadataView {
   return {
@@ -274,11 +295,12 @@ async function main(): Promise<number> {
         {
           mode: args.mode,
           status: 'blocked',
-          reason: 'minimal_billable_probe requires per-run authorization; refused by audit service contract',
+          reason:
+            'minimal_billable_probe requires per-run authorization; refused by audit service contract',
         },
         null,
-        2,
-      ) + '\n',
+        2
+      ) + '\n'
     );
     return 2;
   }
@@ -320,7 +342,7 @@ async function main(): Promise<number> {
   const { CONSOLIDATION_MATRIX } = await import('@/providers/catalog/consolidation-matrix');
   const canonicalProviderTotal = Object.values(CONSOLIDATION_MATRIX).reduce(
     (n, arr) => n + arr.length,
-    0,
+    0
   );
 
   process.stdout.write(
@@ -380,8 +402,8 @@ async function main(): Promise<number> {
         },
       },
       null,
-      2,
-    ) + '\n',
+      2
+    ) + '\n'
   );
   return 0;
 }

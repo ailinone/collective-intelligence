@@ -119,8 +119,18 @@ describe('DistributedBulkhead', () => {
   it('enforces the fleet-wide cap across two independent instances sharing the same Redis (replicas do not multiply capacity)', async () => {
     const name = 'shared-provider';
     const maxConcurrent = 3;
-    const replicaA = new DistributedBulkhead({ name, maxConcurrent, forceDistributed: true, queueTimeout: 2000 });
-    const replicaB = new DistributedBulkhead({ name, maxConcurrent, forceDistributed: true, queueTimeout: 2000 });
+    const replicaA = new DistributedBulkhead({
+      name,
+      maxConcurrent,
+      forceDistributed: true,
+      queueTimeout: 2000,
+    });
+    const replicaB = new DistributedBulkhead({
+      name,
+      maxConcurrent,
+      forceDistributed: true,
+      queueTimeout: 2000,
+    });
 
     let concurrentInFlight = 0;
     let maxObservedConcurrent = 0;
@@ -150,7 +160,11 @@ describe('DistributedBulkhead', () => {
   });
 
   it('releases the lease after the operation completes (capacity returns to 0 active)', async () => {
-    const bulkhead = new DistributedBulkhead({ name: 'release-test', maxConcurrent: 5, forceDistributed: true });
+    const bulkhead = new DistributedBulkhead({
+      name: 'release-test',
+      maxConcurrent: 5,
+      forceDistributed: true,
+    });
     await bulkhead.execute(async () => 'done');
     const stats = await bulkhead.getStats();
     expect(stats.activeLeases).toBe(0);
@@ -158,8 +172,16 @@ describe('DistributedBulkhead', () => {
   });
 
   it('releases the lease even when the operation throws', async () => {
-    const bulkhead = new DistributedBulkhead({ name: 'release-on-error', maxConcurrent: 1, forceDistributed: true });
-    await expect(bulkhead.execute(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    const bulkhead = new DistributedBulkhead({
+      name: 'release-on-error',
+      maxConcurrent: 1,
+      forceDistributed: true,
+    });
+    await expect(
+      bulkhead.execute(async () => {
+        throw new Error('boom');
+      })
+    ).rejects.toThrow('boom');
     const stats = await bulkhead.getStats();
     expect(stats.activeLeases).toBe(0);
   });
@@ -174,7 +196,10 @@ describe('DistributedBulkhead', () => {
 
     let releaseFirst: () => void = () => {};
     const first = bulkhead.execute(
-      () => new Promise<void>((resolve) => { releaseFirst = resolve; })
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        })
     );
     await sleep(10); // let the first operation acquire its lease
 
@@ -200,7 +225,11 @@ describe('DistributedBulkhead', () => {
   });
 
   it('falls back to local enforcement when Redis throws, without crashing the caller', async () => {
-    const bulkhead = new DistributedBulkhead({ name: 'redis-down', maxConcurrent: 2, forceDistributed: true });
+    const bulkhead = new DistributedBulkhead({
+      name: 'redis-down',
+      maxConcurrent: 2,
+      forceDistributed: true,
+    });
     shouldThrowOnGetClient = true;
 
     const result = await bulkhead.execute(async () => 'still works');

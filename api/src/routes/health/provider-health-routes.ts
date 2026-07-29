@@ -120,11 +120,15 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
       schema: {
         tags: ['Health'],
         summary: 'Get specific provider health',
-        description: 'Returns detailed health status for a specific LLM provider including model availability, usability status, and any health check errors.',
+        description:
+          'Returns detailed health status for a specific LLM provider including model availability, usability status, and any health check errors.',
         params: {
           type: 'object',
           properties: {
-            providerName: { type: 'string', description: 'Provider name (e.g., openai, anthropic, google)' },
+            providerName: {
+              type: 'string',
+              description: 'Provider name (e.g., openai, anthropic, google)',
+            },
           },
           required: ['providerName'],
         },
@@ -134,13 +138,29 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
             type: 'object',
             properties: {
               provider: { type: 'string', description: 'Provider name' },
-              status: { type: 'string', enum: ['available', 'degraded', 'unavailable', 'invalid_credentials', 'unknown'], description: 'Current provider status' },
+              status: {
+                type: 'string',
+                enum: ['available', 'degraded', 'unavailable', 'invalid_credentials', 'unknown'],
+                description: 'Current provider status',
+              },
               reason: { type: 'string', description: 'Status reason' },
-              lastChecked: { type: 'string', format: 'date-time', description: 'Last health check timestamp' },
+              lastChecked: {
+                type: 'string',
+                format: 'date-time',
+                description: 'Last health check timestamp',
+              },
               usable: { type: 'boolean', description: 'Whether provider is currently usable' },
               modelsAvailable: { type: 'number', description: 'Number of models available' },
-              healthCheckError: { type: 'string', nullable: true, description: 'Error from health check if any' },
-              details: { type: 'object', additionalProperties: true, description: 'Additional status details' },
+              healthCheckError: {
+                type: 'string',
+                nullable: true,
+                description: 'Error from health check if any',
+              },
+              details: {
+                type: 'object',
+                additionalProperties: true,
+                description: 'Additional status details',
+              },
             },
           },
           400: {
@@ -172,7 +192,12 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       // Type-safe params extraction
       const params = request.params;
-      if (!params || typeof params !== 'object' || !('providerName' in params) || typeof params.providerName !== 'string') {
+      if (
+        !params ||
+        typeof params !== 'object' ||
+        !('providerName' in params) ||
+        typeof params.providerName !== 'string'
+      ) {
         return reply.status(400).send({
           error: 'Invalid provider name parameter',
         });
@@ -229,4 +254,3 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
 
   logger.info('✅ Provider health check routes registered');
 }
-

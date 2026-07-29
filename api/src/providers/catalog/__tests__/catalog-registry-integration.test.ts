@@ -47,10 +47,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import {
-  loadProviderCatalog,
-  resetCatalogLoaderForTests,
-} from '../catalog-loader';
+import { loadProviderCatalog, resetCatalogLoaderForTests } from '../catalog-loader';
 import {
   ProviderRegistry,
   getProviderRegistry,
@@ -75,7 +72,7 @@ const FAKE_KEY = 'fake-integration-key-42';
  */
 function makeLocalEntry(
   port: number,
-  overrides: Partial<ProviderCatalogEntry> = {},
+  overrides: Partial<ProviderCatalogEntry> = {}
 ): ProviderCatalogEntry {
   return {
     providerId: PROVIDER_ID,
@@ -331,9 +328,8 @@ describe('catalog ↔ registry — failure modes do NOT leak into the registry',
 
     // Availability service MUST mark it degraded so operators can tell that
     // the boot probe failed even though the adapter is wired.
-    const { providerAvailabilityService } = await import(
-      '@/services/provider-availability-service'
-    );
+    const { providerAvailabilityService } =
+      await import('@/services/provider-availability-service');
     const status = providerAvailabilityService.getStatus(PROVIDER_ID);
     expect(status?.status).toBe('degraded');
     expect(status?.reason).toMatch(/health.?check failed at boot/i);

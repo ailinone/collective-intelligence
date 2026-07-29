@@ -142,9 +142,8 @@ class ProviderPluginManager {
       //     - unhealthy/threw → 'degraded' (registered, but boot probe failed;
       //       request-time circuit breaker decides whether to actually use it)
       try {
-        const { providerAvailabilityService } = await import(
-          '@/services/provider-availability-service'
-        );
+        const { providerAvailabilityService } =
+          await import('@/services/provider-availability-service');
         if (healthy) {
           providerAvailabilityService.markAvailable(plugin.name);
         } else {
@@ -286,15 +285,15 @@ class ProviderPluginManager {
     if (typeof plugin.initialize !== 'function') {
       throw new Error('Plugin must implement initialize() method');
     }
-    
+
     if (typeof plugin.listModels !== 'function') {
       throw new Error('Plugin must implement listModels() method');
     }
-    
+
     if (typeof plugin.healthCheck !== 'function') {
       throw new Error('Plugin must implement healthCheck() method');
     }
-    
+
     if (typeof plugin.getAdapter !== 'function') {
       throw new Error('Plugin must implement getAdapter() method');
     }

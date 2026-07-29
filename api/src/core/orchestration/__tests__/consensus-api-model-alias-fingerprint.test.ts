@@ -76,13 +76,29 @@ describe('01C.1B-J1E §14.3 — fingerprint includes apiModelId', () => {
       adapterKind: 'openai-compatible-chat',
       equivalenceKind: 'exact_same_model',
     };
-    expect(hashRoutes([projectRouteForFingerprint(route)])).toBe(hashRoutes([projectRouteForFingerprint(route)]));
+    expect(hashRoutes([projectRouteForFingerprint(route)])).toBe(
+      hashRoutes([projectRouteForFingerprint(route)])
+    );
   });
 
   it('multiple routes: order-stable fingerprint', () => {
     const routes = [
-      { routeId: 'a::m::adapter', logicalModelId: 'm', apiModelId: 'm', providerId: 'a', adapterKind: 'adapter', equivalenceKind: 'exact_same_model' },
-      { routeId: 'b::m::adapter', logicalModelId: 'm', apiModelId: 'm', providerId: 'b', adapterKind: 'adapter', equivalenceKind: 'exact_same_model' },
+      {
+        routeId: 'a::m::adapter',
+        logicalModelId: 'm',
+        apiModelId: 'm',
+        providerId: 'a',
+        adapterKind: 'adapter',
+        equivalenceKind: 'exact_same_model',
+      },
+      {
+        routeId: 'b::m::adapter',
+        logicalModelId: 'm',
+        apiModelId: 'm',
+        providerId: 'b',
+        adapterKind: 'adapter',
+        equivalenceKind: 'exact_same_model',
+      },
     ];
     const fp1 = hashRoutes(routes.map(projectRouteForFingerprint));
     const fp2 = hashRoutes(routes.map(projectRouteForFingerprint));

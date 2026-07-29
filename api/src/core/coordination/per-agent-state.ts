@@ -91,9 +91,7 @@ export type PerAgentStateMap = Map<string, PerAgentState>;
  * Pure function — order-deterministic on the input. The map is keyed
  * by agentId so consumers can `.get(agentId)` without scanning.
  */
-export function createInitialPerAgentStates(
-  agentIds: ReadonlyArray<string>,
-): PerAgentStateMap {
+export function createInitialPerAgentStates(agentIds: ReadonlyArray<string>): PerAgentStateMap {
   const map: PerAgentStateMap = new Map();
   const seen = new Set<string>();
   for (const agentId of agentIds) {
@@ -125,7 +123,7 @@ function buildAgentScopedState(
   agentState: PerAgentState,
   limits: CoordinationLimits,
   strategy: string,
-  runId: string,
+  runId: string
 ): CoordinationState {
   return {
     runId,
@@ -168,7 +166,7 @@ export function aggregatePerAgent(
   method: AggregationMethod,
   limits: CoordinationLimits,
   strategy: string,
-  runId: string,
+  runId: string
 ): { nextStates: PerAgentStateMap; perAgentResults: Map<string, SensitivityAggregationResult> } {
   const nextStates: PerAgentStateMap = new Map();
   const perAgentResults = new Map<string, SensitivityAggregationResult>();
@@ -182,7 +180,8 @@ export function aggregatePerAgent(
     // because invoking N coordinator calls (one per agent) would
     // multiply cost N-fold. Operators that want LLM-mediated synthesis
     // SHOULD keep the shared-state mode.
-    const effectiveMethod: AggregationMethod = method === 'llm_synthesis' ? 'weighted_confidence' : method;
+    const effectiveMethod: AggregationMethod =
+      method === 'llm_synthesis' ? 'weighted_confidence' : method;
     const result = aggregateSignals(visibleSignals, scopedState, effectiveMethod);
 
     perAgentResults.set(agentId, result);
@@ -250,7 +249,7 @@ export interface SharedStateSynthesisInput {
 }
 
 export function synthesizeSharedStateFromPerAgent(
-  input: SharedStateSynthesisInput,
+  input: SharedStateSynthesisInput
 ): CoordinationState {
   const median = coordinateMedianConsensus(input.perAgentStates);
   const variables: Record<string, VariableState> = { ...median.variables };
@@ -261,12 +260,17 @@ export function synthesizeSharedStateFromPerAgent(
     ? 1 - decisionTypes.filter((d) => d === majority).length / Math.max(1, decisionTypes.length)
     : 1;
 
-  const decisionFlipRate = computeDecisionFlipRate(input.currentRoundSignals, input.fullHistory, input.round);
+  const decisionFlipRate = computeDecisionFlipRate(
+    input.currentRoundSignals,
+    input.fullHistory,
+    input.round
+  );
 
-  const confidenceAvg = input.currentRoundSignals.length > 0
-    ? input.currentRoundSignals.reduce((acc, s) => acc + s.decision.confidence, 0) /
-      input.currentRoundSignals.length
-    : 0;
+  const confidenceAvg =
+    input.currentRoundSignals.length > 0
+      ? input.currentRoundSignals.reduce((acc, s) => acc + s.decision.confidence, 0) /
+        input.currentRoundSignals.length
+      : 0;
 
   // Pull "stable" / "unstable" labels from the median agreement scores.
   const stableVariables: string[] = [];
@@ -276,9 +280,10 @@ export function synthesizeSharedStateFromPerAgent(
     else unstableVariables.push(variable);
   }
 
-  const variableStability = stableVariables.length + unstableVariables.length > 0
-    ? stableVariables.length / (stableVariables.length + unstableVariables.length)
-    : 0;
+  const variableStability =
+    stableVariables.length + unstableVariables.length > 0
+      ? stableVariables.length / (stableVariables.length + unstableVariables.length)
+      : 0;
 
   const convergence: ConvergenceMetrics = {
     score: 0.4 * (1 - dissent) + 0.3 * variableStability + 0.3 * confidenceAvg,
@@ -322,7 +327,7 @@ function getMajorityDecision(types: string[]): string | undefined {
 function computeDecisionFlipRate(
   currentRoundSignals: ReadonlyArray<CoordinationSignal>,
   fullHistory: ReadonlyArray<CoordinationSignal>,
-  currentRound: number,
+  currentRound: number
 ): number {
   if (currentRound <= 1) return 0;
   const previousRound = currentRound - 1;
@@ -342,9 +347,7 @@ function computeDecisionFlipRate(
  * full variable state — useful for run reports that need to show
  * each agent's coverage at a glance.
  */
-export function summarizePerAgentStates(
-  perAgentStates: PerAgentStateMap,
-): PerAgentStateSnapshot[] {
+export function summarizePerAgentStates(perAgentStates: PerAgentStateMap): PerAgentStateSnapshot[] {
   const out: PerAgentStateSnapshot[] = [];
   for (const [agentId, state] of perAgentStates) {
     out.push({

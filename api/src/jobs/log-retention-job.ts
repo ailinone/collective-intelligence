@@ -9,19 +9,19 @@
 
 /**
  * Log Retention Job (Enterprise-Grade)
- * 
+ *
  * Purpose:
  * - Prevent database explosion from unbounded RequestLog growth
  * - Archive old logs before deletion (compliance, debugging)
  * - Maintain performance of transactional queries
  * - Support regulatory compliance (GDPR, SOC 2, HIPAA)
- * 
+ *
  * Scale Support:
  * - Handles 1M+ requests/day (365M rows/year)
  * - Batch deletion (prevents transaction timeout)
  * - Partition-aware for sharded databases
  * - Progress tracking and resumable operations
- * 
+ *
  * Retention Policy:
  * - RequestLog: 90 days (configurable via env)
  * - LearningData: 365 days (annual aggregations)
@@ -61,7 +61,10 @@ const CONFIG = {
   // Retention periods (days)
   requestLogRetentionDays: parseInt(process.env.REQUEST_LOG_RETENTION_DAYS || '90', 10),
   learningDataRetentionDays: parseInt(process.env.LEARNING_DATA_RETENTION_DAYS || '365', 10),
-  performanceMetricRetentionDays: parseInt(process.env.PERFORMANCE_METRIC_RETENTION_DAYS || '180', 10),
+  performanceMetricRetentionDays: parseInt(
+    process.env.PERFORMANCE_METRIC_RETENTION_DAYS || '180',
+    10
+  ),
   auditLogRetentionDays: parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '730', 10), // 2 years
 
   // Batch processing (prevent transaction timeouts)
@@ -254,7 +257,7 @@ async function deleteOldSecurityAuditLogs(): Promise<number> {
 
 /**
  * Run full log retention cleanup
- * 
+ *
  * Orchestrates deletion across all log tables
  * Tracks metrics for monitoring/alerting
  */
@@ -321,7 +324,7 @@ async function runLogRetentionCleanup(): Promise<void> {
     // Send alert to ops team via error counter and structured logging
     logRetentionErrors.inc();
     logRetentionDuration.observe(duration / 1000);
-    
+
     // Critical errors are logged with ERROR level which can trigger alerts in log aggregation systems
     // (e.g., CloudWatch Alarms, Datadog Monitors, PagerDuty integrations)
   }
@@ -334,7 +337,7 @@ let cronJob: ScheduledTask | null = null;
 
 /**
  * Start log retention job
- * 
+ *
  * Schedule:
  * - Daily at 2 AM UTC (low traffic period)
  * - Configurable via LOG_RETENTION_CRON env var
@@ -390,4 +393,3 @@ export async function runLogRetentionCleanupNow(): Promise<void> {
   logger.info('Running log retention cleanup (manual execution)');
   await runLogRetentionCleanup();
 }
-

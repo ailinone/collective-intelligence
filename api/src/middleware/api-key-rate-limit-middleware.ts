@@ -10,17 +10,17 @@
 /**
  * API Key Rate Limiting Middleware
  * SECURITY: Prevents abuse via API key rate limiting (T7 mitigation)
- * 
+ *
  * This middleware enforces rate limits per API key to prevent:
  * - Replay attacks with stolen API keys
  * - Resource exhaustion attacks
  * - Credential stuffing
- * 
+ *
  * Rate Limiting Strategy:
  * - Sliding window algorithm (Redis sorted sets)
  * - Per-key limits (configurable per organization tier)
  * - Burst allowance for legitimate traffic spikes
- * 
+ *
  * Configuration:
  * - API_KEY_RATE_LIMIT_ENABLED: Enable/disable rate limiting (default: true)
  * - API_KEY_RATE_LIMIT_WINDOW_SECONDS: Time window for rate limiting (default: 60)
@@ -45,11 +45,11 @@ const RATE_LIMIT_PREFIX = 'api_key_rate_limit:';
 
 // Rate limits by tier (requests per minute)
 const TIER_RATE_LIMITS: Record<string, number> = {
-  'free': 20,
-  'starter': 60,
-  'professional': 120,
-  'business': 300,
-  'enterprise': 600,
+  free: 20,
+  starter: 60,
+  professional: 120,
+  business: 300,
+  enterprise: 600,
 };
 
 // Burst allowance multiplier
@@ -123,13 +123,13 @@ async function getRedisClient(): Promise<typeof redisClient> {
   if (redisClient) {
     return redisClient;
   }
-  
+
   try {
     const Redis = (await import('ioredis')).default;
-    const redisUrl = config.redis.password 
+    const redisUrl = config.redis.password
       ? `redis://:${config.redis.password}@${config.redis.host}:${config.redis.port}/${config.redis.db}`
       : `redis://${config.redis.host}:${config.redis.port}/${config.redis.db}`;
-    
+
     redisClient = new Redis(redisUrl, {
       maxRetriesPerRequest: 1,
       retryStrategy: (times) => {
@@ -139,18 +139,21 @@ async function getRedisClient(): Promise<typeof redisClient> {
       enableReadyCheck: true,
       connectTimeout: 5000,
     });
-    
+
     redisClient.on('error', (err) => {
       log.error({ error: err.message }, 'Redis connection error in rate limit middleware');
     });
-    
+
     redisClient.on('connect', () => {
       log.info('Redis connected for API key rate limiting');
     });
-    
+
     return redisClient;
   } catch (error) {
-    log.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to initialize Redis for rate limiting');
+    log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      'Failed to initialize Redis for rate limiting'
+    );
     return null;
   }
 }
@@ -168,27 +171,28 @@ async function checkRateLimit(
     log.warn({ apiKeyId }, 'Redis unavailable, falling back to local in-memory rate limiting');
     return checkRateLimitLocal(apiKeyId, tier);
   }
-  
+
   try {
     const now = Date.now();
-    const windowStart = now - (WINDOW_SECONDS * 1000);
+    const windowStart = now - WINDOW_SECONDS * 1000;
     const key = `${RATE_LIMIT_PREFIX}${apiKeyId}`;
-    
+
     // Get rate limit for tier
     const baseLimit = TIER_RATE_LIMITS[tier] || TIER_RATE_LIMITS['free'];
     const limit = Math.floor(baseLimit * BURST_MULTIPLIER);
-    
+
     // Sliding window: Remove old entries and count current window
     await redis.zremrangebyscore(key, 0, windowStart);
     const currentCount = await redis.zcard(key);
-    
+
     if (currentCount >= limit) {
       // Rate limit exceeded
       const oldestEntry = await redis.zrange(key, 0, 0, 'WITHSCORES');
-      const resetAt = oldestEntry.length > 1 
-        ? new Date(parseInt(oldestEntry[1], 10) + (WINDOW_SECONDS * 1000))
-        : new Date(now + WINDOW_SECONDS * 1000);
-      
+      const resetAt =
+        oldestEntry.length > 1
+          ? new Date(parseInt(oldestEntry[1], 10) + WINDOW_SECONDS * 1000)
+          : new Date(now + WINDOW_SECONDS * 1000);
+
       return {
         allowed: false,
         remaining: 0,
@@ -196,11 +200,11 @@ async function checkRateLimit(
         limit,
       };
     }
-    
+
     // Add current request to window
     await redis.zadd(key, now, `${now}-${Math.random()}`);
     await redis.expire(key, WINDOW_SECONDS * 2); // TTL = 2x window for cleanup
-    
+
     return {
       allowed: true,
       remaining: limit - currentCount - 1,
@@ -218,7 +222,7 @@ async function checkRateLimit(
 
 /**
  * API Key Rate Limiting Middleware
- * 
+ *
  * Should be called AFTER api-key-auth-middleware has validated the API key.
  * Enforces rate limits per API key based on organization tier.
  */
@@ -230,45 +234,51 @@ export async function enforceApiKeyRateLimit(
   if (!RATE_LIMIT_ENABLED) {
     return;
   }
-  
+
   const extendedRequest = request as ExtendedFastifyRequest;
-  
+
   // Only apply to API key authenticated requests
   if (!extendedRequest.apiKey?.id) {
     return;
   }
-  
+
   const apiKeyId = extendedRequest.apiKey.id;
   const tier = extendedRequest.tenantContext?.tier || 'free';
-  
+
   // Check rate limit
   const result = await checkRateLimit(apiKeyId, tier);
-  
+
   // Add rate limit headers to response
   reply.header('X-RateLimit-Limit', result.limit.toString());
   reply.header('X-RateLimit-Remaining', result.remaining.toString());
   reply.header('X-RateLimit-Reset', Math.floor(result.resetAt.getTime() / 1000).toString());
-  
+
   if (!result.allowed) {
-    log.warn({
-      apiKeyId,
-      tier,
-      url: request.url,
-      method: request.method,
-    }, 'API key rate limit exceeded');
-    
+    log.warn(
+      {
+        apiKeyId,
+        tier,
+        url: request.url,
+        method: request.method,
+      },
+      'API key rate limit exceeded'
+    );
+
     return reply.code(429).send({
       error: 'Too Many Requests',
       message: `Rate limit exceeded. Limit: ${result.limit} requests per ${WINDOW_SECONDS}s. Try again at ${result.resetAt.toISOString()}`,
       retry_after: Math.ceil((result.resetAt.getTime() - Date.now()) / 1000),
     });
   }
-  
-  log.debug({
-    apiKeyId,
-    tier,
-    remaining: result.remaining,
-  }, 'API key rate limit check passed');
+
+  log.debug(
+    {
+      apiKeyId,
+      tier,
+      remaining: result.remaining,
+    },
+    'API key rate limit check passed'
+  );
 }
 
 /**

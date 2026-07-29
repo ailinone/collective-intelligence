@@ -35,12 +35,10 @@ let fetchCalls = 0;
 beforeEach(() => {
   fetchCalls = 0;
   originalFetch = globalThis.fetch;
-  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(
-    () => {
-      fetchCalls += 1;
-      throw new Error('dry-run MUST NOT call fetch');
-    },
-  ) as unknown as typeof globalThis.fetch;
+  (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch = vi.fn(() => {
+    fetchCalls += 1;
+    throw new Error('dry-run MUST NOT call fetch');
+  }) as unknown as typeof globalThis.fetch;
   resetFixtureTraceSeq();
 });
 
@@ -60,7 +58,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(fetchCalls).toBe(0);
     expect(result.traceId).toBe('trace-fixture-0001');
@@ -74,7 +72,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(result.candidateCount).toBe(registry.size().routes);
   });
@@ -87,7 +85,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(result.selectedRouteIdHint).toBeTruthy();
     // The hint comes from the fixture: openai's gpt-5.5-pro
@@ -102,7 +100,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(result.selectedRouteIdHint).toBeNull();
   });
@@ -128,7 +126,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     // taskProfile in the trace has ONLY the 5 categorical fields.
     expect(Object.keys(result.trace.taskProfile)).toEqual([
@@ -148,7 +146,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(result.trace.semanticIndexBackend).toBe('none');
   });
@@ -161,7 +159,7 @@ describe('dry-run handler — does NOT call providers, DB, Redis, TEI', () => {
         registry,
         now: FIXTURE_NOW,
         traceIdProvider: FIXTURE_TRACE_ID_PROVIDER,
-      },
+      }
     );
     expect(result.note).toContain('does NOT call providers');
     expect(result.note).toContain('DB');

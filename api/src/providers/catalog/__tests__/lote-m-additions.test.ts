@@ -59,14 +59,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const LOAD_SECRETS_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'config',
-  'load-secrets-into-env.ts',
-);
+const LOAD_SECRETS_PATH = join(__dirname, '..', '..', '..', 'config', 'load-secrets-into-env.ts');
 
 /**
  * The 13 catalog rows landed in LOTE M 2026-04-23. This list is the
@@ -102,7 +95,15 @@ const LOTE_M_NOT_ELIGIBLE = ['liquid', 'modelrun', 'ncompass'] as const;
  * corresponding evidence in NON_CANONICAL_HISTORICAL_CLAIMS.
  */
 const LOTE_M_PROMOTED_TO_LIVE_D1 = ['infermatic'] as const;
-const LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1 = ['arcee'] as const;
+const LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1 = [] as const;
+// arcee: D1 2026-04-24 promoted it credentials-missing -> upstream-suspended
+// (402 insufficient credits, auth accepted). 2026-07-29: the operator
+// topped up the account and a live re-verification confirmed genuine
+// chat + streaming completions (real content, real usage, no more 402) —
+// promoted upstream-suspended -> live-validation. See
+// consolidation-matrix.ts `live-validation` bucket (LOTE V) for the full
+// evidence writeup.
+const LOTE_M_PROMOTED_TO_LIVE_2026_07_29 = ['arcee'] as const;
 const LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1 = ['siliconflow', 'stepfun'] as const;
 
 function findEntry(providerId: string) {
@@ -137,13 +138,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
    * canonical baseUrl returned 200 on /models without auth, and
    * (b) a corresponding historical-claims entry recording the probe.
    */
-  const LOTE_M_PROMOTED_TO_PARTIAL = [
-    'venice',
-    'atlascloud',
-    'avian',
-    'mancer',
-    'phala',
-  ] as const;
+  const LOTE_M_PROMOTED_TO_PARTIAL = ['venice', 'atlascloud', 'avian', 'mancer', 'phala'] as const;
 
   // D1 promotion lists are declared at module scope (above) so all
   // describe blocks can reference them. Semantics:
@@ -153,24 +148,28 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
   //                                        rejected (stays credentials-
   //                                        missing, sub-class changes)
 
-  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended (post Sublote A/B/D1)', () => {
+  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended (post Sublote A/B/D1/2026-07-29)', () => {
     // Sublotes A/B promoted 5 LOTE M ids from credentials-missing →
     // partial (via public /models probe evidence). Sublote D1 promoted
     // 1 LOTE M id (infermatic) → live-validation (real /chat/200) and
-    // 1 LOTE M id (arcee) → upstream-suspended (auth-accepted-402). All
-    // OTHER LOTE M ids remain in credentials-missing. If this test
-    // fires, either (a) a row was added without a matrix entry
-    // (violates I1), or (b) a LOTE M id was moved to a new bucket
-    // WITHOUT being added to one of the explicit promotion lists —
-    // which is the whole point of keeping the explicit lists: each
-    // bucket move must be a deliberate operator decision with probe
-    // evidence, not silent drift.
+    // 1 LOTE M id (arcee) → upstream-suspended (auth-accepted-402).
+    // 2026-07-29 promoted arcee onward from upstream-suspended →
+    // live-validation (operator top-up, re-verified live). All OTHER
+    // LOTE M ids remain in credentials-missing. If this test fires,
+    // either (a) a row was added without a matrix entry (violates I1),
+    // or (b) a LOTE M id was moved to a new bucket WITHOUT being added
+    // to one of the explicit promotion lists — which is the whole point
+    // of keeping the explicit lists: each bucket move must be a
+    // deliberate operator decision with probe evidence, not silent drift.
     const credMissing = new Set(CONSOLIDATION_MATRIX['credentials-missing']);
     const partial = new Set(CONSOLIDATION_MATRIX['partial']);
     const live = new Set(CONSOLIDATION_MATRIX['live-validation']);
     const upstreamSuspended = new Set(CONSOLIDATION_MATRIX['upstream-suspended']);
     const partialSet = new Set<string>(LOTE_M_PROMOTED_TO_PARTIAL);
-    const liveSet = new Set<string>(LOTE_M_PROMOTED_TO_LIVE_D1);
+    const liveSet = new Set<string>([
+      ...LOTE_M_PROMOTED_TO_LIVE_D1,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+    ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
     const misplaced: string[] = [];
     for (const id of LOTE_M_IDS) {
@@ -205,10 +204,25 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
   });
 
   it('all `LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1` ids live in the `upstream-suspended` bucket', () => {
-    // Sublote D1 promotion lock: arcee (trinity-mini chat 402 with
-    // {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}).
+    // Sublote D1 promotion lock. Empty as of 2026-07-29: arcee (the only
+    // id ever on this list, trinity-mini chat 402 with "Insufficient
+    // credits") moved onward to live-validation once the operator topped
+    // up the account — see `LOTE_M_PROMOTED_TO_LIVE_2026_07_29` below.
     for (const id of LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1) {
       expect(CONSOLIDATION_MATRIX['upstream-suspended']).toContain(id);
+      expect(CONSOLIDATION_MATRIX['credentials-missing']).not.toContain(id);
+    }
+  });
+
+  it('all `LOTE_M_PROMOTED_TO_LIVE_2026_07_29` ids live in the `live-validation` bucket', () => {
+    // 2026-07-29 promotion lock: arcee re-verified live (GET /v1/models
+    // 200, POST /v1/chat/completions 200 with real content/usage on
+    // trinity-large-thinking, streaming SSE confirmed) after the operator
+    // topped up the previously-zero-balance account. No longer
+    // upstream-suspended.
+    for (const id of LOTE_M_PROMOTED_TO_LIVE_2026_07_29) {
+      expect(CONSOLIDATION_MATRIX['live-validation']).toContain(id);
+      expect(CONSOLIDATION_MATRIX['upstream-suspended']).not.toContain(id);
       expect(CONSOLIDATION_MATRIX['credentials-missing']).not.toContain(id);
     }
   });
@@ -239,16 +253,20 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
   it('remaining LOTE M ids (not qianfan, not promoted) are sub-classified as secret-absent', () => {
     // After Sublote A (venice → partial), Sublote B (atlascloud, avian,
     // mancer, phala → partial), Sublote D1 (infermatic → live, arcee →
-    // upstream-suspended, siliconflow/stepfun → auth-incomplete
-    // sub-class), the LOTE M ids still in credentials-missing that
-    // should also be in secret-absent are: gmi, inflection, relace.
-    // qianfan and siliconflow/stepfun are auth-incomplete.
+    // upstream-suspended [since re-promoted 2026-07-29 → live],
+    // siliconflow/stepfun → auth-incomplete sub-class), the LOTE M ids
+    // still in credentials-missing that should also be in secret-absent
+    // are: gmi, inflection, relace. qianfan and siliconflow/stepfun are
+    // auth-incomplete.
     // If this test fires, either a LOTE M id was wrongly kept in
     // secret-absent after being promoted/moved, or it was removed from
     // secret-absent without being promoted/moved.
     const secretAbsent = new Set(CREDENTIALS_MISSING_SUBCLASS['secret-absent']);
     const partialSet = new Set<string>(LOTE_M_PROMOTED_TO_PARTIAL);
-    const liveSet = new Set<string>(LOTE_M_PROMOTED_TO_LIVE_D1);
+    const liveSet = new Set<string>([
+      ...LOTE_M_PROMOTED_TO_LIVE_D1,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+    ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
     const authIncompleteSet = new Set<string>(LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1);
     const misclassified: string[] = [];
@@ -267,13 +285,14 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     // Invariant: once a provider LEAVES credentials-missing, it must
     // also leave every sub-class. Sublote A (venice) + Sublote B
     // (atlascloud, avian, mancer, phala) + Sublote D1 (infermatic,
-    // arcee) moves enforced here. Note: D1's siliconflow/stepfun
-    // STAYED in credentials-missing — only their sub-class changed
-    // — so they are NOT in this list.
+    // arcee) + 2026-07-29 (arcee onward to live) moves enforced here.
+    // Note: D1's siliconflow/stepfun STAYED in credentials-missing —
+    // only their sub-class changed — so they are NOT in this list.
     const allLeft = [
       ...LOTE_M_PROMOTED_TO_PARTIAL,
       ...LOTE_M_PROMOTED_TO_LIVE_D1,
       ...LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
     ];
     for (const id of allLeft) {
       for (const subclass of Object.keys(CREDENTIALS_MISSING_SUBCLASS)) {
@@ -423,7 +442,7 @@ describe('LOTE M provider-specific invariants', () => {
     expect(violators).toEqual([]);
   });
 
-  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28} (dated closure + D1 re-review + Phase 4b)', () => {
+  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28, 2026-07-17, 2026-07-29} (dated closure + D1 re-review + Phase 4b + later re-verifications)', () => {
     // Every row in this lot was originally reviewed on the LOTE M
     // closure date (2026-04-23). Rows touched by Sublote D1
     // (2026-04-24) during credential-arrival re-classification legally
@@ -449,18 +468,28 @@ describe('LOTE M provider-specific invariants', () => {
     // de-advertised) and re-stamped. Same lockstep rule as PHASE_4B_TOUCHED:
     // extend this set only together with the entry's stamp bump.
     const MEDIA_SWEEP_2026_07_17_TOUCHED = new Set<string>(['atlascloud']);
+    // 2026-07-29: arcee re-verified live after an operator top-up resolved
+    // the D1 upstream-suspended billing block (see
+    // `LOTE_M_PROMOTED_TO_LIVE_2026_07_29` above) and its notes/
+    // lastReviewedAt were re-stamped accordingly. Same lockstep rule.
+    const LIVE_REVERIFICATION_2026_07_29_TOUCHED = new Set<string>(
+      LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+    );
     const violators: string[] = [];
     for (const id of LOTE_M_IDS) {
       const entry = findEntry(id);
       const reviewedAt = entry?.lastReviewedAt;
-      const expected = MEDIA_SWEEP_2026_07_17_TOUCHED.has(id)
-        ? '2026-07-17'
-        : PHASE_4B_TOUCHED.has(id)
-          ? '2026-04-28'
-          : D1_TOUCHED.has(id)
-            ? '2026-04-24'
-            : '2026-04-23';
-      if (reviewedAt !== expected) violators.push(`${id} (got ${reviewedAt}, expected ${expected})`);
+      const expected = LIVE_REVERIFICATION_2026_07_29_TOUCHED.has(id)
+        ? '2026-07-29'
+        : MEDIA_SWEEP_2026_07_17_TOUCHED.has(id)
+          ? '2026-07-17'
+          : PHASE_4B_TOUCHED.has(id)
+            ? '2026-04-28'
+            : D1_TOUCHED.has(id)
+              ? '2026-04-24'
+              : '2026-04-23';
+      if (reviewedAt !== expected)
+        violators.push(`${id} (got ${reviewedAt}, expected ${expected})`);
     }
     expect(violators).toEqual([]);
   });
@@ -501,9 +530,7 @@ describe('LOTE M secret-loading mappings', () => {
       // The loader will silently fail to populate process.env[envVar]
       // when an operator provisions the GCP secret, making the
       // corresponding catalog row unreachable.
-      const envVarRegex = new RegExp(
-        `envVar:\\s*['"]${envVar}['"][\\s\\S]*?secretKeys:\\s*\\[`,
-      );
+      const envVarRegex = new RegExp(`envVar:\\s*['"]${envVar}['"][\\s\\S]*?secretKeys:\\s*\\[`);
       expect(source).toMatch(envVarRegex);
     });
 
@@ -541,9 +568,7 @@ describe('LOTE M NOT_ELIGIBLE historical claims', () => {
       // brand names (from the directive's 21-provider list) are NOT
       // in the catalog got silently erased. Operators looking at a
       // later complement lot wouldn't understand why we skipped them.
-      const claim = NON_CANONICAL_HISTORICAL_CLAIMS.find((c) =>
-        c.claim.includes(id),
-      );
+      const claim = NON_CANONICAL_HISTORICAL_CLAIMS.find((c) => c.claim.includes(id));
       expect(claim).toBeTruthy();
       expect(claim?.superseded_at).toBe('2026-04-23');
       expect(claim?.reason).toBeTruthy();

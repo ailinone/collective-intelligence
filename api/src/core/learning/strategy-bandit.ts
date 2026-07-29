@@ -34,19 +34,23 @@
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
 import { narrowAs } from '@/utils/type-guards';
-import { learningBanditsAlpha, learningBanditsBeta, banditRollbacksTotal } from '@/observability/ci-metrics';
+import {
+  learningBanditsAlpha,
+  learningBanditsBeta,
+  banditRollbacksTotal,
+} from '@/observability/ci-metrics';
 
 const log = logger.child({ component: 'strategy-bandit' });
 
 const SUCCESS_THRESHOLD = 0.75;
-const FAILURE_THRESHOLD = 0.50;
+const FAILURE_THRESHOLD = 0.5;
 const FLUSH_INTERVAL_MS = 30_000;
 // Minimum number of observations before bandit takes over from prior
 const MIN_OBSERVATIONS_FOR_OVERRIDE = 5;
 
 interface BetaParams {
   alpha: number; // successes + 1
-  beta: number;  // failures  + 1
+  beta: number; // failures  + 1
 }
 
 type BanditKey = string; // `${taskType}|${complexity}|${strategy}`
@@ -135,7 +139,10 @@ interface RecentExecution {
 /** Auto-rollback configuration */
 const ROLLBACK_CONFIG = {
   /** How often to snapshot (ms) — default 6 hours */
-  snapshotIntervalMs: parseInt(process.env.BANDIT_SNAPSHOT_INTERVAL_MS || String(6 * 60 * 60 * 1000), 10),
+  snapshotIntervalMs: parseInt(
+    process.env.BANDIT_SNAPSHOT_INTERVAL_MS || String(6 * 60 * 60 * 1000),
+    10
+  ),
   /** Max snapshots to retain */
   maxSnapshots: parseInt(process.env.BANDIT_MAX_SNAPSHOTS || '20', 10),
   /** Degradation threshold for auto-rollback — if reward rate drops below this fraction of best snapshot */
@@ -187,13 +194,19 @@ class StrategyBandit {
       for (const [field, value] of this.redis.entries()) {
         const existing = this.params.get(field as BanditKey);
         // Only overwrite local if Redis has more observations (higher alpha+beta)
-        if (!existing || (value.alpha + value.beta) > (existing.alpha + existing.beta)) {
+        if (!existing || value.alpha + value.beta > existing.alpha + existing.beta) {
           this.params.set(field as BanditKey, value);
         }
       }
-      log.info({ loaded, localParams: this.params.size }, 'Strategy bandit Redis backing connected');
+      log.info(
+        { loaded, localParams: this.params.size },
+        'Strategy bandit Redis backing connected'
+      );
     } catch (err) {
-      log.warn({ err }, 'Failed to connect Redis backing for strategy bandit — operating local-only');
+      log.warn(
+        { err },
+        'Failed to connect Redis backing for strategy bandit — operating local-only'
+      );
     }
   }
 
@@ -241,11 +254,7 @@ class StrategyBandit {
    * Get the estimated win rate for each strategy (mean of Beta distribution).
    * Useful for logging and metrics.
    */
-  getWinRates(
-    taskType: string,
-    complexity: string,
-    strategies: string[]
-  ): Record<string, number> {
+  getWinRates(taskType: string, complexity: string, strategies: string[]): Record<string, number> {
     const rates: Record<string, number> = {};
     for (const strategy of strategies) {
       const k = key(taskType, complexity, strategy);
@@ -279,7 +288,8 @@ class StrategyBandit {
       newBeta += 1;
     } else {
       // Partial update: interpolate between success and failure
-      const successFraction = (qualityScore - FAILURE_THRESHOLD) / (SUCCESS_THRESHOLD - FAILURE_THRESHOLD);
+      const successFraction =
+        (qualityScore - FAILURE_THRESHOLD) / (SUCCESS_THRESHOLD - FAILURE_THRESHOLD);
       newAlpha += successFraction;
       newBeta += 1 - successFraction;
     }
@@ -322,7 +332,9 @@ class StrategyBandit {
    * Whether the bandit has enough observations to override a static recommendation.
    */
   hasConfidence(taskType: string, complexity: string, strategy: string): boolean {
-    return this.getObservationCount(taskType, complexity, strategy) >= MIN_OBSERVATIONS_FOR_OVERRIDE;
+    return (
+      this.getObservationCount(taskType, complexity, strategy) >= MIN_OBSERVATIONS_FOR_OVERRIDE
+    );
   }
 
   /**
@@ -351,7 +363,10 @@ class StrategyBandit {
 
       for (const row of rows) {
         const successRate = parseFloat(row.success_rate);
-        const n = typeof row.sample_count === 'number' ? row.sample_count : parseInt(String(row.sample_count), 10);
+        const n =
+          typeof row.sample_count === 'number'
+            ? row.sample_count
+            : parseInt(String(row.sample_count), 10);
         const alpha = successRate * n + 1;
         const beta = (1 - successRate) * n + 1;
         const k = key(row.task_type, row.complexity, row.strategy);
@@ -363,20 +378,72 @@ class StrategyBandit {
 
       // Also seed informed priors for new strategies based on theoretical performance
       // This prevents cold-start bias toward 'single' when new collective strategies are available
-      const theoreticalPriors: Array<{ strategy: string; successRate: number; taskTypes: string[] }> = [
-        { strategy: 'blind-debate', successRate: 0.70, taskTypes: ['analysis', 'reasoning', 'code-review'] },
-        { strategy: 'devil-advocate-consensus', successRate: 0.72, taskTypes: ['analysis', 'code-review', 'debugging'] },
-        { strategy: 'safety-quorum', successRate: 0.80, taskTypes: ['general'] },
-        { strategy: 'diversity-ensemble', successRate: 0.68, taskTypes: ['analysis', 'reasoning', 'creative'] },
-        { strategy: 'stigmergic-refinement', successRate: 0.75, taskTypes: ['documentation', 'creative'] },
-        { strategy: 'swarm-explore', successRate: 0.65, taskTypes: ['analysis', 'creative', 'reasoning'] },
-        { strategy: 'clarification-first', successRate: 0.70, taskTypes: ['general', 'analysis', 'creative'] },
-        { strategy: 'research-synthesize', successRate: 0.75, taskTypes: ['factual-qa', 'analysis', 'reasoning'] },
-        { strategy: 'critique-repair', successRate: 0.80, taskTypes: ['code-generation', 'documentation', 'analysis'] },
-        { strategy: 'double-diamond', successRate: 0.70, taskTypes: ['analysis', 'creative', 'general'] },
-        { strategy: 'multi-hop-qa', successRate: 0.75, taskTypes: ['reasoning', 'factual-qa', 'analysis'] },
-        { strategy: 'persona-exploration', successRate: 0.70, taskTypes: ['creative', 'analysis', 'general'] },
-        { strategy: 'agentic', successRate: 0.65, taskTypes: ['code-generation', 'refactoring', 'testing', 'debugging'] },
+      const theoreticalPriors: Array<{
+        strategy: string;
+        successRate: number;
+        taskTypes: string[];
+      }> = [
+        {
+          strategy: 'blind-debate',
+          successRate: 0.7,
+          taskTypes: ['analysis', 'reasoning', 'code-review'],
+        },
+        {
+          strategy: 'devil-advocate-consensus',
+          successRate: 0.72,
+          taskTypes: ['analysis', 'code-review', 'debugging'],
+        },
+        { strategy: 'safety-quorum', successRate: 0.8, taskTypes: ['general'] },
+        {
+          strategy: 'diversity-ensemble',
+          successRate: 0.68,
+          taskTypes: ['analysis', 'reasoning', 'creative'],
+        },
+        {
+          strategy: 'stigmergic-refinement',
+          successRate: 0.75,
+          taskTypes: ['documentation', 'creative'],
+        },
+        {
+          strategy: 'swarm-explore',
+          successRate: 0.65,
+          taskTypes: ['analysis', 'creative', 'reasoning'],
+        },
+        {
+          strategy: 'clarification-first',
+          successRate: 0.7,
+          taskTypes: ['general', 'analysis', 'creative'],
+        },
+        {
+          strategy: 'research-synthesize',
+          successRate: 0.75,
+          taskTypes: ['factual-qa', 'analysis', 'reasoning'],
+        },
+        {
+          strategy: 'critique-repair',
+          successRate: 0.8,
+          taskTypes: ['code-generation', 'documentation', 'analysis'],
+        },
+        {
+          strategy: 'double-diamond',
+          successRate: 0.7,
+          taskTypes: ['analysis', 'creative', 'general'],
+        },
+        {
+          strategy: 'multi-hop-qa',
+          successRate: 0.75,
+          taskTypes: ['reasoning', 'factual-qa', 'analysis'],
+        },
+        {
+          strategy: 'persona-exploration',
+          successRate: 0.7,
+          taskTypes: ['creative', 'analysis', 'general'],
+        },
+        {
+          strategy: 'agentic',
+          successRate: 0.65,
+          taskTypes: ['code-generation', 'refactoring', 'testing', 'debugging'],
+        },
       ];
       const PRIOR_STRENGTH = 3; // Equivalent to 3 observations — enough to be considered, not enough to dominate
       for (const prior of theoreticalPriors) {
@@ -393,7 +460,10 @@ class StrategyBandit {
         }
       }
 
-      log.info({ seeded: rows.length, theoreticalPriors: theoreticalPriors.length }, 'Bandit seeded from strategy_weights DB + theoretical priors');
+      log.info(
+        { seeded: rows.length, theoreticalPriors: theoreticalPriors.length },
+        'Bandit seeded from strategy_weights DB + theoretical priors'
+      );
     } catch (err) {
       log.warn({ error: String(err) }, 'Bandit DB seed failed; using uninformative priors');
     }
@@ -433,7 +503,7 @@ class StrategyBandit {
 
     // Prune old executions outside the reward window
     const cutoff = Date.now() - ROLLBACK_CONFIG.rewardWindowMs;
-    this.recentExecutions = this.recentExecutions.filter(e => e.timestamp > cutoff);
+    this.recentExecutions = this.recentExecutions.filter((e) => e.timestamp > cutoff);
 
     // Check for degradation after recording
     this.checkForDegradation();
@@ -463,12 +533,15 @@ class StrategyBandit {
       this.snapshots = this.snapshots.slice(-ROLLBACK_CONFIG.maxSnapshots);
     }
 
-    log.info({
-      snapshotId: snapshot.snapshotId,
-      rewardRate: rewardRate.toFixed(4),
-      paramsCount: this.params.size,
-      totalSnapshots: this.snapshots.length,
-    }, 'Success-Story snapshot taken');
+    log.info(
+      {
+        snapshotId: snapshot.snapshotId,
+        rewardRate: rewardRate.toFixed(4),
+        paramsCount: this.params.size,
+        totalSnapshots: this.snapshots.length,
+      },
+      'Success-Story snapshot taken'
+    );
 
     return snapshot;
   }
@@ -495,13 +568,16 @@ class StrategyBandit {
     const ratio = currentRewardRate / bestSnapshot.rewardRate;
 
     if (ratio < ROLLBACK_CONFIG.degradationThreshold) {
-      log.error({
-        currentRewardRate: currentRewardRate.toFixed(4),
-        bestRewardRate: bestSnapshot.rewardRate.toFixed(4),
-        ratio: ratio.toFixed(3),
-        threshold: ROLLBACK_CONFIG.degradationThreshold,
-        rollingBackTo: bestSnapshot.snapshotId,
-      }, 'SUCCESS-STORY ROLLBACK — reward rate degraded, restoring best snapshot');
+      log.error(
+        {
+          currentRewardRate: currentRewardRate.toFixed(4),
+          bestRewardRate: bestSnapshot.rewardRate.toFixed(4),
+          ratio: ratio.toFixed(3),
+          threshold: ROLLBACK_CONFIG.degradationThreshold,
+          rollingBackTo: bestSnapshot.snapshotId,
+        },
+        'SUCCESS-STORY ROLLBACK — reward rate degraded, restoring best snapshot'
+      );
 
       this.rollbackToSnapshot(bestSnapshot);
       this.lastRollbackAt = Date.now();
@@ -518,11 +594,14 @@ class StrategyBandit {
       this.params.set(k, { alpha: v.alpha, beta: v.beta });
     }
 
-    log.warn({
-      snapshotId: snapshot.snapshotId,
-      snapshotAge: Date.now() - snapshot.timestamp,
-      paramsRestored: snapshot.params.size,
-    }, 'Bandit state rolled back to snapshot');
+    log.warn(
+      {
+        snapshotId: snapshot.snapshotId,
+        snapshotAge: Date.now() - snapshot.timestamp,
+        paramsRestored: snapshot.params.size,
+      },
+      'Bandit state rolled back to snapshot'
+    );
   }
 
   /**
@@ -532,10 +611,12 @@ class StrategyBandit {
   private calculateCurrentRewardRate(): number | null {
     if (this.recentExecutions.length < 10) return null;
 
-    const avgQuality = this.recentExecutions.reduce((s, e) => s + e.qualityScore, 0)
-      / this.recentExecutions.length;
-    const avgLatencySec = this.recentExecutions.reduce((s, e) => s + e.durationMs, 0)
-      / this.recentExecutions.length / 1000;
+    const avgQuality =
+      this.recentExecutions.reduce((s, e) => s + e.qualityScore, 0) / this.recentExecutions.length;
+    const avgLatencySec =
+      this.recentExecutions.reduce((s, e) => s + e.durationMs, 0) /
+      this.recentExecutions.length /
+      1000;
 
     if (avgLatencySec === 0) return null;
     return avgQuality / avgLatencySec;
@@ -552,9 +633,8 @@ class StrategyBandit {
     lastRollbackAt: number;
   } {
     const currentRewardRate = this.calculateCurrentRewardRate();
-    const bestRewardRate = this.snapshots.length > 0
-      ? Math.max(...this.snapshots.map(s => s.rewardRate))
-      : 0;
+    const bestRewardRate =
+      this.snapshots.length > 0 ? Math.max(...this.snapshots.map((s) => s.rewardRate)) : 0;
 
     return {
       currentRewardRate,
@@ -570,7 +650,11 @@ class StrategyBandit {
     this.snapshotTimer = setInterval(() => {
       this.takeSnapshot();
     }, ROLLBACK_CONFIG.snapshotIntervalMs);
-    if (this.snapshotTimer && typeof this.snapshotTimer === 'object' && 'unref' in this.snapshotTimer) {
+    if (
+      this.snapshotTimer &&
+      typeof this.snapshotTimer === 'object' &&
+      'unref' in this.snapshotTimer
+    ) {
       (this.snapshotTimer as NodeJS.Timeout).unref();
     }
   }

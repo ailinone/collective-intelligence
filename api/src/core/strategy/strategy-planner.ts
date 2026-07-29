@@ -78,7 +78,7 @@ interface PlanInternal {
  */
 function isLocal(
   c: ModelScoreResult,
-  routesInfo: ReadonlyMap<string, PlannerRouteMetadata> | undefined,
+  routesInfo: ReadonlyMap<string, PlannerRouteMetadata> | undefined
 ): boolean {
   const meta = routesInfo?.get(c.routeId);
   if (meta) return SELF_HOSTED_KINDS.has(meta.routeKind);
@@ -91,9 +91,7 @@ function distinctCanonicalCount(candidates: readonly ModelScoreResult[]): number
   return s.size;
 }
 
-function estimateCostClass(
-  candidates: readonly ModelScoreResult[],
-): StrategyCostClass {
+function estimateCostClass(candidates: readonly ModelScoreResult[]): StrategyCostClass {
   if (candidates.length === 0) return 'unknown';
   // Use the MAX costEfficiency among selected (higher efficiency → cheaper).
   let maxEff = 0;
@@ -106,9 +104,7 @@ function estimateCostClass(
   return 'high';
 }
 
-function estimateLatencyClass(
-  candidates: readonly ModelScoreResult[],
-): StrategyLatencyClass {
+function estimateLatencyClass(candidates: readonly ModelScoreResult[]): StrategyLatencyClass {
   if (candidates.length === 0) return 'unknown';
   let maxLatScore = 0;
   for (const c of candidates) {
@@ -120,7 +116,7 @@ function estimateLatencyClass(
 }
 
 function pickTopByLatencyScore(
-  candidates: readonly ModelScoreResult[],
+  candidates: readonly ModelScoreResult[]
 ): ModelScoreResult | undefined {
   if (candidates.length === 0) return undefined;
   let best = candidates[0];
@@ -131,10 +127,7 @@ function pickTopByLatencyScore(
       continue;
     }
     // Tie-breaker: routeId asc for determinism.
-    if (
-      c.breakdown.latencyScore === best.breakdown.latencyScore &&
-      c.routeId < best.routeId
-    ) {
+    if (c.breakdown.latencyScore === best.breakdown.latencyScore && c.routeId < best.routeId) {
       best = c;
     }
   }
@@ -142,7 +135,7 @@ function pickTopByLatencyScore(
 }
 
 function sortByCostEfficiencyDesc(
-  candidates: readonly ModelScoreResult[],
+  candidates: readonly ModelScoreResult[]
 ): readonly ModelScoreResult[] {
   return [...candidates].sort((a, b) => {
     if (a.breakdown.costEfficiency !== b.breakdown.costEfficiency) {
@@ -154,7 +147,7 @@ function sortByCostEfficiencyDesc(
 
 function selectFirstDiverseCanonicals(
   candidates: readonly ModelScoreResult[],
-  count: number,
+  count: number
 ): readonly ModelScoreResult[] {
   const seen = new Set<string>();
   const out: ModelScoreResult[] = [];
@@ -185,7 +178,7 @@ function buildSingleBest(
   c: ModelScoreResult,
   reasons: readonly string[],
   constraints: readonly string[],
-  fallback: readonly string[] = [],
+  fallback: readonly string[] = []
 ): PlanInternal {
   return {
     strategy: 'single_best',
@@ -215,11 +208,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
     const pin = context.explicitModelPin;
     const matching = candidates.filter((c) => candidateMatchesPin(c, pin));
     if (matching.length === 0) {
-      return wrap(
-        buildNoViable(['pin_set_but_no_candidate_matches']),
-        rejected,
-        candidates,
-      );
+      return wrap(buildNoViable(['pin_set_but_no_candidate_matches']), rejected, candidates);
     }
     const top = matching[0]; // candidates pre-sorted by retriever
     // policy.allowFallbackForExplicitPin: in MVP 5B we NEVER fall back
@@ -230,11 +219,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
     if (policy.allowFallbackForExplicitPin) {
       reasons.push('policy_allows_fallback_but_mvp_5b_does_not_substitute');
     }
-    return wrap(
-      buildSingleBest(top, reasons, ['explicit_pin'], fallback),
-      rejected,
-      candidates,
-    );
+    return wrap(buildSingleBest(top, reasons, ['explicit_pin'], fallback), rejected, candidates);
   }
 
   // ─── 2. local_required filter (defensive — retriever already filters) ─
@@ -245,7 +230,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
       return wrap(
         buildNoViable(['privacy_local_required_no_local_candidate']),
         rejected,
-        candidates,
+        candidates
       );
     }
     pool = local;
@@ -253,10 +238,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
 
   // ─── 3. Extreme complexity → critique_repair / expert_panel ─────────
   if (context.complexity === 'extreme') {
-    if (
-      policy.allowCollectiveForHighRisk &&
-      pool.length >= policy.minCandidatesForExpertPanel
-    ) {
+    if (policy.allowCollectiveForHighRisk && pool.length >= policy.minCandidatesForExpertPanel) {
       const selected = pool.slice(0, policy.minCandidatesForExpertPanel);
       return wrap(
         {
@@ -269,12 +251,15 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
           constraintsApplied: ['complexity_extreme'],
         },
         rejected,
-        candidates,
+        candidates
       );
     }
     if (pool.length >= 2) {
       const selected = pool.slice(0, 2);
-      rejected.push({ strategy: 'expert_panel', reason: 'insufficient_candidates_for_expert_panel' });
+      rejected.push({
+        strategy: 'expert_panel',
+        reason: 'insufficient_candidates_for_expert_panel',
+      });
       return wrap(
         {
           strategy: 'critique_repair',
@@ -286,7 +271,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
           constraintsApplied: ['complexity_extreme'],
         },
         rejected,
-        candidates,
+        candidates
       );
     }
     rejected.push({
@@ -311,7 +296,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
           constraintsApplied: ['risk_high'],
         },
         rejected,
-        candidates,
+        candidates
       );
     }
     rejected.push({
@@ -329,19 +314,16 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
           fastest,
           ['high_latency_sensitivity_fastest_single'],
           ['latency_sensitivity_high'],
-          pool.filter((c) => c.routeId !== fastest.routeId).map((c) => c.routeId),
+          pool.filter((c) => c.routeId !== fastest.routeId).map((c) => c.routeId)
         ),
         rejected,
-        candidates,
+        candidates
       );
     }
   }
 
   // ─── 6. High cost sensitivity → cost_cascade ─────────────────────────
-  if (
-    context.costSensitivity === 'high' &&
-    pool.length >= policy.costCascadeMinCandidates
-  ) {
+  if (context.costSensitivity === 'high' && pool.length >= policy.costCascadeMinCandidates) {
     const sortedByCost = sortByCostEfficiencyDesc(pool);
     return wrap(
       {
@@ -354,7 +336,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
         constraintsApplied: ['cost_sensitivity_high'],
       },
       rejected,
-      candidates,
+      candidates
     );
   }
   if (context.costSensitivity === 'high') {
@@ -379,7 +361,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
         constraintsApplied: ['complexity_high', 'confidence_high'],
       },
       rejected,
-      candidates,
+      candidates
     );
   }
 
@@ -389,7 +371,10 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
     if (locals.length > 0) {
       const topLocal = locals[0];
       const topAny = pool[0];
-      if (topAny.totalScore > 0 && topLocal.totalScore / topAny.totalScore >= policy.localFirstScoreRatio) {
+      if (
+        topAny.totalScore > 0 &&
+        topLocal.totalScore / topAny.totalScore >= policy.localFirstScoreRatio
+      ) {
         return wrap(
           {
             strategy: 'local_first',
@@ -403,7 +388,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
             constraintsApplied: ['privacy_local_preferred'],
           },
           rejected,
-          candidates,
+          candidates
         );
       }
       rejected.push({
@@ -434,7 +419,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
         constraintsApplied: ['risk_medium_or_high'],
       },
       rejected,
-      candidates,
+      candidates
     );
   }
 
@@ -444,10 +429,10 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
       pool[0],
       ['default_single_best'],
       [],
-      pool.slice(1).map((c) => c.routeId),
+      pool.slice(1).map((c) => c.routeId)
     ),
     rejected,
-    candidates,
+    candidates
   );
 }
 
@@ -456,7 +441,7 @@ export function planStrategy(input: StrategyPlannerInput): StrategyPlannerResult
 function wrap(
   internal: PlanInternal,
   rejected: readonly StrategyRejectionRecord[],
-  allCandidates: readonly ModelScoreResult[],
+  allCandidates: readonly ModelScoreResult[]
 ): StrategyPlannerResult {
   // estimate cost/latency from the SELECTED routes (not all candidates).
   const selectedSet = new Set(internal.selectedRouteIds);
@@ -498,7 +483,7 @@ function averageScore(arr: readonly ModelScoreResult[]): number {
 
 function candidateMatchesPin(
   c: ModelScoreResult,
-  pin: NonNullable<StrategyPlanningContext['explicitModelPin']>,
+  pin: NonNullable<StrategyPlanningContext['explicitModelPin']>
 ): boolean {
   if (pin.routeId) return c.routeId === pin.routeId;
   if (pin.offeringId) return c.offeringId === pin.offeringId;

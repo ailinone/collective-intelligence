@@ -202,7 +202,10 @@ export class PrismaOrganizationRepository implements IOrganizationRepository {
       return count;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ error: errorMessage, organizationId }, 'Failed to count organization members');
+      this.log.error(
+        { error: errorMessage, organizationId },
+        'Failed to count organization members'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }

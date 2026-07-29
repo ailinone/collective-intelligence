@@ -254,7 +254,9 @@ export class ReplicateAdapter extends ProviderAdapter {
   }
 
   async generateEmbeddings(_request: EmbeddingRequest): Promise<EmbeddingResponse> {
-    throw new Error('Replicate: generateEmbeddings not supported. Use a dedicated embedding provider.');
+    throw new Error(
+      'Replicate: generateEmbeddings not supported. Use a dedicated embedding provider.'
+    );
   }
 
   async healthCheck(): Promise<HealthCheckResult> {
@@ -359,11 +361,12 @@ export class ReplicateAdapter extends ProviderAdapter {
 
     const buffer = Buffer.from(await imageResponse.arrayBuffer());
     const contentType = imageResponse.headers.get('content-type') || 'image/png';
-    const format = contentType.includes('jpeg') || contentType.includes('jpg')
-      ? 'jpg'
-      : contentType.includes('webp')
-        ? 'webp'
-        : 'png';
+    const format =
+      contentType.includes('jpeg') || contentType.includes('jpg')
+        ? 'jpg'
+        : contentType.includes('webp')
+          ? 'webp'
+          : 'png';
 
     return {
       image: buffer,
@@ -409,7 +412,11 @@ export class ReplicateAdapter extends ProviderAdapter {
 
     const buffer = Buffer.from(await audioResponse.arrayBuffer());
     const contentType = audioResponse.headers.get('content-type') || 'audio/wav';
-    const format = contentType.includes('mp3') ? 'mp3' : contentType.includes('ogg') ? 'ogg' : 'wav';
+    const format = contentType.includes('mp3')
+      ? 'mp3'
+      : contentType.includes('ogg')
+        ? 'ogg'
+        : 'wav';
 
     return {
       audio: buffer,
@@ -454,15 +461,24 @@ export class ReplicateAdapter extends ProviderAdapter {
   }
 
   async imageEdit(_model: Model, _request: ImageEditRequest): Promise<ImageEditResponse> {
-    throw new Error('Replicate: imageEdit not implemented. Use a prediction directly for image editing models.');
+    throw new Error(
+      'Replicate: imageEdit not implemented. Use a prediction directly for image editing models.'
+    );
   }
 
-  async imageVariation(_model: Model, _request: ImageVariationRequest): Promise<ImageVariationResponse> {
-    throw new Error('Replicate: imageVariation not implemented. Use a prediction directly for image variation models.');
+  async imageVariation(
+    _model: Model,
+    _request: ImageVariationRequest
+  ): Promise<ImageVariationResponse> {
+    throw new Error(
+      'Replicate: imageVariation not implemented. Use a prediction directly for image variation models.'
+    );
   }
 
   async moderate(_model: Model, _request: ModerationRequest): Promise<ModerationResponse> {
-    throw new Error('Replicate: moderate not implemented. Replicate does not have a dedicated moderation API.');
+    throw new Error(
+      'Replicate: moderate not implemented. Replicate does not have a dedicated moderation API.'
+    );
   }
 
   // ── Core Prediction Methods ──────────────────────────────────────────────
@@ -473,7 +489,7 @@ export class ReplicateAdapter extends ProviderAdapter {
   async createPrediction(
     modelVersion: string,
     input: Record<string, unknown>,
-    options?: { sync?: boolean; webhook?: string },
+    options?: { sync?: boolean; webhook?: string }
   ): Promise<ReplicatePrediction> {
     const headers = this.buildHeaders();
     if (options?.sync) {
@@ -498,7 +514,9 @@ export class ReplicateAdapter extends ProviderAdapter {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(`Replicate prediction failed (${response.status}): ${JSON.stringify(error)}`);
+        throw new Error(
+          `Replicate prediction failed (${response.status}): ${JSON.stringify(error)}`
+        );
       }
 
       return (await response.json()) as ReplicatePrediction;
@@ -524,7 +542,9 @@ export class ReplicateAdapter extends ProviderAdapter {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(`Replicate get prediction failed (${response.status}): ${JSON.stringify(error)}`);
+      throw new Error(
+        `Replicate get prediction failed (${response.status}): ${JSON.stringify(error)}`
+      );
     }
 
     return (await response.json()) as ReplicatePrediction;
@@ -533,7 +553,9 @@ export class ReplicateAdapter extends ProviderAdapter {
   /**
    * List predictions
    */
-  async listPredictions(cursor?: string): Promise<{ results: ReplicatePrediction[]; next?: string }> {
+  async listPredictions(
+    cursor?: string
+  ): Promise<{ results: ReplicatePrediction[]; next?: string }> {
     const url = cursor
       ? `${this.baseUrl}/predictions?cursor=${encodeURIComponent(cursor)}`
       : `${this.baseUrl}/predictions`;
@@ -573,7 +595,7 @@ export class ReplicateAdapter extends ProviderAdapter {
     owner: string,
     name: string,
     input: Record<string, unknown>,
-    options?: { sync?: boolean },
+    options?: { sync?: boolean }
   ): Promise<ReplicatePrediction> {
     const headers = this.buildHeaders();
     if (options?.sync) {
@@ -591,7 +613,7 @@ export class ReplicateAdapter extends ProviderAdapter {
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(
-          `Replicate model prediction for ${owner}/${name} failed (${response.status}): ${JSON.stringify(error)}`,
+          `Replicate model prediction for ${owner}/${name} failed (${response.status}): ${JSON.stringify(error)}`
         );
       }
 
@@ -740,7 +762,7 @@ export class ReplicateAdapter extends ProviderAdapter {
     owner: string,
     name: string,
     versionId: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<unknown> {
     const response = await fetch(
       `${this.baseUrl}/models/${owner}/${name}/versions/${versionId}/trainings`,
@@ -749,12 +771,14 @@ export class ReplicateAdapter extends ProviderAdapter {
         headers: this.buildHeaders(),
         body: JSON.stringify({ input }),
         signal: AbortSignal.timeout(30_000),
-      },
+      }
     );
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(`Replicate create training failed (${response.status}): ${JSON.stringify(error)}`);
+      throw new Error(
+        `Replicate create training failed (${response.status}): ${JSON.stringify(error)}`
+      );
     }
 
     return (await response.json()) as unknown;
@@ -813,7 +837,9 @@ export class ReplicateAdapter extends ProviderAdapter {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(`Replicate create deployment failed (${response.status}): ${JSON.stringify(error)}`);
+      throw new Error(
+        `Replicate create deployment failed (${response.status}): ${JSON.stringify(error)}`
+      );
     }
 
     return (await response.json()) as unknown;
@@ -851,7 +877,7 @@ export class ReplicateAdapter extends ProviderAdapter {
   async createDeploymentPrediction(
     owner: string,
     name: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<ReplicatePrediction> {
     const response = await fetch(`${this.baseUrl}/deployments/${owner}/${name}/predictions`, {
       method: 'POST',
@@ -863,7 +889,7 @@ export class ReplicateAdapter extends ProviderAdapter {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(
-        `Replicate deployment prediction for ${owner}/${name} failed (${response.status}): ${JSON.stringify(error)}`,
+        `Replicate deployment prediction for ${owner}/${name} failed (${response.status}): ${JSON.stringify(error)}`
       );
     }
 
@@ -894,7 +920,12 @@ export class ReplicateAdapter extends ProviderAdapter {
             ? msg.content
                 .map((part) => {
                   if (typeof part === 'string') return part;
-                  if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+                  if (
+                    part &&
+                    typeof part === 'object' &&
+                    'text' in part &&
+                    typeof part.text === 'string'
+                  ) {
                     return part.text;
                   }
                   return '';
@@ -925,9 +956,7 @@ export class ReplicateAdapter extends ProviderAdapter {
     }
     if (Array.isArray(output)) {
       // Many LLM models return an array of string tokens
-      return output
-        .map((item) => (typeof item === 'string' ? item : ''))
-        .join('');
+      return output.map((item) => (typeof item === 'string' ? item : '')).join('');
     }
     if (output && typeof output === 'object') {
       // Check for common output keys
@@ -969,19 +998,25 @@ export class ReplicateAdapter extends ProviderAdapter {
   private async pollPrediction(
     predictionId: string,
     maxAttempts: number = 120,
-    intervalMs: number = 2000,
+    intervalMs: number = 2000
   ): Promise<ReplicatePrediction> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const prediction = await this.getPrediction(predictionId);
 
-      if (prediction.status === 'succeeded' || prediction.status === 'failed' || prediction.status === 'canceled') {
+      if (
+        prediction.status === 'succeeded' ||
+        prediction.status === 'failed' ||
+        prediction.status === 'canceled'
+      ) {
         return prediction;
       }
 
       await this.sleep(intervalMs);
     }
 
-    throw new Error(`Replicate prediction ${predictionId} timed out after ${maxAttempts} polling attempts`);
+    throw new Error(
+      `Replicate prediction ${predictionId} timed out after ${maxAttempts} polling attempts`
+    );
   }
 
   /**
@@ -990,7 +1025,7 @@ export class ReplicateAdapter extends ProviderAdapter {
   private async *streamFromSSE(
     streamUrl: string,
     modelId: string,
-    predictionId: string,
+    predictionId: string
   ): AsyncGenerator<ChatResponse, void, unknown> {
     const response = await fetch(streamUrl, {
       method: 'GET',

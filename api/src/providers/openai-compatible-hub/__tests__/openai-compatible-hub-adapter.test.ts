@@ -105,9 +105,7 @@ describe('openai-compatible-hub-adapter', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const payload =
-      typeof init.body === 'string'
-        ? (JSON.parse(init.body) as Record<string, unknown>)
-        : {};
+      typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
     expect(payload.model).toBe('alibaba/qvq-max');
   });
 
@@ -199,9 +197,7 @@ describe('openai-compatible-hub-adapter', () => {
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/videos/generations');
     const payload =
-      typeof init.body === 'string'
-        ? (JSON.parse(init.body) as Record<string, unknown>)
-        : {};
+      typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
     expect(payload.model).toBe('google/veo-3-fast');
     expect(payload.start_image).toBe('https://example.com/start.png');
     expect(payload.end_image).toBe('https://example.com/end.png');
@@ -419,9 +415,7 @@ describe('openai-compatible-hub-adapter', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const payload =
-      typeof init.body === 'string'
-        ? (JSON.parse(init.body) as Record<string, unknown>)
-        : {};
+      typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
     const messages = Array.isArray(payload.messages) ? payload.messages : [];
     expect(messages.length).toBe(1);
   });
@@ -532,7 +526,7 @@ describe('openai-compatible-hub-adapter', () => {
       new Response('<html><body>502 Bad Gateway</body></html>', {
         status: 502,
         headers: { 'Content-Type': 'text/html' },
-      }),
+      })
     );
 
     const adapter = new OpenAICompatibleHubAdapter({
@@ -572,8 +566,8 @@ describe('openai-compatible-hub-adapter', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({ error: { message: 'Internal upstream failure', type: 'server_error' } }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } },
-      ),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      )
     );
 
     const adapter = new OpenAICompatibleHubAdapter({

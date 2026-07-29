@@ -14,7 +14,12 @@
 
 import { createPublicKey, randomInt } from 'crypto';
 import bcrypt from 'bcrypt';
-import jwt, { type Algorithm, type Secret, type SignOptions, type VerifyOptions } from 'jsonwebtoken';
+import jwt, {
+  type Algorithm,
+  type Secret,
+  type SignOptions,
+  type VerifyOptions,
+} from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import { config } from '@/config';
 import { Prisma, prisma } from '@/database/client';
@@ -319,7 +324,7 @@ export interface AuthChallengeResult {
  * Authentication Service
  */
 export class AuthService {
-  private log = logger.child({ service: 'auth' })
+  private log = logger.child({ service: 'auth' });
   private emailService = getEmailService();
   private federatedJwksCache: FederatedJwksCache | null = null;
 
@@ -380,7 +385,11 @@ export class AuthService {
     return keys;
   }
 
-  private selectFederatedJwk(keys: FederatedJwk[], kid: string | undefined, alg: string): FederatedJwk | null {
+  private selectFederatedJwk(
+    keys: FederatedJwk[],
+    kid: string | undefined,
+    alg: string
+  ): FederatedJwk | null {
     if (kid) {
       const byKid = keys.find((key) => key.kid === kid && (!key.alg || key.alg === alg));
       if (byKid) {
@@ -542,10 +551,11 @@ export class AuthService {
         } catch (error: unknown) {
           // Handle unique constraint if organization creation fails
           // This should rarely happen, but handle gracefully
-          if (
-            isUniqueConstraintError(error)
-          ) {
-            this.log.warn({ email: normalizedEmail }, 'Organization creation failed due to unique constraint, retrying');
+          if (isUniqueConstraintError(error)) {
+            this.log.warn(
+              { email: normalizedEmail },
+              'Organization creation failed due to unique constraint, retrying'
+            );
             // Organization might have been created by another request, continue with user creation
             // This is an edge case that should be handled by proper transaction management in the future
             throw new Error('Failed to create organization due to concurrent request');
@@ -572,15 +582,16 @@ export class AuthService {
         });
       } catch (error: unknown) {
         // Handle unique constraint violation (race condition where user was created between check and create)
-        if (
-          isUniqueConstraintError(error)
-        ) {
+        if (isUniqueConstraintError(error)) {
           // After isUniqueConstraintError guard, we can safely access meta property
           // Use helper function to extract constraint fields
           const constraintFields = getUniqueConstraintFields(error);
-          
+
           if (constraintFields?.includes('email')) {
-            this.log.warn({ email: normalizedEmail }, 'User creation failed due to email unique constraint, user likely created by concurrent request');
+            this.log.warn(
+              { email: normalizedEmail },
+              'User creation failed due to email unique constraint, user likely created by concurrent request'
+            );
             const authSettings = await this.resolveAuthSettings(data.organizationId);
             return {
               success: false,
@@ -877,16 +888,16 @@ export class AuthService {
       const normalizedEmail = email.trim().toLowerCase();
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
-    });
+      });
 
       if (!user) {
         const authSettings = await this.resolveAuthSettings();
-      return {
-        success: false,
+        return {
+          success: false,
           loginMode: authSettings.mode,
           error: 'Invalid email or code',
-      };
-    }
+        };
+      }
 
       const challenges = await prisma.authLoginChallenge.findMany({
         where: {
@@ -900,8 +911,8 @@ export class AuthService {
 
       if (challenges.length === 0) {
         const authSettings = await this.resolveAuthSettings(user.organizationId);
-      return {
-        success: false,
+        return {
+          success: false,
           loginMode: authSettings.mode,
           error: 'Invalid or expired code',
         };
@@ -916,8 +927,8 @@ export class AuthService {
           success: false,
           loginMode: authSettings.mode,
           error: 'Invalid or expired code',
-      };
-    }
+        };
+      }
 
       // Delete used challenge
       await prisma.authLoginChallenge.delete({
@@ -929,24 +940,24 @@ export class AuthService {
         data: { lastLoginAt: new Date() },
       });
 
-    const roles = await getUserRoles(user.id, user.organizationId);
+      const roles = await getUserRoles(user.id, user.organizationId);
 
-    const tokens = await this.generateTokens({
-      userId: user.id,
-      organizationId: user.organizationId,
-      email: user.email,
-      roles,
-    });
+      const tokens = await this.generateTokens({
+        userId: user.id,
+        organizationId: user.organizationId,
+        email: user.email,
+        roles,
+      });
 
       this.log.info({ userId: user.id, email: user.email }, 'User logged in with email code');
 
-    const authUser = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      organizationId: user.organizationId,
-      roles,
-    };
+      const authUser = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organizationId: user.organizationId,
+        roles,
+      };
 
       const authSettings = await this.resolveAuthSettings(user.organizationId);
       return this.buildSuccessResult(authUser, tokens, authSettings.mode);
@@ -964,7 +975,10 @@ export class AuthService {
   /**
    * Verify email code by challengeId
    */
-  private async verifyEmailCodeByChallengeId(challengeId: string, code: string): Promise<AuthResult> {
+  private async verifyEmailCodeByChallengeId(
+    challengeId: string,
+    code: string
+  ): Promise<AuthResult> {
     try {
       const lockHash = computeAdvisoryLockHash(`email_challenge:${challengeId}`);
 
@@ -1154,7 +1168,10 @@ export class AuthService {
         roles,
       });
 
-      this.log.info({ userId: user.id, email: user.email }, 'User logged in with email code via challengeId');
+      this.log.info(
+        { userId: user.id, email: user.email },
+        'User logged in with email code via challengeId'
+      );
 
       return this.buildSuccessResult(
         {
@@ -1456,10 +1473,7 @@ export class AuthService {
       const keys = await prisma.apiKey.findMany({
         where: {
           status: 'active',
-          OR: [
-            { quickHash: keyQuickHash },
-            { keyPrefix },
-          ],
+          OR: [{ quickHash: keyQuickHash }, { keyPrefix }],
         },
         include: {
           user: true,
@@ -1521,7 +1535,7 @@ export class AuthService {
           } else {
             try {
               roles = await getUserRoles(key.userId, key.organizationId);
-              
+
               // Backfill metadata with roles for future use
               if (roles.length > 0) {
                 await prisma.apiKey
@@ -1542,10 +1556,18 @@ export class AuthService {
               // If getUserRoles fails, try to get role from user.role field as fallback
               // This can happen when RBAC cache is stale or roles haven't been assigned yet
               const errorMessage = error instanceof Error ? error.message : String(error);
-              this.log.warn({ error: errorMessage, userId: key.userId, organizationId: key.organizationId }, 'Failed to get user roles, using user.role as fallback');
-              
+              this.log.warn(
+                { error: errorMessage, userId: key.userId, organizationId: key.organizationId },
+                'Failed to get user roles, using user.role as fallback'
+              );
+
               // Fallback to user.role field
-              if (key.user && typeof key.user === 'object' && 'role' in key.user && typeof key.user.role === 'string') {
+              if (
+                key.user &&
+                typeof key.user === 'object' &&
+                'role' in key.user &&
+                typeof key.user.role === 'string'
+              ) {
                 roles = [key.user.role];
               } else {
                 // Last resort: use default role
@@ -1560,9 +1582,10 @@ export class AuthService {
             email: key.user.email,
             roles,
             apiKeyId: key.id,
-            apiKeyPermissions: (key.permissions && typeof key.permissions === 'object') 
-              ? (key.permissions as Record<string, unknown>)
-              : null,
+            apiKeyPermissions:
+              key.permissions && typeof key.permissions === 'object'
+                ? (key.permissions as Record<string, unknown>)
+                : null,
           };
         }
       }
@@ -1595,7 +1618,8 @@ export class AuthService {
       });
       // Best-effort: shrink the auth-cache staleness window below its TTL bound.
       // Dynamic import avoids a circular import (that middleware imports this service).
-      const { invalidateApiKeyAuthCache } = await import('@/api/middleware/api-key-auth-middleware');
+      const { invalidateApiKeyAuthCache } =
+        await import('@/api/middleware/api-key-auth-middleware');
       invalidateApiKeyAuthCache(key.quickHash);
 
       return true;
@@ -1639,8 +1663,16 @@ export class AuthService {
     const accessPayload = { ...payload, jti: `at_${nanoid(24)}`, token_use: ACCESS_TOKEN_USE };
     const refreshPayload = { ...payload, jti: `rt_${nanoid(24)}`, token_use: REFRESH_TOKEN_USE };
 
-    const accessToken = jwt.sign(accessPayload, config.security.jwtSecret as Secret, accessTokenOptions as SignOptions);
-    const refreshToken = jwt.sign(refreshPayload, config.security.jwtSecret as Secret, refreshTokenOptions as SignOptions);
+    const accessToken = jwt.sign(
+      accessPayload,
+      config.security.jwtSecret as Secret,
+      accessTokenOptions as SignOptions
+    );
+    const refreshToken = jwt.sign(
+      refreshPayload,
+      config.security.jwtSecret as Secret,
+      refreshTokenOptions as SignOptions
+    );
 
     return {
       accessToken,
@@ -1784,7 +1816,7 @@ export class AuthService {
   async generateApiKey(
     userId: string,
     name: string,
-    expiresAt?: Date | null,
+    expiresAt?: Date | null
   ): Promise<string | null> {
     try {
       const user = await prisma.user.findUnique({
@@ -1806,7 +1838,7 @@ export class AuthService {
 
       this.log.info(
         { apiKeyId: apiKey.id, userId: user.id, expiresAt: expiresAt?.toISOString() ?? null },
-        'API key generated',
+        'API key generated'
       );
       return plainKey;
     } catch (error) {

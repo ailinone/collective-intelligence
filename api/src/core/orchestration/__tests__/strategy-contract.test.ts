@@ -54,4 +54,3 @@ describe('strategy-contract', () => {
     expect(mapExecutionToCanonical('consensus')).toBe('consensus');
   });
 });
-

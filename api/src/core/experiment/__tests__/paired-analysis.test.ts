@@ -21,7 +21,8 @@ import {
 describe('pairByTaskDeltas', () => {
   it('pairs on the COMMON task set (inner join) and averages repetitions per cell', () => {
     const a: TaskScore[] = [
-      { taskIndex: 1, value: 0.9 }, { taskIndex: 1, value: 0.7 }, // avg 0.8
+      { taskIndex: 1, value: 0.9 },
+      { taskIndex: 1, value: 0.7 }, // avg 0.8
       { taskIndex: 2, value: 0.6 },
       { taskIndex: 3, value: 1.0 }, // no match in b → dropped
     ];
@@ -43,10 +44,10 @@ describe('pairByTaskDeltas', () => {
     const collective: TaskScore[] = [{ taskIndex: 1, value: 0.95 }]; // easy task only
     const single: TaskScore[] = [
       { taskIndex: 1, value: 0.95 }, // same on the easy task
-      { taskIndex: 2, value: 0.30 }, // single also ran a hard task
+      { taskIndex: 2, value: 0.3 }, // single also ran a hard task
     ];
     const pooledCollective = 0.95;
-    const pooledSingle = (0.95 + 0.30) / 2; // 0.625
+    const pooledSingle = (0.95 + 0.3) / 2; // 0.625
     expect(pooledCollective - pooledSingle).toBeGreaterThan(0.3); // pooled: spurious win
     const deltas = pairByTaskDeltas(collective, single);
     expect(deltas).toHaveLength(1); // only task 1 is shared
@@ -87,18 +88,35 @@ describe('pairedCohensD', () => {
 
 describe('sharedTaskIndices', () => {
   it('returns the sorted intersection of taskIndex values (the exact audit trail for pairByTaskDeltas)', () => {
-    const a: TaskScore[] = [{ taskIndex: 3, value: 0.5 }, { taskIndex: 1, value: 0.6 }, { taskIndex: 9, value: 0.7 }];
-    const b: TaskScore[] = [{ taskIndex: 1, value: 0.4 }, { taskIndex: 3, value: 0.3 }, { taskIndex: 5, value: 0.2 }];
+    const a: TaskScore[] = [
+      { taskIndex: 3, value: 0.5 },
+      { taskIndex: 1, value: 0.6 },
+      { taskIndex: 9, value: 0.7 },
+    ];
+    const b: TaskScore[] = [
+      { taskIndex: 1, value: 0.4 },
+      { taskIndex: 3, value: 0.3 },
+      { taskIndex: 5, value: 0.2 },
+    ];
     expect(sharedTaskIndices(a, b)).toEqual([1, 3]); // 9 and 5 are not shared; sorted ascending
   });
 
   it('length always matches pairByTaskDeltas — same inner join, same count', () => {
-    const a: TaskScore[] = [{ taskIndex: 1, value: 0.9 }, { taskIndex: 2, value: 0.6 }, { taskIndex: 4, value: 0.1 }];
-    const b: TaskScore[] = [{ taskIndex: 1, value: 0.5 }, { taskIndex: 2, value: 0.6 }];
+    const a: TaskScore[] = [
+      { taskIndex: 1, value: 0.9 },
+      { taskIndex: 2, value: 0.6 },
+      { taskIndex: 4, value: 0.1 },
+    ];
+    const b: TaskScore[] = [
+      { taskIndex: 1, value: 0.5 },
+      { taskIndex: 2, value: 0.6 },
+    ];
     expect(sharedTaskIndices(a, b).length).toBe(pairByTaskDeltas(a, b).length);
   });
 
   it('is empty when there is no overlap', () => {
-    expect(sharedTaskIndices([{ taskIndex: 1, value: 0.1 }], [{ taskIndex: 2, value: 0.2 }])).toEqual([]);
+    expect(
+      sharedTaskIndices([{ taskIndex: 1, value: 0.1 }], [{ taskIndex: 2, value: 0.2 }])
+    ).toEqual([]);
   });
 });

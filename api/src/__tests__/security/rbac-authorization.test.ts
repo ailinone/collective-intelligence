@@ -9,7 +9,7 @@
 
 /**
  * RBAC (Role-Based Access Control) Authorization Tests
- * 
+ *
  * Tests enterprise-grade authorization:
  * - Role hierarchy (admin > editor > user > viewer)
  * - Permission enforcement per endpoint
@@ -17,7 +17,7 @@
  * - Permission escalation attempts (security)
  * - Cross-organization access prevention
  * - API key permission scoping
- * 
+ *
  * Security Focus:
  * - Privilege escalation attacks
  * - Horizontal privilege escalation (access other org's data)
@@ -33,7 +33,7 @@ import bcrypt from 'bcrypt';
 
 describe('RBAC Authorization Tests (Enterprise)', () => {
   let server: FastifyInstance;
-  
+
   // Organization 1
   let org1Id: string;
   let org1AdminId: string;
@@ -42,7 +42,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
   let org1EditorKey: string;
   let org1ViewerId: string;
   let org1ViewerKey: string;
-  
+
   // Organization 2 (for cross-org tests)
   let org2Id: string;
   let org2AdminId: string;
@@ -50,15 +50,15 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
   beforeAll(async () => {
     server = await createServer();
-    
+
     // Clear RBAC cache to ensure fresh roles
     const { invalidateRbacCache } = await import('@/services/rbac-service');
     invalidateRbacCache();
-    
+
     // Sync default RBAC roles
     const { syncDefaultRoles } = await import('@/services/rbac-sync-service');
     await syncDefaultRoles();
-    
+
     // Register routes needed for RBAC tests
     const { registerApiKeyRotationRoutes } = await import('@/routes/admin/api-key-rotation-routes');
     await registerApiKeyRotationRoutes(server);
@@ -66,14 +66,15 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
     await registerAdminRoutes(server);
     const { registerModelsConfigRoutes } = await import('@/routes/models/models-config-routes');
     await registerModelsConfigRoutes(server);
-    const { registerOrganizationSettingsRoutes } = await import('@/routes/organization/organization-settings-routes');
+    const { registerOrganizationSettingsRoutes } =
+      await import('@/routes/organization/organization-settings-routes');
     await registerOrganizationSettingsRoutes(server);
     const { registerUserManagementRoutes } = await import('@/routes/user/user-management-routes');
     await registerUserManagementRoutes(server);
     const { registerUsageRoutes } = await import('@/routes/usage/usage-routes');
     await registerUsageRoutes(server);
     // Note: apiKeysRoutesClean requires DI container setup, skipping for RBAC tests
-    
+
     await server.listen({ port: 0, host: '127.0.0.1' });
 
     // Create Organization 1
@@ -158,7 +159,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
     // Force refresh of RBAC cache to ensure fresh roles before creating API keys
     // This prevents race conditions where API keys are created before roles are loaded
     invalidateRbacCache(); // Clear all cache (using already imported function)
-    
+
     // Pre-warm RBAC cache by fetching roles for all users
     // This ensures getUserRoles will succeed when verifyApiKey calls it
     const [adminRoles, developerRoles, viewerRoles, org2AdminRoles] = await Promise.all([
@@ -167,7 +168,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       getUserRoles(org1ViewerId, org1Id),
       getUserRoles(org2AdminId, org2Id),
     ]);
-    
+
     // Verify roles were loaded correctly
     if (!adminRoles.includes('admin')) {
       throw new Error(`Failed to assign admin role to user ${org1AdminId}`);
@@ -186,7 +187,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       const keyHash = await bcrypt.hash(keyValue, 10);
       const { createHash } = await import('crypto');
       const quickHash = createHash('sha256').update(keyValue).digest('hex');
-      
+
       // Pre-populate metadata with roles to avoid getUserRoles call during verification
       // This prevents race conditions and ensures roles are always available
       const apiKey = await prisma.apiKey.create({
@@ -204,7 +205,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
           },
         },
       });
-      
+
       return keyValue;
     };
 
@@ -248,7 +249,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
       // Should be forbidden
       expect(response.statusCode).toBe(403);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/forbidden|permission|access denied/i);
     });
@@ -351,7 +352,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
       if (response.statusCode === 200) {
         const body = JSON.parse(response.body);
-        
+
         // All data should belong to org1, not org2
         if (body.data) {
           for (const record of body.data) {
@@ -412,7 +413,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
       // Should be forbidden
       expect(response.statusCode).toBe(403);
-      
+
       // Verify role was not changed in database
       const user = await prisma.user.findUnique({
         where: { id: org1ViewerId },
@@ -428,7 +429,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
           userId: org1ViewerId,
         },
       });
-      
+
       if (!apiKey) {
         throw new Error('API key not found for test');
       }
@@ -466,7 +467,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
       // Admin should have permission
       expect([200, 204]).toContain(response.statusCode);
-      
+
       // Verify role was changed in database
       if (response.statusCode === 200) {
         const user = await prisma.user.findUnique({
@@ -489,7 +490,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       const keyHash = await bcrypt.hash(restrictedKeyValue, 10);
       const { createHash } = await import('crypto');
       const quickHash = createHash('sha256').update(restrictedKeyValue).digest('hex');
-      
+
       await prisma.apiKey.create({
         data: {
           name: 'Read-Only Key',
@@ -523,7 +524,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
       // Should be forbidden despite user being admin
       expect(response.statusCode).toBe(403);
-      
+
       const body = JSON.parse(response.body);
       expect(body.error).toMatch(/permission|forbidden/i);
     });
@@ -532,14 +533,14 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
   describe('Endpoint-Level Authorization', () => {
     // Get API key ID for rotation test
     let rotationTestApiKeyId: string;
-    
+
     beforeAll(async () => {
       const apiKey = await prisma.apiKey.findFirst({
         where: { keyPrefix: org1AdminKey.substring(0, 15) },
       });
       rotationTestApiKeyId = apiKey?.id || '00000000-0000-0000-0000-000000000001';
     });
-    
+
     beforeEach(async () => {
       // Clear RBAC cache before each test to ensure fresh roles
       const { invalidateRbacCache } = await import('@/services/rbac-service.js');
@@ -547,14 +548,14 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       invalidateRbacCache(org1EditorId, org1Id);
       invalidateRbacCache(org1ViewerId, org1Id);
       invalidateRbacCache(org2AdminId, org2Id);
-      
+
       // Force a small delay to ensure cache is cleared
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // Add a small delay between tests to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     });
-    
+
     const testCases = [
       {
         endpoint: '/v1/organization/settings',
@@ -595,7 +596,7 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
         developer: org1EditorKey,
         viewer: org1ViewerKey,
       };
-      
+
       for (const role of ['developer', 'viewer']) {
         const response = await server.inject({
           method: 'POST',
@@ -620,11 +621,12 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
         };
 
         for (const role of testCase.allowedRoles) {
-          const endpoint = typeof testCase.endpoint === 'function' 
-            ? await testCase.endpoint() 
-            : typeof testCase.getEndpoint === 'function'
-            ? await testCase.getEndpoint()
-            : testCase.endpoint;
+          const endpoint =
+            typeof testCase.endpoint === 'function'
+              ? await testCase.endpoint()
+              : typeof testCase.getEndpoint === 'function'
+                ? await testCase.getEndpoint()
+                : testCase.endpoint;
           // Prepare valid payload based on endpoint requirements
           let payload: Record<string, unknown> | undefined = undefined;
           if (testCase.method !== 'GET') {
@@ -652,7 +654,9 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
           // Accept 400 for validation errors (payload issues, not auth issues)
           const allowedStatuses = [200, 201, 204, 404, 400, 401, 429];
           if (!allowedStatuses.includes(response.statusCode)) {
-            console.error(`Unexpected status code ${response.statusCode} for ${testCase.method} ${endpoint} with role ${role}`);
+            console.error(
+              `Unexpected status code ${response.statusCode} for ${testCase.method} ${endpoint} with role ${role}`
+            );
             console.error('Response body:', response.body);
           }
           expect(allowedStatuses).toContain(response.statusCode);
@@ -670,12 +674,13 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
 
           for (const role of testCase.deniedRoles) {
             // Resolve endpoint dynamically if needed (same as in "should allow" test)
-            const endpoint = typeof testCase.endpoint === 'function' 
-              ? await testCase.endpoint() 
-              : typeof testCase.getEndpoint === 'function'
-              ? await testCase.getEndpoint()
-              : testCase.endpoint;
-            
+            const endpoint =
+              typeof testCase.endpoint === 'function'
+                ? await testCase.endpoint()
+                : typeof testCase.getEndpoint === 'function'
+                  ? await testCase.getEndpoint()
+                  : testCase.endpoint;
+
             const response = await server.inject({
               method: testCase.method,
               url: endpoint as string,
@@ -689,12 +694,16 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
             // If we get 200, it means the authorization check failed
             // If we get 429, it means rate limit was hit (should not happen often, but handle gracefully)
             if (response.statusCode === 200) {
-              console.error(`Authorization check failed: ${role} was allowed access to ${testCase.method} ${endpoint}`);
+              console.error(
+                `Authorization check failed: ${role} was allowed access to ${testCase.method} ${endpoint}`
+              );
               console.error('Response body:', response.body);
             }
             // Accept 403 (forbidden) or 429 (rate limit) - both indicate access was denied
             if (response.statusCode !== 403 && response.statusCode !== 429) {
-              console.error(`Unexpected status code ${response.statusCode} for ${testCase.method} ${endpoint} with role ${role} (expected 403 or 429)`);
+              console.error(
+                `Unexpected status code ${response.statusCode} for ${testCase.method} ${endpoint} with role ${role} (expected 403 or 429)`
+              );
               console.error('Response body:', response.body);
             }
             expect([403, 429]).toContain(response.statusCode);
@@ -725,7 +734,11 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       });
 
       expect(auditLog).toBeDefined();
-      if (auditLog?.metadata && typeof auditLog.metadata === 'object' && auditLog.metadata !== null) {
+      if (
+        auditLog?.metadata &&
+        typeof auditLog.metadata === 'object' &&
+        auditLog.metadata !== null
+      ) {
         const metadata = auditLog.metadata as Record<string, unknown>;
         expect(metadata).toMatchObject({
           endpoint: '/v1/admin/users',
@@ -813,4 +826,3 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
     });
   });
 });
-

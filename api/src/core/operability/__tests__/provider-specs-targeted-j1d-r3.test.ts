@@ -76,21 +76,17 @@ describe('01C.1B-J1D-R3 §10 — targeted provider specs', () => {
   });
 
   it('nanogpt endpoint matches existing config layer (https://nano-gpt.com/api/v1/...)', () => {
-    expect(PROVIDER_SPECS.nanogpt!.endpoint).toBe(
-      'https://nano-gpt.com/api/v1/chat/completions',
-    );
+    expect(PROVIDER_SPECS.nanogpt!.endpoint).toBe('https://nano-gpt.com/api/v1/chat/completions');
   });
 
   it('novita endpoint matches NovitaAdapter.DEFAULT_BASE_URL (https://api.novita.ai/openai/v1/...)', () => {
     expect(PROVIDER_SPECS.novita!.endpoint).toBe(
-      'https://api.novita.ai/openai/v1/chat/completions',
+      'https://api.novita.ai/openai/v1/chat/completions'
     );
   });
 
   it('edenai endpoint matches catalog baseUrl (https://api.edenai.run/v3/llm/...)', () => {
-    expect(PROVIDER_SPECS.edenai!.endpoint).toBe(
-      'https://api.edenai.run/v3/llm/chat/completions',
-    );
+    expect(PROVIDER_SPECS.edenai!.endpoint).toBe('https://api.edenai.run/v3/llm/chat/completions');
   });
 
   describe('deliberately unsupported providers (no key / no spec safety)', () => {

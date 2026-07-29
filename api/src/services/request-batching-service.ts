@@ -42,9 +42,16 @@ function estimatePartLength(part: MessageContent | string): number {
   return 0;
 }
 
-async function executeOrchestration(request: ChatRequest, userContext: UserContext): Promise<ChatResponse> {
+async function executeOrchestration(
+  request: ChatRequest,
+  userContext: UserContext
+): Promise<ChatResponse> {
   if (engineInstance && typeof engineInstance.execute === 'function') {
-    const result = await engineInstance.execute(request, userContext.organizationId, userContext.userId);
+    const result = await engineInstance.execute(
+      request,
+      userContext.organizationId,
+      userContext.userId
+    );
     if (result?.finalResponse) {
       return result.finalResponse;
     }
@@ -217,7 +224,10 @@ class RequestBatchingService {
           if (part && typeof part === 'object' && 'type' in part) {
             const partType = part.type;
             // Check for image content types
-            if (partType === 'image_url' || (typeof partType === 'string' && partType.includes('image'))) {
+            if (
+              partType === 'image_url' ||
+              (typeof partType === 'string' && partType.includes('image'))
+            ) {
               return true;
             }
           }

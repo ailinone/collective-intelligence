@@ -64,21 +64,37 @@ describe('Evaluation Pipeline', () => {
       // Calls 1-2: generateDailySnapshots (empty)
       if (queryCallCount <= 1) return Promise.resolve([]);
       // Call 2: getActiveNiches for drift detection
-      if (queryCallCount === 2) return Promise.resolve([{ strategy: 'debate', task_type: 'general' }]);
+      if (queryCallCount === 2)
+        return Promise.resolve([{ strategy: 'debate', task_type: 'general' }]);
       // Call 3: baseline window metrics
-      if (queryCallCount === 3) return Promise.resolve([{
-        sample_size: BigInt(50), avg_quality: 0.85, avg_latency_ms: 3000,
-        avg_cost_usd: 0.03, success_rate: 0.95, quality_p90: 0.93,
-      }]);
+      if (queryCallCount === 3)
+        return Promise.resolve([
+          {
+            sample_size: BigInt(50),
+            avg_quality: 0.85,
+            avg_latency_ms: 3000,
+            avg_cost_usd: 0.03,
+            success_rate: 0.95,
+            quality_p90: 0.93,
+          },
+        ]);
       // Call 4: current window metrics (degraded)
-      if (queryCallCount === 4) return Promise.resolve([{
-        sample_size: BigInt(20), avg_quality: 0.55, avg_latency_ms: 3000,
-        avg_cost_usd: 0.03, success_rate: 0.70, quality_p90: 0.65,
-      }]);
+      if (queryCallCount === 4)
+        return Promise.resolve([
+          {
+            sample_size: BigInt(20),
+            avg_quality: 0.55,
+            avg_latency_ms: 3000,
+            avg_cost_usd: 0.03,
+            success_rate: 0.7,
+            quality_p90: 0.65,
+          },
+        ]);
       // Call 5+: rollback queries (current weights, daily count)
-      if (queryCallCount === 5) return Promise.resolve([
-        { task_type: 'code-generation', complexity: 'medium', weight: 1.2, avg_quality: 0.85 },
-      ]);
+      if (queryCallCount === 5)
+        return Promise.resolve([
+          { task_type: 'code-generation', complexity: 'medium', weight: 1.2, avg_quality: 0.85 },
+        ]);
       if (queryCallCount === 6) return Promise.resolve([{ count: BigInt(0) }]);
       // Call 7+: learning validation (empty)
       return Promise.resolve([]);

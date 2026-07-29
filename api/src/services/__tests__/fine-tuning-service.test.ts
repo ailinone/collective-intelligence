@@ -319,9 +319,7 @@ describe('FineTuningService — OpenAI lifecycle', () => {
 
 describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () => {
   beforeEach(() => {
-    mocks.getModelById.mockResolvedValue(
-      makeModel('google', 'gemini-1.5-flash-001-tuning')
-    );
+    mocks.getModelById.mockResolvedValue(makeModel('google', 'gemini-1.5-flash-001-tuning'));
     mocks.resolveAdapterForModel.mockReturnValue({
       adapter: new FakeGoogleAdapter(),
       operability: { nonOperationalReasons: [] },
@@ -361,23 +359,25 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
       metadata: { tunedModel: 'tunedModels/my-tuned-abc' },
     });
 
-    mocks.prisma.fineTuningJob.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
-      id: data.id,
-      organizationId: data.organizationId,
-      status: data.status,
-      model: data.model,
-      fineTunedModel: data.fineTunedModel ?? null,
-      trainingFileId: data.trainingFileId,
-      validationFileId: data.validationFileId,
-      hyperparameters: data.hyperparameters,
-      integrations: null,
-      resultFiles: data.resultFiles,
-      trainedTokens: null,
-      seed: data.seed ?? null,
-      estimatedFinish: null,
-      createdAt: new Date(),
-      finishedAt: null,
-    }));
+    mocks.prisma.fineTuningJob.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) => ({
+        id: data.id,
+        organizationId: data.organizationId,
+        status: data.status,
+        model: data.model,
+        fineTunedModel: data.fineTunedModel ?? null,
+        trainingFileId: data.trainingFileId,
+        validationFileId: data.validationFileId,
+        hyperparameters: data.hyperparameters,
+        integrations: null,
+        resultFiles: data.resultFiles,
+        trainedTokens: null,
+        seed: data.seed ?? null,
+        estimatedFinish: null,
+        createdAt: new Date(),
+        finishedAt: null,
+      })
+    );
 
     const service = new FineTuningService();
     const job = await service.createJob({
@@ -423,23 +423,25 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
       tuningTask: { completeTime: '2026-06-13T00:00:00Z', snapshots: [] },
     });
 
-    mocks.prisma.fineTuningJob.update.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
-      id: 'ftjob-g-1',
-      organizationId: 'org-1',
-      status: data.status,
-      model: 'gemini-1.5-flash-001-tuning',
-      fineTunedModel: data.fineTunedModel ?? null,
-      trainingFileId: 'file-train',
-      validationFileId: null,
-      hyperparameters: {},
-      integrations: null,
-      resultFiles: [],
-      trainedTokens: null,
-      seed: null,
-      estimatedFinish: null,
-      createdAt: new Date(),
-      finishedAt: data.finishedAt ?? null,
-    }));
+    mocks.prisma.fineTuningJob.update.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'ftjob-g-1',
+        organizationId: 'org-1',
+        status: data.status,
+        model: 'gemini-1.5-flash-001-tuning',
+        fineTunedModel: data.fineTunedModel ?? null,
+        trainingFileId: 'file-train',
+        validationFileId: null,
+        hyperparameters: {},
+        integrations: null,
+        resultFiles: [],
+        trainedTokens: null,
+        seed: null,
+        estimatedFinish: null,
+        createdAt: new Date(),
+        finishedAt: data.finishedAt ?? null,
+      })
+    );
 
     const service = new FineTuningService();
     const job = await service.getJob({
@@ -465,23 +467,25 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
       name: 'tunedModels/failed-xyz',
       state: 'FAILED',
     });
-    mocks.prisma.fineTuningJob.update.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
-      id: 'ftjob-g-2',
-      organizationId: 'org-1',
-      status: data.status,
-      model: 'gemini-1.5-flash-001-tuning',
-      fineTunedModel: data.fineTunedModel ?? null,
-      trainingFileId: 'file-train',
-      validationFileId: null,
-      hyperparameters: {},
-      integrations: null,
-      resultFiles: [],
-      trainedTokens: null,
-      seed: null,
-      estimatedFinish: null,
-      createdAt: new Date(),
-      finishedAt: null,
-    }));
+    mocks.prisma.fineTuningJob.update.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'ftjob-g-2',
+        organizationId: 'org-1',
+        status: data.status,
+        model: 'gemini-1.5-flash-001-tuning',
+        fineTunedModel: data.fineTunedModel ?? null,
+        trainingFileId: 'file-train',
+        validationFileId: null,
+        hyperparameters: {},
+        integrations: null,
+        resultFiles: [],
+        trainedTokens: null,
+        seed: null,
+        estimatedFinish: null,
+        createdAt: new Date(),
+        finishedAt: null,
+      })
+    );
 
     const service = new FineTuningService();
     const job = await service.getJob({
@@ -503,23 +507,25 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
     });
     mocks.registryGet.mockReturnValue(new FakeGoogleAdapter());
     mocks.googleClient.deleteTunedModel.mockResolvedValue(undefined);
-    mocks.prisma.fineTuningJob.update.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
-      id: 'ftjob-g-3',
-      organizationId: 'org-1',
-      status: data.status,
-      model: 'gemini-1.5-flash-001-tuning',
-      fineTunedModel: null,
-      trainingFileId: 'file-train',
-      validationFileId: null,
-      hyperparameters: {},
-      integrations: null,
-      resultFiles: [],
-      trainedTokens: null,
-      seed: null,
-      estimatedFinish: null,
-      createdAt: new Date(),
-      finishedAt: data.finishedAt ?? null,
-    }));
+    mocks.prisma.fineTuningJob.update.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'ftjob-g-3',
+        organizationId: 'org-1',
+        status: data.status,
+        model: 'gemini-1.5-flash-001-tuning',
+        fineTunedModel: null,
+        trainingFileId: 'file-train',
+        validationFileId: null,
+        hyperparameters: {},
+        integrations: null,
+        resultFiles: [],
+        trainedTokens: null,
+        seed: null,
+        estimatedFinish: null,
+        createdAt: new Date(),
+        finishedAt: data.finishedAt ?? null,
+      })
+    );
 
     const service = new FineTuningService();
     const job = await service.cancelJob({
@@ -568,9 +574,7 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
     });
     expect(checkpoints.checkpoints).toHaveLength(2);
     expect(checkpoints.checkpoints[1].metrics.train_loss).toBe(0.5);
-    expect(checkpoints.checkpoints[0].fine_tuned_model_checkpoint).toBe(
-      'tunedModels/with-snaps'
-    );
+    expect(checkpoints.checkpoints[0].fine_tuned_model_checkpoint).toBe('tunedModels/with-snaps');
   });
 });
 
@@ -578,9 +582,7 @@ describe('FineTuningService — Google lifecycle (real Gemini tuning API)', () =
 
 describe('FineTuningService — missing Google credential', () => {
   it('returns 503 provider_not_configured when the Google adapter is not registered', async () => {
-    mocks.getModelById.mockResolvedValue(
-      makeModel('google', 'gemini-1.5-flash-001-tuning')
-    );
+    mocks.getModelById.mockResolvedValue(makeModel('google', 'gemini-1.5-flash-001-tuning'));
     mocks.resolveAdapterForModel.mockReturnValue({
       adapter: new FakeGoogleAdapter(),
       operability: { nonOperationalReasons: [] },
@@ -600,9 +602,7 @@ describe('FineTuningService — missing Google credential', () => {
   });
 
   it('returns 503 when the Google adapter is registered but the key is empty', async () => {
-    mocks.getModelById.mockResolvedValue(
-      makeModel('google', 'gemini-1.5-flash-001-tuning')
-    );
+    mocks.getModelById.mockResolvedValue(makeModel('google', 'gemini-1.5-flash-001-tuning'));
     mocks.resolveAdapterForModel.mockReturnValue({
       adapter: new FakeGoogleAdapter(''),
       operability: { nonOperationalReasons: [] },

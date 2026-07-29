@@ -103,25 +103,25 @@ describe('classifyFallbackError', () => {
 
   it('classifies HTTP 429 as rate_limit', () => {
     expect(classifyFallbackError({ status: 429, message: 'tpm hit' }).errorClass).toBe(
-      'rate_limit',
+      'rate_limit'
     );
   });
 
   it('classifies "not supported" messages as capability_mismatch', () => {
     expect(
-      classifyFallbackError(new Error('embeddings not supported by this provider')).errorClass,
+      classifyFallbackError(new Error('embeddings not supported by this provider')).errorClass
     ).toBe('capability_mismatch');
   });
 
   it('classifies HTTP 503 as provider_unavailable', () => {
     expect(classifyFallbackError({ statusCode: 503, message: 'down' }).errorClass).toBe(
-      'provider_unavailable',
+      'provider_unavailable'
     );
   });
 
   it('classifies HTTP 404 as not_found', () => {
     expect(classifyFallbackError({ statusCode: 404, message: 'no such' }).errorClass).toBe(
-      'not_found',
+      'not_found'
     );
   });
 
@@ -155,7 +155,7 @@ describe('selectCandidates', () => {
 
   it('returns empty when explicit does not exist', () => {
     expect(
-      selectCandidates({ catalog, capabilities: ['embeddings'], explicit: 'fictional-model' }),
+      selectCandidates({ catalog, capabilities: ['embeddings'], explicit: 'fictional-model' })
     ).toEqual([]);
   });
 
@@ -233,7 +233,7 @@ describe('executeWithFallback', () => {
         registry,
         catalog: [a, b],
         execute,
-      }),
+      })
     ).rejects.toMatchObject({
       name: 'FallbackExhaustedError',
       statusCode: 503,
@@ -258,7 +258,7 @@ describe('executeWithFallback', () => {
         registry,
         catalog: [onlyChat],
         execute: vi.fn(),
-      }),
+      })
     ).rejects.toMatchObject({
       name: 'NoFallbackCandidateError',
       statusCode: 404,
@@ -277,7 +277,7 @@ describe('executeWithFallback', () => {
         registry,
         catalog: [a],
         execute: vi.fn(),
-      }),
+      })
     ).rejects.toBeInstanceOf(NoFallbackCandidateError);
   });
 
@@ -289,9 +289,7 @@ describe('executeWithFallback', () => {
     const registry = fakeRegistry({ openai: adapterA, voyage: adapterB });
 
     const execute = vi.fn(async (model: Model) => `ok:${model.id}`);
-    const supportsCapability = vi.fn(
-      (adapter: ProviderAdapter) => adapter.getName() !== 'openai',
-    );
+    const supportsCapability = vi.fn((adapter: ProviderAdapter) => adapter.getName() !== 'openai');
 
     const result = await executeWithFallback<string>({
       capability: 'embeddings',
@@ -308,9 +306,7 @@ describe('executeWithFallback', () => {
   });
 
   it('respects maxCandidates upper bound', async () => {
-    const models = ['a', 'b', 'c', 'd', 'e'].map((id) =>
-      fakeModel({ id, name: id, provider: id }),
-    );
+    const models = ['a', 'b', 'c', 'd', 'e'].map((id) => fakeModel({ id, name: id, provider: id }));
     const adapters = Object.fromEntries(models.map((m) => [m.provider, fakeAdapter(m.provider)]));
     const registry = fakeRegistry(adapters);
     const execute = vi.fn(async () => {
@@ -324,7 +320,7 @@ describe('executeWithFallback', () => {
         catalog: models,
         execute,
         maxCandidates: 2,
-      }),
+      })
     ).rejects.toMatchObject({ name: 'FallbackExhaustedError' });
 
     expect(execute).toHaveBeenCalledTimes(2);
@@ -363,7 +359,7 @@ describe('executeWithFallback', () => {
         catalog: [a, b],
         execute,
         deadlineMs: 0,
-      }),
+      })
     ).rejects.toMatchObject({ name: 'FallbackExhaustedError' });
 
     expect(execute).toHaveBeenCalledTimes(1);
@@ -590,7 +586,7 @@ describe('executeWithFallback — parallelDegree', () => {
         catalog: [a, b, c],
         execute,
         parallelDegree: 2,
-      }),
+      })
     ).rejects.toMatchObject({
       name: 'FallbackExhaustedError',
       statusCode: 503,

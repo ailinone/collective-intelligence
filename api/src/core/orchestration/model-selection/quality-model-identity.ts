@@ -245,11 +245,10 @@ export function buildQualityIdentityAliases(input: QualityModelIdentityInput): s
  *   - 'medium' when separator/case normalization was the only change
  *   - 'low'    when no input matched a known vendor or wrapper
  */
-export function deriveQualityModelIdentity(
-  input: QualityModelIdentityInput,
-): QualityModelIdentity {
+export function deriveQualityModelIdentity(input: QualityModelIdentityInput): QualityModelIdentity {
   const reasons: string[] = [];
-  const raw = input.modelId || input.apiModelId || input.canonicalModelId || input.displayName || '';
+  const raw =
+    input.modelId || input.apiModelId || input.canonicalModelId || input.displayName || '';
   if (!raw) {
     return {
       qualityCanonicalId: '',

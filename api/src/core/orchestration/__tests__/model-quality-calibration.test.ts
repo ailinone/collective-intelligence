@@ -29,7 +29,9 @@ import {
   type ModelQualityCalibrationEntry,
 } from '@/core/orchestration/role-selection/model-quality-calibration';
 
-function mkEntry(overrides: Partial<ModelQualityCalibrationEntry> = {}): ModelQualityCalibrationEntry {
+function mkEntry(
+  overrides: Partial<ModelQualityCalibrationEntry> = {}
+): ModelQualityCalibrationEntry {
   return {
     modelId: 'test-model-x',
     qualityScore: 0.75,
@@ -68,51 +70,65 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
     });
 
     it('rejects placeholder source with non-placeholder confidence', () => {
-      const r = validateEntry(mkEntry({
-        qualityScoreSource: 'placeholder',
-        qualityConfidence: 'high', // INCONSISTENT
-      }));
+      const r = validateEntry(
+        mkEntry({
+          qualityScoreSource: 'placeholder',
+          qualityConfidence: 'high', // INCONSISTENT
+        })
+      );
       expect(r.valid).toBe(false);
       expect(r.errors.some((e) => e.includes('inconsistent with source=placeholder'))).toBe(true);
     });
 
     it('rejects unknown source with high confidence', () => {
-      const r = validateEntry(mkEntry({
-        qualityScoreSource: 'unknown',
-        qualityConfidence: 'high',
-      }));
+      const r = validateEntry(
+        mkEntry({
+          qualityScoreSource: 'unknown',
+          qualityConfidence: 'high',
+        })
+      );
       expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('source=unknown cannot have confidence=high'))).toBe(true);
+      expect(r.errors.some((e) => e.includes('source=unknown cannot have confidence=high'))).toBe(
+        true
+      );
     });
 
     it('accepts placeholder source with placeholder confidence', () => {
-      const r = validateEntry(mkEntry({
-        qualityScoreSource: 'placeholder',
-        qualityConfidence: 'placeholder',
-      }));
+      const r = validateEntry(
+        mkEntry({
+          qualityScoreSource: 'placeholder',
+          qualityConfidence: 'placeholder',
+        })
+      );
       expect(r.valid).toBe(true);
     });
 
     it('rejects dimensionScores values outside [0, 1]', () => {
-      const r = validateEntry(mkEntry({
-        dimensionScores: { reasoning: 0.9, coding: 1.5 },
-      }));
+      const r = validateEntry(
+        mkEntry({
+          dimensionScores: { reasoning: 0.9, coding: 1.5 },
+        })
+      );
       expect(r.valid).toBe(false);
       expect(r.errors.some((e) => e.includes('dimensionScores.coding'))).toBe(true);
     });
 
     it('rejects entry with secret-like pattern in string field', () => {
-      const r = validateEntry(mkEntry({
-        modelId: 'test-with-sk-abc1234567890ABCDEFG-leaked-key',
-      }));
+      const r = validateEntry(
+        mkEntry({
+          modelId: 'test-with-sk-abc1234567890ABCDEFG-leaked-key',
+        })
+      );
       expect(r.valid).toBe(false);
       expect(r.errors.some((e) => e.includes('secret-like pattern'))).toBe(true);
     });
 
     it('rejects entry with Bearer token in benchmarkRunId', () => {
-      const r = validateEntry(mkEntry({
-        benchmarkRunId: 'run-Bearer abcdef1234567890ABCDEFGHIJ-leaked',
-      }));
+      const r = validateEntry(
+        mkEntry({
+          benchmarkRunId: 'run-Bearer abcdef1234567890ABCDEFGHIJ-leaked',
+        })
+      );
       expect(r.valid).toBe(false);
       expect(r.errors.some((e) => e.includes('secret-like pattern'))).toBe(true);
     });
@@ -139,9 +155,11 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
     });
 
     it('01C.1B-J2-C-R3: snapshot without new dimensions (legacy) still valid (backward compat)', () => {
-      const r = validateEntry(mkEntry({
-        dimensionScores: { reasoning: 0.85, coding: 0.80 },
-      }));
+      const r = validateEntry(
+        mkEntry({
+          dimensionScores: { reasoning: 0.85, coding: 0.8 },
+        })
+      );
       expect(r.valid).toBe(true);
     });
 
@@ -190,11 +208,13 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
       const s2 = buildSnapshot({
         version: '1.0.0',
         sourceArtifacts: [],
-        entries: [mkEntry({
-          modelId: 'a',
-          qualityScoreSource: 'placeholder',
-          qualityConfidence: 'placeholder',
-        })],
+        entries: [
+          mkEntry({
+            modelId: 'a',
+            qualityScoreSource: 'placeholder',
+            qualityConfidence: 'placeholder',
+          }),
+        ],
       });
       expect(computeSnapshotHash(s1)).not.toBe(computeSnapshotHash(s2));
     });
@@ -225,22 +245,26 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
       const s1 = buildSnapshot({
         version: '1.0.0',
         sourceArtifacts: [],
-        entries: [mkEntry({
-          modelId: 'a',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          costUsd: 0.001,
-          latencyMsP50: 500,
-        })],
+        entries: [
+          mkEntry({
+            modelId: 'a',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            costUsd: 0.001,
+            latencyMsP50: 500,
+          }),
+        ],
       });
       const s2 = buildSnapshot({
         version: '1.0.0',
         sourceArtifacts: [],
-        entries: [mkEntry({
-          modelId: 'a',
-          createdAt: '2026-12-31T00:00:00.000Z',
-          costUsd: 0.005,
-          latencyMsP50: 1200,
-        })],
+        entries: [
+          mkEntry({
+            modelId: 'a',
+            createdAt: '2026-12-31T00:00:00.000Z',
+            costUsd: 0.005,
+            latencyMsP50: 1200,
+          }),
+        ],
       });
       expect(computeSnapshotHash(s1)).toBe(computeSnapshotHash(s2));
     });
@@ -288,9 +312,23 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
         version: '1.0.0',
         sourceArtifacts: ['a.json'],
         entries: [
-          mkEntry({ modelId: 'a', qualityScoreSource: 'placeholder', qualityConfidence: 'placeholder' }),
-          mkEntry({ modelId: 'b', qualityScoreSource: 'internal_benchmark', qualityConfidence: 'high', costUsd: 0.01 }),
-          mkEntry({ modelId: 'c', qualityScoreSource: 'live_probe', qualityConfidence: 'medium', costUsd: 0.005 }),
+          mkEntry({
+            modelId: 'a',
+            qualityScoreSource: 'placeholder',
+            qualityConfidence: 'placeholder',
+          }),
+          mkEntry({
+            modelId: 'b',
+            qualityScoreSource: 'internal_benchmark',
+            qualityConfidence: 'high',
+            costUsd: 0.01,
+          }),
+          mkEntry({
+            modelId: 'c',
+            qualityScoreSource: 'live_probe',
+            qualityConfidence: 'medium',
+            costUsd: 0.005,
+          }),
         ],
       });
       expect(s.summary.totalEntries).toBe(3);
@@ -306,7 +344,7 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
           version: '1.0.0',
           sourceArtifacts: [],
           entries: [mkEntry({ qualityScore: 2.0 })], // invalid
-        }),
+        })
       ).toThrow(/outside \[0, 1\]/);
     });
   });
@@ -316,74 +354,91 @@ describe('01C.1B-J2 §8 — ModelQualityCalibrationSnapshot contract', () => {
 
 describe('01C.1B-J2-C-R4 §7 — multi-source contract extensions', () => {
   it('accepts an entry with sourceScores[] and qualityScoreSources[]', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'benchlm', score: 0.82, confidence: 'high' },
-        { source: 'lmarena', score: 0.91, confidence: 'high', sampleSize: 41203 },
-      ],
-      qualityScoreSources: ['benchlm', 'lmarena'],
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [
+          { source: 'benchlm', score: 0.82, confidence: 'high' },
+          { source: 'lmarena', score: 0.91, confidence: 'high', sampleSize: 41203 },
+        ],
+        qualityScoreSources: ['benchlm', 'lmarena'],
+      })
+    );
     expect(r.valid).toBe(true);
     expect(r.errors).toEqual([]);
   });
 
   it('rejects sourceScores with duplicate source', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'benchlm', score: 0.82, confidence: 'high' },
-        { source: 'benchlm', score: 0.65, confidence: 'medium' },
-      ],
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [
+          { source: 'benchlm', score: 0.82, confidence: 'high' },
+          { source: 'benchlm', score: 0.65, confidence: 'medium' },
+        ],
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes("duplicate source 'benchlm'"))).toBe(true);
   });
 
   it('rejects sourceScores entry with score outside [0, 1]', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'benchlm', score: 1.7, confidence: 'high' },
-      ],
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [{ source: 'benchlm', score: 1.7, confidence: 'high' }],
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes('sourceScores[0].score'))).toBe(true);
   });
 
   it('rejects when qualityScoreSources is missing a source present in sourceScores', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'benchlm', score: 0.82, confidence: 'high' },
-        { source: 'lmarena', score: 0.91, confidence: 'high' },
-      ],
-      qualityScoreSources: ['benchlm'], // forgot lmarena
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [
+          { source: 'benchlm', score: 0.82, confidence: 'high' },
+          { source: 'lmarena', score: 0.91, confidence: 'high' },
+        ],
+        qualityScoreSources: ['benchlm'], // forgot lmarena
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes("missing 'lmarena'"))).toBe(true);
   });
 
   it('rejects sourceScores categoryScores outside [0, 1]', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'lmarena', score: 0.9, confidence: 'high', categoryScores: { chat_text: 1.4 } },
-      ],
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [
+          { source: 'lmarena', score: 0.9, confidence: 'high', categoryScores: { chat_text: 1.4 } },
+        ],
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes('chat_text'))).toBe(true);
   });
 
   it('rejects taskCategoryScores with value outside [0, 1]', () => {
-    const r = validateEntry(mkEntry({
-      taskCategoryScores: { chat_text: 1.05 },
-    }));
+    const r = validateEntry(
+      mkEntry({
+        taskCategoryScores: { chat_text: 1.05 },
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes('taskCategoryScores.chat_text'))).toBe(true);
   });
 
   it('rejects sourceScores sourceUrl with secret pattern', () => {
-    const r = validateEntry(mkEntry({
-      sourceScores: [
-        { source: 'lmarena', score: 0.9, confidence: 'high', sourceUrl: 'https://example.com?token=sk-abc123def456ghi7' },
-      ],
-    }));
+    const r = validateEntry(
+      mkEntry({
+        sourceScores: [
+          {
+            source: 'lmarena',
+            score: 0.9,
+            confidence: 'high',
+            sourceUrl: 'https://example.com?token=sk-abc123def456ghi7',
+          },
+        ],
+      })
+    );
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes('secret-like pattern'))).toBe(true);
   });
@@ -397,24 +452,40 @@ describe('01C.1B-J2-C-R4 §7 — multi-source contract extensions', () => {
       sourceScores: [{ source: 'benchlm', score: 0.83, confidence: 'high' }],
       qualityScoreSources: ['benchlm'],
     });
-    const h1 = computeSnapshotHash(buildSnapshot({
-      version: '1.0.0', sourceArtifacts: [], entries: [baseEntry],
-    }));
-    const h2 = computeSnapshotHash(buildSnapshot({
-      version: '1.0.0', sourceArtifacts: [], entries: [modifiedEntry],
-    }));
+    const h1 = computeSnapshotHash(
+      buildSnapshot({
+        version: '1.0.0',
+        sourceArtifacts: [],
+        entries: [baseEntry],
+      })
+    );
+    const h2 = computeSnapshotHash(
+      buildSnapshot({
+        version: '1.0.0',
+        sourceArtifacts: [],
+        entries: [modifiedEntry],
+      })
+    );
     expect(h1).not.toBe(h2);
   });
 
   it('hash changes when taskCategoryScores change', () => {
     const baseEntry = mkEntry({ taskCategoryScores: { chat_text: 0.7 } });
     const modifiedEntry = mkEntry({ taskCategoryScores: { chat_text: 0.8 } });
-    const h1 = computeSnapshotHash(buildSnapshot({
-      version: '1.0.0', sourceArtifacts: [], entries: [baseEntry],
-    }));
-    const h2 = computeSnapshotHash(buildSnapshot({
-      version: '1.0.0', sourceArtifacts: [], entries: [modifiedEntry],
-    }));
+    const h1 = computeSnapshotHash(
+      buildSnapshot({
+        version: '1.0.0',
+        sourceArtifacts: [],
+        entries: [baseEntry],
+      })
+    );
+    const h2 = computeSnapshotHash(
+      buildSnapshot({
+        version: '1.0.0',
+        sourceArtifacts: [],
+        entries: [modifiedEntry],
+      })
+    );
     expect(h1).not.toBe(h2);
   });
 
@@ -433,40 +504,48 @@ describe('01C.1B-J2-C-R4 §7 — multi-source contract extensions', () => {
       ],
       qualityScoreSources: ['lmarena', 'benchlm'],
     });
-    const h1 = computeSnapshotHash(buildSnapshot({ version: '1.0.0', sourceArtifacts: [], entries: [e1] }));
-    const h2 = computeSnapshotHash(buildSnapshot({ version: '1.0.0', sourceArtifacts: [], entries: [e2] }));
+    const h1 = computeSnapshotHash(
+      buildSnapshot({ version: '1.0.0', sourceArtifacts: [], entries: [e1] })
+    );
+    const h2 = computeSnapshotHash(
+      buildSnapshot({ version: '1.0.0', sourceArtifacts: [], entries: [e2] })
+    );
     expect(h1).toBe(h2);
   });
 });
 
 describe('01C.1B-J2-C-R4 §7 — aggregateQualityFromSources', () => {
   it('returns undefined when sources is empty', async () => {
-    const { aggregateQualityFromSources } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { aggregateQualityFromSources } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     expect(aggregateQualityFromSources([])).toBeUndefined();
   });
 
   it('confidence-weighted average: high (1.0) outweighs low (0.3)', async () => {
-    const { aggregateQualityFromSources } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { aggregateQualityFromSources } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const result = aggregateQualityFromSources([
-      { source: 'benchlm', score: 0.9, confidence: 'high' },     // weight 1.0
-      { source: 'manual', score: 0.5, confidence: 'low' },        // weight 0.3
+      { source: 'benchlm', score: 0.9, confidence: 'high' }, // weight 1.0
+      { source: 'manual', score: 0.5, confidence: 'low' }, // weight 0.3
     ]);
     // (1.0 * 0.9 + 0.3 * 0.5) / 1.3 = 1.05 / 1.3 = 0.8077
     expect(result).toBeCloseTo(0.8077, 3);
   });
 
   it('placeholder confidence contributes ~10% of high', async () => {
-    const { aggregateQualityFromSources } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { aggregateQualityFromSources } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const result = aggregateQualityFromSources([
-      { source: 'lmarena', score: 0.95, confidence: 'high' },         // weight 1.0
-      { source: 'manual', score: 0.5, confidence: 'placeholder' },    // weight 0.1
+      { source: 'lmarena', score: 0.95, confidence: 'high' }, // weight 1.0
+      { source: 'manual', score: 0.5, confidence: 'placeholder' }, // weight 0.1
     ]);
     // (1.0 * 0.95 + 0.1 * 0.5) / 1.1 = 1.0 / 1.1 = 0.9091
     expect(result).toBeCloseTo(0.9091, 3);
   });
 
   it('clamps result to [0, 1] and rounds to 4 decimals', async () => {
-    const { aggregateQualityFromSources } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { aggregateQualityFromSources } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const result = aggregateQualityFromSources([
       { source: 'benchlm', score: 1, confidence: 'high' },
       { source: 'lmarena', score: 1, confidence: 'high' },
@@ -477,14 +556,16 @@ describe('01C.1B-J2-C-R4 §7 — aggregateQualityFromSources', () => {
 
 describe('01C.1B-J2-C-R4 §12 — resolveQualityForTask', () => {
   it('returns unavailable when entry is undefined', async () => {
-    const { resolveQualityForTask } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { resolveQualityForTask } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const r = resolveQualityForTask(undefined, 'chat_text');
     expect(r.score).toBeUndefined();
     expect(r.resolutionPath).toBe('unavailable');
   });
 
   it('uses task_category when entry.taskCategoryScores[category] is present', async () => {
-    const { resolveQualityForTask } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { resolveQualityForTask } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const entry = mkEntry({
       qualityScore: 0.7,
       taskCategoryScores: { chat_text: 0.95, code_webdev: 0.82 },
@@ -495,7 +576,8 @@ describe('01C.1B-J2-C-R4 §12 — resolveQualityForTask', () => {
   });
 
   it('uses source_category_avg when taskCategoryScores missing but sourceScores has category', async () => {
-    const { resolveQualityForTask } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { resolveQualityForTask } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const entry = mkEntry({
       qualityScore: 0.7,
       sourceScores: [
@@ -511,11 +593,14 @@ describe('01C.1B-J2-C-R4 §12 — resolveQualityForTask', () => {
   });
 
   it('falls back to aggregate when category missing from both taskCategoryScores and sourceScores', async () => {
-    const { resolveQualityForTask } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { resolveQualityForTask } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const entry = mkEntry({
       qualityScore: 0.7,
       taskCategoryScores: { chat_text: 0.95 },
-      sourceScores: [{ source: 'benchlm', score: 0.7, confidence: 'high', categoryScores: { chat_text: 0.9 } }],
+      sourceScores: [
+        { source: 'benchlm', score: 0.7, confidence: 'high', categoryScores: { chat_text: 0.9 } },
+      ],
       qualityScoreSources: ['benchlm'],
     });
     const r = resolveQualityForTask(entry, 'video_t2v');
@@ -524,7 +609,8 @@ describe('01C.1B-J2-C-R4 §12 — resolveQualityForTask', () => {
   });
 
   it('returns aggregate for entry with no per-category data', async () => {
-    const { resolveQualityForTask } = await import('@/core/orchestration/role-selection/model-quality-calibration');
+    const { resolveQualityForTask } =
+      await import('@/core/orchestration/role-selection/model-quality-calibration');
     const entry = mkEntry({ qualityScore: 0.6 });
     const r = resolveQualityForTask(entry, 'chat_text');
     expect(r.score).toBe(0.6);

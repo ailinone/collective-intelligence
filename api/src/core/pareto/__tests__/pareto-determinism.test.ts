@@ -104,19 +104,14 @@ describe('pareto — determinism', () => {
   });
 
   it('reordering input does not affect result (stable across permutations)', () => {
-    const cands = [
-      scoreAnchorA(),
-      scoreAnchorB(),
-      scorePairX(),
-      scorePairY(),
-    ];
+    const cands = [scoreAnchorA(), scoreAnchorB(), scorePairX(), scorePairY()];
     const a = JSON.stringify(
       optimizeParetoEnsemble({
         candidates: cands,
         taskType: 'code-generation',
         taskModality: 'text',
         baseline: STANDARD_BASELINE,
-      }).selectedModelIds,
+      }).selectedModelIds
     );
     const reversed = [...cands].reverse();
     const b = JSON.stringify(
@@ -125,7 +120,7 @@ describe('pareto — determinism', () => {
         taskType: 'code-generation',
         taskModality: 'text',
         baseline: STANDARD_BASELINE,
-      }).selectedModelIds,
+      }).selectedModelIds
     );
     expect(a).toBe(b);
   });

@@ -84,13 +84,7 @@ export interface RunwayMLAdapterConfig extends BaseProviderConfig {
 }
 
 /** Documented task statuses. */
-type RunwayTaskStatus =
-  | 'PENDING'
-  | 'RUNNING'
-  | 'SUCCEEDED'
-  | 'FAILED'
-  | 'CANCELLED'
-  | 'THROTTLED';
+type RunwayTaskStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'THROTTLED';
 
 interface RunwayTask {
   id: string;
@@ -149,17 +143,16 @@ export class RunwayMLAdapter extends ProviderAdapter {
   }
 
   async getModels(): Promise<Model[]> {
-    return STATIC_MODELS.map(
-      (id) =>
-        narrowAs<Model>(({
-          id,
-          name: id,
-          displayName: id,
-          provider: 'runwayml',
-          contextWindow: 0,
-          maxOutputTokens: 0,
-          capabilities: id === 'act-one' ? ['motion_transfer'] : ['image_to_video'],
-        })),
+    return STATIC_MODELS.map((id) =>
+      narrowAs<Model>({
+        id,
+        name: id,
+        displayName: id,
+        provider: 'runwayml',
+        contextWindow: 0,
+        maxOutputTokens: 0,
+        capabilities: id === 'act-one' ? ['motion_transfer'] : ['image_to_video'],
+      })
     );
   }
 
@@ -184,7 +177,7 @@ export class RunwayMLAdapter extends ProviderAdapter {
     const modelId = (model.name || model.id || 'gen3a_turbo').trim();
     if (!RunwayMLAdapter.isRunwayModel(modelId)) {
       throw new Error(
-        `runwayml: unknown model ${modelId} — expected one of ${STATIC_MODELS.join(', ')}`,
+        `runwayml: unknown model ${modelId} — expected one of ${STATIC_MODELS.join(', ')}`
       );
     }
 
@@ -200,7 +193,7 @@ export class RunwayMLAdapter extends ProviderAdapter {
 
     if (!promptImage) {
       throw new Error(
-        'runwayml.videoGenerate: promptImage (URL or data URI) is required for image-to-video',
+        'runwayml.videoGenerate: promptImage (URL or data URI) is required for image-to-video'
       );
     }
 
@@ -216,7 +209,7 @@ export class RunwayMLAdapter extends ProviderAdapter {
 
     const created = await this.fetchJson<{ id: string; status?: RunwayTaskStatus }>(
       '/v1/image_to_video',
-      { method: 'POST', body: payload },
+      { method: 'POST', body: payload }
     );
     if (!created?.id) {
       throw new Error('runwayml: /v1/image_to_video returned no task id');
@@ -310,17 +303,13 @@ export class RunwayMLAdapter extends ProviderAdapter {
       const task = await this.fetchJson<RunwayTask>(`/v1/tasks/${encodeURIComponent(taskId)}`, {
         method: 'GET',
       });
-      if (
-        task.status === 'SUCCEEDED' ||
-        task.status === 'FAILED' ||
-        task.status === 'CANCELLED'
-      ) {
+      if (task.status === 'SUCCEEDED' || task.status === 'FAILED' || task.status === 'CANCELLED') {
         return task;
       }
       await this.sleep(this.pollIntervalMs);
     }
     throw new Error(
-      `runwayml: task ${taskId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`,
+      `runwayml: task ${taskId} did not reach terminal status after ${this.pollMaxAttempts} polls (${this.pollIntervalMs}ms each)`
     );
   }
 
@@ -336,7 +325,7 @@ export class RunwayMLAdapter extends ProviderAdapter {
 
   private async fetchJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST' | 'DELETE'; body?: Record<string, unknown> },
+    init: { method: 'GET' | 'POST' | 'DELETE'; body?: Record<string, unknown> }
   ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
     const timeoutMs = Math.max(1000, this.config.timeout ?? 60000);

@@ -27,7 +27,11 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { scoreContributionAwareCandidate, type ContributionAwareCandidate, type ContributionAwareScore } from '../../contribution/contribution-aware-candidate-scorer';
+import {
+  scoreContributionAwareCandidate,
+  type ContributionAwareCandidate,
+  type ContributionAwareScore,
+} from '../../contribution/contribution-aware-candidate-scorer';
 import { scoreHistoricalContribution } from '../../contribution/historical-contribution-scorer';
 import {
   ALL_ENSEMBLE_ESTIMATORS,
@@ -38,32 +42,19 @@ import {
   calibrateMarginalGain,
   DEFAULT_MARGINAL_GAIN_POLICY,
 } from '../../pareto/calibration/marginal-gain-calibrator';
-import {
-  optimizeEnsembleCalibrated,
-} from '../../pareto/calibration/ensemble-calibrated-optimizer';
-import {
-  resolveEnsembleLiftPolicy,
-} from '../../pareto/calibration/ensemble-lift-policy';
-import {
-  calibratePeerLift,
-  lookupPeerLift,
-} from '../../pareto/calibration/peer-lift-calibrator';
+import { optimizeEnsembleCalibrated } from '../../pareto/calibration/ensemble-calibrated-optimizer';
+import { resolveEnsembleLiftPolicy } from '../../pareto/calibration/ensemble-lift-policy';
+import { calibratePeerLift, lookupPeerLift } from '../../pareto/calibration/peer-lift-calibrator';
 import { decideTaskTypeApproval } from '../../pareto/calibration/tasktype-ensemble-approval';
 import { buildEnsembleCalibrationReport } from '../../pareto/calibration/ensemble-calibration-report';
-import type {
-  EnsembleCalibrationMetrics,
-} from '../../pareto/calibration/ensemble-calibration-types';
+import type { EnsembleCalibrationMetrics } from '../../pareto/calibration/ensemble-calibration-types';
 import { splitTrainHoldout } from '../historical-replay-split';
 import { buildCalibrationExamplesFromTrain } from './ensemble-calibration-shared';
 import type { HistoricalReplayExecution } from '../historical-replay-types';
 import type { ModelTaskPerformanceProfile } from '../../contribution/model-task-performance-profile';
 
-
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
-const NORMALIZED_PATH = resolve(
-  ARTIFACTS_DIR,
-  'c3-history-full-export.normalized.jsonl',
-);
+const NORMALIZED_PATH = resolve(ARTIFACTS_DIR, 'c3-history-full-export.normalized.jsonl');
 const REPORT_PATH = resolve(ARTIFACTS_DIR, 'c3-ensemble-calibration-report.json');
 
 function main(): void {
@@ -93,7 +84,7 @@ function main(): void {
     'exp | holdout=',
     split.holdout.length,
     'over',
-    split.holdoutExperimentIds.length,
+    split.holdoutExperimentIds.length
   );
 
   // Train contribution profiles on TRAIN.
@@ -115,23 +106,18 @@ function main(): void {
   });
 
   // Build calibration examples.
-  const calibrationExamples = buildCalibrationExamplesFromTrain(
-    split.train,
-    trainHistory,
-  );
+  const calibrationExamples = buildCalibrationExamplesFromTrain(split.train, trainHistory);
   console.log('[8b7] calibration examples:', calibrationExamples.length);
 
   // Peer-lift.
   const peerLift = calibratePeerLift({ trainExamples: calibrationExamples });
   console.log('[8b7] globalPeerLift:', peerLift.globalPeerLift.toFixed(4));
   for (const [k, v] of Object.entries(peerLift.peerLiftByTaskType)) {
-    console.log(
-      `[8b7]   peerLift[${k}]=${v.toFixed(4)} (n=${peerLift.sampleCountByTaskType[k]})`,
-    );
+    console.log(`[8b7]   peerLift[${k}]=${v.toFixed(4)} (n=${peerLift.sampleCountByTaskType[k]})`);
   }
 
   // Pick best estimator on TRAIN.
-  const peerLiftLookup = (ex: typeof calibrationExamples[number]) =>
+  const peerLiftLookup = (ex: (typeof calibrationExamples)[number]) =>
     lookupPeerLift(peerLift, ex.taskType, ex.effectiveStrategyId);
   const sel = pickBestEnsembleEstimator({
     examples: calibrationExamples,
@@ -141,7 +127,7 @@ function main(): void {
   console.log('[8b7] BEST ensemble estimator:', sel.chosen.name);
   for (const ev of sel.evaluations) {
     console.log(
-      `[8b7]   ${ev.estimatorName.padEnd(34)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)} nonFallback=${ev.nonFallbackRate.toFixed(3)}`,
+      `[8b7]   ${ev.estimatorName.padEnd(34)} MAE=${ev.meanAbsoluteError.toFixed(4)} median=${ev.medianAbsoluteError.toFixed(4)} p80=${ev.p80AbsoluteError.toFixed(4)} nonFallback=${ev.nonFallbackRate.toFixed(3)}`
     );
   }
 
@@ -156,7 +142,7 @@ function main(): void {
     `maxTotal=${gainCal.chosenPolicy.maxTotalGain}`,
     `maxPerModel=${gainCal.chosenPolicy.maxPerModelGain}`,
     `uncertaintyPenalty=${gainCal.chosenPolicy.uncertaintyPenaltyWeight}`,
-    `MAE=${gainCal.chosenEvaluation.meanAbsoluteError.toFixed(4)}`,
+    `MAE=${gainCal.chosenEvaluation.meanAbsoluteError.toFixed(4)}`
   );
 
   // Build final policy and apply to HOLDOUT.
@@ -186,7 +172,10 @@ function main(): void {
 
   const metrics = aggregateMetrics(holdoutResults, split.holdout.length);
   console.log('[8b7] calibrated metrics:');
-  console.log('   expected_vs_observed_judge_error =', metrics.expectedVsObservedJudgeError.toFixed(4));
+  console.log(
+    '   expected_vs_observed_judge_error =',
+    metrics.expectedVsObservedJudgeError.toFixed(4)
+  );
   console.log('   non_fallback_rate              =', metrics.nonFallbackRate.toFixed(4));
   console.log('   fallback_rate                  =', metrics.fallbackRate.toFixed(4));
   console.log('   quality_ge_single_rate         =', metrics.qualityGeSingleRate.toFixed(4));
@@ -205,7 +194,7 @@ function main(): void {
       examples: calibrationExamples,
       peerLiftLookup,
       uncertaintyPenaltyWeight: liftPolicy.uncertaintyPenaltyWeight,
-    }),
+    })
   );
 
   const report = buildEnsembleCalibrationReport({
@@ -221,10 +210,7 @@ function main(): void {
 
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + '\n', 'utf-8');
   console.log('[8b7] wrote', REPORT_PATH);
-  console.log(
-    '[8b7] APPROVAL:',
-    report.approval.approved ? 'APPROVED' : 'REJECTED',
-  );
+  console.log('[8b7] APPROVAL:', report.approval.approved ? 'APPROVED' : 'REJECTED');
   for (const r of report.approval.reasons) console.log('         -', r);
   void DEFAULT_MARGINAL_GAIN_POLICY;
 }
@@ -319,7 +305,7 @@ function runHoldoutReplay(input: RunHoldoutInput): readonly HoldoutRowResult[] {
 
 function uniqueTrainModelsForTask(
   train: readonly HistoricalReplayExecution[],
-  taskType: string,
+  taskType: string
 ): readonly string[] {
   const set = new Set<string>();
   for (const t of train) {
@@ -330,7 +316,7 @@ function uniqueTrainModelsForTask(
 }
 
 function computeBaselinesByTask(
-  train: readonly HistoricalReplayExecution[],
+  train: readonly HistoricalReplayExecution[]
 ): Map<string, { judgeMean: number; costMean: number }> {
   const out = new Map<string, { judgeMean: number; costMean: number }>();
   const buckets = new Map<string, { judges: number[]; costs: number[] }>();
@@ -357,7 +343,7 @@ function computeBaselinesByTask(
 
 function aggregateMetrics(
   rows: readonly HoldoutRowResult[],
-  totalHoldoutRows: number,
+  totalHoldoutRows: number
 ): EnsembleCalibrationMetrics {
   const n = rows.length;
   if (n === 0) {
@@ -417,11 +403,7 @@ function aggregateMetrics(
     if (r.expectedJudge >= r.singleBaselineJudge && r.expectedCost <= r.singleBaselineCost) {
       both += 1;
     }
-    if (
-      !r.isFallback &&
-      r.memberCount >= 2 &&
-      r.expectedJudge >= r.singleBaselineJudge
-    ) {
+    if (!r.isFallback && r.memberCount >= 2 && r.expectedJudge >= r.singleBaselineJudge) {
       pairWinner += 1;
     }
     if (
@@ -464,7 +446,7 @@ function aggregateMetrics(
 function buildTaskTypeApprovals(
   rows: readonly HoldoutRowResult[],
   split: ReturnType<typeof splitTrainHoldout>,
-  liftPolicy: ReturnType<typeof resolveEnsembleLiftPolicy>,
+  liftPolicy: ReturnType<typeof resolveEnsembleLiftPolicy>
 ): readonly ReturnType<typeof decideTaskTypeApproval>[] {
   const buckets = new Map<string, HoldoutRowResult[]>();
   for (const r of rows) {
@@ -484,7 +466,7 @@ function buildTaskTypeApprovals(
   for (const [taskType, items] of [...buckets.entries()].sort()) {
     const judgeErrors = items.map((r) => Math.abs(r.expectedJudge - r.observedJudge));
     const success = items.filter(
-      (r) => r.expectedJudge >= r.singleBaselineJudge && r.expectedCost <= r.singleBaselineCost,
+      (r) => r.expectedJudge >= r.singleBaselineJudge && r.expectedCost <= r.singleBaselineCost
     ).length;
     const cost = items.filter((r) => r.expectedCost <= r.singleBaselineCost).length;
     const quality = items.filter((r) => r.expectedJudge >= r.singleBaselineJudge).length;
@@ -501,7 +483,7 @@ function buildTaskTypeApprovals(
         nonFallbackRate: 1 - fallback / items.length,
         fallbackRate: fallback / items.length,
         policy: liftPolicy,
-      }),
+      })
     );
   }
   return out;

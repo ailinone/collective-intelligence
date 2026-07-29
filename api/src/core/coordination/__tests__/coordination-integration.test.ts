@@ -24,7 +24,11 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { SensitivityConsensusStrategy } from '../../orchestration/strategies/sensitivity-consensus-strategy';
-import { createInitialState, aggregateSignals, evaluateStopConditions } from '../sensitivity-aggregator';
+import {
+  createInitialState,
+  aggregateSignals,
+  evaluateStopConditions,
+} from '../sensitivity-aggregator';
 import { parseSignalResponse, buildCoordinationSystemPrompt } from '../sensitivity-prompt-adapter';
 import { evaluateConvergence } from '../convergence-evaluator';
 import type { CoordinationSignal, CoordinationLimits } from '../coordination-types';
@@ -105,9 +109,21 @@ describe('Full Coordination Loop — Simulated', () => {
     let state = createInitialState('run-sim-1', 'sensitivity-consensus', limits);
 
     const round1 = [
-      makeSignal({ agentId: 'a', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.6 } }),
-      makeSignal({ agentId: 'b', round: 1, decision: { type: 'reject', value: 'no', confidence: 0.7 } }),
-      makeSignal({ agentId: 'c', round: 1, decision: { type: 'approve', value: 'yes', confidence: 0.65 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.6 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 1,
+        decision: { type: 'reject', value: 'no', confidence: 0.7 },
+      }),
+      makeSignal({
+        agentId: 'c',
+        round: 1,
+        decision: { type: 'approve', value: 'yes', confidence: 0.65 },
+      }),
     ];
 
     const agg1 = aggregateSignals(round1, state);
@@ -120,9 +136,21 @@ describe('Full Coordination Loop — Simulated', () => {
     expect(eval1.convergenceScore).toBeGreaterThan(0);
 
     const round2 = [
-      makeSignal({ agentId: 'a', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.8 } }),
-      makeSignal({ agentId: 'b', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.75 } }),
-      makeSignal({ agentId: 'c', round: 2, decision: { type: 'approve', value: 'yes', confidence: 0.82 } }),
+      makeSignal({
+        agentId: 'a',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.8 },
+      }),
+      makeSignal({
+        agentId: 'b',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.75 },
+      }),
+      makeSignal({
+        agentId: 'c',
+        round: 2,
+        decision: { type: 'approve', value: 'yes', confidence: 0.82 },
+      }),
     ];
 
     const agg2 = aggregateSignals(round2, state);
@@ -145,8 +173,16 @@ describe('Full Coordination Loop — Simulated', () => {
 
     for (let round = 1; round <= 2; round++) {
       const signals = [
-        makeSignal({ agentId: 'a', round, decision: { type: 'approve', value: 'yes', confidence: 0.6 } }),
-        makeSignal({ agentId: 'b', round, decision: { type: 'reject', value: 'no', confidence: 0.65 } }),
+        makeSignal({
+          agentId: 'a',
+          round,
+          decision: { type: 'approve', value: 'yes', confidence: 0.6 },
+        }),
+        makeSignal({
+          agentId: 'b',
+          round,
+          decision: { type: 'reject', value: 'no', confidence: 0.65 },
+        }),
       ];
       const agg = aggregateSignals(signals, state);
       state = agg.nextState;
@@ -182,7 +218,7 @@ describe('Full Coordination Loop — Simulated', () => {
     ];
 
     const agg = aggregateSignals(signals, state);
-    expect(agg.risks.some(r => r.severity === 'critical')).toBe(true);
+    expect(agg.risks.some((r) => r.severity === 'critical')).toBe(true);
 
     const stop = evaluateStopConditions(agg.nextState);
     expect(stop).toBe('critical_risk');
@@ -227,7 +263,12 @@ describe('Signal Parsing — Real Response Shapes', () => {
     const response =
       'Here is my analysis:\n\n' +
       JSON.stringify({
-        decision: { type: 'request_changes', value: 'need tests', confidence: 0.75, rationale: 'Missing tests' },
+        decision: {
+          type: 'request_changes',
+          value: 'need tests',
+          confidence: 0.75,
+          rationale: 'Missing tests',
+        },
         sensitivities: [
           {
             variable: 'test_coverage',
@@ -271,7 +312,7 @@ describe('Memory & Cache Safety', () => {
 
     expect(agg.nextState.runId).toBe('run-tenant-a');
     expect(state2.runId).toBe('run-tenant-b');
-    expect(agg.nextState.history.every(s => s.runId === 'run-tenant-a')).toBe(true);
+    expect(agg.nextState.history.every((s) => s.runId === 'run-tenant-a')).toBe(true);
   });
 
   it('coordination state does not leak between runs', () => {

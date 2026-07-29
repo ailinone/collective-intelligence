@@ -57,10 +57,7 @@ import {
 import type { TraceEnvelope } from '@/broadcast/domain/trace-envelope';
 import { decideSampling } from '@/broadcast/application/sampling-decision';
 import type { ResolvedDestination } from '@/broadcast/application/destination-resolver';
-import {
-  DestinationConfigCipher,
-  type TenantRef,
-} from '@/broadcast/infrastructure/encryption';
+import { DestinationConfigCipher, type TenantRef } from '@/broadcast/infrastructure/encryption';
 import { KekUnwrapBreakerOpenError } from '@/broadcast/infrastructure/encryption/kek-circuit-breaker';
 import type {
   DeliveryOutcome,
@@ -152,15 +149,14 @@ export class BroadcastDeliveryExecutor {
   async deliverOne(
     envelope: TraceEnvelope,
     destination: ResolvedDestination,
-    runner: DeliveryPrismaRunner = this.db,
+    runner: DeliveryPrismaRunner = this.db
   ): Promise<DeliveryReport> {
     // ── Stage 1: sampling ─────────────────────────────────────────────
     // Operator replay escape hatch: a DLQ replay sets `broadcast.force_include`
     // on the envelope so this delivery bypasses the sampling gate. Without
     // this, a replayed envelope could be silently sampled out and never reach
     // the destination — defeating the operator's explicit re-deliver action.
-    const forceInclude =
-      envelope.custom?.['broadcast.force_include'] === true;
+    const forceInclude = envelope.custom?.['broadcast.force_include'] === true;
     const sampling = forceInclude
       ? { include: true as const, bucket: 0 }
       : decideSampling({
@@ -204,7 +200,7 @@ export class BroadcastDeliveryExecutor {
           dekWrapped: destination.configDekWrapped,
           kekResource: destination.configKekResource,
         },
-        tenantRef,
+        tenantRef
       );
     } catch (e) {
       const err = e as Error;
@@ -225,14 +221,14 @@ export class BroadcastDeliveryExecutor {
       }
       log.error(
         { destinationId: destination.id, err: err.message },
-        'Destination config decryption failed — skipping delivery',
+        'Destination config decryption failed — skipping delivery'
       );
       await this.recordConfigFailure(
         envelope,
         destination,
         err.message,
         'config_decrypt_failed',
-        runner,
+        runner
       );
       return {
         destinationId: destination.id,
@@ -292,12 +288,12 @@ export class BroadcastDeliveryExecutor {
     });
     broadcastMetrics.deliveryLatency.observe(
       { destination_type: destType, outcome: outcome.kind },
-      outcome.latencyMs / 1000,
+      outcome.latencyMs / 1000
     );
     if (status !== 'pending_retry') {
       broadcastMetrics.deliveryAttempts.observe(
         { destination_type: destType, terminal_state: status === 'success' ? 'sent' : 'dlq' },
-        attempt,
+        attempt
       );
     }
     if (status === 'permanent_failure') {
@@ -326,7 +322,7 @@ export class BroadcastDeliveryExecutor {
       config: Record<string, unknown>;
       destinationId: string;
       timeoutMs: number;
-    },
+    }
   ): Promise<DeliveryOutcome> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ctx.timeoutMs);
@@ -337,7 +333,7 @@ export class BroadcastDeliveryExecutor {
       const err = e as Error;
       log.warn(
         { destinationId: ctx.destinationId, err: err.message },
-        'Adapter threw — classifying as retryable',
+        'Adapter threw — classifying as retryable'
       );
       return {
         kind: 'retryable',
@@ -354,7 +350,7 @@ export class BroadcastDeliveryExecutor {
     envelope: TraceEnvelope,
     destination: ResolvedDestination,
     _bucket: number,
-    runner: DeliveryPrismaRunner = this.db,
+    runner: DeliveryPrismaRunner = this.db
   ): Promise<void> {
     const now = new Date();
     await runner.broadcastDelivery.upsert({
@@ -384,7 +380,7 @@ export class BroadcastDeliveryExecutor {
     destination: ResolvedDestination,
     reason: string,
     errorClass: string,
-    runner: DeliveryPrismaRunner = this.db,
+    runner: DeliveryPrismaRunner = this.db
   ): Promise<void> {
     const now = new Date();
     // Read prior state first so we can detect a first-time dlq transition and
@@ -448,7 +444,7 @@ export class BroadcastDeliveryExecutor {
     redactedEnvelope: TraceEnvelope,
     destination: ResolvedDestination,
     outcome: DeliveryOutcome,
-    runner: DeliveryPrismaRunner = this.db,
+    runner: DeliveryPrismaRunner = this.db
   ): Promise<number> {
     const now = new Date();
     // Read current state: attempts drives the retry-budget decision, status
@@ -558,7 +554,7 @@ export class BroadcastDeliveryExecutor {
       totalAttempts: number;
       firstAttemptedAt: Date;
       errorContext: Record<string, unknown>;
-    },
+    }
   ): Promise<void> {
     try {
       await runner.broadcastDlqEntry.create({
@@ -581,7 +577,7 @@ export class BroadcastDeliveryExecutor {
           destinationId: args.destinationId,
           err: err.message,
         },
-        'DLQ admission failed — delivery row is dlq but broadcast_dlq insert did not succeed',
+        'DLQ admission failed — delivery row is dlq but broadcast_dlq insert did not succeed'
       );
     }
   }
@@ -605,7 +601,7 @@ function extractPseudonymizationKey(config: Record<string, unknown>): Buffer | u
 }
 
 function extractCustomFieldOverrides(
-  config: Record<string, unknown>,
+  config: Record<string, unknown>
 ): Record<string, FieldMode> | undefined {
   const raw = config.customFieldOverrides;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;

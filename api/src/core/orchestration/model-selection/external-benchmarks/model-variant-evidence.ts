@@ -181,7 +181,11 @@ export function assessVariantEvidence(input: VariantEvidenceInput): VariantEvide
   // Slug-exact or id-exact or high match with no discrepancy detected.
   // Check if there are ANY variant indicators at all on either side.
   const eitherSideHasVariantIndicator =
-    runtimeHasThinking || runtimeHasReasoning || aaIsNonReasoning || aaHasReasoning || aaHasThinking;
+    runtimeHasThinking ||
+    runtimeHasReasoning ||
+    aaIsNonReasoning ||
+    aaHasReasoning ||
+    aaHasThinking;
 
   if (!eitherSideHasVariantIndicator) {
     // No variant language on either side.

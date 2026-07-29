@@ -95,9 +95,7 @@ describe('expandEnvInString', () => {
   });
 
   it('handles multiple substitutions in one string', () => {
-    expect(
-      expandEnvInString('${A}-${B}-${A}', { A: 'x', B: 'y' }),
-    ).toBe('x-y-x');
+    expect(expandEnvInString('${A}-${B}-${A}', { A: 'x', B: 'y' })).toBe('x-y-x');
   });
 });
 
@@ -130,7 +128,7 @@ describe('parseMultiDeploymentEnv', () => {
 
   it('returns [] when root is an object (not array)', () => {
     expect(
-      parseMultiDeploymentEnv('{"alias":"a","deployment":"d"}', 'X', passThroughValidator),
+      parseMultiDeploymentEnv('{"alias":"a","deployment":"d"}', 'X', passThroughValidator)
     ).toEqual([]);
   });
 
@@ -234,10 +232,7 @@ describe('parseAzureDeployments', () => {
   });
 
   it('drops entry when deployment field is missing', () => {
-    const raw = JSON.stringify([
-      { alias: 'no-deploy' },
-      { alias: 'ok', deployment: 'd1' },
-    ]);
+    const raw = JSON.stringify([{ alias: 'no-deploy' }, { alias: 'ok', deployment: 'd1' }]);
     const result = parseAzureDeployments(raw);
     expect(result).toHaveLength(1);
     expect(result[0]?.alias).toBe('ok');
@@ -278,18 +273,13 @@ describe('parseDatabricksEndpoints', () => {
   });
 
   it('interpolates ${VAR} in apiKey', () => {
-    const raw = JSON.stringify([
-      { alias: 'ep', endpoint: 'ep', apiKey: '${DB_TOKEN}' },
-    ]);
+    const raw = JSON.stringify([{ alias: 'ep', endpoint: 'ep', apiKey: '${DB_TOKEN}' }]);
     const result = parseDatabricksEndpoints(raw, { DB_TOKEN: 'dapi-abc' });
     expect(result[0]?.apiKey).toBe('dapi-abc');
   });
 
   it('drops entry with missing endpoint', () => {
-    const raw = JSON.stringify([
-      { alias: 'ok', endpoint: 'e1' },
-      { alias: 'bad' },
-    ]);
+    const raw = JSON.stringify([{ alias: 'ok', endpoint: 'e1' }, { alias: 'bad' }]);
     const result = parseDatabricksEndpoints(raw);
     expect(result.map((r) => r.alias)).toEqual(['ok']);
   });
@@ -302,9 +292,7 @@ describe('parseSageMakerEndpoints', () => {
     // `endpointName` is an operator-chosen SageMaker infra handle — NOT a
     // model ID. The catalog/discovery service is the sole source of truth
     // for which model each endpoint serves.
-    const raw = JSON.stringify([
-      { alias: 'chat-a', endpointName: 'chat-endpoint-a' },
-    ]);
+    const raw = JSON.stringify([{ alias: 'chat-a', endpointName: 'chat-endpoint-a' }]);
     const result = parseSageMakerEndpoints(raw);
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({
@@ -351,10 +339,7 @@ describe('parseSageMakerEndpoints', () => {
   });
 
   it('drops entry with missing endpointName', () => {
-    const raw = JSON.stringify([
-      { alias: 'ok', endpointName: 'e1' },
-      { alias: 'bad' },
-    ]);
+    const raw = JSON.stringify([{ alias: 'ok', endpointName: 'e1' }, { alias: 'bad' }]);
     const result = parseSageMakerEndpoints(raw);
     expect(result.map((r) => r.alias)).toEqual(['ok']);
   });
@@ -365,13 +350,11 @@ describe('parseSageMakerEndpoints', () => {
 describe('synthesizeDeploymentProviderId', () => {
   it('concatenates parent-alias with a dash', () => {
     expect(synthesizeDeploymentProviderId('azure-openai', 'prod-chat')).toBe(
-      'azure-openai-prod-chat',
+      'azure-openai-prod-chat'
     );
-    expect(synthesizeDeploymentProviderId('databricks', 'chat-b')).toBe(
-      'databricks-chat-b',
-    );
+    expect(synthesizeDeploymentProviderId('databricks', 'chat-b')).toBe('databricks-chat-b');
     expect(synthesizeDeploymentProviderId('aws-sagemaker', 'primary')).toBe(
-      'aws-sagemaker-primary',
+      'aws-sagemaker-primary'
     );
   });
 

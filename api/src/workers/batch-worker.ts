@@ -10,9 +10,9 @@
 /**
  * Batch Worker
  * Processes batch jobs asynchronously via BullMQ
- * 
+ *
  * REAL IMPLEMENTATION - No mocks, no stubs
- * 
+ *
  * Features:
  * - Parses JSONL input files
  * - Processes each request via OrchestrationEngine
@@ -88,7 +88,9 @@ export function initializeBatchQueue(): Queue<BatchJobData> {
   // C3 fix: DLQ routing (ADR-003)
   import('@/queue/dlq-manager.js')
     .then(({ setupDLQ }) => setupDLQ(batchQueue!))
-    .catch((err) => log.warn({ err: serializeError(err) }, 'Failed to setup DLQ for batch-processing queue'));
+    .catch((err) =>
+      log.warn({ err: serializeError(err) }, 'Failed to setup DLQ for batch-processing queue')
+    );
 
   return batchQueue;
 }
@@ -113,7 +115,8 @@ export async function setupBatchWorker(): Promise<void> {
   batchWorker = new Worker<BatchJobData>(
     'batch-processing',
     async (job: Job<BatchJobData>) => {
-      const { batchId, inputFileId, organizationId, userId, requestCount, correlationId } = job.data;
+      const { batchId, inputFileId, organizationId, userId, requestCount, correlationId } =
+        job.data;
       const jobLog = log.child({ jobId: job.id, batchId, requestCount, correlationId });
 
       jobLog.info('Starting batch processing');
@@ -145,7 +148,10 @@ export async function setupBatchWorker(): Promise<void> {
         const fileContent = fileContentResult.content;
 
         // Step 3: Parse JSONL
-        const lines = fileContent.toString('utf-8').split('\n').filter(line => line.trim());
+        const lines = fileContent
+          .toString('utf-8')
+          .split('\n')
+          .filter((line) => line.trim());
         const requests: BatchRequestLine[] = [];
 
         for (const line of lines) {
@@ -173,7 +179,8 @@ export async function setupBatchWorker(): Promise<void> {
 
         // Step 4: Process each request
         const outputLines: Array<{ custom_id?: string; response: ChatResponse }> = [];
-        const errorLines: Array<{ custom_id?: string; error: { message: string; code?: string } }> = [];
+        const errorLines: Array<{ custom_id?: string; error: { message: string; code?: string } }> =
+          [];
         let completed = 0;
         let failed = 0;
 
@@ -212,7 +219,10 @@ export async function setupBatchWorker(): Promise<void> {
             completed++;
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            jobLog.warn({ custom_id: requestLine.custom_id, error: errorMessage }, 'Request failed');
+            jobLog.warn(
+              { custom_id: requestLine.custom_id, error: errorMessage },
+              'Request failed'
+            );
 
             errorLines.push({
               custom_id: requestLine.custom_id,
@@ -242,7 +252,7 @@ export async function setupBatchWorker(): Promise<void> {
         // Step 5: Generate output file
         let outputFileId: string | null = null;
         if (outputLines.length > 0) {
-          const outputContent = outputLines.map(line => JSON.stringify(line)).join('\n') + '\n';
+          const outputContent = outputLines.map((line) => JSON.stringify(line)).join('\n') + '\n';
           const outputBuffer = Buffer.from(outputContent, 'utf-8');
 
           // Upload output file to GCS
@@ -261,7 +271,7 @@ export async function setupBatchWorker(): Promise<void> {
         // Step 6: Generate error file (if any errors)
         let errorFileId: string | null = null;
         if (errorLines.length > 0) {
-          const errorContent = errorLines.map(line => JSON.stringify(line)).join('\n') + '\n';
+          const errorContent = errorLines.map((line) => JSON.stringify(line)).join('\n') + '\n';
           const errorBuffer = Buffer.from(errorContent, 'utf-8');
 
           // Upload error file to GCS
@@ -322,10 +332,7 @@ export async function setupBatchWorker(): Promise<void> {
   });
 
   batchWorker.on('failed', (job, error) => {
-    log.error(
-      { jobId: job?.id, batchId: job?.data.batchId, error },
-      'Batch job failed'
-    );
+    log.error({ jobId: job?.id, batchId: job?.data.batchId, error }, 'Batch job failed');
   });
 
   log.info('Batch worker started');
@@ -363,4 +370,3 @@ export async function stopBatchWorker(): Promise<void> {
     log.info('Batch queue closed');
   }
 }
-

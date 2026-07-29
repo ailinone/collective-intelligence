@@ -50,25 +50,20 @@ export const DEFAULT_SHADOW_CONFIG: ShadowRoutingConfig = Object.freeze({
  * Resolves an override on top of the defaults. Conservative: any
  * out-of-range value clamps to the safe default.
  */
-export function resolveShadowConfig(
-  override?: Partial<ShadowRoutingConfig>,
-): ShadowRoutingConfig {
+export function resolveShadowConfig(override?: Partial<ShadowRoutingConfig>): ShadowRoutingConfig {
   if (!override) return DEFAULT_SHADOW_CONFIG;
   return Object.freeze({
     enabled: override.enabled === true,
     sampleRate: clamp01(override.sampleRate ?? DEFAULT_SHADOW_CONFIG.sampleRate),
     logLevel: pickLogLevel(override.logLevel) ?? DEFAULT_SHADOW_CONFIG.logLevel,
-    maxLatencyMs: clampLatency(
-      override.maxLatencyMs ?? DEFAULT_SHADOW_CONFIG.maxLatencyMs,
-    ),
+    maxLatencyMs: clampLatency(override.maxLatencyMs ?? DEFAULT_SHADOW_CONFIG.maxLatencyMs),
     taskTypes: Object.freeze(
       override.taskTypes && override.taskTypes.length > 0
         ? [...override.taskTypes]
-        : [...DEFAULT_SHADOW_CONFIG.taskTypes],
+        : [...DEFAULT_SHADOW_CONFIG.taskTypes]
     ),
     writeMode: pickWriteMode(override.writeMode) ?? DEFAULT_SHADOW_CONFIG.writeMode,
-    decisionMode:
-      pickDecisionMode(override.decisionMode) ?? DEFAULT_SHADOW_CONFIG.decisionMode,
+    decisionMode: pickDecisionMode(override.decisionMode) ?? DEFAULT_SHADOW_CONFIG.decisionMode,
     source: override.source ?? 'override',
   });
 }
@@ -85,25 +80,21 @@ export function resolveShadowConfig(
  * overrides.
  */
 export function loadShadowConfigFromEnv(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>> = process.env
 ): ShadowRoutingConfig {
   return Object.freeze({
     enabled: readBool(env.SEMANTIC_ROUTING_SHADOW_ENABLED) ?? false,
     sampleRate: clamp01(readNumber(env.SEMANTIC_ROUTING_SHADOW_SAMPLE_RATE) ?? 0),
     logLevel:
-      pickLogLevel(env.SEMANTIC_ROUTING_SHADOW_LOG_LEVEL as ShadowLogLevel | undefined) ??
-      'off',
-    maxLatencyMs: clampLatency(
-      readNumber(env.SEMANTIC_ROUTING_SHADOW_MAX_LATENCY_MS) ?? 25,
-    ),
+      pickLogLevel(env.SEMANTIC_ROUTING_SHADOW_LOG_LEVEL as ShadowLogLevel | undefined) ?? 'off',
+    maxLatencyMs: clampLatency(readNumber(env.SEMANTIC_ROUTING_SHADOW_MAX_LATENCY_MS) ?? 25),
     taskTypes: Object.freeze(parseTaskTypes(env.SEMANTIC_ROUTING_SHADOW_TASKTYPES)),
     writeMode:
       pickWriteMode(env.SEMANTIC_ROUTING_SHADOW_WRITE_MODE as ShadowWriteMode | undefined) ??
       'log_only',
     decisionMode:
-      pickDecisionMode(
-        env.SEMANTIC_ROUTING_DECISION_MODE as ShadowDecisionMode | undefined,
-      ) ?? 'legacy',
+      pickDecisionMode(env.SEMANTIC_ROUTING_DECISION_MODE as ShadowDecisionMode | undefined) ??
+      'legacy',
     source: 'env',
   });
 }
@@ -151,9 +142,7 @@ function pickWriteMode(v: ShadowWriteMode | undefined): ShadowWriteMode | undefi
   return undefined;
 }
 
-function pickDecisionMode(
-  v: ShadowDecisionMode | undefined,
-): ShadowDecisionMode | undefined {
+function pickDecisionMode(v: ShadowDecisionMode | undefined): ShadowDecisionMode | undefined {
   if (v === 'legacy' || v === 'shadow') return v;
   return undefined;
 }

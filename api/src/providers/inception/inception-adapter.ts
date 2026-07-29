@@ -51,7 +51,7 @@ export class InceptionAdapter extends OpenAICompatibleHubAdapter {
 
   protected override async getTemperatureParamAsync(
     modelId: string,
-    temperature?: number,
+    temperature?: number
   ): Promise<Record<string, number | undefined>> {
     const base = await super.getTemperatureParamAsync(modelId, temperature);
     if (typeof base.temperature !== 'number') {
@@ -62,7 +62,7 @@ export class InceptionAdapter extends OpenAICompatibleHubAdapter {
     if (clamped !== base.temperature) {
       this.providerLog.warn(
         { modelId, requested: base.temperature, clamped },
-        'Inception Mercury only accepts temperature in [0.5, 1.0]; clamping client-side instead of letting the server silently reset it to 0.75',
+        'Inception Mercury only accepts temperature in [0.5, 1.0]; clamping client-side instead of letting the server silently reset it to 0.75'
       );
     }
     return { temperature: clamped };
@@ -70,12 +70,12 @@ export class InceptionAdapter extends OpenAICompatibleHubAdapter {
 
   protected override getExtraChatPayloadFields(
     _resolvedModel: string,
-    request: ChatRequest,
+    request: ChatRequest
   ): Record<string, unknown> {
     const opts = narrowAs<{ options?: Record<string, unknown> }>(request).options;
     if (opts?.diffusing === true) {
       this.providerLog.warn(
-        "diffusing:true requested for Inception Mercury but intentionally not forwarded — that mode rewrites the full text per SSE chunk instead of streaming deltas, which is incompatible with this hub adapter's delta-concatenation parser.",
+        "diffusing:true requested for Inception Mercury but intentionally not forwarded — that mode rewrites the full text per SSE chunk instead of streaming deltas, which is incompatible with this hub adapter's delta-concatenation parser."
       );
     }
     return {};

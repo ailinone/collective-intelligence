@@ -63,9 +63,7 @@ describe('boot wiring: catalog-loader is reachable from src/index.ts', () => {
     const src = readIndex();
     // Accept `.js` suffix (ESM-style, TS-compiled) or no suffix (NodeNext
     // without explicit extension). Single or double quotes both allowed.
-    expect(src).toMatch(
-      /await import\(['"]@\/providers\/catalog\/catalog-loader(?:\.js)?['"]\)/,
-    );
+    expect(src).toMatch(/await import\(['"]@\/providers\/catalog\/catalog-loader(?:\.js)?['"]\)/);
   });
 
   it('calls loadProviderCatalog() after initializeProviderRegistry()', () => {
@@ -73,19 +71,18 @@ describe('boot wiring: catalog-loader is reachable from src/index.ts', () => {
     const initializeIdx = src.indexOf('initializeProviderRegistry');
     const loaderCallIdx = src.indexOf('loadProviderCatalog()');
 
-    expect(
-      initializeIdx,
-      'initializeProviderRegistry must appear in boot path',
-    ).toBeGreaterThan(-1);
+    expect(initializeIdx, 'initializeProviderRegistry must appear in boot path').toBeGreaterThan(
+      -1
+    );
     expect(
       loaderCallIdx,
-      'loadProviderCatalog() must be invoked in boot path — catalog is test-only otherwise',
+      'loadProviderCatalog() must be invoked in boot path — catalog is test-only otherwise'
     ).toBeGreaterThan(-1);
     expect(
       loaderCallIdx,
       'loadProviderCatalog() must run AFTER initializeProviderRegistry() so the registry ' +
         'exists when the catalog registers into it AND so log-and-replace semantics favor ' +
-        'the catalog over any switch-registered duplicate.',
+        'the catalog over any switch-registered duplicate.'
     ).toBeGreaterThan(initializeIdx);
   });
 
@@ -118,7 +115,7 @@ describe('boot wiring: catalog-loader is reachable from src/index.ts', () => {
     expect(
       lastTry,
       'loadProviderCatalog() must be wrapped in try { ... } catch — a loader-module ' +
-        'import crash must not kill boot for providers registered by the switch.',
+        'import crash must not kill boot for providers registered by the switch.'
     ).toBeGreaterThan(lastCatch);
   });
 });

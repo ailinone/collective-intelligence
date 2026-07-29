@@ -30,9 +30,27 @@ import {
 } from '@/core/orchestration/lookup-serving-providers';
 
 const sampleRows: CatalogRow[] = [
-  { providerId: '1', providerName: 'aiml', modelId: 'a', name: 'gemma-3-4b-it', capabilities: ['chat'] },
-  { providerId: '2', providerName: 'deepinfra', modelId: 'b', name: 'google/gemma-3-4b-it', capabilities: ['chat'] },
-  { providerId: '3', providerName: 'openrouter', modelId: 'c', name: 'google/gemma-3-4b-it', capabilities: ['chat'] },
+  {
+    providerId: '1',
+    providerName: 'aiml',
+    modelId: 'a',
+    name: 'gemma-3-4b-it',
+    capabilities: ['chat'],
+  },
+  {
+    providerId: '2',
+    providerName: 'deepinfra',
+    modelId: 'b',
+    name: 'google/gemma-3-4b-it',
+    capabilities: ['chat'],
+  },
+  {
+    providerId: '3',
+    providerName: 'openrouter',
+    modelId: 'c',
+    name: 'google/gemma-3-4b-it',
+    capabilities: ['chat'],
+  },
 ];
 
 describe('01C.1B-J1C §7 — catalog lookup concurrency + cache cleanup', () => {
@@ -69,7 +87,7 @@ describe('01C.1B-J1C §7 — catalog lookup concurrency + cache cleanup', () => 
       getServingProviders('gemma-3-4b-it'),
       getServingProviders('gemma-3-4b-it'),
     ]);
-    expect(r1).toBe(r2);                  // same promise resolved → same value (object identity)
+    expect(r1).toBe(r2); // same promise resolved → same value (object identity)
     expect(lookupCatalogRows).toHaveBeenCalledTimes(1); // only ONE DB-side call
     expect(maxConcurrent).toBe(1);
   });
@@ -134,7 +152,13 @@ describe('01C.1B-J1C §7 — catalog lookup concurrency + cache cleanup', () => 
 
   it('apiModelId is preserved verbatim from the catalog row', async () => {
     const rows: CatalogRow[] = [
-      { providerId: '1', providerName: 'deepinfra', modelId: 'x', name: 'meta-llama/Llama-3.2-11B-Vision-Instruct', capabilities: ['chat'] },
+      {
+        providerId: '1',
+        providerName: 'deepinfra',
+        modelId: 'x',
+        name: 'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        capabilities: ['chat'],
+      },
     ];
     const result = await lookupServingProvidersFromCatalog({
       logicalModelId: 'meta/llama-3.2-11b',

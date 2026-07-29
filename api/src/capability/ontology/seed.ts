@@ -94,7 +94,8 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     preferredLabel: 'Audio (any direction)',
     labels: { en: 'Audio', pt: 'Áudio' },
     synonyms: ['sound'],
-    description: 'Aggregate label: model handles audio in or out. Prefer audio_input/audio_output when known.',
+    description:
+      'Aggregate label: model handles audio in or out. Prefer audio_input/audio_output when known.',
     category: 'modality',
     broader: [],
     narrower: [uri('audio_input'), uri('audio_output')],
@@ -176,12 +177,17 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     preferredLabel: 'Coding (umbrella)',
     labels: { en: 'Coding', pt: 'Programação' },
     synonyms: ['programming', 'software-engineering'],
-    description: 'Umbrella for code-related tasks (gen, completion, review, debug, refactor, test).',
+    description:
+      'Umbrella for code-related tasks (gen, completion, review, debug, refactor, test).',
     category: 'task',
     broader: [],
     narrower: [
-      uri('code_generation'), uri('code_completion'), uri('code_review'),
-      uri('debugging'), uri('refactoring'), uri('code_interpreter'),
+      uri('code_generation'),
+      uri('code_completion'),
+      uri('code_review'),
+      uri('debugging'),
+      uri('refactoring'),
+      uri('code_interpreter'),
       uri('testing'),
     ],
   },
@@ -381,7 +387,8 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     preferredLabel: 'Moderation',
     labels: { en: 'Moderation', pt: 'Moderação' },
     synonyms: ['safety-classifier', 'harm-detection', 'policy-classifier'],
-    description: 'Classifies content against a safety/policy taxonomy (harassment, violence, etc.).',
+    description:
+      'Classifies content against a safety/policy taxonomy (harassment, violence, etc.).',
     category: 'task',
     broader: [],
     narrower: [],
@@ -631,8 +638,12 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     category: 'tool',
     broader: [],
     narrower: [
-      uri('function_calling'), uri('web_search'), uri('file_search'),
-      uri('code_interpreter'), uri('mcp'), uri('computer_use'),
+      uri('function_calling'),
+      uri('web_search'),
+      uri('file_search'),
+      uri('code_interpreter'),
+      uri('mcp'),
+      uri('computer_use'),
       uri('agents'),
     ],
   },
@@ -698,7 +709,8 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     preferredLabel: 'Safety-rated',
     labels: { en: 'Safety-rated', pt: 'Avaliado por segurança' },
     synonyms: ['safety-tuned', 'guard', 'policy-aware'],
-    description: 'Carries an explicit safety/policy training surface (used for routing or filtering).',
+    description:
+      'Carries an explicit safety/policy training surface (used for routing or filtering).',
     category: 'safety',
     broader: [],
     narrower: [],
@@ -746,7 +758,8 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
     preferredLabel: 'Long context',
     labels: { en: 'Long context', pt: 'Contexto longo' },
     synonyms: ['long-context', 'extended-context', 'large-window'],
-    description: 'Designed for long-input workloads (typically ≥128k usable tokens with retained attention).',
+    description:
+      'Designed for long-input workloads (typically ≥128k usable tokens with retained attention).',
     category: 'meta',
     broader: [],
     narrower: [],
@@ -763,7 +776,9 @@ export const ONTOLOGY_SEED: ReadonlyArray<OntologyEntry> = [
  *   + description with BGE-small.
  * - `ON CONFLICT (uri) DO UPDATE` makes this safe to re-run after edits.
  */
-export async function seedCapabilityOntology(prisma: PrismaClient): Promise<{ upserted: number; edges: number }> {
+export async function seedCapabilityOntology(
+  prisma: PrismaClient
+): Promise<{ upserted: number; edges: number }> {
   // Phase 1: upsert rows without edges. Two-phase to dodge forward-reference order.
   for (const entry of ONTOLOGY_SEED) {
     await prisma.$executeRaw`
@@ -805,5 +820,5 @@ export async function seedCapabilityOntology(prisma: PrismaClient): Promise<{ up
 
 /** Map from legacy ModelCapability slug → ontology URI. Used by the backfill. */
 export const LEGACY_CAPABILITY_TO_URI: Readonly<Record<string, string>> = Object.freeze(
-  Object.fromEntries(ONTOLOGY_SEED.map((entry) => [entry.slug, uri(entry.slug)])),
+  Object.fromEntries(ONTOLOGY_SEED.map((entry) => [entry.slug, uri(entry.slug)]))
 );

@@ -28,7 +28,7 @@ import path from 'node:path';
 
 const scriptSource = fs.readFileSync(
   path.resolve(__dirname, '../scripts/run-live-chat-operability-audit.ts'),
-  'utf8',
+  'utf8'
 );
 
 describe('01C.1B-J1D §11.1 — route-scope CLI flag', () => {
@@ -67,11 +67,15 @@ describe('01C.1B-J1D §11.1 — route-scope CLI flag', () => {
   });
 
   it('default routeScope is `selected` (legacy)', () => {
-    expect(scriptSource).toMatch(/routeScope:\s*'selected'\s*\|\s*'approved'\s*\|\s*'all'\s*=\s*'selected'/);
+    expect(scriptSource).toMatch(
+      /routeScope:\s*'selected'\s*\|\s*'approved'\s*\|\s*'all'\s*=\s*'selected'/
+    );
   });
 
   it('routeScope flips to `approved` when --include-route-candidates is set without explicit --route-scope', () => {
-    expect(scriptSource).toMatch(/if\s*\(\s*includeRouteCandidates\s*&&\s*!routeScopeExplicitlySet\s*\)/);
+    expect(scriptSource).toMatch(
+      /if\s*\(\s*includeRouteCandidates\s*&&\s*!routeScopeExplicitlySet\s*\)/
+    );
   });
 
   it('extractRoutesFromDryRunJson accepts scope param', () => {

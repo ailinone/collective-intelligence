@@ -16,16 +16,32 @@
  */
 import { describe, it, expect } from 'vitest';
 import { summarizePool } from '../consensus-execution-planner';
-import { fullConsensusPool, makeCandidate, makeModel } from '../../model-selection/__tests__/role-resolver.fixtures';
+import {
+  fullConsensusPool,
+  makeCandidate,
+  makeModel,
+} from '../../model-selection/__tests__/role-resolver.fixtures';
 import type { ModelCapability } from '@/types';
 
 describe('summarizePool', () => {
   it('counts usable / no_credits / local / aggregator from candidate flags', () => {
     const pool = [
       makeCandidate({ id: 'a', model: makeModel({ id: 'a', provider: 'cloud-1' }) }),
-      makeCandidate({ id: 'b', hasCredits: false, model: makeModel({ id: 'b', provider: 'cloud-2' }) }),
-      makeCandidate({ id: 'c', rateLimited: true, model: makeModel({ id: 'c', provider: 'cloud-3' }) }),
-      makeCandidate({ id: 'd', providerHealthy: false, model: makeModel({ id: 'd', provider: 'cloud-4' }) }),
+      makeCandidate({
+        id: 'b',
+        hasCredits: false,
+        model: makeModel({ id: 'b', provider: 'cloud-2' }),
+      }),
+      makeCandidate({
+        id: 'c',
+        rateLimited: true,
+        model: makeModel({ id: 'c', provider: 'cloud-3' }),
+      }),
+      makeCandidate({
+        id: 'd',
+        providerHealthy: false,
+        model: makeModel({ id: 'd', provider: 'cloud-4' }),
+      }),
       makeCandidate({ id: 'e', isLocal: true, model: makeModel({ id: 'e', provider: 'ollama' }) }),
       makeCandidate({ id: 'f', model: makeModel({ id: 'f', provider: 'aihubmix' }) }),
     ];

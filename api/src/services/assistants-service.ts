@@ -10,7 +10,7 @@
 /**
  * Assistants Service
  * Manages AI assistants with persistent state
- * 
+ *
  * NO HARDCODED MODELS - Dynamic selection based on assistant configuration
  * REAL IMPLEMENTATION - Persists assistants in database
  */
@@ -52,8 +52,21 @@ export class AssistantsService {
    * REAL IMPLEMENTATION - Persists in database
    */
   async createAssistant(options: CreateAssistantRequest): Promise<Assistant> {
-    const { name, description, model, instructions, tools, tool_resources, metadata, temperature, top_p, response_format, userContext, requestId } = options;
-    
+    const {
+      name,
+      description,
+      model,
+      instructions,
+      tools,
+      tool_resources,
+      metadata,
+      temperature,
+      top_p,
+      response_format,
+      userContext,
+      requestId,
+    } = options;
+
     const assistantId = `asst_${nanoid(24)}`;
     const _createdAt = Math.floor(Date.now() / 1000);
 
@@ -142,7 +155,7 @@ export class AssistantsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, assistantId, error: errorMessage }, 'Get assistant failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Assistant ${assistantId} not found`);
       }
@@ -155,7 +168,21 @@ export class AssistantsService {
    * REAL IMPLEMENTATION - Updates database
    */
   async modifyAssistant(options: ModifyAssistantRequest): Promise<Assistant> {
-    const { assistantId, name, description, model, instructions, tools, tool_resources, metadata, temperature, top_p, response_format, userContext, requestId } = options;
+    const {
+      assistantId,
+      name,
+      description,
+      model,
+      instructions,
+      tools,
+      tool_resources,
+      metadata,
+      temperature,
+      top_p,
+      response_format,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, assistantId }, 'Modifying assistant');
 
@@ -181,11 +208,15 @@ export class AssistantsService {
           ...(model !== undefined && { model: model || 'auto' }),
           ...(instructions !== undefined && { instructions: instructions || null }),
           ...(tools !== undefined && { tools: toPrismaJsonValue(tools || []) }),
-          ...(tool_resources !== undefined && { toolResources: toPrismaNullableJsonValue(tool_resources || null) }),
+          ...(tool_resources !== undefined && {
+            toolResources: toPrismaNullableJsonValue(tool_resources || null),
+          }),
           ...(metadata !== undefined && { metadata: toPrismaJsonValue(metadata || {}) }),
           ...(temperature !== undefined && { temperature: temperature || null }),
           ...(top_p !== undefined && { topP: top_p || null }),
-          ...(response_format !== undefined && { responseFormat: toPrismaNullableJsonValue(response_format || null) }),
+          ...(response_format !== undefined && {
+            responseFormat: toPrismaNullableJsonValue(response_format || null),
+          }),
         },
       });
 
@@ -209,7 +240,7 @@ export class AssistantsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, assistantId, error: errorMessage }, 'Modify assistant failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Assistant ${assistantId} not found`);
       }
@@ -250,7 +281,7 @@ export class AssistantsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, assistantId, error: errorMessage }, 'Delete assistant failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(`Assistant ${assistantId} not found`);
       }
@@ -384,7 +415,10 @@ export class AssistantsService {
         },
       });
 
-      log.info({ requestId, assistantId, fileId, assistantFileId: assistantFile.id }, 'Assistant file association created');
+      log.info(
+        { requestId, assistantId, fileId, assistantFileId: assistantFile.id },
+        'Assistant file association created'
+      );
 
       return {
         id: assistantFile.id,
@@ -394,8 +428,11 @@ export class AssistantsService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, assistantId, fileId, error: errorMessage }, 'Create assistant file failed');
-      
+      log.error(
+        { requestId, assistantId, fileId, error: errorMessage },
+        'Create assistant file failed'
+      );
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -447,8 +484,11 @@ export class AssistantsService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, assistantId, fileId, error: errorMessage }, 'Get assistant file failed');
-      
+      log.error(
+        { requestId, assistantId, fileId, error: errorMessage },
+        'Get assistant file failed'
+      );
+
       if (errorMessage.includes('not found') || errorMessage.includes('not associated')) {
         throw new Error(errorMessage);
       }
@@ -460,8 +500,18 @@ export class AssistantsService {
    * List assistant files
    * REAL IMPLEMENTATION - Queries from database
    */
-  async listAssistantFiles(options: ListAssistantFilesRequest): Promise<ListAssistantFilesResponse> {
-    const { assistantId, limit = 20, order = 'desc', after, before, userContext, requestId } = options;
+  async listAssistantFiles(
+    options: ListAssistantFilesRequest
+  ): Promise<ListAssistantFilesResponse> {
+    const {
+      assistantId,
+      limit = 20,
+      order = 'desc',
+      after,
+      before,
+      userContext,
+      requestId,
+    } = options;
 
     log.info({ requestId, assistantId, limit, order }, 'Listing assistant files');
 
@@ -491,7 +541,7 @@ export class AssistantsService {
       if (before) {
         const beforeFile = await prisma.assistantFile.findUnique({ where: { id: before } });
         if (beforeFile) {
-          where.createdAt = where.createdAt 
+          where.createdAt = where.createdAt
             ? { ...where.createdAt, lt: beforeFile.createdAt }
             : { lt: beforeFile.createdAt };
         }
@@ -521,7 +571,7 @@ export class AssistantsService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log.error({ requestId, assistantId, error: errorMessage }, 'List assistant files failed');
-      
+
       if (errorMessage.includes('not found')) {
         throw new Error(errorMessage);
       }
@@ -533,7 +583,9 @@ export class AssistantsService {
    * Delete assistant file association
    * REAL IMPLEMENTATION - Removes from database
    */
-  async deleteAssistantFile(options: DeleteAssistantFileRequest): Promise<DeleteAssistantFileResponse> {
+  async deleteAssistantFile(
+    options: DeleteAssistantFileRequest
+  ): Promise<DeleteAssistantFileResponse> {
     const { assistantId, fileId, userContext, requestId } = options;
 
     log.info({ requestId, assistantId, fileId }, 'Deleting assistant file association');
@@ -581,8 +633,11 @@ export class AssistantsService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ requestId, assistantId, fileId, error: errorMessage }, 'Delete assistant file failed');
-      
+      log.error(
+        { requestId, assistantId, fileId, error: errorMessage },
+        'Delete assistant file failed'
+      );
+
       if (errorMessage.includes('not found') || errorMessage.includes('not associated')) {
         throw new Error(errorMessage);
       }

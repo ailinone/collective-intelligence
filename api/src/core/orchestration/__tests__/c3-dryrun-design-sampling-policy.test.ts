@@ -30,10 +30,12 @@ import {
   HF_ALL_MODELS_CALLABLE_ASSUMED,
 } from '@/core/experiment/c3-dryrun-experiment-design-contract';
 
-const MANIFEST_PATH = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-design-sampling-manifest.json');
-const manifest = existsSync(MANIFEST_PATH)
-  ? JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'))
-  : null;
+const MANIFEST_PATH = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-dryrun-design-sampling-manifest.json'
+);
+const manifest = existsSync(MANIFEST_PATH) ? JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — sampling policy', () => {
   describe('policy constants', () => {
@@ -85,23 +87,25 @@ describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — sampling policy', () => {
       for (const n of Object.values<number>(manifest.providerCounts)) {
         expect(n).toBeLessThanOrEqual(C3_MAX_MODELS_PER_PROVIDER);
       }
-      expect(manifest.providerCounts.huggingface ?? 0).toBeLessThanOrEqual(C3_MAX_HUGGINGFACE_MODELS);
+      expect(manifest.providerCounts.huggingface ?? 0).toBeLessThanOrEqual(
+        C3_MAX_HUGGINGFACE_MODELS
+      );
     });
 
     it('case 8: includes at least one model_probe_validated candidate', () => {
       expect(
-        manifest.selectedCandidates.some((c: any) => c.candidateClass === 'model_probe_validated'),
+        manifest.selectedCandidates.some((c: any) => c.candidateClass === 'model_probe_validated')
       ).toBe(true);
     });
 
     it('case 9+10: catalog candidates are guarded (require model probe before billable execution)', () => {
       const catalog = manifest.selectedCandidates.filter(
-        (c: any) => c.candidateClass === 'catalog_candidate',
+        (c: any) => c.candidateClass === 'catalog_candidate'
       );
       expect(catalog.length).toBeGreaterThan(0);
-      expect(
-        catalog.every((c: any) => c.requiresModelProbeBeforeBillableExecution === true),
-      ).toBe(true);
+      expect(catalog.every((c: any) => c.requiresModelProbeBeforeBillableExecution === true)).toBe(
+        true
+      );
     });
 
     it('manifest authorizes no execution', () => {

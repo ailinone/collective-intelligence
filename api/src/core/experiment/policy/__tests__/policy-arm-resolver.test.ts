@@ -75,7 +75,7 @@ describe('deriveDefaultIdentityLevel', () => {
     '%s → capability_class',
     (role) => {
       expect(deriveDefaultIdentityLevel(role)).toBe('capability_class');
-    },
+    }
   );
 });
 
@@ -86,7 +86,7 @@ describe('deriveArmId — deterministic', () => {
         mode: 'single-model',
         modelId: 'gpt-4o',
         displayName: 'GPT-4o',
-      }),
+      })
     ).toBe('single-model::gpt-4o');
   });
 
@@ -96,7 +96,7 @@ describe('deriveArmId — deterministic', () => {
         mode: 'single-budget',
         modelId: 'budget-x',
         displayName: 'Budget X',
-      }),
+      })
     ).toBe('single-budget::budget-x');
   });
 
@@ -105,7 +105,7 @@ describe('deriveArmId — deterministic', () => {
       deriveArmId({
         mode: 'collective',
         strategy: 'debate',
-      }),
+      })
     ).toBe('collective::debate');
 
     expect(
@@ -113,7 +113,7 @@ describe('deriveArmId — deterministic', () => {
         mode: 'collective',
         strategy: 'consensus',
         adversarialScenario: 'herding_cascade',
-      }),
+      })
     ).toBe('collective::consensus::herding_cascade');
   });
 
@@ -124,7 +124,7 @@ describe('deriveArmId — deterministic', () => {
         strategy: 'consensus',
         forcedModelPool: ['z-model', 'a-model', 'm-model'],
         displayName: 'Forced',
-      }),
+      })
     ).toBe('forced-pool-collective::consensus::a-model,m-model,z-model');
   });
 
@@ -135,7 +135,7 @@ describe('deriveArmId — deterministic', () => {
         strategy: 'debate',
         displayName: 'Debate ablation',
         disableComponents: ['critique', 'feedback-loop', 'archive'],
-      }),
+      })
     ).toBe('ablation::debate::archive,critique,feedback-loop');
   });
 
@@ -143,7 +143,7 @@ describe('deriveArmId — deterministic', () => {
     expect(
       deriveArmId({
         mode: 'adaptive',
-      }),
+      })
     ).toBe('adaptive::auto');
   });
 });
@@ -312,7 +312,7 @@ describe('resolveExperimentArm — policy overrides', () => {
         policyHints: {
           policyOverrides: { maxFallbackDepth: 0 },
         },
-      }),
+      })
     ).toThrow('maxFallbackDepth must be ≥ 1');
   });
 
@@ -326,7 +326,7 @@ describe('resolveExperimentArm — policy overrides', () => {
             totalArmBudgetUsd: 0.5,
           },
         },
-      }),
+      })
     ).toThrow(/totalArmBudgetUsd .* < perAttemptBudgetUsd/);
   });
 });

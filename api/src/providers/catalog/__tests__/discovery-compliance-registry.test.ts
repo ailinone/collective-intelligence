@@ -125,7 +125,7 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
     for (const id of DISCOVERY_COMPLIANCE_REGISTRY[bucket]) {
       if (bucketOf.has(id)) {
         throw new Error(
-          `Registry corruption: '${id}' appears in both '${bucketOf.get(id)}' and '${bucket}'`,
+          `Registry corruption: '${id}' appears in both '${bucketOf.get(id)}' and '${bucket}'`
         );
       }
       bucketOf.set(id, bucket);
@@ -148,7 +148,7 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
         'non-compliant-runtime-not-materialized',
         'not-applicable-non-model-surface',
         'self-hosted-runtime-dependent',
-      ].sort(),
+      ].sort()
     );
   });
 
@@ -179,9 +179,11 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
         continue;
       }
       const staticModels = (entry as { staticModels?: readonly string[] }).staticModels;
-      const pinnedFallbackModels = (entry as {
-        pinnedFallback?: { models?: readonly string[] };
-      }).pinnedFallback?.models;
+      const pinnedFallbackModels = (
+        entry as {
+          pinnedFallback?: { models?: readonly string[] };
+        }
+      ).pinnedFallback?.models;
       const hasStatic = Array.isArray(staticModels) && staticModels.length > 0;
       const hasPinned = Array.isArray(pinnedFallbackModels) && pinnedFallbackModels.length > 0;
       if (!hasStatic && !hasPinned) {
@@ -209,13 +211,16 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
     //     /models, fetcher unwired)
     // Both pinnedFallback (canonical) and staticModels (legacy) trigger
     // this requirement — the registry semantics are identical.
-    const violators: Array<{ providerId: string; bucket: DiscoveryComplianceClass | undefined }> = [];
+    const violators: Array<{ providerId: string; bucket: DiscoveryComplianceClass | undefined }> =
+      [];
 
     for (const entry of PROVIDER_CATALOG) {
       const staticModels = (entry as { staticModels?: readonly string[] }).staticModels;
-      const pinnedFallbackModels = (entry as {
-        pinnedFallback?: { models?: readonly string[] };
-      }).pinnedFallback?.models;
+      const pinnedFallbackModels = (
+        entry as {
+          pinnedFallback?: { models?: readonly string[] };
+        }
+      ).pinnedFallback?.models;
       const hasStaticInventory =
         (Array.isArray(staticModels) && staticModels.length > 0) ||
         (Array.isArray(pinnedFallbackModels) && pinnedFallbackModels.length > 0);
@@ -253,9 +258,11 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
         offenders.push({ providerId: id, reason: 'not in PROVIDER_CATALOG' });
         continue;
       }
-      const pinnedFallback = (entry as {
-        pinnedFallback?: { reason?: string; models?: readonly unknown[] };
-      }).pinnedFallback;
+      const pinnedFallback = (
+        entry as {
+          pinnedFallback?: { reason?: string; models?: readonly unknown[] };
+        }
+      ).pinnedFallback;
       if (!pinnedFallback) {
         offenders.push({ providerId: id, reason: 'missing pinnedFallback block' });
         continue;
@@ -282,12 +289,11 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
       expect(cls).toBe(bucketOf.get(id));
 
       const compliant = isDiscoveryCompliant(id);
-      const expectedCompliant = cls
-        ? !cls.startsWith('non-compliant-')
-        : false;
-      expect(compliant, `isDiscoveryCompliant('${id}') disagrees with registry class '${cls}'`).toBe(
-        expectedCompliant,
-      );
+      const expectedCompliant = cls ? !cls.startsWith('non-compliant-') : false;
+      expect(
+        compliant,
+        `isDiscoveryCompliant('${id}') disagrees with registry class '${cls}'`
+      ).toBe(expectedCompliant);
     }
 
     // Negative case: an unclassified id returns undefined / false.

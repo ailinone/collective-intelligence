@@ -69,9 +69,7 @@ const log = logger.child({ module: 'responses-routes' });
 /**
  * Input types for responses API
  */
-type ResponseInputItem =
-  | ResponseInputMessageItem
-  | ResponseInputItemReference;
+type ResponseInputItem = ResponseInputMessageItem | ResponseInputItemReference;
 
 interface ResponseInputMessageItem {
   type: 'message';
@@ -85,9 +83,7 @@ interface ResponseInputItemReference {
 }
 
 type ResponseContentPart =
-  | ResponseContentPartText
-  | ResponseContentPartImage
-  | ResponseContentPartFile;
+  ResponseContentPartText | ResponseContentPartImage | ResponseContentPartFile;
 
 interface ResponseContentPartText {
   type: 'input_text' | 'output_text';
@@ -377,15 +373,7 @@ export interface StreamResponseParams {
  * so the connection always terminates cleanly with a final frame + sentinel.
  */
 export async function streamResponse(params: StreamResponseParams): Promise<void> {
-  const {
-    source,
-    sink,
-    responseId,
-    requestedModel,
-    metadata,
-    startTime,
-    onComplete,
-  } = params;
+  const { source, sink, responseId, requestedModel, metadata, startTime, onComplete } = params;
 
   const itemId = `msg_${nanoid(16)}`;
   const createdAt = Math.floor(Date.now() / 1000);
@@ -622,7 +610,7 @@ class ResponsesService {
     const resolvedModel =
       typeof result.metadata?.resolved_model === 'string'
         ? result.metadata.resolved_model
-        : result.modelsUsed.find((m) => m.success)?.modelName ?? result.modelsUsed[0]?.modelName;
+        : (result.modelsUsed.find((m) => m.success)?.modelName ?? result.modelsUsed[0]?.modelName);
     const finalDeciderModelId =
       typeof result.metadata?.final_decider_model_id === 'string'
         ? result.metadata.final_decider_model_id
@@ -704,7 +692,10 @@ class ResponsesService {
       });
       log.debug({ responseId }, 'Response persisted to database');
     } catch (error) {
-      log.warn({ responseId, error: getErrorMessage(error) }, 'Failed to persist response to database');
+      log.warn(
+        { responseId, error: getErrorMessage(error) },
+        'Failed to persist response to database'
+      );
       // Continue even if persistence fails
     }
 
@@ -723,10 +714,13 @@ class ResponsesService {
     // Step 1: Convert input to chat messages
     const messages = this.convertInputToMessages(request.input, request.instructions);
     if (!messages.some((message) => message.role === 'user')) {
-      throw Object.assign(new Error('Invalid responses input: provide at least one user message.'), {
-        statusCode: 400,
-        code: 'invalid_input_format',
-      });
+      throw Object.assign(
+        new Error('Invalid responses input: provide at least one user message.'),
+        {
+          statusCode: 400,
+          code: 'invalid_input_format',
+        }
+      );
     }
 
     // Step 2: Convert tools to chat format
@@ -738,9 +732,7 @@ class ResponsesService {
     const modelProvided = modelValue.length > 0;
     const explicitlyAuto = modelValue.toLowerCase() === 'auto' || aliasResolution !== null;
     const resolvedStrategy =
-      typeof request.strategy === 'string'
-        ? resolveExecutionStrategy(request.strategy)
-        : undefined;
+      typeof request.strategy === 'string' ? resolveExecutionStrategy(request.strategy) : undefined;
     const canonicalStrategy =
       typeof request.strategy === 'string'
         ? canonicalizeStrategyInput(request.strategy)
@@ -765,10 +757,7 @@ class ResponsesService {
         request.quality_target !== undefined
           ? request.quality_target
           : aliasResolution?.qualityTarget,
-      max_cost:
-        request.max_cost !== undefined
-          ? request.max_cost
-          : aliasResolution?.maxCost,
+      max_cost: request.max_cost !== undefined ? request.max_cost : aliasResolution?.maxCost,
       task_type: aliasResolution?.taskType,
       ailin_alias: aliasResolution?.alias,
       ailin_constraints: aliasResolution?.constraints,
@@ -926,7 +915,10 @@ class ResponsesService {
       const responseData = JSON.parse(JSON.stringify(requestLog.response)) as ResponseObject;
       return responseData;
     } catch (error) {
-      log.error({ responseId, error: getErrorMessage(error) }, 'Failed to retrieve response from database');
+      log.error(
+        { responseId, error: getErrorMessage(error) },
+        'Failed to retrieve response from database'
+      );
       return null;
     }
   }
@@ -949,7 +941,10 @@ class ResponsesService {
       });
       return true;
     } catch (error) {
-      log.error({ responseId, error: getErrorMessage(error) }, 'Failed to delete response from database');
+      log.error(
+        { responseId, error: getErrorMessage(error) },
+        'Failed to delete response from database'
+      );
       return false;
     }
   }
@@ -1048,9 +1043,7 @@ class ResponsesService {
   /**
    * Convert content parts to chat format
    */
-  private convertContentParts(
-    content: unknown
-  ): string | ChatMessage['content'] {
+  private convertContentParts(content: unknown): string | ChatMessage['content'] {
     if (typeof content === 'string') {
       return content;
     }
@@ -1240,9 +1233,7 @@ class ResponsesService {
   /**
    * Extract content parts from message content
    */
-  private extractContentParts(
-    content: string | ChatMessage['content']
-  ): ResponseContentPart[] {
+  private extractContentParts(content: string | ChatMessage['content']): ResponseContentPart[] {
     if (typeof content === 'string') {
       return [{ type: 'output_text', text: content }];
     }
@@ -1261,9 +1252,7 @@ class ResponsesService {
 // Route Registration
 // ============================================
 
-export async function registerResponsesRoutes(
-  server: FastifyInstance
-): Promise<void> {
+export async function registerResponsesRoutes(server: FastifyInstance): Promise<void> {
   const responsesService = new ResponsesService();
 
   // ==========================================
@@ -1289,35 +1278,40 @@ export async function registerResponsesRoutes(
             },
             input: {
               anyOf: [
-                { 
+                {
                   type: 'string',
-                  description: 'Input text as a single string. Simple format for text-only requests.',
+                  description:
+                    'Input text as a single string. Simple format for text-only requests.',
                 },
                 {
                   type: 'array',
-                  description: 'Array of input items supporting messages and item references. More flexible format for complex inputs.',
+                  description:
+                    'Array of input items supporting messages and item references. More flexible format for complex inputs.',
                   items: {
                     type: 'object',
                     properties: {
-                      type: { 
-                        type: 'string', 
+                      type: {
+                        type: 'string',
                         enum: ['message', 'item_reference'],
-                        description: 'Item type: message (conversation message) or item_reference (reference to existing item)',
+                        description:
+                          'Item type: message (conversation message) or item_reference (reference to existing item)',
                       },
-                      role: { 
-                        type: 'string', 
+                      role: {
+                        type: 'string',
                         enum: ['user', 'assistant', 'system'],
-                        description: 'Message role: user (human input), assistant (AI response), system (instructions). Required for message type.',
+                        description:
+                          'Message role: user (human input), assistant (AI response), system (instructions). Required for message type.',
                       },
                       content: {
                         anyOf: [
                           { type: 'string', description: 'Text content as a string' },
-                          { 
+                          {
                             type: 'array',
                             description: 'Multimodal content array (text blocks, images, etc.)',
-                            items: { 
+                            items: {
                               type: 'object',
-                              description: 'Content block object. Can contain text, image_url, or other multimodal content types.',
+                              description:
+                                'Content block object. Can contain text, image_url, or other multimodal content types.',
                               properties: {
                                 type: {
                                   type: 'string',
@@ -1337,7 +1331,7 @@ export async function registerResponsesRoutes(
                         ],
                         description: 'Message content. Can be a string or array of content blocks.',
                       },
-                      id: { 
+                      id: {
                         type: 'string',
                         description: 'Item ID for referencing. Required for item_reference type.',
                       },
@@ -1346,9 +1340,9 @@ export async function registerResponsesRoutes(
                 },
               ],
             },
-            instructions: { 
+            instructions: {
               type: 'string',
-              description: 'System instructions to guide the model\'s behavior and response style',
+              description: "System instructions to guide the model's behavior and response style",
             },
             tools: {
               type: 'array',
@@ -1359,25 +1353,34 @@ export async function registerResponsesRoutes(
                   type: {
                     type: 'string',
                     enum: ['function', 'web_search', 'file_search', 'code_interpreter'],
-                    description: 'Tool type: function (custom function), web_search (web search), file_search (RAG), or code_interpreter (Python execution)',
+                    description:
+                      'Tool type: function (custom function), web_search (web search), file_search (RAG), or code_interpreter (Python execution)',
                   },
-                  function: { 
+                  function: {
                     type: 'object',
-                    description: 'Function tool definition (required when type is "function"). Contains name, description, and parameters schema.',
+                    description:
+                      'Function tool definition (required when type is "function"). Contains name, description, and parameters schema.',
                   },
-                  web_search: { 
+                  web_search: {
                     type: 'object',
-                    description: 'Web search tool configuration (required when type is "web_search")',
+                    description:
+                      'Web search tool configuration (required when type is "web_search")',
                   },
                 },
               },
             },
             tool_choice: {
               oneOf: [
-                { type: 'string', enum: ['auto', 'none', 'required'], description: 'Tool choice mode: auto (let model decide), none (no tools), required (must use tools)' },
+                {
+                  type: 'string',
+                  enum: ['auto', 'none', 'required'],
+                  description:
+                    'Tool choice mode: auto (let model decide), none (no tools), required (must use tools)',
+                },
                 { type: 'object', description: 'Specific tool choice configuration object' },
               ],
-              description: 'Controls which tools (if any) the model can use. Can be a string ("auto", "none", "required") or an object specifying specific tools.',
+              description:
+                'Controls which tools (if any) the model can use. Can be a string ("auto", "none", "required") or an object specifying specific tools.',
             },
             temperature: { type: 'number', minimum: 0, maximum: 2 },
             max_output_tokens: { type: 'integer', minimum: 1 },
@@ -1391,16 +1394,18 @@ export async function registerResponsesRoutes(
               description:
                 'Canonical strategy contract with compatibility aliases. Canonical: single, cost, speed, quality, balanced, parallel, debate, quality_multipass, dynamic.',
             },
-            quality_target: { 
-              type: 'number', 
-              minimum: 0, 
-              maximum: 1,
-              description: 'Target quality level (0-1). Higher values prioritize quality over speed/cost. Used in orchestration decisions.',
-            },
-            max_cost: { 
-              type: 'number', 
+            quality_target: {
+              type: 'number',
               minimum: 0,
-              description: 'Maximum cost threshold (in USD). Orchestration will not exceed this cost.',
+              maximum: 1,
+              description:
+                'Target quality level (0-1). Higher values prioritize quality over speed/cost. Used in orchestration decisions.',
+            },
+            max_cost: {
+              type: 'number',
+              minimum: 0,
+              description:
+                'Maximum cost threshold (in USD). Orchestration will not exceed this cost.',
             },
           },
         },
@@ -1413,7 +1418,11 @@ export async function registerResponsesRoutes(
               object: { type: 'string', enum: ['response'], description: 'Object type' },
               created_at: { type: 'integer', description: 'Unix timestamp of creation' },
               model: { type: 'string', description: 'Model used for response' },
-              status: { type: 'string', enum: ['completed', 'in_progress', 'failed'], description: 'Response status' },
+              status: {
+                type: 'string',
+                enum: ['completed', 'in_progress', 'failed'],
+                description: 'Response status',
+              },
               output: {
                 type: 'array',
                 items: {
@@ -1435,7 +1444,11 @@ export async function registerResponsesRoutes(
                   total_tokens: { type: 'integer' },
                 },
               },
-              metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Response metadata' },
+              metadata: {
+                type: 'object',
+                additionalProperties: { type: 'string' },
+                description: 'Response metadata',
+              },
               ailin_metadata: {
                 type: 'object',
                 properties: {
@@ -1486,10 +1499,7 @@ export async function registerResponsesRoutes(
       },
       preHandler: authenticateRequest,
     },
-    async (
-      request: FastifyRequest<{ Body: ResponseCreateRequest }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Body: ResponseCreateRequest }>, reply: FastifyReply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const responsesRequest = request.body;
 
@@ -1506,8 +1516,7 @@ export async function registerResponsesRoutes(
             contextSize: inputSize,
           });
 
-      const requestId =
-        typeof request.id === 'string' ? request.id : `resp-${nanoid(16)}`;
+      const requestId = typeof request.id === 'string' ? request.id : `resp-${nanoid(16)}`;
       userContext.requestId = requestId;
 
       try {
@@ -1607,7 +1616,10 @@ export async function registerResponsesRoutes(
         const statusCode = extractStatusCode(error) ?? 500;
         const errorCode = extractErrorCodeFromObject(error) ?? 'RESPONSE_FAILED';
         const errorMessage = getErrorMessage(error);
-        log.error({ requestId, statusCode, errorCode, error: errorMessage }, 'Response creation failed');
+        log.error(
+          { requestId, statusCode, errorCode, error: errorMessage },
+          'Response creation failed'
+        );
 
         return reply.status(statusCode).send({
           error: {
@@ -1667,10 +1679,7 @@ export async function registerResponsesRoutes(
       },
       preHandler: authenticateRequest,
     },
-    async (
-      request: FastifyRequest<{ Params: { response_id: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: { response_id: string } }>, reply: FastifyReply) => {
       const { response_id } = request.params;
       const extendedRequest = request as ExtendedFastifyRequest;
       const organizationId = extendedRequest.userContext?.organizationId;
@@ -1690,12 +1699,12 @@ export async function registerResponsesRoutes(
       const response = await responsesService.getResponse(response_id, organizationId);
 
       if (!response) {
-      return reply.status(404).send({
-        error: {
+        return reply.status(404).send({
+          error: {
             message: `Response ${response_id} not found.`,
-          type: 'not_found_error',
-        },
-      });
+            type: 'not_found_error',
+          },
+        });
       }
 
       return reply.send(response);
@@ -1733,10 +1742,7 @@ export async function registerResponsesRoutes(
       },
       preHandler: authenticateRequest,
     },
-    async (
-      request: FastifyRequest<{ Params: { response_id: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: { response_id: string } }>, reply: FastifyReply) => {
       const { response_id } = request.params;
       const extendedRequest = request as ExtendedFastifyRequest;
       const organizationId = extendedRequest.userContext?.organizationId;

@@ -21,14 +21,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  getSemanticIndex,
-  resetSemanticIndexForTesting,
-} from '../semantic-index';
-import {
-  getEmbeddingCache,
-  resetEmbeddingCacheForTesting,
-} from '../embedding-cache';
+import { getSemanticIndex, resetSemanticIndexForTesting } from '../semantic-index';
+import { getEmbeddingCache, resetEmbeddingCacheForTesting } from '../embedding-cache';
 import { resetTEIClientForTesting } from '../tei-client';
 import { resolveSemanticCandidates } from '../semantic-resolver';
 import {
@@ -43,7 +37,9 @@ import { resetHealthSyncBusForTesting } from '../health-sync-bus';
 import { classifyProviderError } from '../error-classification';
 import type { ProviderDiscoverySnapshot } from '../types';
 
-function buildSnap(rows: Array<{ providerId: string; modelId: string }>): ProviderDiscoverySnapshot {
+function buildSnap(
+  rows: Array<{ providerId: string; modelId: string }>
+): ProviderDiscoverySnapshot {
   const grouped = new Map<string, string[]>();
   for (const r of rows) {
     const arr = grouped.get(r.providerId) ?? [];

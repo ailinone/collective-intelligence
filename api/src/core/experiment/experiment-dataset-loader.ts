@@ -426,7 +426,7 @@ function buildLiveBenchScorerSource(taskFile: string, entryExpr: string): string
   const util = readLiveBenchScorerFile('util.py');
   const task = readLiveBenchScorerFile(taskFile).replace(
     LIVEBENCH_UTIL_IMPORT_RE,
-    '# (livebench.process_results.util helpers are inlined above from util.py)',
+    '# (livebench.process_results.util helpers are inlined above from util.py)'
   );
   return [
     util,

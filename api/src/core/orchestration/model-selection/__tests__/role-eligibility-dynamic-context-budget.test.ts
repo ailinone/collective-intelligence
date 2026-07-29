@@ -170,7 +170,9 @@ describe('01C.1B-J1D-R4C §12 — role eligibility × dynamic context budget', (
       role: 'synthesizer',
       taskProfile: { taskType: 'general', expectedFormat: 'free_text', userMessageExcerpt: '' },
       constraints: {},
-      candidatePool: [mkCandidate({ modelId: 'm-small', providerId: 'deepinfra', contextWindow: 8192 })],
+      candidatePool: [
+        mkCandidate({ modelId: 'm-small', providerId: 'deepinfra', contextWindow: 8192 }),
+      ],
       contextPolicy: { ...baseBudget, enabled: false, overrides },
     });
     // Flag is OFF: overrides not applied; falls back to legacy static
@@ -197,7 +199,12 @@ describe('01C.1B-J1D-R4C §12 — role eligibility × dynamic context budget', (
       taskProfile: { taskType: 'general', expectedFormat: 'free_text', userMessageExcerpt: '' },
       constraints: {},
       candidatePool: [
-        mkCandidate({ modelId: 'm-big', providerId: 'p', contextWindow: 200000, maxOutputTokens: 4096 }),
+        mkCandidate({
+          modelId: 'm-big',
+          providerId: 'p',
+          contextWindow: 200000,
+          maxOutputTokens: 4096,
+        }),
       ],
       contextPolicy: { ...baseBudget, enabled: true, overrides },
     });
@@ -237,10 +244,26 @@ describe('01C.1B-J1D-R4C §12 — role eligibility × dynamic context budget', (
     // ones, ALL 10 should be eligible for participant (which only needs
     // ~3000 tokens of context).
     const candidates: ModelCandidate[] = [
-      mkCandidate({ modelId: 'anthropic/claude-haiku-4-5', providerId: 'deepinfra', contextWindow: 8192 }),
-      mkCandidate({ modelId: 'anthropic/claude-opus-4-7', providerId: 'deepinfra', contextWindow: 8192 }),
-      mkCandidate({ modelId: 'anthropic/claude-sonnet-4-6', providerId: 'deepinfra', contextWindow: 8192 }),
-      mkCandidate({ modelId: 'deepseek-ai/DeepSeek-R1-0528', providerId: 'deepinfra', contextWindow: 8192 }),
+      mkCandidate({
+        modelId: 'anthropic/claude-haiku-4-5',
+        providerId: 'deepinfra',
+        contextWindow: 8192,
+      }),
+      mkCandidate({
+        modelId: 'anthropic/claude-opus-4-7',
+        providerId: 'deepinfra',
+        contextWindow: 8192,
+      }),
+      mkCandidate({
+        modelId: 'anthropic/claude-sonnet-4-6',
+        providerId: 'deepinfra',
+        contextWindow: 8192,
+      }),
+      mkCandidate({
+        modelId: 'deepseek-ai/DeepSeek-R1-0528',
+        providerId: 'deepinfra',
+        contextWindow: 8192,
+      }),
       mkCandidate({
         modelId: 'accounts/fireworks/models/deepseek-v4-pro',
         providerId: 'fireworks-ai',
@@ -251,8 +274,16 @@ describe('01C.1B-J1D-R4C §12 — role eligibility × dynamic context budget', (
         providerId: 'fireworks-ai',
         contextWindow: 262_144,
       }),
-      mkCandidate({ modelId: 'abacusai/Dracarys-72B-Instruct', providerId: 'nanogpt', contextWindow: 8192 }),
-      mkCandidate({ modelId: 'aion-labs/aion-1.0-mini', providerId: 'nanogpt', contextWindow: 8192 }),
+      mkCandidate({
+        modelId: 'abacusai/Dracarys-72B-Instruct',
+        providerId: 'nanogpt',
+        contextWindow: 8192,
+      }),
+      mkCandidate({
+        modelId: 'aion-labs/aion-1.0-mini',
+        providerId: 'nanogpt',
+        contextWindow: 8192,
+      }),
       mkCandidate({
         modelId: 'xai/grok-4.20-multi-agent',
         providerId: 'vercel-ai-gateway',

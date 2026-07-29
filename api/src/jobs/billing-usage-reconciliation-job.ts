@@ -52,7 +52,10 @@ export async function runUsageReconciliationCycle(referenceDate = new Date()): P
   try {
     await retryStaleStripeInvoices();
   } catch (err) {
-    logger.error({ err }, 'Stale invoice reconciliation failed — continuing with usage reconciliation');
+    logger.error(
+      { err },
+      'Stale invoice reconciliation failed — continuing with usage reconciliation'
+    );
   }
 
   const { start, end } = previousDayWindow(referenceDate);
@@ -146,11 +149,15 @@ async function retryStaleStripeInvoices(): Promise<void> {
         const Stripe = (await import('stripe')).default;
         const { config: appConfig } = await import('@/config/index.js');
         const stripe = new Stripe(appConfig.payments.stripe.secretKey!, {
-          apiVersion: appConfig.payments.stripe.apiVersion as import('stripe').Stripe.LatestApiVersion,
+          apiVersion: appConfig.payments.stripe
+            .apiVersion as import('stripe').Stripe.LatestApiVersion,
         });
         const stripeInvoice = await stripe.invoices.retrieve(invoice.stripeInvoiceId);
         await syncInvoiceFromStripe(narrowAs<import('stripe').Stripe.Invoice>(stripeInvoice));
-        logger.info({ invoiceId: invoice.id, stripeId: invoice.stripeInvoiceId }, 'Stale invoice re-synced from Stripe');
+        logger.info(
+          { invoiceId: invoice.id, stripeId: invoice.stripeInvoiceId },
+          'Stale invoice re-synced from Stripe'
+        );
       } else {
         // No stripeInvoiceId — the Stripe call never happened. Mark as failed for manual review.
         await prisma.invoice.update({
@@ -160,7 +167,10 @@ async function retryStaleStripeInvoices(): Promise<void> {
             lastError: `Stale pending_stripe_sync for ${Math.round((Date.now() - invoice.updatedAt.getTime()) / 60000)}min — Stripe invoice never created. Manual review required.`,
           },
         });
-        logger.warn({ invoiceId: invoice.id }, 'Stale invoice without Stripe ID — marked as failed for manual review');
+        logger.warn(
+          { invoiceId: invoice.id },
+          'Stale invoice without Stripe ID — marked as failed for manual review'
+        );
       }
     } catch (err) {
       logger.error({ invoiceId: invoice.id, err }, 'Failed to reconcile stale invoice');

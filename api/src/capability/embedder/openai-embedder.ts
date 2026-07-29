@@ -105,7 +105,7 @@ export class OpenAIEmbedder implements CapabilityEmbedder {
     const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error(
-        'OpenAIEmbedder: OPENAI_API_KEY missing. Set the env var or pass apiKey explicitly.',
+        'OpenAIEmbedder: OPENAI_API_KEY missing. Set the env var or pass apiKey explicitly.'
       );
     }
     this.client = new OpenAI({
@@ -155,7 +155,7 @@ export class OpenAIEmbedder implements CapabilityEmbedder {
 
       if (response.data.length !== slice.length) {
         throw new Error(
-          `OpenAIEmbedder: response length mismatch — expected ${slice.length}, got ${response.data.length}`,
+          `OpenAIEmbedder: response length mismatch — expected ${slice.length}, got ${response.data.length}`
         );
       }
 
@@ -163,7 +163,7 @@ export class OpenAIEmbedder implements CapabilityEmbedder {
         const item = response.data[j];
         if (!item || !Array.isArray(item.embedding) || item.embedding.length !== EMBEDDING_DIM) {
           throw new Error(
-            `OpenAIEmbedder: malformed embedding at batch offset ${j} (dim=${item?.embedding?.length})`,
+            `OpenAIEmbedder: malformed embedding at batch offset ${j} (dim=${item?.embedding?.length})`
           );
         }
         out[i + j] = { vector: item.embedding };

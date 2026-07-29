@@ -55,7 +55,9 @@ describe('P0-2: learning loop is connected to routing', () => {
   });
 
   it('strategy-bandit is importable and has selectStrategy', async () => {
-    vi.doMock('@/database/client', () => ({ prisma: { $queryRaw: vi.fn().mockResolvedValue([]) } }));
+    vi.doMock('@/database/client', () => ({
+      prisma: { $queryRaw: vi.fn().mockResolvedValue([]) },
+    }));
     vi.doMock('@/observability/ci-metrics', () => ({
       learningBanditsAlpha: { set: vi.fn() },
       learningBanditsBeta: { set: vi.fn() },
@@ -74,10 +76,21 @@ describe('P0-2: learning loop is connected to routing', () => {
 // ============================================
 describe('P0-3: all strategies are reachable', () => {
   it('all execution strategy names resolve correctly', async () => {
-    const { resolveExecutionStrategy, canonicalizeStrategyInput } = await import('../strategy-contract');
+    const { resolveExecutionStrategy, canonicalizeStrategyInput } =
+      await import('../strategy-contract');
 
     // These must all be resolvable without throwing
-    const inputs = ['single', 'parallel', 'debate', 'consensus', 'quality', 'cost', 'speed', 'balanced', 'dynamic'];
+    const inputs = [
+      'single',
+      'parallel',
+      'debate',
+      'consensus',
+      'quality',
+      'cost',
+      'speed',
+      'balanced',
+      'dynamic',
+    ];
     for (const input of inputs) {
       const canonical = canonicalizeStrategyInput(input);
       expect(canonical).toBeDefined();
@@ -149,10 +162,7 @@ describe('P1-1: champion/challenger integration', () => {
   it('continuous-benchmark-job does NOT import prisma directly', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.join(
-      process.cwd(),
-      'src/jobs/continuous-benchmark-job.ts'
-    );
+    const filePath = path.join(process.cwd(), 'src/jobs/continuous-benchmark-job.ts');
     let content: string;
     try {
       content = fs.readFileSync(filePath, 'utf8');
@@ -175,10 +185,7 @@ describe('P1-2: CI workflow has eval gates', () => {
   it('CI workflow contains mock eval and red team steps', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const filePath = path.join(
-      process.cwd(),
-      '../.github/workflows/flexible-cicd.yml'
-    );
+    const filePath = path.join(process.cwd(), '../.github/workflows/flexible-cicd.yml');
     let content: string;
     try {
       content = fs.readFileSync(filePath, 'utf8');

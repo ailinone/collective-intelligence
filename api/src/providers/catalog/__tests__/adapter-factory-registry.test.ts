@@ -90,7 +90,7 @@ describe('adapter-factory-registry', () => {
 
   it('registers and resolves a factory by name', () => {
     const marker = Symbol('stub-adapter');
-    const factory: AdapterFactory = () => ({ marker } as unknown as ReturnType<AdapterFactory>);
+    const factory: AdapterFactory = () => ({ marker }) as unknown as ReturnType<AdapterFactory>;
 
     registerAdapterFactory('StubAdapter', factory);
 
@@ -102,8 +102,10 @@ describe('adapter-factory-registry', () => {
   });
 
   it('is idempotent — duplicate registration keeps the FIRST factory', () => {
-    const first: AdapterFactory = () => ({ which: 'first' } as unknown as ReturnType<AdapterFactory>);
-    const second: AdapterFactory = () => ({ which: 'second' } as unknown as ReturnType<AdapterFactory>);
+    const first: AdapterFactory = () =>
+      ({ which: 'first' }) as unknown as ReturnType<AdapterFactory>;
+    const second: AdapterFactory = () =>
+      ({ which: 'second' }) as unknown as ReturnType<AdapterFactory>;
 
     registerAdapterFactory('DupAdapter', first);
     registerAdapterFactory('DupAdapter', second); // logged-and-ignored
@@ -193,7 +195,7 @@ describe('adapter-factory-registry', () => {
         unresolved.map((u) => `  - ${u.providerId}: ${u.reason}`).join('\n') +
         `\n\nFix: register the adapter factory in default-adapter-factories.ts, ` +
         `flip integrationMode to 'catalog-only', or add to PHASE_3A_KNOWN_GAPS ` +
-        `with an explicit Phase-4 obligation.`,
+        `with an explicit Phase-4 obligation.`
     ).toEqual([]);
   });
 });

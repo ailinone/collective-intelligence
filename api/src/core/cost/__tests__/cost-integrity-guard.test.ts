@@ -116,7 +116,7 @@ describe('guardCost — strict-throw policy', () => {
     process.env.CI_COST_INTEGRITY_POLICY = 'strict-throw';
     const { guardCost, CostIntegrityError } = await import('../cost-integrity-guard');
     expect(() =>
-      guardCost(-2786.097718, { callSite: 'eval-aggregator', strategy: 'debate' }),
+      guardCost(-2786.097718, { callSite: 'eval-aggregator', strategy: 'debate' })
     ).toThrow(CostIntegrityError);
   });
 
@@ -177,7 +177,7 @@ describe('filterValidCosts (aggregator helper)', () => {
     const { filterValidCosts } = await import('../cost-integrity-guard');
     const result = filterValidCosts(
       [0.001, -94.999, 0, NaN, null, undefined, 'oops', 0.002, -2786],
-      { callSite: 'test-aggregator' },
+      { callSite: 'test-aggregator' }
     );
     expect(result.valid).toEqual([0.001, 0, 0.002]);
     expect(result.rejected).toBe(6);
@@ -215,9 +215,10 @@ describe('regression: 2026-02-20 negative-cost incident reproduction', () => {
     expect(filtered.valid.length).toBe(0);
     expect(filtered.rejected).toBe(48);
 
-    const aggregate = filtered.valid.length === 0
-      ? null
-      : filtered.valid.reduce((s, v) => s + v, 0) / filtered.valid.length;
+    const aggregate =
+      filtered.valid.length === 0
+        ? null
+        : filtered.valid.reduce((s, v) => s + v, 0) / filtered.valid.length;
 
     expect(aggregate).toBe(null); // ← critical: NOT -2786, NOT -58.04
   });

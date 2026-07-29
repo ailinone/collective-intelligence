@@ -77,11 +77,12 @@ Report C: Industry analysts project the total addressable market growing from $5
 Report D: TechCorp announced a $500M acquisition of AIStartup, expected to close Q2 next year, adding ML capabilities to their cloud platform.`,
     distributedInfo: [
       'Report A: TechCorp Q4 revenue grew 15% YoY to $2.3B, driven by cloud services (+40%). Hardware declined 8%.',
-      'Report B: TechCorp\'s main competitor DataInc reported Q4 revenue of $1.8B (+22% YoY), gaining 3pp market share in cloud.',
+      "Report B: TechCorp's main competitor DataInc reported Q4 revenue of $1.8B (+22% YoY), gaining 3pp market share in cloud.",
       'Report C: Industry analysts project the total addressable market growing from $50B to $75B by 2027, with cloud accounting for 60%.',
       'Report D: TechCorp announced a $500M acquisition of AIStartup, expected to close Q2 next year, adding ML capabilities to their cloud platform.',
     ],
-    synthesisPrompt: 'Provide a comprehensive competitive analysis of TechCorp\'s market position, including growth trajectory, competitive threats, and strategic moves. What is the outlook?',
+    synthesisPrompt:
+      "Provide a comprehensive competitive analysis of TechCorp's market position, including growth trajectory, competitive threats, and strategic moves. What is the outlook?",
     expectedElements: [
       'TechCorp revenue $2.3B with 15% growth',
       'Cloud services grew 40%',
@@ -94,7 +95,8 @@ Report D: TechCorp announced a $500M acquisition of AIStartup, expected to close
       'Competitive threat from DataInc cloud growth',
       'Strategic response via AI acquisition',
     ],
-    scoringRubric: 'Score 1 point per expected element present in the response. IRR = points / total elements. Integration quality: does the analysis synthesize insights across sources, or just concatenate?',
+    scoringRubric:
+      'Score 1 point per expected element present in the response. IRR = points / total elements. Integration quality: does the analysis synthesize insights across sources, or just concatenate?',
   },
   {
     id: 'hi-ms-002',
@@ -108,13 +110,14 @@ Medication list: Lithium 900mg daily for bipolar disorder (started 2 years ago).
     distributedInfo: [
       'Lab results: Elevated TSH (8.2 mIU/L), low Free T4 (0.6 ng/dL), elevated anti-TPO antibodies (342 IU/mL).',
       'Symptoms: Fatigue, weight gain (8kg in 3 months), cold intolerance, dry skin, constipation, bradycardia (52 bpm).',
-      'Family history: Mother has Graves\' disease. Maternal aunt had thyroid cancer. No diabetes history.',
+      "Family history: Mother has Graves' disease. Maternal aunt had thyroid cancer. No diabetes history.",
       'Medication list: Lithium 900mg daily for bipolar disorder (started 2 years ago). No other medications.',
     ],
-    synthesisPrompt: 'Based on all available information, provide a differential diagnosis with the most likely diagnosis, contributing factors, and recommended next steps.',
+    synthesisPrompt:
+      'Based on all available information, provide a differential diagnosis with the most likely diagnosis, contributing factors, and recommended next steps.',
     expectedElements: [
       'Primary hypothyroidism diagnosis',
-      'Hashimoto\'s thyroiditis (elevated anti-TPO)',
+      "Hashimoto's thyroiditis (elevated anti-TPO)",
       'Lithium as contributing factor',
       'Family history of autoimmune thyroid disease',
       'TSH/T4 values support diagnosis',
@@ -124,7 +127,8 @@ Medication list: Lithium 900mg daily for bipolar disorder (started 2 years ago).
       'Thyroid ultrasound recommended',
       'Monitor for thyroid cancer (family history)',
     ],
-    scoringRubric: 'Score 1 point per expected element. Bonus for identifying the lithium-Hashimoto interaction. IRR = points / total.',
+    scoringRubric:
+      'Score 1 point per expected element. Bonus for identifying the lithium-Hashimoto interaction. IRR = points / total.',
   },
   {
     id: 'hi-ms-003',
@@ -138,10 +142,11 @@ File: deployment.yaml — DEBUG=true in production env vars. API key stored as p
     distributedInfo: [
       'File: auth.ts — Uses JWT tokens with 24h expiry, stores refresh tokens in httpOnly cookies.',
       'File: api-routes.ts — Rate limiting set to 100 req/min per IP. No CORS configuration. Accepts requests from any origin.',
-      'File: database.ts — SQL queries built via string concatenation: `SELECT * FROM users WHERE id = \'${userId}\'`.',
+      "File: database.ts — SQL queries built via string concatenation: `SELECT * FROM users WHERE id = '${userId}'`.",
       'File: deployment.yaml — DEBUG=true in production env vars. API key stored as plain text environment variable.',
     ],
-    synthesisPrompt: 'Perform a comprehensive security review of this application. Identify all vulnerabilities, assess severity, and recommend fixes.',
+    synthesisPrompt:
+      'Perform a comprehensive security review of this application. Identify all vulnerabilities, assess severity, and recommend fixes.',
     expectedElements: [
       'SQL injection vulnerability in database.ts',
       'Missing CORS configuration (accepts any origin)',
@@ -154,7 +159,8 @@ File: deployment.yaml — DEBUG=true in production env vars. API key stored as p
       'Disable debug in production',
       'Cross-file attack chain identified',
     ],
-    scoringRubric: 'Each vulnerability correctly identified = 1 point. Bonus for identifying cross-file attack chains (e.g., CORS + SQL injection). IRR = points / total.',
+    scoringRubric:
+      'Each vulnerability correctly identified = 1 point. Bonus for identifying cross-file attack chains (e.g., CORS + SQL injection). IRR = points / total.',
   },
   {
     id: 'hi-ms-004',
@@ -168,10 +174,11 @@ Court precedent: In TechCase v. InnovateCo (2021), the court ruled that partial 
     distributedInfo: [
       'Plaintiff brief: Company A licensed Patent #1234 to Company B in 2019 with royalties of 5% on products using patented tech. Claims $12M unpaid.',
       'Defendant brief: Company B argues patent invalidated by prior art (2017). Also claims independent implementation not covered by patent claims.',
-      'Expert report: 3 of 7 claims overlap with prior art. Remaining 4 are novel. Company B\'s product uses 2 of these novel claims.',
-      'Court precedent: TechCase v. InnovateCo (2021) — partial invalidation doesn\'t void licenses, only reduces royalty base proportionally.',
+      "Expert report: 3 of 7 claims overlap with prior art. Remaining 4 are novel. Company B's product uses 2 of these novel claims.",
+      "Court precedent: TechCase v. InnovateCo (2021) — partial invalidation doesn't void licenses, only reduces royalty base proportionally.",
     ],
-    synthesisPrompt: 'Analyze this patent dispute. What is the most likely outcome? Calculate the adjusted royalty if partial invalidation applies.',
+    synthesisPrompt:
+      'Analyze this patent dispute. What is the most likely outcome? Calculate the adjusted royalty if partial invalidation applies.',
     expectedElements: [
       'Partial invalidation applies (3/7 claims invalid)',
       'License agreement remains valid (per precedent)',
@@ -199,7 +206,8 @@ Health study: Childhood asthma rates in the area are 2.3x national average. Bloo
       'Soil study: Lead at 450 ppm (EPA limit: 400). Historical: former paint factory demolished 2010.',
       'Health study: Childhood asthma 2.3x national avg. Blood lead 1.8x national avg.',
     ],
-    synthesisPrompt: 'Synthesize all environmental data and recommend a prioritized remediation plan with health impact assessment.',
+    synthesisPrompt:
+      'Synthesize all environmental data and recommend a prioritized remediation plan with health impact assessment.',
     expectedElements: [
       'Three contamination sources identified',
       'Mercury exceeds EPA limit',
@@ -210,7 +218,8 @@ Health study: Childhood asthma rates in the area are 2.3x national average. Bloo
       'Blood lead linked to soil contamination',
       'Prioritized remediation plan',
     ],
-    scoringRubric: 'Integration of environmental data with health outcomes. IRR = elements recovered / total.',
+    scoringRubric:
+      'Integration of environmental data with health outcomes. IRR = elements recovered / total.',
   },
   {
     id: 'hi-ms-006',
@@ -227,7 +236,8 @@ DevOps team: Currently running on single-region AWS. Budget for infrastructure i
       'Product: User dashboard by Q2. Real-time notifications. Mobile-first.',
       'DevOps: Single-region AWS. $15K/month budget. 3-engineer team.',
     ],
-    synthesisPrompt: 'Design a system architecture that satisfies all constraints. Identify trade-offs and recommend an implementation plan.',
+    synthesisPrompt:
+      'Design a system architecture that satisfies all constraints. Identify trade-offs and recommend an implementation plan.',
     expectedElements: [
       'Database sharding or read replicas for performance',
       'Encryption solution for HIPAA',
@@ -238,7 +248,8 @@ DevOps team: Currently running on single-region AWS. Budget for infrastructure i
       'Implementation timeline for Q2',
       'All four stakeholder concerns addressed',
     ],
-    scoringRubric: 'Must address all four stakeholder constraints. Trade-off identification is critical. IRR = elements / total.',
+    scoringRubric:
+      'Must address all four stakeholder constraints. Trade-off identification is critical. IRR = elements / total.',
   },
   {
     id: 'hi-ms-007',
@@ -255,7 +266,8 @@ ESG analysis: Company scored D on environmental (high carbon footprint). A on go
       'Macro: Fed raising rates. Sector rotation growth→value. Dollar strengthening.',
       'ESG: Environmental D (carbon). Governance A. Social C (labor disputes).',
     ],
-    synthesisPrompt: 'Should an institutional investor buy, hold, or sell this stock? Provide a comprehensive recommendation integrating all analysis dimensions.',
+    synthesisPrompt:
+      'Should an institutional investor buy, hold, or sell this stock? Provide a comprehensive recommendation integrating all analysis dimensions.',
     expectedElements: [
       'Revenue growth acknowledged',
       'Negative cash flow risk identified',
@@ -266,7 +278,8 @@ ESG analysis: Company scored D on environmental (high carbon footprint). A on go
       'ESG risk factors',
       'Integrated recommendation with reasoning',
     ],
-    scoringRubric: 'Must integrate all four analysis dimensions into a coherent recommendation. IRR = elements / total.',
+    scoringRubric:
+      'Must integrate all four analysis dimensions into a coherent recommendation. IRR = elements / total.',
   },
   {
     id: 'hi-ms-008',
@@ -283,7 +296,8 @@ Source D (government report): "Labor inspector found 12 safety violations in Jan
       'Company records: "Production halted. Losses $5K/day. Board meeting March 17 for concessions."',
       'Government report: "12 safety violations found in January. No enforcement action taken."',
     ],
-    synthesisPrompt: 'Write a comprehensive historical analysis of this labor dispute, integrating all primary sources.',
+    synthesisPrompt:
+      'Write a comprehensive historical analysis of this labor dispute, integrating all primary sources.',
     expectedElements: [
       'Timeline established (March 15 onwards)',
       'Worker grievances identified',
@@ -293,7 +307,8 @@ Source D (government report): "Labor inspector found 12 safety violations in Jan
       'Economic pressure on company',
       'Sources corroborate each other',
     ],
-    scoringRubric: 'Integration of multiple primary sources into coherent narrative. IRR = elements / total.',
+    scoringRubric:
+      'Integration of multiple primary sources into coherent narrative. IRR = elements / total.',
   },
 
   // ─── Puzzle Assembly (6 tasks) ──────────────────────────────────────────
@@ -313,14 +328,16 @@ Clue 6: The lawyer does not live in the yellow or blue house.`,
       'Clue 3: The doctor lives next to the blue house. Clue 4: The teacher lives in the first house.',
       'Clue 5: The green house is immediately to the right of the yellow house. Clue 6: The lawyer does not live in the yellow or blue house.',
     ],
-    synthesisPrompt: 'Solve the logic puzzle: determine which person lives in which colored house, and the order of the houses.',
+    synthesisPrompt:
+      'Solve the logic puzzle: determine which person lives in which colored house, and the order of the houses.',
     expectedElements: [
       'Correct house order determined',
       'Each person assigned to correct house',
       'All clues satisfied simultaneously',
       'Step-by-step reasoning shown',
     ],
-    scoringRubric: 'Correct solution = full score. Partial credit for correct reasoning with minor errors. IRR = elements / total.',
+    scoringRubric:
+      'Correct solution = full score. Partial credit for correct reasoning with minor errors. IRR = elements / total.',
   },
   {
     id: 'hi-pa-002',
@@ -337,7 +354,8 @@ Fragment 4: "The maintenance team reported that someone had tampered with the el
       'Fragment 3: "Unauthorized vehicle entered parking lot at 1:55 PM."',
       'Fragment 4: "Tampering with electrical panel in Building B discovered at 2:30 PM."',
     ],
-    synthesisPrompt: 'Reconstruct the complete timeline of events. Is there evidence of deliberate sabotage?',
+    synthesisPrompt:
+      'Reconstruct the complete timeline of events. Is there evidence of deliberate sabotage?',
     expectedElements: [
       'Correct chronological order',
       '1:55 PM unauthorized vehicle',
@@ -364,7 +382,8 @@ Company total budget: $430K. Request: CEO wants to know if the company is on tra
       'Dept B: Engineering $80K spent (budget $150K). Underspent $70K — 2 unfilled positions, delayed hardware.',
       'Dept C: Operations $200K spent (budget $180K). Overspent $20K — emergency server replacement.',
     ],
-    synthesisPrompt: 'Provide a consolidated budget analysis with net position, department-level insights, and Q3 recommendations.',
+    synthesisPrompt:
+      'Provide a consolidated budget analysis with net position, department-level insights, and Q3 recommendations.',
     expectedElements: [
       'Total spent $400K vs budget $430K',
       'Net underspend of $30K',
@@ -391,7 +410,8 @@ Security team: All endpoints must validate input lengths. Rate limit: 60 req/min
       'Analytics: Event tracking endpoint, batch upload up to 1000 events, timestamps and user IDs required.',
       'Security: Input length validation, rate limits (60/min auth, 300/min data), IP throttling.',
     ],
-    synthesisPrompt: 'Design a complete REST API specification that satisfies all team requirements. Include endpoint definitions, authentication flow, and rate limiting strategy.',
+    synthesisPrompt:
+      'Design a complete REST API specification that satisfies all team requirements. Include endpoint definitions, authentication flow, and rate limiting strategy.',
     expectedElements: [
       'User CRUD endpoints',
       'Pagination with total count',
@@ -403,7 +423,8 @@ Security team: All endpoints must validate input lengths. Rate limit: 60 req/min
       'Rate limiting configuration',
       'Input validation',
     ],
-    scoringRubric: 'All team requirements addressed in a coherent API design. IRR = elements / total.',
+    scoringRubric:
+      'All team requirements addressed in a coherent API design. IRR = elements / total.',
   },
   {
     id: 'hi-pa-005',
@@ -421,7 +442,8 @@ Constraint 3: Tumor measurement requires MRI. MRI machine available only 2 days/
       'Constraint 2: Drug half-life 4 hours. Twice daily dosing. 28-day study.',
       'Constraint 3: MRI for tumor measurement. Available 2 days/week only.',
     ],
-    synthesisPrompt: 'Design a rigorous preclinical study. Define groups, sample sizes, dosing, measurement schedule, and statistical analysis plan.',
+    synthesisPrompt:
+      'Design a rigorous preclinical study. Define groups, sample sizes, dosing, measurement schedule, and statistical analysis plan.',
     expectedElements: [
       'Control group defined',
       'Treatment group(s) defined',
@@ -431,7 +453,8 @@ Constraint 3: Tumor measurement requires MRI. MRI machine available only 2 days/
       'Statistical analysis plan',
       'All constraints satisfied simultaneously',
     ],
-    scoringRubric: 'Must satisfy all constraints while maintaining scientific rigor. IRR = elements / total.',
+    scoringRubric:
+      'Must satisfy all constraints while maintaining scientific rigor. IRR = elements / total.',
   },
   {
     id: 'hi-pa-006',
@@ -448,7 +471,8 @@ Resources: 50 buses available. 12 ambulances. 200 National Guard deployed. 3 she
       'Population: 15K in evac zone. 2K elderly/disabled. 3 hospitals (1 in flood zone). 500 tourists.',
       'Resources: 50 buses. 12 ambulances. 200 National Guard. 3 shelters (2K, 3K, 5K capacity).',
     ],
-    synthesisPrompt: 'Create a comprehensive evacuation and disaster response plan integrating all available information.',
+    synthesisPrompt:
+      'Create a comprehensive evacuation and disaster response plan integrating all available information.',
     expectedElements: [
       'Evacuation timeline (18-hour window)',
       'Priority for elderly/disabled',
@@ -478,7 +502,8 @@ Data scientist: Heart rate accuracy requires 50Hz sampling. Sleep detection need
       'Business: $149 target, competitor at $199 with 2-day battery. Differentiator: health monitoring accuracy.',
       'Data science: 50Hz heart rate sampling, accelerometer + PPG for sleep, on-device ML ≤ 500KB.',
     ],
-    synthesisPrompt: 'Design a smartwatch product that satisfies all expert requirements. Address trade-offs explicitly.',
+    synthesisPrompt:
+      'Design a smartwatch product that satisfies all expert requirements. Address trade-offs explicitly.',
     expectedElements: [
       'One-handed UI on 1.5" screen',
       'Battery life optimization',
@@ -489,7 +514,8 @@ Data scientist: Heart rate accuracy requires 50Hz sampling. Sleep detection need
       'Trade-offs explicitly identified',
       'All four expert domains addressed',
     ],
-    scoringRubric: 'Cross-domain integration with explicit trade-off analysis. IRR = elements / total.',
+    scoringRubric:
+      'Cross-domain integration with explicit trade-off analysis. IRR = elements / total.',
   },
   {
     id: 'hi-es-002',
@@ -506,7 +532,8 @@ Social equity advocate: 60% of low-income workers rely on private vehicles (no v
       'Economist: Congestion pricing = $50M/yr. Low-income spend 25% on transport. Subsidy needed.',
       'Equity: 60% low-income use cars (no transit alternative). New routes must serve underserved areas.',
     ],
-    synthesisPrompt: 'Design a comprehensive urban transportation policy that addresses all stakeholder concerns. Include timeline and funding.',
+    synthesisPrompt:
+      'Design a comprehensive urban transportation policy that addresses all stakeholder concerns. Include timeline and funding.',
     expectedElements: [
       'BRT as primary intervention',
       'Congestion pricing implemented',
@@ -517,7 +544,8 @@ Social equity advocate: 60% of low-income workers rely on private vehicles (no v
       'Timeline provided',
       'Funding model explained',
     ],
-    scoringRubric: 'Policy must address all four stakeholder domains coherently. IRR = elements / total.',
+    scoringRubric:
+      'Policy must address all four stakeholder domains coherently. IRR = elements / total.',
   },
   {
     id: 'hi-es-003',
@@ -534,7 +562,8 @@ Nutritionist: Patient is borderline malnourished (BMI 18.2). Chemotherapy will l
       'Psychiatrist: GAD on sertraline 100mg. Anticipatory anxiety about chemo. May need dose change.',
       'Nutritionist: BMI 18.2 (borderline malnourished). Chemo will worsen. Pre-treatment nutrition needed.',
     ],
-    synthesisPrompt: 'Create an integrated treatment plan that addresses all specialist concerns with a coordinated timeline.',
+    synthesisPrompt:
+      'Create an integrated treatment plan that addresses all specialist concerns with a coordinated timeline.',
     expectedElements: [
       'Chemotherapy regimen specified',
       'Cardiac monitoring plan',
@@ -543,9 +572,10 @@ Nutritionist: Patient is borderline malnourished (BMI 18.2). Chemotherapy will l
       'Nutritional optimization before chemo',
       'Drug interaction check',
       'Coordinated timeline',
-      'All specialists\' concerns addressed',
+      "All specialists' concerns addressed",
     ],
-    scoringRubric: 'Must integrate all specialist inputs into a coherent, safe plan. IRR = elements / total.',
+    scoringRubric:
+      'Must integrate all specialist inputs into a coherent, safe plan. IRR = elements / total.',
   },
   {
     id: 'hi-es-004',
@@ -562,7 +592,8 @@ Market: Target's largest customer (30% of revenue) is currently evaluating compe
       'Technical: ML model = 60% revenue. Built on deprecated TF1. 3 key engineers hold all knowledge.',
       'Market: Largest customer (30% revenue) evaluating competitors. Market growing 15%.',
     ],
-    synthesisPrompt: 'Provide a comprehensive M&A due diligence report with valuation assessment, risk factors, and buy/no-buy recommendation.',
+    synthesisPrompt:
+      'Provide a comprehensive M&A due diligence report with valuation assessment, risk factors, and buy/no-buy recommendation.',
     expectedElements: [
       'Valuation analysis (10x EBITDA)',
       'Customer concentration risk (30%)',
@@ -573,7 +604,8 @@ Market: Target's largest customer (30% of revenue) is currently evaluating compe
       'Founder competition risk',
       'Integrated buy/no-buy recommendation',
     ],
-    scoringRubric: 'Must synthesize all four due diligence dimensions into a coherent recommendation. IRR = elements / total.',
+    scoringRubric:
+      'Must synthesize all four due diligence dimensions into a coherent recommendation. IRR = elements / total.',
   },
   {
     id: 'hi-es-005',
@@ -590,7 +622,8 @@ Pedagogy: Class size 30. Mix of CS and biology backgrounds. Need differentiated 
       'Biology domain: Genomics data analysis, population modeling, clinical trial design applications.',
       'Pedagogy: 30 students, mixed backgrounds. Differentiated instruction. Portfolio assessment.',
     ],
-    synthesisPrompt: 'Design a one-semester course in computational biology that integrates all expert inputs.',
+    synthesisPrompt:
+      'Design a one-semester course in computational biology that integrates all expert inputs.',
     expectedElements: [
       'Python as primary language',
       'Statistics topics covered',
@@ -613,11 +646,12 @@ Engineering: Breach vector: compromised third-party API key. Patched 4 hours ago
 Customer support: Call volume up 500%. Top questions: "Was my data affected?" and "What should I do?" Need FAQ and email template.`,
     distributedInfo: [
       'PR: 500K users affected. Media reporting. Statement needed in 2 hours. Tone: transparent, empathetic.',
-      'Legal: Don\'t admit fault. Avoid specific numbers pre-investigation. GDPR 72-hour notification. Preserve evidence.',
+      "Legal: Don't admit fault. Avoid specific numbers pre-investigation. GDPR 72-hour notification. Preserve evidence.",
       'Engineering: Third-party API key compromised. Patched 4 hours ago. No ongoing access. Encrypted passwords safe.',
       'Customer support: 500% call volume spike. Top questions: "Am I affected?" and "What should I do?" Need FAQ.',
     ],
-    synthesisPrompt: 'Create a complete crisis communication plan including public statement, FAQ, internal memo, and regulatory notification timeline.',
+    synthesisPrompt:
+      'Create a complete crisis communication plan including public statement, FAQ, internal memo, and regulatory notification timeline.',
     expectedElements: [
       'Public statement draft',
       'Transparent tone without admitting fault',
@@ -628,7 +662,8 @@ Customer support: Call volume up 500%. Top questions: "Was my data affected?" an
       'Internal memo',
       'All four team inputs addressed',
     ],
-    scoringRubric: 'Must balance transparency (PR) with legal caution while providing actionable info. IRR = elements / total.',
+    scoringRubric:
+      'Must balance transparency (PR) with legal caution while providing actionable info. IRR = elements / total.',
   },
 
   // ─── Contradiction Detection (5 tasks) ──────────────────────────────────
@@ -645,7 +680,8 @@ Source C: "Industry analysts project Company X's full-year revenue at $4.5B, con
       'Source B: "Company X\'s Q3 revenue was $1.08B according to SEC filings, down 5% from Q2\'s $1.14B."',
       'Source C: "Industry analysts project Company X\'s full-year revenue at $4.5B, consistent with their guidance."',
     ],
-    synthesisPrompt: 'Analyze these financial reports. Are there any discrepancies? Which source is most reliable and why?',
+    synthesisPrompt:
+      'Analyze these financial reports. Are there any discrepancies? Which source is most reliable and why?',
     expectedElements: [
       'Contradiction identified between A and B',
       'Revenue figures differ ($1.2B vs $1.08B)',
@@ -653,7 +689,8 @@ Source C: "Industry analysts project Company X's full-year revenue at $4.5B, con
       'SEC filing (Source B) more reliable than press report',
       'Source C consistency check against both',
     ],
-    scoringRubric: 'Must identify the contradiction and assess source reliability. IRR = elements / total.',
+    scoringRubric:
+      'Must identify the contradiction and assess source reliability. IRR = elements / total.',
   },
   {
     id: 'hi-cd-002',
@@ -668,7 +705,8 @@ Study 3 (n=150): "Hybrid workers (3 days office, 2 remote) showed highest produc
       'Study 2 (n=2000): No productivity difference (p=0.42). Remote workers more isolated, less collaborative.',
       'Study 3 (n=150): Hybrid highest productivity (+22%). Fully remote lowest collaboration.',
     ],
-    synthesisPrompt: 'Synthesize these conflicting research findings. What is the overall evidence, and how do you reconcile the contradictions?',
+    synthesisPrompt:
+      'Synthesize these conflicting research findings. What is the overall evidence, and how do you reconcile the contradictions?',
     expectedElements: [
       'Contradiction between Study 1 and 2 identified',
       'Sample size differences noted',
@@ -677,7 +715,8 @@ Study 3 (n=150): "Hybrid workers (3 days office, 2 remote) showed highest produc
       'Collaboration vs productivity trade-off',
       'Methodological differences acknowledged',
     ],
-    scoringRubric: 'Must identify contradictions AND attempt reconciliation. IRR = elements / total.',
+    scoringRubric:
+      'Must identify contradictions AND attempt reconciliation. IRR = elements / total.',
   },
   {
     id: 'hi-cd-003',
@@ -692,7 +731,8 @@ Witness C: "I saw a red sedan. It was definitely going over the speed limit. The
       'Witness B: "Dark SUV/maroon, going fast, light was yellow. Driver: possibly a man."',
       'Witness C: "Red sedan, over speed limit, light had just turned red."',
     ],
-    synthesisPrompt: 'Analyze these witness accounts. What can be established as fact? Where do they conflict? What are the likely explanations for discrepancies?',
+    synthesisPrompt:
+      'Analyze these witness accounts. What can be established as fact? Where do they conflict? What are the likely explanations for discrepancies?',
     expectedElements: [
       'Vehicle color: mostly agree (red/maroon)',
       'Vehicle type conflict (car vs SUV)',
@@ -718,7 +758,8 @@ Requirement D: "System must not store or log any PII. All user data must be anon
       'Req C: Log all requests with full payload. Queryable within 5 seconds.',
       'Req D: Must not store/log any PII. Anonymize before processing.',
     ],
-    synthesisPrompt: 'Analyze these requirements for conflicts. Identify contradictions and propose resolution strategies.',
+    synthesisPrompt:
+      'Analyze these requirements for conflicts. Identify contradictions and propose resolution strategies.',
     expectedElements: [
       'Conflict: full payload logging vs no PII storage',
       'Conflict: encryption overhead vs 50ms latency',
@@ -743,16 +784,18 @@ Dataset D (glacier survey): "3 of 5 Arctic glaciers surveyed showed net mass gai
       'Ocean buoys: Arctic ocean temps +0.5°C/decade. Warm water under ice shelves.',
       'Glacier survey: 3/5 glaciers gained mass in 2024 (increased snowfall).',
     ],
-    synthesisPrompt: 'Reconcile these seemingly contradictory climate datasets. What is the overall picture?',
+    synthesisPrompt:
+      'Reconcile these seemingly contradictory climate datasets. What is the overall picture?',
     expectedElements: [
       'Local vs global trend distinction',
       'Regional variation acknowledged',
       'Overall trend is warming/ice loss',
-      'Local cold snap doesn\'t disprove trend',
+      "Local cold snap doesn't disprove trend",
       'Increased snowfall consistent with warming',
       'Warm water intrusion as underlying mechanism',
     ],
-    scoringRubric: 'Must distinguish local from global, identify apparent vs real contradictions. IRR = elements / total.',
+    scoringRubric:
+      'Must distinguish local from global, identify apparent vs real contradictions. IRR = elements / total.',
   },
 ];
 
@@ -760,7 +803,10 @@ Dataset D (glacier survey): "3 of 5 Arctic glaciers surveyed showed net mass gai
  * Calculate Information Recovery Rate for a response against expected elements.
  * Simple substring/keyword matching — can be enhanced with LLM-Judge for production.
  */
-export function calculateIRR(response: string, expectedElements: string[]): {
+export function calculateIRR(
+  response: string,
+  expectedElements: string[]
+): {
   irr: number;
   recovered: string[];
   missed: string[];
@@ -771,8 +817,11 @@ export function calculateIRR(response: string, expectedElements: string[]): {
 
   for (const element of expectedElements) {
     // Check if key terms from the element appear in the response
-    const keyTerms = element.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const matchCount = keyTerms.filter(term => responseLower.includes(term)).length;
+    const keyTerms = element
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    const matchCount = keyTerms.filter((term) => responseLower.includes(term)).length;
     const matchRatio = keyTerms.length > 0 ? matchCount / keyTerms.length : 0;
 
     if (matchRatio >= 0.5) {

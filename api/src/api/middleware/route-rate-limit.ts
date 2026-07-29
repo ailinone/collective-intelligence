@@ -56,7 +56,8 @@ function resolveIdentifier(request: FastifyRequest): string {
     typeof extended.user === 'object' && extended.user && 'userId' in extended.user
       ? (extended.user as { userId?: unknown }).userId
       : undefined;
-  const userId = extended.userId || (typeof userFromObject === 'string' ? userFromObject : undefined);
+  const userId =
+    extended.userId || (typeof userFromObject === 'string' ? userFromObject : undefined);
   if (typeof userId === 'string' && userId.length > 0) {
     return `user:${userId}`;
   }
@@ -94,7 +95,10 @@ export function createRouteRateLimit(routeKey: string, options?: RouteRateLimitO
   const refillRate = options?.refillRate ?? DEFAULT_REFILL_RATE;
   const scope = `route:${routeKey}`;
 
-  return async function routeRateLimit(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  return async function routeRateLimit(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> {
     // Defense-in-depth: never touch the reply once a prior preHandler
     // already sent one (mirrors the guard in token-bucket-rate-limit.ts).
     if (reply.sent) {
@@ -106,7 +110,10 @@ export function createRouteRateLimit(routeKey: string, options?: RouteRateLimitO
     const { allowed, stats } = await bucket.consumeWithStats();
 
     reply.header('X-RateLimit-Limit', stats.capacity.toString());
-    reply.header('X-RateLimit-Remaining', Math.max(0, Math.floor(stats.tokensAvailable)).toString());
+    reply.header(
+      'X-RateLimit-Remaining',
+      Math.max(0, Math.floor(stats.tokensAvailable)).toString()
+    );
 
     if (!allowed) {
       const retryAfterSeconds = Math.max(1, Math.ceil((await bucket.getRetryAfter()) / 1000));

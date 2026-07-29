@@ -85,7 +85,7 @@ describe('ensemble calibration — determinism', () => {
         examples,
         peerLiftLookup: () => 0.05,
         uncertaintyPenaltyWeight: 0.5,
-      }),
+      })
     );
     for (let i = 0; i < 50; i += 1) {
       expect(
@@ -94,8 +94,8 @@ describe('ensemble calibration — determinism', () => {
             examples,
             peerLiftLookup: () => 0.05,
             uncertaintyPenaltyWeight: 0.5,
-          }),
-        ),
+          })
+        )
       ).toBe(a);
     }
   });

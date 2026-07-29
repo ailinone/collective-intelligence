@@ -60,10 +60,12 @@ function makeRequest(content: string, maxTokens?: number): ChatRequest {
   };
 }
 
-function makeState(overrides: {
-  totalCostUsd?: number;
-  maxCostUsd?: number;
-} = {}): CoordinationState {
+function makeState(
+  overrides: {
+    totalCostUsd?: number;
+    maxCostUsd?: number;
+  } = {}
+): CoordinationState {
   const limits: CoordinationLimits = {
     maxRounds: 3,
     minConvergenceScore: 0.82,
@@ -108,7 +110,7 @@ describe('estimateRoundCost', () => {
   it('produces a per-model breakdown with stable order', () => {
     const models = [
       makeModel({ id: 'a', inputCostPer1k: 0.001, outputCostPer1k: 0.002 }),
-      makeModel({ id: 'b', inputCostPer1k: 0.005, outputCostPer1k: 0.010 }),
+      makeModel({ id: 'b', inputCostPer1k: 0.005, outputCostPer1k: 0.01 }),
     ];
     const result = estimateRoundCost(models, makeRequest('hi', 1000), makeState());
     expect(result.perModel).toHaveLength(2);
@@ -116,16 +118,16 @@ describe('estimateRoundCost', () => {
     expect(result.perModel[1].modelId).toBe('b');
     // Model `b` is 5× more expensive — its estimated cost must reflect that.
     expect(result.perModel[1].estimatedCostUsd).toBeGreaterThan(
-      result.perModel[0].estimatedCostUsd,
+      result.perModel[0].estimatedCostUsd
     );
   });
 
   it('counts already-spent cost in the projected total', () => {
     const models = [makeModel()];
-    const state = makeState({ totalCostUsd: 0.40, maxCostUsd: 0.50 });
+    const state = makeState({ totalCostUsd: 0.4, maxCostUsd: 0.5 });
     const result = estimateRoundCost(models, makeRequest('x', 100), state);
-    expect(result.alreadySpentUsd).toBe(0.40);
-    expect(result.projectedTotalUsd).toBeCloseTo(0.40 + result.estimatedRoundCostUsd, 6);
+    expect(result.alreadySpentUsd).toBe(0.4);
+    expect(result.projectedTotalUsd).toBeCloseTo(0.4 + result.estimatedRoundCostUsd, 6);
   });
 
   it('flags exceedsLimit when projected × 1.10 > maxCostUsd', () => {
@@ -169,7 +171,11 @@ describe('estimateRoundCost', () => {
   it('handles models with missing cost fields gracefully (treats as free)', () => {
     // Self-hosted models legitimately have 0 cost — guard must not crash.
     const free = makeModel({ inputCostPer1k: 0, outputCostPer1k: 0 });
-    const result = estimateRoundCost([free], makeRequest('x', 1000), makeState({ maxCostUsd: 0.001 }));
+    const result = estimateRoundCost(
+      [free],
+      makeRequest('x', 1000),
+      makeState({ maxCostUsd: 0.001 })
+    );
     expect(result.estimatedRoundCostUsd).toBe(0);
     expect(result.exceedsLimit).toBe(false);
   });

@@ -10,7 +10,7 @@
 /**
  * Incremental Indexing Service
  * Manages checkpoints and change detection for efficient re-indexing
- * 
+ *
  * Enterprise-grade implementation with:
  * - Hash-based change detection
  * - Checkpoint persistence
@@ -101,7 +101,7 @@ export class IncrementalIndexingService {
 
   /**
    * Detect changed files by comparing checksums
-   * 
+   *
    * @param checkpoint - Current checkpoint state
    * @param incomingFiles - Files with their checksums from CLI
    * @returns Change detection result
@@ -113,12 +113,12 @@ export class IncrementalIndexingService {
     const newFiles: string[] = [];
     const modifiedFiles: string[] = [];
     const unchangedFiles: string[] = [];
-    const incomingPaths = new Set(incomingFiles.map(f => f.filePath));
+    const incomingPaths = new Set(incomingFiles.map((f) => f.filePath));
 
     // Check incoming files against checkpoint
     for (const file of incomingFiles) {
       const existingHash = checkpoint.fileHashes.get(file.filePath);
-      
+
       if (!existingHash) {
         newFiles.push(file.filePath);
       } else if (existingHash !== file.checksum) {
@@ -140,13 +140,16 @@ export class IncrementalIndexingService {
     const changedFiles = newFiles.length + modifiedFiles.length + deletedFiles.length;
     const changeRate = totalFiles > 0 ? (changedFiles / totalFiles) * 100 : 0;
 
-    log.debug({
-      new: newFiles.length,
-      modified: modifiedFiles.length,
-      deleted: deletedFiles.length,
-      unchanged: unchangedFiles.length,
-      changeRate: changeRate.toFixed(2),
-    }, 'Change detection completed');
+    log.debug(
+      {
+        new: newFiles.length,
+        modified: modifiedFiles.length,
+        deleted: deletedFiles.length,
+        unchanged: unchangedFiles.length,
+        changeRate: changeRate.toFixed(2),
+      },
+      'Change detection completed'
+    );
 
     return {
       newFiles,
@@ -197,7 +200,7 @@ export class IncrementalIndexingService {
 
   /**
    * Clean up old checkpoints (keep last N per project)
-   * 
+   *
    * @param projectId - Project ID
    * @param keepCount - Number of checkpoints to keep (default: 5)
    */
@@ -212,7 +215,7 @@ export class IncrementalIndexingService {
       return;
     }
 
-    const deletedIds = checkpoints.map(c => c.id);
+    const deletedIds = checkpoints.map((c) => c.id);
     await prisma.codebaseCheckpoint.deleteMany({
       where: { id: { in: deletedIds } },
     });
@@ -223,7 +226,10 @@ export class IncrementalIndexingService {
   /**
    * Get checkpoint statistics
    */
-  async getCheckpointStats(projectId: string, branch?: string): Promise<{
+  async getCheckpointStats(
+    projectId: string,
+    branch?: string
+  ): Promise<{
     totalCheckpoints: number;
     latestCheckpoint?: {
       id: string;
@@ -265,4 +271,3 @@ export class IncrementalIndexingService {
     };
   }
 }
-

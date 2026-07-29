@@ -162,7 +162,7 @@ export class HumanCalibrationService {
     for (const a of this.annotations) {
       annotationCounts.set(a.sampleId, (annotationCounts.get(a.sampleId) ?? 0) + 1);
     }
-    return this.samples.filter(s => (annotationCounts.get(s.id) ?? 0) < minAnnotators);
+    return this.samples.filter((s) => (annotationCounts.get(s.id) ?? 0) < minAnnotators);
   }
 
   /**
@@ -172,25 +172,42 @@ export class HumanCalibrationService {
     // Need at least 20 samples with 3 annotations each
     const fullyAnnotated = this.getFullyAnnotatedSamples();
     if (fullyAnnotated.length < 20) {
-      log.warn({ fullyAnnotated: fullyAnnotated.length }, 'Insufficient annotations for calibration');
+      log.warn(
+        { fullyAnnotated: fullyAnnotated.length },
+        'Insufficient annotations for calibration'
+      );
       return null;
     }
 
     // Compute human consensus scores (average of annotators)
-    const humanScores = fullyAnnotated.map(s => this.computeConsensusScore(s.id));
+    const humanScores = fullyAnnotated.map((s) => this.computeConsensusScore(s.id));
 
     // Calibrate heuristic scorer
-    const heuristicScores = fullyAnnotated.map(s => s.heuristicScore);
-    const humanOverall = humanScores.map(h => h.overall);
-    const heuristicCalibration = this.computeCalibration('heuristic', heuristicScores, humanOverall, fullyAnnotated, humanScores);
+    const heuristicScores = fullyAnnotated.map((s) => s.heuristicScore);
+    const humanOverall = humanScores.map((h) => h.overall);
+    const heuristicCalibration = this.computeCalibration(
+      'heuristic',
+      heuristicScores,
+      humanOverall,
+      fullyAnnotated,
+      humanScores
+    );
 
     // Calibrate LLM-Judge (if available)
-    const samplesWithJudge = fullyAnnotated.filter(s => s.judgeScore !== null);
+    const samplesWithJudge = fullyAnnotated.filter((s) => s.judgeScore !== null);
     let judgeCalibration: CalibrationResult | null = null;
     if (samplesWithJudge.length >= 20) {
-      const judgeScores = samplesWithJudge.map(s => s.judgeScore!);
-      const judgeHumanScores = samplesWithJudge.map(s => this.computeConsensusScore(s.id).overall);
-      judgeCalibration = this.computeCalibration('llm-judge', judgeScores, judgeHumanScores, samplesWithJudge, humanScores);
+      const judgeScores = samplesWithJudge.map((s) => s.judgeScore!);
+      const judgeHumanScores = samplesWithJudge.map(
+        (s) => this.computeConsensusScore(s.id).overall
+      );
+      judgeCalibration = this.computeCalibration(
+        'llm-judge',
+        judgeScores,
+        judgeHumanScores,
+        samplesWithJudge,
+        humanScores
+      );
     }
 
     // Compute inter-rater reliability
@@ -199,7 +216,9 @@ export class HumanCalibrationService {
     // Generate recommendations
     const recommendations: string[] = [];
     if (heuristicCalibration.pearsonR < 0.6) {
-      recommendations.push('CRITICAL: Heuristic scorer has r < 0.6 with humans — INVALID for learning');
+      recommendations.push(
+        'CRITICAL: Heuristic scorer has r < 0.6 with humans — INVALID for learning'
+      );
     }
     if (judgeCalibration && judgeCalibration.pearsonR < 0.6) {
       recommendations.push('CRITICAL: LLM-Judge has r < 0.6 with humans — INVALID for learning');
@@ -208,21 +227,22 @@ export class HumanCalibrationService {
       recommendations.push('WARNING: Krippendorff α < 0.7 — annotation guideline needs refinement');
     }
     if (Math.abs(heuristicCalibration.bias) > 0.1) {
-      recommendations.push(`Heuristic scorer has systematic bias of ${heuristicCalibration.bias > 0 ? '+' : ''}${heuristicCalibration.bias.toFixed(3)}`);
+      recommendations.push(
+        `Heuristic scorer has systematic bias of ${heuristicCalibration.bias > 0 ? '+' : ''}${heuristicCalibration.bias.toFixed(3)}`
+      );
     }
     if (judgeCalibration && judgeCalibration.pearsonR > heuristicCalibration.pearsonR + 0.1) {
-      recommendations.push('LLM-Judge is significantly more aligned with humans than heuristic — prioritize judge for learning');
+      recommendations.push(
+        'LLM-Judge is significantly more aligned with humans than heuristic — prioritize judge for learning'
+      );
     }
 
     // Overall verdict
     const bestR = judgeCalibration
       ? Math.max(heuristicCalibration.pearsonR, judgeCalibration.pearsonR)
       : heuristicCalibration.pearsonR;
-    const verdict: CalibrationReport['verdict'] = bestR >= 0.75
-      ? 'valid'
-      : bestR >= 0.6
-        ? 'needs-improvement'
-        : 'invalid';
+    const verdict: CalibrationReport['verdict'] =
+      bestR >= 0.75 ? 'valid' : bestR >= 0.6 ? 'needs-improvement' : 'invalid';
 
     return {
       heuristicCalibration,
@@ -239,19 +259,24 @@ export class HumanCalibrationService {
     for (const a of this.annotations) {
       annotationCounts.set(a.sampleId, (annotationCounts.get(a.sampleId) ?? 0) + 1);
     }
-    return this.samples.filter(s => (annotationCounts.get(s.id) ?? 0) >= minAnnotators);
+    return this.samples.filter((s) => (annotationCounts.get(s.id) ?? 0) >= minAnnotators);
   }
 
-  private computeConsensusScore(sampleId: string): { overall: number; dimensions: Record<string, number> } {
-    const sampleAnnotations = this.annotations.filter(a => a.sampleId === sampleId);
+  private computeConsensusScore(sampleId: string): {
+    overall: number;
+    dimensions: Record<string, number>;
+  } {
+    const sampleAnnotations = this.annotations.filter((a) => a.sampleId === sampleId);
     if (sampleAnnotations.length === 0) {
       return { overall: 0, dimensions: {} };
     }
 
-    const overall = sampleAnnotations.reduce((s, a) => s + a.overallScore, 0) / sampleAnnotations.length;
+    const overall =
+      sampleAnnotations.reduce((s, a) => s + a.overallScore, 0) / sampleAnnotations.length;
     const dimensions: Record<string, number> = {};
     for (const dim of ['correctness', 'completeness', 'clarity', 'relevance'] as const) {
-      dimensions[dim] = sampleAnnotations.reduce((s, a) => s + a.dimensions[dim], 0) / sampleAnnotations.length;
+      dimensions[dim] =
+        sampleAnnotations.reduce((s, a) => s + a.dimensions[dim], 0) / sampleAnnotations.length;
     }
 
     return { overall, dimensions };
@@ -268,7 +293,9 @@ export class HumanCalibrationService {
     const spearmanRho = this.spearman(scorerScores, humanScores);
 
     // MAE and RMSE
-    let maeSum = 0, rmseSum = 0, biasSum = 0;
+    let maeSum = 0,
+      rmseSum = 0,
+      biasSum = 0;
     for (let i = 0; i < scorerScores.length; i++) {
       const diff = scorerScores[i] - humanScores[i];
       maeSum += Math.abs(diff);
@@ -282,20 +309,17 @@ export class HumanCalibrationService {
     // Per-dimension correlations
     const dimensionCorrelations: Record<string, number> = {};
     for (const dim of ['correctness', 'completeness', 'clarity', 'relevance']) {
-      const scorerDim = samples.map(s => {
+      const scorerDim = samples.map((s) => {
         if (scorerName === 'heuristic') return s.heuristicDimensions[dim] ?? 0;
         return s.judgeDimensions?.[dim] ?? 0;
       });
-      const humanDim = humanConsensus.map(h => h.dimensions[dim] ?? 0);
+      const humanDim = humanConsensus.map((h) => h.dimensions[dim] ?? 0);
       dimensionCorrelations[dim] = this.pearson(scorerDim, humanDim);
     }
 
     const validForLearning = pearsonR >= 0.6;
-    const confidence: 'high' | 'medium' | 'low' = scorerScores.length >= 100
-      ? 'high'
-      : scorerScores.length >= 50
-        ? 'medium'
-        : 'low';
+    const confidence: 'high' | 'medium' | 'low' =
+      scorerScores.length >= 100 ? 'high' : scorerScores.length >= 50 ? 'medium' : 'low';
 
     return {
       scorerName,
@@ -313,7 +337,7 @@ export class HumanCalibrationService {
 
   private computeInterRaterReliability(samples: CalibrationSample[]): InterRaterReliability {
     // Get all annotator IDs
-    const annotatorIds = [...new Set(this.annotations.map(a => a.annotatorId))];
+    const annotatorIds = [...new Set(this.annotations.map((a) => a.annotatorId))];
     const annotatorCount = annotatorIds.length;
 
     // Compute average pairwise Pearson r
@@ -323,8 +347,12 @@ export class HumanCalibrationService {
         const aScores: number[] = [];
         const bScores: number[] = [];
         for (const sample of samples) {
-          const aAnnotation = this.annotations.find(a => a.sampleId === sample.id && a.annotatorId === annotatorIds[i]);
-          const bAnnotation = this.annotations.find(a => a.sampleId === sample.id && a.annotatorId === annotatorIds[j]);
+          const aAnnotation = this.annotations.find(
+            (a) => a.sampleId === sample.id && a.annotatorId === annotatorIds[i]
+          );
+          const bAnnotation = this.annotations.find(
+            (a) => a.sampleId === sample.id && a.annotatorId === annotatorIds[j]
+          );
           if (aAnnotation && bAnnotation) {
             aScores.push(aAnnotation.overallScore);
             bScores.push(bAnnotation.overallScore);
@@ -336,9 +364,10 @@ export class HumanCalibrationService {
       }
     }
 
-    const avgPairwisePearsonR = pairwiseCorrelations.length > 0
-      ? pairwiseCorrelations.reduce((a, b) => a + b, 0) / pairwiseCorrelations.length
-      : 0;
+    const avgPairwisePearsonR =
+      pairwiseCorrelations.length > 0
+        ? pairwiseCorrelations.reduce((a, b) => a + b, 0) / pairwiseCorrelations.length
+        : 0;
 
     // Simplified Krippendorff's alpha (using interval metric)
     const krippendorffsAlpha = this.computeKrippendorffsAlpha(samples);
@@ -360,13 +389,14 @@ export class HumanCalibrationService {
     let pairCount = 0;
 
     for (const sample of samples) {
-      const sampleAnnotations = this.annotations.filter(a => a.sampleId === sample.id);
+      const sampleAnnotations = this.annotations.filter((a) => a.sampleId === sample.id);
       if (sampleAnnotations.length < 2) continue;
 
       for (let i = 0; i < sampleAnnotations.length; i++) {
         allScores.push(sampleAnnotations[i].overallScore);
         for (let j = i + 1; j < sampleAnnotations.length; j++) {
-          observedDisagreement += (sampleAnnotations[i].overallScore - sampleAnnotations[j].overallScore) ** 2;
+          observedDisagreement +=
+            (sampleAnnotations[i].overallScore - sampleAnnotations[j].overallScore) ** 2;
           pairCount++;
         }
       }
@@ -378,7 +408,8 @@ export class HumanCalibrationService {
 
     // Expected disagreement (variance of all scores)
     const mean = allScores.reduce((a, b) => a + b, 0) / allScores.length;
-    const expectedDisagreement = allScores.reduce((s, x) => s + (x - mean) ** 2, 0) / (allScores.length - 1);
+    const expectedDisagreement =
+      allScores.reduce((s, x) => s + (x - mean) ** 2, 0) / (allScores.length - 1);
 
     if (expectedDisagreement === 0) return 1;
 
@@ -390,9 +421,12 @@ export class HumanCalibrationService {
     if (n < 2) return 0;
     const mx = x.reduce((a, b) => a + b, 0) / n;
     const my = y.reduce((a, b) => a + b, 0) / n;
-    let num = 0, dx2 = 0, dy2 = 0;
+    let num = 0,
+      dx2 = 0,
+      dy2 = 0;
     for (let i = 0; i < n; i++) {
-      const dx = x[i] - mx, dy = y[i] - my;
+      const dx = x[i] - mx,
+        dy = y[i] - my;
       num += dx * dy;
       dx2 += dx * dx;
       dy2 += dy * dy;

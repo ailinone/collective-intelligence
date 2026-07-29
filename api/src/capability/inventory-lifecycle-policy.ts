@@ -93,14 +93,9 @@
  * A new status literal is a policy change that requires updating
  * this enum, the SQL classifier, and ADR-023.
  */
-export const INVENTORY_LIFECYCLE_STATUSES = [
-  'active',
-  'stale',
-  'inactive',
-] as const;
+export const INVENTORY_LIFECYCLE_STATUSES = ['active', 'stale', 'inactive'] as const;
 
-export type InventoryLifecycleStatus =
-  (typeof INVENTORY_LIFECYCLE_STATUSES)[number];
+export type InventoryLifecycleStatus = (typeof INVENTORY_LIFECYCLE_STATUSES)[number];
 
 /** Default grace window: a model remains `active` if seen within this window. */
 export const DEFAULT_STALE_HOURS = 48;
@@ -121,24 +116,20 @@ export interface LifecyclePolicyThresholds {
  * the resolved thresholds violate the partition invariant.
  */
 export function resolveLifecycleThresholds(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): LifecyclePolicyThresholds {
   const staleHours = Number(env.STALE_HOURS ?? DEFAULT_STALE_HOURS);
   const inactiveDays = Number(env.INACTIVE_DAYS ?? DEFAULT_INACTIVE_DAYS);
 
   if (!Number.isFinite(staleHours) || staleHours <= 0)
-    throw new Error(
-      `Invalid STALE_HOURS=${env.STALE_HOURS!} — must be a positive number`,
-    );
+    throw new Error(`Invalid STALE_HOURS=${env.STALE_HOURS!} — must be a positive number`);
   if (!Number.isFinite(inactiveDays) || inactiveDays <= 0)
-    throw new Error(
-      `Invalid INACTIVE_DAYS=${env.INACTIVE_DAYS!} — must be a positive number`,
-    );
+    throw new Error(`Invalid INACTIVE_DAYS=${env.INACTIVE_DAYS!} — must be a positive number`);
   if (inactiveDays * 24 <= staleHours)
     throw new Error(
       `INACTIVE_DAYS=${inactiveDays} * 24h must be strictly greater than ` +
         `STALE_HOURS=${staleHours} — otherwise the 'stale' bucket collapses ` +
-        `to empty and the grace window vanishes (I3 violation).`,
+        `to empty and the grace window vanishes (I3 violation).`
     );
 
   return { staleHours, inactiveDays };
@@ -159,7 +150,7 @@ export function resolveLifecycleThresholds(
  */
 export function classifyExpressionSql(
   observedAtColumn: string,
-  thresholds: LifecyclePolicyThresholds = resolveLifecycleThresholds(),
+  thresholds: LifecyclePolicyThresholds = resolveLifecycleThresholds()
 ): string {
   const { staleHours, inactiveDays } = thresholds;
   return `CASE
@@ -179,7 +170,7 @@ export function classifyExpressionSql(
  */
 export function reasonExpressionSql(
   observedAtColumn: string,
-  thresholds: LifecyclePolicyThresholds = resolveLifecycleThresholds(),
+  thresholds: LifecyclePolicyThresholds = resolveLifecycleThresholds()
 ): string {
   const { staleHours, inactiveDays } = thresholds;
   return `CASE
@@ -203,8 +194,7 @@ export function reasonExpressionSql(
  * a database that hasn't been classified yet, call `hasLifecycleColumn`
  * first and fall back to `HISTORICAL_UNIVERSE_WHERE` with an audit log.
  */
-export const LIVE_UNIVERSE_WHERE =
-  `status = 'active' AND lifecycle_status = 'active'` as const;
+export const LIVE_UNIVERSE_WHERE = `status = 'active' AND lifecycle_status = 'active'` as const;
 
 /**
  * WHERE-clause fragment for the **historical-style** universe — every
@@ -219,13 +209,13 @@ export const HISTORICAL_UNIVERSE_WHERE = `status = 'active'` as const;
  * running against environments where the classifier has not been run.
  */
 export async function hasLifecycleColumn(
-  query: (sql: string) => Promise<{ rows: { exists: boolean }[] }>,
+  query: (sql: string) => Promise<{ rows: { exists: boolean }[] }>
 ): Promise<boolean> {
   const r = await query(
     `SELECT EXISTS (
        SELECT 1 FROM information_schema.columns
        WHERE table_name='models' AND column_name='lifecycle_status'
-     ) AS exists`,
+     ) AS exists`
   );
   return r.rows[0]?.exists ?? false;
 }
@@ -241,12 +231,12 @@ export async function hasLifecycleColumn(
  * because the staleness-tolerance is measured in hours, not seconds.
  */
 export async function getClassifierLastEvaluatedAt(
-  query: (sql: string) => Promise<{ rows: { max: Date | string | null }[] }>,
+  query: (sql: string) => Promise<{ rows: { max: Date | string | null }[] }>
 ): Promise<Date | null> {
   try {
     const r = await query(
       `SELECT MAX(lifecycle_evaluated_at) AS max
-       FROM models WHERE status='active'`,
+       FROM models WHERE status='active'`
     );
     const raw = r.rows[0]?.max;
     if (raw === null || raw === undefined) return null;
@@ -280,9 +270,7 @@ export const DEFAULT_UNIVERSE_ENV_VAR = 'HCRA_DEFAULT_UNIVERSE' as const;
  * `'historical'` (backwards-compatible). A future lot will flip this default
  * to `'live'` once the scheduled classifier is live in every environment.
  */
-export function resolveDefaultUniverse(
-  env: NodeJS.ProcessEnv = process.env,
-): UniverseMode {
+export function resolveDefaultUniverse(env: NodeJS.ProcessEnv = process.env): UniverseMode {
   const raw = (env[DEFAULT_UNIVERSE_ENV_VAR] ?? '').toLowerCase();
   return raw === 'live' ? 'live' : 'historical';
 }
@@ -351,9 +339,10 @@ export interface UniverseResolution {
  *
  * @see resolveUniverseWhere — the only caller of this function.
  */
-export function shouldFallbackToHistorical(
-  ctx: UniverseResolutionContext,
-): { fallback: boolean; reason?: string } {
+export function shouldFallbackToHistorical(ctx: UniverseResolutionContext): {
+  fallback: boolean;
+  reason?: string;
+} {
   // Safety guard: column missing ⇒ live is physically impossible.
   if (!ctx.lifecycleColumnExists) {
     return { fallback: true, reason: 'lifecycle_column_missing' };
@@ -393,12 +382,10 @@ export function shouldFallbackToHistorical(
  */
 export function resolveUniverseWhere(
   ctx: UniverseResolutionContext,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): UniverseResolution {
   const requestedValid: UniverseMode | undefined =
-    ctx.requested === 'live' || ctx.requested === 'historical'
-      ? ctx.requested
-      : undefined;
+    ctx.requested === 'live' || ctx.requested === 'historical' ? ctx.requested : undefined;
   const envDefault = resolveDefaultUniverse(env);
   const desired: UniverseMode = requestedValid ?? envDefault;
 
@@ -437,6 +424,5 @@ export const POLICY_SUMMARY = {
       'being tight enough that truly gone models exit the baseline within ' +
       'one week.',
   },
-  runtime_override:
-    'Override via STALE_HOURS (integer hours) and INACTIVE_DAYS (integer days).',
+  runtime_override: 'Override via STALE_HOURS (integer hours) and INACTIVE_DAYS (integer days).',
 } as const;

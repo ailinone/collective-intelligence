@@ -24,14 +24,13 @@
  *   - wasModelFallback always false (cascade never swaps model)
  */
 import { describe, it, expect, vi } from 'vitest';
-import {
-  runRoleViaRouteCascade,
-  isRouteInPlan,
-} from '../route-cascade-runtime-adapter';
+import { runRoleViaRouteCascade, isRouteInPlan } from '../route-cascade-runtime-adapter';
 import type { ApprovedRouteCandidate } from '../route-candidates';
 import type { Model, ChatRequest, ModelExecution } from '@/types';
 
-function makeRoute(over: Partial<ApprovedRouteCandidate> & { providerId: string }): ApprovedRouteCandidate {
+function makeRoute(
+  over: Partial<ApprovedRouteCandidate> & { providerId: string }
+): ApprovedRouteCandidate {
   return {
     routeId: `${over.providerId}::api::oai`,
     logicalModelId: 'gpt-4o',
@@ -48,9 +47,13 @@ function makeRoute(over: Partial<ApprovedRouteCandidate> & { providerId: string 
 
 function makeModel(): Model {
   return {
-    id: 'gpt-4o', name: 'gpt-4o', provider: 'openai',
-    capabilities: ['chat'], contextWindow: 8000,
-    inputCostPer1k: 0.005, outputCostPer1k: 0.015,
+    id: 'gpt-4o',
+    name: 'gpt-4o',
+    provider: 'openai',
+    capabilities: ['chat'],
+    contextWindow: 8000,
+    inputCostPer1k: 0.005,
+    outputCostPer1k: 0.015,
     description: 'test',
   } as Model;
 }
@@ -63,8 +66,18 @@ const dummyExecution = (modelId: string): ModelExecution => ({
   role: 'voter',
   request: dummyRequest,
   response: {
-    id: 'r', object: 'chat.completion', created: 0, model: modelId,
-    choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop', logprobs: null }],
+    id: 'r',
+    object: 'chat.completion',
+    created: 0,
+    model: modelId,
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant', content: 'OK' },
+        finish_reason: 'stop',
+        logprobs: null,
+      },
+    ],
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   } as never,
   startedAt: Date.now(),
@@ -82,7 +95,10 @@ describe('runRoleViaRouteCascade — first route succeeds', () => {
       role: 'voter',
       logicalModel: makeModel(),
       request: dummyRequest,
-      approvedRoutes: [makeRoute({ providerId: 'openai' }), makeRoute({ providerId: 'openrouter' })],
+      approvedRoutes: [
+        makeRoute({ providerId: 'openai' }),
+        makeRoute({ providerId: 'openrouter' }),
+      ],
       resolveAdapter,
       executeChat,
     });
@@ -111,7 +127,10 @@ describe('runRoleViaRouteCascade — route fallback', () => {
       role: 'voter',
       logicalModel: makeModel(),
       request: dummyRequest,
-      approvedRoutes: [makeRoute({ providerId: 'openai' }), makeRoute({ providerId: 'openrouter' })],
+      approvedRoutes: [
+        makeRoute({ providerId: 'openai' }),
+        makeRoute({ providerId: 'openrouter' }),
+      ],
       resolveAdapter,
       executeChat,
     });
@@ -125,7 +144,12 @@ describe('runRoleViaRouteCascade — route fallback', () => {
   });
 
   it('cascades through 4 error kinds before succeeding', async () => {
-    const errors = ['HTTP 402 insufficient credits', 'HTTP 401 invalid key', 'HTTP 429 rate limited', 'HTTP 400 model not supported'];
+    const errors = [
+      'HTTP 402 insufficient credits',
+      'HTTP 401 invalid key',
+      'HTTP 429 rate limited',
+      'HTTP 400 model not supported',
+    ];
     let idx = 0;
     const executeChat = vi.fn(async () => {
       if (idx < errors.length) {
@@ -166,7 +190,9 @@ describe('runRoleViaRouteCascade — all routes fail', () => {
       request: dummyRequest,
       approvedRoutes: ['a', 'b'].map((p) => makeRoute({ providerId: p })),
       resolveAdapter: async () => dummyAdapter,
-      executeChat: async () => { throw new Error('HTTP 401 invalid'); },
+      executeChat: async () => {
+        throw new Error('HTTP 401 invalid');
+      },
       policy: {
         orderBy: ['liveReady'],
         maxRouteAttempts: 2,
@@ -191,7 +217,9 @@ describe('runRoleViaRouteCascade — empty / missing routes', () => {
       request: dummyRequest,
       approvedRoutes: [],
       resolveAdapter: async () => dummyAdapter,
-      executeChat: async () => { throw new Error('should not run'); },
+      executeChat: async () => {
+        throw new Error('should not run');
+      },
     });
     expect(result.success).toBe(false);
     expect(result.aggregateFailure).toBe('no_approved_route_candidates');
@@ -205,8 +233,10 @@ describe('runRoleViaRouteCascade — empty / missing routes', () => {
         logicalModel: makeModel(),
         request: dummyRequest,
         resolveAdapter: async () => dummyAdapter,
-        executeChat: async () => { throw new Error('should not run'); },
-      }),
+        executeChat: async () => {
+          throw new Error('should not run');
+        },
+      })
     ).rejects.toThrow(/no_approved_route_candidates/);
   });
 });
@@ -214,7 +244,9 @@ describe('runRoleViaRouteCascade — empty / missing routes', () => {
 describe('runRoleViaRouteCascade — adapter resolution failure', () => {
   it('treats adapter=null as a failed attempt (continues cascade)', async () => {
     const resolveAdapter = vi.fn(async () => null);
-    const executeChat = vi.fn(async () => { throw new Error('should not be called when adapter null'); });
+    const executeChat = vi.fn(async () => {
+      throw new Error('should not be called when adapter null');
+    });
     const result = await runRoleViaRouteCascade({
       role: 'voter',
       logicalModel: makeModel(),
@@ -233,7 +265,7 @@ describe('runRoleViaRouteCascade — adapter resolution failure', () => {
     });
     expect(result.success).toBe(false);
     expect(result.attempts).toHaveLength(2);
-    expect(executeChat).not.toHaveBeenCalled();  // adapter resolution failed each time
+    expect(executeChat).not.toHaveBeenCalled(); // adapter resolution failed each time
   });
 });
 
@@ -292,16 +324,25 @@ describe('runRoleViaRouteCascade — recordAttempt sink', () => {
 describe('isRouteInPlan — out-of-plan guard helper', () => {
   it('returns true when routeId matches', () => {
     const approved = [makeRoute({ providerId: 'openai' })];
-    expect(isRouteInPlan({ routeId: 'openai::api::oai', providerId: 'openai', apiModelId: 'gpt-4o' }, approved)).toBe(true);
+    expect(
+      isRouteInPlan(
+        { routeId: 'openai::api::oai', providerId: 'openai', apiModelId: 'gpt-4o' },
+        approved
+      )
+    ).toBe(true);
   });
 
   it('returns true when providerId + apiModelId match (even if routeId differs)', () => {
     const approved = [makeRoute({ providerId: 'openai' })];
-    expect(isRouteInPlan({ routeId: 'other::id', providerId: 'openai', apiModelId: 'gpt-4o' }, approved)).toBe(true);
+    expect(
+      isRouteInPlan({ routeId: 'other::id', providerId: 'openai', apiModelId: 'gpt-4o' }, approved)
+    ).toBe(true);
   });
 
   it('returns false when neither routeId nor (providerId+apiModelId) match', () => {
     const approved = [makeRoute({ providerId: 'openai' })];
-    expect(isRouteInPlan({ routeId: 'x', providerId: 'anthropic', apiModelId: 'claude-3' }, approved)).toBe(false);
+    expect(
+      isRouteInPlan({ routeId: 'x', providerId: 'anthropic', apiModelId: 'claude-3' }, approved)
+    ).toBe(false);
   });
 });

@@ -15,7 +15,11 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const ART = resolve(process.cwd(), 'tmp', '01c1b-c3-budget-authorization-gate-approval-envelope.json');
+const ART = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-budget-authorization-gate-approval-envelope.json'
+);
 const env = existsSync(ART) ? JSON.parse(readFileSync(ART, 'utf8')) : null;
 
 const maybe = env ? describe : describe.skip;

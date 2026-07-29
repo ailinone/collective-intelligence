@@ -29,7 +29,7 @@ function single(
   taskType: string,
   judge: number,
   cost: number,
-  overrides: Partial<HistoricalReplayExecution> = {},
+  overrides: Partial<HistoricalReplayExecution> = {}
 ): HistoricalReplayExecution {
   return Object.freeze({
     executionId: eid(),
@@ -54,7 +54,7 @@ function parallel(
   models: readonly string[],
   taskType: string,
   judge: number,
-  cost: number,
+  cost: number
 ): HistoricalReplayExecution {
   return Object.freeze({
     executionId: eid(),
@@ -86,20 +86,19 @@ for (let i = 0; i < 6; i += 1)
   records.push(single(EXP_A, 'fx-anchor-b', 'code', 0.65 - i * 0.02, 0.025));
 
 // Cheap-good in EXP_A
-for (let i = 0; i < 5; i += 1)
-  records.push(single(EXP_A, 'fx-cheap-good', 'code', 0.55, 0.0015));
+for (let i = 0; i < 5; i += 1) records.push(single(EXP_A, 'fx-cheap-good', 'code', 0.55, 0.0015));
 
 // Cheap-harmful in EXP_A
 for (let i = 0; i < 5; i += 1)
-  records.push(single(EXP_A, 'fx-cheap-harmful', 'code', 0.05, 0.0012, {
-    degraded: true,
-  }));
+  records.push(
+    single(EXP_A, 'fx-cheap-harmful', 'code', 0.05, 0.0012, {
+      degraded: true,
+    })
+  );
 
 // Pair winner in EXP_A
 for (let i = 0; i < 4; i += 1)
-  records.push(
-    parallel(EXP_A, ['fx-pair-x', 'fx-pair-y'], 'code', 0.92, 0.003),
-  );
+  records.push(parallel(EXP_A, ['fx-pair-x', 'fx-pair-y'], 'code', 0.92, 0.003));
 
 // Singles for pair members in EXP_A
 for (let i = 0; i < 4; i += 1) records.push(single(EXP_A, 'fx-pair-x', 'code', 0.78, 0.0014));
@@ -109,13 +108,9 @@ for (let i = 0; i < 4; i += 1) records.push(single(EXP_A, 'fx-pair-y', 'code', 0
 for (let i = 0; i < 3; i += 1) records.push(single(EXP_B, 'fx-anchor-a', 'code', 0.7, 0.022));
 for (let i = 0; i < 3; i += 1) records.push(single(EXP_B, 'fx-cheap-good', 'code', 0.55, 0.0015));
 for (let i = 0; i < 3; i += 1)
-  records.push(
-    parallel(EXP_B, ['fx-pair-x', 'fx-pair-y'], 'code', 0.93, 0.0028),
-  );
+  records.push(parallel(EXP_B, ['fx-pair-x', 'fx-pair-y'], 'code', 0.93, 0.0028));
 for (let i = 0; i < 3; i += 1)
-  records.push(
-    parallel(EXP_B, ['fx-cheap-harmful', 'fx-cheap-harmful'], 'code', 0.05, 0.0024),
-  );
+  records.push(parallel(EXP_B, ['fx-cheap-harmful', 'fx-cheap-harmful'], 'code', 0.05, 0.0024));
 
 // Different task type in BOTH experiments — exercises taskType break-down
 for (let i = 0; i < 5; i += 1) records.push(single(EXP_A, 'fx-anchor-a', 'analysis', 0.6, 0.022));
@@ -134,7 +129,7 @@ export const SYNTHETIC_EXPERIMENTS = Object.freeze({
  * exercise the parser without hitting a file.
  */
 export function asJsonl(
-  records: readonly HistoricalReplayExecution[] = SYNTHETIC_REPLAY_FIXTURE,
+  records: readonly HistoricalReplayExecution[] = SYNTHETIC_REPLAY_FIXTURE
 ): string {
   return records.map((r) => JSON.stringify(r)).join('\n');
 }

@@ -118,7 +118,7 @@ export class BaiduModelFetcher extends BaseProviderModelFetcher {
         try {
           const model = this.convertBaiduModel(baiduModel);
           if (model) {
-          models.push(model);
+            models.push(model);
           }
         } catch (error) {
           this.log.warn({ model: baiduModel.model, error }, 'Failed to convert Baidu model');
@@ -205,7 +205,7 @@ export class BaiduModelFetcher extends BaseProviderModelFetcher {
       const expiresIn = data.expires_in || 30 * 24 * 60 * 60 * 1000; // Default to 30 days in ms
       this.accessTokenCache = {
         token: data.access_token,
-        expiresAt: Date.now() + (expiresIn * 1000) - (24 * 60 * 60 * 1000), // Cache for expiresIn - 1 day
+        expiresAt: Date.now() + expiresIn * 1000 - 24 * 60 * 60 * 1000, // Cache for expiresIn - 1 day
       };
 
       return data.access_token;

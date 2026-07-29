@@ -98,18 +98,8 @@ type HubRequestError = Error & {
  * videos is a legitimate empty sync response, while a terminal-failure submit
  * carries the provider's error and must not enter the poll loop.
  */
-const VIDEO_TERMINAL_SUCCESS_STATUSES = new Set([
-  'succeeded',
-  'success',
-  'completed',
-  'complete',
-]);
-const VIDEO_TERMINAL_FAILURE_STATUSES = new Set([
-  'failed',
-  'error',
-  'cancelled',
-  'canceled',
-]);
+const VIDEO_TERMINAL_SUCCESS_STATUSES = new Set(['succeeded', 'success', 'completed', 'complete']);
+const VIDEO_TERMINAL_FAILURE_STATUSES = new Set(['failed', 'error', 'cancelled', 'canceled']);
 
 const DEFAULT_MODERATION_CATEGORY_KEYS = [
   'sexual',
@@ -126,7 +116,10 @@ const DEFAULT_MODERATION_CATEGORY_KEYS = [
 ] as const;
 
 function normalizeProviderName(value: string): string {
-  return value.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
 }
 
 function normalizeHubModelIdentifier(value: string): string {
@@ -261,15 +254,17 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         const models = await this.getModels();
         this._modelMetadataCache = new Map();
         for (const m of models) {
-          const meta = (m.metadata && typeof m.metadata === 'object' && !Array.isArray(m.metadata))
-            ? (m.metadata as Record<string, unknown>)
-            : {};
+          const meta =
+            m.metadata && typeof m.metadata === 'object' && !Array.isArray(m.metadata)
+              ? (m.metadata as Record<string, unknown>)
+              : {};
           // Also store capabilities in meta for convenience
           meta._capabilities = m.capabilities;
           this._modelMetadataCache.set(m.id, meta);
           if (m.name !== m.id) this._modelMetadataCache.set(m.name, meta);
         }
-        this._modelMetadataCacheExpiry = now + OpenAICompatibleHubAdapter.MODEL_METADATA_CACHE_TTL_MS;
+        this._modelMetadataCacheExpiry =
+          now + OpenAICompatibleHubAdapter.MODEL_METADATA_CACHE_TTL_MS;
       } catch {
         return null;
       }
@@ -287,7 +282,10 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
    * 3. Model capabilities: reasoning/thinking_mode → max_completion_tokens
    * 4. Default: max_tokens (safe for legacy models)
    */
-  protected async getMaxTokensParamAsync(modelId: string, maxTokens?: number): Promise<Record<string, number | undefined>> {
+  protected async getMaxTokensParamAsync(
+    modelId: string,
+    maxTokens?: number
+  ): Promise<Record<string, number | undefined>> {
     const meta = await this.getModelMetadataById(modelId);
 
     if (meta) {
@@ -297,14 +295,20 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       }
 
       // 2. supported_parameters (OpenRouter and hub fetchers extract this)
-      const params = Array.isArray(meta.supported_parameters) ? meta.supported_parameters as string[] : [];
+      const params = Array.isArray(meta.supported_parameters)
+        ? (meta.supported_parameters as string[])
+        : [];
       if (params.includes('max_completion_tokens')) {
         return { max_completion_tokens: maxTokens };
       }
 
       // 3. Capabilities: reasoning/thinking models use max_completion_tokens
-      const caps = Array.isArray(meta._capabilities) ? meta._capabilities as string[] : [];
-      if (caps.some((c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research')) {
+      const caps = Array.isArray(meta._capabilities) ? (meta._capabilities as string[]) : [];
+      if (
+        caps.some(
+          (c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research'
+        )
+      ) {
         return { max_completion_tokens: maxTokens };
       }
     }
@@ -341,7 +345,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
    */
   protected async getTemperatureParamAsync(
     modelId: string,
-    temperature?: number,
+    temperature?: number
   ): Promise<Record<string, number | undefined>> {
     if (typeof temperature !== 'number') {
       return {};
@@ -403,15 +407,24 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
    * Synchronous fallback for getMaxTokensParam when async is not possible.
    * Uses cached metadata if available, defaults to max_tokens otherwise.
    */
-  protected getMaxTokensParam(modelId: string, maxTokens?: number): Record<string, number | undefined> {
+  protected getMaxTokensParam(
+    modelId: string,
+    maxTokens?: number
+  ): Record<string, number | undefined> {
     // Use cached metadata if available (populated by previous async calls)
     const meta = this._modelMetadataCache?.get(modelId);
     if (meta) {
       if (meta.uses_max_completion_tokens === true) return { max_completion_tokens: maxTokens };
-      const params = Array.isArray(meta.supported_parameters) ? meta.supported_parameters as string[] : [];
+      const params = Array.isArray(meta.supported_parameters)
+        ? (meta.supported_parameters as string[])
+        : [];
       if (params.includes('max_completion_tokens')) return { max_completion_tokens: maxTokens };
-      const caps = Array.isArray(meta._capabilities) ? meta._capabilities as string[] : [];
-      if (caps.some((c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research')) {
+      const caps = Array.isArray(meta._capabilities) ? (meta._capabilities as string[]) : [];
+      if (
+        caps.some(
+          (c: string) => c === 'reasoning' || c === 'thinking_mode' || c === 'deep_research'
+        )
+      ) {
         return { max_completion_tokens: maxTokens };
       }
     }
@@ -510,7 +523,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
    */
   protected getExtraChatPayloadFields(
     _resolvedModel: string,
-    _request: ChatRequest,
+    _request: ChatRequest
   ): Record<string, unknown> {
     return {};
   }
@@ -617,8 +630,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       }
     }
 
-    const lastErrorMessage =
-      lastError instanceof Error ? lastError.message : String(lastError);
+    const lastErrorMessage = lastError instanceof Error ? lastError.message : String(lastError);
     throw new Error(
       `${this.providerName} chat completion failed after trying ${limitedCandidates.length} dynamic candidates: ${lastErrorMessage}`
     );
@@ -697,7 +709,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   }
 
   async generateEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
-    const normalizedModel = await this.normalizeModelName(request.model || (await this.getDefaultModel()));
+    const normalizedModel = await this.normalizeModelName(
+      request.model || (await this.getDefaultModel())
+    );
     const path = this.metadata.embeddingsPath || '/embeddings';
 
     const response = await this.sendJsonRequestWithRetry({
@@ -717,10 +731,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
 
   async healthCheck(): Promise<HealthCheckResult> {
     const start = Date.now();
-    const candidates = [
-      this.metadata.modelListPath || '/models',
-      '/v1/models',
-    ].filter((path, index, all) => all.indexOf(path) === index);
+    const candidates = [this.metadata.modelListPath || '/models', '/v1/models'].filter(
+      (path, index, all) => all.indexOf(path) === index
+    );
 
     let lastError: string | undefined;
 
@@ -787,7 +800,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       try {
         const resp = await fetch(specific.url, {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5000),
         });
         if (resp.ok) {
@@ -795,17 +808,28 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
           const result = this.parseBalanceResponse(data);
           if (result) {
             this.providerLog.info(
-              { provider: this.providerName, hasCredits: result.hasCredits, balance: result.balance },
+              {
+                provider: this.providerName,
+                hasCredits: result.hasCredits,
+                balance: result.balance,
+              },
               'Provider balance checked (specific endpoint)'
             );
             return result;
           }
         }
-      } catch { /* fall through to generic */ }
+      } catch {
+        /* fall through to generic */
+      }
     }
 
     // 2) Generic OpenAI-compatible billing paths
-    for (const path of ['/dashboard/billing/credit_grants', '/v1/dashboard/billing/credit_grants', '/dashboard/billing/usage', '/v1/dashboard/billing/usage']) {
+    for (const path of [
+      '/dashboard/billing/credit_grants',
+      '/v1/dashboard/billing/credit_grants',
+      '/dashboard/billing/usage',
+      '/v1/dashboard/billing/usage',
+    ]) {
       try {
         const resp = await fetch(this.buildUrl(path), {
           method: 'GET',
@@ -820,7 +844,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         const data = (await resp.json()) as Record<string, unknown>;
         const result = this.parseBalanceResponse(data);
         if (result) return result;
-      } catch { continue; }
+      } catch {
+        continue;
+      }
     }
 
     return null;
@@ -829,20 +855,20 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   /** Map provider name → specific balance API URL */
   private getProviderBalanceEndpoint(): { url: string } | null {
     const endpoints: Record<string, string> = {
-      'poe': 'https://api.poe.com/usage/current_balance',
-      'aiml': 'https://api.aimlapi.com/v1/billing/balance',
-      'cometapi': 'https://api.cometapi.com/api/user/self',
+      poe: 'https://api.poe.com/usage/current_balance',
+      aiml: 'https://api.aimlapi.com/v1/billing/balance',
+      cometapi: 'https://api.cometapi.com/api/user/self',
       // Post-migration canonical id is `ai302`; the legacy `302ai` name
       // still appears in the discovery-service aliases so the adapter's
       // `providerName` field may arrive as either form — keep both keys.
-      'ai302': 'https://api.302.ai/dashboard/balance',
+      ai302: 'https://api.302.ai/dashboard/balance',
       '302ai': 'https://api.302.ai/dashboard/balance',
-      'aihubmix': 'https://aihubmix.com/api/user/self',
-      'nanogpt': 'https://nano-gpt.com/api/balance',
-      'edenai': 'https://api.edenai.run/v2/user/balance',
-      'novita': 'https://api.novita.ai/v3/billing/balance',
-      'routeway': 'https://api.routeway.ai/v1/credits',
-      'requesty': 'https://router.requesty.ai/v1/dashboard/billing/credit_grants',
+      aihubmix: 'https://aihubmix.com/api/user/self',
+      nanogpt: 'https://nano-gpt.com/api/balance',
+      edenai: 'https://api.edenai.run/v2/user/balance',
+      novita: 'https://api.novita.ai/v3/billing/balance',
+      routeway: 'https://api.routeway.ai/v1/credits',
+      requesty: 'https://router.requesty.ai/v1/dashboard/billing/credit_grants',
     };
     const url = endpoints[this.providerName.toLowerCase()];
     return url ? { url } : null;
@@ -851,29 +877,44 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   /** Parse various balance response shapes into a uniform result */
   private parseBalanceResponse(data: Record<string, unknown>): BalanceCheckResult | null {
     // Shape: { balance: number }
-    if (typeof data.balance === 'number') return { hasCredits: data.balance > 0, balance: data.balance, currency: 'USD' };
+    if (typeof data.balance === 'number')
+      return { hasCredits: data.balance > 0, balance: data.balance, currency: 'USD' };
     // Shape: { total_balance: number }
-    if (typeof data.total_balance === 'number') return { hasCredits: data.total_balance > 0, balance: data.total_balance, currency: 'USD' };
+    if (typeof data.total_balance === 'number')
+      return { hasCredits: data.total_balance > 0, balance: data.total_balance, currency: 'USD' };
     // Shape: { credits: number }
-    if (typeof data.credits === 'number') return { hasCredits: data.credits > 0, balance: data.credits, currency: 'USD' };
+    if (typeof data.credits === 'number')
+      return { hasCredits: data.credits > 0, balance: data.credits, currency: 'USD' };
     // Shape: { total_available: number }
-    if (typeof data.total_available === 'number') return { hasCredits: data.total_available > 0, balance: data.total_available, currency: 'USD' };
+    if (typeof data.total_available === 'number')
+      return {
+        hasCredits: data.total_available > 0,
+        balance: data.total_available,
+        currency: 'USD',
+      };
     // Shape: { remaining: number }
-    if (typeof data.remaining === 'number') return { hasCredits: data.remaining > 0, balance: data.remaining, currency: 'USD' };
+    if (typeof data.remaining === 'number')
+      return { hasCredits: data.remaining > 0, balance: data.remaining, currency: 'USD' };
     // Shape: { quota: number }
-    if (typeof data.quota === 'number') return { hasCredits: data.quota > 0, balance: data.quota, currency: 'USD' };
+    if (typeof data.quota === 'number')
+      return { hasCredits: data.quota > 0, balance: data.quota, currency: 'USD' };
     // Shape: { credit_balance: number }
-    if (typeof data.credit_balance === 'number') return { hasCredits: data.credit_balance > 0, balance: data.credit_balance, currency: 'USD' };
+    if (typeof data.credit_balance === 'number')
+      return { hasCredits: data.credit_balance > 0, balance: data.credit_balance, currency: 'USD' };
     // Nested: { data: { balance: number } }
     const nested = data.data as Record<string, unknown> | undefined;
     if (nested) {
-      if (typeof nested.balance === 'number') return { hasCredits: nested.balance > 0, balance: nested.balance, currency: 'USD' };
-      if (typeof nested.remaining === 'number') return { hasCredits: nested.remaining > 0, balance: nested.remaining, currency: 'USD' };
-      if (typeof nested.quota === 'number') return { hasCredits: nested.quota > 0, balance: nested.quota, currency: 'USD' };
+      if (typeof nested.balance === 'number')
+        return { hasCredits: nested.balance > 0, balance: nested.balance, currency: 'USD' };
+      if (typeof nested.remaining === 'number')
+        return { hasCredits: nested.remaining > 0, balance: nested.remaining, currency: 'USD' };
+      if (typeof nested.quota === 'number')
+        return { hasCredits: nested.quota > 0, balance: nested.quota, currency: 'USD' };
       // Grants array: { data: { grants: [{ remaining }] } }
       if (Array.isArray(nested.grants)) {
         const total = (nested.grants as Array<{ remaining?: number }>).reduce(
-          (sum, g) => sum + (typeof g.remaining === 'number' ? g.remaining : 0), 0
+          (sum, g) => sum + (typeof g.remaining === 'number' ? g.remaining : 0),
+          0
         );
         return { hasCredits: total > 0, balance: total, currency: 'USD' };
       }
@@ -889,8 +930,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   calculateCost(model: Model, inputTokens: number, outputTokens: number): number {
     const inputRate = Number(model.inputCostPer1k) || 0;
     const outputRate = Number(model.outputCostPer1k) || 0;
-    const cost = (inputTokens / 1000) * Math.max(0, inputRate)
-               + (outputTokens / 1000) * Math.max(0, outputRate);
+    const cost =
+      (inputTokens / 1000) * Math.max(0, inputRate) +
+      (outputTokens / 1000) * Math.max(0, outputRate);
     return Math.max(0, cost);
   }
 
@@ -923,10 +965,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       const normalizedModelId = normalizeHubModelIdentifier(model.id);
       const normalizedModelName = normalizeHubModelIdentifier(model.name);
 
-      if (
-        normalizedModelId === sanitizedInput ||
-        normalizedModelName === sanitizedInput
-      ) {
+      if (normalizedModelId === sanitizedInput || normalizedModelName === sanitizedInput) {
         return normalizedModelName;
       }
       if (
@@ -1075,11 +1114,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     }
   }
 
-  private resolveFormDataFile(
-    buffer: Buffer,
-    fileName: string,
-    mimeType: string
-  ): File {
+  private resolveFormDataFile(buffer: Buffer, fileName: string, mimeType: string): File {
     return new File([new Blob([new Uint8Array(buffer)], { type: mimeType })], fileName, {
       type: mimeType,
     });
@@ -1099,7 +1134,10 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     return fallback;
   }
 
-  protected async downloadImageWithRetry(url: string, operation: string): Promise<{
+  protected async downloadImageWithRetry(
+    url: string,
+    operation: string
+  ): Promise<{
     image: Buffer;
     format: string;
   }> {
@@ -1268,9 +1306,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         max_tokens: 1500,
       });
 
-      const content = this.extractTextFromMessageContent(
-        response.choices?.[0]?.message?.content
-      );
+      const content = this.extractTextFromMessageContent(response.choices?.[0]?.message?.content);
       const parsed = this.parseStructuredSearchOutput(content);
 
       return {
@@ -1310,7 +1346,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     return {
       audio: audioBuffer,
       format:
-        typeof payload.response_format === 'string' ? payload.response_format : request.format || 'mp3',
+        typeof payload.response_format === 'string'
+          ? payload.response_format
+          : request.format || 'mp3',
       raw: { size: audioBuffer.length },
     };
   }
@@ -1596,7 +1634,12 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       return value
         .filter((item) => item && typeof item === 'object')
         .map((item) => {
-          const n = item as { id?: unknown; url?: unknown; b64_json?: unknown; video_url?: unknown };
+          const n = item as {
+            id?: unknown;
+            url?: unknown;
+            b64_json?: unknown;
+            video_url?: unknown;
+          };
           return {
             id: typeof n.id === 'string' ? n.id : undefined,
             url:
@@ -1785,10 +1828,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       ['image_mime_type', 'mime_type', 'mimeType'],
       'image/png'
     );
-    formData.append(
-      'image',
-      this.resolveFormDataFile(request.image, imageFileName, imageMimeType)
-    );
+    formData.append('image', this.resolveFormDataFile(request.image, imageFileName, imageMimeType));
     formData.append('model', normalizedModel);
     formData.append('prompt', request.prompt);
 
@@ -1803,10 +1843,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         ['mask_mime_type', 'maskMimeType'],
         'image/png'
       );
-      formData.append(
-        'mask',
-        this.resolveFormDataFile(request.mask, maskFileName, maskMimeType)
-      );
+      formData.append('mask', this.resolveFormDataFile(request.mask, maskFileName, maskMimeType));
     }
 
     const requestN = typeof request.n === 'number' ? request.n : undefined;
@@ -1874,10 +1911,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       ['image_mime_type', 'mime_type', 'mimeType'],
       'image/png'
     );
-    formData.append(
-      'image',
-      this.resolveFormDataFile(request.image, imageFileName, imageMimeType)
-    );
+    formData.append('image', this.resolveFormDataFile(request.image, imageFileName, imageMimeType));
     formData.append('model', normalizedModel);
 
     const requestN = typeof request.n === 'number' ? request.n : undefined;
@@ -2007,10 +2041,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         await this.sleep(delayMs);
         attempt += 1;
       } catch (error) {
-        if (
-          error instanceof Error &&
-          (error as Error & { terminal?: boolean }).terminal === true
-        ) {
+        if (error instanceof Error && (error as Error & { terminal?: boolean }).terminal === true) {
           throw error;
         }
 
@@ -2106,10 +2137,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         await this.sleep(delayMs);
         attempt += 1;
       } catch (error) {
-        if (
-          error instanceof Error &&
-          (error as Error & { terminal?: boolean }).terminal === true
-        ) {
+        if (error instanceof Error && (error as Error & { terminal?: boolean }).terminal === true) {
           throw error;
         }
 
@@ -2139,8 +2167,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
 
   private shouldFallbackToNextModel(error: unknown): boolean {
     const hubError = error as HubRequestError | undefined;
-    const status =
-      typeof hubError?.status === 'number' ? hubError.status : undefined;
+    const status = typeof hubError?.status === 'number' ? hubError.status : undefined;
     const bodyFromHubError = hubError?.body;
     const bodyCandidate =
       typeof bodyFromHubError === 'string'
@@ -2159,7 +2186,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       body.includes('authorization credentials were missing or incorrect') ||
       body.includes('model not found') ||
       body.includes('unknown model') ||
-      body.includes('provider') && body.includes('not configured')
+      (body.includes('provider') && body.includes('not configured'))
     );
   }
 
@@ -2235,9 +2262,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   }
 
   private buildUrl(path: string): string {
-    const normalizedBase = this.baseURL.endsWith('/')
-      ? this.baseURL.slice(0, -1)
-      : this.baseURL;
+    const normalizedBase = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${normalizedBase}${normalizedPath}`;
   }
@@ -2275,9 +2300,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
 
     const choices: ChatChoice[] = choicesRaw.map((choiceRaw, index) => {
       const choice =
-        choiceRaw && typeof choiceRaw === 'object'
-          ? (choiceRaw as Record<string, unknown>)
-          : {};
+        choiceRaw && typeof choiceRaw === 'object' ? (choiceRaw as Record<string, unknown>) : {};
       const deltaRaw =
         choice.delta && typeof choice.delta === 'object'
           ? (choice.delta as Record<string, unknown>)
@@ -2375,8 +2398,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     return {
       id: typeof chunk.id === 'string' ? chunk.id : `${this.providerName}-${Date.now()}`,
       object: 'chat.completion.chunk',
-      created:
-        typeof chunk.created === 'number' ? chunk.created : Math.floor(Date.now() / 1000),
+      created: typeof chunk.created === 'number' ? chunk.created : Math.floor(Date.now() / 1000),
       model: requestedModel,
       choices,
       usage:

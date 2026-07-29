@@ -33,9 +33,7 @@ export interface RotateApiKeyResult {
 
 @injectable()
 export class RotateApiKeyHandler {
-  constructor(
-    @inject('IUserRepository') private readonly userRepository: IUserRepository,
-  ) {}
+  constructor(@inject('IUserRepository') private readonly userRepository: IUserRepository) {}
 
   async execute(command: RotateApiKeyCommand): Promise<RotateApiKeyResult> {
     try {
@@ -68,7 +66,11 @@ export class RotateApiKeyHandler {
         await this.userRepository.saveAggregate(userAggregate, tx);
 
         const events = userAggregate.getDomainEvents() as BaseDomainEvent[];
-        await writeEventsToOutbox(narrowAs<Parameters<typeof writeEventsToOutbox>[0]>(tx), events, 'User');
+        await writeEventsToOutbox(
+          narrowAs<Parameters<typeof writeEventsToOutbox>[0]>(tx),
+          events,
+          'User'
+        );
       });
 
       // 5. Calculate grace period end

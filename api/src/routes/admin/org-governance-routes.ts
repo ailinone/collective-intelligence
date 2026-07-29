@@ -127,7 +127,11 @@ export async function registerOrgGovernanceRoutes(server: FastifyInstance): Prom
         : undefined;
 
       const { userId } = getAuthIds(req);
-      const result = await setBudget(orgId, { maxMonthlyCostUsd, alertThresholds, updatedBy: userId });
+      const result = await setBudget(orgId, {
+        maxMonthlyCostUsd,
+        alertThresholds,
+        updatedBy: userId,
+      });
       if (!result) {
         return reply.code(404).send({ error: 'not_found', message: 'Organization not found.' });
       }

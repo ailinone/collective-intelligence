@@ -37,16 +37,23 @@ describe('ProviderOperabilityHub.bootstrapKnownProviders', () => {
 
     const result = hub.bootstrapKnownProviders(
       ['test-provider-bootstrap-1', 'test-provider-bootstrap-2'],
-      'unit_test',
+      'unit_test'
     );
 
     expect(result.added).toBeGreaterThanOrEqual(0); // could be 0 if already seeded
     expect(result.total).toBeGreaterThanOrEqual(2);
 
     const summary = hub.getSummary();
-    const known = [...summary.healthy, ...summary.unknown, ...summary.degraded,
-      ...summary.recovering, ...summary.no_credits, ...summary.rate_limited,
-      ...summary.auth_failed, ...summary.temporarily_unavailable];
+    const known = [
+      ...summary.healthy,
+      ...summary.unknown,
+      ...summary.degraded,
+      ...summary.recovering,
+      ...summary.no_credits,
+      ...summary.rate_limited,
+      ...summary.auth_failed,
+      ...summary.temporarily_unavailable,
+    ];
     expect(known).toContain('test-provider-bootstrap-1');
     expect(known).toContain('test-provider-bootstrap-2');
     // Both should be in `unknown` because no runtime events have fired.

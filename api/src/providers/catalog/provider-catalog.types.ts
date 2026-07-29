@@ -89,10 +89,7 @@ export type ProviderIntegrationClass =
  *    listing endpoint. Requires a manual model whitelist in `staticModels`.
  */
 export type ProviderIntegrationMode =
-  | 'discovery+execution'
-  | 'discovery-only'
-  | 'catalog-only'
-  | 'execution-only';
+  'discovery+execution' | 'discovery-only' | 'catalog-only' | 'execution-only';
 
 /**
  * Pricing discovery mode.
@@ -146,10 +143,7 @@ export interface CapabilityHint {
   readonly capability: string;
   /** Hint source — appears in the provenance record. */
   readonly rationale:
-    | 'provider-class-default'
-    | 'docs-declared'
-    | 'endpoint-declared'
-    | 'integration-class-default';
+    'provider-class-default' | 'docs-declared' | 'endpoint-declared' | 'integration-class-default';
   /** Confidence 0..1. Default 0.45 for class-default, 0.60 for docs-declared. */
   readonly confidence?: number;
 }
@@ -223,9 +217,10 @@ export type PinnedModelEntry =
  * yield an empty `capabilities` array — the consumer can then choose whether
  * to fall back to inference or treat that as a tagging gap.
  */
-export function normalizePinnedModelEntry(
-  entry: PinnedModelEntry,
-): { id: string; capabilities: readonly string[] } {
+export function normalizePinnedModelEntry(entry: PinnedModelEntry): {
+  id: string;
+  capabilities: readonly string[];
+} {
   if (typeof entry === 'string') {
     return { id: entry, capabilities: [] };
   }
@@ -434,13 +429,9 @@ export interface ProviderCatalogEntry {
  * Used by the plugin bridge to decide fetcher/adapter selection.
  */
 export function isOpenAICompatibleEntry(
-  entry: ProviderCatalogEntry,
+  entry: ProviderCatalogEntry
 ): entry is ProviderCatalogEntry & {
-  integrationClass:
-    | 'oai-compat-pure'
-    | 'oai-compat-quirks'
-    | 'self-hosted-oai-compat'
-    | 'gateway';
+  integrationClass: 'oai-compat-pure' | 'oai-compat-quirks' | 'self-hosted-oai-compat' | 'gateway';
 } {
   return (
     entry.integrationClass === 'oai-compat-pure' ||

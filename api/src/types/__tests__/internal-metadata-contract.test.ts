@@ -39,7 +39,10 @@ const __dirnameLocal = dirname(fileURLToPath(import.meta.url));
 const SRC = join(__dirnameLocal, '..', '..');
 
 const typesSource = readFileSync(join(SRC, 'types', 'index.ts'), 'utf8');
-const engineSource = readFileSync(join(SRC, 'core', 'orchestration', 'orchestration-engine.ts'), 'utf8');
+const engineSource = readFileSync(
+  join(SRC, 'core', 'orchestration', 'orchestration-engine.ts'),
+  'utf8'
+);
 const processorSource = readFileSync(join(SRC, 'services', 'chat-request-processor.ts'), 'utf8');
 
 /** Keys declared in the typed contract. */
@@ -80,7 +83,7 @@ describe('internal-metadata contract: __ keys are typed, stripped, and never cli
     // Each declared key must appear as a strip alias `__x: _internal...` in the
     // boundary destructure, and the public spread must use publicMetadata.
     const missingFromStrip = declared.filter(
-      (k) => !new RegExp(`${k}:\\s*_internal`).test(engineSource),
+      (k) => !new RegExp(`${k}:\\s*_internal`).test(engineSource)
     );
     expect(missingFromStrip).toEqual([]);
     expect(engineSource).toContain('...publicMetadata,');

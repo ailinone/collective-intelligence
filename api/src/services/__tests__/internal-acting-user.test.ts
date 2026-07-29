@@ -60,7 +60,7 @@ describe('resolveOrProvisionActingUser', () => {
     findUniqueMock.mockResolvedValueOnce(user);
 
     const result = await resolveOrProvisionActingUser(
-      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID }),
+      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID })
     );
 
     expect(result).toBe(user);
@@ -82,7 +82,7 @@ describe('resolveOrProvisionActingUser', () => {
     findUniqueMock.mockResolvedValueOnce(null);
 
     const result = await resolveOrProvisionActingUser(
-      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID }),
+      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID })
     );
 
     expect(result).toBeNull();
@@ -95,7 +95,7 @@ describe('resolveOrProvisionActingUser', () => {
     ensureMock.mockResolvedValueOnce(undefined);
 
     const result = await resolveOrProvisionActingUser(
-      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID }),
+      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID })
     );
 
     expect(ensureMock).toHaveBeenCalledWith({
@@ -112,7 +112,7 @@ describe('resolveOrProvisionActingUser', () => {
     ensureMock.mockRejectedValueOnce(new Error('federated_email_collision'));
 
     const result = await resolveOrProvisionActingUser(
-      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID }),
+      ctx({ actingUserEmail: 'user@example.com', actingUserTenant: TENANT_ID })
     );
 
     expect(result).toBeNull();

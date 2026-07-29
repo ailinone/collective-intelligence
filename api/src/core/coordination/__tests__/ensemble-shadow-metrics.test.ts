@@ -25,43 +25,40 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { recordShadowMetrics } from '../ensemble-shadow-metrics';
 import type { ShadowEnsembleSnapshot } from '../ensemble-coordinator-shadow';
 
-async function readCounterValue(
-  name: string,
-  labels: Record<string, string>,
-): Promise<number> {
+async function readCounterValue(name: string, labels: Record<string, string>): Promise<number> {
   // register.getMetricsAsJSON awaits async-collector metrics (Summary)
   // and returns a uniform sync shape for Counter/Histogram. Easier than
   // casting through prom-client's promise-returning Metric.get().
   const all = await promClient.register.getMetricsAsJSON();
   const found = all.find((m) => m.name === name);
   if (!found) return 0;
-  const values = (found as { values?: Array<{ labels: Record<string, string>; value: number }> })
-    .values ?? [];
-  const match = values.find(
-    (v) => Object.entries(labels).every(([k, val]) => v.labels[k] === val),
-  );
+  const values =
+    (found as { values?: Array<{ labels: Record<string, string>; value: number }> }).values ?? [];
+  const match = values.find((v) => Object.entries(labels).every(([k, val]) => v.labels[k] === val));
   return match?.value ?? 0;
 }
 
 async function readHistogramSampleCount(
   name: string,
-  labels: Record<string, string>,
+  labels: Record<string, string>
 ): Promise<number> {
   const all = await promClient.register.getMetricsAsJSON();
   const found = all.find((m) => m.name === name);
   if (!found) return 0;
   const values =
-    (found as {
-      values?: Array<{
-        metricName?: string;
-        labels: Record<string, string>;
-        value: number;
-      }>;
-    }).values ?? [];
+    (
+      found as {
+        values?: Array<{
+          metricName?: string;
+          labels: Record<string, string>;
+          value: number;
+        }>;
+      }
+    ).values ?? [];
   const countSeries = values.filter(
     (v) =>
       v.metricName === `${name}_count` &&
-      Object.entries(labels).every(([k, val]) => v.labels[k] === val),
+      Object.entries(labels).every(([k, val]) => v.labels[k] === val)
   );
   return countSeries.reduce((acc, v) => acc + v.value, 0);
 }
@@ -118,11 +115,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', SUCCESS_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         kind: 'success',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -130,11 +127,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', TIMEOUT_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         kind: 'timeout',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -142,11 +139,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', ERROR_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         kind: 'error',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -154,11 +151,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', DISABLED_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         kind: 'disabled',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -201,11 +198,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', SUCCESS_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_role_match_total', {
+      await readCounterValue('coord_ensemble_shadow_role_match_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         match: 'true',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -217,11 +214,11 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', disagreeing);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_role_match_total', {
+      await readCounterValue('coord_ensemble_shadow_role_match_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         match: 'false',
-      }),
+      })
     ).toBe(1);
   });
 
@@ -233,18 +230,18 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('debate', 'moderator-selection', successWithoutDivergence);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_role_match_total', {
+      await readCounterValue('coord_ensemble_shadow_role_match_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         match: 'true',
-      }),
+      })
     ).toBe(0);
     expect(
-        await readCounterValue('coord_ensemble_shadow_role_match_total', {
+      await readCounterValue('coord_ensemble_shadow_role_match_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         match: 'false',
-      }),
+      })
     ).toBe(0);
   });
 
@@ -253,18 +250,18 @@ describe('recordShadowMetrics', () => {
     recordShadowMetrics('expert-panel', 'panel-composition', SUCCESS_SNAPSHOT);
 
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'debate',
         decisionType: 'moderator-selection',
         kind: 'success',
-      }),
+      })
     ).toBe(1);
     expect(
-        await readCounterValue('coord_ensemble_shadow_calls_total', {
+      await readCounterValue('coord_ensemble_shadow_calls_total', {
         strategy: 'expert-panel',
         decisionType: 'panel-composition',
         kind: 'success',
-      }),
+      })
     ).toBe(1);
   });
 });

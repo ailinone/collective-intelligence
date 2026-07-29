@@ -34,23 +34,28 @@ function parseExpiresIn(expiresIn: string | number | undefined): number {
   if (!expiresIn || typeof expiresIn !== 'string') {
     return 86400; // Default 24 hours
   }
-  
+
   const match = expiresIn.match(/^(\d+)([smhd])$/);
   if (!match) {
     // Try to parse as pure number
     const num = parseInt(expiresIn, 10);
     return isNaN(num) ? 86400 : num;
   }
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2];
-  
+
   switch (unit) {
-    case 's': return value;
-    case 'm': return value * 60;
-    case 'h': return value * 3600;
-    case 'd': return value * 86400;
-    default: return 86400;
+    case 's':
+      return value;
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 3600;
+    case 'd':
+      return value * 86400;
+    default:
+      return 86400;
   }
 }
 
@@ -149,16 +154,18 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
       }
 
       requestLog.info({ userId: result.user?.id }, 'Registration successful');
-      
+
       // Ensure expiresIn is a number for proper serialization
       const response = {
         ...result,
-        tokens: result.tokens ? {
-          ...result.tokens,
-          expiresIn: parseExpiresIn(result.tokens.expiresIn),
-        } : undefined,
+        tokens: result.tokens
+          ? {
+              ...result.tokens,
+              expiresIn: parseExpiresIn(result.tokens.expiresIn),
+            }
+          : undefined,
       };
-      
+
       return reply.code(201).send(response);
     }
   );
@@ -407,16 +414,18 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
           }
 
           requestLog.info({ userId: result.user?.id }, 'Password login successful');
-          
+
           // Ensure expiresIn is a number for proper serialization
           const response = {
             ...result,
-            tokens: result.tokens ? {
-              ...result.tokens,
-              expiresIn: parseExpiresIn(result.tokens.expiresIn),
-            } : undefined,
+            tokens: result.tokens
+              ? {
+                  ...result.tokens,
+                  expiresIn: parseExpiresIn(result.tokens.expiresIn),
+                }
+              : undefined,
           };
-          
+
           return reply.code(200).send(response);
         } catch (error) {
           const requestLog = logger.child({
@@ -514,16 +523,18 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
       }
 
       requestLog.info({ userId: result.user?.id }, 'Token refreshed');
-      
+
       // Ensure expiresIn is a number for proper serialization
       const response = {
         ...result,
-        tokens: result.tokens ? {
-          ...result.tokens,
-          expiresIn: parseExpiresIn(result.tokens.expiresIn),
-        } : undefined,
+        tokens: result.tokens
+          ? {
+              ...result.tokens,
+              expiresIn: parseExpiresIn(result.tokens.expiresIn),
+            }
+          : undefined,
       };
-      
+
       return reply.code(200).send(response);
     }
   );
@@ -579,15 +590,20 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const user = extendedRequest.user;
-      
+
       // Type guard for user
-      if (!user || typeof user !== 'object' || !('userId' in user) || typeof user.userId !== 'string') {
+      if (
+        !user ||
+        typeof user !== 'object' ||
+        !('userId' in user) ||
+        typeof user.userId !== 'string'
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
         });
       }
-      
+
       const { name } = request.body as { name: string };
 
       const requestLog = logger.child({ endpoint: '/v1/auth/api-keys', userId: user.userId });
@@ -665,15 +681,20 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
       const user = extendedRequest.user;
-      
+
       // Type guard for user
-      if (!user || typeof user !== 'object' || !('userId' in user) || typeof user.userId !== 'string') {
+      if (
+        !user ||
+        typeof user !== 'object' ||
+        !('userId' in user) ||
+        typeof user.userId !== 'string'
+      ) {
         return reply.code(401).send({
           error: 'Unauthorized',
           message: 'User not authenticated',
         });
       }
-      
+
       const { id } = request.params as { id: string };
 
       const requestLog = logger.child({

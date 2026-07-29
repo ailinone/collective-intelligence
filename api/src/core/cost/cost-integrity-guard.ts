@@ -67,11 +67,7 @@ import { logger } from '@/utils/logger';
  *                    both worlds — Recommended default.
  */
 export type CostIntegrityPolicy =
-  | 'silent-zero'
-  | 'warn-and-null'
-  | 'warn-and-zero'
-  | 'strict-throw'
-  | 'env-dependent';
+  'silent-zero' | 'warn-and-null' | 'warn-and-zero' | 'strict-throw' | 'env-dependent';
 
 export interface CostGuardContext {
   /** Where the cost is being validated (e.g. 'base-strategy.createModelExecution') */
@@ -90,23 +86,19 @@ export interface CostGuardResult {
   /** Whether the input was valid (non-negative, finite). */
   ok: boolean;
   /** If !ok, why it was flagged. */
-  reason?:
-    | 'negative'
-    | 'not-a-number'
-    | 'infinite'
-    | 'undefined-or-null';
+  reason?: 'negative' | 'not-a-number' | 'infinite' | 'undefined-or-null';
 }
 
 export class CostIntegrityError extends Error {
   constructor(
     public readonly rawCost: unknown,
     public readonly context: CostGuardContext,
-    public readonly reason: NonNullable<CostGuardResult['reason']>,
+    public readonly reason: NonNullable<CostGuardResult['reason']>
   ) {
     super(
       `Cost integrity violation [${reason}]: rawCost=${String(rawCost)} ` +
         `at ${context.callSite} (strategy=${context.strategy ?? 'n/a'}, ` +
-        `provider=${context.provider ?? 'n/a'}, model=${context.modelId ?? 'n/a'})`,
+        `provider=${context.provider ?? 'n/a'}, model=${context.modelId ?? 'n/a'})`
     );
     this.name = 'CostIntegrityError';
   }
@@ -177,10 +169,7 @@ function resolveEnvDependent(): 'warn-and-null' | 'strict-throw' {
  * @param context - Where the cost is coming from (for telemetry + error)
  * @returns CostGuardResult — always returns a result (unless policy throws)
  */
-export function guardCost(
-  rawCost: unknown,
-  context: CostGuardContext,
-): CostGuardResult {
+export function guardCost(rawCost: unknown, context: CostGuardContext): CostGuardResult {
   const classification = classify(rawCost);
   if (classification.ok) return classification;
 
@@ -205,7 +194,7 @@ export function guardCost(
           provider: context.provider,
           modelId: context.modelId,
         },
-        'cost integrity violation — flooring to 0',
+        'cost integrity violation — flooring to 0'
       );
       return { cost: 0, ok: false, reason: classification.reason };
 
@@ -219,7 +208,7 @@ export function guardCost(
           provider: context.provider,
           modelId: context.modelId,
         },
-        'cost integrity violation — recording as null/unknown',
+        'cost integrity violation — recording as null/unknown'
       );
       return { cost: null, ok: false, reason: classification.reason };
 
@@ -242,7 +231,7 @@ export function guardCost(
  */
 export function filterValidCosts(
   costs: ReadonlyArray<unknown>,
-  context: CostGuardContext,
+  context: CostGuardContext
 ): {
   valid: number[];
   rejected: number;
@@ -250,10 +239,7 @@ export function filterValidCosts(
 } {
   const valid: number[] = [];
   let rejected = 0;
-  const rejectionReasons = new Map<
-    NonNullable<CostGuardResult['reason']>,
-    number
-  >();
+  const rejectionReasons = new Map<NonNullable<CostGuardResult['reason']>, number>();
 
   for (const raw of costs) {
     const c = classify(raw);
@@ -274,7 +260,7 @@ export function filterValidCosts(
         rejected,
         rejectionReasons: Object.fromEntries(rejectionReasons),
       },
-      'cost integrity: aggregator filtered invalid cost samples',
+      'cost integrity: aggregator filtered invalid cost samples'
     );
   }
 
@@ -287,7 +273,7 @@ let metricEmitter: ((reason: string, ctx: CostGuardContext) => void) | null = nu
 
 function emitViolationMetric(
   reason: NonNullable<CostGuardResult['reason']>,
-  context: CostGuardContext,
+  context: CostGuardContext
 ): void {
   if (metricEmitter === null) {
     try {

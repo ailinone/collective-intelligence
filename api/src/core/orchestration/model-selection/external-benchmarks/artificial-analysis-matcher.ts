@@ -83,7 +83,7 @@ const CONFIDENCE_RANK: Record<AaMatchConfidence, number> = {
 function buildRuntimeAliases(
   runtimeModelId: string,
   extra: ReadonlyArray<string> | undefined,
-  explicitAliases: ReadonlyArray<ExplicitAliasEntry>,
+  explicitAliases: ReadonlyArray<ExplicitAliasEntry>
 ): { aliases: ReadonlyArray<string>; ceiling: AaMatchConfidence | undefined } {
   const set = new Set<string>();
   set.add(runtimeModelId);
@@ -121,7 +121,10 @@ function buildRuntimeAliases(
   return { aliases: [...set].filter(Boolean), ceiling };
 }
 
-function applyCeiling(c: AaMatchConfidence, ceiling: AaMatchConfidence | undefined): AaMatchConfidence {
+function applyCeiling(
+  c: AaMatchConfidence,
+  ceiling: AaMatchConfidence | undefined
+): AaMatchConfidence {
   if (!ceiling) return c;
   return CONFIDENCE_RANK[c] > CONFIDENCE_RANK[ceiling] ? ceiling : c;
 }
@@ -142,7 +145,7 @@ export function matchArtificialAnalysisModel(input: MatchInput): ArtificialAnaly
   const { aliases, ceiling } = buildRuntimeAliases(
     runtimeModelId,
     input.runtimeAliases,
-    input.explicitAliases ?? [],
+    input.explicitAliases ?? []
   );
   const aliasesLower = new Set(aliases.map((a) => a.toLowerCase()));
 
@@ -190,7 +193,10 @@ export function matchArtificialAnalysisModel(input: MatchInput): ArtificialAnaly
       }
     }
     if (hit) {
-      const kind: AaMatchKind = m.creatorName && m.aaName && hit.includes('/') ? 'creator_plus_name_exact' : 'normalized_name_exact';
+      const kind: AaMatchKind =
+        m.creatorName && m.aaName && hit.includes('/')
+          ? 'creator_plus_name_exact'
+          : 'normalized_name_exact';
       highMatches.push({ model: m, kind, alias: hit });
     }
   }

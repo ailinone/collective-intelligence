@@ -126,16 +126,28 @@ describe('01C.1B-J2-C-R3 §9 — BenchLM adapter', () => {
 
   describe('matchBenchLmRowToCatalogModel', () => {
     const candidates: CandidateLike[] = [
-      { canonicalModelId: 'claude-opus-4.7', modelId: 'anthropic/claude-opus-4.7', family: 'anthropic_claude' },
+      {
+        canonicalModelId: 'claude-opus-4.7',
+        modelId: 'anthropic/claude-opus-4.7',
+        family: 'anthropic_claude',
+      },
       { canonicalModelId: 'deepseek-v4-pro', modelId: 'deepseek-v4-pro', family: 'deepseek' },
-      { canonicalModelId: 'moonshotai/kimi-k2.6', modelId: 'moonshotai/Kimi-K2.6', family: 'moonshot_kimi' },
-      { canonicalModelId: 'claude-3.7-sonnet', modelId: 'claude-3.7-sonnet', family: 'anthropic_claude' },
+      {
+        canonicalModelId: 'moonshotai/kimi-k2.6',
+        modelId: 'moonshotai/Kimi-K2.6',
+        family: 'moonshot_kimi',
+      },
+      {
+        canonicalModelId: 'claude-3.7-sonnet',
+        modelId: 'claude-3.7-sonnet',
+        family: 'anthropic_claude',
+      },
     ];
 
     it('returns medium confidence slug-substring match for "Claude Opus 4.7 (Adaptive)"', () => {
       const r = matchBenchLmRowToCatalogModel(
         { modelName: 'Claude Opus 4.7 (Adaptive)' },
-        candidates,
+        candidates
       );
       expect(r.matched).toBe(true);
       expect(r.candidate?.canonicalModelId).toBe('claude-opus-4.7');
@@ -145,19 +157,13 @@ describe('01C.1B-J2-C-R3 §9 — BenchLM adapter', () => {
     });
 
     it('matches DeepSeek V4 Pro (Max)', () => {
-      const r = matchBenchLmRowToCatalogModel(
-        { modelName: 'DeepSeek V4 Pro (Max)' },
-        candidates,
-      );
+      const r = matchBenchLmRowToCatalogModel({ modelName: 'DeepSeek V4 Pro (Max)' }, candidates);
       expect(r.matched).toBe(true);
       expect(r.candidate?.canonicalModelId).toBe('deepseek-v4-pro');
     });
 
     it('matches Kimi K2.6', () => {
-      const r = matchBenchLmRowToCatalogModel(
-        { modelName: 'Kimi K2.6' },
-        candidates,
-      );
+      const r = matchBenchLmRowToCatalogModel({ modelName: 'Kimi K2.6' }, candidates);
       expect(r.matched).toBe(true);
       expect(r.candidate?.canonicalModelId).toBe('moonshotai/kimi-k2.6');
     });
@@ -165,7 +171,7 @@ describe('01C.1B-J2-C-R3 §9 — BenchLM adapter', () => {
     it('returns unmatched for missing model', () => {
       const r = matchBenchLmRowToCatalogModel(
         { modelName: 'nonexistent-future-model-7000' },
-        candidates,
+        candidates
       );
       expect(r.matched).toBe(false);
       expect(r.matchKind).toBe('unmatched');
@@ -176,7 +182,7 @@ describe('01C.1B-J2-C-R3 §9 — BenchLM adapter', () => {
       const shortCands: CandidateLike[] = [{ canonicalModelId: 'gpt-4o-mini' }];
       const r = matchBenchLmRowToCatalogModel(
         { modelName: 'gpt' }, // dangerous: 3-char stem
-        shortCands,
+        shortCands
       );
       // "gpt" canonicalizes to "gpt" (3 chars), shorter than min 5 — should reject
       expect(r.matched).toBe(false);
@@ -218,7 +224,10 @@ describe('01C.1B-J2-C-R3 §9 — BenchLM adapter', () => {
     });
 
     it('returns undefined when overall is missing', () => {
-      const e = benchLmRowToCalibrationEntry({ modelName: 'No Overall', categoryScores: { coding: 80 } });
+      const e = benchLmRowToCalibrationEntry({
+        modelName: 'No Overall',
+        categoryScores: { coding: 80 },
+      });
       expect(e).toBeUndefined();
     });
 

@@ -104,9 +104,7 @@ describe('ConsensusStrategy — artifacts', () => {
     expect(a.effectiveStrategyId).toBe('consensus_fallback_best_individual');
     expect(a.finalSelection.source).toBe('best_individual');
     expect(a.finalSelection.fallbackTriggered).toBe(true);
-    expect(a.finalSelection.fallbackReason).toBe(
-      'synthesis_underperformed_best_individual',
-    );
+    expect(a.finalSelection.fallbackReason).toBe('synthesis_underperformed_best_individual');
     expect(a.finalSelection.finalScore).toBe(0.9);
     expect(a.finalSelection.comparable).toBe(true);
     expect(a.finalSelection.deltaVsBestIndividual).toBeLessThan(0);

@@ -262,7 +262,10 @@ const METRIC_DEFS: Record<
  * first use to avoid eager registration costs and to keep the module
  * import side-effect-free.
  */
-const promCache = new Map<string, Counter<string> | Histogram<string> | Gauge<string> | undefined>();
+const promCache = new Map<
+  string,
+  Counter<string> | Histogram<string> | Gauge<string> | undefined
+>();
 
 /**
  * Used for tests that want to swap a temporary registry. Defaults to the
@@ -275,7 +278,9 @@ export function setActiveRegistryForTesting(registry: Registry | null): void {
   promCache.clear();
 }
 
-function getOrCreatePromMetric(name: MetricName): Counter<string> | Histogram<string> | Gauge<string> | undefined {
+function getOrCreatePromMetric(
+  name: MetricName
+): Counter<string> | Histogram<string> | Gauge<string> | undefined {
   const cached = promCache.get(name);
   if (cached) return cached;
 
@@ -320,7 +325,10 @@ function getOrCreatePromMetric(name: MetricName): Counter<string> | Histogram<st
     // Registration failure (rare — usually duplicate name with mismatched
     // labels). Log once and disable prom for this metric to keep the
     // logs+tests path working.
-    log.warn({ name, err: String(err) }, 'Failed to create prom-client metric — falling back to logs only');
+    log.warn(
+      { name, err: String(err) },
+      'Failed to create prom-client metric — falling back to logs only'
+    );
     promCache.set(name, undefined);
     return undefined;
   }
@@ -330,13 +338,20 @@ function getOrCreatePromMetric(name: MetricName): Counter<string> | Histogram<st
 
 const counters = new Map<string, number>();
 
-function counterKey(metric: MetricName, labels: Readonly<Record<string, string | number | boolean>>): string {
+function counterKey(
+  metric: MetricName,
+  labels: Readonly<Record<string, string | number | boolean>>
+): string {
   const sortedKeys = Object.keys(labels).sort();
   const parts = sortedKeys.map((k) => `${k}=${String(labels[k])}`);
   return `${metric}{${parts.join(',')}}`;
 }
 
-function bumpCounter(metric: MetricName, labels: Readonly<Record<string, string | number | boolean>>, by = 1): void {
+function bumpCounter(
+  metric: MetricName,
+  labels: Readonly<Record<string, string | number | boolean>>,
+  by = 1
+): void {
   const key = counterKey(metric, labels);
   counters.set(key, (counters.get(key) ?? 0) + by);
 }
@@ -357,7 +372,7 @@ export interface CounterIncrementOptions {
  */
 function projectLabels(
   metric: MetricName,
-  labels: Readonly<Record<string, string | number | boolean>>,
+  labels: Readonly<Record<string, string | number | boolean>>
 ): Record<string, string> {
   const def = METRIC_DEFS[metric];
   if (!def) return {};
@@ -373,7 +388,7 @@ function projectLabels(
 export function incrementCounter(
   metric: MetricName,
   labels: Readonly<Record<string, string | number | boolean>> = {},
-  options: CounterIncrementOptions = {},
+  options: CounterIncrementOptions = {}
 ): void {
   const by = options.by ?? 1;
   bumpCounter(metric, labels, by);
@@ -396,7 +411,7 @@ export function incrementCounter(
 export function observeHistogram(
   metric: MetricName,
   valueMs: number,
-  labels: Readonly<Record<string, string | number | boolean>> = {},
+  labels: Readonly<Record<string, string | number | boolean>> = {}
 ): void {
   const promMetric = getOrCreatePromMetric(metric);
   if (promMetric && 'observe' in promMetric) {
@@ -412,7 +427,7 @@ export function observeHistogram(
 export function setGauge(
   metric: MetricName,
   value: number,
-  labels: Readonly<Record<string, string | number | boolean>> = {},
+  labels: Readonly<Record<string, string | number | boolean>> = {}
 ): void {
   const key = counterKey(metric, labels);
   counters.set(key, value);
@@ -433,7 +448,7 @@ export function setGauge(
 
 export function getCounterValueForTesting(
   metric: MetricName,
-  labels: Readonly<Record<string, string | number | boolean>> = {},
+  labels: Readonly<Record<string, string | number | boolean>> = {}
 ): number {
   return counters.get(counterKey(metric, labels)) ?? 0;
 }

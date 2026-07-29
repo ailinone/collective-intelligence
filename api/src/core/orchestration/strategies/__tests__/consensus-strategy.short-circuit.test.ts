@@ -36,11 +36,14 @@ import {
 // aggregator runs, LLM synthesis fails, and the simple-concatenation
 // fallback ("### From Voter A…") breaks the SENTINEL_SYNTHESIS asserts).
 vi.mock('@/core/aggregation/response-aggregator', async () =>
-  (await import('./consensus-module-mocks')).responseAggregatorModuleMock());
+  (await import('./consensus-module-mocks')).responseAggregatorModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-shadow', async () =>
-  (await import('./consensus-module-mocks')).ensembleShadowModuleMock());
+  (await import('./consensus-module-mocks')).ensembleShadowModuleMock()
+);
 vi.mock('@/core/coordination/ensemble-coordinator-client', async () =>
-  (await import('./consensus-module-mocks')).ensembleClientModuleMock());
+  (await import('./consensus-module-mocks')).ensembleClientModuleMock()
+);
 
 const isEven = (a: string) => Number(a) % 2 === 0;
 const pad = 'Detailed reasoning about the task, long enough to clear the outlier threshold. ';
@@ -72,7 +75,7 @@ describe('ConsensusStrategy — pre-synthesis short-circuits', () => {
 
     const r = await strategy.execute(
       makeRequest(),
-      makeContext(models, { answerVerifier: isEven }),
+      makeContext(models, { answerVerifier: isEven })
     );
     const a = artifactsOf(r);
 
@@ -106,7 +109,7 @@ describe('ConsensusStrategy — pre-synthesis short-circuits', () => {
 
     const r = await strategy.execute(
       makeRequest(),
-      makeContext(models, { answerVerifier: isEven }),
+      makeContext(models, { answerVerifier: isEven })
     );
     const a = artifactsOf(r);
 
@@ -255,7 +258,9 @@ describe('ConsensusStrategy — concurrent voter evaluation', () => {
 
     expect(maxInFlight).toBeGreaterThanOrEqual(2); // was 1 when the loop was sequential
     // Per-voter scores still attributed to the right voter (order preserved).
-    const byId = Object.fromEntries(a.participantOutputs.map((p) => [p.modelId, p.individualScore]));
+    const byId = Object.fromEntries(
+      a.participantOutputs.map((p) => [p.modelId, p.individualScore])
+    );
     expect(byId['voter-a']).toBe(0.4);
     expect(byId['voter-b']).toBe(0.6);
     expect(byId['voter-c']).toBe(0.8);

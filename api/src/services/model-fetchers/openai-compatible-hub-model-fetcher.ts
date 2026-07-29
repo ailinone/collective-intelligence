@@ -115,7 +115,10 @@ function normalizeHubModelId(rawModelId: string): string {
 }
 
 function normalizeProviderToken(value: string): string {
-  return value.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-');
 }
 
 export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
@@ -134,7 +137,10 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
 
   constructor(config: OpenAICompatibleHubModelFetcherConfig) {
     super();
-    this.providerName = config.providerName.trim().toLowerCase().replace(/[\s_]+/g, '-');
+    this.providerName = config.providerName
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-');
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl;
     this.modelListPaths = (
@@ -150,7 +156,11 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     this.apiKeyOptional = config.apiKeyOptional === true;
     // Denylist from config OR from env: <PROVIDER_UPPER>_MODEL_DENYLIST=model1,model2
     const envKey = `${this.providerName.toUpperCase().replace(/-/g, '_')}_MODEL_DENYLIST`;
-    const fromEnv = process.env[envKey] ? process.env[envKey]!.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const fromEnv = process.env[envKey]
+      ? process.env[envKey]!.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
     this.modelDenylist = new Set([...(config.modelDenylist ?? []), ...fromEnv]);
     if (this.modelDenylist.size > 0) {
       this.log = logger.child({ component: `${this.providerName}-fetcher` });
@@ -165,7 +175,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     if (missingAndRequired || looksMockOrTest) {
       this.log.warn(
         { apiKeyOptional: this.apiKeyOptional, hasKey: Boolean(this.apiKey) },
-        'API key appears to be missing (and required) or mock/test, skipping model discovery',
+        'API key appears to be missing (and required) or mock/test, skipping model discovery'
       );
       return [];
     }
@@ -266,9 +276,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     if (/^https?:\/\//i.test(path)) {
       return path;
     }
-    const normalizedBase = this.baseUrl.endsWith('/')
-      ? this.baseUrl.slice(0, -1)
-      : this.baseUrl;
+    const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl.slice(0, -1) : this.baseUrl;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${normalizedBase}${normalizedPath}`;
   }
@@ -283,8 +291,8 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
 
   private extractRawModels(payload: unknown): RawModelRecord[] {
     if (Array.isArray(payload)) {
-      return payload.filter(
-        (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+      return payload.filter((item): item is RawModelRecord =>
+        Boolean(item && typeof item === 'object')
       );
     }
 
@@ -303,8 +311,8 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
 
     for (const candidate of possibleArrays) {
       if (Array.isArray(candidate)) {
-        return candidate.filter(
-          (item): item is RawModelRecord => Boolean(item && typeof item === 'object')
+        return candidate.filter((item): item is RawModelRecord =>
+          Boolean(item && typeof item === 'object')
         );
       }
     }
@@ -313,13 +321,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   }
 
   private convertRawModel(rawModel: RawModelRecord, sourcePath: string): ProviderModel | null {
-    const rawModelId = this.extractString(rawModel, [
-      'id',
-      'model',
-      'model_id',
-      'name',
-      'slug',
-    ]);
+    const rawModelId = this.extractString(rawModel, ['id', 'model', 'model_id', 'name', 'slug']);
 
     if (!rawModelId) {
       return null;
@@ -504,8 +506,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
       return {
         inputCostPer1M: directInputCostPer1M || 0,
         outputCostPer1M: directOutputCostPer1M || 0,
-        currency:
-          this.extractString(rawModel, ['currency', 'pricing_currency']) || 'USD',
+        currency: this.extractString(rawModel, ['currency', 'pricing_currency']) || 'USD',
       };
     }
 
@@ -516,9 +517,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
 
     const prompt = this.extractNumberish(
       pricingObject || rawModel,
-      pricingObject
-        ? ['prompt', 'input', 'prompt_price', 'promptPrice']
-        : ['prompt', 'input']
+      pricingObject ? ['prompt', 'input', 'prompt_price', 'promptPrice'] : ['prompt', 'input']
     );
     const completion = this.extractNumberish(
       pricingObject || rawModel,
@@ -530,8 +529,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     return {
       inputCostPer1M: this.normalizeTokenPriceToPer1M(prompt),
       outputCostPer1M: this.normalizeTokenPriceToPer1M(completion),
-      currency:
-        this.extractString(pricingObject || rawModel, ['currency']) || 'USD',
+      currency: this.extractString(pricingObject || rawModel, ['currency']) || 'USD',
     };
   }
 

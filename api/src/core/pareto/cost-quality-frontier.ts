@@ -39,7 +39,7 @@ export interface ParetoExtractors<T> {
  */
 export function computeParetoFrontier<T>(
   candidates: readonly T[],
-  extractors: ParetoExtractors<T>,
+  extractors: ParetoExtractors<T>
 ): readonly T[] {
   if (candidates.length <= 1) return Object.freeze(candidates.slice());
   const indexed = candidates.map((c, i) => ({ c, i }));
@@ -82,7 +82,7 @@ export function computeParetoFrontier<T>(
 export function isParetoDominated<T>(
   candidate: T,
   others: readonly T[],
-  extractors: ParetoExtractors<T>,
+  extractors: ParetoExtractors<T>
 ): boolean {
   for (const o of others) {
     if (dominates(o, candidate, extractors)) return true;

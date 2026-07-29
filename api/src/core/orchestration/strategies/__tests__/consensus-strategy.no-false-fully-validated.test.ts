@@ -87,7 +87,10 @@ describe('Consensus — no false fully_validated', () => {
       evaluator: new TaskSpecificEvaluator(), // no codeRunner
       eligibleModels: models,
     });
-    const r = await strategy.execute(makeRequest(), makeContext(models, { taskType: 'code-generation' as never }));
+    const r = await strategy.execute(
+      makeRequest(),
+      makeContext(models, { taskType: 'code-generation' as never })
+    );
     const a = r.metadata?.consensusArtifacts as ConsensusStrategyArtifacts;
     expect(a.validationStatus).toBe('structurally_validated_only');
     expect(a.scoringMode).toBe('task_specific');

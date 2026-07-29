@@ -54,7 +54,7 @@ export const DEFAULT_ENSEMBLE_LIFT_POLICY: EnsembleLiftPolicy = Object.freeze({
 });
 
 export function resolveEnsembleLiftPolicy(
-  override?: Partial<EnsembleLiftPolicy>,
+  override?: Partial<EnsembleLiftPolicy>
 ): EnsembleLiftPolicy {
   if (!override) return DEFAULT_ENSEMBLE_LIFT_POLICY;
   return Object.freeze({ ...DEFAULT_ENSEMBLE_LIFT_POLICY, ...override });

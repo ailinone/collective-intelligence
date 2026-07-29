@@ -26,8 +26,7 @@
  * `fetch` (via the injectable `fetchImpl`) so no live calls happen in CI.
  */
 
-const GOOGLE_TUNING_BASE_URL =
-  'https://generativelanguage.googleapis.com/v1beta';
+const GOOGLE_TUNING_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
  * Injectable fetch — defaults to the global fetch. Tests pass a mock so no
@@ -40,22 +39,13 @@ export type FetchImpl = typeof fetch;
  * fine-tuning status vocabulary used across providers.
  */
 export type NormalizedTuningStatus =
-  | 'validating_files'
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  'validating_files' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /**
  * Google TunedModel `state` enum (subset we care about).
  * @see https://ai.google.dev/api/tuning#State
  */
-export type GoogleTunedModelState =
-  | 'STATE_UNSPECIFIED'
-  | 'CREATING'
-  | 'ACTIVE'
-  | 'FAILED';
+export type GoogleTunedModelState = 'STATE_UNSPECIFIED' | 'CREATING' | 'ACTIVE' | 'FAILED';
 
 /**
  * Per-step tuning metrics snapshot returned by the Gemini tuning API.
@@ -190,11 +180,7 @@ export class GoogleFineTuningClient {
   private readonly fetchImpl: FetchImpl;
   private readonly baseUrl: string;
 
-  constructor(options: {
-    apiKey: string;
-    fetchImpl?: FetchImpl;
-    baseUrl?: string;
-  }) {
+  constructor(options: { apiKey: string; fetchImpl?: FetchImpl; baseUrl?: string }) {
     const apiKey = (options.apiKey || '').trim();
     if (!apiKey) {
       throw new GoogleTuningNotConfiguredError(
@@ -213,10 +199,7 @@ export class GoogleFineTuningClient {
     return `${this.baseUrl}/${cleanPath}${separator}key=${encodeURIComponent(this.apiKey)}`;
   }
 
-  private async request<T>(
-    path: string,
-    init: { method: string; body?: unknown }
-  ): Promise<T> {
+  private async request<T>(path: string, init: { method: string; body?: unknown }): Promise<T> {
     const url = this.buildUrl(path);
     const response = await this.fetchImpl(url, {
       method: init.method,
@@ -247,9 +230,7 @@ export class GoogleFineTuningClient {
    * Create a supervised tuning job. Returns the long-running Operation whose
    * `metadata.tunedModel` is the resource name we persist as providerJobId.
    */
-  async createTuningJob(
-    params: CreateGoogleTuningJobParams
-  ): Promise<GoogleTuningOperation> {
+  async createTuningJob(params: CreateGoogleTuningJobParams): Promise<GoogleTuningOperation> {
     const tuningTask: Record<string, unknown> = {
       trainingData: {
         examples: {
@@ -270,8 +251,7 @@ export class GoogleFineTuningClient {
         hp.batchSize = params.hyperparameters.batchSize;
       }
       if (typeof params.hyperparameters.learningRateMultiplier === 'number') {
-        hp.learningRateMultiplier =
-          params.hyperparameters.learningRateMultiplier;
+        hp.learningRateMultiplier = params.hyperparameters.learningRateMultiplier;
       }
       if (typeof params.hyperparameters.learningRate === 'number') {
         hp.learningRate = params.hyperparameters.learningRate;

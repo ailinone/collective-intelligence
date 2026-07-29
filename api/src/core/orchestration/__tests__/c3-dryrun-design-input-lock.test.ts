@@ -32,10 +32,12 @@ import {
   K_AUTHORIZED,
 } from '@/core/experiment/c3-dryrun-experiment-design-contract';
 
-const ARTIFACT_PATH = resolve(process.cwd(), 'tmp', '01c1b-c3-dryrun-design-r4-integrity-input-lock.json');
-const artifact = existsSync(ARTIFACT_PATH)
-  ? JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))
-  : null;
+const ARTIFACT_PATH = resolve(
+  process.cwd(),
+  'tmp',
+  '01c1b-c3-dryrun-design-r4-integrity-input-lock.json'
+);
+const artifact = existsSync(ARTIFACT_PATH) ? JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8')) : null;
 
 describe('01C.1B-C3-DRYRUN-EXPERIMENT-DESIGN — input lock', () => {
   describe('locked R4 entry-state constants', () => {

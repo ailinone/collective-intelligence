@@ -51,9 +51,8 @@ export class LoginUserHandler {
 
       // 3. Check status
       if (user.status !== UserStatus.ACTIVE) {
-        const statusMessage = user.status === UserStatus.SUSPENDED 
-          ? 'Account is suspended' 
-          : 'Account is not active';
+        const statusMessage =
+          user.status === UserStatus.SUSPENDED ? 'Account is suspended' : 'Account is not active';
         return {
           success: false,
           error: statusMessage,

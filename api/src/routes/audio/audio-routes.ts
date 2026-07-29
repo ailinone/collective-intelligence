@@ -10,14 +10,14 @@
 /**
  * Audio API Routes
  * OpenAI-compatible audio endpoints (TTS, STT, Translations)
- * 
+ *
  * Features:
  * - Multi-provider orchestration (OpenAI, Google, ElevenLabs, etc.)
  * - Dynamic model selection based on capabilities
  * - Streaming support for TTS
  * - Multiple audio formats (mp3, wav, ogg, opus, pcm)
  * - Language detection and translation
- * 
+ *
  * NO HARDCODED MODELS - All model selection is dynamic via capabilities
  */
 
@@ -64,7 +64,8 @@ function toAilinAttempt(a: CandidateAttempt): {
 /** JSON schema fragment for an `attempts` array in _ailin response envelopes. */
 const AILIN_ATTEMPTS_SCHEMA = {
   type: 'array',
-  description: 'Per-candidate attempt log when fallback was exercised. Empty/single-entry array on first-success paths.',
+  description:
+    'Per-candidate attempt log when fallback was exercised. Empty/single-entry array on first-success paths.',
   items: {
     type: 'object',
     properties: {
@@ -72,7 +73,20 @@ const AILIN_ATTEMPTS_SCHEMA = {
       provider: { type: 'string' },
       status: { type: 'string', enum: ['success', 'failed', 'skipped'] },
       duration_ms: { type: 'number' },
-      error_class: { type: 'string', enum: ['quota_exhausted', 'auth', 'rate_limit', 'capability_mismatch', 'provider_unavailable', 'timeout', 'bad_request', 'not_found', 'other'] },
+      error_class: {
+        type: 'string',
+        enum: [
+          'quota_exhausted',
+          'auth',
+          'rate_limit',
+          'capability_mismatch',
+          'provider_unavailable',
+          'timeout',
+          'bad_request',
+          'not_found',
+          'other',
+        ],
+      },
     },
   },
 } as const;
@@ -84,11 +98,24 @@ const AILIN_ATTEMPTS_SCHEMA = {
 const TTSRequestSchema = z.object({
   model: z.string().optional().default('auto'), // 'auto' triggers dynamic selection
   input: z.string().min(1).max(100000),
-  voice: z.string().optional().default('auto'),  // Provider-specific voice (alloy, af_heart, Rachel, etc.)
+  voice: z.string().optional().default('auto'), // Provider-specific voice (alloy, af_heart, Rachel, etc.)
   response_format: z.enum(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']).optional().default('mp3'),
   speed: z.number().min(0.25).max(4.0).optional().default(1.0),
   strategy: z
-    .enum(['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'])
+    .enum([
+      'single',
+      'cost',
+      'speed',
+      'quality',
+      'balanced',
+      'parallel',
+      'debate',
+      'quality_multipass',
+      'quality-multipass',
+      'quality-multi-pass',
+      'dynamic',
+      'auto',
+    ])
     .optional(),
   allow_fallback: z.boolean().optional().default(true),
   max_cost: z.number().min(0).optional(),
@@ -130,61 +157,78 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Audio'],
       summary: 'Text-to-Speech (TTS)',
-      description: 'Converts text to natural-sounding audio using multi-provider orchestration. Automatically selects the best TTS model based on language, voice preference, and quality requirements.',
+      description:
+        'Converts text to natural-sounding audio using multi-provider orchestration. Automatically selects the best TTS model based on language, voice preference, and quality requirements.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       body: {
         type: 'object',
         required: ['input'],
         properties: {
-          model: { 
-            type: 'string', 
+          model: {
+            type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best TTS model for your requirements.'
+            description:
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best TTS model for your requirements.',
           },
-          input: { 
-            type: 'string', 
-            minLength: 1, 
+          input: {
+            type: 'string',
+            minLength: 1,
             maxLength: 100000,
-            description: 'The text to convert to audio. Maximum length is 100,000 characters.' 
+            description: 'The text to convert to audio. Maximum length is 100,000 characters.',
           },
           voice: {
             type: 'string',
             default: 'auto',
-            description: 'Voice ID or "auto" for intelligent selection. Any provider voice name accepted (alloy, af_heart, Rachel, etc.).'
+            description:
+              'Voice ID or "auto" for intelligent selection. Any provider voice name accepted (alloy, af_heart, Rachel, etc.).',
           },
-          response_format: { 
-            type: 'string', 
+          response_format: {
+            type: 'string',
             enum: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
             default: 'mp3',
-            description: 'Audio format for the output'
+            description: 'Audio format for the output',
           },
-          speed: { 
-            type: 'number', 
-            minimum: 0.25, 
+          speed: {
+            type: 'number',
+            minimum: 0.25,
             maximum: 4.0,
             default: 1.0,
-            description: 'Playback speed (0.25 = 4x slower, 4.0 = 4x faster)'
+            description: 'Playback speed (0.25 = 4x slower, 4.0 = 4x faster)',
           },
           strategy: {
             type: 'string',
-            enum: ['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'],
-            description: 'Execution strategy for model selection and orchestration.'
+            enum: [
+              'single',
+              'cost',
+              'speed',
+              'quality',
+              'balanced',
+              'parallel',
+              'debate',
+              'quality_multipass',
+              'quality-multipass',
+              'quality-multi-pass',
+              'dynamic',
+              'auto',
+            ],
+            description: 'Execution strategy for model selection and orchestration.',
           },
           allow_fallback: {
             type: 'boolean',
             default: true,
-            description: 'Allow fallback to additional candidate models/providers on transient failures.'
+            description:
+              'Allow fallback to additional candidate models/providers on transient failures.',
           },
           max_cost: {
             type: 'number',
             minimum: 0,
-            description: 'Maximum target cost for this request in USD.'
+            description: 'Maximum target cost for this request in USD.',
           },
           quality_target: {
             type: 'number',
             minimum: 0,
             maximum: 1,
-            description: 'Quality target from 0 to 1 used by orchestration ranking.'
+            description: 'Quality target from 0 to 1 used by orchestration ranking.',
           },
         },
       },
@@ -201,7 +245,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "invalid_parameter")' },
               },
@@ -229,7 +276,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -243,7 +293,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -258,11 +311,20 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
       // `speed` is destructured for documentation completeness; actual TTS
       // call uses validated.speed (post-validation), so the destructured
       // copy is intentionally unused here.
-      const { model = 'auto', input, voice = 'auto', response_format = 'mp3', speed: _speed = 1.0 } = request.body;
+      const {
+        model = 'auto',
+        input,
+        voice = 'auto',
+        response_format = 'mp3',
+        speed: _speed = 1.0,
+      } = request.body;
       const extendedRequest = request as ExtendedFastifyRequest;
       const userContext = extendedRequest.userContext || createOrchestrationContext(request);
 
-      log.info({ requestId, model, inputLength: input.length, voice, format: response_format }, 'TTS request received');
+      log.info(
+        { requestId, model, inputLength: input.length, voice, format: response_format },
+        'TTS request received'
+      );
 
       try {
         // Validate request body
@@ -270,7 +332,14 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
 
         // Type guard for audio format
         const format = validated.response_format;
-        if (format !== 'mp3' && format !== 'opus' && format !== 'aac' && format !== 'flac' && format !== 'wav' && format !== 'pcm') {
+        if (
+          format !== 'mp3' &&
+          format !== 'opus' &&
+          format !== 'aac' &&
+          format !== 'flac' &&
+          format !== 'wav' &&
+          format !== 'pcm'
+        ) {
           throw new Error(`Invalid audio format: ${format}`);
         }
 
@@ -278,7 +347,9 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         const enrichedUserContext = {
           ...userContext,
           ...(validated.max_cost !== undefined ? { maxCost: validated.max_cost } : {}),
-          ...(validated.quality_target !== undefined ? { qualityTarget: validated.quality_target } : {}),
+          ...(validated.quality_target !== undefined
+            ? { qualityTarget: validated.quality_target }
+            : {}),
         };
         const result = await executeRouteWithRetry(
           () =>
@@ -307,7 +378,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         // Set response headers
         const contentType = getContentType(validated.response_format);
         reply.header('Content-Type', contentType);
-        reply.header('Content-Disposition', `attachment; filename="speech.${validated.response_format}"`);
+        reply.header(
+          'Content-Disposition',
+          `attachment; filename="speech.${validated.response_format}"`
+        );
         reply.header('X-Ailin-Model-Used', result.modelUsed);
         reply.header('X-Ailin-Provider', result.provider);
         reply.header('X-Ailin-Duration-Ms', result.durationMs.toString());
@@ -316,16 +390,22 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         return reply.send(result.audioBuffer);
       } catch (error: unknown) {
         log.error({ requestId, error }, 'TTS request failed');
-        const statusCode = (error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number') 
-          ? error.statusCode 
-          : 500;
+        const statusCode =
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
+          typeof error.statusCode === 'number'
+            ? error.statusCode
+            : 500;
         const message = error instanceof Error ? error.message : 'TTS request failed';
-        const errorType = (error && typeof error === 'object' && 'type' in error && typeof error.type === 'string')
-          ? error.type
-          : 'audio_synthesis_error';
-        const errorCode = (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string')
-          ? error.code
-          : 'internal_error';
+        const errorType =
+          error && typeof error === 'object' && 'type' in error && typeof error.type === 'string'
+            ? error.type
+            : 'audio_synthesis_error';
+        const errorCode =
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : 'internal_error';
         return reply.code(statusCode).send({
           error: {
             message,
@@ -348,73 +428,92 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Audio'],
       summary: 'Speech-to-Text (STT)',
-      description: 'Transcribes audio into text using multi-provider orchestration (Whisper, Google Speech, etc.). Automatically selects the best STT model based on language and audio quality.',
+      description:
+        'Transcribes audio into text using multi-provider orchestration (Whisper, Google Speech, etc.). Automatically selects the best STT model based on language and audio quality.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       consumes: ['multipart/form-data'],
       body: {
         type: 'object',
         required: ['file'],
         properties: {
-          file: { 
-            type: 'string', 
+          file: {
+            type: 'string',
             format: 'binary',
-            description: 'Audio file to transcribe (mp3, mp4, mpeg, mpga, m4a, wav, webm, flac, ogg, opus)'
+            description:
+              'Audio file to transcribe (mp3, mp4, mpeg, mpga, m4a, wav, webm, flac, ogg, opus)',
           },
-          model: { 
-            type: 'string', 
+          model: {
+            type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection'
+            description: 'Model ID or "auto" for intelligent selection',
           },
-          language: { 
+          language: {
             type: 'string',
-            description: 'Language of the audio (ISO-639-1 format, e.g., "en", "es", "pt-BR"). Optional - auto-detected if not provided.' 
+            description:
+              'Language of the audio (ISO-639-1 format, e.g., "en", "es", "pt-BR"). Optional - auto-detected if not provided.',
           },
-          prompt: { 
+          prompt: {
             type: 'string',
-            description: 'Optional text to guide the model\'s style or continue a previous audio segment. Helps with proper nouns, context, etc.'
+            description:
+              "Optional text to guide the model's style or continue a previous audio segment. Helps with proper nouns, context, etc.",
           },
-          response_format: { 
-            type: 'string', 
+          response_format: {
+            type: 'string',
             enum: ['json', 'text', 'srt', 'verbose_json', 'vtt'],
-            default: 'json'
+            default: 'json',
           },
-          temperature: { 
-            type: 'number', 
-            minimum: 0, 
+          temperature: {
+            type: 'number',
+            minimum: 0,
             maximum: 1,
-            default: 0
+            default: 0,
           },
           timestamp_granularities: {
             type: 'array',
             items: { type: 'string', enum: ['word', 'segment'] },
-            description: 'Timestamp granularities (word-level or segment-level)'
+            description: 'Timestamp granularities (word-level or segment-level)',
           },
           strategy: {
             type: 'string',
-            enum: ['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'],
-            description: 'Execution strategy for model selection and orchestration.'
+            enum: [
+              'single',
+              'cost',
+              'speed',
+              'quality',
+              'balanced',
+              'parallel',
+              'debate',
+              'quality_multipass',
+              'quality-multipass',
+              'quality-multi-pass',
+              'dynamic',
+              'auto',
+            ],
+            description: 'Execution strategy for model selection and orchestration.',
           },
           allow_fallback: {
             type: 'boolean',
             default: true,
-            description: 'Allow fallback to additional candidate models/providers on transient failures.'
+            description:
+              'Allow fallback to additional candidate models/providers on transient failures.',
           },
           max_cost: {
             type: 'number',
             minimum: 0,
-            description: 'Maximum target cost for this request in USD.'
+            description: 'Maximum target cost for this request in USD.',
           },
           quality_target: {
             type: 'number',
             minimum: 0,
             maximum: 1,
-            description: 'Quality target from 0 to 1 used by orchestration ranking.'
+            description: 'Quality target from 0 to 1 used by orchestration ranking.',
           },
         },
       },
       response: {
         200: {
-          description: 'Transcription successful. Response format depends on response_format parameter (json, text, srt, verbose_json, vtt)',
+          description:
+            'Transcription successful. Response format depends on response_format parameter (json, text, srt, verbose_json, vtt)',
           oneOf: [
             { type: 'string', description: 'Plain text transcription (when response_format=text)' },
             { type: 'string', description: 'SRT subtitle format (when response_format=srt)' },
@@ -474,9 +573,16 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "missing_file", "invalid_parameter", "invalid_audio_format")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "missing_file", "invalid_parameter", "invalid_audio_format")',
+                },
               },
             },
           },
@@ -502,7 +608,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -516,7 +625,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -542,7 +654,9 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
           fields?: Record<string, { value?: string }>;
         }
 
-        const multipartRequest = request as FastifyRequest & { file?: () => Promise<MultipartFile> };
+        const multipartRequest = request as FastifyRequest & {
+          file?: () => Promise<MultipartFile>;
+        };
         const data = multipartRequest.file ? await multipartRequest.file() : undefined;
         if (!data) {
           return reply.code(400).send({
@@ -594,9 +708,7 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
           try {
             const parsed: unknown = JSON.parse(timestampGranularitiesRaw);
             if (!Array.isArray(parsed)) return undefined;
-            return parsed.filter(
-              (v): v is 'word' | 'segment' => v === 'word' || v === 'segment',
-            );
+            return parsed.filter((v): v is 'word' | 'segment' => v === 'word' || v === 'segment');
           } catch {
             return undefined;
           }
@@ -610,7 +722,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         const qualityTargetRaw = getFieldValue(fields.quality_target);
         const qualityTarget = qualityTargetRaw !== undefined ? Number(qualityTargetRaw) : undefined;
 
-        log.info({ requestId, model, filename, language, format: response_format }, 'STT processing started');
+        log.info(
+          { requestId, model, filename, language, format: response_format },
+          'STT processing started'
+        );
 
         // Execute STT via orchestration service
         const enrichedUserContext = {
@@ -674,16 +789,22 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         }
       } catch (error: unknown) {
         log.error({ requestId, error }, 'STT request failed');
-        const statusCode = (error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number') 
-          ? error.statusCode 
-          : 500;
+        const statusCode =
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
+          typeof error.statusCode === 'number'
+            ? error.statusCode
+            : 500;
         const message = error instanceof Error ? error.message : 'STT request failed';
-        const errorType = (error && typeof error === 'object' && 'type' in error && typeof error.type === 'string')
-          ? error.type
-          : 'audio_transcription_error';
-        const errorCode = (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string')
-          ? error.code
-          : 'internal_error';
+        const errorType =
+          error && typeof error === 'object' && 'type' in error && typeof error.type === 'string'
+            ? error.type
+            : 'audio_transcription_error';
+        const errorCode =
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : 'internal_error';
         return reply.code(statusCode).send({
           error: {
             message,
@@ -703,66 +824,85 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
     schema: {
       tags: ['Audio'],
       summary: 'Audio Translation',
-      description: 'Translates audio from any language to English using multi-provider orchestration.',
+      description:
+        'Translates audio from any language to English using multi-provider orchestration.',
       security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       consumes: ['multipart/form-data'],
       body: {
         type: 'object',
         required: ['file'],
         properties: {
-          file: { 
-            type: 'string', 
+          file: {
+            type: 'string',
             format: 'binary',
-            description: 'Audio file to translate'
+            description: 'Audio file to translate',
           },
-          model: { 
-            type: 'string', 
+          model: {
+            type: 'string',
             default: 'auto',
-            description: 'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best audio translation model.',
+            description:
+              'Model ID or "auto" for intelligent selection. When "auto", Ailin orchestrates across 500+ models to find the best audio translation model.',
           },
-          prompt: { 
+          prompt: {
             type: 'string',
             description: 'Optional text prompt to guide translation context or terminology',
           },
-          response_format: { 
-            type: 'string', 
+          response_format: {
+            type: 'string',
             enum: ['json', 'text', 'srt', 'verbose_json', 'vtt'],
             default: 'json',
-            description: 'Response format: json (default, structured JSON), text (plain text), srt (SRT subtitles), verbose_json (detailed JSON with timestamps), or vtt (WebVTT format)'
+            description:
+              'Response format: json (default, structured JSON), text (plain text), srt (SRT subtitles), verbose_json (detailed JSON with timestamps), or vtt (WebVTT format)',
           },
-          temperature: { 
-            type: 'number', 
-            minimum: 0, 
+          temperature: {
+            type: 'number',
+            minimum: 0,
             maximum: 1,
             default: 0,
-            description: 'Sampling temperature (0-1). Controls randomness in translation. Lower values make output more deterministic. Default is 0 (most deterministic).'
+            description:
+              'Sampling temperature (0-1). Controls randomness in translation. Lower values make output more deterministic. Default is 0 (most deterministic).',
           },
           strategy: {
             type: 'string',
-            enum: ['single', 'cost', 'speed', 'quality', 'balanced', 'parallel', 'debate', 'quality_multipass', 'quality-multipass', 'quality-multi-pass', 'dynamic', 'auto'],
-            description: 'Execution strategy for model selection and orchestration.'
+            enum: [
+              'single',
+              'cost',
+              'speed',
+              'quality',
+              'balanced',
+              'parallel',
+              'debate',
+              'quality_multipass',
+              'quality-multipass',
+              'quality-multi-pass',
+              'dynamic',
+              'auto',
+            ],
+            description: 'Execution strategy for model selection and orchestration.',
           },
           allow_fallback: {
             type: 'boolean',
             default: true,
-            description: 'Allow fallback to additional candidate models/providers on transient failures.'
+            description:
+              'Allow fallback to additional candidate models/providers on transient failures.',
           },
           max_cost: {
             type: 'number',
             minimum: 0,
-            description: 'Maximum target cost for this request in USD.'
+            description: 'Maximum target cost for this request in USD.',
           },
           quality_target: {
             type: 'number',
             minimum: 0,
             maximum: 1,
-            description: 'Quality target from 0 to 1 used by orchestration ranking.'
+            description: 'Quality target from 0 to 1 used by orchestration ranking.',
           },
         },
       },
       response: {
         200: {
-          description: 'Translation successful. Response format depends on response_format parameter (json, text, srt, verbose_json, vtt)',
+          description:
+            'Translation successful. Response format depends on response_format parameter (json, text, srt, verbose_json, vtt)',
           oneOf: [
             { type: 'string', description: 'Plain text translation (when response_format=text)' },
             { type: 'string', description: 'SRT subtitle format (when response_format=srt)' },
@@ -806,9 +946,16 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the validation failure' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the validation failure',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "invalid_request_error")' },
-                code: { type: 'string', description: 'Error code (e.g., "missing_file", "invalid_parameter", "invalid_audio_format")' },
+                code: {
+                  type: 'string',
+                  description:
+                    'Error code (e.g., "missing_file", "invalid_parameter", "invalid_audio_format")',
+                },
               },
             },
           },
@@ -834,7 +981,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message indicating the requested resource was not found' },
+                message: {
+                  type: 'string',
+                  description: 'Error message indicating the requested resource was not found',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "not_found_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "resource_not_found")' },
               },
@@ -848,7 +998,10 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
             error: {
               type: 'object',
               properties: {
-                message: { type: 'string', description: 'Error message describing the server error' },
+                message: {
+                  type: 'string',
+                  description: 'Error message describing the server error',
+                },
                 type: { type: 'string', description: 'Error type (e.g., "server_error")' },
                 code: { type: 'string', description: 'Error code (e.g., "internal_error")' },
               },
@@ -874,7 +1027,9 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
           fields?: Record<string, { value: string }>;
         }
 
-        const data = await (request as FastifyRequest & { file?: () => Promise<MultipartFile> }).file?.();
+        const data = await (
+          request as FastifyRequest & { file?: () => Promise<MultipartFile> }
+        ).file?.();
         if (!data) {
           return reply.code(400).send({
             error: {
@@ -889,40 +1044,82 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         const filename = data.filename;
 
         const fields = data.fields || {};
-        const model = (typeof fields.model === 'object' && fields.model !== null && 'value' in fields.model && typeof fields.model.value === 'string')
-          ? fields.model.value
-          : 'auto';
-        const prompt = (typeof fields.prompt === 'object' && fields.prompt !== null && 'value' in fields.prompt && typeof fields.prompt.value === 'string')
-          ? fields.prompt.value
-          : undefined;
-        const response_format = (typeof fields.response_format === 'object' && fields.response_format !== null && 'value' in fields.response_format && typeof fields.response_format.value === 'string')
-          ? fields.response_format.value
-          : 'json';
-        const temperature = (typeof fields.temperature === 'object' && fields.temperature !== null && 'value' in fields.temperature && typeof fields.temperature.value === 'string')
-          ? parseFloat(fields.temperature.value)
-          : 0;
-        const strategy = (typeof fields.strategy === 'object' && fields.strategy !== null && 'value' in fields.strategy && typeof fields.strategy.value === 'string')
-          ? fields.strategy.value
-          : undefined;
-        const allowFallbackRaw = (typeof fields.allow_fallback === 'object' && fields.allow_fallback !== null && 'value' in fields.allow_fallback && typeof fields.allow_fallback.value === 'string')
-          ? fields.allow_fallback.value
-          : undefined;
-        const allowFallback = allowFallbackRaw === undefined ? true : allowFallbackRaw.toLowerCase() !== 'false';
-        const maxCostRaw = (typeof fields.max_cost === 'object' && fields.max_cost !== null && 'value' in fields.max_cost && typeof fields.max_cost.value === 'string')
-          ? fields.max_cost.value
-          : undefined;
+        const model =
+          typeof fields.model === 'object' &&
+          fields.model !== null &&
+          'value' in fields.model &&
+          typeof fields.model.value === 'string'
+            ? fields.model.value
+            : 'auto';
+        const prompt =
+          typeof fields.prompt === 'object' &&
+          fields.prompt !== null &&
+          'value' in fields.prompt &&
+          typeof fields.prompt.value === 'string'
+            ? fields.prompt.value
+            : undefined;
+        const response_format =
+          typeof fields.response_format === 'object' &&
+          fields.response_format !== null &&
+          'value' in fields.response_format &&
+          typeof fields.response_format.value === 'string'
+            ? fields.response_format.value
+            : 'json';
+        const temperature =
+          typeof fields.temperature === 'object' &&
+          fields.temperature !== null &&
+          'value' in fields.temperature &&
+          typeof fields.temperature.value === 'string'
+            ? parseFloat(fields.temperature.value)
+            : 0;
+        const strategy =
+          typeof fields.strategy === 'object' &&
+          fields.strategy !== null &&
+          'value' in fields.strategy &&
+          typeof fields.strategy.value === 'string'
+            ? fields.strategy.value
+            : undefined;
+        const allowFallbackRaw =
+          typeof fields.allow_fallback === 'object' &&
+          fields.allow_fallback !== null &&
+          'value' in fields.allow_fallback &&
+          typeof fields.allow_fallback.value === 'string'
+            ? fields.allow_fallback.value
+            : undefined;
+        const allowFallback =
+          allowFallbackRaw === undefined ? true : allowFallbackRaw.toLowerCase() !== 'false';
+        const maxCostRaw =
+          typeof fields.max_cost === 'object' &&
+          fields.max_cost !== null &&
+          'value' in fields.max_cost &&
+          typeof fields.max_cost.value === 'string'
+            ? fields.max_cost.value
+            : undefined;
         const maxCost = maxCostRaw !== undefined ? Number(maxCostRaw) : undefined;
-        const qualityTargetRaw = (typeof fields.quality_target === 'object' && fields.quality_target !== null && 'value' in fields.quality_target && typeof fields.quality_target.value === 'string')
-          ? fields.quality_target.value
-          : undefined;
+        const qualityTargetRaw =
+          typeof fields.quality_target === 'object' &&
+          fields.quality_target !== null &&
+          'value' in fields.quality_target &&
+          typeof fields.quality_target.value === 'string'
+            ? fields.quality_target.value
+            : undefined;
         const qualityTarget = qualityTargetRaw !== undefined ? Number(qualityTargetRaw) : undefined;
 
         // Type guard for response format
-        if (response_format !== 'json' && response_format !== 'text' && response_format !== 'srt' && response_format !== 'verbose_json' && response_format !== 'vtt') {
+        if (
+          response_format !== 'json' &&
+          response_format !== 'text' &&
+          response_format !== 'srt' &&
+          response_format !== 'verbose_json' &&
+          response_format !== 'vtt'
+        ) {
           throw new Error(`Invalid response format: ${response_format}`);
         }
 
-        log.info({ requestId, model, filename, format: response_format }, 'Translation processing started');
+        log.info(
+          { requestId, model, filename, format: response_format },
+          'Translation processing started'
+        );
 
         // Execute translation via orchestration service
         const enrichedUserContext = {
@@ -981,16 +1178,22 @@ export async function registerAudioRoutes(server: FastifyInstance): Promise<void
         }
       } catch (error: unknown) {
         log.error({ requestId, error }, 'Translation request failed');
-        const statusCode = (error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number') 
-          ? error.statusCode 
-          : 500;
+        const statusCode =
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
+          typeof error.statusCode === 'number'
+            ? error.statusCode
+            : 500;
         const message = error instanceof Error ? error.message : 'Translation request failed';
-        const errorType = (error && typeof error === 'object' && 'type' in error && typeof error.type === 'string')
-          ? error.type
-          : 'audio_translation_error';
-        const errorCode = (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string')
-          ? error.code
-          : 'internal_error';
+        const errorType =
+          error && typeof error === 'object' && 'type' in error && typeof error.type === 'string'
+            ? error.type
+            : 'audio_translation_error';
+        const errorCode =
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : 'internal_error';
         return reply.code(statusCode).send({
           error: {
             message,
@@ -1020,4 +1223,3 @@ function getContentType(format: string): string {
   };
   return mimeTypes[format] || 'audio/mpeg';
 }
-

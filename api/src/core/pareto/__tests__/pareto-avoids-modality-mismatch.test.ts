@@ -30,19 +30,13 @@ import {
 describe('optimizer — modality + harm rejection', () => {
   it('audio TTS route never appears in a text-task selection', () => {
     const plan = optimizeParetoEnsemble({
-      candidates: [
-        scorePairX(),
-        scoreAnchorA(),
-        scoreModalityMismatchAudio(),
-      ],
+      candidates: [scorePairX(), scoreAnchorA(), scoreModalityMismatchAudio()],
       taskType: 'code-generation',
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
     });
     expect(plan.selectedModelIds).not.toContain('fx-audio-tts');
-    const rejection = plan.rejectedCandidates.find(
-      (r) => r.modelId === 'fx-audio-tts',
-    );
+    const rejection = plan.rejectedCandidates.find((r) => r.modelId === 'fx-audio-tts');
     expect(rejection, 'audio reject record').toBeDefined();
     expect(rejection!.reason).toContain('modality');
   });
@@ -59,13 +53,7 @@ describe('optimizer — modality + harm rejection', () => {
 
   it('multi-mini pool: none of the minis appear, no matter how cheap', () => {
     const plan = optimizeParetoEnsemble({
-      candidates: [
-        scoreMini('a'),
-        scoreMini('b'),
-        scoreMini('c'),
-        scoreAnchorA(),
-        scorePairX(),
-      ],
+      candidates: [scoreMini('a'), scoreMini('b'), scoreMini('c'), scoreAnchorA(), scorePairX()],
       taskType: 'code-generation',
       taskModality: 'text',
       baseline: STANDARD_BASELINE,
@@ -83,9 +71,7 @@ describe('optimizer — modality + harm rejection', () => {
       baseline: STANDARD_BASELINE,
     });
     expect(plan.selectedModelIds).not.toContain('fx-cheap-harmful');
-    const rec = plan.rejectedCandidates.find(
-      (r) => r.modelId === 'fx-cheap-harmful',
-    );
+    const rec = plan.rejectedCandidates.find((r) => r.modelId === 'fx-cheap-harmful');
     expect(rec, 'cheap-harmful rejection record').toBeDefined();
     expect(rec!.reason.length).toBeGreaterThan(0);
   });

@@ -95,9 +95,11 @@ describe('openai-compatible-hub-model-fetcher', () => {
 
   describe('explicit User-Agent header (featherless-ai WAF regression)', () => {
     it('sends a non-default User-Agent instead of undici\'s "node" default', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: 'recursal/EagleX_1-7T', context_window: 16384 }] })
-      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          jsonResponse({ data: [{ id: 'recursal/EagleX_1-7T', context_window: 16384 }] })
+        );
 
       const fetcher = new OpenAICompatibleHubModelFetcher({
         providerName: 'featherless-ai',
@@ -218,9 +220,9 @@ describe('openai-compatible-hub-model-fetcher', () => {
     });
 
     it('proceeds with discovery on an empty key when apiKeyOptional is true, and omits the Authorization header', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: 'qwen2.5:7b' }] })
-      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'qwen2.5:7b' }] }));
       const fetcher = new OpenAICompatibleHubModelFetcher({
         providerName: 'vllm',
         apiKey: '',
@@ -250,9 +252,9 @@ describe('openai-compatible-hub-model-fetcher', () => {
 
   describe('absolute-URL modelListPaths override (github-models catalog endpoint)', () => {
     it('uses the absolute URL as-is instead of concatenating it onto baseUrl', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        jsonResponse({ data: [{ id: 'openai/gpt-4o' }] })
-      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'openai/gpt-4o' }] }));
       const fetcher = new OpenAICompatibleHubModelFetcher({
         providerName: 'github-models',
         apiKey: 'ghp_live',
@@ -263,7 +265,7 @@ describe('openai-compatible-hub-model-fetcher', () => {
       expect(models).toHaveLength(1);
       expect(fetchSpy).toHaveBeenCalledWith(
         'https://models.github.ai/catalog/models',
-        expect.any(Object),
+        expect.any(Object)
       );
     });
   });

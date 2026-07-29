@@ -111,29 +111,39 @@ export class MassiveParallelStrategy extends BaseStrategy {
           attempted: context.preferredModelIds?.[0],
           reason: preference.pinReason,
         },
-        'Preferred model not eligible for massive-parallel pool — using diverse selection only.',
+        'Preferred model not eligible for massive-parallel pool — using diverse selection only.'
       );
     }
     // If pin is in eligible models but not in diverse pool, swap in.
     let selectedModels = diversePool;
-    if (preference.pinnedExecutor && !diversePool.find(m => m.id === preference.pinnedExecutor!.id)) {
-      const fallback = diversePool.filter(m => m.id !== preference.pinnedExecutor!.id);
+    if (
+      preference.pinnedExecutor &&
+      !diversePool.find((m) => m.id === preference.pinnedExecutor!.id)
+    ) {
+      const fallback = diversePool.filter((m) => m.id !== preference.pinnedExecutor!.id);
       selectedModels = withPreferredFirst(preference, fallback).slice(0, 9);
     } else if (preference.pinnedExecutor) {
       // Pin already in pool — promote to first slot for execution-order
       // observability (doesn't affect correctness; all run in parallel).
-      const without = diversePool.filter(m => m.id !== preference.pinnedExecutor!.id);
+      const without = diversePool.filter((m) => m.id !== preference.pinnedExecutor!.id);
       selectedModels = withPreferredFirst(preference, without).slice(0, 9);
     }
 
     // Observer: start
-    this.emitObserverEvent(context, { type: 'phase_start', models: selectedModels.map(m => m.name || m.id), summary: `Massive parallel: ${selectedModels.length} models executing simultaneously.` });
+    this.emitObserverEvent(context, {
+      type: 'phase_start',
+      models: selectedModels.map((m) => m.name || m.id),
+      summary: `Massive parallel: ${selectedModels.length} models executing simultaneously.`,
+    });
 
     // 2. Execute with early-exit: stop when high-agreement responses arrive
     const executions = await this.executeAllModelsWithEarlyExit(request, selectedModels, context);
 
     // Observer: complete
-    this.emitObserverEvent(context, { type: 'synthesis_complete', summary: `Massive parallel: ${executions.filter(e => e.success).length}/${executions.length} succeeded.` });
+    this.emitObserverEvent(context, {
+      type: 'synthesis_complete',
+      summary: `Massive parallel: ${executions.filter((e) => e.success).length}/${executions.length} succeeded.`,
+    });
 
     // 3. Score each response
     const scoredExecutions = this.scoreExecutions(executions);
@@ -144,7 +154,9 @@ export class MassiveParallelStrategy extends BaseStrategy {
     const allExecutions: ModelExecution[] = executions.map((exec) => ({
       modelId: exec.model.id,
       modelName: exec.model.name,
-      role: (exec.model.id === bestExecution.execution.model.id ? 'primary' : 'secondary') as ModelRole,
+      role: (exec.model.id === bestExecution.execution.model.id
+        ? 'primary'
+        : 'secondary') as ModelRole,
       request,
       response: exec.response,
       cost: exec.cost,
@@ -156,7 +168,12 @@ export class MassiveParallelStrategy extends BaseStrategy {
     // synthesize across all candidates instead of only selecting the single best,
     // so the collective can EXCEED the best individual. Falls back to the best
     // response if the merge can't be produced.
-    const merged = await this.synthesizeMerged(allExecutions, request, context, bestExecution.execution.model);
+    const merged = await this.synthesizeMerged(
+      allExecutions,
+      request,
+      context,
+      bestExecution.execution.model
+    );
     let finalResponse = bestExecution.execution.response;
     let mergeCost = 0;
     if (merged && merged.response !== bestExecution.execution.response) {
@@ -191,8 +208,18 @@ export class MassiveParallelStrategy extends BaseStrategy {
           score: se.score,
           cost: se.execution.cost,
         })),
-        ...(this.isReasoningEnabled(request) && allExecutions.some(e => e.reasoning)
-          ? { reasoning_traces: allExecutions.filter(e => e.reasoning).map(e => ({ model_id: e.modelId, model_name: e.modelName, role: e.role, reasoning: e.reasoning, reasoning_tokens: e.reasoningTokens })) }
+        ...(this.isReasoningEnabled(request) && allExecutions.some((e) => e.reasoning)
+          ? {
+              reasoning_traces: allExecutions
+                .filter((e) => e.reasoning)
+                .map((e) => ({
+                  model_id: e.modelId,
+                  model_name: e.modelName,
+                  role: e.role,
+                  reasoning: e.reasoning,
+                  reasoning_tokens: e.reasoningTokens,
+                })),
+            }
           : {}),
       },
     };
@@ -303,7 +330,10 @@ export class MassiveParallelStrategy extends BaseStrategy {
         const errorMessage = error instanceof Error ? error.message : String(error);
         return {
           model,
-          response: this.createErrorResponse(model, error instanceof Error ? error : new Error(errorMessage)),
+          response: this.createErrorResponse(
+            model,
+            error instanceof Error ? error : new Error(errorMessage)
+          ),
           startTime: execStart,
           endTime: execEnd,
           duration: execEnd - execStart,
@@ -368,7 +398,12 @@ export class MassiveParallelStrategy extends BaseStrategy {
     const tokenSets = executions.map((e) => {
       const text = safeResponseContent(e.response);
       // Rough token set: split on whitespace + punctuation, lowercase
-      return new Set(text.toLowerCase().split(/[\s,.!?;:()[\]{}"'`]+/).filter(Boolean));
+      return new Set(
+        text
+          .toLowerCase()
+          .split(/[\s,.!?;:()[\]{}"'`]+/)
+          .filter(Boolean)
+      );
     });
 
     // Pairwise Jaccard — average of all pairs
@@ -391,7 +426,9 @@ export class MassiveParallelStrategy extends BaseStrategy {
   /**
    * Score each execution based on quality metrics
    */
-  private scoreExecutions(executions: InternalExecution[]): Array<{ execution: InternalExecution; score: number }> {
+  private scoreExecutions(
+    executions: InternalExecution[]
+  ): Array<{ execution: InternalExecution; score: number }> {
     return executions
       .filter((exec) => exec.success)
       .map((execution) => ({
@@ -441,7 +478,9 @@ export class MassiveParallelStrategy extends BaseStrategy {
   /**
    * Select best execution from scored list
    */
-  private selectBestExecution(scoredExecutions: Array<{ execution: InternalExecution; score: number }>): {
+  private selectBestExecution(
+    scoredExecutions: Array<{ execution: InternalExecution; score: number }>
+  ): {
     execution: InternalExecution;
     score: number;
   } {

@@ -70,8 +70,7 @@ export class UpdateProjectHandler {
           project.mergeSettings(command.settings);
         }
       } catch (entityError: unknown) {
-        const message =
-          entityError instanceof Error ? entityError.message : String(entityError);
+        const message = entityError instanceof Error ? entityError.message : String(entityError);
         return {
           success: false,
           error: message,
