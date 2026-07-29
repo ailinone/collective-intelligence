@@ -96,10 +96,10 @@ const THEMES = {
     grid: '#e2e6ec',
     axisText: '#57606a',
     titleText: '#1f2328',
-    line: '#6d28d9',
-    areaTop: 'rgba(109, 40, 217, 0.16)',
-    areaBottom: 'rgba(109, 40, 217, 0.0)',
-    marker: '#6d28d9',
+    line: '#24292f',
+    areaTop: 'rgba(36, 41, 47, 0.12)',
+    areaBottom: 'rgba(36, 41, 47, 0.0)',
+    marker: '#24292f',
     markerRing: '#ffffff',
   },
   dark: {
@@ -107,10 +107,10 @@ const THEMES = {
     grid: '#30363d',
     axisText: '#8b949e',
     titleText: '#e6edf3',
-    line: '#a78bfa',
-    areaTop: 'rgba(167, 139, 250, 0.18)',
-    areaBottom: 'rgba(167, 139, 250, 0.0)',
-    marker: '#a78bfa',
+    line: '#e6edf3',
+    areaTop: 'rgba(230, 237, 243, 0.14)',
+    areaBottom: 'rgba(230, 237, 243, 0.0)',
+    marker: '#e6edf3',
     markerRing: '#0d1117',
   },
 };
@@ -169,9 +169,12 @@ function renderSvg(points, repo, theme) {
 
   const endX = x(lastDate);
   const endY = y(maxCount);
-  const endLabel = `${maxCount.toLocaleString('en-US')} stars`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Cumulative GitHub stars over time for ${repo}, currently ${maxCount.toLocaleString('en-US')}">
+  // No exact-count label by design: this chart refreshes on a schedule (see
+  // the workflow's cron), not on every view, so a precise number here could
+  // read as stale next to the always-live GitHub stars badge elsewhere in
+  // the README. The curve's shape stays meaningful without it.
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Cumulative GitHub stars over time for ${repo}">
   <rect x="0" y="0" width="${W}" height="${H}" fill="${t.bg}" />
   <text x="${M.left}" y="24" font-size="14" font-weight="600" fill="${t.titleText}" font-family="-apple-system, Segoe UI, sans-serif">${repo}: star history</text>
   <g>
@@ -182,7 +185,6 @@ function renderSvg(points, repo, theme) {
   <path d="${areaPath}" fill="url(#fill-${theme})" stroke="none" />
   <path d="${linePath}" fill="none" stroke="${t.line}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
   <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="4" fill="${t.marker}" stroke="${t.markerRing}" stroke-width="2" />
-  <text x="${(endX - 8).toFixed(1)}" y="${(endY - 12).toFixed(1)}" text-anchor="end" font-size="13" font-weight="600" fill="${t.titleText}" font-family="-apple-system, Segoe UI, sans-serif">${endLabel}</text>
   <defs>
     <linearGradient id="fill-${theme}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${t.areaTop}" />
