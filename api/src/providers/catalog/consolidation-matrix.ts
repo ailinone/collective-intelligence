@@ -632,6 +632,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'arcee', // D1 2026-04-24 — /v1/chat with trinity-mini returned 402 {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}. Auth accepted.
     'chutes', // D1 2026-04-24 — /v1/chat with Qwen/Qwen3-32B-TEE returned 402 {"detail":{"message":"Quota exceeded and account balance is $0.0, please pay with fiat or send tao to..."}}. Auth accepted.
     'hyperbolic', // D1 2026-04-24 — /v1/chat returned 402 {"detail":"Insufficient funds, please see https://docs.hyperbolic.xyz/docs/hyperbolic-pricing"}. Auth accepted.
+    'sakana-ai', // LOTE U 2026-07-29 — GET /v1/models 200 (real 5-model list, proves auth accepted) but POST /v1/chat/completions for BOTH fugu and fugu-ultra returned 429 {"error":{"type":"usage_limit_reached","message":"No active subscription. Subscribe at https://console.sakana.ai/billing"}}. Same operational shape as ai302/arcee/chutes/hyperbolic: authentication complete, billing/credit blocked, execution unavailable. Promotion path: operator activates a subscription or PAYG billing on the Sakana account → re-probe → live-validation.
   ],
 
   // ── 0 credentials in cache invalidated ───────────────────────────────
@@ -1174,6 +1175,17 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     // this is a 70k-model, constantly-shifting catalog, and pinning a
     // fallback list would misrepresent it (see catalog entry notes).
     'ailin',
+    // LOTE U (2026-07-29) — sakana-ai. AUTHENTICATED GET /v1/models
+    // confirmed live 2026-07-29 with a real key from GCP secret
+    // `ailin-sakana-ai-key`: HTTP 200, real OpenAI-list shape
+    // (`{object:"list",data:[{id,object,created,owned_by}]}`), 5 real
+    // models — the exact shape the generic OpenAICompatibleHubModelFetcher
+    // expects, no dedicated fetcher needed. Note: chat/completions itself
+    // could not be live-confirmed end-to-end on this key (429
+    // usage_limit_reached — no active subscription/billing on the account)
+    // but that's an execution-time/billing concern, not a discovery-shape
+    // one; the /v1/models surface itself is genuinely live and compliant.
+    'sakana-ai',
   ],
   // ── 3 — Deployment-bound discovery ───────────────────────────────────
   // Discovery via a deployment-listing API; runtime materialises only

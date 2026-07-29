@@ -397,6 +397,10 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // for a self-hosted deployment. secretKeys follow the same naming
   // convention as the rest of this file in case one is provisioned later.
   { envVar: 'AILIN_API_KEY', secretKeys: ['ailin-key', 'ailin-api-key', 'gateway-key'] },
+  // ── LOTE U (2026-07-29) — Sakana AI (Fugu), chat-capable ────────────────
+  // 'sakana-ai-key' listed first: it's the actual GCP secret name
+  // (`ailin-sakana-ai-key`, prefix auto-added) confirmed live this lot.
+  { envVar: 'SAKANA_AI_API_KEY', secretKeys: ['sakana-ai-key', 'sakana-key'] },
 ] as const;
 
 // ─── Provider Key Status Tracking ──────────────────────────────────────────
@@ -584,6 +588,8 @@ const ENV_VAR_TO_PROVIDER: Record<string, string> = {
   PERPLEXITY_AGENT_API_KEY: 'perplexity-agent',
   // ── LOTE T (2026-07-13) ────────────────────────────────────────────────
   AILIN_API_KEY: 'ailin',
+  // ── LOTE U (2026-07-29) ────────────────────────────────────────────────
+  SAKANA_AI_API_KEY: 'sakana-ai',
 };
 
 /**
@@ -748,6 +754,8 @@ const LLM_PROVIDER_ENV_VARS = [
   'PERPLEXITY_AGENT_API_KEY',
   // ── LOTE T (2026-07-13) — Ailin gateway, chat-capable ──────────────────
   'AILIN_API_KEY',
+  // ── LOTE U (2026-07-29) — Sakana AI (Fugu), chat-capable ────────────────
+  'SAKANA_AI_API_KEY',
 ] as const;
 
 /**

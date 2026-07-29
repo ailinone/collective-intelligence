@@ -3553,4 +3553,71 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     notes: 'Meta-gateway to ~100 upstream providers / 70k+ models behind api.ailin.one\'s own orchestration. Discovery uses the generic hub fetcher against a richer native /v1/models shape it only partly understands (see header comment) — operability filtering is a known follow-up gap. Auth is X-API-Key; api.ailin.one also accepts bearerAuth JWT for user sessions, not used here (static server credential).',
     lastReviewedAt: '2026-07-13',
   },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Sakana AI (Fugu) — added 2026-07-29, live-verified with a real key from
+  // GCP secret `ailin-sakana-ai-key`.
+  //   - GET /v1/models -> 200, real 5-model array (fugu, fugu-ultra,
+  //     fugu-ultra-20260615, fugu-ultra-v1.0, fugu-ultra-v1.1) even though
+  //     NEITHER docs page (console.sakana.ai/get-started or /models)
+  //     documents this endpoint. Shape matches the generic
+  //     OpenAICompatibleHubModelFetcher (`data[].id`) — no dedicated
+  //     fetcher/pinnedFallback needed.
+  //   - POST /v1/chat/completions is real and OpenAI-shaped (confirmed a
+  //     proper `authentication_error` on a missing key), but a genuinely
+  //     successful completion could NOT be confirmed: both `fugu` and
+  //     `fugu-ultra` returned HTTP 429 usage_limit_reached, "No active
+  //     subscription. Subscribe at https://console.sakana.ai/billing" — this
+  //     key's account has no active subscription/PAYG billing. Streaming,
+  //     tools, jsonMode, reasoning and vision below are per-docs only, not
+  //     live-confirmed. Vision comes from the get-started page's sample
+  //     model-catalog config (`input_modalities: ["text","image"]` for all
+  //     models); the /models capability table omits vision entirely, so
+  //     treat that flag with some caution.
+  //   - fugu-cyber / fugu-cyber-v1.0 are excluded via modelDenylist: the
+  //     pricing docs say cyber "requires access request approval" and is
+  //     "available only through pay-as-you-go billing"; this key's
+  //     /v1/models response does not list either cyber model, consistent
+  //     with no cyber entitlement. Deliberately not advertising a model
+  //     most keys can't call.
+  //   - pricingMode is `none`, not `remote`: neither /v1/models nor
+  //     chat/completions responses expose pricing/context-window fields,
+  //     and this catalog's `static-file` PricingMode is reserved/
+  //     unimplemented. For reference only (marketing page, not machine-
+  //     read): fugu-ultra $5/$30 per 1M in/out tokens standard, $10/$45
+  //     above 272K context, $0.50/$1.00 cached; fugu-cyber $6/$36 standard,
+  //     $12/$54 above 272K, $0.60/$1.20 cached; base fugu has no per-token
+  //     price — subscription-only (Standard $20/mo, Pro $100/mo, Max
+  //     $200/mo), consistent with base fugu also 429'ing with the same
+  //     no-active-subscription error on this key.
+  //   - apiKeyEnvVar follows the `<PROVIDER_ID_UPPER>_API_KEY` convention
+  //     (SAKANA_AI_API_KEY, not the shorter SAKANA_API_KEY) per Rule 1 in
+  //     provider-catalog.schema.ts — Sakana has no well-known upstream SDK
+  //     env-var name to justify an override.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    providerId: 'sakana-ai',
+    displayName: 'Sakana AI (Fugu)',
+    providerFamily: 'sakana-ai',
+    integrationClass: 'oai-compat-pure',
+    integrationMode: 'discovery+execution',
+    baseUrl: 'https://api.sakana.ai/v1',
+    baseUrlEnvVar: 'SAKANA_AI_BASE_URL',
+    authScheme: 'bearer',
+    apiKeyEnvVar: 'SAKANA_AI_API_KEY',
+    supports: {
+      chat: true,
+      streaming: true,
+      tools: true,
+      jsonMode: true,
+      vision: true,
+      reasoning: true,
+    },
+    pricingMode: 'none',
+    modelDenylist: ['fugu-cyber', 'fugu-cyber-v1.0'],
+    enabledByDefault: true,
+    priority: 35,
+    docsUrl: 'https://console.sakana.ai/get-started',
+    notes: 'Fugu chat/tools/reasoning models. Live-verified 2026-07-29: /v1/models works (undocumented but real, 5 models), chat/completions is real OAI-shaped but this key has no active billing so a successful completion was not confirmed (429 usage_limit_reached on both fugu and fugu-ultra). fugu-cyber excluded via modelDenylist (approval-gated, absent from this key\'s /v1/models). pricingMode=none: no pricing in API responses; see header comment above for full detail and marketing-page figures.',
+    lastReviewedAt: '2026-07-29',
+  },
 ] as const satisfies readonly ProviderCatalogEntry[];
