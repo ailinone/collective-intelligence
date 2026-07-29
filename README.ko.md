@@ -479,7 +479,7 @@ licensing@ailin.one.
 </a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
+  <img src="https://raw.githubusercontent.com/ailinone/collective-intelligence/main/.github/contributors/contributors.svg" alt="Contributors" />
 </a>
 
 공개적으로 검증되고, 증빙이 저장소에 담긴 집단 지성 명제, 이것이

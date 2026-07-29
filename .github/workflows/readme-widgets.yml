@@ -1,0 +1,57 @@
+# Copyright (C) 2026 Ailin One, Inc.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Regenerates the README's self-hosted widgets directly in this repo: the
+# star-history chart SVGs (light/dark) and the contributors avatar SVG.
+# GitHub restricted the stargazers API to repo collaborators/admins on
+# 2026-06-30, which broke third-party chart services (star-history.com and
+# similar) for repos they do not administer; separately, the third-party
+# contrib.rocks embed was found showing a stale, incomplete contributor list.
+# This workflow runs in our own repo's own context (a collaborator request by
+# definition) and reads both directly from the GitHub API, rendering static
+# SVGs committed here instead of depending on either third party.
+name: README widgets
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # daily, 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: readme-widgets
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Generate widgets
+        env:
+          # Prefer a fine-grained PAT with Contents:Read-and-write on this repo
+          # (required by GitHub's stargazer-API restriction); fall back to the
+          # default Actions token, which may or may not satisfy that check.
+          GITHUB_TOKEN: ${{ secrets.STARMAP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/star-history/generate-chart.mjs
+          node scripts/contributors/generate-contributors.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- .github/star-history/ .github/contributors/; then
+            echo "No change in README widgets, nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/star-history/ .github/contributors/
+          git commit -m "chore(readme-widgets): regenerate star history and contributors from live GitHub data"
+          git push

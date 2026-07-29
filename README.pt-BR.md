@@ -480,7 +480,7 @@ Mantido pela **Ailin One, Inc.** A AGPL licencia o código, não as marcas.
 </a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
+  <img src="https://raw.githubusercontent.com/ailinone/collective-intelligence/main/.github/contributors/contributors.svg" alt="Contributors" />
 </a>
 
 Se a tese da inteligência coletiva (testada às claras, com os recibos no
