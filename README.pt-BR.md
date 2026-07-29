@@ -95,6 +95,8 @@ outras ainda estão amadurecendo; a documentação carrega badges de status
 para você sempre saber o que já está entregue versus o que está no
 roadmap.
 
+---
+
 ## Por que um coletivo vence o maior modelo único
 
 Os modelos de fronteira continuam crescendo, e o modelo único mais forte
@@ -118,6 +120,8 @@ resultado é mais confiável, mais governável, mais durável e, no conjunto
 crescente de tarefas em que a correção pode ser verificada objetivamente,
 **mensuravelmente mais preciso que todos os flagships de fronteira que
 testamos** (97% vs 68–82%, com os recibos abaixo).
+
+---
 
 ## Provado contra a fronteira, às claras
 
@@ -147,6 +151,8 @@ roadmap:
 Todo número acima é respaldado pelos dados brutos por execução e pelos
 scripts reproduzíveis commitados neste repositório: rode o harness você
 mesmo, na sua própria carga de trabalho, e nos cobre por isso.
+
+---
 
 ## Dezenas de milhares de modelos, sempre na fronteira
 
@@ -224,6 +230,8 @@ em produção.
 
 **A mesma trilha de auditoria que prova nossas alegações de benchmark governa o seu tráfego de produção**: governança como [princípio de primeira classe](https://ailin.guide/architecture/principles), não como sobrecusto.
 
+---
+
 ## Visão geral da arquitetura
 
 O sistema, de ponta a ponta (a descoberta alimenta a montagem do time, e
@@ -255,6 +263,8 @@ conversando nos dois sentidos com ~90 integrações de provedores. A saída
 da execução vai para a arbitragem, que aplica os gates de qualidade e o
 verificador determinístico, produzindo a resposta final com proveniência
 completa (`ailin_metadata`).*
+
+---
 
 ## Como uma requisição flui
 
@@ -297,6 +307,8 @@ por padrão, escalando apenas quando o gate de qualidade exige.
 - Prosa estilo documentação
 
 A decisão é operacional, não filosófica.
+
+---
 
 ## Início rápido
 
@@ -387,6 +399,8 @@ Início rápido com a API hospedada:
 
 Próximo: [como escolher uma estratégia](docs/guides/strategy-selection.md) · [aliases de modelo explicados](docs/guides/model-aliases-and-routing.md).
 
+---
+
 ## O que já é entregue hoje vs. o que está em desenvolvimento
 
 | Já entregue hoje | Em desenvolvimento |
@@ -401,6 +415,8 @@ Próximo: [como escolher uma estratégia](docs/guides/strategy-selection.md) · 
 
 Honestidade sobre validação é uma feature: tudo que não está na coluna da
 esquerda é rotulado na documentação do mesmo jeito que é rotulado aqui.
+
+---
 
 ## Contribuindo: inteligência coletiva precisa de um coletivo
 
@@ -422,6 +438,8 @@ ponto todo.
 
 Perguntas e resultados: [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
 Reportes de segurança: **nunca** em issue pública; veja [SECURITY.md](SECURITY.md).
+
+---
 
 ## Licença e governança
 
@@ -445,13 +463,21 @@ licensing@ailin.one.
 
 Mantido pela **Ailin One, Inc.** A AGPL licencia o código, não as marcas.
 
+---
+
 ## Histórico de estrelas e contribuidores
 
 <p align="center">
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Estrele o repositório e apoie uma nova era da IA, mais coletiva e colaborativa</b></a>
 </p>
 
-[![Gráfico de histórico de estrelas: total de estrelas no GitHub acumuladas ao longo do tempo para ailinone/collective-intelligence](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <img alt="Gráfico de histórico de estrelas: total de estrelas no GitHub acumuladas ao longo do tempo para ailinone/collective-intelligence" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+ </picture>
+</a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />

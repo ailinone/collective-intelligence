@@ -92,6 +92,8 @@ Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 있어, 무엇이 출시되어 있고 무엇이 로드맵에 있는지 언제나 알 수
 있습니다.
 
+---
+
 ## 집단이 가장 큰 단일 모델을 이기는 이유
 
 프런티어 모델은 계속 커지고 있고, 어느 시점에서든 가장 강한 단일
@@ -115,6 +117,8 @@ Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 그리고 정답을 객관적으로 검증할 수 있는, 점점 넓어지는 과제
 집합에서는 **우리가 테스트한 모든 프런티어 플래그십보다 측정 가능하게
 더 정확합니다** (97% vs 68–82%, 증빙은 아래에).
+
+---
 
 ## 프런티어를 상대로, 공개적으로 입증
 
@@ -150,6 +154,8 @@ Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 위 모든 수치는 이 저장소에 커밋된 실행 단위 원시 데이터와 재현
 가능한 스크립트로 뒷받침됩니다. 여러분의 워크로드로 직접 하네스를
 실행해 보고, 그 결과로 저희에게 책임을 물어 주세요.
+
+---
 
 ## 수만 개의 모델, 언제나 프런티어에
 
@@ -223,6 +229,8 @@ best-of-N) 각각은 정직한 도달 가능성(자동 선택 가능 / 명시적
 
 **우리의 주장을 증명하는 감사 추적이 곧 여러분의 트래픽을 통제하는 감사 추적입니다**: 거버넌스는 오버헤드가 아니라 [일급 원칙](https://ailin.guide/architecture/principles)입니다.
 
+---
+
 ## 한눈에 보는 아키텍처
 
 시스템을 처음부터 끝까지 보면, 디스커버리가 팀 구성에 정보를 공급하고,
@@ -251,6 +259,8 @@ flowchart TB
 관리하고 ~90개 제공자 통합과 양방향으로 통신합니다. 실행의 결과는
 중재 단계로 전달되어 품질 게이트와 결정론적 검증기를 적용받고, 완전한
 의사결정 이력(`ailin_metadata`)이 담긴 최종 응답을 만들어냅니다.*
+
+---
 
 ## 요청이 흐르는 방식
 
@@ -291,6 +301,8 @@ flowchart LR
 - 문서 스타일 산문
 
 이 결정은 철학이 아니라 운영의 문제입니다.
+
+---
 
 ## 퀵스타트
 
@@ -385,6 +397,8 @@ Linux에서는 api 서비스에
 다음: [전략 선택하기](docs/guides/strategy-selection.md) ·
 [모델 별칭 설명](docs/guides/model-aliases-and-routing.md).
 
+---
+
 ## 오늘 출시된 것 vs. 개발 중인 것
 
 | 오늘 출시됨 | 개발 중 |
@@ -399,6 +413,8 @@ Linux에서는 api 서비스에
 
 검증에 대한 정직함은 하나의 기능입니다: 왼쪽 열에 없는 것은
 무엇이든, 여기 라벨링된 방식 그대로 문서에도 라벨링되어 있습니다.
+
+---
 
 ## 기여하기: 집단 지성에는 집단이 필요합니다
 
@@ -420,6 +436,8 @@ Linux에서는 api 서비스에
 
 질문과 결과: [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
 보안 신고: **절대** 공개 이슈로 올리지 마세요. [SECURITY.md](SECURITY.md)를 참조하세요.
+
+---
 
 ## 라이선스 & 거버넌스
 
@@ -444,13 +462,21 @@ licensing@ailin.one.
 **Ailin One, Inc.**가 관리합니다. AGPL은 코드에 대한 라이선스이며,
 상표에는 적용되지 않습니다.
 
+---
+
 ## 스타 히스토리 & 컨트리뷰터
 
 <p align="center">
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 이 저장소에 Star를 눌러 더 집단적이고 협력적인 AI의 새로운 시대를 응원해 주세요</b></a>
 </p>
 
-[![Star History 차트: ailinone/collective-intelligence 저장소의 시간에 따른 누적 GitHub Star 수](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <img alt="Star History 차트: ailinone/collective-intelligence 저장소의 시간에 따른 누적 GitHub Star 수" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+ </picture>
+</a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
