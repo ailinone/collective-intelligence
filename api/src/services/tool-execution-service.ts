@@ -152,12 +152,17 @@ function globToRegExp(glob: string): RegExp {
  * regex mode for search/replace or grep, so escaping it the way
  * `globToRegExp` does would silently turn regex mode into literal-string
  * mode and break the feature. Instead, bound the worst case: cap pattern
- * length and reject the classic nested-quantifier shape (`(a+)+`, `(a*)*`,
- * `(a|a){2,}`, …) that causes catastrophic backtracking / ReDoS, while
- * leaving ordinary regex patterns unaffected.
+ * length and reject the classic nested-quantifier shape (`(a+)+`, `(a*)*`)
+ * AND the alternation-repetition shape (`(a|a){2,}`, `(a|aa)+`) that both
+ * cause catastrophic backtracking / ReDoS, while leaving ordinary regex
+ * patterns unaffected. (CodeQL alert #225: the alternation shape wasn't
+ * actually covered despite the doc comment claiming it was — the original
+ * pattern only matched a `+`/`*` *inside* the parens, which `(a|a){2,}`
+ * doesn't have.)
  */
 const MAX_USER_REGEX_LENGTH = 500;
-const CATASTROPHIC_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]|\([^()]*[+*][^()]*\)\{\d*,/;
+const CATASTROPHIC_REGEX_SHAPE =
+  /\([^()]*[+*][^()]*\)[+*]|\([^()]*[+*][^()]*\)\{\d*,|\([^()]*\|[^()]*\)[+*]|\([^()]*\|[^()]*\)\{\d*,/;
 
 function assertSafeUserRegex(source: string, label: string): void {
   if (source.length > MAX_USER_REGEX_LENGTH) {

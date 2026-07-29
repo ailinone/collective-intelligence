@@ -414,7 +414,7 @@ async function resolveApiKeyContext(
     });
 
     if (!apiKeyRecord) {
-      logger.warn({ keyPrefix }, 'API key not found in database');
+      logger.warn({ quickHash }, 'API key not found in database');
       return null;
     }
 
@@ -453,7 +453,7 @@ async function resolveApiKeyContext(
 
     if (!isValidHash) {
       logger.warn(
-        { keyId: apiKeyRecord.id, keyPrefix },
+        { keyId: apiKeyRecord.id, quickHash },
         'API key hash mismatch (possible collision or tampering)'
       );
       return null;
@@ -518,7 +518,7 @@ async function resolveApiKeyContext(
     return context;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error({ error: errorMessage, keyPrefix }, 'Error validating API key');
+    logger.error({ error: errorMessage, quickHash }, 'Error validating API key');
     return null;
   }
 }
@@ -769,7 +769,7 @@ export async function apiKeyAuthMiddleware(
         url,
         method: request.method,
         clientIp,
-        keyPrefix: apiKey.substring(0, 15),
+        quickHash: createQuickHash(apiKey),
       },
       'Authentication failed - invalid API key'
     );
