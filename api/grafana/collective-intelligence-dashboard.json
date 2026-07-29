@@ -1008,7 +1008,18 @@
   "style": "dark",
   "tags": ["collective-intelligence", "ai", "orchestration"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "label": "Datasource",
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",

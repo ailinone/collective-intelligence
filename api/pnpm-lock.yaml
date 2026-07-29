@@ -285,8 +285,8 @@ importers:
         specifier: ^2.2.3
         version: 2.3.4
       nanoid:
-        specifier: ^5.0.5
-        version: 5.1.6
+        specifier: ^6.0.0
+        version: 6.0.0
       node-cron:
         specifier: ^4.6.0
         version: 4.6.0
@@ -330,8 +330,8 @@ importers:
         specifier: ^4.10.0
         version: 4.10.0
       undici:
-        specifier: ^7.28.0
-        version: 7.28.0
+        specifier: ^7.29.0
+        version: 7.29.0
       ws:
         specifier: ^8.21.1
         version: 8.21.1
@@ -340,11 +340,11 @@ importers:
         version: 3.25.76
     devDependencies:
       '@testcontainers/postgresql':
-        specifier: ^10.10.3
-        version: 10.28.0
+        specifier: ^12.0.3
+        version: 12.0.4
       '@testcontainers/redis':
-        specifier: ^10.10.3
-        version: 10.28.0
+        specifier: ^12.0.3
+        version: 12.0.4
       '@types/bcrypt':
         specifier: ^6.0.0
         version: 6.0.0
@@ -406,8 +406,8 @@ importers:
         specifier: ^0.121.19
         version: 0.121.19(@aws-sdk/credential-provider-node@3.972.74)(@electric-sql/pglite@0.4.3)(@prisma/client@7.9.1(prisma@7.9.1(@types/react@19.2.17)(better-sqlite3@12.6.2)(magicast@0.3.5)(react-dom@19.2.0(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3))(@smithy/signature-v4@5.6.11)(@swc/helpers@0.5.23)(@types/json-schema@7.0.15)(@types/node@20.19.25)(@types/pg@8.20.0)(better-sqlite3@12.6.2)(mysql2@3.15.3)(pg@8.22.0)(playwright-core@1.61.1)(postgres@3.4.7)(prisma@7.9.1(@types/react@19.2.17)(better-sqlite3@12.6.2)(magicast@0.3.5)(react-dom@19.2.0(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(socks@2.8.7)
       testcontainers:
-        specifier: ^10.10.3
-        version: 10.28.0
+        specifier: ^12.0.3
+        version: 12.0.4
       tsc-alias:
         specifier: ^1.9.1
         version: 1.9.1
@@ -3290,11 +3290,11 @@ packages:
   '@swc/types@0.1.27':
     resolution: {integrity: sha512-K6h3iUlqeM946U4sXFYeahefR1YBbXJvko+hv8WS8/0BNJ4OHiHRywMnQUJCqkR7Y9+hqQ1TvEpiKqUhz7NEFg==}
 
-  '@testcontainers/postgresql@10.28.0':
-    resolution: {integrity: sha512-NN25rruG5D4Q7pCNIJuHwB+G85OSeJ3xHZ2fWx0O6sPoPEfCYwvpj8mq99cyn68nxFkFYZeyrZJtSFO+FnydiA==}
+  '@testcontainers/postgresql@12.0.4':
+    resolution: {integrity: sha512-a/pLU6j5lpKKAlUTPwqweqMGhOSjgTSb6HBX69TOrXn32ifU37nnQDmNFTj8ddOAw+BQL9oTRkeOxVbZkqhgZA==}
 
-  '@testcontainers/redis@10.28.0':
-    resolution: {integrity: sha512-xDNKSJTBmQca/3v5sdHmqSCYr68vjvAGSxoHCuWylha77gAYn88g5nUZK0ocNbUZgBq69KhIzj/f9zlHkw34uA==}
+  '@testcontainers/redis@12.0.4':
+    resolution: {integrity: sha512-44Ov3Lcptb3KqljcCy6xIJ2VxNsN+3Kw/YpBiotZpOcI4iLgLNmcOgvCFPVo+vDoh4rCfgtNUEbIpL5Mu7oRuw==}
 
   '@tokenizer/inflate@0.4.1':
     resolution: {integrity: sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA==}
@@ -3370,8 +3370,8 @@ packages:
   '@types/docker-modem@3.0.6':
     resolution: {integrity: sha512-yKpAGEuKRSS8wwx0joknWxsmLha78wNMe9R2S3UNsVOkZded8UqOrV8KoeDXoXsjndxwyF3eIhyClGbO1SEhEg==}
 
-  '@types/dockerode@3.3.45':
-    resolution: {integrity: sha512-iYpZF+xr5QLpIICejLdUF2r5gh8IXY1Gw3WLmt41dUbS3Vn/3hVgL+6lJBVbmrhYBWfbWPPstdr6+A0s95DTWA==}
+  '@types/dockerode@4.0.1':
+    resolution: {integrity: sha512-cmUpB+dPN955PxBEuXE3f6lKO1hHiIGYJA46IVF3BJpNsZGvtBDcRnlrHYHtOH/B6vtDOyl2kZ2ShAu3mgc27Q==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -4521,17 +4521,17 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  docker-compose@0.24.8:
-    resolution: {integrity: sha512-plizRs/Vf15H+GCVxq2EUvyPK7ei9b/cVesHvjnX4xaXjM9spHe2Ytq0BitndFgvTJ3E3NljPNUEl7BAN43iZw==}
+  docker-compose@1.4.2:
+    resolution: {integrity: sha512-rPHigTKGaEHpkUmfd69QgaOp+Os5vGJwG/Ry8lcr8W/382AmI+z/D7qoa9BybKIkqNppaIbs8RYeHSevdQjWww==}
     engines: {node: '>= 6.0.0'}
 
-  docker-modem@5.0.6:
-    resolution: {integrity: sha512-ens7BiayssQz/uAxGzH8zGXCtiV24rRWXdjNha5V4zSOcxmAZsfGVm/PPFbwQdqEkDnhG+SyR9E3zSHUbOKXBQ==}
+  docker-modem@5.0.7:
+    resolution: {integrity: sha512-XJgGhoR/CLpqshm4d3L7rzH6t8NgDFUIIpztYlLHIApeJjMZKYJMz2zxPsYxnejq5h3ELYSw/RBsi3t5h7gNTA==}
     engines: {node: '>= 8.0'}
 
-  dockerode@4.0.9:
-    resolution: {integrity: sha512-iND4mcOWhPaCNh54WmK/KoSb35AFqPAUWFMffTQcp52uQt36b5uNwEJTSXntJZBbeGad72Crbi/hvDIv6us/6Q==}
-    engines: {node: '>= 8.0'}
+  dockerode@5.0.1:
+    resolution: {integrity: sha512-avsq/xk4YPIrn0CgleX5bjT9Y8IT1p9PxrNQ++RBQ2WEyFfHCTDsT9kmyxz+H/axnjAwg8wJWEIuPGOUuNupiA==}
+    engines: {node: '>= 14.17'}
 
   doctrine@3.0.0:
     resolution: {integrity: sha512-yS+Q5i3hBf7GBkd4KG8a7eBNNWNGLTaEwwYWUijIYM7zrlYDM0BFXHjjPWlWZ1Rg7UaddZeIDmi9jF3HmqiQ2w==}
@@ -5195,9 +5195,9 @@ packages:
   get-port-please@3.2.0:
     resolution: {integrity: sha512-I9QVvBw5U/hw3RmWpYKRumUeaDgxTPd401x364rLmWBJcOQ753eov1eTgzDqRG9bqFIfDc7gfzcQEWrUri3o1A==}
 
-  get-port@7.1.0:
-    resolution: {integrity: sha512-QB9NKEeDg3xxVwCCwJQ9+xycaz6pBB6iQ76wiWMl1927n0Kir6alPiP+yuiICLLU4jpMe08dXfpebuQppFA2zw==}
-    engines: {node: '>=16'}
+  get-port@5.1.1:
+    resolution: {integrity: sha512-g/Q1aTSDOxFpchXC4i8ZWvxA1lnPqx/JHqcpIw0/LX9T8x/GBbi6YnlN5nhaKIFkT8oFsscUKgDJYxfwfS6QsQ==}
+    engines: {node: '>=8'}
 
   get-proto@1.0.1:
     resolution: {integrity: sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==}
@@ -5999,8 +5999,8 @@ packages:
     resolution: {integrity: sha512-FP+p8RB8OWpF3YZBCrP5gtADmtXApB5AMLn+vdyA+PyxCjrCs00mjyUozssO33cwDeT3wNGdLxJ5M//YqtHAJw==}
     hasBin: true
 
-  mkdirp@1.0.4:
-    resolution: {integrity: sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==}
+  mkdirp@3.0.1:
+    resolution: {integrity: sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -6121,6 +6121,11 @@ packages:
   nanoid@5.1.6:
     resolution: {integrity: sha512-c7+7RQ+dMB5dPwwCp4ee1/iV/q2P6aK1mTZcfr1BTuVlyW9hJYiMPybJCcnBlQtuSmTIWNeazm/zqNoZSSElBg==}
     engines: {node: ^18 || >=20}
+    hasBin: true
+
+  nanoid@6.0.0:
+    resolution: {integrity: sha512-mkUH+rPkwU2qPadJ0oJZOjeZ5Mxn8Q1UhevwkTRWNuUZzyia3h4rhzK39hxaHTk0o2OxB8W2SQ6A8k23ZDi1pQ==}
+    engines: {node: ^22 || ^24 || >=26}
     hasBin: true
 
   napi-build-utils@2.0.0:
@@ -6692,9 +6697,9 @@ packages:
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
 
-  properties-reader@2.3.0:
-    resolution: {integrity: sha512-z597WicA7nDZxK12kZqHr2TcvwNU1GCfA5UwfDY/HDp3hXPoPlb5rlEx9bwGTiJnc0OqbBTkU975jDToth8Gxw==}
-    engines: {node: '>=14'}
+  properties-reader@3.0.1:
+    resolution: {integrity: sha512-WPn+h9RGEExOKdu4bsF4HksG/uzd3cFq3MFtq8PsFeExPse5Ha/VOjQNyHhjboBFwGXGev6muJYTSPAOkROq2g==}
+    engines: {node: '>=18'}
 
   proto3-json-serializer@2.0.2:
     resolution: {integrity: sha512-SAzp/O4Yh02jGdRc+uIrGoe87dkN/XtwxfZ4ZyafJHymd79ozp5VG5nyZ7ygqPM5+cpLDjjGnYFUkngonyDPOQ==}
@@ -7295,14 +7300,11 @@ packages:
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
 
-  tar-fs@2.1.4:
-    resolution: {integrity: sha512-mDAjwmZdh7LTT6pNleZ05Yt65HC3E+NiQzl672vQG38jIrehtJk/J3mNwIg+vShQPcLF/LV7CMnDW6vjj6sfYQ==}
-
   tar-fs@2.1.5:
     resolution: {integrity: sha512-OboTd8mmMhZDNPV+UjQcK9yKAatXu2aJ+r1w4im1Otd4M4fl2hwvdoXUxIYHFTHWK/3y3FarBP70v3vwmGlOxw==}
 
-  tar-fs@3.1.1:
-    resolution: {integrity: sha512-LZA0oaPOc2fVo82Txf3gw+AkEd38szODlptMYejQUhndHMLQ9M059uXR+AfS7DNo0NpINvSqDsvyaCrBVkptWg==}
+  tar-fs@3.1.3:
+    resolution: {integrity: sha512-/hU4AXnIdZu+Gvl1pk0oI5f5HxWsCJRtY2aFaJdk9VvyL48DWU6iU5WAIPG+wIi1YvWA6eTJvIviP/tMAZZNwQ==}
 
   tar-stream@2.2.0:
     resolution: {integrity: sha512-ujeqbceABgwMZxEJnk2HDY2DlnUZ+9oEcb1KzTVfYHio0UE6dG71n60d8D2I4qNvleWrrXpmjpt7vZeF1LnMZQ==}
@@ -7326,8 +7328,8 @@ packages:
     resolution: {integrity: sha512-u9E6A+ZDYdp7a4WnarkXPZOx8Ilz46+kby6p1yZ8zsGTz9gYa6FIS7lj2oezzNKmtdyyJNNmmXDppga5GB7kSw==}
     engines: {node: '>=18'}
 
-  testcontainers@10.28.0:
-    resolution: {integrity: sha512-1fKrRRCsgAQNkarjHCMKzBKXSJFmzNTiTbhb5E/j5hflRXChEtHvkefjaHlgkNUjfw92/Dq8LTgwQn6RDBFbMg==}
+  testcontainers@12.0.4:
+    resolution: {integrity: sha512-QIR/8xF1+F/26cIM+9B4yyxNTbKJxAv3hygZyhPRgZ8Q2AhlPZjDdpXRuk16V37X4bgJRI3hXFhoEICMBA7Adg==}
 
   text-decoder@1.2.3:
     resolution: {integrity: sha512-3/o9z3X0X0fTupwsYvR03pJ/DjWuqqrfwBgTQzdWDiQSm9KitAyz/9WqsT2JQW7KV2m+bC2ol/zqpW37NHxLaA==}
@@ -7518,17 +7520,13 @@ packages:
   undici-types@7.24.6:
     resolution: {integrity: sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==}
 
-  undici@6.27.0:
-    resolution: {integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==}
-    engines: {node: '>=18.17'}
-
-  undici@7.28.0:
-    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
-    engines: {node: '>=20.18.1'}
-
   undici@7.29.0:
     resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
+
+  undici@8.9.0:
+    resolution: {integrity: sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==}
+    engines: {node: '>=22.19.0'}
 
   unicode-properties@1.4.1:
     resolution: {integrity: sha512-CLjCCLQ6UuMxWnbIylkisbRj31qxHPAurvena/0iwSVbQ2G1VY5/HjV0IRabOEbDHlzZlRdCrD4NhB0JtU40Pg==}
@@ -11703,18 +11701,18 @@ snapshots:
       '@swc/counter': 0.1.3
     optional: true
 
-  '@testcontainers/postgresql@10.28.0':
+  '@testcontainers/postgresql@12.0.4':
     dependencies:
-      testcontainers: 10.28.0
+      testcontainers: 12.0.4
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
       - react-native-b4a
       - supports-color
 
-  '@testcontainers/redis@10.28.0':
+  '@testcontainers/redis@12.0.4':
     dependencies:
-      testcontainers: 10.28.0
+      testcontainers: 12.0.4
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -11801,7 +11799,7 @@ snapshots:
       '@types/node': 20.19.25
       '@types/ssh2': 1.15.5
 
-  '@types/dockerode@3.3.45':
+  '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
       '@types/node': 20.19.25
@@ -13073,11 +13071,11 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  docker-compose@0.24.8:
+  docker-compose@1.4.2:
     dependencies:
       yaml: 2.9.0
 
-  docker-modem@5.0.6:
+  docker-modem@5.0.7:
     dependencies:
       debug: 4.4.3
       readable-stream: 3.6.2
@@ -13086,15 +13084,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  dockerode@4.0.9:
+  dockerode@5.0.1:
     dependencies:
       '@balena/dockerignore': 1.0.2
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.7.15
-      docker-modem: 5.0.6
+      docker-modem: 5.0.7
       protobufjs: 7.6.5
-      tar-fs: 2.1.4
-      uuid: 14.0.1
+      tar-fs: 2.1.5
     transitivePeerDependencies:
       - supports-color
 
@@ -13853,7 +13850,7 @@ snapshots:
 
   get-port-please@3.2.0: {}
 
-  get-port@7.1.0: {}
+  get-port@5.1.1: {}
 
   get-proto@1.0.1:
     dependencies:
@@ -13895,7 +13892,7 @@ snapshots:
       foreground-child: 3.3.1
       jackspeak: 3.4.3
       minimatch: 9.0.7
-      minipass: 7.1.2
+      minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 1.11.1
 
@@ -14757,7 +14754,7 @@ snapshots:
     dependencies:
       minimist: 1.2.8
 
-  mkdirp@1.0.4: {}
+  mkdirp@3.0.1: {}
 
   ml-array-max@1.2.4:
     dependencies:
@@ -14889,6 +14886,8 @@ snapshots:
   nanoid@3.3.16: {}
 
   nanoid@5.1.6: {}
+
+  nanoid@6.0.0: {}
 
   napi-build-utils@2.0.0:
     optional: true
@@ -15206,7 +15205,7 @@ snapshots:
   path-scurry@1.11.1:
     dependencies:
       lru-cache: 10.4.3
-      minipass: 7.1.2
+      minipass: 7.1.3
 
   path-scurry@2.0.2:
     dependencies:
@@ -15563,7 +15562,7 @@ snapshots:
       socket.io-client: 4.8.3
       text-extensions: 3.1.0
       tsx: 4.23.1
-      undici: 7.28.0
+      undici: 7.29.0
       winston: 3.19.0
       ws: 8.21.1
       zod: 4.3.6
@@ -15667,9 +15666,12 @@ snapshots:
       retry: 0.12.0
       signal-exit: 3.0.7
 
-  properties-reader@2.3.0:
+  properties-reader@3.0.1:
     dependencies:
-      mkdirp: 1.0.4
+      '@kwsites/file-exists': 1.1.1
+      mkdirp: 3.0.1
+    transitivePeerDependencies:
+      - supports-color
 
   proto3-json-serializer@2.0.2:
     dependencies:
@@ -15735,7 +15737,6 @@ snapshots:
     dependencies:
       end-of-stream: 1.4.5
       once: 1.4.0
-    optional: true
 
   punycode@2.3.1: {}
 
@@ -16399,24 +16400,16 @@ snapshots:
 
   systeminformation@5.33.0: {}
 
-  tar-fs@2.1.4:
-    dependencies:
-      chownr: 1.1.4
-      mkdirp-classic: 0.5.3
-      pump: 3.0.3
-      tar-stream: 2.2.0
-
   tar-fs@2.1.5:
     dependencies:
       chownr: 1.1.4
       mkdirp-classic: 0.5.3
       pump: 3.0.4
       tar-stream: 2.2.0
-    optional: true
 
-  tar-fs@3.1.1:
+  tar-fs@3.1.3:
     dependencies:
-      pump: 3.0.3
+      pump: 3.0.4
       tar-stream: 3.1.7
     optionalDependencies:
       bare-fs: 4.5.0
@@ -16473,23 +16466,23 @@ snapshots:
       glob: 10.5.0
       minimatch: 10.2.3
 
-  testcontainers@10.28.0:
+  testcontainers@12.0.4:
     dependencies:
       '@balena/dockerignore': 1.0.2
-      '@types/dockerode': 3.3.45
+      '@types/dockerode': 4.0.1
       archiver: 7.0.1
       async-lock: 1.4.1
       byline: 5.0.0
       debug: 4.4.3
-      docker-compose: 0.24.8
-      dockerode: 4.0.9
-      get-port: 7.1.0
+      docker-compose: 1.4.2
+      dockerode: 5.0.1
+      get-port: 5.1.1
       proper-lockfile: 4.1.2
-      properties-reader: 2.3.0
+      properties-reader: 3.0.1
       ssh-remote-port-forward: 1.0.4
-      tar-fs: 3.1.1
+      tar-fs: 3.1.3
       tmp: 0.2.7
-      undici: 6.27.0
+      undici: 8.9.0
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -16673,12 +16666,9 @@ snapshots:
 
   undici-types@7.24.6: {}
 
-  undici@6.27.0: {}
+  undici@7.29.0: {}
 
-  undici@7.28.0: {}
-
-  undici@7.29.0:
-    optional: true
+  undici@8.9.0: {}
 
   unicode-properties@1.4.1:
     dependencies:

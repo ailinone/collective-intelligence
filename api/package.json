@@ -96,7 +96,7 @@
   "author": "Ailin Team",
   "license": "AGPL-3.0-or-later",
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=24.0.0",
     "pnpm": ">=8.0.0"
   },
   "dependencies": {
@@ -153,7 +153,7 @@
     "jszip": "^3.10.1",
     "lru-cache": "^11.5.2",
     "module-alias": "^2.2.3",
-    "nanoid": "^5.0.5",
+    "nanoid": "^6.0.0",
     "node-cron": "^4.6.0",
     "node-fetch": "^3.3.2",
     "nodemailer": "^9.0.3",
@@ -168,7 +168,7 @@
     "reflect-metadata": "^0.2.2",
     "stripe": "^14.24.0",
     "tsyringe": "^4.10.0",
-    "undici": "^7.28.0",
+    "undici": "^7.29.0",
     "ws": "^8.21.1",
     "zod": "^3.22.4"
   },
@@ -176,8 +176,8 @@
     "@google-cloud/kms": "^4.5.0"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^10.10.3",
-    "@testcontainers/redis": "^10.10.3",
+    "@testcontainers/postgresql": "^12.0.3",
+    "@testcontainers/redis": "^12.0.3",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.11.17",
@@ -198,7 +198,7 @@
     "pdf-parse": "^2.4.5",
     "prettier": "^3.9.6",
     "promptfoo": "^0.121.19",
-    "testcontainers": "^10.10.3",
+    "testcontainers": "^12.0.3",
     "tsc-alias": "^1.9.1",
     "tsx": "^4.23.1",
     "typescript": "^5.3.3",

@@ -43,6 +43,7 @@ const RESET_ENV_VARS = [
   'ANTHROPIC_API_KEY',
   'DATABASE_URL',
   'JWT_SECRET',
+  'SENTRY_DSN',
 ] as const;
 
 function resetEnv() {
@@ -168,5 +169,27 @@ describe('loadSecretsIntoEnv — GCP authoritative mode', () => {
 
     expect(process.env.JWT_SECRET).toBe('gcp-fresh-jwt');
     expect(process.env.DATABASE_URL).toBe('postgresql://gcp/db');
+  });
+
+  it('loads SENTRY_DSN from GCP into env when the secret is present (optional CRITICAL_SECRETS entry)', async () => {
+    loadSecretMock.mockImplementation(async (key: string) => {
+      if (key === 'jwt-secret') return 'gcp-jwt';
+      if (key === 'database-url') return 'postgresql://gcp/db';
+      if (key === 'sentry-dsn') return 'https://example@o0.ingest.sentry.io/1';
+      return undefined;
+    });
+
+    await loadSecretsIntoEnv();
+
+    expect(process.env.SENTRY_DSN).toBe('https://example@o0.ingest.sentry.io/1');
+  });
+
+  it('leaves SENTRY_DSN unset when GCP has no secret and no env value is present (no default, not required)', async () => {
+    // Default mock (set in beforeEach) resolves every candidate to undefined,
+    // i.e. no `ailin-sentry-dsn` secret exists in GCP yet. loadSecretsIntoEnv()
+    // must not throw (required: false) and must not fabricate a value.
+    await loadSecretsIntoEnv();
+
+    expect(process.env.SENTRY_DSN).toBeUndefined();
   });
 });

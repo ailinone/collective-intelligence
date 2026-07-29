@@ -1,0 +1,43 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Grafana datasource provisioning — ci Collective Intelligence platform.
+#
+# Defines the single Prometheus datasource that both dashboard JSONs
+# (collective-intelligence-dashboard.json, coord-stable-shadow-dashboard.json)
+# and the alert rules (ci-alert-rules.yml) reference via the `${DS_PROMETHEUS}`
+# placeholder.
+#
+# `uid` is set to `${DS_PROMETHEUS}` on purpose, not a literal string: Grafana
+# expands $ENV_VAR / ${ENV_VAR} in provisioning YAML for datasource fields, so
+# this resolves at container start to whatever DS_PROMETHEUS is set to on the
+# ci-grafana service (docker-compose.production.yml) — currently "prometheus".
+# That SAME env var is what lets ci-alert-rules.yml's `datasourceUid:
+# "${DS_PROMETHEUS}"` fields resolve too (Grafana's alert-rule provisioning
+# also expands env vars in fields outside `model`, which datasourceUid is).
+# Keeping it env-var-driven means the UID only needs to change in one place
+# (the compose file) if it's ever rotated.
+#
+# access: proxy — the Grafana SERVER makes the request to Prometheus over the
+# internal `default` Swarm network; the browser never talks to Prometheus
+# directly (Prometheus has no published port at all — see the ci-prometheus
+# service's network-exposure comment in docker-compose.production.yml).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: ${DS_PROMETHEUS}
+    access: proxy
+    url: http://ci-prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s

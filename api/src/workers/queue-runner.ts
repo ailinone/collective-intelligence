@@ -23,6 +23,7 @@ import { connectDatabase, disconnectDatabase } from '@/database/client';
 import { markSecretAuditPersistenceReady } from '@/services/secret-audit-service';
 import { initializeCacheRuntime, isCacheEnabled } from '@/cache/cache-runtime-state';
 import { serializeError } from '@/utils/type-guards';
+import { authorizeWorkerMetricsScrape } from './worker-metrics-auth';
 import {
   getQueueRuntimeState,
   initializeQueueRuntime,
@@ -67,6 +68,20 @@ async function bootstrapWorker(): Promise<void> {
       initializeMetrics();
       metricsServer = http.createServer(async (req, res) => {
         if (req.url === '/metrics') {
+          if (!authorizeWorkerMetricsScrape(req)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error: {
+                  code: 'forbidden',
+                  message: config.observability.prometheusToken
+                    ? 'Invalid or missing scrape token'
+                    : 'Metrics endpoint is disabled in production until PROMETHEUS_SCRAPE_TOKEN is configured',
+                },
+              })
+            );
+            return;
+          }
           const data = await register.metrics();
           res.writeHead(200, {
             'Content-Type': register.contentType,

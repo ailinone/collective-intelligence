@@ -1,0 +1,117 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Prometheus production scrape configuration — ci Collective Intelligence
+# platform (Docker Swarm stack `ci`, see docker/docker-compose.production.yml
+# `ci-prometheus` service).
+#
+# THIS IS THE PRODUCTION CONFIG. It is intentionally separate from, and NOT
+# a drop-in replacement for, the two dev-only files in this repo:
+#   - api/prometheus.yml            (local docker-compose, targets
+#                                     host.docker.internal:3000, no auth)
+#   - api/monitoring/prometheus.yml (local docker-compose, targets api:9464,
+#                                     no auth, `environment: development`
+#                                     label)
+# Both of those scrape the wrong port for this stack and carry no scrape
+# authentication — do not point this stack's Prometheus at them.
+#
+# SECURITY (see docker-compose.production.yml `ci-prometheus` service comment
+# for the full network-exposure decision):
+#   - ci_api / ci_api_prompt_metrics jobs send `Authorization: Bearer <token>`
+#     via `authorization.credentials_file`, reading the token from a mounted
+#     Docker secret file at scrape time. The token value is NEVER written
+#     into this tracked file — see api/src/routes/metrics/metrics-route.ts
+#     `authorizeScrape()`, which fail-closes (403) these routes in production
+#     when PROMETHEUS_SCRAPE_TOKEN is unset. Token = the `ailin-prometheus-
+#     scrape-token` GCP Secret Manager secret, mirrored into the Docker
+#     Swarm secret `ci_prometheus_scrape_token` (see that secret's comment
+#     block in docker-compose.production.yml for the exact operator command).
+#   - ci_worker's /metrics (port 9465) is a separate raw node:http server
+#     (api/src/workers/queue-runner.ts) that does NOT check the bearer token
+#     at all today — unlike the api service's Fastify-routed /metrics, it has
+#     no `authorizeScrape` gate. The Authorization header is still sent for
+#     consistency and in case that gap is closed later, but it currently adds
+#     no protection on that specific target. It is scraped only over this
+#     stack's internal-only `default` Swarm overlay network (no published
+#     host port, no external `gateway-net` attachment) — the same trust
+#     boundary ci-db/ci-redis already rely on in this compose file.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: 'ci-production'
+    environment: 'production'
+
+# Routes firing alerts to the existing ci-alertmanager service (already
+# declared in docker-compose.production.yml, previously unused — no
+# Prometheus instance existed to feed it before this change).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['ci-alertmanager:9093']
+
+# No Prometheus-native rule_files are loaded here. The platform's alert
+# rules (api/grafana/ci-alert-rules.yml) are provisioned directly into
+# Grafana's own alerting engine instead — see the ci-grafana service's
+# provisioning volumes. api/monitoring/prometheus-alerts.yaml is a stale
+# dev-only rule set (wrong job names, Cloud Run-oriented) and was
+# deliberately not adapted/reused here; revisit if Prometheus-native rules
+# are wanted later.
+rule_files: []
+
+scrape_configs:
+  # ci-api — OpenTelemetry/prom-client metrics (request rates, latency,
+  # provider health, circuit breakers, model catalog, etc.)
+  - job_name: 'ci_api'
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 30s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/ci_prometheus_scrape_token
+    static_configs:
+      - targets: ['api:3000']
+        labels:
+          service: 'ci-api'
+
+  # ci-api — prompt-layer metrics (slots, variants, augmentation, judges,
+  # selector, triage). Same auth gate, separate endpoint by design (see
+  # metrics-route.ts) so it can be scraped/scaled independently of the main
+  # OpenTelemetry /metrics endpoint above.
+  - job_name: 'ci_api_prompt_metrics'
+    metrics_path: /metrics/prompts
+    scheme: http
+    scrape_interval: 30s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/ci_prometheus_scrape_token
+    static_configs:
+      - targets: ['api:3000']
+        labels:
+          service: 'ci-api'
+
+  # ci-worker — BullMQ job-processing metrics (queue depth, job duration,
+  # etc.) exposed on its own dedicated metrics port. See the security note
+  # above: this endpoint does not enforce the bearer token itself.
+  - job_name: 'ci_worker'
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 30s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/ci_prometheus_scrape_token
+    static_configs:
+      - targets: ['worker:9465']
+        labels:
+          service: 'ci-worker'
+
+  # Prometheus self-monitoring.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

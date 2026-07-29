@@ -20,6 +20,16 @@ import { logger } from '@/utils/logger';
 let sdk: NodeSDK | null = null;
 
 function createTraceExporter(): OTLPTraceExporter | JaegerExporter {
+  // NOTE (2026-07-29): the JaegerExporter branch below is kept for operator
+  // flexibility (OTEL_TRACES_EXPORTER=jaeger / OTEL_EXPORTER_JAEGER_ENDPOINT),
+  // but production does NOT use it. The installed
+  // @opentelemetry/exporter-jaeger@2.10.0 package is itself upstream-deprecated
+  // ("Jaeger supports the OpenTelemetry protocol natively" — see its
+  // build/src/jaeger.js). Our self-hosted Jaeger (ci-jaeger, added in
+  // docker/docker-compose.production.yml) ingests OTLP/HTTP directly on 4318, so
+  // production instead leaves OTEL_TRACES_EXPORTER/jaegerEndpoint unset and
+  // points OTEL_EXPORTER_OTLP_ENDPOINT at ci-jaeger's OTLP receiver, falling
+  // through to the OTLPTraceExporter branch below.
   const explicitExporter = process.env.OTEL_TRACES_EXPORTER?.toLowerCase();
 
   if (explicitExporter === 'jaeger' || config.observability.jaegerEndpoint) {
@@ -70,7 +80,45 @@ export async function initializeOpenTelemetry(): Promise<void> {
     resource,
     instrumentations: [
       getNodeAutoInstrumentations({
-        '@opentelemetry/instrumentation-http': { enabled: true },
+        '@opentelemetry/instrumentation-http': {
+          enabled: true,
+          // SECURITY (2026-07-29): verified against the installed
+          // @opentelemetry/instrumentation-http@0.220.0 source — request/response
+          // headers are NEVER added as span attributes unless `headersToSpanAttributes`
+          // is explicitly set (it defaults to an empty allowlist per direction). We
+          // deliberately leave it unset, so Authorization / X-API-Key / Cookie / any
+          // other credential-bearing header on every incoming or outgoing HTTP
+          // request never becomes a span attribute. Do NOT set
+          // `headersToSpanAttributes` without re-reviewing this comment and using an
+          // explicit allowlist of known-safe header names — never a "capture
+          // everything" config. Request/response BODY content is never captured by
+          // this instrumentation regardless of config (also verified against the
+          // installed source) — LLM prompts/completions are not at risk here.
+          //
+          // Outbound request URLs ARE captured as the http.url / url.full span
+          // attribute. A few provider adapters embed live credentials directly in
+          // the URL query string for websocket handshakes instead of using headers
+          // (see providers/cartesia/cartesia-adapter.ts `?api_key=...` and
+          // providers/openai/realtime-client.ts `?client_secret=...`). The
+          // instrumentation's built-in redaction list (sig, Signature,
+          // AWSAccessKeyId, X-Goog-Signature — cloud-storage presigned-URL params)
+          // doesn't cover those, so we extend it below. NOTE: `redactedQueryParams`
+          // REPLACES the built-in list rather than merging with it, so the built-in
+          // entries are repeated here.
+          redactedQueryParams: [
+            'sig',
+            'Signature',
+            'AWSAccessKeyId',
+            'X-Goog-Signature',
+            'api_key',
+            'apikey',
+            'access_token',
+            'client_secret',
+            'token',
+            'password',
+            'secret',
+          ],
+        },
         '@opentelemetry/instrumentation-pino': { enabled: true },
       }),
     ],
