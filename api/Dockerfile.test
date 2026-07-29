@@ -10,12 +10,12 @@
 # Dockerfile for running API test suite with dev dependencies
 # Build context: api/ (.). Use from repo root: docker build -f api/Dockerfile.test api/
 
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache python3 py3-pip make g++ build-base pkgconf openssl git \
     && ln -sf python3 /usr/bin/python
 
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
 COPY src ./src
 COPY tests ./tests
-COPY tsconfig.json vitest.config.ts vitest.integration.config.ts vitest.unit.config.ts ./
+COPY tsconfig.json vitest.config.ts vitest.ci.config.ts vitest.integration.config.ts vitest.unit.config.ts ./
 
 RUN pnpm install --no-frozen-lockfile \
     && pnpm exec prisma generate

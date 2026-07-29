@@ -52,6 +52,23 @@ const CRITICAL_SECRETS: CriticalSecret[] = [
   // the GCP secret `coord-ensemble-token` MUST also be set with the
   // value to share with coord-serving's COORD_SERVING_AUTH_TOKEN.
   { envVar: 'CI_ENSEMBLE_COORDINATOR_TOKEN', secretKey: 'coord-ensemble-token', required: false },
+  // Prometheus scrape bearer token for /metrics + /metrics/prompts
+  // (metrics-route.ts `authorizeScrape`). Optional here — the route itself
+  // is fail-closed when unset: it denies (403) in production and stays
+  // open for local/dev scraping otherwise. Wired via CRITICAL_SECRETS
+  // (not PROVIDER_SECRETS) because this is a general app credential, not
+  // a provider API key.
+  { envVar: 'PROMETHEUS_SCRAPE_TOKEN', secretKey: 'prometheus-scrape-token', required: false },
+  // Sentry error-tracking DSN (utils/error-tracking.ts `initializeErrorTracking`).
+  // Optional — the module itself no-ops with a warning log when unset, both
+  // at API boot (index.ts) and worker boot (workers/queue-runner.ts), so
+  // there is no fail-closed/fail-open behavior riding on this like the
+  // Prometheus token above. Wired via CRITICAL_SECRETS (not PROVIDER_SECRETS)
+  // because this is a general app credential, not a provider API key. No GCP
+  // secret exists yet as of this commit — an operator must create one
+  // (`ailin-sentry-dsn`) with a real DSN from Sentry's project settings
+  // before this ever resolves to a non-empty value.
+  { envVar: 'SENTRY_DSN', secretKey: 'sentry-dsn', required: false },
 ];
 
 /**

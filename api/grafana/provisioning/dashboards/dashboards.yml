@@ -1,0 +1,33 @@
+# Copyright (C) 2026 Ailin One, Inc.
+#
+# This file is part of Collective Intelligence Engine (ci).
+# Licensed under the GNU Affero General Public License v3.0 or later.
+# See LICENSE in the repository root, or <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Source: https://github.com/ailinone/collective-intelligence
+
+# Grafana dashboard provisioning — ci Collective Intelligence platform.
+#
+# Loads every *.json dashboard file from the path below on container start
+# (and re-scans every updateIntervalSeconds), so
+# collective-intelligence-dashboard.json and coord-stable-shadow-dashboard.json
+# (bind-mounted individually into that path — see the ci-grafana service in
+# docker-compose.production.yml) appear automatically with no manual UI
+# import. `editable: false` + `disableDeletion: true` because these
+# dashboards are provisioned-as-code: changes belong in the source JSON files
+# in this repo, not in the Grafana UI (UI edits to a provisioned dashboard are
+# discarded/overwritten on the next re-scan).
+apiVersion: 1
+
+providers:
+  - name: 'ci-dashboards'
+    orgId: 1
+    folder: 'Collective Intelligence'
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 300
+    options:
+      path: /var/lib/grafana-dashboards
+      foldersFromFilesStructure: false
