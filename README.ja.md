@@ -94,6 +94,8 @@ Ailin¹ はその原理をエンジニアリング・プラットフォームと
 ドキュメントにはステータスバッジが付いており、何が提供済みで何が
 ロードマップ上にあるのか、常に分かるようになっています。
 
+---
+
 ## なぜコレクティブは最大の単一モデルに勝るのか
 
 フロンティアモデルは大型化を続けており、その時々の最強単一モデルは
@@ -118,6 +120,8 @@ Ailin¹ はその原理をエンジニアリング・プラットフォームと
 領域においては、**私たちがテストしたすべてのフロンティア・
 フラッグシップよりも測定可能なかたちで高精度**です
 (97% vs 68–82%、証拠は下記)。
+
+---
 
 ## フロンティアを相手に、公開の場で実証済み
 
@@ -154,6 +158,8 @@ Ailin¹ はその原理をエンジニアリング・プラットフォームと
 上記のすべての数値は、このリポジトリにコミットされた実行単位の生データと
 再現可能なスクリプトに裏付けられています。ハーネスを自分自身の
 ワークロードで実行し、私たちに同じ基準を突きつけてください。
+
+---
 
 ## 数万のモデル、常にフロンティアに
 
@@ -232,6 +238,8 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 
 **私たちの主張を証明する監査証跡は、あなたの本番トラフィックを統治するのと同じものです**: ガバナンスはオーバーヘッドではなく[第一級の原則](https://ailin.guide/architecture/principles)です。
 
+---
+
 ## アーキテクチャ概観
 
 エンドツーエンドのシステム全体、ディスカバリーがチーム編成に情報を
@@ -262,6 +270,8 @@ flowchart TB
 プロバイダー統合と双方向にやり取りします。実行の出力は裁定に渡され、
 品質ゲートと決定論的検証器が適用されて、完全なプロビナンス
 (`ailin_metadata`)を伴う最終レスポンスが生成されます。*
+
+---
 
 ## リクエストの流れ
 
@@ -303,6 +313,8 @@ flowchart LR
 - ドキュメント調の文章
 
 この判断は哲学ではなく、運用の問題です。
+
+---
 
 ## クイックスタート
 
@@ -398,6 +410,8 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 次に: [戦略の選び方](docs/guides/strategy-selection.md) ·
 [モデルエイリアスの解説](docs/guides/model-aliases-and-routing.md)。
 
+---
+
 ## 現在提供中のもの vs. 開発中のもの
 
 | 現在提供中 | 開発中 |
@@ -413,6 +427,8 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 検証に関する誠実さはひとつの機能です。左の列にないものはすべて、
 ここでのラベル付けと同じ方法で、ドキュメント内でもラベル付けされて
 います。
+
+---
 
 ## コントリビューション：コレクティブ・インテリジェンスにはコレクティブが必要だ
 
@@ -437,6 +453,8 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 セキュリティ報告: **決して**公開Issueにしないでください。
 [SECURITY.md](SECURITY.md) を参照。
 
+---
+
 ## ライセンスとガバナンス
 
 **AGPL-3.0-or-later。** 改変したバージョンをネットワークサービスとして
@@ -460,13 +478,21 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 **Ailin One, Inc.** によって保守されています。AGPL がライセンスするのは
 コードであり、商標ではありません。
 
+---
+
 ## スター履歴とコントリビューター
 
 <p align="center">
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ リポジトリに Star を付けて、より集合的で協調的な AI の新しい時代を後押ししてください</b></a>
 </p>
 
-[![Star History Chart: ailinone/collective-intelligence の累積GitHubスター数の推移](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <img alt="Star History Chart: ailinone/collective-intelligence の累積GitHubスター数の推移" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+ </picture>
+</a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />

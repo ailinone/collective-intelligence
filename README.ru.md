@@ -92,6 +92,8 @@ Ailin¹ воплощает этот принцип как инженерную �
 ещё созревают; в документации стоят статус-бейджи, поэтому вы всегда
 знаете, что уже поставляется, а что в роадмапе.
 
+---
+
 ## Почему коллектив превосходит самую большую одиночную модель
 
 Фронтирные модели продолжают расти, и сильнейшая одиночная модель в
@@ -115,6 +117,8 @@ Ailin¹ воплощает этот принцип как инженерную �
 множестве задач, где корректность проверяется объективно, **измеримо
 точнее каждого протестированного нами фронтирного флагмана**
 (97% vs 68–82%, доказательства ниже).
+
+---
 
 ## Доказано в сравнении с фронтиром, у всех на виду
 
@@ -145,6 +149,8 @@ Ailin¹ воплощает этот принцип как инженерную �
 воспроизводимыми скриптами, закоммиченными в этот репозиторий. Запустите
 харнесс сами, на своей собственной рабочей нагрузке, и держите нас в
 ответе за это.
+
+---
 
 ## Десятки тысяч моделей, всегда на переднем крае
 
@@ -222,6 +228,8 @@ PDF, PPTX, ZIP, код) из любой чат-модели со структу�
 
 **Тот же аудиторский след, что доказывает наши заявления по бенчмаркам, управляет вашим продакшен-трафиком**: управление как [принцип первого класса](https://ailin.guide/architecture/principles), а не накладные расходы.
 
+---
+
 ## Архитектура одним взглядом
 
 Система целиком, от начала до конца. Обнаружение моделей питает сборку
@@ -253,6 +261,8 @@ flowchart TB
 провайдеров. Результат исполнения уходит в арбитраж, который применяет
 гейты качества и детерминированный верификатор, порождая финальный ответ
 с полной прослеживаемостью (`ailin_metadata`).*
+
+---
 
 ## Как проходит запрос
 
@@ -292,6 +302,8 @@ flowchart LR
 - Проза в документационном стиле
 
 Это решение операционное, а не философское.
+
+---
 
 ## Быстрый старт
 
@@ -385,6 +397,8 @@ Linux также добавьте `extra_hosts: ["host.docker.internal:host-gate
 Далее: [выбор стратегии](docs/guides/strategy-selection.md) ·
 [алиасы моделей объяснены](docs/guides/model-aliases-and-routing.md).
 
+---
+
 ## Что поставляется сегодня и что в разработке
 
 | Поставляется сегодня | В разработке |
@@ -399,6 +413,8 @@ Linux также добавьте `extra_hosts: ["host.docker.internal:host-gate
 
 Честность в вопросах валидации сама по себе фича: всё, чего нет в левой колонке,
 помечено в документации так же, как помечено здесь.
+
+---
 
 ## Вклад в проект: коллективному интеллекту нужен коллектив
 
@@ -420,6 +436,8 @@ Linux также добавьте `extra_hosts: ["host.docker.internal:host-gate
 
 Вопросы и результаты: [GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions).
 Отчёты о безопасности: **никогда** через публичный issue, см. [SECURITY.md](SECURITY.md).
+
+---
 
 ## Лицензия и управление
 
@@ -445,13 +463,21 @@ licensing@ailin.one.
 Поддерживается **Ailin One, Inc.** AGPL лицензирует код, а не товарные
 знаки.
 
+---
+
 ## История звёзд и контрибьюторы
 
 <p align="center">
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ Поставьте звезду репозиторию и поддержите новую, более коллективную и совместную эру ИИ</b></a>
 </p>
 
-[![График истории звёзд: накопленное количество звёзд GitHub во времени для ailinone/collective-intelligence](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <img alt="График истории звёзд: накопленное количество звёзд GitHub во времени для ailinone/collective-intelligence" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+ </picture>
+</a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />

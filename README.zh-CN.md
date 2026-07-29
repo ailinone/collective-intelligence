@@ -84,6 +84,8 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 流水线。其中一些层今天已达到生产级，另一些仍在成熟之中。文档带有
 状态标识，让你始终清楚哪些已经交付、哪些还在路线图上。
 
+---
+
 ## 为什么集体能胜过最大的单一模型
 
 前沿模型在不断变大，任一时刻最强的那个单一模型都令人惊叹。但单一
@@ -104,6 +106,8 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 而且，在正确性可被客观验证的、不断扩大的任务集合上，
 **可测量地比我们测试过的每一个前沿旗舰模型更准确**
 （97% vs 68–82%，凭据见下文）。
+
+---
 
 ## 对阵前沿的公开实证
 
@@ -131,6 +135,8 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 以上每一个数字都由本仓库中提交的原始逐次执行数据与可复现脚本
 支撑：你可以在自己的工作负载上亲自运行这套测试框架，以同样的
 标准检验我们。
+
+---
 
 ## 数万个模型，始终站在前沿
 
@@ -195,6 +201,8 @@ Ailin¹ 集体不依赖硬编码的模型列表或人工的提供商集成。一
 
 **证明我们主张的审计轨迹，与治理你的流量的是同一条**：治理是[一等原则](https://ailin.guide/architecture/principles)，而不是额外负担。
 
+---
+
 ## 架构一览
 
 这是系统的端到端全貌，发现引擎为团队组建输送候选模型，每一条执行路径最终都会收敛到同一个生成溯源记录的仲裁环节：
@@ -220,6 +228,8 @@ curl 客户端，只需切换 base_url。策略解析套用 `ailin-auto` 保守�
 预算调控器管理，并与约 90 个提供商集成双向通信。执行结果交给仲裁
 环节，套用质量门控与确定性校验器，最终生成带完整溯源信息
 （`ailin_metadata`）的响应。*
+
+---
 
 ## 请求如何流转
 
@@ -255,6 +265,8 @@ flowchart LR
 - 文档式行文
 
 这是一个运营层面的决策，不是哲学立场。
+
+---
 
 ## 快速开始
 
@@ -346,6 +358,8 @@ bridge IP）。面向 OpenAPI 校验的原生（无 Docker）开发环境搭建�
 下一步：[如何选择策略](docs/guides/strategy-selection.md) ·
 [模型别名与路由说明](docs/guides/model-aliases-and-routing.md)。
 
+---
+
 ## 现已交付与开发中
 
 | 今天已交付 | 开发中 |
@@ -360,6 +374,8 @@ bridge IP）。面向 OpenAPI 校验的原生（无 Docker）开发环境搭建�
 
 对验证状态的诚实本身就是一项特性：凡不在左列的内容，在文档中的
 标注方式与此处完全一致。
+
+---
 
 ## 参与贡献：集体智能需要一个集体
 
@@ -378,6 +394,8 @@ Python 标准库。每一次独立复现（无论是验证还是证伪）都让�
 
 问题与结果：[GitHub Discussions](https://github.com/ailinone/collective-intelligence/discussions)。
 安全报告：**绝不要**用公开 issue，见 [SECURITY.md](SECURITY.md)。
+
+---
 
 ## 许可证与治理
 
@@ -399,13 +417,21 @@ Python 标准库。每一次独立复现（无论是验证还是证伪）都让�
 
 由 **Ailin One, Inc.** 维护。AGPL 许可的是代码，不是商标。
 
+---
+
 ## Star历史与贡献者
 
 <p align="center">
   <a href="https://github.com/ailinone/collective-intelligence"><b>⭐ 为这个仓库点亮 Star，支持一个更集体、更协作的 AI 新时代</b></a>
 </p>
 
-[![Star History 图表：ailinone/collective-intelligence 仓库的 GitHub Star 累计增长趋势](https://api.star-history.com/svg?repos=ailinone/collective-intelligence&type=Date)](https://star-history.com/#ailinone/collective-intelligence&Date)
+<a href="https://www.star-history.com/?repos=ailinone%2Fcollective-intelligence&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&theme=dark&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+   <img alt="Star History 图表：ailinone/collective-intelligence 仓库的 GitHub Star 累计增长趋势" src="https://api.star-history.com/chart?repos=ailinone/collective-intelligence&type=date&legend=top-left&sealed_token=X6eLWi2iXLAcjPUKgFwvaqEsmvrXQTzr24Utu5FubHK_xvi55157GCfBjyDF_30eqUsMJjch6iys7Mk0QY3-Sv4Sm7QvjdQAFRQElJvNTKdu2yNRyo-U20kKOz6BJqXwyDTOjmkxl5tT8Kp_5E_7Km7IiS82hmWAG4RHm_44aS5YUJnN_c7vzjx0u9Uc" />
+ </picture>
+</a>
 
 <a href="https://github.com/ailinone/collective-intelligence/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ailinone/collective-intelligence" alt="Contributors" />
