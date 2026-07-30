@@ -464,3 +464,10 @@ Python 标准库。每一次独立复现（无论是验证还是证伪）都让�
    <img src="https://statics.startupbase.io/site/badges/launched-on-sb-dark.svg" alt="Launched on StartupBase" height="55" style="height:55px;width:auto;" />
  </picture>
 </a>
+<a href="https://www.startupinspire.com" target="_blank">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.startupinspire.com/images/badge_2.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.startupinspire.com/images/badge_3.svg" />
+   <img src="https://www.startupinspire.com/images/badge_2.svg" alt="Featured on Startup Inspire" />
+ </picture>
+</a>
