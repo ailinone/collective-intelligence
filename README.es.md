@@ -507,3 +507,15 @@ Si la tesis de la inteligencia colectiva (puesta a prueba en abierto, con
 los recibos en el repo) es algo que quieres que exista en el mundo, una ⭐
 es la forma de decirles a otros desarrolladores que vale sus diez minutos.
 
+
+---
+
+## Destacado en
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>

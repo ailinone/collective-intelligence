@@ -443,3 +443,15 @@ Maintained by **Ailin One, Inc.** The AGPL licenses the code, not the marks.
 If the collective-intelligence thesis (tested in the open, receipts in
 the repo) is something you want to exist in the world, a ⭐ is how you
 tell other developers it's worth their ten minutes.
+
+---
+
+## Featured on
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>
