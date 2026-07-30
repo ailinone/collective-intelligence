@@ -489,3 +489,15 @@ licensing@ailin.one.
 공개적으로 검증되고, 증빙이 저장소에 담긴 집단 지성 명제, 이것이
 세상에 존재하기를 바란다면, ⭐ 하나가 다른 개발자들에게 이 프로젝트가
 그들의 10분을 들일 가치가 있음을 알리는 방법입니다.
+
+---
+
+## 게재 플랫폼
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>

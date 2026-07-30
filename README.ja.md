@@ -507,3 +507,15 @@ print(r.model_extra["ailin_metadata"])  # strategy, models, costs, dissent — t
 思うなら、⭐ こそが、他の開発者に「これは10分を割く価値がある」と
 伝える方法です。
 </content>
+
+---
+
+## 掲載メディア
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>

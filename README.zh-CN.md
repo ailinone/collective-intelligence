@@ -445,3 +445,15 @@ Python 标准库。每一次独立复现（无论是验证还是证伪）都让�
 世界上存在下去，一颗 ⭐ 就是你告诉其他开发者"这值得他们花十分钟"
 的方式。
 </content>
+
+---
+
+## 媒体报道
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>

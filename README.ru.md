@@ -491,3 +491,15 @@ licensing@ailin.one.
 открыто и с доказательствами в репозитории, то ⭐ станет способом сказать
 другим разработчикам, что он стоит их десяти минут.
 </content>
+
+---
+
+## Отмечено на
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>

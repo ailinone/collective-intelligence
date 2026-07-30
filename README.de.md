@@ -507,3 +507,15 @@ Wenn die These der kollektiven Intelligenz (öffentlich getestet, Belege
 im Repo) etwas ist, das es aus deiner Sicht in der Welt geben sollte,
 dann ist ein ⭐ die Art, anderen Entwicklerinnen und Entwicklern zu
 sagen, dass es ihre zehn Minuten wert ist.
+
+---
+
+## Vorgestellt auf
+
+<a href="https://www.betterlaunch.co/product/ailin">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://www.betterlaunch.co/badge-live-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://www.betterlaunch.co/badge-live-light.svg" />
+   <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
+ </picture>
+</a>
