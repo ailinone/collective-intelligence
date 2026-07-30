@@ -457,3 +457,10 @@ Python 标准库。每一次独立复现（无论是验证还是证伪）都让�
    <img src="https://www.betterlaunch.co/badge-live-light.svg" alt="Featured on Better Launch" width="200" height="56" />
  </picture>
 </a>
+<a href="https://startupbase.io/products/ailin?utm_source=startupbase&utm_medium=badge&utm_campaign=launch-badge-dark" target="_blank" rel="noopener noreferrer">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://statics.startupbase.io/site/badges/launched-on-sb-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://statics.startupbase.io/site/badges/launched-on-sb.svg" />
+   <img src="https://statics.startupbase.io/site/badges/launched-on-sb-dark.svg" alt="Launched on StartupBase" height="55" style="height:55px;width:auto;" />
+ </picture>
+</a>
