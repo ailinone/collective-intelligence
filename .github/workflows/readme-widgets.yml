@@ -29,6 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Without this, checkout wires up git's push credential to the
+          # ephemeral Actions bot token, which is not exempt from this
+          # branch's required-status-checks rule, so the later `git push`
+          # is rejected (GH006) even though the commit succeeds locally.
+          # A fine-grained PAT belonging to an exempted user lets the
+          # scheduled push land the same way an admin's own push does.
+          token: ${{ secrets.STARMAP_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
