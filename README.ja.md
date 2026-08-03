@@ -37,7 +37,7 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR**: Ailin¹ は **76,636 個の AI モデル** をひとつのコレクティブ・モデルの中で協調させ、単一モデルへのルーティングではなく **32 の戦略** でオーケストレーションします。すべてのリクエストに構造化された多様性・独立した推論・完全な意思決定の監査証跡を付与し、単一モデル統合よりも信頼性・耐障害性・監査可能性に優れます。さらに[公開の場でフロンティアを相手に実証済み](#フロンティアを相手に公開の場で実証済み)。
+> **TL;DR**: Ailin¹ は **103,224 個の AI モデル** をひとつのコレクティブ・モデルの中で協調させ、単一モデルへのルーティングではなく **32 の戦略** でオーケストレーションします。すべてのリクエストに構造化された多様性・独立した推論・完全な意思決定の監査証跡を付与し、単一モデル統合よりも信頼性・耐障害性・監査可能性に優れます。さらに[公開の場でフロンティアを相手に実証済み](#フロンティアを相手に公開の場で実証済み)。
 >
 > **→ [クイックスタート](#クイックスタート) · [エビデンスを見る](#フロンティアを相手に公開の場で実証済み) · [ドキュメント](https://ailin.guide)**
 
@@ -56,7 +56,7 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQLの状態、クリックすると現在の検出結果を確認できます](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90件のプロバイダー統合](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![76,636モデルをインデックス済み](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#数万のモデル常にフロンティアに)
+[![103,224モデルをインデックス済み](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#数万のモデル常にフロンティアに)
 [![登録済み32件のコレクティブ戦略](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#リクエストの流れ)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: 公開中](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
@@ -71,8 +71,8 @@ Source: https://github.com/ailinone/collective-intelligence
 ## コレクティブ・インテリジェンス：AIの次なるフロンティア
 
 AI業界は、より大きな単一モデルを構築することに注力してきました。
-Ailin¹ はそれを補完するアプローチを取ります: **76,636のAIモデル**
-(2026-07時点の本番稼働数)からなるコレクティブが、協調し、討論し、
+Ailin¹ はそれを補完するアプローチを取ります: **103,224のAIモデル**
+(2026-08時点の本番稼働数)からなるコレクティブが、協調し、討論し、
 批評し、統合する。単一モデルがトレーニング・アーキテクチャ・バイアス・
 障害それぞれの単一点となってしまう問題に対して、
 [構造化された多様性](https://ailin.guide/architecture/cognitive-diversity)を適用します。
@@ -90,7 +90,7 @@ API、オープンウェイトの挑戦者、そして自社モデルファミ�
 能力に勝る)」という結果や、Woolley らによる集合的パフォーマンスの
 研究(公開の[参考文献一覧](https://ailin.guide/reference/bibliography)を参照)。
 Ailin¹ はその原理をエンジニアリング・プラットフォームとして実装します:
-76,636のモデルをインデックスするディスカバリーエンジン、数十の協調戦略、
+103,224のモデルをインデックスするディスカバリーエンジン、数十の協調戦略、
 すべての協調上の意思決定を記録する
 [監査基盤](https://ailin.guide/architecture/collective-intelligence)、
 そしてクローズドループの学習パイプライン。これらのレイヤーには今日
@@ -173,7 +173,7 @@ Ailin¹ のコレクティブは、ハードコードされたモデルリスト
 自動的に吸収します。
 
 その結果: [~90のプロバイダー統合](https://ailin.guide/architecture/provider-ecosystem)にまたがる
-**76,636モデル**のライブなコレクティブが、エコシステムの最新状態を
+**103,224モデル**のライブなコレクティブが、エコシステムの最新状態を
 保ち続けます。発見済みのソースから新しいモデルが公開されると、
 ディスカバリーエンジンはコード変更・設定・ダウンタイムなしにそれを
 吸収します。

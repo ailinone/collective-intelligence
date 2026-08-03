@@ -37,7 +37,7 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR:** O Ailin¹ faz **76,636 modelos de IA** colaborarem dentro de um único modelo coletivo, coordenados por **32 estratégias** em vez de roteados para um só. Diversidade estruturada, raciocínio independente e proveniência completa de decisão em cada requisição, mais confiável, resiliente e auditável do que qualquer integração de modelo único, e [provado contra a fronteira, às claras](#provado-contra-a-fronteira-às-claras).
+> **TL;DR:** O Ailin¹ faz **103,224 modelos de IA** colaborarem dentro de um único modelo coletivo, coordenados por **32 estratégias** em vez de roteados para um só. Diversidade estruturada, raciocínio independente e proveniência completa de decisão em cada requisição, mais confiável, resiliente e auditável do que qualquer integração de modelo único, e [provado contra a fronteira, às claras](#provado-contra-a-fronteira-às-claras).
 >
 > **→ [Início rápido](#início-rápido) · [Veja as provas](#provado-contra-a-fronteira-às-claras) · [Docs](https://ailin.guide)**
 
@@ -57,7 +57,7 @@ Esta é a camada onde eles trabalham juntos. Documentação completa:
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL status, click through for current findings](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90 provider integrations](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![76,636 models indexed](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#dezenas-de-milhares-de-modelos-sempre-na-fronteira)
+[![103,224 models indexed](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#dezenas-de-milhares-de-modelos-sempre-na-fronteira)
 [![32 registered collective strategies](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#como-uma-requisição-flui)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: open](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
@@ -73,7 +73,7 @@ Esta é a camada onde eles trabalham juntos. Documentação completa:
 
 A indústria de IA tem se concentrado em construir modelos individuais cada
 vez maiores. A Ailin¹ segue uma abordagem complementar: um coletivo de
-**76,636 modelos de IA** (contagem viva de produção, 2026-07) capazes de
+**103,224 modelos de IA** (contagem viva de produção, 2026-08) capazes de
 colaborar, debater, criticar e sintetizar juntos, aplicando
 [diversidade estruturada](https://ailin.guide/architecture/cognitive-diversity) a problemas em que um
 modelo único é um ponto único de treinamento, de arquitetura, de viés e
@@ -92,7 +92,7 @@ diversidade supera a habilidade") de Hong & Page e o trabalho de
 Woolley et al. sobre desempenho coletivo (veja a
 [Bibliografia](https://ailin.guide/reference/bibliography) pública). A Ailin¹ aplica
 esse princípio como plataforma de engenharia: um motor de descoberta que
-indexa 76,636 modelos, dezenas de estratégias de coordenação, um [substrato de auditoria](https://ailin.guide/architecture/collective-intelligence) que
+indexa 103,224 modelos, dezenas de estratégias de coordenação, um [substrato de auditoria](https://ailin.guide/architecture/collective-intelligence) que
 registra cada decisão de coordenação e um pipeline de treinamento em
 circuito fechado. Algumas dessas camadas já são production-grade hoje e
 outras ainda estão amadurecendo; a documentação carrega badges de status
@@ -165,7 +165,7 @@ integrações manuais de provedores. Um motor de descoberta contínua varre o
 ecossistema global de IA e absorve automaticamente novos modelos à medida
 que são lançados.
 
-O resultado: um coletivo vivo de **76,636 modelos** em [~90 integrações
+O resultado: um coletivo vivo de **103,224 modelos** em [~90 integrações
 de provedores](https://ailin.guide/architecture/provider-ecosystem) que se mantém atualizado com o ecossistema. Quando um novo
 modelo é publicado por uma fonte descoberta, o motor de descoberta o
 absorve sem mudanças de código, configuração ou downtime.

@@ -37,7 +37,7 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR**：Ailin¹ 让 **76,636 个 AI 模型** 在同一个集体模型中协同，通过 **32 种策略** 编排，而非路由到单一模型。每一次请求都具备结构化多样性、独立推理与完整的决策审计轨迹，比任何单模型集成更可靠、更有韧性、更可审计，并且[已在公开场景中对阵前沿完成实证](#对阵前沿的公开实证)。
+> **TL;DR**：Ailin¹ 让 **103,224 个 AI 模型** 在同一个集体模型中协同，通过 **32 种策略** 编排，而非路由到单一模型。每一次请求都具备结构化多样性、独立推理与完整的决策审计轨迹，比任何单模型集成更可靠、更有韧性、更可审计，并且[已在公开场景中对阵前沿完成实证](#对阵前沿的公开实证)。
 >
 > **→ [快速开始](#快速开始) · [查看实证](#对阵前沿的公开实证) · [文档](https://ailin.guide)**
 
@@ -55,7 +55,7 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL 状态，点击查看实时扫描结果](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![约 90 个提供商集成](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![76,636 个模型已建立索引](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#数万个模型始终站在前沿)
+[![103,224 个模型已建立索引](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#数万个模型始终站在前沿)
 [![32 个已注册的集体策略](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#请求如何流转)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions：开放中](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
@@ -70,7 +70,7 @@ Source: https://github.com/ailinone/collective-intelligence
 ## 集体智能：AI的下一个前沿
 
 AI 行业一直专注于打造更大的单体模型。Ailin¹ 采取一条互补的路线：
-一个由 **76,636 个 AI 模型**（2026-07 生产环境实时统计）组成的集体，
+一个由 **103,224 个 AI 模型**（2026-08 生产环境实时统计）组成的集体，
 它们可以协作、辩论、互相批判并共同综合，将[结构化多样性](https://ailin.guide/architecture/cognitive-diversity)应用于那些
 对单一模型而言意味着单点训练、单点架构、单点偏见与单点故障的问题。
 
@@ -83,7 +83,7 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 这一原则植根于关于集体智能与认知多样性的研究：Hong & Page 的
 "多样性胜过能力"（diversity trumps ability）结论，以及 Woolley 等人
 关于集体绩效的工作（见公开的[参考文献](https://ailin.guide/reference/bibliography)）。Ailin¹ 把这一原则
-落地为一个工程平台：一个索引了 76,636 个模型的发现引擎、数十种协同
+落地为一个工程平台：一个索引了 103,224 个模型的发现引擎、数十种协同
 策略、一个记录每一次协同决策的[审计基座](https://ailin.guide/architecture/collective-intelligence)，以及一条闭环训练
 流水线。其中一些层今天已达到生产级，另一些仍在成熟之中。文档带有
 状态标识，让你始终清楚哪些已经交付、哪些还在路线图上。
@@ -147,7 +147,7 @@ Intelligence）**：一个让来自各大架构的模型（前沿 API、开放�
 Ailin¹ 集体不依赖硬编码的模型列表或人工的提供商集成。一个持续运行
 的发现引擎扫描全球 AI 生态，并在新模型发布时自动将其吸纳。
 
-结果是：一个横跨 [~90 个提供商集成](https://ailin.guide/architecture/provider-ecosystem)、由 **76,636 个模型**
+结果是：一个横跨 [~90 个提供商集成](https://ailin.guide/architecture/provider-ecosystem)、由 **103,224 个模型**
 组成、与生态同步演进的实时集体。当一个已被发现的来源发布新模型时，
 发现引擎无需代码改动、无需配置、无需停机即可将其吸纳。
 
