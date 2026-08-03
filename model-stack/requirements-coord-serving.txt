@@ -15,7 +15,7 @@
 # image build even though nothing in this file changed. These pins are validated
 # to resolve cleanly in python:3.13-slim (pip install --dry-run, exit 0). Bump
 # deliberately, and re-validate the whole set together, not one package at a time.
-fastapi==0.140.13
+fastapi==0.141.1
 uvicorn[standard]==0.52.0
 httpx==0.28.1
 httpcore==1.0.9
