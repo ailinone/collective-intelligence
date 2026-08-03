@@ -37,7 +37,7 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR:** Ailin¹ 은 **76,636 개의 AI 모델** 을 하나의 집단 모델 안에서 협력시키며, 단일 모델로 라우팅하는 대신 **32 가지 전략** 으로 오케스트레이션합니다. 모든 요청에 구조화된 다양성, 독립적 추론, 완전한 의사결정 감사 추적을 적용해 단일 모델 통합보다 더 신뢰할 수 있고 회복력 있으며 감사 가능합니다. 또한 [공개적으로 프런티어를 상대로 입증되었습니다](#프런티어를-상대로-공개적으로-입증).
+> **TL;DR:** Ailin¹ 은 **103,224 개의 AI 모델** 을 하나의 집단 모델 안에서 협력시키며, 단일 모델로 라우팅하는 대신 **32 가지 전략** 으로 오케스트레이션합니다. 모든 요청에 구조화된 다양성, 독립적 추론, 완전한 의사결정 감사 추적을 적용해 단일 모델 통합보다 더 신뢰할 수 있고 회복력 있으며 감사 가능합니다. 또한 [공개적으로 프런티어를 상대로 입증되었습니다](#프런티어를-상대로-공개적으로-입증).
 >
 > **→ [퀵스타트](#퀵스타트) · [증거 보기](#프런티어를-상대로-공개적으로-입증) · [문서](https://ailin.guide)**
 
@@ -56,7 +56,7 @@ Source: https://github.com/ailinone/collective-intelligence
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL 상태, 클릭하면 현재 검출 결과 확인](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90개 제공자 통합](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![인덱싱된 모델 76,636개](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#수만-개의-모델-언제나-프런티어에)
+[![인덱싱된 모델 103,224개](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#수만-개의-모델-언제나-프런티어에)
 [![등록된 집단 전략 32개](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#요청이-흐르는-방식)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: 열림](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
@@ -72,7 +72,7 @@ Source: https://github.com/ailinone/collective-intelligence
 
 AI 업계는 지금까지 더 큰 단일 모델을 만드는 데 집중해 왔습니다.
 Ailin¹은 이를 보완하는 접근을 취합니다: 서로 협업하고, 토론하고,
-비판하고, 종합할 수 있는 **76,636개 AI 모델**의 집단(2026-07 기준
+비판하고, 종합할 수 있는 **103,224개 AI 모델**의 집단(2026-08 기준
 라이브 프로덕션 수치)이 [구조화된 다양성](https://ailin.guide/architecture/cognitive-diversity)을 적용해, 단일 모델이 곧
 학습의 단일 지점이자 아키텍처·편향·장애의 단일 지점이 되는 문제들에
 맞섭니다.
@@ -88,7 +88,7 @@ Ailin¹은 이를 보완하는 접근을 취합니다: 서로 협업하고, 토�
 Hong & Page의 "다양성이 능력을 이긴다(diversity trumps ability)"
 결과와 Woolley 등의 집단 성과 연구가 그것입니다(공개
 [참고문헌](https://ailin.guide/reference/bibliography) 참조). Ailin¹은
-그 원리를 엔지니어링 플랫폼으로 구현합니다: 76,636개 모델을
+그 원리를 엔지니어링 플랫폼으로 구현합니다: 103,224개 모델을
 인덱싱하는 디스커버리 엔진, 수십 가지 조율 전략, 모든 조율 결정을
 기록하는 [감사 기반(audit substrate)](https://ailin.guide/architecture/collective-intelligence), 그리고
 폐루프(closed-loop) 학습 파이프라인. 이 계층들 중 일부는 오늘 이미
@@ -168,7 +168,7 @@ Ailin¹ 집단은 하드코딩된 모델 목록이나 수동 제공자 통합에
 모델이 출시되는 즉시 자동으로 흡수합니다.
 
 그 결과: [~90개 제공자
-통합](https://ailin.guide/architecture/provider-ecosystem)에 걸친 **76,636개 모델**의 라이브 집단이 생태계와
+통합](https://ailin.guide/architecture/provider-ecosystem)에 걸친 **103,224개 모델**의 라이브 집단이 생태계와
 함께 최신 상태를 유지합니다. 발견된 소스에서 새 모델이 공개되면,
 디스커버리 엔진은 코드 변경도, 설정도, 다운타임도 없이 그것을
 흡수합니다.

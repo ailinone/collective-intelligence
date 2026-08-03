@@ -37,7 +37,7 @@ Source: https://github.com/ailinone/collective-intelligence
   <a href="README.ru.md"><img alt="Русский" src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-30363d?style=for-the-badge"></a>
 </p>
 
-> **TL;DR**: Ailin¹ lässt **76,636 KI-Modelle** in einem einzigen kollektiven Modell zusammenarbeiten, orchestriert über **32 Strategien** statt an ein einzelnes Modell geroutet. Strukturierte Diversität, unabhängiges Reasoning und ein vollständiger Entscheidungs-Audit-Trail bei jedem Request: zuverlässiger, resilienter und auditierbarer als jede Einzelmodell-Integration, und [gegen die Frontier bewiesen, öffentlich](#gegen-die-frontier-bewiesen-öffentlich).
+> **TL;DR**: Ailin¹ lässt **103,224 KI-Modelle** in einem einzigen kollektiven Modell zusammenarbeiten, orchestriert über **32 Strategien** statt an ein einzelnes Modell geroutet. Strukturierte Diversität, unabhängiges Reasoning und ein vollständiger Entscheidungs-Audit-Trail bei jedem Request: zuverlässiger, resilienter und auditierbarer als jede Einzelmodell-Integration, und [gegen die Frontier bewiesen, öffentlich](#gegen-die-frontier-bewiesen-öffentlich).
 >
 > **→ [Quickstart](#quickstart) · [Die Belege ansehen](#gegen-die-frontier-bewiesen-öffentlich) · [Docs](https://ailin.guide)**
 
@@ -57,7 +57,7 @@ zusammenarbeiten. Vollständige Dokumentation: **[ailin.guide](https://ailin.gui
 [![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 [![CodeQL-Status, anklicken für aktuelle Befunde](https://github.com/ailinone/collective-intelligence/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/ailinone/collective-intelligence/security/code-scanning)
 [![~90 Provider-Integrationen](https://img.shields.io/badge/provider_integrations-~90-8A2BE2)](https://ailin.guide/architecture/provider-ecosystem)
-[![76,636 Modelle indexiert](https://img.shields.io/badge/models_indexed-76%2C636-blueviolet)](#zehntausende-modelle-immer-an-der-frontier)
+[![103,224 Modelle indexiert](https://img.shields.io/badge/models_indexed-103%2C224-blueviolet)](#zehntausende-modelle-immer-an-der-frontier)
 [![32 registrierte Kollektivstrategien](https://img.shields.io/badge/collective_strategies-32_registered-6A5ACD)](#der-weg-eines-requests)
 [![GitHub stars](https://img.shields.io/github/stars/ailinone/collective-intelligence?style=social)](https://github.com/ailinone/collective-intelligence/stargazers)
 [![GitHub Discussions: offen](https://img.shields.io/badge/discussions-open-2ea44f?logo=github)](https://github.com/ailinone/collective-intelligence/discussions)
@@ -73,7 +73,7 @@ zusammenarbeiten. Vollständige Dokumentation: **[ailin.guide](https://ailin.gui
 
 Die KI-Industrie hat sich darauf konzentriert, immer größere Einzelmodelle
 zu bauen. Ailin¹ verfolgt einen komplementären Ansatz: ein Kollektiv aus
-**76,636 KI-Modellen** (Live-Produktionszählung, 2026-07), die gemeinsam
+**103,224 KI-Modellen** (Live-Produktionszählung, 2026-08), die gemeinsam
 kollaborieren, debattieren, kritisieren und synthetisieren können, und
 [strukturierte Diversität](https://ailin.guide/architecture/cognitive-diversity) auf Probleme anwenden, bei denen ein
 Einzelmodell ein Single Point of Training, of Architecture, of Bias und
@@ -91,7 +91,7 @@ Diversität verankert: Hong & Pages Resultat „diversity trumps ability"
 und die Arbeiten von Woolley et al. zu kollektiver Leistung (siehe die
 öffentliche [Bibliographie](https://ailin.guide/reference/bibliography)).
 Ailin¹ setzt dieses Prinzip als Engineering-Plattform um: eine
-Discovery-Engine, die 76,636 Modelle indexiert, Dutzende
+Discovery-Engine, die 103,224 Modelle indexiert, Dutzende
 Koordinationsstrategien, ein [Audit-Substrat](https://ailin.guide/architecture/collective-intelligence), das
 jede Koordinationsentscheidung aufzeichnet, und eine
 Closed-Loop-Trainingspipeline. Einige dieser Schichten sind heute
@@ -175,7 +175,7 @@ manuellen Provider-Integrationen ab. Eine kontinuierliche Discovery-Engine
 scannt das globale KI-Ökosystem und absorbiert neue Modelle automatisch,
 sobald sie veröffentlicht werden.
 
-Das Ergebnis: ein lebendes Kollektiv aus **76,636 Modellen** über [~90
+Das Ergebnis: ein lebendes Kollektiv aus **103,224 Modellen** über [~90
 Provider-Integrationen](https://ailin.guide/architecture/provider-ecosystem), das mit dem Ökosystem Schritt hält.
 Veröffentlicht eine entdeckte Quelle ein neues Modell, absorbiert die
 Discovery-Engine es ohne Codeänderungen, Konfiguration oder Downtime.
