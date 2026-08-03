@@ -38,7 +38,7 @@ jobs:
           # scheduled push land the same way an admin's own push does.
           token: ${{ secrets.STARMAP_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
