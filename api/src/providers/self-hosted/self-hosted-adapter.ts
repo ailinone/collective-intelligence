@@ -97,7 +97,9 @@ export class SelfHostedAdapter extends ProviderAdapter {
       const filename = (request.options?.filename as string) || 'audio.wav';
       form.set(
         'file',
-        new File([new Blob([request.audio], { type: mimeType })], filename, { type: mimeType })
+        new File([new Blob([new Uint8Array(request.audio)], { type: mimeType })], filename, {
+          type: mimeType,
+        })
       );
       if (request.language) form.set('language', request.language);
 
