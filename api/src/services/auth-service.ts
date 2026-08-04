@@ -449,16 +449,17 @@ export class AuthService {
       return null;
     }
 
-    // `createPublicKey` expects a `JsonWebKey` (structurally identical to our
-    // `FederatedJwk`, but defined in `node:crypto`). Building the object
+    // `createPublicKey` expects a `webcrypto.JsonWebKey` (structurally close
+    // to our `FederatedJwk`, but defined in `node:crypto`; notably it has no
+    // `kid` field — key-ID matching already happened in `selectFederatedJwk`
+    // above, so dropping it here doesn't lose anything). Building the object
     // explicitly here lets us drop the `as unknown as Record<string, string>`
     // cast — the previous code laundered the type through `unknown`, which
     // hides any real shape mismatch instead of catching it. With this shape,
     // tsc validates each field; if `FederatedJwk` ever drifts from the JWK
     // contract, the compiler tells us at the site instead of at runtime.
-    const jwkInput: import('crypto').JsonWebKey = {
+    const jwkInput: import('crypto').webcrypto.JsonWebKey = {
       kty: jwk.kty,
-      ...(jwk.kid !== undefined ? { kid: jwk.kid } : {}),
       ...(jwk.use !== undefined ? { use: jwk.use } : {}),
       ...(jwk.alg !== undefined ? { alg: jwk.alg } : {}),
       ...(jwk.n !== undefined ? { n: jwk.n } : {}),

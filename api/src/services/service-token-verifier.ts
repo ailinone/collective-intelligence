@@ -154,9 +154,10 @@ function selectJwk(keys: Jwk[], kid: string | undefined, alg: string): Jwk | nul
 }
 
 function toPublicKey(jwk: Jwk): Secret {
-  const jwkInput: import('crypto').JsonWebKey = {
+  // kid is intentionally omitted: webcrypto.JsonWebKey has no such field, and
+  // key-ID matching already happened in selectJwk() above.
+  const jwkInput: import('crypto').webcrypto.JsonWebKey = {
     kty: jwk.kty,
-    ...(jwk.kid !== undefined ? { kid: jwk.kid } : {}),
     ...(jwk.use !== undefined ? { use: jwk.use } : {}),
     ...(jwk.alg !== undefined ? { alg: jwk.alg } : {}),
     ...(jwk.n !== undefined ? { n: jwk.n } : {}),
