@@ -431,8 +431,8 @@ importers:
         specifier: 3.2.6
         version: 3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0)
       vitest-evals:
-        specifier: ^0.15.0
-        version: 0.15.0(ai@6.0.231(zod@3.25.76))(tinyrainbow@2.0.0)(vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0))(zod@3.25.76)
+        specifier: ^0.5.0
+        version: 0.5.0(tinyrainbow@2.0.0)(vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0))
       yaml:
         specifier: '>=2.8.3'
         version: 2.9.0
@@ -3253,12 +3253,6 @@ packages:
 
   '@visx/vendor@4.0.0-alpha.0':
     resolution: {integrity: sha512-6I+MuqXBcv9jnlcVowHoHKSdk9gXTWkHLKyqBwRWg7LY6A3Ei8SHfubpqGV5rBUSppxMq2RszPJUS6w+H0YgmQ==}
-
-  '@vitest-evals/core@0.15.0':
-    resolution: {integrity: sha512-kqyg3ocVtZxr3rP9oh01oAycRgXNRasvTgLZ8MbFGBJ4BRd4tk7Bgww253HY7fw7ZFUp4UPYNmDp5AcHajm++w==}
-
-  '@vitest-evals/report-ui@0.15.0':
-    resolution: {integrity: sha512-icrutiRhZ2T1MrHo2RW09hcEwfi/tV/FgsGAE76Wd0C02tZyCleQRjt11RWhBJiYDPpsjjjTHGCHIO6tmtX5zQ==}
 
   '@vitest/coverage-v8@3.2.6':
     resolution: {integrity: sha512-LsAdmUapA0qSN306d8+zOyawM0hFm2m2Hg9IwVNIKBm+qJV8cijiq2c+gxKZcB1HCfIWAy+0qEZDCUQA58A1cw==}
@@ -7250,19 +7244,11 @@ packages:
       yaml:
         optional: true
 
-  vitest-evals@0.15.0:
-    resolution: {integrity: sha512-bOYALQdLXKYFRCV8aQ+yLeH7XkmYsTxUWQxLHzJdIEcIBx2v/kPgG3Zg6m231jMCphuoM6xH4YQB3+0pDP7LLw==}
-    hasBin: true
+  vitest-evals@0.5.0:
+    resolution: {integrity: sha512-kg8r6NKNBD6jkmyjdO64qduATW6IUG+62atCJj3dLzaRZEG4TIdfFVy64iEh0dSSo1CCpAJi+dJqSN2Y2qv2Sw==}
     peerDependencies:
-      ai: '>=4 <7'
-      tinyrainbow: '>=2 <4'
-      vitest: '>=4 <5'
-      zod: '>=3 <5'
-    peerDependenciesMeta:
-      ai:
-        optional: true
-      zod:
-        optional: true
+      tinyrainbow: '*'
+      vitest: '*'
 
   vitest@3.2.6:
     resolution: {integrity: sha512-xejya+bT/j/+R/AGa1XOfRxLmNUlLtlwjRsFUILF+xHfzElmGcmFydy2gqqIrd62ptIEfwVMofd19uNWD9L7Nw==}
@@ -7465,28 +7451,12 @@ snapshots:
   '@acemir/cssom@0.9.31':
     optional: true
 
-  '@ai-sdk/gateway@3.0.154(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.40(zod@3.25.76)
-      '@vercel/oidc': 3.2.0
-      zod: 3.25.76
-    optional: true
-
   '@ai-sdk/gateway@3.0.154(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.40(zod@4.3.6)
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
-
-  '@ai-sdk/provider-utils@4.0.40(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.14
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.1.0
-      zod: 3.25.76
-    optional: true
 
   '@ai-sdk/provider-utils@4.0.40(zod@4.3.6)':
     dependencies:
@@ -11058,14 +11028,6 @@ snapshots:
       d3-time-format: 4.1.0
       internmap: 2.0.3
 
-  '@vitest-evals/core@0.15.0':
-    dependencies:
-      zod: 3.25.76
-
-  '@vitest-evals/report-ui@0.15.0':
-    dependencies:
-      '@vitest-evals/core': 0.15.0
-
   '@vitest/coverage-v8@3.2.6(vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@ampproject/remapping': 2.3.0
@@ -11173,15 +11135,6 @@ snapshots:
   agent-base@7.1.4: {}
 
   agent-base@9.0.0: {}
-
-  ai@6.0.231(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/gateway': 3.0.154(zod@3.25.76)
-      '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.40(zod@3.25.76)
-      '@opentelemetry/api': 1.9.1
-      zod: 3.25.76
-    optional: true
 
   ai@6.0.231(zod@4.3.6):
     dependencies:
@@ -15663,15 +15616,10 @@ snapshots:
       tsx: 4.23.1
       yaml: 2.9.0
 
-  vitest-evals@0.15.0(ai@6.0.231(zod@3.25.76))(tinyrainbow@2.0.0)(vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0))(zod@3.25.76):
+  vitest-evals@0.5.0(tinyrainbow@2.0.0)(vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0)):
     dependencies:
-      '@vitest-evals/core': 0.15.0
-      '@vitest-evals/report-ui': 0.15.0
       tinyrainbow: 2.0.0
       vitest: 3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0)
-    optionalDependencies:
-      ai: 6.0.231(zod@3.25.76)
-      zod: 3.25.76
 
   vitest@3.2.6(@types/debug@4.1.12)(@types/node@26.1.2)(jiti@2.7.0)(jsdom@28.0.0(@noble/hashes@1.8.0))(tsx@4.23.1)(yaml@2.9.0):
     dependencies:
