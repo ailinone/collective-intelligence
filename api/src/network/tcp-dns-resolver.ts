@@ -141,8 +141,11 @@ function tryServer(server: string, packet: Buffer, timeoutMs: number): Promise<B
       sock.write(packet);
     });
     sock.on('data', (chunk) => {
-      chunks.push(chunk);
-      received += chunk.length;
+      // Always a Buffer at runtime — this socket never calls setEncoding(),
+      // but the stream type widens to string | NonSharedBuffer regardless.
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buf);
+      received += buf.length;
       if (totalLen < 0 && received >= 2) {
         const buf = Buffer.concat(chunks);
         totalLen = buf.readUInt16BE(0);
