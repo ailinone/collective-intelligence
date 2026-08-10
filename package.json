@@ -45,7 +45,7 @@
   "homepage": "https://github.com/ailinone/collective-intelligence#readme",
   "devDependencies": {
     "@redocly/cli": "^2.43.2",
-    "@stoplight/spectral-cli": "^6.15.0",
+    "@stoplight/spectral-cli": "^6.16.3",
     "yaml": "^2.9.0"
   },
   "overrides": {
