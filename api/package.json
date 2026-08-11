@@ -144,7 +144,7 @@
     "bullmq": "^5.81.2",
     "docx": "^9.7.1",
     "dotenv": "^16.4.1",
-    "eventsource-parser": "^1.1.2",
+    "eventsource-parser": "^3.1.0",
     "exceljs": "^4.4.0",
     "fastify": "^5.11.0",
     "fastify-raw-body": "^5.0.0",
