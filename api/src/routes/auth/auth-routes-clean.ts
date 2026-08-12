@@ -28,7 +28,10 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { container } from 'tsyringe';
 import { LoginUserHandler } from '../../application/handlers/login-user.handler';
-import { RegisterUserHandler } from '../../application/handlers/register-user.handler';
+import {
+  RegisterUserHandler,
+  ORGANIZATION_JOIN_REQUIRES_INVITATION,
+} from '../../application/handlers/register-user.handler';
 import { RequestEmailChallengeHandler } from '../../application/handlers/request-email-challenge.handler';
 import { LoginWithCodeHandler } from '../../application/handlers/login-with-code.handler';
 import { LoginUserCommand } from '../../application/commands/login-user.command';
@@ -231,6 +234,19 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
       const result = await registerHandler.execute(command);
 
       if (!result.success) {
+        // SECURITY: anonymous registration may not join a PRE-EXISTING
+        // organization — that was a cross-tenant implant. Not even an empty one:
+        // a freshly provisioned tenant whose first user has not been
+        // materialized yet is exactly that shape.
+        if (result.error === ORGANIZATION_JOIN_REQUIRES_INVITATION) {
+          return reply.code(409).send({
+            success: false,
+            error: 'Organization join requires invitation',
+            message:
+              'This organization already exists. Ask an organization admin for an invitation instead of self-registering into it.',
+          });
+        }
+
         // Check if error is about duplicate email
         const isDuplicateEmail =
           result.error?.toLowerCase().includes('already') ||
@@ -253,12 +269,21 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
 
       // Generate tokens after successful registration
       if (result.userId && result.organizationId) {
+        // SECURITY: mint the token from the roles the handler ACTUALLY granted
+        // in `user_roles`. A JWT claim must never assert a role the database
+        // does not back — the previous hardcoded `['admin']` was claim forgery
+        // independent of any DB state.
+        const grantedRoles =
+          result.roles && result.roles.length > 0
+            ? result.roles
+            : await getUserRoles(result.userId, result.organizationId);
+
         // body.email is validated above and guaranteed to be a string
         const tokens = await authService.generateTokens({
           userId: result.userId,
           organizationId: result.organizationId,
           email: body.email,
-          roles: ['admin'], // First user in org is admin
+          roles: grantedRoles,
         });
 
         // Get user details
@@ -279,8 +304,6 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
           });
         }
 
-        const userRoles = await getUserRoles(result.userId, result.organizationId);
-
         return reply.code(201).send({
           success: true,
           user: {
@@ -288,7 +311,10 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
             email: user.email,
             name: user.name,
             organizationId: user.organizationId,
-            roles: userRoles.length > 0 ? userRoles : ['admin'], // Default to admin if no roles
+            // Report exactly what was granted. No `['admin']` fallback: an
+            // empty result here would be a real anomaly, not something to
+            // paper over with a fabricated elevated role.
+            roles: grantedRoles,
           },
           tokens: {
             accessToken: tokens.accessToken,
@@ -416,14 +442,22 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
 
           // Generate tokens after successful login
           if (result.userId && result.organizationId && result.email) {
+            // SECURITY (rbac-silent-role-downgrade): the token's `roles` claim is
+            // minted from the AUTHORITATIVE `user_roles` join, and from nothing
+            // else. It used to be `[users.role]` (the handler returned the
+            // denormalized hint column as a one-element array, which is always
+            // non-empty, so the getUserRoles() call below never influenced the
+            // token at all) with a `[result.role || 'user']` fallback on top —
+            // the exact "a claim asserts a role the database does not back"
+            // pattern this change removes from the register branch above.
+            // A principal with no grants gets an empty claim and fails closed.
             const userRoles = await getUserRoles(result.userId, result.organizationId);
 
             const tokens = await authService.generateTokens({
               userId: result.userId,
               organizationId: result.organizationId,
               email: result.email,
-              roles:
-                result.roles && result.roles.length > 0 ? result.roles : [result.role || 'user'],
+              roles: userRoles,
             });
 
             // Ensure all values are serializable (strings, numbers, arrays)
@@ -433,12 +467,7 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
                 id: String(result.userId),
                 email: String(result.email),
                 organizationId: String(result.organizationId),
-                roles:
-                  Array.isArray(userRoles) && userRoles.length > 0
-                    ? userRoles.map((r) => String(r))
-                    : Array.isArray(result.roles) && result.roles.length > 0
-                      ? result.roles.map((r) => String(r))
-                      : [String(result.role || 'user')],
+                roles: userRoles.map((r) => String(r)),
               },
               tokens: {
                 accessToken: String(tokens.accessToken),

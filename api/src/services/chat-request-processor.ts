@@ -30,6 +30,7 @@ import type { OrchestrationEngine } from '@/core/orchestration/orchestration-eng
 import type { ChatRequestWithMetadata } from '@/types/chat-request-extended';
 import { isChatRequestWithMetadata, getTaskType } from '@/types/chat-request-extended';
 import { narrowAs } from '@/utils/type-guards';
+import { getToolsBaseDir, clampWorkingDirectory } from '@/utils/tools-workspace-guard';
 import { getRequestLogger } from '@/services/request-logger';
 import { getCacheService } from '@/cache/cache-service';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
@@ -633,6 +634,19 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
     /\b(generate|create|make|render|produce|gerar|criar|produza|fa[çc]a)\b/i.test(lower);
   const hasDevContext =
     /\b(endpoint|api|route|rota|swagger|openapi|c[oó]digo|code|implementa(?:r|ção))\b/i.test(lower);
+  // FIX (2026-08-04): false positive found in audit — "Create a comparison of
+  // Sora vs Veo, which is better?" matches hasVideoKeyword ("sora"/"veo") +
+  // hasGenerationVerb ("create") with none of hasDevContext's terms present,
+  // so it silently triggered a real (and, per the same audit, mostly-broken)
+  // video generation call instead of answering the user's actual question in
+  // text. The prompt is DISCUSSING video-generation tools/concepts, not
+  // asking to generate one — this guard catches that class of phrasing
+  // (comparison/question/explanation language) the same way hasDevContext
+  // catches "this is really a coding question" phrasing.
+  const hasDiscussionContext =
+    /\b(vs\.?|versus|compar[ae]|compara(?:r|[çc][aã]o)|diferen[çc]a|which (?:is|one is) better|qual (?:[eé]|o) melhor|o que [eé]|what is|explain|explique|review|resenha|an[aá]lise|analysis|opini[aã]o|opinion)\b/i.test(
+      lower
+    );
 
   const image = getRequestString(chatRequest, 'image') ?? lastUserContent.image;
   const startImage = getRequestString(chatRequest, 'start_image');
@@ -642,7 +656,8 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
   const hasConditioningMedia = !!(image || startImage || endImage || audio || video);
 
   const shouldGenerate =
-    hasConditioningMedia || (hasVideoKeyword && hasGenerationVerb && !hasDevContext);
+    hasConditioningMedia ||
+    (hasVideoKeyword && hasGenerationVerb && !hasDevContext && !hasDiscussionContext);
   if (!shouldGenerate) return null;
 
   const responseFormatRaw = getRequestString(chatRequest, 'response_format');
@@ -680,21 +695,25 @@ async function executeToolCallsAutomatically(
   const toolCalls = response.choices[0].message.tool_calls;
   log.info({ toolCallCount: toolCalls.length }, 'Executing tool calls automatically');
 
-  const toolResults: ToolResult[] = [];
-
-  for (const toolCall of toolCalls) {
-    try {
-      const result = await executeRealTool(toolCall, chatRequest, log, organizationId, userId);
-      toolResults.push(result);
-    } catch (error) {
-      log.error({ toolCall: toolCall.function.name, error }, 'Tool execution failed');
-      toolResults.push({
-        tool_call_id: toolCall.id,
-        success: false,
-        error: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
-      });
-    }
-  }
+  // Multiple tool_calls on one response are independent by the OpenAI
+  // tool-calling contract (the model would need a separate turn to see one
+  // call's result before issuing a dependent one), so they execute
+  // concurrently; each call is caught individually to keep one failure from
+  // rejecting its siblings.
+  const toolResults: ToolResult[] = await Promise.all(
+    toolCalls.map(async (toolCall): Promise<ToolResult> => {
+      try {
+        return await executeRealTool(toolCall, chatRequest, log, organizationId, userId);
+      } catch (error) {
+        log.error({ toolCall: toolCall.function.name, error }, 'Tool execution failed');
+        return {
+          tool_call_id: toolCall.id,
+          success: false,
+          error: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    })
+  );
 
   const succeeded = toolResults.filter((result) => result.success);
   const failed = toolResults.filter((result) => !result.success);
@@ -747,12 +766,14 @@ function getStringProperty(obj: unknown, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function resolveWorkingDirectory(chatRequest: ChatRequest | ChatRequestWithMetadata): string {
-  const candidates: Array<string | undefined> = [];
+export function resolveWorkingDirectory(
+  chatRequest: ChatRequest | ChatRequestWithMetadata
+): string {
+  const clientCandidates: Array<string | undefined> = [];
 
   // Check if it's ChatRequestWithMetadata with direct properties
   if (isChatRequestWithMetadata(chatRequest)) {
-    candidates.push(
+    clientCandidates.push(
       chatRequest.working_directory,
       chatRequest.workingDirectory,
       chatRequest.workspace_path,
@@ -762,7 +783,7 @@ function resolveWorkingDirectory(chatRequest: ChatRequest | ChatRequestWithMetad
     );
   } else {
     // For ChatRequest, try to access properties safely
-    candidates.push(
+    clientCandidates.push(
       getStringProperty(chatRequest, 'working_directory'),
       getStringProperty(chatRequest, 'workingDirectory'),
       getStringProperty(chatRequest, 'workspace_path'),
@@ -770,10 +791,23 @@ function resolveWorkingDirectory(chatRequest: ChatRequest | ChatRequestWithMetad
     );
   }
 
-  candidates.push(process.env.AILIN_WORKSPACE_ROOT);
+  const requested = clientCandidates.find(
+    (value) => typeof value === 'string' && value.trim().length > 0
+  );
 
-  const picked = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
-  return normalizeWorkingDirectory(picked);
+  // SECURITY (2026-07-29): `requested` came verbatim from the client request
+  // body — the same class of input /v1/tools/* already clamps via
+  // clampWorkingDirectory() before touching the filesystem/shell. This
+  // function used to resolve it with a bare path.resolve() (normalizeWorkingDirectory
+  // below), letting a chat client point any auto-executed tool at an
+  // arbitrary absolute path on the host. process.env.AILIN_WORKSPACE_ROOT is
+  // operator/environment config — same trust level as TOOLS_BASE_DIR — so it
+  // intentionally stays outside the client candidate list and the clamp.
+  if (requested) {
+    return clampWorkingDirectory(getToolsBaseDir(), requested);
+  }
+
+  return normalizeWorkingDirectory(process.env.AILIN_WORKSPACE_ROOT);
 }
 
 function resolveProjectId(chatRequest: ChatRequest | ChatRequestWithMetadata): string | undefined {
@@ -862,10 +896,36 @@ function resolvePathWithinWorkspace(workingDirectory: string, targetPath: string
   return normalizedTarget;
 }
 
+// SECURITY (2026-07-29): tools whose own registration marks them unsafe for
+// unattended execution (`safeForStrategies: false` in registerToolsInRegistry
+// below) must never run through chat completions' automatic tool_calls loop —
+// that surface authenticates any tenant API key with no role check, unlike
+// the admin/owner-gated `/v1/tools/*` routes these operations were designed
+// for. Mirrors the registry's own safeForStrategies flags; kept as an
+// explicit list (rather than only relying on executeForStrategy() below) so
+// the pre-registry-boot switch fallback further down is covered too, since it
+// has no registration object to consult.
+export const CHAT_AUTO_EXECUTE_BLOCKED_TOOLS = new Set([
+  'run_command',
+  'delete_file',
+  'git_commit',
+  'git_push',
+  'git_pull',
+  'git_create_branch',
+  'git_merge',
+  'git_rebase',
+  'git_resolve_conflict',
+  'todo_write',
+  'create_todo',
+  'update_todo',
+  'execute_workflow',
+  'register_workflow',
+]);
+
 /**
  * Execute tool calls with actual tool implementations
  */
-async function executeRealTool(
+export async function executeRealTool(
   toolCall: ToolCall,
   chatRequest: ChatRequest | ChatRequestWithMetadata,
   log: Logger,
@@ -876,14 +936,27 @@ async function executeRealTool(
 
   log.info({ toolName: name, args }, 'Executing real tool');
 
+  if (CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(name)) {
+    log.warn({ toolName: name }, 'Blocked unsafe tool from automatic chat execution');
+    return {
+      tool_call_id: toolCall.id,
+      success: false,
+      error: `Tool "${name}" is not permitted for automatic execution via chat completions. Use the /v1/tools/* API (admin/owner) instead.`,
+    };
+  }
+
   try {
     const parsedArgs: unknown = JSON.parse(args);
     const context = createToolContext(chatRequest, log, organizationId, userId);
 
-    // Delegate to Tool Registry if available (enables shared execution with strategies)
+    // Delegate to Tool Registry if available (enables shared execution with strategies).
+    // executeForStrategy() (not execute()) so any tool registered with
+    // safeForStrategies:false — even one not yet added to the blocklist
+    // above — is refused here too, using the registry's own live flag as the
+    // authoritative source.
     const { toolRegistry } = await import('@/core/tools/tool-registry');
     if (toolRegistry.isInitialized() && toolRegistry.has(name)) {
-      return await toolRegistry.execute(
+      return await toolRegistry.executeForStrategy(
         name,
         narrowAs<Record<string, unknown>>(parsedArgs),
         toolCall.id,

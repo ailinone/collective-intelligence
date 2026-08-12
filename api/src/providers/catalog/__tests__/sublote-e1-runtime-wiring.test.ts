@@ -103,7 +103,15 @@ const LOAD_SECRETS_SRC = readFileSync(LOAD_SECRETS_PATH, 'utf8');
  * exemption.
  */
 const RUNTIME_WIRING_EXEMPTIONS: ReadonlySet<string> = new Set<string>([
-  // Empty by design.
+  // recraft (2026-08-01, LOTE Y promotion): image-only, execution-only —
+  // no chat surface at all. RECRAFT_API_KEY is deliberately excluded from
+  // LLM_PROVIDER_ENV_VARS in load-secrets-into-env.ts ("image surfaces
+  // don't satisfy the 'at least one LLM key' boot gate" — see that file's
+  // own comment ahead of the LLM_PROVIDER_ENV_VARS declaration). Gates 1+2
+  // (ENV_VAR_TO_PROVIDER attribution) still pass unexempted — only Gate 3
+  // (the LLM-key boot-mode gate) is architecturally not applicable to a
+  // pure image-generation provider.
+  'recraft',
 ]);
 
 /**

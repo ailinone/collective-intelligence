@@ -66,9 +66,7 @@ describe('OpenAPI Contract Validation', () => {
     expect(paths).toContain('/v1/auth/register');
     expect(paths).toContain('/v1/auth/login');
     expect(paths).toContain('/v1/auth/refresh');
-    expect(paths).toContain('/v1/analyze-requirements');
     expect(paths).toContain('/v1/provider-capabilities');
-    expect(paths).toContain('/v1/chat/completions/intelligent');
     expect(paths).toContain('/v1/models/list');
     expect(paths).toContain('/v1/embeddings/create');
   });
@@ -80,6 +78,22 @@ describe('OpenAPI Contract Validation', () => {
     expect(paths).not.toContain('/models/providers');
     expect(paths).not.toContain('/users/me/password');
     expect(paths).not.toContain('/queue/jobs');
+  });
+
+  it('should NOT document the retracted orchestration endpoints', () => {
+    if (!openApiSpec) return;
+    const paths = Object.keys(openApiSpec.paths);
+
+    // Removed 2026-08-03. Both were unfinished (the /intelligent 202 queue
+    // contract was never implemented, its "input enrichment" was a no-op) and
+    // their model selection never reached the execution engine. Superseded by
+    // POST /v1/chat/completions with model: "auto".
+    // Guard against re-injection: scripts/openapi-enforce-public-contract.cjs
+    // re-adds any REQUIRED_PATHS entry into the spec on every run.
+    expect(paths).not.toContain('/v1/analyze-requirements');
+    expect(paths).not.toContain('/v1/chat/completions/intelligent');
+    expect(paths).not.toContain('/analyze-requirements');
+    expect(paths).not.toContain('/chat/completions/intelligent');
   });
 
   it('should have security schemes defined', () => {

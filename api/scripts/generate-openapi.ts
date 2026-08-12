@@ -118,9 +118,7 @@ This API implements **true Collective Intelligence** through dynamic orchestrati
 - Intelligent fallback chains (unlimited attempts)
 
 **Advanced Endpoints:**
-- \`POST /analyze-requirements\` - Analyzes requests and suggests optimal models
 - \`GET /provider-capabilities\` - Discovers all available models and capabilities
-- \`POST /chat/completions/intelligent\` - Explicit intelligent selection endpoint
 
 **Extended Fields (optional, backwards-compatible):**
 - \`strategy\`: Orchestration strategy (parallel, sequential, cost-optimized)
@@ -152,8 +150,9 @@ POST /v1/chat/completions
 
 **Advanced orchestration with strategies:**
 \`\`\`json
-POST /v1/chat/completions/intelligent
+POST /v1/chat/completions
 {
+  "model": "auto",
   "messages": [{"role": "user", "content": "Complex task"}],
   "strategy": "consensus",
   "max_cost": 0.01,
@@ -796,85 +795,6 @@ POST /v1/chat/completions/intelligent
         }
       },
 
-      // Advanced Chat Features (Ailin Extensions)
-      '/analyze-requirements': {
-        post: {
-          tags: ['Chat', 'Advanced'],
-          summary: 'Analyze request requirements',
-          description: 'Analyzes a chat request and returns recommended capabilities, triage results, and optimal model selection',
-          security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['messages'],
-                  properties: {
-                    model: { type: 'string' },
-                    messages: {
-                      type: 'array',
-                      items: { $ref: '#/components/schemas/ChatMessage' }
-                    },
-                    tools: { type: 'array' }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            '200': {
-              description: 'Requirements analysis completed',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      requirements: {
-                        type: 'object',
-                        properties: {
-                          required: { type: 'array', items: { type: 'string' } },
-                          preferred: { type: 'array', items: { type: 'string' } },
-                          taskType: { type: 'string' },
-                          complexity: { type: 'string' },
-                          contextSize: { type: 'number' },
-                          needsTools: { type: 'boolean' }
-                        }
-                      },
-                      triage: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          suggestedCapabilities: { type: 'array', items: { type: 'string' } },
-                          complexity: { type: 'string' },
-                          confidence: { type: 'number' }
-                        }
-                      },
-                      selection: {
-                        type: 'object',
-                        properties: {
-                          totalModelsEvaluated: { type: 'number' },
-                          totalModelsMatched: { type: 'number' },
-                          primaryCandidate: {
-                            type: 'object',
-                            nullable: true,
-                            properties: {
-                              modelId: { type: 'string' },
-                              provider: { type: 'string' },
-                              score: { type: 'number' }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-
       '/provider-capabilities': {
         get: {
           tags: ['Models', 'Advanced'],
@@ -922,64 +842,6 @@ POST /v1/chat/completions/intelligent
                         }
                       }
                     }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-
-      '/chat/completions/intelligent': {
-        post: {
-          tags: ['Chat', 'Advanced'],
-          summary: 'Intelligent chat completion',
-          description: 'Chat completion with intelligent model selection, triage, and unlimited fallback',
-          security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['messages'],
-                  properties: {
-                    model: { type: 'string' },
-                    messages: {
-                      type: 'array',
-                      items: { $ref: '#/components/schemas/ChatMessage' }
-                    },
-                    stream: { type: 'boolean', default: false },
-                    temperature: { type: 'number', minimum: 0, maximum: 2 },
-                    max_tokens: { type: 'integer', minimum: 1 }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            '200': {
-              description: 'Intelligent completion response',
-              content: {
-                'application/json': {
-                  schema: {
-                    allOf: [
-                      { $ref: '#/components/schemas/ChatCompletion' },
-                      {
-                        type: 'object',
-                        properties: {
-                          _execution: {
-                            type: 'object',
-                            properties: {
-                              provider: { type: 'string' },
-                              model: { type: 'string' },
-                              attempts: { type: 'number' },
-                              triageUsed: { type: 'boolean' }
-                            }
-                          }
-                        }
-                      }
-                    ]
                   }
                 }
               }

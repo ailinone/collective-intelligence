@@ -104,7 +104,17 @@ const LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1 = [] as const;
 // consolidation-matrix.ts `live-validation` bucket (LOTE V) for the full
 // evidence writeup.
 const LOTE_M_PROMOTED_TO_LIVE_2026_07_29 = ['arcee'] as const;
-const LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1 = ['siliconflow', 'stepfun'] as const;
+// siliconflow, stepfun: D1 2026-04-24 moved them credentials-missing/
+// secret-absent -> credentials-missing/auth-incomplete (keys provisioned,
+// upstream rejected them with a shape that read as a key-format problem).
+// 2026-07-30: the operator gathered fresh live evidence directly against
+// the real APIs and found BOTH were actually wrong-regional-baseUrl bugs,
+// not key problems — siliconflow needed api.siliconflow.com not .cn;
+// stepfun needed api.stepfun.ai not .com. Both promoted straight to
+// live-validation. See consolidation-matrix.ts `live-validation` bucket
+// (LOTE W) for the full evidence writeup.
+const LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1 = [] as const;
+const LOTE_M_PROMOTED_TO_LIVE_2026_07_30 = ['siliconflow', 'stepfun'] as const;
 
 function findEntry(providerId: string) {
   return PROVIDER_CATALOG.find((e) => e.providerId === providerId);
@@ -148,18 +158,21 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
   //                                        rejected (stays credentials-
   //                                        missing, sub-class changes)
 
-  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended (post Sublote A/B/D1/2026-07-29)', () => {
+  it('every LOTE M id is in credentials-missing OR partial OR live OR upstream-suspended (post Sublote A/B/D1/2026-07-29/2026-07-30)', () => {
     // Sublotes A/B promoted 5 LOTE M ids from credentials-missing →
     // partial (via public /models probe evidence). Sublote D1 promoted
     // 1 LOTE M id (infermatic) → live-validation (real /chat/200) and
     // 1 LOTE M id (arcee) → upstream-suspended (auth-accepted-402).
     // 2026-07-29 promoted arcee onward from upstream-suspended →
-    // live-validation (operator top-up, re-verified live). All OTHER
-    // LOTE M ids remain in credentials-missing. If this test fires,
-    // either (a) a row was added without a matrix entry (violates I1),
-    // or (b) a LOTE M id was moved to a new bucket WITHOUT being added
-    // to one of the explicit promotion lists — which is the whole point
-    // of keeping the explicit lists: each bucket move must be a
+    // live-validation (operator top-up, re-verified live). 2026-07-30
+    // promoted siliconflow and stepfun from credentials-missing/auth-
+    // incomplete straight to live-validation (wrong-regional-baseUrl bugs,
+    // not key problems — see LOTE_M_PROMOTED_TO_LIVE_2026_07_30 above).
+    // All OTHER LOTE M ids remain in credentials-missing. If this test
+    // fires, either (a) a row was added without a matrix entry (violates
+    // I1), or (b) a LOTE M id was moved to a new bucket WITHOUT being
+    // added to one of the explicit promotion lists — which is the whole
+    // point of keeping the explicit lists: each bucket move must be a
     // deliberate operator decision with probe evidence, not silent drift.
     const credMissing = new Set(CONSOLIDATION_MATRIX['credentials-missing']);
     const partial = new Set(CONSOLIDATION_MATRIX['partial']);
@@ -169,6 +182,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     const liveSet = new Set<string>([
       ...LOTE_M_PROMOTED_TO_LIVE_D1,
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
     ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
     const misplaced: string[] = [];
@@ -227,6 +241,21 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     }
   });
 
+  it('all `LOTE_M_PROMOTED_TO_LIVE_2026_07_30` ids live in the `live-validation` bucket', () => {
+    // 2026-07-30 promotion lock: siliconflow and stepfun re-verified live
+    // directly against the real APIs with regenerated keys. Both turned
+    // out to be wrong-regional-baseUrl bugs, not key problems: siliconflow
+    // 401s on .cn (china-domestic) but 200s on .com (international, where
+    // this account lives); stepfun 401s on .com (china-domestic, despite
+    // the .com TLD) but 200s on .ai (international). No longer
+    // credentials-missing/auth-incomplete.
+    for (const id of LOTE_M_PROMOTED_TO_LIVE_2026_07_30) {
+      expect(CONSOLIDATION_MATRIX['live-validation']).toContain(id);
+      expect(CONSOLIDATION_MATRIX['credentials-missing']).not.toContain(id);
+      expect(CREDENTIALS_MISSING_SUBCLASS['auth-incomplete']).not.toContain(id);
+    }
+  });
+
   it('qianfan is sub-classified as auth-incomplete (not secret-absent)', () => {
     // The v1 baidu-{key,secret,base-url} GCP secrets exist (placeholder
     // values), and a separate v2 QIANFAN_API_KEY must be provisioned.
@@ -238,11 +267,11 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
 
   it('D1 auth-incomplete promotions (siliconflow, stepfun) are sub-classified correctly', () => {
     // Sublote D1 (2026-04-24) moved siliconflow and stepfun from
-    // secret-absent → auth-incomplete. Both had secrets provisioned
-    // by the operator but the upstream rejected the specific key
-    // (bare-JSON "Api key is invalid" / OAI-shape "Incorrect API key
-    // provided"). They remain in credentials-missing; only the
-    // sub-class changed.
+    // secret-absent → auth-incomplete. Empty as of 2026-07-30: both moved
+    // onward from auth-incomplete to live-validation once the operator
+    // gathered fresh live evidence showing the real problem was a wrong
+    // regional baseUrl, not the key — see
+    // `LOTE_M_PROMOTED_TO_LIVE_2026_07_30` above.
     for (const id of LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1) {
       expect(CONSOLIDATION_MATRIX['credentials-missing']).toContain(id);
       expect(CREDENTIALS_MISSING_SUBCLASS['auth-incomplete']).toContain(id);
@@ -254,10 +283,10 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     // After Sublote A (venice → partial), Sublote B (atlascloud, avian,
     // mancer, phala → partial), Sublote D1 (infermatic → live, arcee →
     // upstream-suspended [since re-promoted 2026-07-29 → live],
-    // siliconflow/stepfun → auth-incomplete sub-class), the LOTE M ids
-    // still in credentials-missing that should also be in secret-absent
-    // are: gmi, inflection, relace. qianfan and siliconflow/stepfun are
-    // auth-incomplete.
+    // siliconflow/stepfun → auth-incomplete sub-class [since re-promoted
+    // 2026-07-30 → live]), the LOTE M ids still in credentials-missing
+    // that should also be in secret-absent are: gmi, inflection, relace.
+    // qianfan is auth-incomplete.
     // If this test fires, either a LOTE M id was wrongly kept in
     // secret-absent after being promoted/moved, or it was removed from
     // secret-absent without being promoted/moved.
@@ -266,6 +295,7 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     const liveSet = new Set<string>([
       ...LOTE_M_PROMOTED_TO_LIVE_D1,
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
     ]);
     const upstreamSet = new Set<string>(LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1);
     const authIncompleteSet = new Set<string>(LOTE_M_MOVED_TO_AUTH_INCOMPLETE_D1);
@@ -285,14 +315,14 @@ describe('LOTE M inventory — all 13 additions exist as catalog rows', () => {
     // Invariant: once a provider LEAVES credentials-missing, it must
     // also leave every sub-class. Sublote A (venice) + Sublote B
     // (atlascloud, avian, mancer, phala) + Sublote D1 (infermatic,
-    // arcee) + 2026-07-29 (arcee onward to live) moves enforced here.
-    // Note: D1's siliconflow/stepfun STAYED in credentials-missing —
-    // only their sub-class changed — so they are NOT in this list.
+    // arcee) + 2026-07-29 (arcee onward to live) + 2026-07-30
+    // (siliconflow, stepfun onward to live) moves enforced here.
     const allLeft = [
       ...LOTE_M_PROMOTED_TO_PARTIAL,
       ...LOTE_M_PROMOTED_TO_LIVE_D1,
       ...LOTE_M_PROMOTED_TO_UPSTREAM_SUSPENDED_D1,
       ...LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
+      ...LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
     ];
     for (const id of allLeft) {
       for (const subclass of Object.keys(CREDENTIALS_MISSING_SUBCLASS)) {
@@ -442,7 +472,7 @@ describe('LOTE M provider-specific invariants', () => {
     expect(violators).toEqual([]);
   });
 
-  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28, 2026-07-17, 2026-07-29} (dated closure + D1 re-review + Phase 4b + later re-verifications)', () => {
+  it('all LOTE M rows have lastReviewedAt in {2026-04-23, 2026-04-24, 2026-04-28, 2026-07-17, 2026-07-29, 2026-07-30} (dated closure + D1 re-review + Phase 4b + later re-verifications)', () => {
     // Every row in this lot was originally reviewed on the LOTE M
     // closure date (2026-04-23). Rows touched by Sublote D1
     // (2026-04-24) during credential-arrival re-classification legally
@@ -475,19 +505,29 @@ describe('LOTE M provider-specific invariants', () => {
     const LIVE_REVERIFICATION_2026_07_29_TOUCHED = new Set<string>(
       LOTE_M_PROMOTED_TO_LIVE_2026_07_29,
     );
+    // 2026-07-30: siliconflow and stepfun re-verified live after the
+    // operator gathered fresh evidence showing both were wrong-regional-
+    // baseUrl bugs (see `LOTE_M_PROMOTED_TO_LIVE_2026_07_30` above) and
+    // their notes/lastReviewedAt were re-stamped accordingly. Same
+    // lockstep rule.
+    const LIVE_REVERIFICATION_2026_07_30_TOUCHED = new Set<string>(
+      LOTE_M_PROMOTED_TO_LIVE_2026_07_30,
+    );
     const violators: string[] = [];
     for (const id of LOTE_M_IDS) {
       const entry = findEntry(id);
       const reviewedAt = entry?.lastReviewedAt;
-      const expected = LIVE_REVERIFICATION_2026_07_29_TOUCHED.has(id)
-        ? '2026-07-29'
-        : MEDIA_SWEEP_2026_07_17_TOUCHED.has(id)
-          ? '2026-07-17'
-          : PHASE_4B_TOUCHED.has(id)
-            ? '2026-04-28'
-            : D1_TOUCHED.has(id)
-              ? '2026-04-24'
-              : '2026-04-23';
+      const expected = LIVE_REVERIFICATION_2026_07_30_TOUCHED.has(id)
+        ? '2026-07-30'
+        : LIVE_REVERIFICATION_2026_07_29_TOUCHED.has(id)
+          ? '2026-07-29'
+          : MEDIA_SWEEP_2026_07_17_TOUCHED.has(id)
+            ? '2026-07-17'
+            : PHASE_4B_TOUCHED.has(id)
+              ? '2026-04-28'
+              : D1_TOUCHED.has(id)
+                ? '2026-04-24'
+                : '2026-04-23';
       if (reviewedAt !== expected)
         violators.push(`${id} (got ${reviewedAt}, expected ${expected})`);
     }

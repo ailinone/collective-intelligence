@@ -219,11 +219,16 @@ export class VideoOrchestrationService {
       // entry to declare a video surface (supports.videoGeneration or an
       // explicit paths.videoGenerate). Provenance is mixed: the fastrouter/
       // aihubmix/cometapi/togetherai/empiriolabs declarations were proven by
-      // live probe 2026-07-17; the legacy flags (zai/gmi/siliconflow/stepfun/
-      // venice) are catalog-level claims not yet probed and will be exercised
-      // by prove-then-advertise once those providers have active models.
-      // Dedicated adapters with their own videoGenerate (google/Veo,
-      // runwayml, openai, openrouter) pass as before.
+      // live probe 2026-07-17; the rest (zai/gmi/siliconflow/stepfun/venice,
+      // plus imagerouter/byteplus added since) are catalog-level claims not
+      // yet probed and will be exercised by prove-then-advertise once those
+      // providers have active models — this comment is intentionally not
+      // re-enumerated every time a new provider sets videoGeneration:true in
+      // the catalog; the gate logic below is what's load-bearing, not this
+      // list. Dedicated adapters with their own videoGenerate (google/Veo,
+      // runwayml, openai, openrouter) pass as before — runwayml specifically
+      // is correctly wired (confirmed 2026-08-01: real key, right baseUrl/
+      // headers) but blocked purely on billing (creditBalance: 0), not code.
       const usesGenericHubVideo =
         (resolution.adapter as ProviderAdapter & { videoGenerate?: unknown }).videoGenerate ===
         OpenAICompatibleHubAdapter.prototype.videoGenerate;

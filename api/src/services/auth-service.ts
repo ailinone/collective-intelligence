@@ -26,7 +26,7 @@ import { Prisma, prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
 import type { AuthMode } from '@/types';
 import { getEmailService } from './email-service';
-import { assignRoleToUser, getUserRoles } from '@/services/rbac-service';
+import { assignRoleToUser, ensureBaselineRole, getUserRoles } from '@/services/rbac-service';
 import { recordSecurityEvent } from '@/services/security-audit-service';
 import { toInputJson } from '@/utils/json';
 import { organizationSettingsService } from '@/services/organization-settings-service';
@@ -535,11 +535,37 @@ export class AuthService {
         };
       }
 
+      // SECURITY (rbac-silent-role-downgrade): mirror RegisterUserHandler.
+      // Self-registration is anonymous, so it NEVER attaches to a pre-existing
+      // organization — a caller-supplied `organizationId` used to be trusted
+      // verbatim here, with no existence and no membership check, implanting
+      // the new user straight into whatever tenant was named. Joining an
+      // existing organization is an invitation flow.
+      //
+      // This method is currently unreachable (only `authRoutesClean` is wired,
+      // see index.ts), but it is `public` and the guard must not live in only
+      // one of the two registration implementations.
+      if (data.organizationId) {
+        this.log.warn(
+          { email: normalizedEmail, organizationId: data.organizationId },
+          'Refused anonymous registration into a caller-supplied organization'
+        );
+        const authSettings = await this.resolveAuthSettings(data.organizationId);
+        return {
+          success: false,
+          loginMode: authSettings.mode,
+          // Same code as RegisterUserHandler.ORGANIZATION_JOIN_REQUIRES_INVITATION
+          // (duplicated as a literal rather than imported: auth-service is a
+          // low-level service and must not depend on the application layer).
+          error: 'organization_join_requires_invitation',
+        };
+      }
+
       const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
       // Use safe upsert for organization creation (handles race conditions)
-      let organizationId = data.organizationId;
-      if (!organizationId) {
+      let organizationId: string | undefined;
+      {
         try {
           const org = await prisma.organization.create({
             data: {
@@ -606,7 +632,11 @@ export class AuthService {
       }
 
       const orgId = organizationId!;
-      const roles = await assignRoleToUser(user.id, orgId, 'owner');
+      // Always the configured BASELINE role — never `owner`, never `admin`.
+      // See RegisterUserHandler for the full rationale: an anonymous, unverified
+      // caller must not bootstrap a super-role. Owner is a human decision made
+      // through `pnpm run rbac:grant-owner`.
+      const roles = await ensureBaselineRole(user.id, orgId, 'self-registration:new-org');
 
       const tokens = await this.generateTokens({
         userId: user.id,
@@ -1387,6 +1417,13 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(`federated-${nanoid(48)}`, SALT_ROUNDS);
+    // SECURITY (rbac-silent-role-downgrade): do NOT populate the declared
+    // `users.role` column from the incoming claim. It is not normalized on the
+    // on-behalf path, it would be written BEFORE the authoritative grant
+    // exists, and the two writes are not in one transaction — so a failed role
+    // sync used to leave a row declaring a privilege that nothing backs. Let
+    // the column default (`viewer`), then let assignRoleToUser →
+    // updatePrimaryRole set it from the grant that actually succeeded.
     await prisma.user.create({
       data: {
         id: payload.userId,
@@ -1394,7 +1431,6 @@ export class AuthService {
         name: payload.email.split('@')[0] || 'Federated User',
         passwordHash,
         organizationId: payload.organizationId,
-        role: payload.roles[0] || config.security.rbac.defaultRole,
         status: 'active',
       },
     });
@@ -1419,16 +1455,37 @@ export class AuthService {
     userId: string;
     organizationId: string;
     email: string;
-    roles?: string[];
   }): Promise<void> {
+    // SECURITY (rbac-silent-role-downgrade): this deliberately accepts NO
+    // `roles`. The trusted-BFF headers carry an identity (`x-acting-user`,
+    // `x-acting-user-email`, `x-acting-user-tenant`) and nothing else; a `roles`
+    // parameter here was a latent footgun — a future BFF change that forwarded a
+    // roles header would additively grant that role with no further gate. The
+    // acting user gets the configured baseline via syncFederatedRoles' fallback,
+    // and any real authority is granted deliberately in ci.
     await this.ensureFederatedPrincipal({
       userId: input.userId,
       organizationId: input.organizationId,
       email: input.email.trim().toLowerCase(),
-      roles: input.roles ?? [],
+      roles: [],
     });
   }
 
+  /**
+   * Mirror the identity provider's role assertion into local grants.
+   *
+   * ADDITIVE BY DESIGN, and that has a consequence worth stating plainly: for a
+   * federated principal the IdP is authoritative, so a LOCAL demotion (an admin
+   * calling `PUT /v1/users/:id`, or `rbac:grant-owner --revoke-owner-from`) is
+   * NOT durable — the next federated token verification re-asserts whatever the
+   * IdP still claims and re-grants it. Demote such a principal at the identity
+   * provider. Reconciling removals here would require provenance on
+   * `user_roles` that the schema does not carry, and doing it naively would let
+   * a federated login silently wipe grants made deliberately inside ci.
+   *
+   * `owner` is never granted from a claim (no `allowOwner`) — an IdP asserting
+   * "owner" is an identity assertion, not an authority assertion.
+   */
   private async syncFederatedRoles(
     userId: string,
     organizationId: string,
@@ -1439,6 +1496,11 @@ export class AuthService {
 
     for (const role of normalizedRoles) {
       try {
+        // No `allowOwner`: an identity provider asserting "owner" is an
+        // identity assertion, not an authority assertion. Owner is granted only
+        // by an operator (`pnpm run rbac:grant-owner`) or by a verified owner
+        // through `authorizeRoleChange`, so a federated `owner` claim is
+        // refused here by design.
         await assignRoleToUser(userId, organizationId, role);
         assignedRoles += 1;
       } catch (error) {
@@ -1451,7 +1513,13 @@ export class AuthService {
     }
 
     try {
-      await assignRoleToUser(userId, organizationId, config.security.rbac.defaultRole);
+      // Explicit, named baseline grant — the read path never does this
+      // implicitly any more, so provisioning must do it here.
+      this.log.warn(
+        { userId, organizationId, defaultRole: config.security.rbac.defaultRole },
+        'No federated role assigned; provisioning principal with the configured default role'
+      );
+      await ensureBaselineRole(userId, organizationId, 'federated-provisioning:default');
     } catch (error) {
       this.log.error(
         { error, userId, organizationId, defaultRole: config.security.rbac.defaultRole },
@@ -1503,78 +1571,54 @@ export class AuthService {
             });
           }
 
-          const rolesFromMetadata = (() => {
-            const metadata = key.metadata;
-            if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-              return null;
-            }
-
-            const obj = metadata as Record<string, unknown>;
-            const rolesValue = obj.roles;
-            if (
-              Array.isArray(rolesValue) &&
-              rolesValue.length > 0 &&
-              rolesValue.every((value) => typeof value === 'string')
-            ) {
-              return rolesValue;
-            }
-
-            const roleValue = obj.role;
-            if (typeof roleValue === 'string' && roleValue.length > 0) {
-              return [roleValue];
-            }
-
-            return null;
-          })();
-
-          // Security: API keys should NOT automatically gain privileges when a user's roles change.
-          // We treat roles as a snapshot stored on the API key metadata; if missing, we backfill
-          // once (based on current assignments) and then keep using the snapshot.
+          // Effective roles are EXACTLY the `user_roles` grants — the same rule
+          // the global apiKeyAuthMiddleware applies, so the two entrypoints can
+          // never disagree about what a key is allowed to do.
+          //
+          // Removed here, deliberately:
+          //   - the `api_keys.metadata.roles` "snapshot". It was described as a
+          //     security feature ("a key must not gain power when its user is
+          //     promoted") but the primary request path never consulted it, so
+          //     the promise was not kept anywhere — and where it WAS consulted
+          //     it was strictly more dangerous: a frozen snapshot keeps granting
+          //     a role after the user has been demoted.
+          //   - the metadata BACKFILL, which was a write on the auth path.
+          //   - synthesizing `config.security.rbac.defaultRole` for a principal
+          //     with no grants. The middleware resolves such a principal to [],
+          //     and inventing a role here would just be a second, quieter place
+          //     where authority appears without a grant behind it.
+          //
+          // An API key's roles therefore track the user's CURRENT grants, with
+          // the cache TTL as the lag bound. That is a real property with a real
+          // consequence — promoting a user promotes their existing keys — which
+          // is why `rbac:grant-owner` now refuses to grant an elevating role
+          // while active keys exist unless the operator decides explicitly.
           let roles: string[] = [];
-          if (rolesFromMetadata) {
-            roles = rolesFromMetadata;
-          } else {
-            try {
-              roles = await getUserRoles(key.userId, key.organizationId);
-
-              // Backfill metadata with roles for future use
-              if (roles.length > 0) {
-                await prisma.apiKey
-                  .update({
-                    where: { id: key.id },
-                    data: {
-                      metadata: mergeJsonMetadata(key.metadata, {
-                        roles,
-                        rolesUpdatedAt: new Date().toISOString(),
-                      }),
-                    },
-                  })
-                  .catch(() => {
-                    // Best-effort backfill; do not fail auth if metadata update fails.
-                  });
-              }
-            } catch (error: unknown) {
-              // If getUserRoles fails, try to get role from user.role field as fallback
-              // This can happen when RBAC cache is stale or roles haven't been assigned yet
-              const errorMessage = error instanceof Error ? error.message : String(error);
+          try {
+            roles = await getUserRoles(key.userId, key.organizationId);
+            if (roles.length === 0) {
               this.log.warn(
-                { error: errorMessage, userId: key.userId, organizationId: key.organizationId },
-                'Failed to get user roles, using user.role as fallback'
+                {
+                  userId: key.userId,
+                  organizationId: key.organizationId,
+                  apiKeyId: key.id,
+                },
+                'API key principal has no RBAC role assignments; resolving as unprivileged (fail-closed)'
               );
-
-              // Fallback to user.role field
-              if (
-                key.user &&
-                typeof key.user === 'object' &&
-                'role' in key.user &&
-                typeof key.user.role === 'string'
-              ) {
-                roles = [key.user.role];
-              } else {
-                // Last resort: use default role
-                roles = [config.security.rbac.defaultRole || 'viewer'];
-              }
             }
+          } catch (error: unknown) {
+            // A failed lookup is not an authorization. Fail closed — never fall
+            // back to `users.role`, which is a declared hint and not a grant.
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log.warn(
+              {
+                error: errorMessage,
+                userId: key.userId,
+                organizationId: key.organizationId,
+              },
+              'Failed to resolve API key roles; resolving as unprivileged (fail-closed)'
+            );
+            roles = [];
           }
 
           return {

@@ -24,7 +24,40 @@ interface ModelUsageSummary {
   tokens?: number;
   promptTokens?: number;
   completionTokens?: number;
+  /**
+   * Which leg of the request this model served, when the caller can distinguish
+   * them. A handler that pays for a triage/selection fan-out BEFORE it executes
+   * lands both legs in the same event — without this an analyst reading `models`
+   * sees one entry where several calls were bought. Absent on the default
+   * `summarizeModels` path, where every entry is an execution.
+   */
+  phase?: 'execution' | 'triage';
 }
+
+/**
+ * Which of the three fan-out legs `trackChatUsage` runs.
+ *
+ * - `full` (DEFAULT, and what every pre-existing call site gets): wallet debit +
+ *   analytics event + quota counter increment. Unchanged behaviour.
+ * - `analytics-only`: analytics event ONLY. No `debitChatRequest`, no
+ *   `recordQuotaUsage`.
+ *
+ * `analytics-only` exists because ADDING metering to a route that never had it
+ * is not a locally-contained change. `recordQuotaUsage` increments the exact
+ * `usage_quotas` columns that `checkQuota` compares, and `/v1/chat/completions`
+ * enforces a hard 429 on that result with no feature flag of its own
+ * (`chat-routes.ts:798-820`). So metering a previously-uncounted route makes an
+ * *untouched, already-enforcing* route start rejecting sooner for any org with
+ * an explicitly configured quota. `debitChatRequest` has the same shape of
+ * problem for the prepaid wallet: it would make the route a debit site with no
+ * matching reserve.
+ *
+ * `analytics-only` gives the visibility (attributed `chat.completion` events
+ * with real cost/token numbers, which is what the revenue hole was about)
+ * without moving any counter that something else enforces on. Flipping to
+ * `full` is then a deliberate, separately-schedulable act.
+ */
+export type UsageAccountingMode = 'full' | 'analytics-only';
 
 export interface TrackChatUsageOptions {
   organizationId: string;
@@ -37,6 +70,8 @@ export interface TrackChatUsageOptions {
   totalTokensOverride?: number;
   totalCostOverride?: number;
   modelsOverride?: ModelUsageSummary[];
+  /** Defaults to `full`. See {@link UsageAccountingMode}. */
+  accounting?: UsageAccountingMode;
 }
 
 export async function trackChatUsage(options: TrackChatUsageOptions): Promise<void> {
@@ -57,17 +92,21 @@ export async function trackChatUsage(options: TrackChatUsageOptions): Promise<vo
       options.strategyOverride ??
       (options.cacheHit ? 'cache' : 'streaming');
 
+    const analyticsOnly = options.accounting === 'analytics-only';
+
     await Promise.all([
       // Prepaid wallet debit on the user's REAL tokens at the tier rate. No-op
       // when the gate flag is off or the model is not a tiered cell. Single
       // chokepoint covering streaming, non-streaming, and cache-hit paths.
-      debitChatRequest({
-        organizationId: options.organizationId,
-        request: options.request,
-        promptTokens: tokenUsage.promptTokens,
-        completionTokens: tokenUsage.completionTokens,
-        requestId: options.requestId,
-      }),
+      analyticsOnly
+        ? Promise.resolve()
+        : debitChatRequest({
+            organizationId: options.organizationId,
+            request: options.request,
+            promptTokens: tokenUsage.promptTokens,
+            completionTokens: tokenUsage.completionTokens,
+            requestId: options.requestId,
+          }),
       recordUsageEvents({
         organizationId: options.organizationId,
         events: [
@@ -88,19 +127,22 @@ export async function trackChatUsage(options: TrackChatUsageOptions): Promise<vo
               prompt_tokens: tokenUsage.promptTokens,
               completion_tokens: tokenUsage.completionTokens,
               models,
+              accounting: analyticsOnly ? 'analytics-only' : 'full',
             },
           },
         ],
       }),
-      recordQuotaUsage(options.organizationId, {
-        organizationId: options.organizationId,
-        userId: options.userId,
-        operation: {
-          requests: 1,
-          tokens: totalTokens,
-          cost: billedCost,
-        },
-      }),
+      analyticsOnly
+        ? Promise.resolve()
+        : recordQuotaUsage(options.organizationId, {
+            organizationId: options.organizationId,
+            userId: options.userId,
+            operation: {
+              requests: 1,
+              tokens: totalTokens,
+              cost: billedCost,
+            },
+          }),
     ]);
   } catch (error) {
     log.error(

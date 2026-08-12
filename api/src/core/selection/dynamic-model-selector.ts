@@ -105,6 +105,52 @@ async function getVerifiedHubUids(): Promise<string[]> {
   }
 }
 
+type ModelWithProvider = Prisma.ModelGetPayload<{ include: { provider: true } }>;
+
+// Popularity-seed pool (2026-08-01): the raw top-300-by-downloads query below
+// used to run uncached on effectively every selection that reaches the
+// database path (measured in prod: 14-19s selection-time spikes under
+// concurrency, ~76.5k-row table). HF download counts move slowly, so a long
+// TTL is safe — this is the request-independent part (which 300 rows are the
+// global popularity seed); per-request de-duplication against that request's
+// own candidate pool still happens at the call site, in memory, on every call.
+let popularitySeedCache: { rows: ModelWithProvider[]; expiresAt: number } | null = null;
+const POPULARITY_SEED_TTL_MS = 30 * 60_000;
+
+async function getPopularitySeedRows(): Promise<{ rows: ModelWithProvider[]; queried: boolean }> {
+  const now = Date.now();
+  if (popularitySeedCache && popularitySeedCache.expiresAt > now) {
+    return { rows: popularitySeedCache.rows, queried: false };
+  }
+  try {
+    const seedRows = await prisma.$queryRaw<Array<{ uid: string }>>`
+      SELECT uid FROM models
+      WHERE metadata->>'serverless_callable' = 'true'
+        AND (metadata->>'downloads') IS NOT NULL
+      ORDER BY (metadata->>'downloads')::numeric DESC
+      LIMIT 300
+    `;
+    const seedUids = seedRows.map((r) => r.uid);
+    const rows =
+      seedUids.length > 0
+        ? await prisma.model.findMany({
+            where: { uid: { in: seedUids } },
+            include: { provider: true },
+          })
+        : [];
+    popularitySeedCache = { rows, expiresAt: now + POPULARITY_SEED_TTL_MS };
+    return { rows, queried: true };
+  } catch (rawErr) {
+    log.warn(
+      { error: getErrorMessage(rawErr) },
+      'popularity-seed query failed — selection continues without seed (fail-open)'
+    );
+    // Brief negative cache so a failing DB is not hammered on every request.
+    popularitySeedCache = { rows: [], expiresAt: now + 5_000 };
+    return { rows: [], queried: true };
+  }
+}
+
 /**
  * Model selection criteria
  */
@@ -321,16 +367,25 @@ export class DynamicModelSelector {
    */
   async findModelsByRequirements(
     criteria: SelectionCriteria,
-    maxModels?: number
+    maxModels?: number,
+    // Caller-owned output slot for real cache/query telemetry. Not stored on
+    // `this` — DynamicModelSelector is a shared singleton (getDynamicModelSelector),
+    // so per-call stats on instance state would race under concurrent requests.
+    statsOut?: { cacheHit: boolean; databaseQueries: number }
   ): Promise<Model[]> {
     const limit = maxModels ?? this.config.limits?.maxModelsQuery ?? 2000;
     const startTime = Date.now();
     const monitor = getPerformanceMonitor();
+    let databaseQueries = 0;
 
     // ✅ ENTERPRISE CACHING: Check cache first
     const cacheKey = `findModels:${JSON.stringify(criteria)}:${maxModels}`;
     const cachedResult = this.selectionCache.get(cacheKey);
     if (cachedResult) {
+      if (statsOut) {
+        statsOut.cacheHit = true;
+        statsOut.databaseQueries = 0;
+      }
       // Record performance for cache hit
       monitor.recordSelection({
         requestId: 'cache-hit',
@@ -459,6 +514,7 @@ export class DynamicModelSelector {
       take: Math.min(limit * 3, 800),
       orderBy: [{ usageCount: 'desc' }],
     });
+    databaseQueries++;
     if ((prefilterCallable || restrictVerified) && models.length < 5) {
       // Flag not populated (or too sparse) — degrade gracefully to the full candidate set.
       // C3 perf fix (2026-06-11): BOUND the fallback to the TOP-N most-used models via the existing
@@ -475,6 +531,7 @@ export class DynamicModelSelector {
         orderBy: { usageCount: 'desc' },
         take: Math.min(limit * 3, 800),
       });
+      databaseQueries++;
     }
     if (restrictVerified && models.length < 5) {
       // Terminal never-collapse: the verified-hub restriction combined with this request's
@@ -486,6 +543,7 @@ export class DynamicModelSelector {
         orderBy: { usageCount: 'desc' },
         take: Math.min(limit * 3, 800),
       });
+      databaseQueries++;
     }
 
     // POPULARITY SEED (2026-06-29): `orderBy usage_count` cannot surface popular
@@ -499,20 +557,13 @@ export class DynamicModelSelector {
     // so the (popularity-aware) scorer can actually rank them to the top.
     if (prefilterCallable && process.env.SELECTION_POPULARITY_SEED !== 'false') {
       try {
-        const seedRows = await prisma.$queryRaw<Array<{ uid: string }>>`
-          SELECT uid FROM models
-          WHERE metadata->>'serverless_callable' = 'true'
-            AND (metadata->>'downloads') IS NOT NULL
-          ORDER BY (metadata->>'downloads')::numeric DESC
-          LIMIT 300
-        `;
+        // 30min-cached pool (getPopularitySeedRows) — per-request de-dup against
+        // this call's own candidate set still happens here, every time, in memory.
+        const { rows: seedPool, queried } = await getPopularitySeedRows();
+        if (queried) databaseQueries++;
         const have = new Set(models.map((m) => m.uid));
-        const seedUids = seedRows.map((r) => r.uid).filter((u) => !have.has(u));
-        if (seedUids.length > 0) {
-          const seeded = await prisma.model.findMany({
-            where: { uid: { in: seedUids } },
-            include: { provider: true },
-          });
+        const seeded = seedPool.filter((m) => !have.has(m.uid));
+        if (seeded.length > 0) {
           // Lead with the popular seed, keep the usage-ranked set, re-cap to the
           // in-memory ranker ceiling so scoring latency stays bounded.
           models = [...seeded, ...models].slice(0, 800);
@@ -719,6 +770,11 @@ export class DynamicModelSelector {
     // ✅ ENTERPRISE CACHING: Cache result
     this.selectionCache.set(cacheKey, mapped);
 
+    if (statsOut) {
+      statsOut.cacheHit = false;
+      statsOut.databaseQueries = databaseQueries;
+    }
+
     // ✅ ENTERPRISE MONITORING: Record performance metrics
     monitor.recordSelection({
       requestId: 'find-models',
@@ -728,7 +784,7 @@ export class DynamicModelSelector {
       modelsSelected: mapped.length,
       cacheHits: 0,
       cacheMisses: 1,
-      databaseQueries: 1,
+      databaseQueries,
       validationErrors: validation.errors.length,
       strategy: 'database',
       result: validation.valid ? 'success' : 'error',
@@ -788,6 +844,11 @@ export class DynamicModelSelector {
       }
     }
 
+    // Real telemetry for the recordSelection call below — findModelsByRequirements
+    // fills this in; stays a local (not `this`) so concurrent calls on the shared
+    // selector singleton never share/race on it.
+    const queryStats = { cacheHit: false, databaseQueries: 0 };
+
     let modelsToUse: Model[];
     if (!availableModels || availableModels.length === 0) {
       log.info(
@@ -799,7 +860,8 @@ export class DynamicModelSelector {
       );
       modelsToUse = await this.findModelsByRequirements(
         sanitizedCriteria,
-        this.config.limits?.maxModelsQuery ?? 2000
+        this.config.limits?.maxModelsQuery ?? 2000,
+        queryStats
       ); // Consider ALL 509+ registered models
     } else {
       modelsToUse = availableModels;
@@ -1470,16 +1532,18 @@ export class DynamicModelSelector {
       'Dynamic model selection completed'
     );
 
-    // ✅ ENTERPRISE MONITORING: Record selection performance
+    // ✅ ENTERPRISE MONITORING: Record selection performance.
+    // Real counts from queryStats (filled by findModelsByRequirements above) —
+    // when availableModels was passed in, neither cache nor DB were touched here.
     selectionMonitor.recordSelection({
       requestId: context.requestId,
       duration: Date.now() - startTime,
       criteria,
       modelsFound: modelsToUse.length,
       modelsSelected: filtered.length,
-      cacheHits: 0, // Simplified for now
-      cacheMisses: 0, // Simplified for now
-      databaseQueries: availableModels ? 0 : 1,
+      cacheHits: availableModels ? 0 : queryStats.cacheHit ? 1 : 0,
+      cacheMisses: availableModels ? 0 : queryStats.cacheHit ? 0 : 1,
+      databaseQueries: availableModels ? 0 : queryStats.databaseQueries,
       validationErrors: validation.errors.length,
       strategy: availableModels ? 'provided' : 'database',
       result: validation.valid ? 'success' : 'error',

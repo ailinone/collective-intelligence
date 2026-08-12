@@ -56,10 +56,9 @@ import { evaluateGovernance } from '@/services/org-governance-service';
 import { gateChatRequest } from '@/services/prepaid-wallet-gate';
 import { recordSecurityEvent } from '@/services/security-audit-service';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
-import { getIntelligentModelSelectionService } from '@/services/intelligent-model-selection-service';
 import { providerAvailabilityService } from '@/services/provider-availability-service';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
-import { ensureStringArray } from '@/utils/type-guards';
+import { ensureStringArray, getHeaderString } from '@/utils/type-guards';
 import { isDevelopment } from '@/config';
 import { resolveAilinVirtualModelAlias } from '@/services/ailin-virtual-model-service';
 import {
@@ -70,12 +69,27 @@ import {
   isTierBillingEnabled,
 } from '@/services/pricing-tier-billing';
 import { executeRouteWithRetry } from '@/utils/route-retry';
+import { streamingTimeToFirstByte } from '@/observability/ci-metrics';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { withIdempotency } from '@/middleware/idempotency-middleware';
 import {
   STRATEGY_INPUT_VALUES,
   canonicalizeStrategyInput,
   resolveExecutionStrategy,
 } from '@/core/orchestration/strategy-contract';
+import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
+import {
+  anonymousGuestApiKeyId,
+  anonymousQuotaExceededBody,
+  checkAndConsumeAnonymousQuota,
+  inAnonymousQuotaScope,
+} from '@/services/anonymous-quota-gate';
+import {
+  checkAndConsumeFreeTierAutoQuota,
+  freeTierQuotaExceededBody,
+  isFreeTierAutoRawModel,
+  isFreeTierAutoQuotaEnabled,
+} from '@/services/free-tier-quota-gate';
 
 /**
  * Request body schema
@@ -783,6 +797,12 @@ export async function registerChatRoutes(
       preHandler: [_authenticate],
     },
     async (request, reply) => {
+      // Read the RAW, client-submitted model BEFORE normalizeChatRequest
+      // rewrites it to 'auto' for every ailin-* alias (see
+      // anonymous-quota-gate.ts header) — the anonymous-visitor scope check
+      // below depends on seeing exactly what the client sent.
+      const rawModel = typeof request.body?.model === 'string' ? request.body.model : undefined;
+
       const chatRequest = normalizeChatRequest(request.body);
       const userContext = createOrchestrationContext(request);
       const organizationId = userContext.organizationId;
@@ -795,6 +815,66 @@ export async function registerChatRoutes(
             message: 'Tenant context required',
           },
         });
+      }
+
+      // ── Anonymous-visitor daily free quota (ailin-economy) ─────────────
+      // In scope ONLY for the one designated M2M guest key + literal
+      // model:"ailin-economy" (checked on the RAW body, not the
+      // post-normalization value). Every other request is untouched — this
+      // never runs, and never consults the wallet, for normal traffic.
+      const requestApiKeyId = (request as ExtendedFastifyRequest).apiKey?.id;
+      const anonScope = inAnonymousQuotaScope({
+        apiKeyId: requestApiKeyId,
+        rawModel,
+        visitorIdHeader: getHeaderString(
+          request.headers as Record<string, string | string[] | undefined>,
+          'x-anonymous-visitor-id'
+        ),
+      });
+      if (anonScope.inScope && anonScope.visitorIdHash && requestApiKeyId) {
+        const anonResult = await checkAndConsumeAnonymousQuota(
+          requestApiKeyId,
+          anonScope.visitorIdHash
+        );
+        if (!anonResult.allowed) {
+          return reply.status(429).send(anonymousQuotaExceededBody(anonResult.resetAt));
+        }
+      } else if (requestApiKeyId && requestApiKeyId === anonymousGuestApiKeyId()) {
+        // Defense in depth: the dedicated anonymous-guest M2M key exists for
+        // exactly one purpose (ailin-economy chat completions carrying the
+        // visitor header). Nothing else stops this key from being used for
+        // any other model or endpoint today — without this check, a leaked
+        // key (or a chat-backend bug) would get free, uncounted access to
+        // the whole model catalog through this identity. Reject anything
+        // that doesn't match the expected shape instead of silently
+        // processing it unmetered and uncounted.
+        return reply.status(403).send({
+          error: {
+            code: 'anonymous_key_scope_violation',
+            message:
+              'This API key is restricted to POST /v1/chat/completions with model "ailin-economy" and the X-Anonymous-Visitor-Id header set.',
+          },
+        });
+      }
+
+      // ── Authenticated daily free quota (ailin-auto) ─────────────────────
+      // In scope ONLY when the RAW, pre-normalization model is exactly the
+      // literal string 'ailin-auto' (checked the same way as the anonymous
+      // gate above — NOT via the post-normalization `ailin_alias`, which
+      // `resolveAilinVirtualModelAlias` deliberately leaves unset for bare
+      // 'auto' / an omitted model, even though both execute identically to
+      // 'ailin-auto' today; see free-tier-quota-gate.ts's file header for
+      // why bare 'auto' is deliberately NOT also brought into scope here).
+      // Within the allowance this is a no-op (request proceeds as today,
+      // still exempt from the wallet gate below). Once exceeded, the
+      // ailin-auto request is rejected outright — never silently swapped to
+      // a billed model. Any other model skips this entirely and goes
+      // straight to the normal gates.
+      if (isFreeTierAutoQuotaEnabled() && isFreeTierAutoRawModel(rawModel)) {
+        const freeTierResult = await checkAndConsumeFreeTierAutoQuota(organizationId);
+        if (!freeTierResult.allowed) {
+          return reply.status(429).send(freeTierQuotaExceededBody(freeTierResult.resetAt));
+        }
       }
 
       // Three independent gates against three different data sources (quota
@@ -1397,45 +1477,79 @@ async function handleStreamingRequest(
   // Collective strategies (debate, consensus, quality-multipass) use hybrid streaming:
   // Phase 1: multi-model rounds yield SSE progress events
   // Phase 2: synthesis LLM call streams token-by-token
-  const COLLECTIVE_STRATEGIES = new Set([
-    'consensus',
-    'debate',
-    'quality-multipass',
-    'quality_multipass',
-    'parallel',
-    'war-room',
-    'blind-debate',
-    'devil-advocate-consensus',
-    'swarm-explore',
-    'expert-panel',
-    'stigmergic-refinement',
-    'diversity-ensemble',
-    'safety-quorum',
-    'collaborative',
-    'clarification-first',
-    'research-synthesize',
-    'critique-repair',
-    'double-diamond',
-    'multi-hop-qa',
-    'persona-exploration',
-    'agentic',
-  ]);
+  //
+  // FIX (2026-08-03): this used to be a hand-maintained Set that had drifted
+  // out of sync with the 32 strategies orchestration-engine.ts actually
+  // registers — 11 of them (hybrid, cost-cascade, adaptive, contextual,
+  // hierarchical, massive-parallel, reinforcement, sensitivity-consensus,
+  // sequential, tri-role-collective, competitive) were requestable via
+  // `strategy` but NOT in this Set, so `strategy:"hybrid", stream:true`
+  // silently fell through to the single-model fast path below instead of
+  // the strategy the caller actually asked for — the client had no way to
+  // tell it happened. Deriving from resolveExecutionStrategy() (the same
+  // canonical registry backing the request-body schema validation, see
+  // strategy-contract.ts) means any strategy actually registered on the
+  // engine is routed correctly here by construction, with no second list to
+  // keep in sync. executeStream() (orchestration-engine.ts:2865
+  // selectStrategy, :2982) already resolves ANY registered strategy
+  // correctly — streaming-capable or not, both branches are handled — so
+  // 'single' and unspecified/'auto' are the only two cases left on the
+  // dedicated fast path below, unchanged from prior behavior.
   const requestedStrategy = typeof chatRequest.strategy === 'string' ? chatRequest.strategy : '';
-  if (COLLECTIVE_STRATEGIES.has(requestedStrategy)) {
+  const resolvedExecutionStrategy = resolveExecutionStrategy(requestedStrategy);
+  const isCollectiveStrategyRequest =
+    !!resolvedExecutionStrategy &&
+    resolvedExecutionStrategy !== 'single' &&
+    resolvedExecutionStrategy !== 'auto';
+  if (isCollectiveStrategyRequest) {
     setupSSEHeaders(reply);
-    try {
-      for await (const chunk of orchestrationEngine.executeStream(
-        chatRequest,
-        organizationId,
-        userId
-      )) {
-        sendSSEChunk(reply, chunk);
+    let firstChunkAt = false;
+    // OTel coverage gap fix (2026-08-03): orchestrationEngine.executeStream()
+    // itself is an async generator (too large/complex to safely wrap
+    // internally in this pass — see orchestration-engine.ts:2737), so the
+    // span is created here at the consumption site instead, around the
+    // exact boundary chat-routes.ts already controls. This was previously
+    // completely untraced: OTel only covered the non-streaming execute()
+    // path (orchestration-engine.ts:715), never this one, despite it being
+    // the collective-strategy SSE path used in production.
+    const tracer = trace.getTracer('ci-orchestration');
+    await tracer.startActiveSpan(
+      'orchestration.executeStream',
+      { attributes: { 'request.id': requestId, 'org.id': organizationId, 'request.strategy': requestedStrategy } },
+      async (span) => {
+        try {
+          for await (const chunk of orchestrationEngine.executeStream(
+            chatRequest,
+            organizationId,
+            userId
+          )) {
+            if (!firstChunkAt) {
+              firstChunkAt = true;
+              streamingTimeToFirstByte.observe(
+                { strategy: requestedStrategy, result: 'success' },
+                Date.now() - startTime
+              );
+            }
+            sendSSEChunk(reply, chunk);
+          }
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (err) {
+          if (!firstChunkAt) {
+            streamingTimeToFirstByte.observe(
+              { strategy: requestedStrategy, result: 'error' },
+              Date.now() - startTime
+            );
+          }
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          span.recordException(err instanceof Error ? err : new Error(errorMsg));
+          span.setStatus({ code: SpanStatusCode.ERROR, message: errorMsg });
+          requestLog.error({ error: errorMsg }, 'Collective strategy stream failed');
+          sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
+        } finally {
+          span.end();
+        }
       }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      requestLog.error({ error: errorMsg }, 'Collective strategy stream failed');
-      sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
-    }
+    );
     sendSSEDone(reply);
     // Close the HTTP response after [DONE]. The other streaming paths already
     // reply.raw.end() (see below); the collective path did not, so the socket
@@ -1692,6 +1806,12 @@ async function handleStreamingRequest(
             totalTokens = chunk.usage.total_tokens;
           }
           lastChunk = chunk;
+          if (!firstChunkSent) {
+            streamingTimeToFirstByte.observe(
+              { strategy: requestedStrategy || 'auto', result: 'success' },
+              Date.now() - startTime
+            );
+          }
           firstChunkSent = true;
           sendSSEChunk(reply, chunk);
           // Flush response if available
@@ -1925,13 +2045,20 @@ async function handleStreamingRequest(
   } catch (error: unknown) {
     const durationMs = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorObj = error instanceof Error ? error : new Error(String(error));
     requestLog.error(
       { error: errorMessage, duration: durationMs, allAttempts },
       'Streaming failed'
     );
 
-    sendSSEError(reply, errorObj);
+    // Client only ever sees a generic, request-ID-correlated message here —
+    // errorObj/errorMessage (already logged above in full, including raw
+    // upstream provider text) can contain vendor account/billing details
+    // (e.g. "account balance is insufficient", internal transaction ids)
+    // that must not be relayed to the API caller.
+    sendSSEError(
+      reply,
+      new Error(`Upstream provider error while streaming (request ${requestId}).`)
+    );
     sendSSEDone(reply);
 
     requestLogger
@@ -1955,172 +2082,22 @@ async function handleStreamingRequest(
 }
 
 /**
- * Register capability analysis and intelligent selection endpoints
+ * Register provider-capability discovery endpoints.
+ *
+ * Registers exactly one route: `GET /v1/provider-capabilities`. It reads the
+ * provider registry directly and needs no orchestration engine, which is why
+ * this function takes none.
+ *
+ * `POST /v1/chat/completions/intelligent` and `POST /v1/analyze-requirements`
+ * used to be registered here; both were removed on 2026-08-03. The retraction
+ * is recorded in `docs/guides/migration-guide.md` ("Removed Endpoints") in this
+ * repo, and in the public changelog (`reference/changelog.mdx`) in the separate
+ * `guide` repo — this repo has no CHANGELOG file. Use `POST /v1/chat/completions`
+ * with `model: "auto"`, which runs the same selection through the canonical
+ * orchestration engine (with cost accounting and billing the removed routes
+ * never had).
  */
-export async function registerCapabilityRoutes(
-  fastify: FastifyInstance,
-  _orchestrationEngine: OrchestrationEngine
-): Promise<void> {
-  const intelligentSelection = getIntelligentModelSelectionService();
-
-  /**
-   * POST /v1/analyze-requirements
-   * Analyzes a request and returns recommended capabilities and models
-   */
-  fastify.post<{ Body: ChatRequest }>(
-    '/v1/analyze-requirements',
-    {
-      schema: {
-        description: 'Analyze request requirements and suggest optimal model selection',
-        tags: ['capabilities'],
-        body: {
-          ...chatCompletionSchema.body,
-          required: [],
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              requirements: {
-                type: 'object',
-                properties: {
-                  required: { type: 'array', items: { type: 'string' } },
-                  preferred: { type: 'array', items: { type: 'string' } },
-                  taskType: { type: 'string' },
-                  complexity: { type: 'string' },
-                  contextSize: { type: 'number' },
-                  needsTools: { type: 'boolean' },
-                  toolCount: { type: 'number' },
-                },
-              },
-              triage: {
-                type: 'object',
-                nullable: true,
-                properties: {
-                  suggestedCapabilities: { type: 'array', items: { type: 'string' } },
-                  suggestedTaskType: { type: 'string' },
-                  complexity: { type: 'string' },
-                  confidence: { type: 'number' },
-                  triageModelsUsed: { type: 'array', items: { type: 'string' } },
-                  crossValidated: { type: 'boolean' },
-                },
-              },
-              selection: {
-                type: 'object',
-                properties: {
-                  totalModelsEvaluated: { type: 'number' },
-                  totalModelsMatched: { type: 'number' },
-                  selectionTime: { type: 'number' },
-                  primaryCandidate: {
-                    type: 'object',
-                    nullable: true,
-                    properties: {
-                      modelId: { type: 'string' },
-                      provider: { type: 'string' },
-                      score: { type: 'number' },
-                      reason: { type: 'string' },
-                      matchedCapabilities: { type: 'array', items: { type: 'string' } },
-                    },
-                  },
-                  topCandidates: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        modelId: { type: 'string' },
-                        provider: { type: 'string' },
-                        score: { type: 'number' },
-                        reason: { type: 'string' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      preHandler: [_authenticate],
-    },
-    async (request, reply) => {
-      const chatRequest = normalizeChatRequest(request.body);
-      const requestId = nanoid();
-
-      const requestLog = logger.child({
-        endpoint: '/v1/analyze-requirements',
-        requestId,
-      });
-
-      requestLog.info('Analyzing request requirements');
-
-      try {
-        // Step 1: Analyze requirements
-        const requirements = await intelligentSelection.analyzeRequirements(chatRequest);
-
-        // Step 2: Perform triage if complex enough
-        const triage = await intelligentSelection.performInputTriage(chatRequest, requirements);
-
-        // Step 3: Select capable models
-        const selection = await intelligentSelection.selectCapableModels(requirements, triage);
-
-        const response = {
-          requirements,
-          triage: triage
-            ? {
-                suggestedCapabilities: triage.suggestedCapabilities,
-                suggestedTaskType: triage.suggestedTaskType,
-                complexity: triage.complexity,
-                confidence: triage.confidence,
-                triageModelsUsed: triage.triageModelsUsed,
-                crossValidated: triage.crossValidated,
-              }
-            : null,
-          selection: {
-            totalModelsEvaluated: selection.totalModelsEvaluated,
-            totalModelsMatched: selection.totalModelsMatched,
-            selectionTime: selection.selectionTime,
-            primaryCandidate: selection.primaryCandidate
-              ? {
-                  modelId: selection.primaryCandidate.model.id,
-                  provider: selection.primaryCandidate.model.provider,
-                  score: selection.primaryCandidate.score,
-                  reason: selection.primaryCandidate.reason,
-                  matchedCapabilities: selection.primaryCandidate.matchedCapabilities,
-                }
-              : null,
-            topCandidates: selection.candidates.slice(0, 10).map((c) => ({
-              modelId: c.model.id,
-              provider: c.model.provider,
-              score: c.score,
-              reason: c.reason,
-            })),
-          },
-        };
-
-        requestLog.info(
-          {
-            complexity: requirements.complexity,
-            taskType: requirements.taskType,
-            modelsMatched: selection.totalModelsMatched,
-            primaryModel: selection.primaryCandidate?.model.id,
-          },
-          'Requirements analysis complete'
-        );
-
-        return reply.send(response);
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        requestLog.error({ error: errorMessage }, 'Failed to analyze requirements');
-        return reply.status(500).send({
-          error: {
-            code: 'analysis_failed',
-            message: errorMessage,
-          },
-        });
-      }
-    }
-  );
-
+export async function registerCapabilityRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/provider-capabilities
    * Returns all available providers and their capabilities
@@ -2327,298 +2304,6 @@ export async function registerCapabilityRoutes(
         return reply.status(500).send({
           error: {
             code: 'capabilities_fetch_failed',
-            message: errorMessage,
-          },
-        });
-      }
-    }
-  );
-
-  /**
-   * POST /v1/chat/completions/intelligent
-   * Uses intelligent model selection with triage and dynamic fallback
-   */
-  fastify.post<{ Body: ChatRequest }>(
-    '/v1/chat/completions/intelligent',
-    {
-      schema: {
-        tags: ['Chat', 'Intelligent'],
-        summary: 'Create chat completion with intelligent selection',
-        description:
-          'Chat completion with intelligent model selection, triage, and unlimited fallback. Uses advanced AI to analyze requirements and automatically select the best model, with automatic failover to alternative models if needed.',
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        body: {
-          ...chatCompletionSchema.body,
-          required: ['messages'],
-          additionalProperties: true,
-        },
-        response: {
-          200: {
-            description: 'Chat completion completed successfully',
-            ...chatCompletionResponseSchema,
-          },
-          202: {
-            description: 'Request queued for asynchronous processing',
-            type: 'object',
-            properties: {
-              status: { type: 'string', enum: ['queued'] },
-              message: { type: 'string' },
-              queueId: { type: 'string' },
-              position: { type: 'integer' },
-              estimatedWaitTimeMs: { type: 'integer' },
-              priority: { type: 'integer' },
-              tier: { type: 'string', enum: ['enterprise', 'pro', 'free'] },
-              systemLoad: { type: 'number' },
-              reason: { type: 'string' },
-              pollAfterMs: { type: 'integer' },
-              statusUrl: { type: 'string' },
-              expiresAt: { type: 'integer' },
-            },
-          },
-          400: {
-            description: 'Bad request (invalid input)',
-            type: 'object',
-            properties: {
-              error: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                  type: { type: 'string' },
-                  code: { type: 'string' },
-                },
-              },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              error: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                  type: { type: 'string' },
-                  code: { type: 'string' },
-                },
-              },
-            },
-          },
-          429: {
-            description: 'Rate limit exceeded',
-            type: 'object',
-            properties: {
-              error: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                  type: { type: 'string' },
-                  code: { type: 'string' },
-                },
-              },
-            },
-          },
-          500: {
-            description: 'Internal server error',
-            type: 'object',
-            properties: {
-              error: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                  type: { type: 'string' },
-                  code: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-      },
-      preHandler: [_authenticate, _requireTenantContext()],
-    },
-    async (request, reply) => {
-      const chatRequest = normalizeChatRequest(request.body);
-      const userContext = createOrchestrationContext(request);
-      const organizationId = userContext.organizationId;
-      const userId = userContext.userId || '';
-      const requestId = nanoid();
-      const startTime = Date.now();
-
-      const requestLog = logger.child({
-        endpoint: '/v1/chat/completions/intelligent',
-        organizationId,
-        userId,
-        requestId,
-        requestedModel: chatRequest.model,
-      });
-
-      requestLog.info('Intelligent chat completion request received');
-
-      try {
-        // Step 1: Analyze requirements
-        const requirements = await intelligentSelection.analyzeRequirements(chatRequest);
-
-        requestLog.info(
-          {
-            complexity: requirements.complexity,
-            taskType: requirements.taskType,
-            requiredCapabilities: requirements.required,
-          },
-          'Requirements analyzed'
-        );
-
-        // Step 2: Perform triage for complex requests
-        const triage = await intelligentSelection.performInputTriage(chatRequest, requirements);
-
-        if (triage) {
-          requestLog.info(
-            {
-              triageModels: triage.triageModelsUsed,
-              suggestedCapabilities: triage.suggestedCapabilities,
-              confidence: triage.confidence,
-            },
-            'Input triage completed'
-          );
-        }
-
-        // Step 3: Select capable models (no limit)
-        const selection = await intelligentSelection.selectCapableModels(requirements, triage);
-
-        requestLog.info(
-          {
-            totalCandidates: selection.totalModelsMatched,
-            primaryModel: selection.primaryCandidate?.model.id,
-            selectionTime: selection.selectionTime,
-          },
-          'Model selection completed'
-        );
-
-        if (!selection.primaryCandidate) {
-          return reply.status(400).send({
-            error: {
-              code: 'no_capable_models',
-              message: 'No models found matching the required capabilities',
-              requirements: requirements.required,
-            },
-          });
-        }
-
-        // Step 4: Execute with intelligent fallback
-        if (chatRequest.stream) {
-          // Streaming execution
-          setupSSEHeaders(reply);
-
-          const streamGenerator = intelligentSelection.executeStreamingWithFallback(
-            chatRequest,
-            selection
-          );
-
-          let result;
-          for await (const chunk of streamGenerator) {
-            if (chunk.choices) {
-              sendSSEChunk(reply, chunk);
-            }
-            result = chunk;
-          }
-
-          // Final result contains execution metadata
-          if (result && !result.choices) {
-            const execResult = result as {
-              success?: boolean;
-              modelsAttempted?: number;
-              finalProvider?: string;
-              finalModel?: string;
-            };
-            reply.raw.write(
-              `: execution-summary success=${execResult.success} attempts=${execResult.modelsAttempted} provider=${execResult.finalProvider} model=${execResult.finalModel}\n\n`
-            );
-          }
-
-          sendSSEDone(reply);
-          reply.raw.end();
-        } else {
-          // Non-streaming execution
-          const result = await executeRouteWithRetry(
-            () =>
-              intelligentSelection.executeWithIntelligentFallback(
-                chatRequest,
-                selection,
-                organizationId,
-                userId,
-                requirements.required
-              ),
-            {
-              operationName: 'POST /v1/chat/completions/intelligent',
-              requestId,
-              log: requestLog,
-              isIdempotent: true,
-              maxAttempts: 3,
-              baseDelayMs: 200,
-              maxDelayMs: 1200,
-            }
-          );
-
-          const durationMs = Date.now() - startTime;
-
-          if (!result.success) {
-            requestLog.error(
-              {
-                attempts: result.attempts,
-                durationMs,
-              },
-              'All models failed'
-            );
-
-            return reply.status(500).send({
-              error: {
-                code: 'all_models_failed',
-                message: `All ${result.modelsAttempted} capable models failed`,
-                attempts: result.attempts.map((a) => ({
-                  provider: a.provider,
-                  model: a.model,
-                  error: a.error,
-                  errorCode: a.errorCode,
-                })),
-              },
-            });
-          }
-
-          requestLog.info(
-            {
-              finalProvider: result.finalProvider,
-              finalModel: result.finalModel,
-              attempts: result.modelsAttempted,
-              durationMs,
-            },
-            'Intelligent completion successful'
-          );
-
-          // Add execution metadata to response
-          const response = {
-            ...result.response,
-            _execution: {
-              provider: result.finalProvider,
-              model: result.finalModel,
-              attempts: result.modelsAttempted,
-              totalCandidates: selection.totalModelsMatched,
-              triageUsed: !!triage,
-              durationMs,
-              // Canonical-engine cost accounting (DUP #1 demotion, 2026-06-11):
-              // triage + judge + synthesizer folded into the request total.
-              costUsd: result.costUsd,
-              modelsUsed: result.modelsUsed,
-            },
-          };
-
-          return reply.send(response);
-        }
-      } catch (error: unknown) {
-        const durationMs = Date.now() - startTime;
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        requestLog.error({ error: errorMessage, durationMs }, 'Intelligent completion failed');
-
-        return reply.status(500).send({
-          error: {
-            code: 'intelligent_completion_failed',
             message: errorMessage,
           },
         });

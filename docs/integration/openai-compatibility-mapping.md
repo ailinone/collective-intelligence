@@ -22,7 +22,6 @@ The public contract maintains operational compatibility with OpenAI for core flo
 | `POST /embeddings` | `POST /v1/embeddings` | Direct ✅ |
 | `POST /responses` | `POST /v1/responses` | Direct + Ailin metadata ✅ |
 | — | `GET /v1/provider-capabilities` | Ailin extension |
-| — | `POST /v1/analyze-requirements` | Ailin extension |
 | — | `/v1/capabilities/*` | Ailin capability discovery |
 
 ## Compatibility Layer

@@ -128,7 +128,9 @@ export async function createTestServerWithRoutes(): Promise<FastifyInstance> {
 
   if (orchestrationEngine) {
     await registerChatRoutes(server, orchestrationEngine);
-    await registerCapabilityRoutes(server, orchestrationEngine);
+    // NOTE: registerCapabilityRoutes no longer needs the engine, but stays inside
+    // this guard so the set of routes a test server exposes is unchanged.
+    await registerCapabilityRoutes(server);
   }
 
   await registerAudioRoutes(server);

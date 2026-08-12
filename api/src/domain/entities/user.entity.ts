@@ -22,10 +22,26 @@ import { UserId } from '../value-objects/user-id';
 import { Email } from '../value-objects/email';
 import { PasswordHash } from '../value-objects/password-hash';
 
+/**
+ * Declared (denormalized) user role, mirroring `users.role`.
+ *
+ * This MUST cover every role name seeded in `src/config/rbac-defaults.ts`,
+ * otherwise `normalizeUserRole()` in PrismaUserRepository silently rewrites an
+ * unknown value to `USER` — which, combined with a reconstitute → save cycle,
+ * is another way a declared privilege gets quietly destroyed. `USER` is kept
+ * for backwards compatibility with legacy rows only.
+ *
+ * NOTE: this column is a HINT, not a grant. Effective authority always comes
+ * from the `user_roles` join table via rbac-service.getUserRoles().
+ */
 export enum UserRole {
   USER = 'user',
+  OWNER = 'owner',
   ADMIN = 'admin',
   DEVELOPER = 'developer',
+  MEMBER = 'member',
+  AUDITOR = 'auditor',
+  VIEWER = 'viewer',
 }
 
 export enum UserStatus {

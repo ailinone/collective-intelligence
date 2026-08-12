@@ -9,11 +9,30 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 /**
- * Probes every endpoint documented in the guide's OpenAPI spec against production.
- * Categorizes results: 2xx, 401 (auth required), 403, 404 (missing), 5xx, network errors.
+ * Probes every endpoint documented in the GUIDE repo's published OpenAPI spec
+ * against production. Categorizes results: 2xx, 401 (auth required), 403,
+ * 404 (missing), 5xx, network errors.
+ *
+ * IMPORTANT — this prober is deliberately NOT driven by this repo's own spec.
+ * Its whole job is to catch drift between what the guide repo PUBLISHES and what
+ * production actually SERVES, so it must read the other side of that contract.
+ * The sibling probers (`validate-production-endpoints.cjs`,
+ * `validate-authenticated-endpoints.cjs`) read `ROOT/openapi-spec.json` and
+ * therefore self-heal when this repo's spec changes; this one does not, by design.
+ *
+ * Consequence to expect: whenever a path is removed from this repo's spec but the
+ * guide repo has not yet regenerated `public/openapi/openapi-spec.{yaml,json}`,
+ * this prober reports 404 FAIL for that path. That is the drift signal working —
+ * it means the guide repo still advertises an endpoint production no longer
+ * serves. It is NOT a deploy regression. Fix it by pruning + regenerating the
+ * guide spec, not by editing this script.
  *
  * Usage:
- *   node scripts/probe-documented-endpoints.mjs [--auth=API_KEY] [--out=path] [--base=https://api.ailin.one]
+ *   node scripts/probe-documented-endpoints.mjs [--auth=API_KEY] [--out=path]
+ *        [--base=https://api.ailin.one] [--spec=guide|ci|<path>]
+ *
+ *   --spec=guide  (default) published guide spec — drift detection
+ *   --spec=ci                this repo's spec — "does production match what we built"
  */
 
 import fs from 'node:fs';
@@ -26,14 +45,39 @@ const args = Object.fromEntries(
   }),
 );
 
-const SPEC_PATH = args.spec
-  ? path.resolve(args.spec)
-  : path.resolve('openapi-spec.json');
+// `guide` | `ci` | `custom` — which side of the contract we are reading.
+const SPEC_SOURCE =
+  !args.spec || args.spec === true || args.spec === 'guide'
+    ? 'guide'
+    : args.spec === 'ci'
+      ? 'ci'
+      : 'custom';
+
+// NOTE: the two absolute defaults below are genericized for the public OSS
+// mirror by scripts/oss-export/scrub-rules.json, which matches them as exact
+// literals and aborts the export when they drift. Keep them byte-identical.
+const SPEC_PATH =
+  SPEC_SOURCE === 'guide'
+    ? path.resolve('openapi-spec.json')
+    : SPEC_SOURCE === 'ci'
+      ? path.resolve(process.cwd(), 'openapi-spec.json')
+      : path.resolve(args.spec);
 const BASE = args.base || 'https://api.ailin.one';
 const AUTH = args.auth || process.env.AILIN_API_KEY || null;
 const OUT = args.out || './probe-results.json';
 const TIMEOUT_MS = Number(args.timeout || 15000);
 const CONCURRENCY = Number(args.concurrency || 6);
+
+if (!fs.existsSync(SPEC_PATH)) {
+  console.error(`Spec not found: ${SPEC_PATH}`);
+  if (SPEC_SOURCE === 'guide') {
+    console.error(
+      'The default source is the guide repo checkout.\n' +
+        "Pass --spec=ci to probe against this repo's spec instead, or --spec=<path>.",
+    );
+  }
+  process.exit(1);
+}
 
 const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8'));
 const paths = spec.paths || {};
@@ -54,6 +98,13 @@ for (const p of Object.keys(paths)) {
 
 console.log(`Loaded ${operations.length} operations from ${SPEC_PATH}`);
 console.log(`Probing against ${BASE} ${AUTH ? '(authenticated)' : '(unauthenticated)'}`);
+if (SPEC_SOURCE === 'guide') {
+  console.log(
+    'Source is the PUBLISHED guide spec. A 404 here means the guide still advertises\n' +
+      'a path production no longer serves (guide-spec drift), not a deploy regression.\n' +
+      "Use --spec=ci to probe against this repo's spec instead.",
+  );
+}
 
 // Replace path params with placeholders the API can parse
 function substituteParams(p) {

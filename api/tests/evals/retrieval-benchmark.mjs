@@ -73,8 +73,17 @@ function extractContent(json) {
   return json.choices?.[0]?.message?.content ?? null;
 }
 
+// `errorType` distinguishes an INFRASTRUCTURE failure (judge call timed out
+// / errored / returned unparseable output) from a genuine low quality
+// score — both used to collapse into `score: 0` with no way to tell them
+// apart (found 2026-08-01 auditing a post-deploy gate that scored q=0.00 on
+// nearly every case: it was judge-call timeouts, not real quality). `score`/
+// `pass` still default to 0/false on error so existing numeric aggregation
+// is unchanged — errorType is purely additive.
 async function gradeWithLLMJudge(content, rubric, threshold = 0.70) {
-  if (!content) return { pass: false, score: 0, reasoning: 'No content to grade' };
+  if (!content) {
+    return { pass: false, score: 0, reasoning: 'No content to grade', errorType: 'no-content' };
+  }
   try {
     const { json } = await callChat([
       {
@@ -88,12 +97,14 @@ async function gradeWithLLMJudge(content, rubric, threshold = 0.70) {
     ]);
     const raw = extractContent(json);
     const match = raw?.match(/\{[\s\S]*\}/);
-    if (!match) return { pass: false, score: 0, reasoning: 'Judge response unparseable' };
+    if (!match) {
+      return { pass: false, score: 0, reasoning: 'Judge response unparseable', errorType: 'unparseable' };
+    }
     const parsed = JSON.parse(match[0]);
     const score = Number(parsed.score ?? 0);
-    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '' };
+    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '', errorType: null };
   } catch (err) {
-    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}` };
+    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}`, errorType: 'exception' };
   }
 }
 
@@ -271,6 +282,7 @@ async function runRetrievalBenchmark() {
 
       // Check for hallucination (unsupported claims)
       let hallucinationScore = 1.0; // 1.0 = no hallucination
+      let hallCheckErrorType = null;
       if (tc.context) {
         const hallCheck = await gradeWithLLMJudge(
           content,
@@ -278,9 +290,11 @@ async function runRetrievalBenchmark() {
           0.70
         );
         hallucinationScore = hallCheck.score;
+        hallCheckErrorType = hallCheck.errorType;
         await sleep(DELAY_MS);
       }
 
+      const judgeErrorType = groundedness.errorType ?? hallCheckErrorType;
       const result = {
         caseId: tc.id,
         status,
@@ -293,11 +307,13 @@ async function runRetrievalBenchmark() {
         hallucinationFreedom: hallucinationScore,
         groundednessReasoning: groundedness.reasoning,
         contentPreview: content?.slice(0, 150),
+        judgeErrorType,
       };
       results.push(result);
 
-      const icon = groundedness.pass && keywordRecall >= 0.5 ? '✓' : '✗';
-      console.log(`${icon} recall=${keywordRecall.toFixed(2)} ground=${groundedness.score.toFixed(2)} hallFree=${hallucinationScore.toFixed(2)} | ${latencyMs}ms`);
+      const icon = judgeErrorType ? '⚠ JUDGE-ERR' : groundedness.pass && keywordRecall >= 0.5 ? '✓' : '✗';
+      const groundLabel = judgeErrorType ? `N/A(${judgeErrorType})` : groundedness.score.toFixed(2);
+      console.log(`${icon} recall=${keywordRecall.toFixed(2)} ground=${groundLabel} hallFree=${hallucinationScore.toFixed(2)} | ${latencyMs}ms`);
     } catch (e) {
       console.log(`EXCEPTION: ${e.message}`);
       results.push({
@@ -305,6 +321,7 @@ async function runRetrievalBenchmark() {
         keywordRecall: 0, keywordsExpected: tc.expectedKeywords.length, keywordsFound: 0,
         groundedness: 0, groundednessPass: false, hallucinationFreedom: 0,
         groundednessReasoning: `Exception: ${e.message}`, contentPreview: null,
+        judgeErrorType: 'test-call-exception',
       });
     }
     await sleep(DELAY_MS);
@@ -351,11 +368,25 @@ console.log(`  Groundedness Pass Rate:    ${(summary.groundednessPassRate * 100)
 console.log(`  Unsupported Claim Rate:    ${(summary.unsupportedClaimRate * 100).toFixed(1)}%`);
 console.log(`  Composite Score:           ${(summary.compositeScore * 100).toFixed(1)}%`);
 
+// Judge/infra failures (timeouts, unparseable judge output, no content to
+// grade) counted separately from genuine low scores — see gradeWithLLMJudge.
+const judgeErrors = results.filter(r => r.judgeErrorType);
+const judgeErrorRate = results.length ? judgeErrors.length / results.length : 0;
+if (judgeErrors.length > 0) {
+  const byType = {};
+  for (const r of judgeErrors) byType[r.judgeErrorType] = (byType[r.judgeErrorType] ?? 0) + 1;
+  console.log('\n⚠️  JUDGE/INFRA FAILURES (excluded from quality signal, NOT the same as a low score)');
+  console.log(`   ${judgeErrors.length}/${results.length} cases (${(judgeErrorRate * 100).toFixed(1)}%): ${Object.entries(byType).map(([t, n]) => `${t}=${n}`).join(', ')}`);
+  if (judgeErrorRate >= 0.20) {
+    console.log(`   ⚠️  Judge-error rate ≥20% — treat the composite score above as INCONCLUSIVE, not a real regression signal.`);
+  }
+}
+
 // ─── Save results ────────────────────────────────────────────────────────────
 const outDir = join(ROOT, 'eval-results');
 mkdirSync(outDir, { recursive: true });
 const outPath = join(outDir, `retrieval-benchmark-${timestamp}.json`);
-writeFileSync(outPath, JSON.stringify({ timestamp, summary, cases: results }, null, 2));
+writeFileSync(outPath, JSON.stringify({ timestamp, summary, judgeErrorCount: judgeErrors.length, judgeErrorRate, cases: results }, null, 2));
 console.log(`\nFull results saved to: ${outPath}`);
 
 // ─── CI gate ─────────────────────────────────────────────────────────────────
@@ -366,6 +397,9 @@ if (isCiMode) {
     process.exit(0);
   } else {
     console.error(`\n❌ RETRIEVAL REGRESSION: Composite score ${(summary.compositeScore * 100).toFixed(1)}% < threshold ${(failThreshold * 100).toFixed(0)}%`);
+    if (judgeErrorRate >= 0.20) {
+      console.error(`   ⚠️  ${(judgeErrorRate * 100).toFixed(1)}% of cases hit judge/infra errors (not real quality failures) — this failure may be infrastructure noise, not a genuine regression. Check the JUDGE/INFRA FAILURES section above before treating this as real.`);
+    }
     process.exit(1);
   }
 }

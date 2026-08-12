@@ -1450,6 +1450,24 @@ export function validateConfig(): void {
     errors.push('SECURITY_AUDIT_RETENTION_DAYS must be at least 1');
   }
 
+  // Prepaid-wallet double-charge interlock. `PREPAID_WALLET_GATE_ENABLED`
+  // (prepaid-wallet-gate.ts) and `PRICING_TIERS_BILLING_ENABLED`
+  // (pricing-tier-billing.ts) are two independent gate+debit implementations over
+  // the SAME PrepaidWallet, both keyed off `ailin_tier`/`ailin_tier_rate`, and both
+  // wired into the same /v1/chat/completions handler. With both on, every tiered
+  // request is held twice and debited twice — real money, silently. Fail at boot
+  // rather than leaving this to a code comment.
+  if (
+    process.env.PREPAID_WALLET_GATE_ENABLED === 'true' &&
+    process.env.PRICING_TIERS_BILLING_ENABLED === 'true'
+  ) {
+    errors.push(
+      'PREPAID_WALLET_GATE_ENABLED and PRICING_TIERS_BILLING_ENABLED are mutually exclusive: ' +
+        'both debit the same prepaid wallet for the same tiered requests, so enabling both ' +
+        'double-charges every request. Enable exactly one.'
+    );
+  }
+
   if (config.payments.stripe.enabled) {
     if (!config.payments.stripe.secretKey) {
       errors.push('STRIPE_SECRET_KEY must be set when STRIPE_ENABLED=true');

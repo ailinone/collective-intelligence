@@ -224,10 +224,12 @@ describe('Input Validation Security Tests', () => {
           method: 'POST',
           url: '/v1/auth/register',
           payload: {
+            // No `organizationId`: anonymous registration may not join a
+            // pre-existing organization (409), and passing one here made this
+            // whole loop vacuous — the 201-guarded assertions below never ran.
             email: `test-${nanoid(8)}@example.com`,
             password: 'SecureP@ssw0rd123',
             name: payload,
-            organizationId: testOrgId,
           },
         });
 
@@ -507,10 +509,10 @@ describe('Input Validation Security Tests', () => {
           method: 'POST',
           url: '/v1/auth/register',
           payload: {
+            // No `organizationId` — see the XSS loop above.
             email: `${payload}@example.com`,
             password: 'SecureP@ssw0rd123',
             name: payload,
-            organizationId: testOrgId,
           },
         });
 

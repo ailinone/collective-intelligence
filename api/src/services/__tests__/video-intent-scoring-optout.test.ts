@@ -53,3 +53,38 @@ describe('detectVideoGenerationIntent', () => {
     expect(detectVideoGenerationIntent(withImage)).toBeNull();
   });
 });
+
+describe('detectVideoGenerationIntent — discussion/comparison false positives (2026-08-04 audit)', () => {
+  it('does NOT trigger on a comparison question naming video-model products', () => {
+    // Real audit finding: "sora"/"veo" matched hasVideoKeyword and "create"
+    // matched hasGenerationVerb, with none of hasDevContext's terms present —
+    // this used to silently call the (mostly-broken) video generation path
+    // instead of answering the user's actual question in text.
+    expect(
+      detectVideoGenerationIntent(req('Create a comparison of Sora vs Veo, which is better?'))
+    ).toBeNull();
+  });
+
+  it('does NOT trigger on an explanatory/review question about a video tool', () => {
+    expect(
+      detectVideoGenerationIntent(req('Explain how Sora generates video and review its quality'))
+    ).toBeNull();
+  });
+
+  it('does NOT trigger on the Portuguese equivalent comparison phrasing', () => {
+    expect(
+      detectVideoGenerationIntent(
+        req('Qual a diferença entre gerar vídeo com Sora e Veo, e qual é melhor?')
+      )
+    ).toBeNull();
+  });
+
+  it('still triggers a genuine generation request that happens to name a model', () => {
+    // The discussion-context guard must not become so broad it swallows real
+    // requests — "using Sora" here is instructing HOW to generate, not asking
+    // to compare/explain/review anything.
+    expect(
+      detectVideoGenerationIntent(req('Please create a short video of a sunset using Sora'))
+    ).not.toBeNull();
+  });
+});

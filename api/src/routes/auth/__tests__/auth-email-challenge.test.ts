@@ -25,6 +25,7 @@ import { createTestServerWithAuthOnly } from '../../../../tests/utils/test-serve
 import { prisma } from '@/database/client';
 import { nanoid } from 'nanoid';
 import { syncDefaultRoles } from '@/services/rbac-sync-service';
+import { ensureBaselineRole } from '@/services/rbac-service';
 
 // Mock the email service to prevent actual email sending during tests
 vi.mock('@/services/email-service', () => ({
@@ -61,7 +62,7 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
 
   afterAll(async () => {
     // Cleanup in reverse order of dependencies
-    await prisma.userRole.deleteMany({ where: { userId: { in: [] } } }).catch(() => {});
+    await prisma.userRole.deleteMany({ where: { organizationId: testOrgId } }).catch(() => {});
     await prisma.authLoginChallenge
       .deleteMany({ where: { organizationId: testOrgId } })
       .catch(() => {});
@@ -74,19 +75,42 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
     testEmail = `test-${nanoid(8)}@example.com`;
   });
 
+  /**
+   * Seed a member of `testOrgId` directly.
+   *
+   * This suite exercises the email-code login flow, not signup, and its
+   * challenge rows are keyed to `testOrgId` — so the account has to land in
+   * THAT organization. It used to get there by POSTing `organizationId` to
+   * `POST /v1/auth/register`, which is an anonymous cross-tenant implant and is
+   * now correctly rejected with 409. Putting an operator-provisioned member
+   * into an operator-provisioned tenant is the legitimate expression of the
+   * same intent, and it mirrors what this file's own fallback path already did.
+   *
+   * The `user_roles` grant is not optional: `users.role` is a hint, never a
+   * grant, so a member with no rows resolves to zero roles.
+   */
+  async function seedOrgMember(email: string): Promise<string> {
+    const bcrypt = await import('bcrypt');
+    const passwordHash = await bcrypt.hash('SecureP@ssw0rd123', 12);
+    const user = await prisma.user.upsert({
+      where: { email: email.trim().toLowerCase() },
+      update: { passwordHash, organizationId: testOrgId, status: 'active' },
+      create: {
+        email: email.trim().toLowerCase(),
+        passwordHash,
+        name: 'Test User',
+        organizationId: testOrgId,
+        status: 'active',
+      },
+    });
+    await ensureBaselineRole(user.id, testOrgId, 'test-fixture:email-challenge');
+    return user.id;
+  }
+
   describe('Request Email Challenge', () => {
     it('should send email challenge for existing user', async () => {
-      // First, register user
-      await server.inject({
-        method: 'POST',
-        url: '/v1/auth/register',
-        payload: {
-          email: testEmail,
-          password: 'SecureP@ssw0rd123',
-          name: 'Test User',
-          organizationId: testOrgId,
-        },
-      });
+      // First, seed the user into the suite's organization
+      await seedOrgMember(testEmail);
 
       // Request email challenge
       const response = await server.inject({
@@ -121,17 +145,8 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
     });
 
     it('should rate limit email challenge requests', async () => {
-      // Register user
-      await server.inject({
-        method: 'POST',
-        url: '/v1/auth/register',
-        payload: {
-          email: testEmail,
-          password: 'SecureP@ssw0rd123',
-          name: 'Test User',
-          organizationId: testOrgId,
-        },
-      });
+      // Seed user
+      await seedOrgMember(testEmail);
 
       // Make 10 rapid challenge requests
       const attempts = [];
@@ -158,40 +173,9 @@ describe('Email Challenge Authentication Flow (Integration)', () => {
     let verificationCode: string;
 
     beforeEach(async () => {
-      // Register user
-      const registerResponse = await server.inject({
-        method: 'POST',
-        url: '/v1/auth/register',
-        payload: {
-          email: testEmail,
-          password: 'SecureP@ssw0rd123',
-          name: 'Test User',
-          organizationId: testOrgId,
-        },
-      });
-
-      if (registerResponse.statusCode !== 201) {
-        // Full-suite runs can reach this block when another suite leaves auth
-        // in a non-default mode. Ensure the user exists so login-with-code tests
-        // validate the code flow itself instead of setup side-effects.
-        const bcrypt = require('bcrypt');
-        const fallbackHash = await bcrypt.hash('SecureP@ssw0rd123', 12);
-        await prisma.user.upsert({
-          where: { email: testEmail.trim().toLowerCase() },
-          update: {
-            passwordHash: fallbackHash,
-            organizationId: testOrgId,
-            status: 'active',
-          },
-          create: {
-            email: testEmail.trim().toLowerCase(),
-            passwordHash: fallbackHash,
-            name: 'Test User',
-            organizationId: testOrgId,
-            status: 'active',
-          },
-        });
-      }
+      // Seed the user directly so these cases validate the code flow itself
+      // rather than registration side-effects.
+      await seedOrgMember(testEmail);
 
       // Create a challenge with a known code for testing
       // In production, the code is sent via email, but for testing we create it manually

@@ -598,6 +598,16 @@ export interface EmbeddingRequest {
   user?: string;
   encoding_format?: 'float' | 'base64';
   dimensions?: number;
+  /**
+   * Provider-specific escape hatch, mirroring the `options` bag every
+   * request type in `model-client.ts` already carries. Adapters MUST ignore
+   * keys they do not understand — this is not a second contract, it is the
+   * documented way to reach a vendor field that has no cross-provider
+   * meaning (e.g. BytePlus ModelArk's `instructions`, which the vendor
+   * warns "directly determines model inference performance" and which no
+   * adapter may fabricate on the caller's behalf).
+   */
+  options?: Record<string, unknown>;
 }
 
 export interface EmbeddingData {

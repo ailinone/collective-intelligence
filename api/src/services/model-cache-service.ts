@@ -272,7 +272,7 @@ class ModelCacheService {
       if (!cached) return null;
       return JSON.parse(cached) as Model;
     } catch (error) {
-      logger.error('[ModelCache] Redis get error:', error);
+      logger.error({ err: error }, '[ModelCache] Redis get error:');
       return null;
     }
   }
@@ -292,7 +292,7 @@ class ModelCacheService {
         }
       }
     } catch (error) {
-      logger.error('[ModelCache] Redis bulk get error:', error);
+      logger.error({ err: error }, '[ModelCache] Redis bulk get error:');
     }
     return results;
   }
@@ -306,7 +306,7 @@ class ModelCacheService {
         JSON.stringify(model)
       );
     } catch (error) {
-      logger.error('[ModelCache] Redis set error:', error);
+      logger.error({ err: error }, '[ModelCache] Redis set error:');
     }
   }
 
@@ -315,7 +315,7 @@ class ModelCacheService {
       const redis = getRedisClient();
       await redis.del(`model:${modelId}`);
     } catch (error) {
-      logger.error('[ModelCache] Redis delete error:', error);
+      logger.error({ err: error }, '[ModelCache] Redis delete error:');
     }
   }
 
@@ -328,7 +328,7 @@ class ModelCacheService {
         await redis.del(...keys);
       }
     } catch (error) {
-      logger.error('[ModelCache] Redis clear error:', error);
+      logger.error({ err: error }, '[ModelCache] Redis clear error:');
     }
   }
 
@@ -347,7 +347,7 @@ class ModelCacheService {
       }
       return this.normalizeModelRecord(model);
     } catch (error) {
-      logger.error('[ModelCache] Database get error:', error);
+      logger.error({ err: error }, '[ModelCache] Database get error:');
       return null;
     }
   }
@@ -374,7 +374,7 @@ class ModelCacheService {
         results.set(originalId, normalized);
       }
     } catch (error) {
-      logger.error('[ModelCache] Database bulk get error:', error);
+      logger.error({ err: error }, '[ModelCache] Database bulk get error:');
     }
     return results;
   }

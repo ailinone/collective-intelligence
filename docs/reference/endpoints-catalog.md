@@ -13,8 +13,8 @@ Source: https://github.com/ailinone/collective-intelligence
 
 This page is generated from `ci/openapi-spec.json`.
 
-- Total paths: 207
-- Total operations: 240
+- Total paths: 224
+- Total operations: 261
 
 ## Auth Semantics
 
@@ -24,10 +24,10 @@ This page is generated from `ci/openapi-spec.json`.
 
 ## Surface Split
 
-- Public operations (`security: []`): 13
-- Authenticated operations: 227
+- Public operations (`security: []`): 15
+- Authenticated operations: 246
 
-## Public API (No Auth Required) (13)
+## Public API (No Auth Required) (15)
 
 ### Advanced (6)
 
@@ -48,6 +48,12 @@ This page is generated from `ci/openapi-spec.json`.
 | POST | `/v1/auth/login` | Create or execute auth login | `postAuthLogin` |
 | POST | `/v1/auth/login-with-code` | Create or execute auth login with code | `postAuthLoginwithcode` |
 
+### Authentication (1)
+
+| Method | Path | Summary | Operation ID |
+|---|---|---|---|
+| GET | `/console/api/v1/jwks` | Retrieve console JWKS public keys | `getConsoleApiV1Jwks` |
+
 ### Health (1)
 
 | Method | Path | Summary | Operation ID |
@@ -62,18 +68,18 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/models/{id}` | Retrieve models id | `getModelsById` |
 | GET | `/v1/models/list` | Retrieve models list | `getModelsList` |
 
-## Authenticated API (227)
+### Status (1)
 
-### Advanced (87)
+| Method | Path | Summary | Operation ID |
+|---|---|---|---|
+| GET | `/v1/hcra/health` | HCRA search-stack liveness probe | `getHcraHealth` |
+
+## Authenticated API (246)
+
+### Advanced (91)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
-| POST | `/v1/admin/api-keys/auto-rotate/enable` | Create or execute admin api keys auto rotate enable | Bearer or API Key | `postAdminApikeysAutorotateEnable2` |
-| POST | `/v1/admin/api-keys/rotate/{keyId}` | Create or execute admin api keys rotate keyId | Bearer or API Key | `postAdminApikeysRotateBykeyId` |
-| GET | `/v1/admin/api-keys/rotation-logs` | Retrieve admin api keys rotation logs | Bearer or API Key | `getAdminApikeysRotationlogs2` |
-| GET | `/v1/admin/api-keys/rotation-status` | Retrieve admin api keys rotation status | Bearer or API Key | `getAdminApikeysRotationstatus2` |
-| GET | `/v1/admin/users` | Retrieve admin users | Bearer or API Key | `getAdminUsers2` |
-| DELETE | `/v1/admin/users/{id}` | Delete admin users id | Bearer or API Key | `deleteAdminUsersByid` |
 | GET | `/v1/auth/api-keys` | Retrieve auth api keys | Bearer or API Key | `getAuthApikeys` |
 | POST | `/v1/auth/api-keys` | Create or execute auth api keys | Bearer or API Key | `postAuthApikeys` |
 | DELETE | `/v1/auth/api-keys/{id}` | Delete auth api keys id | Bearer or API Key | `deleteAuthApikeysById` |
@@ -125,6 +131,11 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/fine_tuning/jobs/{job_id}/checkpoints` | Retrieve fine tuning jobs job id checkpoints | Bearer or API Key | `getFinetuningJobsByjobidCheckpoints` |
 | GET | `/v1/fine_tuning/jobs/{job_id}/events` | Retrieve fine tuning jobs job id events | Bearer or API Key | `getFinetuningJobsByjobidEvents` |
 | POST | `/v1/grounding/extract` | Create or execute grounding extract | Bearer or API Key | `postGroundingExtract2` |
+| GET | `/v1/hcra/capabilities` | Retrieve hcra capabilities | Bearer or API Key | `getHcraCapabilities` |
+| GET | `/v1/hcra/capabilities/*` | Retrieve hcra capabilities * | Bearer or API Key | `getHcraCapabilities2` |
+| GET | `/v1/hcra/capabilities/expand` | Retrieve hcra capabilities expand | Bearer or API Key | `getHcraCapabilitiesExpand` |
+| GET | `/v1/hcra/capabilities/facets` | Retrieve hcra capabilities facets | Bearer or API Key | `getHcraCapabilitiesFacets` |
+| GET | `/v1/hcra/models` | Retrieve hcra models | Bearer or API Key | `getHcraModels` |
 | GET | `/v1/jobs` | Retrieve jobs | Bearer or API Key | `getJobs2` |
 | GET | `/v1/jobs/{id}` | Retrieve jobs id | Bearer or API Key | `getJobsByid` |
 | POST | `/v1/memory` | Create or execute memory | Bearer or API Key | `postMemory2` |
@@ -152,6 +163,11 @@ This page is generated from `ci/openapi-spec.json`.
 | POST | `/v1/tools/jina/rerank` | Create or execute tools jina rerank | Bearer or API Key | `postToolsJinaRerank` |
 | POST | `/v1/tools/jina/search` | Create or execute tools jina search | Bearer or API Key | `postToolsJinaSearch` |
 | POST | `/v1/tools/jina/segment` | Create or execute tools jina segment | Bearer or API Key | `postToolsJinaSegment` |
+| POST | `/v1/translation/batch` | Create or execute translation batch | Bearer or API Key | `postTranslationBatch` |
+| GET | `/v1/translation/languages` | Retrieve translation languages | Bearer or API Key | `getTranslationLanguages` |
+| POST | `/v1/translation/session` | Create or execute translation session | Bearer or API Key | `postTranslationSession` |
+| DELETE | `/v1/translation/session/{id}` | Delete translation session id | Bearer or API Key | `deleteTranslationSessionByid` |
+| POST | `/v1/translation/text` | Create or execute translation text | Bearer or API Key | `postTranslationText` |
 | POST | `/v1/videos/generations` | Create or execute videos generations | Bearer or API Key | `postVideosGenerations` |
 | POST | `/v1/workflows/create` | Create or execute workflows create | Bearer or API Key | `postWorkflowsCreate2` |
 | POST | `/v1/workflows/execute` | Create or execute workflows execute | Bearer or API Key | `postWorkflowsExecute2` |
@@ -214,25 +230,33 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/caching/contexts/{context_id}` | Retrieve caching contexts context id | Bearer or API Key | `getCachingContextsBycontextid` |
 | POST | `/v1/caching/contexts/{context_id}/use` | Create or execute caching contexts context id use | Bearer or API Key | `postCachingContextsBycontextidUse` |
 
-### Capabilities (6)
+### Capabilities (7)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
-| POST | `/v1/analyze-requirements` | Create or execute analyze requirements | Bearer or API Key | `postAnalyzerequirements` |
 | GET | `/v1/capabilities` | Retrieve capabilities | Bearer or API Key | `getCapabilities` |
 | POST | `/v1/capabilities/{capability}/execute` | Create or execute capabilities capability execute | Bearer or API Key | `postCapabilitiesByCapabilityExecute` |
 | GET | `/v1/capabilities/{capability}/health` | Retrieve capabilities capability health | Bearer or API Key | `getCapabilitiesByCapabilityHealth` |
 | POST | `/v1/capabilities/{capability}/stream` | Create or execute capabilities capability stream | Bearer or API Key | `postCapabilitiesByCapabilityStream` |
+| GET | `/v1/capabilities/models/search` | Retrieve capabilities models search | Bearer or API Key | `getCapabilitiesModelsSearch` |
+| GET | `/v1/capabilities/ontology/search` | Retrieve capabilities ontology search | Bearer or API Key | `getCapabilitiesOntologySearch` |
 | GET | `/v1/provider-capabilities` | Retrieve provider capabilities | Bearer or API Key | `getProvidercapabilities` |
 
-### Chat (4)
+### Chat (3)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
 | POST | `/v1/chat/completions` | Create a chat completion | Bearer or API Key | `postChatCompletions` |
 | POST | `/v1/chat/completions/extended-thinking` | Create or execute chat completions extended thinking | Bearer or API Key | `postChatCompletionsExtendedthinking2` |
-| POST | `/v1/chat/completions/intelligent` | Create chat completion with intelligent selection | Bearer or API Key | `postChatCompletionsIntelligent` |
 | POST | `/v1/chat/completions/ultra-thinking` | Create or execute chat completions ultra thinking | Bearer or API Key | `postChatCompletionsUltrathinking2` |
+
+### Collective (3)
+
+| Method | Path | Summary | Auth | Operation ID |
+|---|---|---|---|---|
+| GET | `/v1/collective/runs` | List collective runs by request id | Bearer or API Key | `getCollectiveRuns` |
+| GET | `/v1/collective/runs/{id}` | Get a collective run with its signals | Bearer or API Key | `getCollectiveRun` |
+| GET | `/v1/collective/runs/{id}/trace` | Get the full trace spans for a collective run | Bearer or API Key | `getCollectiveRunTrace` |
 
 ### Embeddings (2)
 
@@ -267,11 +291,15 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/providers` | Retrieve providers | Bearer or API Key | `getProviders2` |
 | GET | `/v1/providers/{id}` | Retrieve providers id | Bearer or API Key | `getProvidersByid` |
 
-### Moderations (1)
+### Moderations (5)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
 | POST | `/v1/moderations` | Create or execute moderations | Bearer or API Key | `postModerations` |
+| GET | `/v1/moderations/policies` | List custom moderation policies | Bearer or API Key | `getModerationsPolicies` |
+| POST | `/v1/moderations/policies` | Create a custom moderation policy | Bearer or API Key | `postModerationsPolicies` |
+| DELETE | `/v1/moderations/policies/{id}` | Delete a custom moderation policy | Bearer or API Key | `deleteModerationsPoliciesById` |
+| GET | `/v1/moderations/policies/{id}` | Get a custom moderation policy | Bearer or API Key | `getModerationsPoliciesById` |
 
 ### Organizations (6)
 
@@ -284,6 +312,17 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/organizations/{id}/members` | Retrieve organizations id members | Bearer | `getOrganizationsByIdMembers` |
 | DELETE | `/v1/organizations/{id}/members/{userId}` | Delete organizations id members userId | Bearer | `deleteOrganizationsByIdMembersByUserId` |
 
+### Projects (6)
+
+| Method | Path | Summary | Auth | Operation ID |
+|---|---|---|---|---|
+| GET | `/v1/projects` | List projects | Bearer or API Key | `getProjects` |
+| POST | `/v1/projects` | Create project | Bearer or API Key | `postProjects` |
+| GET | `/v1/projects/{idOrSlug}` | Get a project | Bearer or API Key | `getProject` |
+| PATCH | `/v1/projects/{idOrSlug}` | Update a project | Bearer or API Key | `patchProject` |
+| POST | `/v1/projects/{idOrSlug}/archive` | Archive a project | Bearer or API Key | `postProjectArchive` |
+| POST | `/v1/projects/{idOrSlug}/restore` | Restore a project | Bearer or API Key | `postProjectRestore` |
+
 ### Queue (2)
 
 | Method | Path | Summary | Auth | Operation ID |
@@ -291,11 +330,12 @@ This page is generated from `ci/openapi-spec.json`.
 | DELETE | `/v1/queue/status/{id}` | Delete queue status id | Bearer or API Key | `deleteQueueStatusByid` |
 | GET | `/v1/queue/status/{id}` | Retrieve queue status id | Bearer or API Key | `getQueueStatusByid` |
 
-### Realtime (1)
+### Realtime (2)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
 | GET | `/v1/realtime` | Retrieve realtime | Bearer or API Key | `getRealtime` |
+| POST | `/v1/realtime/session` | Create or execute realtime session | Bearer or API Key | `postRealtimeSession` |
 
 ### Responses (3)
 
@@ -448,7 +488,7 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/users/{id}/api-keys` | Retrieve users id api keys | Bearer or API Key | `getUsersByidApikeys` |
 | POST | `/v1/users/{id}/change-password` | Create or execute users id change password | Bearer or API Key | `postUsersByidChangepassword` |
 
-### Vector Stores (8)
+### Vector Stores (9)
 
 | Method | Path | Summary | Auth | Operation ID |
 |---|---|---|---|---|
@@ -460,4 +500,5 @@ This page is generated from `ci/openapi-spec.json`.
 | GET | `/v1/vector_stores/{vector_store_id}/files` | List vector store files | Bearer or API Key | `getVectorstoresByVectorstoreidFiles` |
 | POST | `/v1/vector_stores/{vector_store_id}/files` | Create vector store file | Bearer or API Key | `postVectorstoresByVectorstoreidFiles` |
 | DELETE | `/v1/vector_stores/{vector_store_id}/files/{file_id}` | Delete vector store file | Bearer or API Key | `deleteVectorstoresByVectorstoreidFilesByFileid` |
+| POST | `/v1/vector_stores/{vector_store_id}/search` | Search vector store | Bearer or API Key | `postVectorstoresByVectorstoreidSearch` |
 

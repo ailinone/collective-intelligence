@@ -25,6 +25,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import type {
   ChatRequest,
   ChatResponse,
@@ -41,6 +42,7 @@ import {
 import { ModelRepository } from '@/services/model-repository';
 import { nanoid } from 'nanoid';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
+import { evaluateOrchestrationGate } from '@/services/orchestration-gate';
 // SSE helpers reserved for future streaming support; route currently
 // returns full responses synchronously.
 
@@ -745,7 +747,7 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           },
         },
       },
-      preHandler: authenticateRequest,
+      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
     },
     async (request: FastifyRequest<{ Body: ExtendedThinkingRequest }>, reply: FastifyReply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -763,6 +765,37 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
       userContext.requestId = requestId;
 
       try {
+        // Admission gate. Class B: this route is already metered (trackChatUsage
+        // below), so adding the check is purely additive with no accounting
+        // change. Check-only helper — it records nothing. Defaults to shadow
+        // mode: evaluates and logs, denies nothing.
+        //
+        // `strategy` is deliberately OMITTED. 'extended-thinking' is a route
+        // name, not a member of `ExecutionStrategyName | StrategyInputName`
+        // (`types/index.ts:834`), and `evaluatePolicy` does an exact-string
+        // membership test against the org's `allowedStrategies`
+        // (`org-governance-service.ts:377`). Passing a non-canonical token would
+        // produce a `policy_violation` on EVERY request for any org that has
+        // configured an allowed-strategy list out of the canonical names — which
+        // under shadow mode systematically inflates the very
+        // `orchestration_gate.shadow_denial` rate this workstream uses as its
+        // enforcement-readiness signal, and would 403 blameless users the moment
+        // this endpoint was allowlisted. The real strategy is not knowable here
+        // anyway: `executeExtendedThinking` picks it from model-repository
+        // candidates resolved inside the service. `evaluatePolicy` short-circuits
+        // on an empty strategy (`:377`), so model allow/block lists and the
+        // budget cap still apply.
+        const gate = await evaluateOrchestrationGate({
+          organizationId: userContext.organizationId,
+          userId: userContext.userId ?? '',
+          endpoint: '/v1/chat/completions/extended-thinking',
+          requestId,
+          model: thinkingRequest.model,
+        });
+        if (!gate.allowed) {
+          return reply.status(gate.status).send(gate.body);
+        }
+
         // Handle streaming (future enhancement)
         if (thinkingRequest.stream) {
           // For now, execute normally and stream the result
@@ -1025,7 +1058,7 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
           },
         },
       },
-      preHandler: authenticateRequest,
+      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
     },
     async (request: FastifyRequest<{ Body: ExtendedThinkingRequest }>, reply: FastifyReply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -1043,6 +1076,27 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
       userContext.requestId = requestId;
 
       try {
+        // Admission gate. Ultra-thinking is collective intelligence — many
+        // models per single request — so it is one of the highest-amplification
+        // doors in the API and belongs in the first enforcement wave. Already
+        // metered below, so the check is purely additive. Defaults to shadow.
+        //
+        // `strategy` is OMITTED for the same reason as the extended-thinking
+        // route above, and here it is not merely non-canonical but genuinely
+        // unknowable at gate time: `executeUltraThinking` selects between
+        // 'collaborative', 'debate' and 'massive-parallel' from the number of
+        // models it resolves (`:322-328`), which happens after this point.
+        const gate = await evaluateOrchestrationGate({
+          organizationId: userContext.organizationId,
+          userId: userContext.userId ?? '',
+          endpoint: '/v1/chat/completions/ultra-thinking',
+          requestId,
+          model: thinkingRequest.model,
+        });
+        if (!gate.allowed) {
+          return reply.status(gate.status).send(gate.body);
+        }
+
         // Execute ultra thinking with collective intelligence
         const response = await thinkingService.executeUltraThinking(thinkingRequest, userContext);
 

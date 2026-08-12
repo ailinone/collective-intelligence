@@ -83,8 +83,17 @@ function extractMeta(json) {
  * Grade a response using an LLM judge.
  * Returns { pass, score, reasoning }.
  */
+// `errorType` distinguishes an INFRASTRUCTURE failure (judge call timed out
+// / errored / returned unparseable output) from a genuine low quality
+// score — both used to collapse into `score: 0` with no way to tell them
+// apart (found 2026-08-01 auditing a post-deploy gate that scored q=0.00 on
+// nearly every case: it was judge-call timeouts, not real quality). `score`/
+// `pass` still default to 0/false on error so existing numeric aggregation
+// is unchanged — errorType is purely additive.
 async function gradeWithLLMJudge(content, rubric, threshold = 0.75) {
-  if (!content) return { pass: false, score: 0, reasoning: 'No content to grade' };
+  if (!content) {
+    return { pass: false, score: 0, reasoning: 'No content to grade', errorType: 'no-content' };
+  }
   try {
     const { json } = await callAPI('single', [
       {
@@ -99,12 +108,14 @@ async function gradeWithLLMJudge(content, rubric, threshold = 0.75) {
     ]);
     const raw = extractContent(json);
     const match = raw?.match(/\{[\s\S]*\}/);
-    if (!match) return { pass: false, score: 0, reasoning: 'Judge response unparseable' };
+    if (!match) {
+      return { pass: false, score: 0, reasoning: 'Judge response unparseable', errorType: 'unparseable' };
+    }
     const parsed = JSON.parse(match[0]);
     const score = Number(parsed.score ?? 0);
-    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '' };
+    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '', errorType: null };
   } catch (err) {
-    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}` };
+    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}`, errorType: 'exception' };
   }
 }
 
@@ -370,8 +381,10 @@ async function runSuite(suiteName, cases, strategies) {
         };
         results.push(result);
 
-        const icon = json.error ? '✗ ERR' : assertion.pass ? '✓' : '✗';
-        const judgeScore = assertion.score != null ? ` | judge=${assertion.score?.toFixed(2)}` : '';
+        const icon = json.error ? '✗ ERR' : assertion.errorType ? '⚠ JUDGE-ERR' : assertion.pass ? '✓' : '✗';
+        const judgeScore = assertion.errorType
+          ? ` | judge=N/A(${assertion.errorType})`
+          : assertion.score != null ? ` | judge=${assertion.score?.toFixed(2)}` : '';
         console.log(`${icon}${judgeScore} | ${latencyMs}ms | cost=$${meta.cost_usd?.toFixed(6) ?? 'N/A'} | tokens=${meta.tokens_total ?? '?'} | models=${meta.model_count ?? (meta.models_used?.length ?? '?')}`);
         if (json.error) console.log(`    ERROR: ${json.error.message ?? JSON.stringify(json.error)}`);
         if (!assertion.pass && assertion.reasoning) console.log(`    JUDGE: ${assertion.reasoning}`);
@@ -435,11 +448,12 @@ console.log('═'.repeat(60));
 
 const byStrategy = {};
 for (const r of allResults) {
-  if (!byStrategy[r.strategy]) byStrategy[r.strategy] = { pass: 0, fail: 0, error: 0, costs: [], tokens: [], latencies: [] };
+  if (!byStrategy[r.strategy]) byStrategy[r.strategy] = { pass: 0, fail: 0, error: 0, judgeErrors: 0, costs: [], tokens: [], latencies: [] };
   const s = byStrategy[r.strategy];
   if (r.exception || r.meta?.error) s.error++;
   else if (r.assertion?.pass) s.pass++;
   else s.fail++;
+  if (r.assertion?.errorType) s.judgeErrors++;
   if (r.meta?.cost_usd != null) s.costs.push(r.meta.cost_usd);
   if (r.meta?.tokens_total != null) s.tokens.push(r.meta.tokens_total);
   if (r.latencyMs != null) s.latencies.push(r.latencyMs);
@@ -451,7 +465,21 @@ for (const [strat, s] of Object.entries(byStrategy)) {
   const avgTokens = s.tokens.length ? Math.round(s.tokens.reduce((a,b) => a+b, 0) / s.tokens.length) : 'N/A';
   const avgLatency = s.latencies.length ? Math.round(s.latencies.reduce((a,b) => a+b, 0) / s.latencies.length) : 'N/A';
   const negCosts = s.costs.filter(c => c < 0).length;
-  console.log(`${strat.padEnd(20)} | ${s.pass}/${total} pass | errors=${s.error} | avgCost=$${avgCost} | avgTokens=${avgTokens} | avgLatency=${avgLatency}ms | negCosts=${negCosts}`);
+  const judgeErrSuffix = s.judgeErrors > 0 ? ` | ⚠judgeErrors=${s.judgeErrors}` : '';
+  console.log(`${strat.padEnd(20)} | ${s.pass}/${total} pass | errors=${s.error} | avgCost=$${avgCost} | avgTokens=${avgTokens} | avgLatency=${avgLatency}ms | negCosts=${negCosts}${judgeErrSuffix}`);
+}
+
+// Judge/infra failures (timeouts, unparseable judge output, no content to
+// grade) counted separately from genuine low pass/fail — a "fail" caused by
+// a judge timeout is infrastructure noise, not a real quality regression.
+const totalJudgeErrors = allResults.filter(r => r.assertion?.errorType).length;
+const totalJudgeCalls = allResults.filter(r => r.assertion && 'errorType' in r.assertion).length;
+const judgeErrorRate = totalJudgeCalls ? totalJudgeErrors / totalJudgeCalls : 0;
+if (totalJudgeErrors > 0) {
+  console.log(`\n⚠️  JUDGE/INFRA FAILURES: ${totalJudgeErrors}/${totalJudgeCalls} LLM-judge calls (${(judgeErrorRate * 100).toFixed(1)}%) — excluded from quality signal, NOT the same as a genuine "fail".`);
+  if (judgeErrorRate >= 0.20) {
+    console.log(`   ⚠️  Judge-error rate ≥20% — treat any regressions below as INCONCLUSIVE until re-run.`);
+  }
 }
 
 // ─── IC Win Rate ──────────────────────────────────────────────────────────────
@@ -491,12 +519,14 @@ if (isCiMode) {
   }
   if (!hasRegression) {
     console.log(`\n✅ All strategies meet quality threshold (${(failThreshold * 100).toFixed(0)}%)`);
+  } else if (judgeErrorRate >= 0.20) {
+    console.error(`   ⚠️  ${(judgeErrorRate * 100).toFixed(1)}% of judge calls hit errors (not real quality failures) — this may be infrastructure noise, not a genuine regression. Check the JUDGE/INFRA FAILURES line above before treating this as real.`);
   }
   // ─── Save ─────────────────────────────────────────────────────────────────
   const outDir = join(ROOT, 'eval-results');
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `audit-live-${timestamp}.json`);
-  writeFileSync(outPath, JSON.stringify({ timestamp, summary: byStrategy, icWinRate, results: allResults }, null, 2));
+  writeFileSync(outPath, JSON.stringify({ timestamp, summary: byStrategy, judgeErrorRate, icWinRate, results: allResults }, null, 2));
   console.log(`\nFull results saved to: ${outPath}`);
   process.exit(hasRegression ? 1 : 0);
 }

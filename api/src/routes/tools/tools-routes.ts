@@ -16,10 +16,11 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import path from 'node:path';
 import { logger } from '@/utils/logger';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
+import { getToolsBaseDir, clampWorkingDirectory } from '@/utils/tools-workspace-guard';
 import { nanoid } from 'nanoid';
 import { JinaToolsService, type JinaToolName } from '@/services/jina-tools-service';
 import {
@@ -137,49 +138,9 @@ const jinaToolsService = new JinaToolsService();
 // Helper Functions
 // ============================================
 
-/**
- * SECURITY: server-controlled base for tool filesystem/shell operations.
- *
- * Tool executors run git and file operations under `context.workingDirectory`.
- * That value was taken VERBATIM from the client request body, so a caller could
- * point any tool at an arbitrary absolute path on the host (`/etc`, another
- * tenant's checkout, …). We clamp the client-supplied `working_directory` to a
- * server-configured base (TOOLS_BASE_DIR, default = the process cwd): the value
- * is resolved relative to the base and rejected if it escapes the base via `..`
- * or an absolute path that lands outside it. This does not weaken the admin/owner
- * RBAC gate added on the routes — it is defense-in-depth on top of it.
- */
-function getToolsBaseDir(): string {
-  const configured = process.env.TOOLS_BASE_DIR;
-  return path.resolve(configured && configured.length > 0 ? configured : process.cwd());
-}
-
-/**
- * Resolve a client-supplied working_directory against the server base, refusing
- * anything that escapes the base. Returns the safe absolute path (the base
- * itself when no/invalid value is supplied).
- */
-export function clampWorkingDirectory(baseDir: string, requested: unknown): string {
-  const base = path.resolve(baseDir);
-  if (typeof requested !== 'string' || requested.length === 0) {
-    return base;
-  }
-  // Resolve relative to the base (absolute `requested` overrides base on
-  // resolve, which is exactly the escape we then detect below).
-  const resolved = path.resolve(base, requested);
-  const rel = path.relative(base, resolved);
-  // `rel` starting with '..' (or being an absolute path on a different drive)
-  // means the target is outside the base — reject by falling back to the base.
-  const escapes = rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel);
-  if (escapes) {
-    logger.warn(
-      { requested, base, resolved },
-      'Tool working_directory escapes the allowed base — clamping to base'
-    );
-    return base;
-  }
-  return resolved;
-}
+// getToolsBaseDir / clampWorkingDirectory now live in
+// @/utils/tools-workspace-guard so chat-request-processor.ts's automatic
+// tool_calls loop can apply the same clamp (2026-07-29).
 
 function createContext(request: FastifyRequest): ToolExecutionContext {
   const baseDir = getToolsBaseDir();
@@ -366,6 +327,13 @@ export async function registerToolsRoutes(rootServer: FastifyInstance): Promise<
   // weakening this one. The shell/FS executors must stay admin-gated.
   await rootServer.register(async (server: FastifyInstance) => {
     server.addHook('preHandler', authenticate);
+    // The dedicated anonymous-chat-guest M2M key (see anonymous-quota-gate.ts)
+    // has no legitimate reason to ever reach the tool surface. requireRole
+    // below should already block it (the guest key is provisioned with a
+    // minimal, non-admin role) — this is an explicit, role-independent
+    // backstop so tool access for this one key never depends on its role
+    // being configured correctly.
+    server.addHook('preHandler', rejectAnonymousGuestKeyPreHandler);
     server.addHook('preHandler', requireRole('admin', 'owner'));
     // SECURITY (js/missing-rate-limiting): these handlers execute shell
     // commands / filesystem + git operations — expensive, authorization-gated

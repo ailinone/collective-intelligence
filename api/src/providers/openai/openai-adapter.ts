@@ -2557,10 +2557,13 @@ export class OpenAIAdapter extends ProviderAdapter {
       return response;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.providerLog.error('Realtime chat completion failed', {
-        error: errorMessage,
-        model: normalizedModel,
-      });
+      this.providerLog.error(
+        {
+          error: errorMessage,
+          model: normalizedModel,
+        },
+        'Realtime chat completion failed'
+      );
       throw error instanceof Error ? error : new Error(String(error));
     }
   }

@@ -239,7 +239,7 @@ async function registerAllRoutesForDocs(server: FastifyInstance): Promise<void> 
       critical: true,
       register: async () => {
         const { registerCapabilityRoutes } = await import('../src/routes/chat/chat-routes.js');
-        await registerCapabilityRoutes(server, orchestrationEngine as never);
+        await registerCapabilityRoutes(server);
       },
     },
     {

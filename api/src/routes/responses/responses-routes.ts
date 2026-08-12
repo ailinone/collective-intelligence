@@ -45,8 +45,10 @@ import {
 } from '@/core/orchestration/orchestration-engine';
 import { nanoid } from 'nanoid';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
+import { evaluateOrchestrationGate } from '@/services/orchestration-gate';
 import { withIdempotency } from '@/middleware/idempotency-middleware';
 import { setupSSEHeaders } from '@/utils/sse';
+import { anonymousGuestApiKeyId } from '@/services/anonymous-quota-gate';
 import { executeRouteWithRetry } from '@/utils/route-retry';
 import type { ChatResponse } from '@/types';
 import { prisma } from '@/database/client';
@@ -561,7 +563,16 @@ class ResponsesService {
    */
   async createResponse(
     request: ResponseCreateRequest,
-    context: OrchestrationContext
+    context: OrchestrationContext,
+    /**
+     * Pre-built chat request, when the caller already built one for the same
+     * `request` with `stream: false`. `buildChatRequest` is pure, so this is a
+     * pure allocation saving — but not a trivial one: `convertContentParts`
+     * `.trim()`s every text part, so rebuilding copies the entire prompt a
+     * second time per request. The route builds it up-front to resolve the
+     * post-alias model/strategy its admission gate evaluates.
+     */
+    prebuiltChatRequest?: ChatRequest
   ): Promise<ResponseObject> {
     const startTime = Date.now();
     const responseId = `resp_${nanoid(24)}`;
@@ -578,7 +589,7 @@ class ResponsesService {
 
     // Steps 1-3: Convert input + tools and prepare the chat request
     // (shared with the streaming path via buildChatRequest).
-    const chatRequest = this.buildChatRequest(request, false);
+    const chatRequest = prebuiltChatRequest ?? this.buildChatRequest(request, false);
 
     // Step 4: Execute via orchestration engine
     if (!isOrchestrationEngineInitialized()) {
@@ -1503,6 +1514,26 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
       const extendedRequest = request as ExtendedFastifyRequest;
       const responsesRequest = request.body;
 
+      // The dedicated anonymous-chat-guest M2M key (see
+      // anonymous-quota-gate.ts) exists for exactly one purpose:
+      // POST /v1/chat/completions with model:"ailin-economy". It has no
+      // legitimate reason to ever reach this endpoint — chat-routes.ts's
+      // per-visitor daily counter and scope restriction would otherwise be
+      // fully bypassable by just calling /v1/responses instead (confirmed:
+      // this endpoint resolves ailin-* aliases identically and has no
+      // quota/counting of its own). Reject outright rather than silently
+      // processing it uncounted and unrestricted.
+      const guestKeyId = anonymousGuestApiKeyId();
+      if (guestKeyId && extendedRequest.apiKey?.id === guestKeyId) {
+        return reply.status(403).send({
+          error: {
+            code: 'anonymous_key_scope_violation',
+            message:
+              'This API key is restricted to POST /v1/chat/completions with model "ailin-economy" and the X-Anonymous-Visitor-Id header set.',
+          },
+        });
+      }
+
       // Create orchestration context
       const inputSize =
         typeof responsesRequest.input === 'string'
@@ -1520,18 +1551,96 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
       userContext.requestId = requestId;
 
       try {
+        // Build the chat request ONCE, up-front. It validates (throws 400 for
+        // bad input at `:717-725` and bad strategy at `:741-746`) and it
+        // resolves `ailin-*` aliases to a concrete model (`:732`, `:749`) plus
+        // the canonical strategy (`:766-770`) — which is exactly what the gate
+        // below needs to evaluate governance policy against. Previously the
+        // handler built it only inside the streaming branch; the non-streaming
+        // path built it further down, inside `createResponse` (`:582`).
+        //
+        // BEHAVIOURAL DELTA — this is more than "one build for both paths", and
+        // the difference is on the NON-STREAMING path. `withIdempotency`
+        // short-circuits a replay WITHOUT invoking its handler, so before this
+        // change an idempotency cache hit never entered `createResponse` and so
+        // never built the chat request at all. Now it does. Accepted
+        // deliberately; it is not a request-acceptance change:
+        //   - `buildChatRequest` is pure. On a replay the cost is one extra
+        //     walk that `.trim()`s every text part (`:1078`) — CPU and garbage
+        //     proportional to prompt size, no I/O, no writes, and no gate call
+        //     (the gate stays inside the handler at `:1666`, so replays are
+        //     still un-gated by design — see the note below).
+        //   - Validation errors now surface BEFORE the middleware is entered
+        //     rather than inside it. Both sites sit inside the same `try` at
+        //     `:1523` and map through the same catch, so the status, code and
+        //     body a client sees are unchanged.
+        //   - A replay implies the identical request body already validated on
+        //     the original call, so "a replay that newly 400s" is not a
+        //     reachable state.
+        const gateChatShape = responsesService.buildChatRequest(
+          responsesRequest,
+          !!responsesRequest.stream
+        );
+
+        // Admission gate. This route runs the same orchestration engine as
+        // /v1/chat/completions and resolves the same ailin-* aliases, but had
+        // no quota or governance check of any kind. Defaults to shadow mode:
+        // evaluates and logs, denies nothing. Check-only — the existing
+        // `trackChatUsage` calls at `:871` (streaming) and `:1691`
+        // (non-streaming) remain the sole recording sites, so nothing is
+        // double-counted. Both already run at the default `full` accounting
+        // mode; this route has ALWAYS incremented `usage_quotas`.
+        //
+        // TENANT-CONTEXT ESCAPE, and it applies to this route even though this
+        // is the flagship fix of the three: the preHandler
+        // is `authenticateRequest` alone — `requireTenantContext` appears in 14
+        // other route files but not this one — so any principal whose token
+        // resolves to an empty organizationId is allowed through the gate
+        // unconditionally. Not fixed here on purpose: adding the preHandler would
+        // start 401ing callers who succeed today. The operational consequence is
+        // that the shadow-denial rate for this endpoint reads clean for org-less
+        // traffic whether or not it would have been denied, so the pre-flip
+        // readiness check must be paired with a count of org-less principals.
+        // See the PR body's pre-deploy queries.
+        //
+        // NOT hoisted above the stream/non-stream split, deliberately. On the
+        // non-streaming path the gate belongs INSIDE `withIdempotency`'s handler
+        // (below), because an idempotent replay must not be re-admitted: today a
+        // client retrying with an `Idempotency-Key` gets the cached body back
+        // with no admission check, and once /v1/responses is allowlisted into
+        // enforce mode a replay issued after the org crosses its quota would
+        // return 429 for work that has already been executed AND already been
+        // billed. Charging for a result the customer can no longer retrieve is
+        // worse than admitting one replay. `withIdempotency` short-circuits on a
+        // cache hit without invoking the handler, so putting the gate there gives
+        // exactly the right semantics: first execution gated, replays not.
+        const runGate = () =>
+          evaluateOrchestrationGate({
+            organizationId: userContext.organizationId,
+            userId: userContext.userId ?? '',
+            endpoint: '/v1/responses',
+            requestId,
+            model: gateChatShape.model,
+            strategy: gateChatShape.strategy,
+          });
+
         // Streaming path (SSE). Mirrors /v1/chat/completions: idempotency is
         // bypassed for streams (a token stream is not a replayable buffered
         // body), and we write OpenAI Responses streaming events directly to
-        // `reply.raw`. Request validation happens inside buildChatRequest,
-        // which runs BEFORE any SSE header/frame is written — so a 4xx still
-        // returns a proper JSON error body.
+        // `reply.raw`. Validation already happened in the shared
+        // `buildChatRequest` above, which runs BEFORE any SSE header/frame is
+        // written — so a 4xx still returns a proper JSON error body.
         if (responsesRequest.stream) {
           log.info({ requestId }, 'Streaming responses API requested');
 
-          // Validate up-front (throws 400 for bad input/strategy) so we can
-          // still emit a JSON error before committing to the SSE channel.
-          responsesService.buildChatRequest(responsesRequest, true);
+          // Streams bypass idempotency entirely (a token stream is not a
+          // replayable buffered body), so there is no replay to protect and the
+          // gate runs here — still before any SSE header is written, so a denial
+          // keeps its JSON body.
+          const streamGate = await runGate();
+          if (!streamGate.allowed) {
+            return reply.status(streamGate.status).send(streamGate.body);
+          }
 
           // Commit to SSE: set headers, then stream events to the raw socket.
           setupSSEHeaders(reply);
@@ -1572,16 +1681,30 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
         // Wrap the billable execution with Idempotency-Key support. Without
         // the header this is a transparent passthrough; with it, identical
         // retries replay the original response instead of re-billing.
-        return await withIdempotency({
+        // Explicit `unknown` body type: the handler now returns either a
+        // `ResponseObject` (success) or the gate's denial body (429/403). The
+        // middleware caches 2xx only (`idempotency-middleware.ts:255`), so a
+        // gate denial is never stored as a replayable record.
+        return await withIdempotency<unknown>({
           request,
           reply,
           organizationId: userContext.organizationId,
           requestBody: responsesRequest,
           isStreaming: false,
           handler: async () => {
-            // Create response
+            // Gate the real execution only. A cache hit never reaches here.
+            const gate = await runGate();
+            if (!gate.allowed) {
+              return { httpStatus: gate.status, body: gate.body };
+            }
+
+            // Create response. `gateChatShape` is handed through so the request
+            // is built ONCE: `buildChatRequest` is pure but it walks and
+            // `.trim()`s every text part (`:1078`), which for a large prompt
+            // means a full extra copy per request. It was already built above to
+            // resolve the post-alias model/strategy the gate evaluates.
             const response = await executeRouteWithRetry(
-              () => responsesService.createResponse(responsesRequest, userContext),
+              () => responsesService.createResponse(responsesRequest, userContext, gateChatShape),
               {
                 operationName: 'POST /v1/responses',
                 requestId,

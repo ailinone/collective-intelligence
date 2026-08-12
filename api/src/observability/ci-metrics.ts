@@ -136,6 +136,29 @@ export const modelSelectionScore = createHistogram({
 });
 
 // ============================================
+// Streaming Latency Metrics
+// ============================================
+// ADDED (2026-08-03): the streaming request path (chat-routes.ts
+// handleStreamingRequest -> executeStream/createStreamingPlan) had ZERO
+// latency observability despite being the dominant path in production —
+// neither this Prometheus registry nor OTel tracing covered it, so the
+// "Selection time exceeded threshold" alerts (see modelSelectionDuration
+// above) could only ever explain the selection PHASE, not what the client
+// actually experienced end-to-end. time_to_first_byte_ms is measured from
+// request start to the first SSE chunk written to the response (the
+// `firstChunkSent` transition in chat-routes.ts), independent of whether
+// that first chunk came from the single-model streaming path or the
+// collective-strategy path.
+
+export const streamingTimeToFirstByte = createHistogram({
+  name: 'ci_streaming_time_to_first_byte_ms',
+  help: 'Time from request start to first SSE chunk written, in milliseconds',
+  labelNames: ['strategy', 'result'],
+  buckets: [100, 250, 500, 1000, 2000, 3000, 5000, 8000, 15000, 30000],
+  registers: [registry],
+});
+
+// ============================================
 // Semantic Memory Metrics
 // ============================================
 

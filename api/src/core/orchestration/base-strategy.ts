@@ -301,7 +301,9 @@ export abstract class BaseStrategy {
       }
 
       if (maxCost && maxCost > 0) {
-        const estimatedCost = (Number(model.inputCostPer1k) + Number(model.outputCostPer1k)) * 2;
+        // The two rates already represent a 1k-token input plus a 1k-token
+        // output. Do not double the combined estimate again.
+        const estimatedCost = Number(model.inputCostPer1k) + Number(model.outputCostPer1k);
         if (estimatedCost > maxCost) return false;
       }
 
@@ -2447,26 +2449,31 @@ export abstract class BaseStrategy {
         return execution;
       }
 
-      // Execute tool calls and build messages with results
-      const toolResultMessages: ChatMessage[] = [];
-      for (const toolCall of toolCalls) {
-        try {
-          // Dynamic import to avoid circular dependency
-          const { executeToolForStrategy } = await import('@/services/strategy-tool-executor');
-          const result = await executeToolForStrategy(toolCall, logger);
-          toolResultMessages.push({
-            role: 'tool',
-            content: result.output || result.error || 'No output',
-            tool_call_id: toolCall.id,
-          });
-        } catch (err) {
-          toolResultMessages.push({
-            role: 'tool',
-            content: `Tool execution error: ${err instanceof Error ? err.message : String(err)}`,
-            tool_call_id: toolCall.id,
-          });
-        }
-      }
+      // Execute tool calls concurrently and build messages with results.
+      // Multiple tool_calls on one response are independent by the OpenAI
+      // tool-calling contract, so they run via Promise.all; order in
+      // toolResultMessages still matches toolCalls (Promise.all preserves
+      // input order regardless of completion order), and each call is
+      // caught individually so one failure doesn't drop its siblings.
+      const { executeToolForStrategy } = await import('@/services/strategy-tool-executor');
+      const toolResultMessages: ChatMessage[] = await Promise.all(
+        toolCalls.map(async (toolCall): Promise<ChatMessage> => {
+          try {
+            const result = await executeToolForStrategy(toolCall, logger);
+            return {
+              role: 'tool',
+              content: result.output || result.error || 'No output',
+              tool_call_id: toolCall.id,
+            };
+          } catch (err) {
+            return {
+              role: 'tool',
+              content: `Tool execution error: ${err instanceof Error ? err.message : String(err)}`,
+              tool_call_id: toolCall.id,
+            };
+          }
+        })
+      );
 
       // Re-send with tool results appended to conversation
       currentRequest = {

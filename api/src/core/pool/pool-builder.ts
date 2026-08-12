@@ -262,14 +262,17 @@ export class PoolBuilder {
   /**
    * Filter by cost ceiling.
    */
-  filterByCost(maxCostPer1k: number): this {
-    if (maxCostPer1k <= 0) return this;
+  filterByCost(maxCost: number): this {
+    if (maxCost <= 0) return this;
     const inputCount = this.models.length;
     const reasons: Record<string, number> = {};
 
     this.models = this.models.filter((model) => {
-      const estimatedCost = (Number(model.inputCostPer1k) + Number(model.outputCostPer1k)) * 2;
-      if (estimatedCost > maxCostPer1k) {
+      // inputCostPer1k + outputCostPer1k already estimates one 1k-token
+      // input plus one 1k-token output. Multiplying that sum by two again
+      // incorrectly rejects models whose combined request cost equals the cap.
+      const estimatedCost = Number(model.inputCostPer1k) + Number(model.outputCostPer1k);
+      if (estimatedCost > maxCost) {
         reasons['above_cost_ceiling'] = (reasons['above_cost_ceiling'] ?? 0) + 1;
         return false;
       }

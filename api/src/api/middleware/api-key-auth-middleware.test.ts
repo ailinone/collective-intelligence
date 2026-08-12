@@ -390,7 +390,9 @@ describe('API Key Authentication Middleware', () => {
             tier: 'enterprise',
             status: 'active',
           },
-          userRoles: [],
+          // The AUTHORITATIVE grant. `user.role` above is 'admin' and is
+          // deliberately ignored — see the roles assertion below.
+          userRoles: [{ role: { id: 'role-developer', name: 'developer' } }],
         },
       };
       vi.mocked(prisma.apiKey.findFirst).mockResolvedValue(mockApiKey as never);
@@ -402,7 +404,11 @@ describe('API Key Authentication Middleware', () => {
       expect(authenticatedRequest.user).toEqual({
         userId: 'user-123',
         organizationId: 'org-123',
-        roles: ['admin'],
+        // SECURITY (rbac-silent-role-downgrade): effective roles are EXACTLY the
+        // `user_roles` grants. This used to assert ['admin'] — i.e. it pinned the
+        // behaviour where the denormalized `users.role` hint column WAS the
+        // effective grant on the primary request path.
+        roles: ['developer'],
         email: 'test@example.com',
         name: 'Test User',
       });

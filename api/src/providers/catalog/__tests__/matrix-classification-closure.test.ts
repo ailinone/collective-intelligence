@@ -193,7 +193,21 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // LOTE S (2026-07-13): +perplexity-agent (same shape) — integrado 86→87.
     // LOTE T (2026-07-13): +ailin (same shape) — integrado 87→88.
     // LOTE U (2026-07-29): +sakana-ai (same shape) — integrado 88→89.
-    expect(buckets['integrado-sem-live-validation'].length).toBe(89);
+    // LOTE V (2026-08-01): +maritaca-ai (same shape) — integrado 89→90.
+    // LOTE AA (2026-08-02): +byteplus (BytePlus ModelArk — enabledByDefault
+    // true, integrationMode discovery+execution, dedicated
+    // BytePlusModelArkAdapter) — integrado 90→91. NB this bucket is derived
+    // from catalog STRUCTURE only; byteplus's operational state (auth proven,
+    // every model entitlement-gated behind 404 ModelNotOpen) is recorded
+    // separately in CONSOLIDATION_MATRIX['upstream-suspended'].
+    // LOTE AB (2026-08-10): +digitalocean (DigitalOcean Serverless
+    // Inference — enabledByDefault true, integrationMode
+    // discovery+execution, no dedicated adapter/oai-compat-pure) —
+    // integrado 91→92. Structural bucket only, same as byteplus's note
+    // above; digitalocean's operational state (full live-validation, chat
+    // + streaming + tools + jsonMode + embeddings all real 200s) is
+    // recorded separately in CONSOLIDATION_MATRIX['live-validation'].
+    expect(buckets['integrado-sem-live-validation'].length).toBe(92);
     // credentials-missing history:
     //   22 (original) → 25 (Lot B, 2026-04-23: +writer/upstage/rekaai)
     //                → 36 (LOTE M complement lot, 2026-04-23: +11 catalog
@@ -221,7 +235,7 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // from provider-registry.ts — it was unreachable and Bedrock is served
     // by its catalog row with the AwsBedrockAdapter factory binding).
     expect(buckets['switch-only-legitimate'].length).toBe(21);
-    // Sum: 89 + 0 + 1 + 1 + 21 = 112 (= |catalog 91| + |switch 21|,
-    // recomputed 2026-07-29 after LOTE U sakana-ai onboarding).
+    // Sum: 92 + 0 + 1 + 1 + 21 = 115 (= |catalog 94| + |switch 21|,
+    // recomputed 2026-08-10 after LOTE AB digitalocean onboarding).
   });
 });

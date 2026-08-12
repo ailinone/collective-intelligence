@@ -195,13 +195,16 @@ export class OpenAIRealtimeClient extends EventEmitter {
         throw new Error('No client_secret returned from API');
       }
 
-      this.logger.info('Client secret generated successfully', {
-        expires_at: data.expires_at,
-        session_id: data.session?.id,
-      });
+      this.logger.info(
+        {
+          expires_at: data.expires_at,
+          session_id: data.session?.id,
+        },
+        'Client secret generated successfully'
+      );
       return this.clientSecret;
     } catch (error) {
-      this.logger.error('Failed to generate client secret', { error });
+      this.logger.error({ error }, 'Failed to generate client secret');
       throw error;
     }
   }
@@ -219,11 +222,14 @@ export class OpenAIRealtimeClient extends EventEmitter {
    */
   async createCall(callConfig: RealtimeCallConfig): Promise<string> {
     try {
-      this.logger.info('Creating WebRTC call with SDP offer (GA format)', {
-        sdpLength: callConfig.sdp.length,
-        model: callConfig.session.model,
-        contentType: 'application/sdp',
-      });
+      this.logger.info(
+        {
+          sdpLength: callConfig.sdp.length,
+          model: callConfig.session.model,
+          contentType: 'application/sdp',
+        },
+        'Creating WebRTC call with SDP offer (GA format)'
+      );
 
       // Use the GA API format: SDP as body with application/sdp content-type
       const response = await fetch(`${this.baseUrl}/realtime/calls`, {
@@ -237,11 +243,14 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error('Call creation failed with GA format', {
-          status: response.status,
-          error: errorText,
-          contentType: 'application/sdp',
-        });
+        this.logger.error(
+          {
+            status: response.status,
+            error: errorText,
+            contentType: 'application/sdp',
+          },
+          'Call creation failed with GA format'
+        );
 
         // Provide detailed error information
         throw new Error(
@@ -254,9 +263,12 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
       // The response should be the SDP answer
       const sdpAnswer = await response.text();
-      this.logger.info('Call created successfully - SDP answer received', {
-        answerLength: sdpAnswer.length,
-      });
+      this.logger.info(
+        {
+          answerLength: sdpAnswer.length,
+        },
+        'Call created successfully - SDP answer received'
+      );
 
       // Store the SDP answer for WebRTC connection
       this.sdpAnswer = sdpAnswer;
@@ -267,7 +279,7 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
       return callId;
     } catch (error) {
-      this.logger.error('Failed to create WebRTC call', { error });
+      this.logger.error({ error }, 'Failed to create WebRTC call');
       throw error;
     }
   }
@@ -365,21 +377,24 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
             this.handleServerEvent(message);
           } catch (error) {
-            this.logger.error('Failed to parse server message', { error, data: event.data });
+            this.logger.error({ error, data: event.data }, 'Failed to parse server message');
           }
         };
 
         this.ws.onclose = (event) => {
           this.connected = false;
-          this.logger.info('WebSocket connection closed', {
-            code: event.code,
-            reason: event.reason,
-          });
+          this.logger.info(
+            {
+              code: event.code,
+              reason: event.reason,
+            },
+            'WebSocket connection closed'
+          );
           this.emit('disconnected', event);
         };
 
         this.ws.onerror = (error) => {
-          this.logger.error('WebSocket error', { error });
+          this.logger.error({ error }, 'WebSocket error');
           reject(error);
         };
       } catch (error) {
@@ -403,7 +418,7 @@ export class OpenAIRealtimeClient extends EventEmitter {
 
         this.ws.onopen = () => {
           this.connected = true;
-          this.logger.info('Connected to call WebSocket', { callId });
+          this.logger.info({ callId }, 'Connected to call WebSocket');
           resolve();
         };
 
@@ -412,18 +427,18 @@ export class OpenAIRealtimeClient extends EventEmitter {
             const message = narrowAs<ServerEvent>(JSON.parse(event.data.toString()));
             this.handleServerEvent(message);
           } catch (error) {
-            this.logger.error('Failed to parse call message', { error, data: event.data });
+            this.logger.error({ error, data: event.data }, 'Failed to parse call message');
           }
         };
 
         this.ws.onclose = (event) => {
           this.connected = false;
-          this.logger.info('Call WebSocket connection closed', { callId, code: event.code });
+          this.logger.info({ callId, code: event.code }, 'Call WebSocket connection closed');
           this.emit('call_disconnected', { callId, code: event.code, reason: event.reason });
         };
 
         this.ws.onerror = (error) => {
-          this.logger.error('Call WebSocket error', { error, callId });
+          this.logger.error({ error, callId }, 'Call WebSocket error');
           reject(error);
         };
       } catch (error) {
@@ -441,14 +456,14 @@ export class OpenAIRealtimeClient extends EventEmitter {
     }
 
     this.ws.send(JSON.stringify(event));
-    this.logger.debug('Event sent', { type: event.type });
+    this.logger.debug({ type: event.type }, 'Event sent');
   }
 
   /**
    * Handle server events
    */
   private handleServerEvent(event: ServerEvent): void {
-    this.logger.debug('Server event received', { type: event.type });
+    this.logger.debug({ type: event.type }, 'Server event received');
 
     // Emit the event for external handling
     this.emit(event.type, event);
@@ -587,9 +602,9 @@ export class OpenAIRealtimeClient extends EventEmitter {
         );
       }
 
-      this.logger.info('Call accepted successfully via REST API', { callId });
+      this.logger.info({ callId }, 'Call accepted successfully via REST API');
     } catch (error) {
-      this.logger.error('Failed to accept call via REST API', { error, callId });
+      this.logger.error({ error, callId }, 'Failed to accept call via REST API');
       throw error;
     }
   }
@@ -614,9 +629,9 @@ export class OpenAIRealtimeClient extends EventEmitter {
         );
       }
 
-      this.logger.info('Call rejected successfully via REST API', { callId });
+      this.logger.info({ callId }, 'Call rejected successfully via REST API');
     } catch (error) {
-      this.logger.error('Failed to reject call via REST API', { error, callId });
+      this.logger.error({ error, callId }, 'Failed to reject call via REST API');
       throw error;
     }
   }
@@ -644,9 +659,9 @@ export class OpenAIRealtimeClient extends EventEmitter {
         );
       }
 
-      this.logger.info('Call referred successfully via REST API', { callId, targetUri });
+      this.logger.info({ callId, targetUri }, 'Call referred successfully via REST API');
     } catch (error) {
-      this.logger.error('Failed to refer call via REST API', { error, callId, targetUri });
+      this.logger.error({ error, callId, targetUri }, 'Failed to refer call via REST API');
       throw error;
     }
   }
@@ -670,9 +685,9 @@ export class OpenAIRealtimeClient extends EventEmitter {
         );
       }
 
-      this.logger.info('Call hung up successfully via REST API', { callId });
+      this.logger.info({ callId }, 'Call hung up successfully via REST API');
     } catch (error) {
-      this.logger.error('Failed to hang up call via REST API', { error, callId });
+      this.logger.error({ error, callId }, 'Failed to hang up call via REST API');
       throw error;
     }
   }
@@ -822,7 +837,7 @@ export class OpenAIRealtimeClient extends EventEmitter {
         }
       }
     } catch (error) {
-      this.logger.warn('Failed to extract call ID from response headers', { error });
+      this.logger.warn({ error }, 'Failed to extract call ID from response headers');
     }
     return null;
   }

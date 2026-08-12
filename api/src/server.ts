@@ -521,6 +521,20 @@ export async function createServer(): Promise<FastifyInstance> {
     );
   }
 
+  // Anonymous-guest-key config sanity check (chat free-tier feature). Best
+  // effort, never blocks boot: a misconfigured ANONYMOUS_GUEST_API_KEY_ID
+  // leaves that one opt-in gate silently inert rather than crashing the
+  // whole platform. See anonymous-quota-gate.ts for the full reasoning.
+  try {
+    const { logAnonymousGuestApiKeyConfigStatus } = await import(
+      './services/anonymous-quota-gate.js'
+    );
+    await logAnonymousGuestApiKeyConfigStatus();
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.warn({ error: errorMessage }, 'anonymous-guest-key config check failed to run at boot');
+  }
+
   // ==========================================
   // Security Middleware (v5.0)
   // ==========================================

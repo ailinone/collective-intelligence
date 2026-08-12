@@ -82,7 +82,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     providerFamily: 'togetherai',
     integrationClass: 'oai-compat-pure',
     integrationMode: 'discovery+execution',
-    baseUrl: 'https://api.together.xyz/v1',
+    baseUrl: 'https://api.together.ai/v1',
     authScheme: 'bearer',
     apiKeyEnvVar: 'TOGETHERAI_API_KEY',
     // Live probe 2026-07-17: POST /videos/generations EXISTS and requires the
@@ -109,8 +109,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 40,
     docsUrl: 'https://docs.together.ai/reference',
     notes:
-      'D1 2026-04-24: provisioned key (ailin-togetherai-api-key) returned 401 on /v1/chat — "key_" prefix non-canonical; operator to re-issue if chat 401 persists. Probe 2026-07-17: video surface live-validated to the field-validation layer with THIS key (payload-wrap body; see videoRequestStyle) — auth accepted there.',
-    lastReviewedAt: '2026-07-17',
+      '2026-07-30: operator corrected the provisioned key to the canonical tgp_v1_* format (D1 2026-04-24 "key_" prefix was non-canonical, caused 401s). Live-verified POST /v1/chat/completions, real content + usage. baseUrl updated api.together.xyz → api.together.ai to match current docs (docs.together.ai/docs/quickstart + .../inference/openai-compatibility); .xyz still works identically, just no longer the documented-canonical domain. Docs also list TTS/STT via compat layer — unverified, gap.',
+    lastReviewedAt: '2026-07-30',
     originalProviderField: 'organization',
   },
   {
@@ -286,8 +286,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 25,
     docsUrl: 'https://docs.nscale.com/docs/inference/chat',
-    notes: 'EU data sovereignty; GDPR-compliant inference.',
-    lastReviewedAt: '2026-04-21',
+    notes:
+      'EU data sovereignty; GDPR-compliant inference. Live-verified 2026-08-01 with the real key (ailin-nscale-key, ~1207B JWT bearer token): GET /v1/models 200 (23 models incl. Kimi-K2.5, gpt-oss-120b/20b, Qwen3 variants, Llama-4-Scout, FLUX.1-schnell) and POST /v1/chat/completions 200 real completion (Qwen/Qwen3-4B-Instruct-2507, vLLM backend). The catalog\'s credentials-missing classification was stale — the secret was already provisioned.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'anyscale',
@@ -446,8 +447,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 10,
     docsUrl: 'https://synthetic.new/landing/home',
-    notes: 'Smaller provider; smoke-test with real key before relying on routing.',
-    lastReviewedAt: '2026-04-21',
+    notes:
+      'Smaller provider; smoke-test with real key before relying on routing. 2026-08-01: real key confirmed live — GET /v1/models 200 (10 models); auth genuinely checked (bogus key → 401). POST /v1/chat/completions → 402 "Insufficient credits, no active subscription" on 4 real model ids — zero balance, not credentials-missing. Blocked on billing at synthetic.new/billing.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'morph',
@@ -521,8 +523,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 30,
     docsUrl: 'https://docs.z.ai/devpack/quick-start',
-    notes: 'GLM-4 family; strong Chinese + multilingual. Video via CogVideoX.',
-    lastReviewedAt: '2026-04-21',
+    notes:
+      'GLM-4 family; strong Chinese + multilingual. Video via CogVideoX. Live-verified 2026-08-01 with the real key (ailin-zai-key, 49B): POST /chat/completions against open.bigmodel.cn returns HTTP 200 real completions for glm-4.5, glm-4.5-flash, and glm-4-plus. Deprecated ids glm-4/glm-4-flash/glm-4-air/glm-3-turbo now return HTTP 400 error code 1211 "model not found" — a stale-model-id issue on this account, not an auth/domain problem (bigmodel.cn baseUrl is correct as-is).',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'xiaomi-mimo',
@@ -530,38 +533,26 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     providerFamily: 'xiaomi-mimo',
     aliases: ['xiaomi', 'mimo'],
     integrationClass: 'oai-compat-pure',
-    // 2026-04-29: live probe of platform.xiaomimimo.com/v1/models returns the
-    // platform's HTML homepage (no JSON listing endpoint exists). Switched
-    // to execution-only with pinnedFallback so the catalog row materializes.
-    // Model IDs sourced from the Vercel AI Gateway listing (xiaomi/mimo-v2-pro,
-    // xiaomi/mimo-v2-flash) plus the platform's own docs (Omni multimodal).
-    integrationMode: 'execution-only',
-    baseUrl: 'https://platform.xiaomimimo.com/v1',
+    // 2026-08-01: WRONG-DOMAIN FIX. platform.xiaomimimo.com is the
+    // console/marketing SPA, not the API — GET /v1/models there returns
+    // HTTP 200 but Content-Type text/html (the React app shell), and
+    // POST /v1/chat/completions returns a raw nginx/openresty 403 that is
+    // IDENTICAL for a valid key and a garbage key (auth never evaluated on
+    // this host). The correct API host, confirmed against Xiaomi's
+    // own docs (mimo.mi.com/docs/en-US/api/chat/openai-api,
+    // mimo.mi.com/docs/en-US/quick-start/summary/first-api-call), is
+    // api.xiaomimimo.com — a genuine, working /v1/models discovery
+    // endpoint that returns real JSON with the SAME key. Switched back to
+    // discovery+execution now that a live /v1/models surface exists; the
+    // old execution-only + pinnedFallback (3 stale/invented model ids that
+    // don't even exist on this host) is no longer needed.
+    integrationMode: 'discovery+execution',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
     authScheme: 'bearer',
     apiKeyEnvVar: 'XIAOMI_MIMO_API_KEY',
     supports: {
       chat: true,
       streaming: true,
-    },
-    pinnedFallback: {
-      reason: 'no-list-endpoint',
-      // Structured form with capabilities — same rationale as v0 above:
-      // `mimo-*` ids don't match any built-in regex, so bare strings would
-      // trip the `pinnedFallback-capability-coverage` invariant.
-      //
-      // Architectural note (2026-04-28): the model's Chinese-language
-      // affinity is NOT in this strict capabilities array. It lives in
-      // `capabilityHints` below (fuzzy soft hint, confidence 0.85) — the
-      // strict capabilities surface answers "can the model perform action
-      // X?" (boolean), while language strength is a fuzzy quality, not a
-      // discrete capability surface. Other Chinese-trained providers
-      // (qwen, glm, ernie, deepseek) follow the same convention.
-      models: [
-        { id: 'mimo-v2-pro', capabilities: ['chat', 'streaming', 'tool_use'] },
-        { id: 'mimo-v2-flash', capabilities: ['chat', 'streaming'] },
-        { id: 'mimo-omni', capabilities: ['chat', 'streaming', 'vision', 'multimodal'] },
-      ],
-      lastReviewedAt: '2026-04-29',
     },
     capabilityHints: [
       { capability: 'multilingual_chinese', rationale: 'provider-class-default', confidence: 0.85 },
@@ -569,28 +560,32 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 10,
-    docsUrl: 'https://platform.xiaomimimo.com/#/docs/welcome',
+    docsUrl: 'https://mimo.mi.com/docs/en-US/quick-start/summary/first-api-call',
     notes:
-      'New platform; no /v1/models listing — pinnedFallback covers the 3 published SKUs (MiMo-V2-Pro, V2-Flash, Omni). Cross-checked against Vercel AI Gateway listing 2026-04-29. Uses dedicated XiaomiMimoAdapter for named identity in metrics + circuit-breaker scoping.',
+      'Live-verified 2026-08-01: real key confirmed. GET api.xiaomimimo.com/v1/models 200 (6 models). POST /v1/chat/completions → 402 "Insufficient account balance"; bogus key on the same host → 401, proving auth works and the only blocker is zero balance (the old platform.xiaomimimo.com host never evaluated auth at all). Uses dedicated XiaomiMimoAdapter for identity/circuit-breaker scoping.',
     adapterClass: 'XiaomiMimoAdapter',
-    lastReviewedAt: '2026-04-29',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'v0',
     displayName: 'v0 (Vercel)',
     providerFamily: 'v0',
-    integrationClass: 'oai-compat-pure',
-    // 2026-04-29: live probe api.v0.dev/v1/models returns 404 (Not Found —
-    // {"error":{"type":"not_found_error"}}). v0 has no models-listing endpoint;
-    // their public docs (v0.app/docs/api/platform/overview) describe a chats
-    // / projects / deployments shape, not a model selector. Falling back to
-    // pinned list of advertised SKUs. Note: v0 is also exposed via Vercel AI
-    // Gateway as `vercel/v0-...` — but the gateway listing today shows zero
-    // vercel-owned entries, so the direct row is the canonical reach.
+    integrationClass: 'first-party-native',
+    // 2026-08-02: WRONG-SHAPE FIX. The previous oai-compat-pure assumption
+    // targeted a /v1/chat/completions surface that doesn't exist on v0's
+    // app router (404 identical for valid key/garbage key/no auth header —
+    // never even reached an auth gate). v0's real Platform API is a
+    // stateful chat resource (POST /v1/chats, {"message": "..."}) — see
+    // V0Adapter (api/src/providers/v0/v0-adapter.ts) for the full wire
+    // contract. Still no /v1/models endpoint (Projects/Chats/Deployments
+    // only per the official overview), so pinnedFallback stays required;
+    // its 5 ids are now the real modelConfiguration.modelId enum instead
+    // of the prior stale/invented v0-1.5-md/v0-1.5-sm/v0-1.0-md.
     integrationMode: 'execution-only',
     baseUrl: 'https://api.v0.dev/v1',
     authScheme: 'bearer',
     apiKeyEnvVar: 'V0_API_KEY',
+    adapterClass: 'V0Adapter',
     supports: {
       chat: true,
       streaming: true,
@@ -598,15 +593,17 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     },
     pinnedFallback: {
       reason: 'no-list-endpoint',
-      // Explicit capabilities (not bare strings) so the CI invariant
-      // `pinnedFallback-capability-coverage` passes — `v0-*` ids don't match
-      // any built-in name-regex, so bare strings would fail the coverage check.
+      // Real modelConfiguration.modelId enum (create-chat + send-message
+      // reference pages) — explicit capabilities so the CI invariant
+      // `pinnedFallback-capability-coverage` passes.
       models: [
-        { id: 'v0-1.5-md', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
-        { id: 'v0-1.5-sm', capabilities: ['chat', 'streaming', 'code_generation'] },
-        { id: 'v0-1.0-md', capabilities: ['chat', 'streaming', 'code_generation'] },
+        { id: 'v0-auto', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
+        { id: 'v0-mini', capabilities: ['chat', 'streaming', 'code_generation'] },
+        { id: 'v0-pro', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
+        { id: 'v0-max', capabilities: ['chat', 'streaming', 'tool_use', 'code_generation'] },
+        { id: 'v0-max-fast', capabilities: ['chat', 'streaming', 'code_generation'] },
       ],
-      lastReviewedAt: '2026-04-29',
+      lastReviewedAt: '2026-08-02',
     },
     capabilityHints: [
       {
@@ -620,8 +617,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 20,
     docsUrl: 'https://v0.app/docs/api/platform/overview',
     notes:
-      'Specialized in frontend/UI code generation. No /v1/models endpoint — pinnedFallback enumerates the published SKUs.',
-    lastReviewedAt: '2026-04-29',
+      'Frontend/UI code generation via v0\'s stateful chat API, not OAI chat/completions. 2026-08-02: dedicated V0Adapter built (POST /chats, latestVersion.files[] + messages[]); real key live-tested end-to-end. pinnedFallback ids corrected to the real modelConfiguration.modelId enum.',
+    lastReviewedAt: '2026-08-02',
   },
   {
     providerId: 'vercel-ai-gateway',
@@ -687,8 +684,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 35,
     docsUrl: 'https://vercel.com/docs/ai-gateway',
     notes:
-      'Gateway routing to OpenAI/Anthropic/xAI/etc. Models namespaced as `provider/model`; adapter exposes parseModelId() + attributeFromDiscovery() so the capability merger attributes to the real owner. Image/video/reasoning/rerank/moderation surface; paths.imagesGenerate=/images/generations matches the OAI Images endpoint. videoGeneration=true reflects model surface, NOT REST availability — Vercel video is AI-SDK-only as of 2026-04-29 (no published REST).',
-    lastReviewedAt: '2026-04-29',
+      'Gateway routing to OpenAI/Anthropic/xAI/etc. Models namespaced `provider/model`; adapter attributes the real owner via parseModelId(). Image/reasoning/rerank/moderation surface; video is AI-SDK-only, no published REST. 2026-08-01: real key confirmed — GET /v1/models 200 (312 models). POST /v1/chat/completions → 402 insufficient_funds (account-wide; BYOK does not bypass per Vercel\'s own error text) — needs operator top-up, not a credential/code fix.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     // providerId is `wandb` (not `wandb-inference`) so the convention
@@ -858,9 +855,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 25,
     docsUrl: 'https://www.ibm.com/watsonx/developer/',
     notes:
-      'IAM token exchange against https://iam.cloud.ibm.com/identity/token (grant_type=urn:ibm:params:oauth:grant-type:apikey). Requires WATSONX_APIKEY + WATSONX_PROJECT_ID. API version pinned to 2024-05-31.',
+      'IAM token exchange against iam.cloud.ibm.com/identity/token. Requires WATSONX_APIKEY + WATSONX_PROJECT_ID; version pinned 2024-05-31. 2026-08-01 review (no live call): APIKEY is real, but PROJECT_ID/URL are not provisioned. PROJECT_ID is a hard blocker (adapter throws before any request); URL soft-defaults to us-south. healthCheck() only probes the IAM exchange, so it can read healthy while chat/embeddings throw.',
     adapterClass: 'WatsonxAdapter',
-    lastReviewedAt: '2026-04-22',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'snowflake',
@@ -969,8 +966,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 30,
     docsUrl: 'https://www.recraft.ai/docs/api-reference/getting-started',
     notes:
-      'Vector + raster image gen with style controls. Dedicated adapter validates model × style pairs before the wire (v3 has vector families + any, v2 is raster-only).',
-    lastReviewedAt: '2026-04-22',
+      'Vector + raster image gen with style controls. Dedicated adapter validates model × style pairs before the wire. Live-verified 2026-08-01: real key confirmed — POST /images/generations 200 with a real image_id + url; fetched url confirmed a genuine ~3.1MB png. Catalog\'s credentials-missing tag was stale.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'runwayml',
@@ -1018,8 +1015,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 35,
     docsUrl: 'https://docs.dev.runwayml.com/',
     notes:
-      'Video-from-image + act-one motion transfer. Requires X-Runway-Version header. Async-job API: POST /v1/image_to_video → poll GET /v1/tasks/{id} until terminal status. Dedicated adapter owns the polling budget.',
-    lastReviewedAt: '2026-04-22',
+      'Video-from-image + act-one motion transfer. Requires X-Runway-Version header (already sent by RunwayMLAdapter). Async-job API: POST /v1/image_to_video → poll GET /v1/tasks/{id}. Live-verified 2026-08-01: real key confirmed — GET /v1/organization 200, creditBalance 0; baseUrl confirmed correct (api.dev.runwayml.com is the real prod host, not a sandbox leftover). POST /v1/text_to_video → 400 no credits. Blocked purely on billing.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'topaz',
@@ -1103,9 +1100,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 35,
     docsUrl: 'https://docs.bfl.ai/',
     notes:
-      'FLUX family. Uses x-key header (not Bearer). Async-job protocol — submit → poll → download.',
+      'FLUX family. Uses x-key header (not Bearer). Async-job protocol — submit → poll → download. Live-verified 2026-08-01: real key confirmed, baseUrl/authScheme correct. POST /v1/flux-pro-1.1 and /v1/flux-dev both → 402 "Insufficient credits" (401/422 controls confirm auth genuinely works). Blocked purely on account funding, not credentials-missing.',
     adapterClass: 'BflAdapter',
-    lastReviewedAt: '2026-04-29',
+    lastReviewedAt: '2026-08-01',
   },
   {
     // 302.AI — OAI-compatible aggregator at api.302.ai/v1. Migrated out of
@@ -2008,8 +2005,9 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     enabledByDefault: true,
     priority: 30,
     docsUrl: 'https://platform.minimaxi.com/document/ChatCompletion',
-    notes: 'abab6 / Hailuo family. Was switch case; migrated 2026-04-21.',
-    lastReviewedAt: '2026-04-21',
+    notes:
+      'abab6 / Hailuo family. Was switch case; migrated 2026-04-21. Live-verified 2026-08-01: real key confirmed — GET /v1/models 200 (8 models). POST /v1/chat/completions with MiniMax-M3 → 200. M-series models emit a `<think>` preamble by default; low max_tokens can truncate mid-think — expected, not a fault. Parsers should account for the think block.',
+    lastReviewedAt: '2026-08-01',
   },
   {
     providerId: 'friendli',
@@ -2397,7 +2395,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   },
   {
     providerId: 'local-llama',
-    displayName: 'Local LLM (llama.cpp)',
+    displayName: 'Local LLM (dedicated Ollama host)',
     providerFamily: 'local-llama',
     integrationClass: 'self-hosted-oai-compat',
     integrationMode: 'discovery+execution',
@@ -2413,9 +2411,10 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     pricingMode: 'none',
     enabledByDefault: true,
     priority: 5,
-    docsUrl: 'https://github.com/ggerganov/llama.cpp/blob/master/examples/server/README.md',
-    notes: 'llama.cpp server in OpenAI-compat mode. Set LOCAL_LLAMA_URL to enable.',
-    lastReviewedAt: '2026-04-21',
+    docsUrl: 'https://github.com/ollama/ollama/blob/main/docs/openai.md',
+    notes:
+      "LOCAL_LLAMA_URL points at a dedicated external CPU host (<ollama-host>) — despite the 'llama.cpp' name this slot originally documented, the running server is native Ollama (systemd ollama.service, v0.31.1), confirmed live 2026-07-31 from the production API host (not the probe environment, which can't reach it — firewalled to the production IP by design): GET /v1/models 200 (qwen2.5:7b/3b/1.5b); POST /v1/chat/completions (qwen2.5:1.5b) 200, real content.",
+    lastReviewedAt: '2026-07-31',
   },
   {
     providerId: 'local-kobold',
@@ -3042,7 +3041,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     aliases: ['silicon-flow'],
     integrationClass: 'oai-compat-quirks',
     integrationMode: 'discovery+execution',
-    baseUrl: 'https://api.siliconflow.cn/v1',
+    baseUrl: 'https://api.siliconflow.com/v1',
     authScheme: 'bearer',
     apiKeyEnvVar: 'SILICONFLOW_API_KEY',
     supports: {
@@ -3062,8 +3061,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 5,
     docsUrl: 'https://docs.siliconflow.cn',
     notes:
-      'PRC-region primary (.cn); .com fronts same service. Full multi-surface: chat+image+video+audio+rerank. Supports enable_thinking + thinking_budget (128–32768). Returns x-siliconcloud-trace-id header. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-siliconflow-api-key, 51B "sk-hhc…") but /v1/chat returns 401 bare-JSON "Api key is invalid" (15B oai-compat-quirks shape). sk- prefix non-canonical; probable format mismatch. Sub-class: auth-incomplete.',
-    lastReviewedAt: '2026-04-24',
+      '2026-07-30: baseUrl corrected .cn → .com — GENUINE integration bug, not a key problem. SiliconFlow runs two separate regional platforms (china-domestic .cn vs international .com) with SEPARATE, non-interchangeable account/key namespaces. This account is on the international platform: .cn 401 "Api key is invalid" (bare-JSON) even freshly regenerated; identical key against .com 200, real chat completion + usage, prompt_cache_hit/miss_tokens fields confirm oai-compat-quirks shape.',
+    lastReviewedAt: '2026-07-30',
   },
   {
     providerId: 'stepfun',
@@ -3072,7 +3071,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     aliases: ['step', 'step-ai'],
     integrationClass: 'oai-compat-pure',
     integrationMode: 'discovery+execution',
-    baseUrl: 'https://api.stepfun.com/v1',
+    baseUrl: 'https://api.stepfun.ai/v1',
     authScheme: 'bearer',
     apiKeyEnvVar: 'STEPFUN_API_KEY',
     supports: {
@@ -3093,8 +3092,8 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     priority: 5,
     docsUrl: 'https://platform.stepfun.com/docs',
     notes:
-      'OpenAI SDK v1.0+ drop-in compat. Dual-region: api.stepfun.com (PRC) / api.stepfun.ai (global). Realtime voice + cloning. 10-min timeout → 503. Lot M 2026-04-23. D1 2026-04-24: key provisioned (ailin-stepfun-api-key, 65B) but /v1/chat returns 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}}. Endpoint alive; specific key rejected. Operator must verify key-account binding. Sub-class: auth-incomplete.',
-    lastReviewedAt: '2026-04-24',
+      '2026-07-30: baseUrl corrected .com → .ai — GENUINE integration bug, opposite domain mapping from siliconflow (StepFun\'s .com is china-domestic, .ai is international). .com 401 "Incorrect API key provided" even freshly regenerated; .ai 200 real model list (step-3.5-flash, stepaudio-2.5-*, step-image-edit-2). Model lineup renamed to step-3.x gen — old step-1-8k id is gone (404, not auth). step-3.5-flash chat 200 (reasoning model; verified via reasoning_content).',
+    lastReviewedAt: '2026-07-30',
   },
   {
     providerId: 'venice',
@@ -3707,5 +3706,308 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     notes:
       'Fugu chat/tools/reasoning/vision models. Live-verified 2026-07-29: /v1/models works (5 real models). Billing activated same day; end-to-end re-verification confirmed chat, streaming, tools, JSON mode, and vision all genuinely work — real HTTP 200s with correct content. Vision is evidence-backed despite console.sakana.ai/models marking it unsupported. fugu-cyber excluded via modelDenylist (approval-gated). pricingMode=none: no pricing in API responses; see header comment for detail.',
     lastReviewedAt: '2026-07-29',
+  },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Maritaca AI (Sabiá) — added 2026-08-01. Brazilian LLM provider (Sabiá 4
+  // family, PT-BR focused).
+  //   - GET https://chat.maritaca.ai/api/v1/models -> 200, real 6-model
+  //     array (sabia-4, sabia-4-br-sp, sabia-4-thinking,
+  //     sabia-4-thinking-br-sp, sabiazinho-4, sabiazinho-4-br-sp). Docs
+  //     (docs.maritaca.ai/pt/api/comeco-rapido) never mention a /v1/models
+  //     list endpoint, but it genuinely works — the docs were WRONG on this
+  //     point. GET .../api/models (no /v1) returns byte-identical output,
+  //     no redirect; catalog uses the /v1 path for consistency with every
+  //     other row in this file.
+  //   - POST .../api/v1/chat/completions AND POST .../api/chat/completions
+  //     (no /v1) are BOTH real, reachable routes: a bogus path 404s with
+  //     {"detail":"Not Found"}, but both these paths pass straight through
+  //     to a structured {code:"insufficient_funds"} 403 — proof the
+  //     request was parsed, authenticated, and the model validated before
+  //     billing rejected it. Could NOT obtain an actual HTTP 200 chat
+  //     completion: this GCP key's MariTalk account currently has zero
+  //     active credits ("Sorry, you need have active credits to use
+  //     MariTalk via API."). Catalog uses the /v1 path for consistency; the
+  //     no-/v1 alias also works if ever needed.
+  //   - Auth confirmed standard OpenAI-style Bearer: an invalid key gets a
+  //     distinct 401 {code:"invalid_api_key"}, vs the 403 insufficient_funds
+  //     above for the real (valid) key — proves auth succeeds and it's a
+  //     billing gate, not an auth failure.
+  //   - Model ids confirmed via TWO independent live signals (not guessed
+  //     from docs): the /v1/models array above, and the 404
+  //     model_not_found error body for a deliberately bogus model name,
+  //     which echoes the exact canonical list + aliases: sabia-4 (alias
+  //     sabiá-4), sabia-4-br-sp, sabia-4-thinking (alias sabiá-4-thinking),
+  //     sabia-4-thinking-br-sp, sabiazinho-4 (aliases sabia-4-small,
+  //     sabiazim-4), sabiazinho-4-br-sp. The docs-mentioned alias
+  //     "sabia-4-2026-01-06" does NOT appear in either live signal, so it
+  //     is deliberately omitted here rather than guessed.
+  //   - tools (function-calling) and jsonMode (response_format=
+  //     json_object) requests were both submitted live against sabia-4 and
+  //     passed through to the same insufficient_funds gate (not rejected
+  //     as malformed) — combined with dedicated docs pages
+  //     (/pt/chamada-funcao, /pt/ferramentas, /pt/structured-outputs) this
+  //     is treated as strong-confidence support, NOT a verified 200.
+  //     stream:true was accepted the same way but streaming is deliberately
+  //     left OFF supports since it was never observed producing real SSE
+  //     chunks end-to-end.
+  //   - reasoning: true reflects the documented Sabiá 4 Thinking tier (a
+  //     dedicated reasoning/agentic model family, confirmed to exist via
+  //     live discovery above) — docs-declared, not live-response-verified
+  //     (blocked by the same billing gate).
+  //   - vision NOT set: no vision capability is mentioned anywhere in the
+  //     gathered Maritaca docs, unlike Sakana above.
+  //   - embeddings intentionally omitted: Maritaca's own docs say they
+  //     don't offer an embeddings model and point to DeepInfra's
+  //     intfloat/multilingual-e5-large instead.
+  //   - pricingMode is `none`: no per-token pricing exposed in /v1/models
+  //     or chat/completions responses; rate limits are spend-tier based
+  //     (R$0–R$5000+), informational only.
+  //   - apiKeyEnvVar follows the `<PROVIDER_ID_UPPER>_API_KEY` convention
+  //     (MARITACA_AI_API_KEY, not e.g. MARITACA_API_KEY) per Rule 1 in
+  //     provider-catalog.schema.ts — no well-known upstream SDK env-var
+  //     name to justify an override.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    providerId: 'maritaca-ai',
+    displayName: 'Maritaca AI (Sabiá)',
+    providerFamily: 'maritaca-ai',
+    integrationClass: 'oai-compat-pure',
+    integrationMode: 'discovery+execution',
+    baseUrl: 'https://chat.maritaca.ai/api/v1',
+    baseUrlEnvVar: 'MARITACA_AI_BASE_URL',
+    authScheme: 'bearer',
+    apiKeyEnvVar: 'MARITACA_AI_API_KEY',
+    supports: {
+      chat: true,
+      tools: true,
+      jsonMode: true,
+      reasoning: true,
+    },
+    pricingMode: 'none',
+    enabledByDefault: true,
+    priority: 30,
+    docsUrl: 'https://docs.maritaca.ai/pt/api/comeco-rapido',
+    notes:
+      'Sabiá 4 family (Brazilian Portuguese). Live-verified 2026-08-01: /v1/models genuinely works (6 real models) though docs imply no discovery endpoint. Both /v1/chat/completions and /chat/completions are real routes but blocked by insufficient_funds (zero credits on this key) — could not obtain an actual 200. tools/jsonMode/reasoning are docs-declared + request-accepted-not-rejected, not 200-verified. streaming unconfirmed, left off. No embeddings (Maritaca points to DeepInfra e5-large instead).',
+    lastReviewedAt: '2026-08-01',
+  },
+  // ──────────────────────────────────────────────────────────────────────────
+  // LOTE AA (2026-08-02) — BytePlus ModelArk. Dedicated multimodal adapter.
+  //
+  // DISTINCT FROM `volcano` ABOVE. ModelArk is ByteDance's international
+  // (non-China) deployment; Volcengine Ark is the mainland one. Separate
+  // hosts, TLDs, control planes, model catalogs, and provably
+  // non-interchangeable credentials — a ModelArk key does not authenticate
+  // against Volcengine and vice versa. The `volcano` row is deliberately
+  // untouched, and this row claims NEITHER of volcano's `ark`/`bytedance`
+  // aliases (the alias-collision invariant only rejects alias-vs-providerId
+  // duplication, so reusing them would pass CI while being semantically
+  // ambiguous during normalisation).
+  //
+  // baseUrl carries three separate traps, all live-verified:
+  //   · `/api/v3`, NOT `/v1` — a client appending /v1 404s on everything;
+  //   · TLD is `bytepluses.com` (PLURAL) — docs/console are byteplus.com;
+  //   · region token is `ap-southeast` with NO `-1` (only the AK/SK control
+  //     plane, on a different host entirely, uses ap-southeast-1).
+  //
+  // integrationMode is discovery+execution because GET /api/v3/models is
+  // REAL: live probe returned 200 with 52 models carrying richer metadata
+  // than OpenAI's listing (domain, task_type[], modalities, token_limits,
+  // features.{tools,structured_outputs}). Pre-implementation research had
+  // concluded discovery was impossible without AK/SK request signing; the
+  // live probe disproved that, so there is deliberately NO pinnedFallback
+  // here — the vendor's own listing is the inventory of record.
+  //
+  // `supports` reflects what the ADAPTER IMPLEMENTS against routes proven
+  // to exist — not what the provider is capable of. Not declared, with
+  // reasons:
+  //   · responses — /responses EXISTS upstream (it reached the model gate
+  //     and returned 404 ModelNotOpen, so the route is real) but
+  //     BytePlusModelArkAdapter contains zero Responses-API code: every
+  //     chat path goes to /chat/completions. The Responses API has a
+  //     different content-part and tool schema that was not implemented.
+  //     Declaring it would break this row's own stated rule, and
+  //     paths.responses is omitted for the same reason paths.moderation is
+  //     (below) — a path present is a path a generic fallback can fire at.
+  //   · mcp — remote MCP tools are SUPPORTED upstream but Responses-API
+  //     only (POST /responses + `ark-beta-mcp: true` + tools[{type:'mcp'}]).
+  //     Chat Completions has no mcp tool type, so a Chat-API-only adapter
+  //     cannot reach it. Implementing MCP means implementing /responses.
+  //   · textToSpeech — /audio/speech is an absent route; ModelArk has no
+  //     speech synthesis at all (Seedance generate_audio is a video
+  //     soundtrack, not TTS).
+  //   · moderation — /moderations is an absent route; moderation exists
+  //     only as output-side metadata on chat responses.
+  //   · rerank — not on the ModelArk data plane (it belongs to the separate
+  //     Knowledge-Base/RAG product, different host, AK/SK-signed).
+  //   · speechToText — IMPLEMENTED and callable (chat + input_audio part),
+  //     but deliberately NOT advertised: it is an LLM understanding task
+  //     with prompt-dependent formatting, not an ASR endpoint, and should
+  //     not be router-selectable over a real ASR provider until measured.
+  //
+  // Implemented but outside any ProviderAdapter contract, so they appear in
+  // neither `paths` nor `supports` — they are plain public methods on the
+  // adapter, following the countTokens precedent: countTokens
+  // (POST /tokenization), batchChatCompletion (POST /batch/chat/completions),
+  // uploadFile (POST /files, multipart), generateAsset3D (the same
+  // /contents/generations/tasks route as video, result at content.file_url).
+  //
+  // Known upstream capability with no ci surface at all: STREAMING image
+  // generation (stream:true on /images/generations — SSE with typed
+  // image_generation.partial_succeeded/partial_failed/completed events and
+  // no [DONE] sentinel). ci has no streaming-image method to map it onto.
+  //
+  // Route-existence method: ModelArk's gateway answers unknown routes with
+  // HTTP 200 and an EMPTY body (verified against a deliberately bogus
+  // path), never a 404 — so absent routes were identified against that
+  // control, not assumed from documentation.
+  //
+  // paths.imagesEdit intentionally points at /images/generations: editing
+  // is the same route with an `image` field and a JSON (not multipart)
+  // body. /images/edits does not exist. paths.moderation and
+  // paths.audioTranscriptions are deliberately ABSENT so no generic
+  // fallback can fire at a route that isn't there.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    providerId: 'byteplus',
+    displayName: 'BytePlus ModelArk',
+    providerFamily: 'byteplus',
+    aliases: ['modelark', 'byteplus-modelark'],
+    integrationClass: 'oai-compat-quirks',
+    integrationMode: 'discovery+execution',
+    baseUrl: 'https://ark.ap-southeast.bytepluses.com/api/v3',
+    authScheme: 'bearer',
+    apiKeyEnvVar: 'BYTEPLUS_API_KEY',
+    adapterClass: 'BytePlusModelArkAdapter',
+    paths: {
+      modelList: ['/models'],
+      chatCompletions: '/chat/completions',
+      embeddings: '/embeddings/multimodal',
+      imagesGenerate: '/images/generations',
+      imagesEdit: '/images/generations',
+      videoGenerate: '/contents/generations/tasks',
+      videoPoll: '/contents/generations/tasks/{taskId}',
+    },
+    supports: {
+      chat: true,
+      streaming: true,
+      tools: true,
+      jsonMode: true,
+      vision: true,
+      reasoning: true,
+      embeddings: true,
+      imageGeneration: true,
+      imageEditing: true,
+      videoGeneration: true,
+    },
+    capabilityHints: [
+      { capability: 'multilingual_chinese', rationale: 'provider-class-default', confidence: 0.85 },
+      { capability: 'video_generation', rationale: 'endpoint-declared', confidence: 0.9 },
+    ],
+    pricingMode: 'none',
+    enabledByDefault: true,
+    priority: 30,
+    docsUrl: 'https://docs.byteplus.com/en/docs/ModelArk/1099455',
+    notes:
+      'ByteDance international — NOT volcano/Volcengine (non-interchangeable keys). Live 2026-08-02: auth works (GET /models 200 w/ 52 models, /ping and /tokenization 200; 401 on bad key), but account 3003814011 has ZERO models activated — every inference route 404s ModelNotOpen, a Console entitlement action, not a defect. Unknown routes answer 200+empty body; absent routes (/images/edits, /audio/*, /moderations) proven vs a bogus control. Real upstream, NOT claimed: responses, mcp, image streaming.',
+    lastReviewedAt: '2026-08-02',
+  },
+  // ──────────────────────────────────────────────────────────────────────────
+  // LOTE AB (2026-08-10) — DigitalOcean Serverless Inference. New catalog
+  // row, no dedicated adapter: genuinely OpenAI-schema-compatible (Bearer
+  // auth, POST /v1/chat/completions with standard messages/choices/usage
+  // shape, SSE streaming with chat.completion.chunk objects, GET /v1/models
+  // returning the standard {data:[{id,object,owned_by,created}],object:
+  // "list"} shape) — same conclusion pattern as sakana-ai/maritaca-ai
+  // (`oai-compat-pure`, no adapterClass override), NOT the BytePlus
+  // ModelArk path (no non-standard field names, no Responses-API-only
+  // surface, no multimodal-embeddings-only route).
+  //
+  // FULL LIVE END-TO-END VERIFICATION, same GCP secret `ailin-digitalocean-
+  // key` used throughout (a `doo_v1_`-prefixed token — DO's OAuth/app-token
+  // format, one of two credential types the docs say are interchangeable
+  // with a dedicated model-access-key for this API; value never logged):
+  //   - GET /v1/models -> 200, 74 real models spanning DO's own catalog
+  //     (llama3.3-70b-instruct, deepseek-v4-pro, glm-5.2, qwen3.5-397b-a17b,
+  //     kimi-k2.6, nemotron-3-ultra-550b, gemma-4-31B-it, mistral-3-14B,
+  //     openai-gpt-oss-120b/20b, deepseek-r1-distill-llama-70b, ...) PLUS
+  //     re-hosted frontier vendor models under DO-flat (hyphenated, not
+  //     slash-prefixed) ids: anthropic-claude-5-sonnet, anthropic-claude-
+  //     opus-5, anthropic-claude-haiku-4.5, openai-gpt-5.5, openai-gpt-4o,
+  //     openai-o3, etc. `owned_by` is NOT uniformly "digitalocean" as the
+  //     design-phase docs research assumed — it varies (anthropic, openai,
+  //     digitalocean per-model) — but ids stay flat single-namespace
+  //     strings, never vendor/model-style routing prefixes, so `gateway`
+  //     classification is still not warranted; recorded here as a
+  //     correction to the design note for future reference.
+  //   - POST /v1/chat/completions (llama3.3-70b-instruct) -> 200, real
+  //     content ("pong"), real usage tokens.
+  //   - stream:true -> real SSE chat.completion.chunk events, correctly
+  //     assembled, ordinary OpenAI shape.
+  //   - tools -> a weather-lookup prompt correctly produced
+  //     finish_reason:"tool_calls" with the right function name + JSON
+  //     arguments.
+  //   - response_format:{type:"json_object"} -> 200 with valid, on-topic
+  //     JSON content.
+  //   - POST /v1/embeddings (bge-m3) -> 200, real float vector.
+  //   - glm-5.2 returned a populated `reasoning_content` field distinct
+  //     from `content` on a step-by-step arithmetic prompt — genuine
+  //     reasoning-model behavior, not name-inferred.
+  //   - vision attempted (nemotron-nano-12b-v2-vl, inline base64 image):
+  //     the model demonstrably received the image (prompt_tokens jumped
+  //     ~10x vs text-only calls) but answered the color prompt WRONG and
+  //     with garbled template-leakage tokens — inconclusive, not a clean
+  //     confirmation. `vision` deliberately left OFF supports per this
+  //     session's evidence bar (contrast with sakana-ai, where vision was
+  //     unambiguously correct).
+  //   - imageGeneration (stable-diffusion-3.5-large), videoGeneration
+  //     (wan2-2-t2v-a14b), textToSpeech (qwen3-tts-voicedesign), and
+  //     rerank (bge-reranker-v2-m3) all have real model ids in the live
+  //     /v1/models listing but were NOT probed this session — deferred to
+  //     a follow-up lot, same minimal-surface-first convention as
+  //     sakana-ai/maritaca-ai's initial rows.
+  //   - Rate limits (response headers, not docs): X-Ratelimit-Limit/
+  //     Remaining/Reset-Requests, plus separate Tokens-Per-Day and
+  //     Embedding-Tokens-Per-Minute/Day variants — more granular than the
+  //     flat 5000/hr + 250/min the marketing docs describe.
+  //   - pricingMode is `none`: no price field anywhere in /v1/models or
+  //     chat/completions responses.
+  //   - apiKeyEnvVar follows the `<PROVIDER_ID_UPPER>_API_KEY` convention
+  //     (DIGITALOCEAN_API_KEY) per Rule 1 in provider-catalog.schema.ts —
+  //     DO's own curl examples use `$DIGITALOCEAN_TOKEN`, but that is a doc
+  //     convenience string, not an SDK-enforced name, so no override
+  //     reason is warranted (same reasoning as maritaca-ai).
+  //   - Out of scope, deliberately: the Agent Inference API (separate
+  //     per-agent subdomain + `agent_access_key` auth, docs call it
+  //     "independent of the main DigitalOcean control-plane API") and the
+  //     Billing API (api.digitalocean.com, no inference-cost granularity
+  //     documented; per-request usage is already in every chat response's
+  //     `usage` object).
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    providerId: 'digitalocean',
+    displayName: 'DigitalOcean Serverless Inference',
+    providerFamily: 'digitalocean',
+    integrationClass: 'oai-compat-pure',
+    integrationMode: 'discovery+execution',
+    baseUrl: 'https://inference.do-ai.run/v1',
+    baseUrlEnvVar: 'DIGITALOCEAN_BASE_URL',
+    authScheme: 'bearer',
+    apiKeyEnvVar: 'DIGITALOCEAN_API_KEY',
+    supports: {
+      chat: true,
+      streaming: true,
+      tools: true,
+      jsonMode: true,
+      embeddings: true,
+      reasoning: true,
+    },
+    pricingMode: 'none',
+    enabledByDefault: true,
+    priority: 35,
+    docsUrl: 'https://docs.digitalocean.com/products/inference/',
+    notes:
+      'Serverless Inference — re-hosts 70+ models (Llama, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, Nemotron, plus Anthropic/OpenAI under flat DO ids) via one OpenAI-compatible surface. Live-verified 2026-08-10: /v1/models (74), chat, streaming, tools, jsonMode, /v1/embeddings all real HTTP 200s; glm-5.2 showed real reasoning_content. Vision attempted but inconclusive (wrong answer, garbled) — left off. Image/video/TTS/rerank models exist live but unprobed; deferred.',
+    lastReviewedAt: '2026-08-10',
   },
 ] as const satisfies readonly ProviderCatalogEntry[];

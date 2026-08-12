@@ -383,17 +383,15 @@ describe('Comprehensive API Endpoints Testing', () => {
       expect([200, 400, 500, 503]).toContain(result.statusCode);
     });
 
-    it('POST /v1/analyze-requirements should analyze request requirements', async () => {
+    it('POST /v1/analyze-requirements should be gone (removed 2026-08-03)', async () => {
       const result = await testEndpoint('POST', '/v1/analyze-requirements', {
         auth: 'jwt',
         payload: {
           messages: [{ role: 'user', content: 'Analyze this request' }],
         },
-        expectedStatus: 200,
-        validateResponse: (body) =>
-          body.requirements && body.selection && body.triage !== undefined,
+        expectedStatus: 404,
       });
-      expect(result.status).toBe('PASS');
+      expect(result.statusCode).toBe(404);
     });
 
     it('GET /v1/provider-capabilities should list provider capabilities', async () => {
@@ -406,7 +404,8 @@ describe('Comprehensive API Endpoints Testing', () => {
       expect(result.status).toBe('PASS');
     });
 
-    it('POST /v1/chat/completions/intelligent should use intelligent selection', async () => {
+    it('POST /v1/chat/completions/intelligent should be gone (removed 2026-08-03)', async () => {
+      // Superseded by POST /v1/chat/completions with model: "auto".
       const result = await testEndpoint(
         'POST',
         '/v1/chat/completions/intelligent',
@@ -415,11 +414,10 @@ describe('Comprehensive API Endpoints Testing', () => {
           payload: {
             messages: [{ role: 'user', content: 'Test intelligent mode' }],
           },
-          validateResponse: (body) =>
-            body.choices && body._execution !== undefined,
+          expectedStatus: 404,
         }
       );
-      expect([200, 400, 500, 503]).toContain(result.statusCode);
+      expect(result.statusCode).toBe(404);
     });
   });
 

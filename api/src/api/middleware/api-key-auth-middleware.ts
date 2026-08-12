@@ -41,6 +41,7 @@ import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import { getHeaderString } from '@/utils/type-guards';
 import { getAuthService } from '@/services/auth-service';
+import { registerRoleChangeListener } from '@/services/rbac-service';
 import { looksLikeApiKey } from '@/utils/api-key-format';
 import {
   consumeRealtimeSession,
@@ -244,6 +245,34 @@ export function invalidateApiKeyAuthCache(quickHash: string | null | undefined):
   apiKeyAuthCache.delete(quickHash);
 }
 
+/**
+ * Drop every cached auth context belonging to `userId`.
+ *
+ * Called on an authoritative role change (`rbac-service.setUserRole`) so a
+ * demotion takes effect on THIS instance immediately instead of after the
+ * 30s TTL. The cache is per-process and bounded by the number of distinct keys
+ * seen recently, so the linear scan is cheap.
+ *
+ * NOTE (deliberately not solved here): on a multi-instance deployment the other
+ * instances still serve their own cached contexts until their TTL expires. The
+ * TTL — `API_KEY_AUTH_CACHE_TTL_MS`, default 30s — is the hard upper bound on
+ * how long a demotion can lag cluster-wide. A cross-instance invalidation bus is
+ * tracked separately; do not assume a role change is globally effective at once.
+ */
+export function invalidateApiKeyAuthCacheForUser(userId: string | null | undefined): void {
+  if (!userId) return;
+  for (const [quickHash, entry] of apiKeyAuthCache) {
+    if (entry.context.userId === userId) {
+      apiKeyAuthCache.delete(quickHash);
+    }
+  }
+}
+
+// An authoritative grant change must evict this cache too, not just the RBAC
+// service's own. Registered here (middleware → service) so rbac-service needs
+// no request-layer import.
+registerRoleChangeListener((userId) => invalidateApiKeyAuthCacheForUser(userId));
+
 /** Test-only: clear the whole cache so each test resolves fresh. */
 export function __resetApiKeyAuthCacheForTests(): void {
   apiKeyAuthCache.clear();
@@ -327,19 +356,38 @@ async function validateJwtAndGetUser(
       return null;
     }
 
-    // Prefer persisted RBAC roles, then fallback to user.role/token roles.
-    const roleCandidates = [
-      ...user.userRoles.map((ur: { role: { name: string } }) => ur.role.name),
-      user.role,
-      ...payload.roles,
-    ];
+    // SECURITY (rbac-silent-role-downgrade): effective authority is EXACTLY the
+    // `user_roles` grants. This is the array `requireRole` / `requirePermission`
+    // actually consume, so it must agree with `rbac-service.getUserRoles()` —
+    // which is a pure read of the same join table.
+    //
+    // Deliberately NOT unioned in any more:
+    //   - `user.role`: a denormalized HINT. It is writable to elevated values by
+    //     paths that never created a matching grant, so seeding from it turns a
+    //     desync into a privilege-escalation oracle.
+    //   - `payload.roles`: a CLAIM. For local tokens AuthService.verifyToken
+    //     already re-resolves it from `getUserRoles`, so unioning adds nothing;
+    //     for FEDERATED tokens it is the raw IdP assertion, and unioning it
+    //     would re-grant a role the IdP sync deliberately refused (e.g. `owner`)
+    //     and would keep an unexpired pre-demotion token resolving as admin.
     const roles = Array.from(
       new Set(
-        roleCandidates.filter(
-          (value): value is string => typeof value === 'string' && value.length > 0
-        )
+        user.userRoles
+          .map((ur: { role: { name: string } }) => ur.role.name)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
       )
     );
+
+    if (roles.length === 0) {
+      logger.warn(
+        {
+          userId: user.id,
+          organizationId: user.organizationId,
+          declaredRole: user.role,
+        },
+        'rbac_role_assignment_missing: JWT principal has zero role grants; resolving as unprivileged (fail-closed)'
+      );
+    }
 
     return {
       userId: user.id,
@@ -480,16 +528,34 @@ async function resolveApiKeyContext(
       return null;
     }
 
-    // Step 8: Extract roles (from user.role + userRoles join)
-    const roles: string[] = [apiKeyRecord.user.role];
-
-    // Add roles from RBAC system (if using UserRole table)
+    // Step 8: Extract roles — from the AUTHORITATIVE `user_roles` join ONLY.
+    //
+    // SECURITY (rbac-silent-role-downgrade): this used to SEED the array with
+    // `apiKeyRecord.user.role`, the denormalized hint column. That made
+    // `users.role` a real grant on the primary request path — a principal with
+    // `users.role='admin'` and zero `user_roles` rows authenticated as admin on
+    // every route, including the `requireRole('admin','owner')`-gated
+    // `/v1/tools/*` shell/git/filesystem surface. The column is now read for
+    // observability only (see the empty-roles warning below).
+    const roles: string[] = [];
     if (apiKeyRecord.user.userRoles && apiKeyRecord.user.userRoles.length > 0) {
       for (const userRole of apiKeyRecord.user.userRoles) {
         if (userRole.role && !roles.includes(userRole.role.name)) {
           roles.push(userRole.role.name);
         }
       }
+    }
+
+    if (roles.length === 0) {
+      logger.warn(
+        {
+          keyId: apiKeyRecord.id,
+          userId: apiKeyRecord.user.id,
+          organizationId: apiKeyRecord.user.organizationId,
+          declaredRole: apiKeyRecord.user.role,
+        },
+        'rbac_role_assignment_missing: API key principal has zero role grants; resolving as unprivileged (fail-closed)'
+      );
     }
 
     // Step 9: Build the context and cache it (keyed by quickHash) so the NEXT

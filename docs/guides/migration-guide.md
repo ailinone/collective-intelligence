@@ -26,6 +26,34 @@ This guide helps migrate from OpenAI-only usage to Ailin CI API.
 - `GET /v1/models`: supported
 - `POST /v1/embeddings`: supported
 
+## Removed Endpoints (2026-08-03)
+
+Two Ailin-specific extensions were **removed** from the `/v1` surface. Both were
+incomplete: their model selection never reached the execution engine, so the
+selection they advertised did not change what actually ran.
+
+| Removed | Replacement |
+|---|---|
+| `POST /v1/chat/completions/intelligent` | `POST /v1/chat/completions` with `model: "auto"` |
+| `POST /v1/analyze-requirements` | `POST /v1/chat/completions` with `model: "auto"` (selection is internal; no separate analysis call is needed) |
+
+Migration is a one-line change — drop the `/intelligent` suffix and set `model`:
+
+```json
+POST /v1/chat/completions
+{
+  "model": "auto",
+  "messages": [{ "role": "user", "content": "Complex task" }],
+  "strategy": "consensus",
+  "max_cost": 0.01
+}
+```
+
+`model: "auto"` routes through the canonical orchestration engine, which applies
+the same capability-based selection **and** the cost accounting, billing, and
+mid-stream failover safety that the removed routes never had. Requests to the
+removed paths now return `404`.
+
 ## Step-by-Step Migration
 
 1. Point base URL to Ailin API.

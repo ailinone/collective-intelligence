@@ -104,7 +104,6 @@ const SKIP_METHOD_PATHS = new Set([
 const DEFAULT_TIMEOUT = 30000;
 const SLOW_TIMEOUTS = {
   'POST /v1/chat/completions': 90000,
-  'POST /v1/chat/completions/intelligent': 90000,
   'POST /v1/chat/completions/extended-thinking': 120000,
   'POST /v1/chat/completions/ultra-thinking': 120000,
   'POST /v1/responses': 90000,
@@ -131,7 +130,6 @@ function timeoutFor(key) { return SLOW_TIMEOUTS[key] || DEFAULT_TIMEOUT; }
 const BODY_OVERRIDES = {
   // Chat / completions / embeddings — small, fast prompts
   'POST /v1/chat/completions': { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 },
-  'POST /v1/chat/completions/intelligent': { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 },
   'POST /v1/chat/completions/extended-thinking': { model: 'auto', messages: [{ role: 'user', content: 'ping' }], max_tokens: 16, thinking_budget: 256 },
   'POST /v1/chat/completions/ultra-thinking': { model: 'auto', messages: [{ role: 'user', content: 'ping' }], max_tokens: 16, thinking_budget: 256 },
   'POST /v1/embeddings': { model: 'text-embedding-3-small', input: 'ping' },
