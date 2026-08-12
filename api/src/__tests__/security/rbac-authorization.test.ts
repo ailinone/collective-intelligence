@@ -421,6 +421,52 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       expect(user!.role).toBe('viewer'); // Still viewer
     });
 
+    it('should NOT allow viewer to escalate to owner', async () => {
+      const response = await server.inject({
+        method: 'PUT',
+        url: `/v1/users/${org1ViewerId}`,
+        headers: {
+          'x-api-key': org1ViewerKey,
+        },
+        payload: {
+          role: 'owner', // Top-of-hierarchy escalation attempt
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+
+      const user = await prisma.user.findUnique({ where: { id: org1ViewerId } });
+      expect(user!.role).toBe('viewer');
+
+      // And absolutely no owner grant was minted anywhere in the org.
+      const ownerGrants = await prisma.userRole.findMany({
+        where: { organizationId: org1Id, role: { name: 'owner' } },
+      });
+      expect(ownerGrants).toHaveLength(0);
+    });
+
+    it('should NOT allow an admin to mint an owner', async () => {
+      // Admins may assign roles, but ownership is not theirs to give:
+      // creating an owner is a deliberate operator action (rbac:grant-owner).
+      const response = await server.inject({
+        method: 'PUT',
+        url: `/v1/users/${org1ViewerId}`,
+        headers: {
+          'x-api-key': org1AdminKey,
+        },
+        payload: {
+          role: 'owner',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+
+      const ownerGrants = await prisma.userRole.findMany({
+        where: { organizationId: org1Id, role: { name: 'owner' } },
+      });
+      expect(ownerGrants).toHaveLength(0);
+    });
+
     it('should NOT allow user to modify their own permissions', async () => {
       // Find the API key ID for the viewer
       const apiKey = await prisma.apiKey.findFirst({
@@ -468,17 +514,20 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       // Admin should have permission
       expect([200, 204]).toContain(response.statusCode);
 
-      // Verify role was changed in database
+      // The route now routes the change through assignRoleToUser, so the
+      // AUTHORITATIVE join table is updated — no manual patch-up needed. (This
+      // test used to call assignRoleToUser itself to paper over the fact that
+      // PUT only wrote the denormalized column, which is exactly the desync
+      // that made privilege silently destructible.)
       if (response.statusCode === 200) {
-        const user = await prisma.user.findUnique({
-          where: { id: org1ViewerId },
+        const grants = await prisma.userRole.findMany({
+          where: { userId: org1ViewerId, organizationId: org1Id },
+          include: { role: true },
         });
-        // Role should be updated (but we need to also update UserRole table)
-        if (user) {
-          // Update UserRole table to match
-          const { assignRoleToUser } = await import('@/services/rbac-service');
-          await assignRoleToUser(org1ViewerId, org1Id, 'developer');
-        }
+        expect(grants.map((grant) => grant.role.name)).toContain('developer');
+
+        const user = await prisma.user.findUnique({ where: { id: org1ViewerId } });
+        expect(user!.role).toBe('developer');
       }
     });
   });
@@ -824,5 +873,202 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
       // Should be forbidden
       expect([403, 404]).toContain(response.statusCode);
     });
+  });
+});
+
+/**
+ * Role-hierarchy inversion.
+ *
+ * `authorizeRoleChange` used to prove only "may this caller assign roles?" and,
+ * for `owner`, "is this caller an owner?" — nothing stopped a LOWER-ranked
+ * principal acting on a HIGHER-ranked one. An admin holds `users:role_assign`,
+ * so `PUT /v1/users/<owner-id> {role: 'viewer'}` stripped an owner whenever the
+ * organization had a second owner to satisfy `cannot_demote_last_owner`.
+ *
+ * Runs in its own organization so the "zero owner grants" assertions in the
+ * suite above stay meaningful.
+ */
+describe('RBAC role hierarchy inversion', () => {
+  let server: FastifyInstance;
+  let orgId: string;
+  let adminId: string;
+  let adminKey: string;
+  let ownerAId: string;
+  let ownerAKey: string;
+  let ownerBId: string;
+
+  const makeKey = async (userId: string, organizationId: string): Promise<string> => {
+    const keyValue = `ak_test_${nanoid(32)}`;
+    const { createHash } = await import('crypto');
+    await prisma.apiKey.create({
+      data: {
+        name: `Hierarchy key ${userId}`,
+        keyHash: await bcrypt.hash(keyValue, 10),
+        keyPrefix: keyValue.substring(0, 15),
+        quickHash: createHash('sha256').update(keyValue).digest('hex'),
+        userId,
+        organizationId,
+        status: 'active',
+      },
+    });
+    return keyValue;
+  };
+
+  beforeAll(async () => {
+    server = await createServer();
+    const { syncDefaultRoles } = await import('@/services/rbac-sync-service');
+    await syncDefaultRoles();
+    const { registerUserManagementRoutes } = await import('@/routes/user/user-management-routes');
+    await registerUserManagementRoutes(server);
+    await server.listen({ port: 0, host: '127.0.0.1' });
+
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Hierarchy Org',
+        slug: `hierarchy-org-${nanoid(8)}`,
+        tier: 'enterprise',
+        status: 'active',
+      },
+    });
+    orgId = org.id;
+
+    const makeUser = async (label: string): Promise<string> => {
+      const user = await prisma.user.create({
+        data: {
+          email: `${label}-${nanoid(8)}@hierarchy.test`,
+          name: label,
+          passwordHash: await bcrypt.hash('test123', 12),
+          organizationId: orgId,
+          status: 'active',
+        },
+      });
+      return user.id;
+    };
+
+    adminId = await makeUser('admin');
+    ownerAId = await makeUser('owner-a');
+    ownerBId = await makeUser('owner-b');
+
+    const { assignRoleToUser, invalidateRbacCache } = await import('@/services/rbac-service');
+    await assignRoleToUser(adminId, orgId, 'admin');
+    // TWO owners, so `cannot_demote_last_owner` cannot be what produces the 403.
+    await assignRoleToUser(ownerAId, orgId, 'owner', { allowOwner: true, assignedBy: 'test' });
+    await assignRoleToUser(ownerBId, orgId, 'owner', { allowOwner: true, assignedBy: 'test' });
+    invalidateRbacCache();
+
+    adminKey = await makeKey(adminId, orgId);
+    ownerAKey = await makeKey(ownerAId, orgId);
+  });
+
+  afterAll(async () => {
+    if (orgId) {
+      await prisma.organization.deleteMany({ where: { id: orgId } });
+    }
+    await server.close();
+  });
+
+  it('refuses to let an admin demote an owner', async () => {
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/v1/users/${ownerAId}`,
+      headers: { 'x-api-key': adminKey },
+      payload: { role: 'viewer' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(JSON.parse(response.body).message).toContain('outranks you');
+
+    const grants = await prisma.userRole.findMany({
+      where: { userId: ownerAId, organizationId: orgId },
+      include: { role: true },
+    });
+    expect(grants.map((grant) => grant.role.name)).toEqual(['owner']);
+  });
+
+  it('refuses to let an admin grant a role above its own rank', async () => {
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/v1/users/${adminId}`,
+      headers: { 'x-api-key': adminKey },
+      payload: { role: 'owner' },
+    });
+
+    expect(response.statusCode).toBe(403);
+
+    const grants = await prisma.userRole.findMany({
+      where: { userId: adminId, organizationId: orgId },
+      include: { role: true },
+    });
+    expect(grants.map((grant) => grant.role.name)).toEqual(['admin']);
+  });
+
+  it('leaves profile fields untouched when the role change is refused', async () => {
+    // The profile update used to be committed BEFORE setUserRole ran, so a
+    // refusal returned an error with `name` already persisted.
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: ownerAId } });
+
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/v1/users/${ownerAId}`,
+      headers: { 'x-api-key': adminKey },
+      payload: { name: 'Renamed By Attacker', role: 'viewer' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: ownerAId } });
+    expect(after.name).toBe(before.name);
+  });
+
+  it('still lets an admin change a lower-ranked user', async () => {
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/v1/users/${adminId}`,
+      headers: { 'x-api-key': adminKey },
+      payload: { role: 'developer' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const grants = await prisma.userRole.findMany({
+      where: { userId: adminId, organizationId: orgId },
+      include: { role: true },
+    });
+    expect(grants.map((grant) => grant.role.name)).toEqual(['developer']);
+  });
+
+  // MUST STAY LAST: it removes the second owner grant from the fixture org.
+  it('409 on cannot_demote_last_owner writes NOTHING (no half-applied request)', async () => {
+    const ownerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'owner' } });
+    await prisma.userRole.deleteMany({
+      where: { userId: ownerBId, organizationId: orgId, roleId: ownerRole.id },
+    });
+    const { invalidateRbacCache } = await import('@/services/rbac-service');
+    invalidateRbacCache();
+    const { __resetApiKeyAuthCacheForTests } = await import(
+      '@/api/middleware/api-key-auth-middleware'
+    );
+    __resetApiKeyAuthCacheForTests();
+
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: ownerAId } });
+
+    const response = await server.inject({
+      method: 'PUT',
+      url: `/v1/users/${ownerAId}`,
+      headers: { 'x-api-key': ownerAKey },
+      payload: { name: 'Half Applied', role: 'viewer' },
+    });
+
+    expect(response.statusCode).toBe(409);
+
+    // The profile update used to be committed before setUserRole threw.
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: ownerAId } });
+    expect(after.name).toBe(before.name);
+    expect(after.role).toBe('owner');
+
+    const grants = await prisma.userRole.findMany({
+      where: { userId: ownerAId, organizationId: orgId },
+      include: { role: true },
+    });
+    expect(grants.map((grant) => grant.role.name)).toEqual(['owner']);
   });
 });

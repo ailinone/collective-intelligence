@@ -76,12 +76,35 @@ export async function listQuotas(organizationId: string): Promise<QuotaConfig[]>
   }));
 }
 
+export interface CheckQuotaOptions {
+  /**
+   * When false, a missing quota row is NOT created — the check reads, and an
+   * absent row is treated as "no limits configured" (unlimited, allow).
+   *
+   * Defaults to true, preserving the behaviour `/v1/chat/completions` has
+   * always had. `orchestration-gate.ts` passes false on the flat principle that
+   * a CHECK must not write — not on any claim about whether its routes record
+   * quota usage elsewhere (they all do). Concretely, writing here would
+   * (a) materialise quota rows for orgs whose request never reaches the
+   * recording path at all, changing what `listQuotas`/`getQuotaUsage` report,
+   * and (b) race on `@@unique([organizationId, period, periodStart])` for
+   * concurrent first-requests-of-period. The row is still created on the
+   * recording path by `recordQuotaUsage`, so nothing is lost for a request that
+   * actually completes.
+   */
+  createIfMissing?: boolean;
+}
+
 export async function checkQuota(
   organizationId: string,
-  request: QuotaCheckRequest
+  request: QuotaCheckRequest,
+  options: CheckQuotaOptions = {}
 ): Promise<QuotaCheckResult> {
   const period = request.period ?? DEFAULT_PERIOD;
-  const quota = await getOrCreateCurrentQuota(organizationId, period);
+  const quota =
+    options.createIfMissing === false
+      ? await getCurrentQuotaOrUnlimited(organizationId, period)
+      : await getOrCreateCurrentQuota(organizationId, period);
 
   const requested = {
     requests: request.operation?.requests ?? 0,
@@ -171,21 +194,25 @@ export async function getQuotaUsage(
   return quota ? mapUsageRecordToDto(quota) : null;
 }
 
-async function getOrCreateCurrentQuota(organizationId: string, period: QuotaLimit['period']) {
-  const window = resolvePeriodWindow(period);
-
-  const existing = await prisma.usageQuota.findFirst({
+async function findCurrentQuota(organizationId: string, period: QuotaLimit['period'], start: Date) {
+  return await prisma.usageQuota.findFirst({
     where: {
       organizationId,
       period,
       periodStart: {
-        lte: window.start,
+        lte: start,
       },
       periodEnd: {
-        gte: window.start,
+        gte: start,
       },
     },
   });
+}
+
+async function getOrCreateCurrentQuota(organizationId: string, period: QuotaLimit['period']) {
+  const window = resolvePeriodWindow(period);
+
+  const existing = await findCurrentQuota(organizationId, period, window.start);
 
   if (existing) {
     return existing;
@@ -203,6 +230,34 @@ async function getOrCreateCurrentQuota(organizationId: string, period: QuotaLimi
       fileLimit: null,
     },
   });
+}
+
+/**
+ * Read-only counterpart of `getOrCreateCurrentQuota`. When no row exists for the
+ * current window it synthesises the SAME shape the auto-created row would have
+ * had (`requestLimit: INT_MAX`, no token/cost/file cap, zero counters) without
+ * writing anything, so the resulting `QuotaCheckResult` is identical to what the
+ * creating path would have produced — minus the INSERT.
+ */
+async function getCurrentQuotaOrUnlimited(organizationId: string, period: QuotaLimit['period']) {
+  const window = resolvePeriodWindow(period);
+
+  const existing = await findCurrentQuota(organizationId, period, window.start);
+  if (existing) {
+    return existing;
+  }
+
+  return {
+    periodEnd: window.end,
+    requestLimit: INT_MAX,
+    tokenLimit: null as bigint | null,
+    costLimitUsd: null as Prisma.Decimal | null,
+    fileLimit: null as number | null,
+    requestCount: 0,
+    tokenCount: BigInt(0),
+    costUsd: new Prisma.Decimal(0),
+    fileCount: 0,
+  };
 }
 
 function mapUsageRecordToDto(record: {

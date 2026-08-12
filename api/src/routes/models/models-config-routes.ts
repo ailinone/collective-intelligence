@@ -137,12 +137,11 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
           });
         }
 
+        // SECURITY (rbac-silent-role-downgrade): only the `roles: string[]`
+        // array is authority. A scalar `role` is the denormalized `users.role`
+        // hint column's shape and is never a grant — see requireRole.
         const userRoles: string[] =
-          'roles' in user && Array.isArray(user.roles)
-            ? user.roles
-            : 'role' in user && typeof user.role === 'string'
-              ? [user.role]
-              : [];
+          'roles' in user && Array.isArray(user.roles) ? user.roles : [];
 
         const allowedRoles = ['admin', 'developer', 'owner'];
         const hasRole = userRoles.some((role) => allowedRoles.includes(role));

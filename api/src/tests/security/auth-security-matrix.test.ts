@@ -27,6 +27,7 @@
  * | T11 | API key expirada            | 401           | Go       |
  * | T12 | API key com IP errado       | 401           | Go       |
  * | T17 | Clock skew (nbf futuro)     | 401           | Go       |
+ * | T18 | Self-register em org alheia | 409           | Go       |
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -351,6 +352,7 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
   // dynamic import so no top-level fastify import is added to the hermetic path.
   let inProcessServer: import('fastify').FastifyInstance | null = null;
   let seededOrgId: string | null = null;
+  let seededUserId: string | null = null;
 
   beforeAll(async () => {
     if (useExternalServer) {
@@ -400,16 +402,17 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
 
     // Seed an active org + user so loginAndGetToken() can obtain a real,
     // server-issued JWT and mint API keys against the real DB.
-    const org = await prisma.organization.create({
-      data: {
-        name: `SecMatrix Org ${nanoid(8)}`,
-        slug: `secmatrix-${nanoid(8)}`,
-        tier: 'enterprise',
-        status: 'active',
-      },
-    });
-    seededOrgId = org.id;
-
+    //
+    // SEEDING CONTRACT (do not "simplify" this back): the fixture used to
+    // pre-create an organization with prisma and then hand its id to
+    // `POST /v1/auth/register`. That is precisely the cross-tenant implant this
+    // change closes — anonymous registration may not attach to a pre-existing
+    // tenant — so the fixture was depending on the vulnerability. It now uses
+    // the one path an anonymous caller is legitimately allowed to take: a
+    // registration that CREATES its own organization (the normal signup flow).
+    // The principal that comes out is provisioned exactly the way production
+    // provisions one, including the real `user_roles` baseline grant, which is
+    // what the JWT/API-key cases below need to exercise.
     testUserEmail = `secmatrix-${nanoid(8)}@example.com`;
     testUserPassword = 'SecureP@ssw0rd123';
     const registerRes = await fetch(`${baseUrl}/v1/auth/register`, {
@@ -419,13 +422,40 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
         email: testUserEmail,
         password: testUserPassword,
         name: 'Security Matrix Test User',
-        organizationId: seededOrgId,
       }),
     });
     if (registerRes.status !== 201) {
       const body = await registerRes.text();
       throw new Error(`Failed to seed security-matrix test user (${registerRes.status}): ${body}`);
     }
+
+    const registerBody = (await registerRes.json()) as {
+      user?: { id?: string; organizationId?: string; roles?: string[] };
+    };
+    seededUserId = registerBody.user?.id ?? null;
+    seededOrgId = registerBody.user?.organizationId ?? null;
+    if (!seededUserId || !seededOrgId) {
+      throw new Error(
+        `Registration did not report the provisioned principal: ${JSON.stringify(registerBody)}`
+      );
+    }
+    // The grant has to be real — the whole point of the surrounding change is
+    // that `user_roles` is the only source of authority. A principal with zero
+    // rows would make T3/T9/T10 assert against an unprivileged shell.
+    if (!registerBody.user?.roles || registerBody.user.roles.length === 0) {
+      throw new Error('Seeded principal has no role grants; RBAC defaults are not synced');
+    }
+
+    // Tier parity with the previous fixture. Self-registration necessarily
+    // starts a tenant on the free tier; the suite has always exercised these
+    // auth paths on an enterprise tenant, and tier is carried into
+    // `tenantContext` by both auth middlewares, so pin it rather than let the
+    // covered surface drift. This is a tier edit on an org the test itself just
+    // created — it grants nothing.
+    await prisma.organization.update({
+      where: { id: seededOrgId },
+      data: { tier: 'enterprise' },
+    });
 
     serverAvailable = true;
   });
@@ -572,5 +602,48 @@ integrationDescribe('Integration Security Tests (requires running server)', () =
       headers: { 'X-API-Key': 'ak_live_invalid_key_no_access' },
     });
     expect(res.status).toBe(401);
+  });
+
+  // T18 pins the guard that the seeding above deliberately stopped leaning on.
+  // `POST /v1/auth/register` is UNAUTHENTICATED and takes `organizationId` from
+  // the request body: joining a pre-existing tenant from there is an anonymous
+  // cross-tenant implant, not a signup. Nothing pinned that behaviour before,
+  // which is exactly why a fixture could quietly depend on it. Regressing this
+  // must turn the security gate red, not silently re-open the hole.
+  it('T18: anonymous registration MUST NOT join a pre-existing organization', async () => {
+    if (!serverAvailable || !seededOrgId) {
+      return;
+    }
+    const { nanoid } = await import('nanoid');
+    const { prisma } = await import('@/database/client');
+
+    const implantEmail = `implant-${nanoid(8)}@example.com`;
+    const res = await fetch(`${baseUrl}/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: implantEmail,
+        password: 'SecureP@ssw0rd123',
+        name: 'Cross-Tenant Implant',
+        organizationId: seededOrgId,
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { success?: boolean; error?: string };
+    expect(body.success).toBe(false);
+    expect(String(body.error).toLowerCase()).toContain('invitation');
+
+    // Rejected means rejected: no user row, and no membership in the target org.
+    const implanted = await prisma.user.findUnique({
+      where: { email: implantEmail.toLowerCase() },
+    });
+    expect(implanted).toBeNull();
+
+    const members = await prisma.user.findMany({
+      where: { organizationId: seededOrgId },
+      select: { id: true },
+    });
+    expect(members.map((m) => m.id)).toEqual([seededUserId]);
   });
 });

@@ -25,6 +25,25 @@ import { createTestServerWithAuthOnly } from '../../../../tests/utils/test-serve
 import { prisma } from '@/database/client';
 import { nanoid } from 'nanoid';
 
+/**
+ * Every account in this suite is created by the registration endpoint itself —
+ * that is what the suite is for. It must therefore use the only shape anonymous
+ * registration accepts: NO `organizationId` in the payload, so the call creates
+ * its own organization.
+ *
+ * It used to pre-create one organization and pass its id into every register
+ * call. `POST /v1/auth/register` is unauthenticated, so joining a pre-existing
+ * tenant from there is a cross-tenant implant; it is now rejected with 409 and
+ * the old payload shape cannot succeed. Do not reintroduce it.
+ *
+ * Consequence for teardown: there is no single org to delete. Every email is
+ * prefixed with a per-run id, the default org name is derived from the email
+ * local-part, so one prefix sweep removes every organization this run created
+ * (cascading to its users) — including the orphans left by the registrations
+ * that are supposed to fail.
+ */
+const RUN_PREFIX = `jwtflow-${nanoid(10).toLowerCase()}-`;
+
 describe('Authentication JWT Flow (Integration)', () => {
   let server: FastifyInstance;
   let testOrgId: string;
@@ -50,30 +69,21 @@ describe('Authentication JWT Flow (Integration)', () => {
     server = await createTestServerWithAuthOnly();
 
     await server.listen({ port: 0, host: '127.0.0.1' }); // Random port
-
-    // Create test organization
-    const testOrg = await prisma.organization.create({
-      data: {
-        name: `Test Org ${nanoid(8)}`,
-        slug: `test-org-${nanoid(8)}`,
-        tier: 'enterprise',
-        status: 'active',
-      },
-    });
-    testOrgId = testOrg.id;
   });
 
   afterAll(async () => {
-    // Cleanup: Delete test organization (cascades to users)
-    await prisma.organization.delete({
-      where: { id: testOrgId },
-    });
+    // Cleanup: delete every organization this run provisioned (cascades to
+    // users). Registration names a default org after the email local-part, so
+    // the per-run email prefix identifies them all.
+    await prisma.organization
+      .deleteMany({ where: { name: { startsWith: RUN_PREFIX } } })
+      .catch(() => {});
 
     await server.close();
   });
 
   beforeEach(() => {
-    testEmail = `test-${nanoid(8)}@example.com`;
+    testEmail = `${RUN_PREFIX}${nanoid(8).toLowerCase()}@example.com`;
   });
 
   describe('Registration Flow', () => {
@@ -85,7 +95,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -112,7 +121,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: '123', // Too weak
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -132,7 +140,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -144,7 +151,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User 2',
-          organizationId: testOrgId,
         },
       });
 
@@ -163,7 +169,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: 'not-an-email',
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -181,7 +186,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -287,7 +291,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -295,6 +298,9 @@ describe('Authentication JWT Flow (Integration)', () => {
       accessToken = body.tokens.accessToken;
       refreshToken = body.tokens.refreshToken;
       testUserId = body.user.id;
+      // Registration provisions the tenant; read the id back rather than
+      // supplying one (anonymous registration cannot join an existing org).
+      testOrgId = body.user.organizationId;
     });
 
     it('should accept valid JWT token', async () => {
@@ -376,7 +382,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -452,7 +457,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password,
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 
@@ -476,7 +480,6 @@ describe('Authentication JWT Flow (Integration)', () => {
           email: testEmail,
           password: 'SecureP@ssw0rd123',
           name: 'Test User',
-          organizationId: testOrgId,
         },
       });
 

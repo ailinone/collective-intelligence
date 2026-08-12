@@ -11,7 +11,7 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Moderations Endpoints
 
-Total operations: 1
+Total operations: 5
 
 ## POST `/v1/moderations`
 
@@ -93,6 +93,384 @@ import requests
 response = requests.request(
     "POST",
     "https://api.ailin.one/v1/moderations",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/moderations/policies`
+
+### Purpose
+
+List custom moderation policies.
+
+Lists all moderation policies belonging to the caller's organization (newest-first).
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Policies listed successfully |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/moderations/policies" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/moderations/policies", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/moderations/policies",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/moderations/policies`
+
+### Purpose
+
+Create a custom moderation policy.
+
+Creates a per-tenant moderation policy (category thresholds + optional custom categories + action). Scoped to the caller's organization. The policy id can then be passed as `policy_id` to POST /v1/moderations.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+```json
+{
+  "name": "string",
+  "thresholds": {},
+  "customCategories": [
+    {
+      "name": "string",
+      "keywords": [
+        {}
+      ],
+      "description": "string"
+    }
+  ],
+  "action": "flag",
+  "enabled": true
+}
+```
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `201` | Policy created successfully |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/moderations/policies" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"string","thresholds":{},"customCategories":[{"name":"string","keywords":[{}],"description":"string"}],"action":"flag","enabled":true}'
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/moderations/policies", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+  "name": "string",
+  "thresholds": {},
+  "customCategories": [
+    {
+      "name": "string",
+      "keywords": [
+        {}
+      ],
+      "description": "string"
+    }
+  ],
+  "action": "flag",
+  "enabled": true
+}),
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/moderations/policies",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
+    },
+    json={
+    "name": "string",
+    "thresholds": {},
+    "customCategories": [
+        {
+            "name": "string",
+            "keywords": [
+                {}
+            ],
+            "description": "string"
+        }
+    ],
+    "action": "flag",
+    "enabled": true
+},
+)
+print(response.status_code)
+print(response.text)
+```
+
+## DELETE `/v1/moderations/policies/{id}`
+
+### Purpose
+
+Delete a custom moderation policy.
+
+Deletes one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `id` | path | yes | string | Unique identifier of the moderation policy |
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Policy deleted successfully |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X DELETE "https://api.ailin.one/v1/moderations/policies/sample" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/moderations/policies/sample", {
+  method: "DELETE",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "DELETE",
+    "https://api.ailin.one/v1/moderations/policies/sample",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/moderations/policies/{id}`
+
+### Purpose
+
+Get a custom moderation policy.
+
+Fetches one policy by id, scoped to the caller's organization. Cross-tenant ids return 404.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `id` | path | yes | string | Unique identifier of the moderation policy |
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Policy retrieved successfully |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/moderations/policies/sample" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/moderations/policies/sample", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/moderations/policies/sample",
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),

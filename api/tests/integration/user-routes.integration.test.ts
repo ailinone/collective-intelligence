@@ -72,12 +72,17 @@ describe('User Routes Integration Tests', () => {
     });
     testUserId = user.id;
 
-    // Generate auth token using authService (same method used in production)
+    // Grant the role EXPLICITLY. getUserRoles() is a pure read and no longer
+    // self-heals a role-less principal into the default role (that implicit
+    // write was the silent privilege-destruction defect), so a fixture that
+    // creates a user row must also create its grant — which is what real
+    // provisioning does anyway.
     const { getAuthService } = await import('@/services/auth-service');
     const authService = getAuthService();
-    const { getUserRoles } = await import('@/services/rbac-service');
+    const { ensureBaselineRole, getUserRoles } = await import('@/services/rbac-service');
+    await ensureBaselineRole(testUserId, testOrgId, 'test-fixture:user-routes');
     const roles = await getUserRoles(testUserId, testOrgId);
-    
+
     const tokens = await authService.generateTokens({
       userId: testUserId,
       organizationId: testOrgId,

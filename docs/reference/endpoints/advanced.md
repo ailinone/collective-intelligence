@@ -11,545 +11,7 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Advanced Endpoints
 
-Total operations: 85
-
-## POST `/v1/admin/api-keys/auto-rotate/enable`
-
-### Purpose
-
-Create or execute admin api keys auto rotate enable.
-
-Create or execute admin api keys auto rotate enable.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/api-keys/auto-rotate/enable as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-This operation does not declare explicit parameters.
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X POST "https://api.ailin.one/v1/admin/api-keys/auto-rotate/enable" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/api-keys/auto-rotate/enable", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "POST",
-    "https://api.ailin.one/v1/admin/api-keys/auto-rotate/enable",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
-
-## POST `/v1/admin/api-keys/rotate/{keyId}`
-
-### Purpose
-
-Create or execute admin api keys rotate keyId.
-
-Create or execute admin api keys rotate keyId.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/api-keys/rotate/{keyId} as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-| Name | In | Required | Type | Description |
-|---|---|---|---|---|
-| `keyId` | path | yes | string | - |
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X POST "https://api.ailin.one/v1/admin/api-keys/rotate/sample" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/api-keys/rotate/sample", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "POST",
-    "https://api.ailin.one/v1/admin/api-keys/rotate/sample",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
-
-## GET `/v1/admin/api-keys/rotation-logs`
-
-### Purpose
-
-Retrieve admin api keys rotation logs.
-
-Retrieve admin api keys rotation logs.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/api-keys/rotation-logs as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-This operation does not declare explicit parameters.
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X GET "https://api.ailin.one/v1/admin/api-keys/rotation-logs" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/api-keys/rotation-logs", {
-  method: "GET",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "GET",
-    "https://api.ailin.one/v1/admin/api-keys/rotation-logs",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
-
-## GET `/v1/admin/api-keys/rotation-status`
-
-### Purpose
-
-Retrieve admin api keys rotation status.
-
-Retrieve admin api keys rotation status.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/api-keys/rotation-status as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-This operation does not declare explicit parameters.
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X GET "https://api.ailin.one/v1/admin/api-keys/rotation-status" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/api-keys/rotation-status", {
-  method: "GET",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "GET",
-    "https://api.ailin.one/v1/admin/api-keys/rotation-status",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
-
-## GET `/v1/admin/users`
-
-### Purpose
-
-Retrieve admin users.
-
-Retrieve admin users.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/users as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-This operation does not declare explicit parameters.
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X GET "https://api.ailin.one/v1/admin/users" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/users", {
-  method: "GET",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "GET",
-    "https://api.ailin.one/v1/admin/users",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
-
-## DELETE `/v1/admin/users/{id}`
-
-### Purpose
-
-Delete admin users id.
-
-Delete admin users id.
-
-Enterprise contract notes:
-- Purpose: exposes /v1/admin/users/{id} as a governed API capability inside the CI Fabric.
-- Preconditions: requires valid authentication unless explicitly marked as public.
-- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
-- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
-- Observability: request and correlation identifiers are propagated for traceability.
-- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
-
-### Authentication
-
-Requires: Bearer token or API key.
-
-### Parameters
-
-| Name | In | Required | Type | Description |
-|---|---|---|---|---|
-| `id` | path | yes | string | - |
-
-### Request Body
-
-No JSON request body is required.
-
-### Responses
-
-| Status | Description |
-|---|---|
-| `200` | Successful operation. |
-| `400` | #/components/responses/BadRequest |
-| `401` | #/components/responses/Unauthorized |
-| `403` | #/components/responses/Forbidden |
-| `404` | #/components/responses/NotFound |
-| `409` | #/components/responses/Conflict |
-| `422` | #/components/responses/UnprocessableEntity |
-| `429` | #/components/responses/TooManyRequests |
-| `500` | #/components/responses/InternalServerError |
-
-### Error Handling
-
-Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
-
-### Rate Limits
-
-Subject to tenant-level quota and platform-level rate-limit policies.
-
-### Observability
-
-Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
-
-### Examples
-
-```bash
-curl -X DELETE "https://api.ailin.one/v1/admin/users/sample" \
-  -H "Authorization: Bearer $AILIN_TOKEN" \
-  -H "X-API-Key: $AILIN_API_KEY"
-```
-
-```ts
-const response = await fetch("https://api.ailin.one/v1/admin/users/sample", {
-  method: "DELETE",
-  headers: {
-    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
-    "X-API-Key": process.env.AILIN_API_KEY || "",
-  },
-});
-const data = await response.json();
-```
-
-```python
-import os
-import requests
-
-response = requests.request(
-    "DELETE",
-    "https://api.ailin.one/v1/admin/users/sample",
-    headers={
-        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
-        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
-    },
-)
-print(response.status_code)
-print(response.text)
-```
+Total operations: 97
 
 ## GET `/v1/auth/api-keys`
 
@@ -5466,6 +4928,451 @@ print(response.status_code)
 print(response.text)
 ```
 
+## GET `/v1/hcra/capabilities`
+
+### Purpose
+
+Retrieve hcra capabilities.
+
+Retrieve hcra capabilities.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/hcra/capabilities as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/hcra/capabilities" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/hcra/capabilities", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/hcra/capabilities",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/hcra/capabilities/*`
+
+### Purpose
+
+Retrieve hcra capabilities *.
+
+Retrieve hcra capabilities *.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/hcra/capabilities/* as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/hcra/capabilities/*" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/hcra/capabilities/*", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/hcra/capabilities/*",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/hcra/capabilities/expand`
+
+### Purpose
+
+Retrieve hcra capabilities expand.
+
+Retrieve hcra capabilities expand.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/hcra/capabilities/expand as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/hcra/capabilities/expand" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/hcra/capabilities/expand", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/hcra/capabilities/expand",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/hcra/capabilities/facets`
+
+### Purpose
+
+Retrieve hcra capabilities facets.
+
+Retrieve hcra capabilities facets.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/hcra/capabilities/facets as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/hcra/capabilities/facets" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/hcra/capabilities/facets", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/hcra/capabilities/facets",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/hcra/models`
+
+### Purpose
+
+Retrieve hcra models.
+
+Retrieve hcra models.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/hcra/models as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/hcra/models" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/hcra/models", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/hcra/models",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
 ## GET `/v1/jobs`
 
 ### Purpose
@@ -7423,6 +7330,1165 @@ import requests
 response = requests.request(
     "POST",
     "https://api.ailin.one/v1/tools/google-maps/search",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/classify`
+
+### Purpose
+
+Create or execute tools jina classify.
+
+Create or execute tools jina classify.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/classify as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/classify" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/classify", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/classify",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/deepsearch`
+
+### Purpose
+
+Create or execute tools jina deepsearch.
+
+Create or execute tools jina deepsearch.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/deepsearch as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/deepsearch" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/deepsearch", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/deepsearch",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/embeddings`
+
+### Purpose
+
+Create or execute tools jina embeddings.
+
+Create or execute tools jina embeddings.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/embeddings as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/embeddings" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/embeddings", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/embeddings",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/reader`
+
+### Purpose
+
+Create or execute tools jina reader.
+
+Create or execute tools jina reader.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/reader as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/reader" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/reader", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/reader",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/rerank`
+
+### Purpose
+
+Create or execute tools jina rerank.
+
+Create or execute tools jina rerank.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/rerank as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/rerank" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/rerank", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/rerank",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/search`
+
+### Purpose
+
+Create or execute tools jina search.
+
+Create or execute tools jina search.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/search as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/search" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/search", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/search",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/tools/jina/segment`
+
+### Purpose
+
+Create or execute tools jina segment.
+
+Create or execute tools jina segment.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/tools/jina/segment as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/tools/jina/segment" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/tools/jina/segment", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/tools/jina/segment",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/translation/batch`
+
+### Purpose
+
+Create or execute translation batch.
+
+Create or execute translation batch.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/translation/batch as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/translation/batch" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/translation/batch", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/translation/batch",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## GET `/v1/translation/languages`
+
+### Purpose
+
+Retrieve translation languages.
+
+Retrieve translation languages.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/translation/languages as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X GET "https://api.ailin.one/v1/translation/languages" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/translation/languages", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "GET",
+    "https://api.ailin.one/v1/translation/languages",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/translation/session`
+
+### Purpose
+
+Create or execute translation session.
+
+Create or execute translation session.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/translation/session as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/translation/session" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/translation/session", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/translation/session",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## DELETE `/v1/translation/session/{id}`
+
+### Purpose
+
+Delete translation session id.
+
+Delete translation session id.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/translation/session/{id} as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `id` | path | yes | string | - |
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X DELETE "https://api.ailin.one/v1/translation/session/sample" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/translation/session/sample", {
+  method: "DELETE",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "DELETE",
+    "https://api.ailin.one/v1/translation/session/sample",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/translation/text`
+
+### Purpose
+
+Create or execute translation text.
+
+Create or execute translation text.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/translation/text as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/translation/text" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/translation/text", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/translation/text",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+    },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/videos/generations`
+
+### Purpose
+
+Create or execute videos generations.
+
+Create or execute videos generations.
+
+Enterprise contract notes:
+- Purpose: exposes /v1/videos/generations as a governed API capability inside the CI Fabric.
+- Preconditions: requires valid authentication unless explicitly marked as public.
+- Side-effects: may emit telemetry/audit signals and mutate artifacts depending on method semantics.
+- Limits: subject to tenant quotas, payload constraints, and rate-limit policies.
+- Observability: request and correlation identifiers are propagated for traceability.
+- Security and privacy: tenant isolation, policy enforcement, retention, and redaction controls apply.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+This operation does not declare explicit parameters.
+
+### Request Body
+
+No JSON request body is required.
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Successful operation. |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/videos/generations" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY"
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/videos/generations", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+  },
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/videos/generations",
     headers={
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),

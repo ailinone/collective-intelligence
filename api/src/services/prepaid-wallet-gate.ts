@@ -14,10 +14,49 @@
  * SAFE BY DEFAULT:
  *  - Disabled unless `PREPAID_WALLET_GATE_ENABLED=true`. When off, every function
  *    is a no-op (allowed / no debit), so existing traffic is untouched.
- *  - Even when ON, it only fires for `<strategy>:<tier>` pricing cells (the new
- *    collective pricing aliases). Raw model ids and legacy `ailin-*` aliases that
- *    don't resolve to a tier are NEVER gated or debited.
+ *  - Even when ON, it only fires for requests carrying a SERVER-SET `ailin_tier` +
+ *    `ailin_tier_rate` (see `resolveTier` for why that carrier is the only safe key).
  *  - Fail-OPEN: a wallet/store error allows the request (never block on infra).
+ *
+ * WHICH MODEL STRINGS CARRY THAT TIER (verified against the real resolver, not
+ * inferred — `resolveAilinVirtualModelAlias` + `parseStrategyTier`):
+ *   BILLED — `<strategy>:<tier>` composites (`consensus:extra`), bare execution-ready
+ *     strategy names (`best`→medium, `consensus`→medium, `expert-panel`→large,
+ *     `fast`/`economy`/`single`/`parallel`→base), AND — because `parseStrategyTier`
+ *     strips a leading `ailin-` (pricing-tiers.ts) — any `ailin-<strategy>[:<tier>]`
+ *     that is NOT a configured virtual-model profile: `ailin-parallel`→`parallel:base`,
+ *     `ailin-single`→`single:base`, `ailin-expert-panel`→`expert-panel:large` ($4/$20),
+ *     `ailin-best:large`, `ailin-consensus:extra`, …
+ *   NOT BILLED — names that ARE a configured profile (the DEFAULT_PROFILES
+ *     `ailin-auto|best|fast|economy|consensus|voice|stt|realtime`, plus anything added
+ *     via AILIN_AUTO_MODEL_ALIASES / AILIN_VIRTUAL_MODEL_PROFILES), a literal
+ *     `model: 'auto'`, raw provider ids, and shadow-wired cells (`war-room:large`).
+ * The profile lookup runs FIRST, so adding an id to those env vars silently moves it
+ * from the billed set to the unbilled one. Treat that env as a pricing control.
+ *
+ * OPEN PRODUCT DECISION (do not enable the flag before it is settled): the unbilled
+ * set above includes `ailin-consensus` (strategy consensus, fanoutFactor 5) and
+ * `ailin-best` (quality-multipass, fanoutFactor 6) — the two heaviest fan-out
+ * mechanisms — while the byte-identical `consensus:medium` / `best:medium` are
+ * charged. There is currently NO compensating charge for them: none of the
+ * DEFAULT_PROFILES declares a `billing` profile and `AILIN_VIRTUAL_MODEL_PROFILES` is
+ * empty in production, so `applyBillingProfile` (billing-usage-tracker.ts) returns the
+ * provider cost unchanged — and even when it does apply it only feeds usage analytics
+ * and quota counters, never the prepaid wallet.
+ *
+ * COVERAGE (also unsettled): the only route wired to this module is
+ * /v1/chat/completions (gate at chat-routes.ts, debit via `trackChatUsage`).
+ * /v1/responses, /v1/chat/completions/extended-thinking and /ultra-thinking route the
+ * same composite strategies but are neither gated nor debited — their `trackChatUsage`
+ * call sites pass a synthetic `{ model, messages: [] }` with no per-model token
+ * breakdown, so `debitChatRequest` always sees 0/0 tokens and charges nothing. That is
+ * true before and after this module's rewrite; closing it is a separate change.
+ *
+ * OPERATORS: `PREPAID_WALLET_GATE_ENABLED` and `PRICING_TIERS_BILLING_ENABLED`
+ * (pricing-tier-billing.ts) are two independent gate+debit implementations over the
+ * SAME wallet firing on the same request set — enabling both double-charges every
+ * tiered request. This is not left to a comment: `validateConfig()` (config/index.ts)
+ * REFUSES TO BOOT when both are 'true'.
  *
  * Pre-execution: estimate the worst-case charge (prompt + declared max output at
  * the tier rate) and reject with 402 if the balance can't cover it. Post-execution:
@@ -27,11 +66,7 @@
 import { nanoid } from 'nanoid';
 import { PrepaidWallet, estimateMaxChargeUsd } from '@/services/prepaid-wallet';
 import { PrismaBalanceStore } from '@/services/prepaid-wallet-prisma-store';
-import {
-  resolveStrategyTier,
-  tierBilledCostUsd,
-  type ResolvedStrategyTier,
-} from '@/services/pricing-tiers';
+import type { TierId } from '@/services/pricing-tiers';
 import { logger } from '@/utils/logger';
 import type { ChatRequest } from '@/types';
 
@@ -58,20 +93,67 @@ export function walletInstance(): PrepaidWallet {
   return getWallet();
 }
 
-/**
- * Resolve a request to a tiered pricing cell, trying `model` then `ailin_alias`.
- * Returns null for raw/legacy models (which are never gated/debited).
- */
-function resolveTier(req: ChatRequest): ResolvedStrategyTier | null {
-  const fromModel = resolveStrategyTier(req.model);
-  if (fromModel) return fromModel;
-  const alias = (req as { ailin_alias?: string }).ailin_alias;
-  return alias ? resolveStrategyTier(alias) : null;
+/** The billable pricing cell for a request: which tier, at which quoted rate. */
+interface BillableCell {
+  tier: TierId;
+  inputPer1MUsd: number;
+  outputPer1MUsd: number;
 }
 
-/** Rough char/4 prompt-token estimate for the worst-case gate HOLD (debit uses real tokens). */
+/**
+ * The billable cell for a request, or null when the request is not a tiered product.
+ *
+ * The ONLY billable shape is a `<strategy>:<tier>` composite. `normalizeChatRequest`
+ * sets `ailin_tier` + `ailin_tier_rate` server-side for exactly those cells and
+ * DELETES them on every other path (chat-routes.ts:522-528), so this carrier is both
+ * precise and impossible for a client to inject. It is the same discriminator
+ * `extractTierContext` (pricing-tier-billing.ts) already uses.
+ *
+ * We deliberately do NOT look at `model` or `ailin_alias`:
+ *  - post-normalization `model` is the literal sentinel 'auto' for EVERY resolved
+ *    alias (chat-routes.ts:492), and 'auto' is itself a key in STRATEGY_POLICY, so
+ *    probing `model` bills all default platform traffic at the 'auto' cell — and
+ *    bills shadow-wired cells (`war-room:large`) the platform refuses to sell,
+ *    since `resolveStrategyTier` does not filter on `executionReady`;
+ *  - `ailin_alias` survives untouched from the client body when no alias resolved
+ *    (it is set at chat-routes.ts:547 but never deleted), so probing it would hand
+ *    the client control of its own billing key.
+ *
+ * Configured virtual-model profiles (`ailin-auto`, `ailin-best`, …), raw provider ids,
+ * a literal user `model: 'auto'` and shadow-wired cells therefore all return null here
+ * — never gated, never debited, and (see the module header) not charged anywhere else
+ * either. `ailin-<strategy>` names that are NOT profiles DO carry a tier and ARE billed.
+ */
+function resolveTier(req: ChatRequest): BillableCell | null {
+  const tier = req.ailin_tier;
+  const rate = req.ailin_tier_rate;
+  if (!tier || !rate) return null;
+  // Defence in depth for any future non-chat caller that hand-builds a request:
+  // a NaN/negative rate must never produce a bogus (or negative) charge.
+  if (!Number.isFinite(rate.inputPer1MUsd) || rate.inputPer1MUsd < 0) return null;
+  if (!Number.isFinite(rate.outputPer1MUsd) || rate.outputPer1MUsd < 0) return null;
+  return { tier, inputPer1MUsd: rate.inputPer1MUsd, outputPer1MUsd: rate.outputPer1MUsd };
+}
+
+/**
+ * Worst-case token allowance for a NON-TEXT content part (image / audio / file).
+ *
+ * Only `part.text` used to be summed, so an image-heavy prompt estimated ~0 prompt
+ * tokens and held little more than `max_tokens`. The debit then meters the provider's
+ * REAL prompt tokens, and `PrepaidWallet.debit` does not floor at zero — so a wallet
+ * near $0 could pass the 402 check and land an arbitrarily negative balance.
+ *
+ * These are deliberate over-estimates (~an OpenAI high-detail tile budget). The hold
+ * is a reservation and `settle` releases the unused remainder, so over-holding costs
+ * an honest caller nothing, while under-holding is an uncollectable debt.
+ */
+const NON_TEXT_PART_TOKENS = 1_200;
+const LOW_DETAIL_IMAGE_TOKENS = 100;
+
+/** Rough prompt-token estimate for the worst-case gate HOLD (debit uses real tokens). */
 function estimatePromptTokens(req: ChatRequest): number {
   let chars = 0;
+  let nonTextTokens = 0;
   const messages = (req as { messages?: Array<{ content?: unknown }> }).messages;
   if (Array.isArray(messages)) {
     for (const m of messages) {
@@ -80,13 +162,21 @@ function estimatePromptTokens(req: ChatRequest): number {
         chars += content.length;
       } else if (Array.isArray(content)) {
         for (const part of content) {
-          const text = (part as { text?: unknown })?.text;
-          if (typeof text === 'string') chars += text.length;
+          const text = (part as { text?: unknown } | null)?.text;
+          if (typeof text === 'string') {
+            chars += text.length;
+            continue;
+          }
+          if (!part || typeof part !== 'object') continue;
+          // Any part that is not text (image_url, input_audio, file, …) bills real
+          // prompt tokens at the provider but contributes 0 characters here.
+          const detail = (part as { image_url?: { detail?: unknown } }).image_url?.detail;
+          nonTextTokens += detail === 'low' ? LOW_DETAIL_IMAGE_TOKENS : NON_TEXT_PART_TOKENS;
         }
       }
     }
   }
-  return Math.ceil(chars / 4);
+  return Math.ceil(chars / 4) + nonTextTokens;
 }
 
 export interface WalletGateResult {
@@ -103,7 +193,7 @@ export interface WalletGateResult {
 
 /**
  * Pre-execution balance gate. Returns { allowed: true } (no-op) when the gate is
- * off or the model is not a tiered cell. Otherwise atomically RESERVES the worst-case
+ * off or the request carries no tier cell. Otherwise atomically RESERVES the worst-case
  * hold (DI-02) so concurrent requests can't oversell, and returns a 402 payload if the
  * balance can't cover it.
  */
@@ -135,7 +225,9 @@ export async function gateChatRequest(
         body: {
           error: {
             code: 'insufficient_funds',
-            message: `Insufficient prepaid balance for "${req.model}". Estimated hold $${hold.toFixed(4)}, available $${decision.balanceUsd.toFixed(4)}. Add credits to continue.`,
+            // Name the product the caller actually asked for. `req.model` is the
+            // post-normalization 'auto' sentinel and would read as `for "auto"`.
+            message: `Insufficient prepaid balance for "${req.ailin_alias ?? tier.tier}". Estimated hold $${hold.toFixed(4)}, available $${decision.balanceUsd.toFixed(4)}. Add credits to continue.`,
             balance_usd: decision.balanceUsd,
             required_usd: hold,
           },
@@ -145,7 +237,7 @@ export async function gateChatRequest(
     return { allowed: true, holdId };
   } catch (error) {
     log.error(
-      { error, organizationId, model: req.model },
+      { error, organizationId, model: req.model, alias: req.ailin_alias, tier: tier.tier },
       'wallet gate reserve failed — allowing (fail-open)'
     );
     return { allowed: true };
@@ -153,8 +245,8 @@ export async function gateChatRequest(
 }
 
 /**
- * Post-execution debit on the user's REAL tokens at the tier rate. No-op when the
- * gate is off or the model is not a tiered cell.
+ * Post-execution debit on the user's REAL tokens at the rate quoted on the request.
+ * No-op when the gate is off or the request carries no tier cell.
  *
  * Idempotent (DI-01): keyed by the hold id (when the gate's `holdId` is threaded in)
  * or the request id, so a retried debit charges exactly once. When a `holdId` is
@@ -178,7 +270,11 @@ export async function debitChatRequest(args: {
   const tier = resolveTier(args.request);
   if (!tier) return;
 
-  const charge = tierBilledCostUsd(tier.tier, args.promptTokens, args.completionTokens);
+  // Bill at the rate the resolver QUOTED on this request, not at whatever the static
+  // card says now — the two diverge the day a calibrated card is injected upstream.
+  const charge =
+    (Math.max(0, args.promptTokens) / 1_000_000) * tier.inputPer1MUsd +
+    (Math.max(0, args.completionTokens) / 1_000_000) * tier.outputPer1MUsd;
   if (!(charge > 0)) {
     // Nothing to charge, but a reservation may still be outstanding — release it.
     if (args.holdId) {
@@ -207,6 +303,8 @@ export async function debitChatRequest(args: {
       {
         organizationId: args.organizationId,
         model: args.request.model,
+        alias: args.request.ailin_alias,
+        tier: tier.tier,
         charge,
         newBalance,
         requestId: args.requestId,

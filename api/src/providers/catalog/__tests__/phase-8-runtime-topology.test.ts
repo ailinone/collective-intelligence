@@ -188,7 +188,8 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   ollama: 'self-hosted; ollama container exposed but not seeded with models',
   xinference: 'self-hosted; needs Xinference deployment',
   triton: 'self-hosted; needs NVIDIA Triton server',
-  'local-llama': 'self-hosted; ad-hoc local llama.cpp',
+  'local-llama':
+    'self-hosted; dedicated external Ollama host (<ollama-host-ip>), not reachable from this 2026-04-28 snapshot env — live-probed 2026-07-31 from the production API host, confirmed working (postdates this frozen snapshot)',
   'local-kobold': 'self-hosted; ad-hoc local KoboldCpp',
   'local-embeddings': 'self-hosted; ad-hoc local embedding server',
   // Catalog-only / pinnedFallback specialty (no list endpoint)
@@ -199,37 +200,43 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   inflection:
     'oai-compat-pure execution-only (api.inflection.ai/v1); creds-missing in local env; expected in prod via GCP',
   relace: 'catalog-only; specialty code-edit, pinnedFallback used',
-  recraft: 'image-only specialty, pinnedFallback',
-  runwayml: 'video-only specialty, pinnedFallback',
-  bfl: 'image-only specialty, pinnedFallback',
+  recraft:
+    'image-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, POST /images/generations 200 + fetched image confirmed genuine png); postdates this frozen snapshot',
+  runwayml:
+    'video-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, GET /v1/organization 200); blocked on billing (creditBalance 0), not credentials; postdates this frozen snapshot',
+  bfl: 'image-only specialty, pinnedFallback — live-probed 2026-08-01 (real key, auth accepted); blocked on billing (402 insufficient credits), not credentials; postdates this frozen snapshot',
   'azure-openai': 'per-deployment, no list endpoint, pinnedFallback',
   // Credentials missing in local .env — expected to materialise in prod with GCP
-  togetherai: 'creds-missing in local env; expected in prod via GCP',
-  nscale: 'creds-missing in local env; expected in prod via GCP',
+  nscale:
+    'creds-missing in local env; live-probed 2026-08-01 from GCP secret — GET /v1/models 200 (23 models) + POST /v1/chat/completions 200; postdates this frozen snapshot',
   anyscale: 'creds-missing in local env; expected in prod via GCP',
   'featherless-ai': 'creds-missing in local env; expected in prod via GCP',
   nebius: 'creds-missing in local env; expected in prod via GCP',
   'lambda-ai': 'creds-missing in local env; expected in prod via GCP',
   scaleway: 'creds-missing in local env; expected in prod via GCP',
-  synthetic: 'creds-missing in local env; expected in prod via GCP',
+  synthetic:
+    'creds-missing in local env; live-probed 2026-08-01 from GCP secret — auth accepted (GET /v1/models 200), but POST /v1/chat/completions 402 zero balance/no subscription; postdates this frozen snapshot',
   morph: 'creds-missing in local env; expected in prod via GCP',
-  zai: 'creds-missing in local env; expected in prod via GCP',
-  'xiaomi-mimo': 'creds-missing in local env; expected in prod via GCP',
-  v0: 'creds-missing in local env; expected in prod via GCP',
-  'vercel-ai-gateway': 'creds-missing in local env; expected in prod via GCP',
+  zai: 'creds-missing in local env; live-probed 2026-08-01 from GCP secret — POST /chat/completions 200 real completions (glm-4.5/glm-4.5-flash/glm-4-plus); postdates this frozen snapshot',
+  'xiaomi-mimo':
+    'creds-missing in local env; live-probed 2026-08-01 from GCP secret — baseUrl was wrong (platform.xiaomimimo.com is the marketing SPA); corrected to api.xiaomimimo.com, GET /v1/models 200 (6 models); POST /v1/chat/completions 402 zero balance; postdates this frozen snapshot',
+  v0: 'execution-only, pinnedFallback (no /v1/models surface) — dedicated V0Adapter (2026-08-02) live-probed end-to-end (healthCheck + getModels + real POST /v1/chats generation) through the new adapter code; still execution-only so no runtime `models` table rows expected; postdates this frozen snapshot',
+  'vercel-ai-gateway':
+    'creds-missing in local env; live-probed 2026-08-01 from GCP secret — GET /v1/models 200 (312 models), but POST /v1/chat/completions 402 insufficient_funds (account-wide billing gate); postdates this frozen snapshot',
   volcano: 'creds-missing in local env; expected in prod via GCP',
-  watsonx: 'creds-missing in local env; expected in prod via GCP',
+  byteplus:
+    'creds-missing in local env; live-probed 2026-08-02 from GCP secret ailin--byteplus-key THROUGH the new BytePlusModelArkAdapter — GET /api/v3/models 200 (52 records, 40 non-Shutdown), /ping 200, /tokenization 200 with real token ids; every inference route 404s ModelNotOpen because account 3003814011 has zero models activated in the Ark Console (auth itself is proven: 401 without a key). Operator entitlement action, not an integration defect; postdates this frozen snapshot',
+  watsonx:
+    'creds-missing in local env; 2026-08-01 auth-completeness review (no live call attempted) — WATSONX_APIKEY is real/provisioned, but WATSONX_PROJECT_ID (hard blocker) and WATSONX_URL are not; postdates this frozen snapshot',
   ai302: 'creds-missing in local env; expected in prod via GCP',
   'cloudflare-workers-ai': 'creds-missing in local env; expected in prod via GCP',
   'gemini-openai': 'creds-missing in local env; expected in prod via GCP',
   'github-models': 'creds-missing in local env; expected in prod via GCP',
   imagerouter: 'creds-missing in local env; expected in prod via GCP',
-  stepfun: 'creds-missing in local env; expected in prod via GCP',
   // Single-cycle regressions (operator follow-up)
   bytez: 'BytezNativeModelFetcher regression; Phase 4d promotion did not survive rebuild',
   voyage: 'creds-revoked; needs operator rotation',
   replicate: 'API not enabled in current GCP project',
-  siliconflow: 'API endpoint 404 in latest probe',
   qianfan: 'creds-format mismatch; needs operator',
   // LOTE O (2026-07-10/11) — catalog row + full secret wiring landed
   // 2026-07-10; live-probed successfully 2026-07-11 (real /v1/models 200 +
@@ -280,6 +287,39 @@ const DOCUMENTED_MISSING_2026_04_28: Record<string, string> = {
   // gap.
   'sakana-ai':
     'live-probed 2026-07-29 (200 on /v1/models + /v1/chat/completions, including streaming/tools/jsonMode/vision, after same-day billing activation); postdates the 2026-04-28 DB snapshot',
+  // LOTE W (2026-07-30) — togetherai, siliconflow, stepfun. All three were
+  // credentials-missing at the 2026-04-28 snapshot; the operator gathered
+  // fresh live evidence today directly against the real APIs with
+  // regenerated/corrected keys, confirming real chat completions on all
+  // three (see consolidation-matrix.ts `live-validation` bucket [LOTE W]
+  // and the catalog entry notes for the full per-provider writeup,
+  // including the siliconflow/.cn→.com and stepfun/.com→.ai baseUrl
+  // corrections). Absent from RUNTIME_MATERIALIZED_2026_04_28 simply
+  // because that capture predates this fix — not a gap.
+  togetherai:
+    'live-probed 2026-07-30 (200 on /v1/models + /v1/chat/completions with the corrected tgp_v1_* key); postdates the 2026-04-28 DB snapshot',
+  siliconflow:
+    'live-probed 2026-07-30 (200 on /v1/models + /v1/chat/completions against api.siliconflow.com after correcting the wrong-regional .cn baseUrl); postdates the 2026-04-28 DB snapshot',
+  stepfun:
+    'live-probed 2026-07-30 (200 on /v1/models + /v1/chat/completions against api.stepfun.ai after correcting the wrong-regional .com baseUrl); postdates the 2026-04-28 DB snapshot',
+  // LOTE V (2026-08-01) — maritaca-ai. Discovery live-probed successfully
+  // (200 on /v1/models, real 6-model list) same day as catalog onboarding.
+  // chat/completions execution could NOT be live-confirmed: every model
+  // returns 403 insufficient_funds (zero credits on this GCP-sourced key)
+  // — see consolidation-matrix.ts `upstream-suspended` bucket for the full
+  // writeup. Absent from RUNTIME_MATERIALIZED_2026_04_28 simply because
+  // that capture predates this onboarding, same as sakana-ai above.
+  'maritaca-ai':
+    'live-probed 2026-08-01 (200 on /v1/models; chat/completions blocked by 403 insufficient_funds — zero credits on this key, not an integration defect); postdates the 2026-04-28 DB snapshot',
+  // LOTE AB (2026-08-10) — digitalocean. Full end-to-end live verification
+  // the same day as catalog onboarding: /v1/models (74 models), chat,
+  // streaming, tools, jsonMode, and /v1/embeddings all real HTTP 200s with
+  // correct content (see consolidation-matrix.ts `live-validation` bucket
+  // for the full writeup). Absent from RUNTIME_MATERIALIZED_2026_04_28
+  // simply because that capture predates this onboarding, same as
+  // sakana-ai/maritaca-ai above — not a gap.
+  digitalocean:
+    'live-probed 2026-08-10 (200 on /v1/models + /v1/chat/completions, including streaming/tools/jsonMode/embeddings); postdates the 2026-04-28 DB snapshot',
 };
 
 // ──────────────────────────────────────────────────────────────────────────

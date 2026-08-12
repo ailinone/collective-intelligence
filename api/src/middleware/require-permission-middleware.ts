@@ -65,8 +65,16 @@ export function isRbacEnforced(): boolean {
 }
 
 /**
- * Extract roles from the attached principal, mirroring `requireRole`'s logic
- * (supports both the `roles: string[]` claim and a legacy `role: string`).
+ * Extract roles from the attached principal, mirroring `requireRole`'s logic.
+ *
+ * SECURITY (rbac-silent-role-downgrade): ONLY the `roles: string[]` array is
+ * read. There used to be a fallback to a scalar `role: string`, which is the
+ * shape of the denormalized `users.role` hint column — and `hasSuperRole` below
+ * short-circuits every permission check for `owner`/`admin`, so honouring that
+ * scalar would let a single stray `{ role: 'admin' }` principal bypass RBAC
+ * entirely. Every producer (`apiKeyAuthMiddleware`, `authenticate`, the realtime
+ * session path) attaches a real array, so the fallback bought nothing and only
+ * kept a laundering shape alive. Absent/!array now means no roles: fail closed.
  */
 function extractRoles(user: unknown): string[] {
   if (user && typeof user === 'object') {
@@ -74,9 +82,6 @@ function extractRoles(user: unknown): string[] {
       return (user as { roles: unknown[] }).roles.filter(
         (role): role is string => typeof role === 'string'
       );
-    }
-    if ('role' in user && typeof (user as { role?: unknown }).role === 'string') {
-      return [(user as { role: string }).role];
     }
   }
   return [];

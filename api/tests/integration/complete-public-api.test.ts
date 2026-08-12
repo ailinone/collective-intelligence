@@ -475,14 +475,13 @@ describe('Complete Public API Test Suite', () => {
       120_000
     );
 
-    it('POST /v1/analyze-requirements should analyze request', async () => {
+    it('POST /v1/analyze-requirements should be gone (removed 2026-08-03)', async () => {
       const result = await testEndpoint('POST', '/v1/analyze-requirements', 'Chat', {
         auth: 'jwt',
         payload: { messages: [{ role: 'user', content: 'Analyze this' }] },
-        expectedStatus: 200,
-        validateResponse: (body) => body.requirements !== undefined,
+        expectedStatus: 404,
       });
-      expect(result.status).toBe('PASS');
+      expect(result.statusCode).toBe(404);
     });
 
     it('GET /v1/provider-capabilities should list capabilities', async () => {
@@ -494,7 +493,9 @@ describe('Complete Public API Test Suite', () => {
       expect(result.status).toBe('PASS');
     });
 
-    it('POST /v1/chat/completions/intelligent should use intelligent selection', async () => {
+    it('POST /v1/chat/completions/intelligent should be gone (removed 2026-08-03)', async () => {
+      // Superseded by POST /v1/chat/completions with model: "auto", which runs
+      // selection through the canonical engine with cost accounting/billing.
       const result = await testEndpoint('POST', '/v1/chat/completions/intelligent', 'Chat', {
         auth: 'jwt',
         payload: {
@@ -502,10 +503,9 @@ describe('Complete Public API Test Suite', () => {
           strategy: 'single',
           messages: [{ role: 'user', content: 'Test intelligent mode' }],
         },
-        expectedStatus: [200, 400, 503, 500],
-        validateResponse: (body) => body.choices !== undefined || body.error !== undefined,
+        expectedStatus: 404,
       });
-      expect(result.status).toBe('PASS');
+      expect(result.statusCode).toBe(404);
     });
   });
 

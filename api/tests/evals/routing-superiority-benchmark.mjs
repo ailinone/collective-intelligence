@@ -100,8 +100,19 @@ function extractMeta(json) {
 }
 
 // ─── LLM-as-Judge ────────────────────────────────────────────────────────────
+// `errorType` distinguishes an INFRASTRUCTURE failure (the judge call itself
+// timed out / errored / returned unparseable output) from a genuine low
+// quality score. Both used to collapse into `score: 0` with no way to tell
+// them apart from the console output or the saved JSON — a real production
+// slowdown or judge-call timeout looked identical to "the model answered
+// every question wrong" (found 2026-08-01 auditing why a post-deploy gate
+// scored q=0.00 on nearly every case: it was judge-call timeouts, not
+// routing quality). `score`/`pass` still default to 0/false on error so the
+// existing numeric aggregation is unchanged — errorType is purely additive.
 async function gradeWithLLMJudge(content, rubric, threshold = 0.70) {
-  if (!content) return { pass: false, score: 0, reasoning: 'No content to grade' };
+  if (!content) {
+    return { pass: false, score: 0, reasoning: 'No content to grade', errorType: 'no-content' };
+  }
   try {
     const { json } = await callAPI('single', [
       {
@@ -116,12 +127,14 @@ async function gradeWithLLMJudge(content, rubric, threshold = 0.70) {
     ]);
     const raw = extractContent(json);
     const match = raw?.match(/\{[\s\S]*\}/);
-    if (!match) return { pass: false, score: 0, reasoning: 'Judge response unparseable' };
+    if (!match) {
+      return { pass: false, score: 0, reasoning: 'Judge response unparseable', errorType: 'unparseable' };
+    }
     const parsed = JSON.parse(match[0]);
     const score = Number(parsed.score ?? 0);
-    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '' };
+    return { pass: score >= threshold, score, reasoning: parsed.reasoning ?? '', errorType: null };
   } catch (err) {
-    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}` };
+    return { pass: false, score: 0, reasoning: `Judge error: ${err.message}`, errorType: 'exception' };
   }
 }
 
@@ -406,11 +419,13 @@ async function runBenchmark() {
           modelsUsed: meta.models_used,
           resolvedStrategy: meta.resolved_strategy,
           reasoning: grade.reasoning,
+          judgeErrorType: grade.errorType,
         };
         results.push(result);
 
-        const icon = json.error ? '✗ ERR' : grade.score >= 0.60 ? '✓' : '✗';
-        console.log(`${icon} q=${grade.score.toFixed(2)} | ${latencyMs}ms | $${(meta.cost_usd ?? 0).toFixed(6)} | models=${meta.models_used?.length ?? '?'}`);
+        const icon = json.error ? '✗ ERR' : grade.errorType ? '⚠ JUDGE-ERR' : grade.score >= 0.60 ? '✓' : '✗';
+        const qLabel = grade.errorType ? `q=N/A(${grade.errorType})` : `q=${grade.score.toFixed(2)}`;
+        console.log(`${icon} ${qLabel} | ${latencyMs}ms | $${(meta.cost_usd ?? 0).toFixed(6)} | models=${meta.models_used?.length ?? '?'}`);
       } catch (e) {
         console.log(`EXCEPTION: ${e.message}`);
         results.push({
@@ -425,6 +440,7 @@ async function runBenchmark() {
           modelsUsed: [],
           resolvedStrategy: null,
           reasoning: `Exception: ${e.message}`,
+          judgeErrorType: 'test-call-exception',
         });
       }
       await sleep(DELAY_MS);
@@ -532,6 +548,22 @@ for (const [family, strategies] of Object.entries(summary.byTaskFamily)) {
   console.log(`  ${family.padEnd(20)} auto=${(autoQAS * 100).toFixed(1)}% single=${(singleQAS * 100).toFixed(1)}% delta=${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}pp`);
 }
 
+// Judge-infra failures (timeouts, unparseable judge output, no content to
+// grade) are counted separately from genuine low scores — a high rate here
+// means the quality comparison above is not trustworthy, independent of
+// whatever the delta numbers say.
+const judgeErrors = results.filter(r => r.judgeErrorType);
+const judgeErrorRate = results.length ? judgeErrors.length / results.length : 0;
+if (judgeErrors.length > 0) {
+  const byType = {};
+  for (const r of judgeErrors) byType[r.judgeErrorType] = (byType[r.judgeErrorType] ?? 0) + 1;
+  console.log('\n⚠️  JUDGE/INFRA FAILURES (excluded from quality signal, NOT the same as a low score)');
+  console.log(`   ${judgeErrors.length}/${results.length} cases (${(judgeErrorRate * 100).toFixed(1)}%): ${Object.entries(byType).map(([t, n]) => `${t}=${n}`).join(', ')}`);
+  if (judgeErrorRate >= 0.20) {
+    console.log(`   ⚠️  Judge-error rate ≥20% — treat the AUTO vs SINGLE delta above as INCONCLUSIVE, not a real regression signal.`);
+  }
+}
+
 // ─── Save results ────────────────────────────────────────────────────────────
 const outDir = join(ROOT, 'eval-results');
 mkdirSync(outDir, { recursive: true });
@@ -542,6 +574,8 @@ const output = {
   strategyCount: STRATEGIES.length,
   totalRuns: results.length,
   failThreshold,
+  judgeErrorCount: judgeErrors.length,
+  judgeErrorRate,
   ...summary,
   cases: results,
 };
@@ -557,6 +591,9 @@ if (isCiMode) {
   } else {
     console.error(`\n❌ ROUTING REGRESSION: AUTO does NOT beat SINGLE by required ${(failThreshold * 100).toFixed(1)} pp`);
     console.error(`   Actual delta: ${(d.qualityAdjustedSuccess * 100).toFixed(2)} pp`);
+    if (judgeErrorRate >= 0.20) {
+      console.error(`   ⚠️  ${(judgeErrorRate * 100).toFixed(1)}% of cases hit judge/infra errors (not real quality failures) — this failure may be infrastructure noise, not a genuine routing regression. Check the JUDGE/INFRA FAILURES section above before treating this as a real regression.`);
+    }
     process.exit(1);
   }
 }

@@ -11,7 +11,7 @@ Source: https://github.com/ailinone/collective-intelligence
 
 # Vector Stores Endpoints
 
-Total operations: 8
+Total operations: 9
 
 ## GET `/v1/vector_stores`
 
@@ -751,6 +751,115 @@ response = requests.request(
         "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
         "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
     },
+)
+print(response.status_code)
+print(response.text)
+```
+
+## POST `/v1/vector_stores/{vector_store_id}/search`
+
+### Purpose
+
+Search vector store.
+
+Run a semantic similarity search over a vector store. The query is embedded and ranked against the store's chunk embeddings using cosine similarity (pgvector HNSW). Returns the most relevant chunks with their similarity scores. Scoped to the calling organization.
+
+### Authentication
+
+Requires: Bearer token or API key.
+
+### Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `vector_store_id` | path | yes | string | Unique identifier of the vector store to search |
+
+### Request Body
+
+```json
+{
+  "query": "string",
+  "top_k": 10,
+  "file_ids": [
+    "string"
+  ]
+}
+```
+
+### Responses
+
+| Status | Description |
+|---|---|
+| `200` | Search results ordered by descending similarity score |
+| `400` | #/components/responses/BadRequest |
+| `401` | #/components/responses/Unauthorized |
+| `403` | #/components/responses/Forbidden |
+| `404` | #/components/responses/NotFound |
+| `409` | #/components/responses/Conflict |
+| `422` | #/components/responses/UnprocessableEntity |
+| `429` | #/components/responses/TooManyRequests |
+| `500` | #/components/responses/InternalServerError |
+
+### Error Handling
+
+Client errors generally follow 4xx contracts (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`). Server failures return `500`.
+
+### Rate Limits
+
+Subject to tenant-level quota and platform-level rate-limit policies.
+
+### Observability
+
+Propagate and log `X-Request-Id` and `X-Correlation-Id` for traceability, debugging, and audit workflows.
+
+### Examples
+
+```bash
+curl -X POST "https://api.ailin.one/v1/vector_stores/sample/search" \
+  -H "Authorization: Bearer $AILIN_TOKEN" \
+  -H "X-API-Key: $AILIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"string","top_k":10,"file_ids":["string"]}'
+```
+
+```ts
+const response = await fetch("https://api.ailin.one/v1/vector_stores/sample/search", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.AILIN_TOKEN}`,
+    "X-API-Key": process.env.AILIN_API_KEY || "",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+  "query": "string",
+  "top_k": 10,
+  "file_ids": [
+    "string"
+  ]
+}),
+});
+const data = await response.json();
+```
+
+```python
+import os
+import requests
+
+response = requests.request(
+    "POST",
+    "https://api.ailin.one/v1/vector_stores/sample/search",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('AILIN_TOKEN', '')}",
+        "X-API-Key": os.environ.get("AILIN_API_KEY", ""),
+        "Content-Type": "application/json",
+    },
+    json={
+    "query": "string",
+    "top_k": 10,
+    "file_ids": [
+        "string"
+    ]
+},
 )
 print(response.status_code)
 print(response.text)

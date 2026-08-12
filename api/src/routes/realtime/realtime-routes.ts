@@ -25,6 +25,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import type { RequestUserContext } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { OpenAIRealtimeClient } from '@/providers/openai/realtime-client';
@@ -220,7 +221,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
   server.post(
     '/v1/realtime/session',
     {
-      preHandler: authenticateRequest,
+      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
       schema: {
         tags: ['Realtime'],
         summary: 'Create realtime session',
@@ -308,7 +309,7 @@ export async function registerRealtimeRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: authenticateRequest,
+      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
     },
     async (connection, request) => {
       const userContext = getUserContext(request);

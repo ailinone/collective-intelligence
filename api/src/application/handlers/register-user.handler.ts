@@ -28,8 +28,20 @@ export interface RegisterUserResult {
   success: boolean;
   userId?: string;
   organizationId?: string;
+  /**
+   * The authoritative roles actually granted in `user_roles` by this
+   * registration. Callers MUST mint tokens from this, never from a hardcoded
+   * assumption about what the first user of an org is.
+   */
+  roles?: string[];
   error?: string;
 }
+
+/**
+ * Returned when an anonymous registration targets an organization that already
+ * exists. Joining an existing tenant must go through an invitation flow.
+ */
+export const ORGANIZATION_JOIN_REQUIRES_INVITATION = 'organization_join_requires_invitation';
 
 @injectable()
 export class RegisterUserHandler {
@@ -53,33 +65,42 @@ export class RegisterUserHandler {
         };
       }
 
-      // 3. Create or find organization
+      // 3. Create the organization.
+      //
+      // SECURITY (rbac-silent-role-downgrade): this route is UNAUTHENTICATED
+      // (POST /v1/auth/register has no preHandler) and the caller supplies
+      // `organizationId` / `organizationName`. Anonymous registration therefore
+      // NEVER attaches to a pre-existing tenant — not even an empty one.
+      //
+      // "Empty" is not a safe proxy for "unowned": a freshly provisioned tenant
+      // whose first user has not been materialized yet is exactly that shape
+      // (see internal-acting-user.ts — a console/BFF-only principal is never
+      // materialized), so an anonymous caller who knows or guesses the id or
+      // name would land inside a real customer's organization. Joining an
+      // existing organization is an invitation flow, full stop.
       let organization: OrganizationEntity;
 
       if (command.organizationId) {
         const existingOrg = await this.organizationRepository.findById(command.organizationId);
-        if (!existingOrg) {
+        return {
+          success: false,
+          error: existingOrg ? ORGANIZATION_JOIN_REQUIRES_INVITATION : 'Organization not found',
+        };
+      }
+
+      if (command.organizationName) {
+        const existingOrg = await this.organizationRepository.findByName(command.organizationName);
+        if (existingOrg) {
           return {
             success: false,
-            error: 'Organization not found',
+            error: ORGANIZATION_JOIN_REQUIRES_INVITATION,
           };
         }
-        organization = existingOrg;
-      } else if (command.organizationName) {
-        // Check if organization exists
-        const existingOrg = await this.organizationRepository.findByName(command.organizationName);
-
-        if (existingOrg) {
-          organization = existingOrg;
-        } else {
-          // Create new organization
-          organization = OrganizationEntity.create({
-            name: command.organizationName,
-            tier: TierLevel.FREE, // Default tier
-          });
-
-          await this.organizationRepository.save(organization);
-        }
+        organization = OrganizationEntity.create({
+          name: command.organizationName,
+          tier: TierLevel.FREE, // Default tier
+        });
+        await this.organizationRepository.save(organization);
       } else {
         // Create default organization
         const orgName = `${email.getValue().split('@')[0]}'s Organization`;
@@ -101,21 +122,49 @@ export class RegisterUserHandler {
       // 6. Create user
       const passwordHash = await PasswordHash.fromPlainText(command.password);
 
+      // SECURITY: never stamp an elevated role on the denormalized column. The
+      // declared role is the baseline; real authority is granted below through
+      // the authoritative `user_roles` table.
       const user = UserEntity.create({
         email: email.getValue(), // Convert Email VO to string
         name: sanitizedName,
         organizationId: organization.id,
-        role: UserRole.ADMIN, // First user in org is admin
+        role: UserRole.VIEWER,
         passwordHash,
       });
 
       // 6. Save user
       await this.userRepository.save(user);
 
+      // 7. Create the AUTHORITATIVE grant — the configured BASELINE role, always.
+      //
+      // Deliberately NOT `owner`. This endpoint is anonymous and unverified: no
+      // email confirmation, no invitation, no operator in the loop. Minting an
+      // `owner` grant here would hand any internet caller `secrets:manage` and
+      // `quotas:override`, make them a `superRole` that short-circuits
+      // `requirePermission`, and let them through the
+      // `requireRole('admin','owner')` gate on the `/v1/tools/*`
+      // shell/git/filesystem surface — permanently, and for every API key they
+      // ever create. "The organization is empty so there is nobody to escalate
+      // over" is true and beside the point; the escalation is over the platform,
+      // not over a co-tenant.
+      //
+      // Owner is bootstrapped by a human: `pnpm run rbac:grant-owner`.
+      //
+      // The grant itself is required, not cosmetic: `getUserRoles()` no longer
+      // self-heals, so without it a freshly registered user would resolve to [].
+      const { ensureBaselineRole } = await import('@/services/rbac-service');
+      const roles = await ensureBaselineRole(
+        user.id,
+        organization.id,
+        'self-registration:new-org'
+      );
+
       return {
         success: true,
         userId: user.id, // Already string from getter
         organizationId: organization.id,
+        roles,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

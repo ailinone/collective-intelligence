@@ -97,6 +97,17 @@ import { InceptionAdapter } from '../inception/inception-adapter';
 // (Responses-style input/output) requires overriding chatCompletion/
 // chatCompletionStream — see the adapter file for the full rationale.
 import { PerplexityAgentAdapter } from '../perplexity-agent/perplexity-agent-adapter';
+// LOTE Z (2026-08-02) — v0 (Vercel). Direct extension (stateful chat
+// resource, not OAI shape) replacing the wrong oai-compat-pure assumption
+// the catalog row previously carried — see v0-adapter.ts for the full
+// wire-contract rationale.
+import { V0Adapter } from '../v0/v0-adapter';
+// LOTE AA (2026-08-02) — BytePlus ModelArk. Direct ProviderAdapter
+// extension: ModelArk's media surfaces (JSON image-edit on the generate
+// route, submit→poll video with the result at `content.video_url`,
+// one-vector-per-request multimodal embeddings) diverge too far from the
+// OpenAI-compatible hub's defaults for hub inheritance to be a net win.
+import { BytePlusModelArkAdapter } from '../byteplus/byteplus-adapter';
 
 /**
  * Convert the factory context into the `OpenAICompatibleHubAdapterConfig`
@@ -393,6 +404,25 @@ const inceptionFactory: AdapterFactory = (ctx) => new InceptionAdapter(buildHubC
 const perplexityAgentFactory: AdapterFactory = (ctx) =>
   new PerplexityAgentAdapter(buildHubConfig(ctx));
 
+// LOTE Z (2026-08-02) — v0 direct extension. Narrow { apiKey, baseUrl }
+// shape, same as Recraft/BFL/Triton — no extra env-var-sourced config
+// needed (unlike Watsonx's projectId or SAP's OAuth2 client pair).
+const v0Factory: AdapterFactory = (ctx) =>
+  new V0Adapter({
+    apiKey: ctx.apiKey,
+    baseUrl: ctx.baseUrl,
+  });
+
+// LOTE AA (2026-08-02) — BytePlus ModelArk direct extension. Narrow
+// { apiKey, baseUrl } shape (same as V0/Recraft/BFL/Triton); every
+// ModelArk-specific path is a constant inside the adapter class rather
+// than hub metadata, so buildHubConfig would carry nothing it uses.
+const byteplusFactory: AdapterFactory = (ctx) =>
+  new BytePlusModelArkAdapter({
+    apiKey: ctx.apiKey,
+    baseUrl: ctx.baseUrl,
+  });
+
 /**
  * Register the project's first-party adapter factories. Called once from the
  * catalog loader. Additional provider batches register by adding entries here.
@@ -472,4 +502,15 @@ export function registerDefaultAdapterFactories(): void {
 
   // LOTE S (2026-07-13) — Perplexity Agent API.
   registerAdapterFactory('PerplexityAgentAdapter', perplexityAgentFactory);
+
+  // LOTE Z (2026-08-02) — v0 (Vercel). Catalog row's adapterClass was
+  // absent entirely and integrationClass wrongly assumed oai-compat-pure;
+  // this closes both gaps.
+  registerAdapterFactory('V0Adapter', v0Factory);
+
+  // LOTE AA (2026-08-02) — BytePlus ModelArk. New catalog row + dedicated
+  // multimodal adapter (chat/streaming/tools/vision, image gen+edit, async
+  // video, multimodal embeddings, chat-based STT). Distinct provider from
+  // `volcano`; that row and its adapter are untouched.
+  registerAdapterFactory('BytePlusModelArkAdapter', byteplusFactory);
 }

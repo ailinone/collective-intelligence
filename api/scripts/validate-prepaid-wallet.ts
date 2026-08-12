@@ -46,8 +46,50 @@ function check(label: string, ok: boolean, detail = ''): void {
   if (!ok) failures += 1;
 }
 
-function tieredReq(model: string) {
+/**
+ * A POST-NORMALIZATION request — the shape `gateChatRequest` actually receives at
+ * chat-routes.ts:807, NOT the raw client body. This distinction is the whole reason
+ * the alias/'auto' billing defect shipped: this script used to drive the gate with
+ * raw model strings (`consensus:large`), a shape the server never produces, so it
+ * validated behaviour that did not exist on the request path.
+ *
+ * normalizeChatRequest rewrites the model of every resolved alias to 'auto' and, for
+ * `<strategy>:<tier>` composites ONLY, attaches the server-set `ailin_tier` +
+ * `ailin_tier_rate` carrier. That carrier is what the gate bills off.
+ */
+function tieredReq(alias: string, tier: string, inputPer1MUsd: number, outputPer1MUsd: number) {
+  return {
+    model: 'auto',
+    ailin_alias: alias,
+    ailin_tier: tier,
+    ailin_tier_rate: { inputPer1MUsd, outputPer1MUsd },
+    messages: [{ role: 'user', content: 'hello world '.repeat(20) }],
+    max_tokens: 256,
+  } as never;
+}
+
+/** `consensus:large` as the server produces it: $4 in / $20 out per 1M user tokens. */
+function consensusLarge() {
+  return tieredReq('consensus:large', 'large', 4, 20);
+}
+
+/** A non-tiered request: a raw provider id carries no tier carrier, so it is never billed. */
+function rawModelReq(model: string) {
   return { model, messages: [{ role: 'user', content: 'hello world '.repeat(20) }], max_tokens: 256 } as never;
+}
+
+/**
+ * A legacy `ailin-*` preset AFTER normalization: model rewritten to 'auto', alias
+ * preserved, and NO tier carrier. Must never be gated or debited — this is the
+ * regression guard for the defect (it used to bill at the 'auto' cell).
+ */
+function legacyAliasReq(alias: string) {
+  return {
+    model: 'auto',
+    ailin_alias: alias,
+    messages: [{ role: 'user', content: 'hello world '.repeat(20) }],
+    max_tokens: 256,
+  } as never;
 }
 
 async function main(): Promise<void> {
@@ -61,24 +103,39 @@ async function main(): Promise<void> {
   check('gate flag enabled', gate.isWalletGateEnabled());
 
   // 1) gate DENIES a tiered request at $0 balance
-  const d0 = await gate.gateChatRequest(TEST_ORG, tieredReq('consensus:large'));
+  const d0 = await gate.gateChatRequest(TEST_ORG, consensusLarge());
   check('tiered + $0 balance → 402 denied', d0.allowed === false && d0.status === 402, `allowed=${d0.allowed} status=${d0.status}`);
 
   // 2) non-tiered model is a no-op (allowed) even at $0
-  const dRaw = await gate.gateChatRequest(TEST_ORG, tieredReq('gpt-4o-mini'));
-  check('non-tiered model → allowed (no-op)', dRaw.allowed === true);
+  const dRaw = await gate.gateChatRequest(TEST_ORG, rawModelReq('gpt-4o-mini'));
+  check('raw provider model → allowed (no-op)', dRaw.allowed === true);
+
+  // 2b) REGRESSION GUARD: a legacy `ailin-*` preset carries no tier, so it must be a
+  //     no-op even at $0. Before the alias fix this was billed at the 'auto' cell and
+  //     would have 402'd essentially all default platform traffic.
+  const dLegacy = await gate.gateChatRequest(TEST_ORG, legacyAliasReq('ailin-best'));
+  check('legacy ailin-* alias + $0 balance → allowed (never gated)', dLegacy.allowed === true && dLegacy.holdId === undefined, `allowed=${dLegacy.allowed} holdId=${dLegacy.holdId}`);
+
+  // 2c) …and a literal `model:'auto'` (no alias resolved) is likewise never gated.
+  const dAuto = await gate.gateChatRequest(TEST_ORG, rawModelReq('auto'));
+  check("literal model:'auto' + $0 balance → allowed (never gated)", dAuto.allowed === true && dAuto.holdId === undefined, `allowed=${dAuto.allowed} holdId=${dAuto.holdId}`);
 
   // 3) top-up → balance, then gate ALLOWS
   const bal1 = await gate.walletInstance().topUp(TEST_ORG, 10);
   check('topUp 10 → balance 10', Math.abs(bal1 - 10) < 1e-6, `balance=${bal1}`);
-  const dOk = await gate.gateChatRequest(TEST_ORG, tieredReq('consensus:large'));
-  check('tiered + funded → allowed', dOk.allowed === true);
+  const dOk = await gate.gateChatRequest(TEST_ORG, consensusLarge());
+  check('tiered + funded → allowed', dOk.allowed === true && typeof dOk.holdId === 'string');
 
   // 4) debit reduces balance
-  await gate.debitChatRequest({ organizationId: TEST_ORG, request: tieredReq('consensus:large'), promptTokens: 1_000_000, completionTokens: 1_000_000, requestId: 'val-1' });
+  await gate.debitChatRequest({ organizationId: TEST_ORG, request: consensusLarge(), promptTokens: 1_000_000, completionTokens: 1_000_000, requestId: 'val-1' });
   const bal2 = await gate.walletInstance().getBalanceUsd(TEST_ORG);
   // consensus:large = $4 in + $20 out per 1M → debit $24 → but balance was 10 → goes negative (debit doesn't floor).
   check('debit applied (balance decreased by ~$24)', Math.abs(bal2 - (10 - 24)) < 1e-3, `balance=${bal2}`);
+
+  // 4b) REGRESSION GUARD: the legacy alias debit must move no money at all.
+  await gate.debitChatRequest({ organizationId: TEST_ORG, request: legacyAliasReq('ailin-best'), promptTokens: 1_000_000, completionTokens: 1_000_000, requestId: 'val-legacy' });
+  const bal3 = await gate.walletInstance().getBalanceUsd(TEST_ORG);
+  check('legacy ailin-* alias → never debited', Math.abs(bal3 - bal2) < 1e-9, `before=${bal2} after=${bal3}`);
 
   // ── endpoints ──
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

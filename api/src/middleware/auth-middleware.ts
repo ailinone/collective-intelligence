@@ -222,13 +222,18 @@ export function requireRole(...roles: string[]) {
       });
     }
 
-    // Type guard for user object
+    // Type guard for user object.
+    //
+    // SECURITY (rbac-silent-role-downgrade): ONLY the `roles: string[]` array
+    // counts. The former fallback to a scalar `role: string` accepted exactly
+    // the shape of the denormalized `users.role` hint column, which is not a
+    // grant — the same laundering that made `apiKeyAuthMiddleware` resolve a
+    // role-less principal to `admin`. Every producer attaches an array; absent
+    // or non-array now means no roles, and the check below denies.
     const userRoles: string[] =
       user && typeof user === 'object' && 'roles' in user && Array.isArray(user.roles)
         ? user.roles
-        : user && typeof user === 'object' && 'role' in user && typeof user.role === 'string'
-          ? [user.role]
-          : [];
+        : [];
 
     // Extract userId for logging (type-safe)
     const getUserId = (userObj: typeof user): string => {

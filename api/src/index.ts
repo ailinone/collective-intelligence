@@ -1042,7 +1042,7 @@ async function bootstrap(): Promise<void> {
     // Register legacy/orchestration routes
     await registerModelRoutes(server, providerRegistry);
     await registerChatRoutes(server, orchestrationEngine);
-    await registerCapabilityRoutes(server, orchestrationEngine); // Intelligent model selection
+    await registerCapabilityRoutes(server); // GET /v1/provider-capabilities (discovery only)
     await registerCapabilitiesRoutes(server); // Universal capability routes (execute/stream/health)
     await server.register(hcraSearchRoutes); // ADR-022: HCRA ontology search + operational /v1/hcra/health
     await registerCapabilitySearchRoutes(server); // Caminho-C Stage 4: /v1/capabilities/{ontology,models}/search via CapabilitySearchService singleton

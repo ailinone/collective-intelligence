@@ -403,6 +403,26 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
     envVar: 'VOLCANO_API_KEY',
     secretKeys: ['volcano-key', 'volcano-api-key', 'volcengine-key', 'doubao-key', 'ark-key'],
   },
+  // BytePlus ModelArk — ByteDance's INTERNATIONAL platform. A completely
+  // different credential from VOLCANO_API_KEY above: the two are registered
+  // in separate control planes (ap-southeast-1 vs cn-beijing) and neither
+  // key authenticates against the other's host. Do not merge these entries.
+  //
+  // ⚠ THE LEADING HYPHEN IN `-byteplus-key` IS NOT A TYPO — DO NOT "FIX" IT.
+  // GcpSecretsProvider.resolveSecretId concatenates the prefix naively as
+  // `${prefix}-${key}` with prefix='ailin' and no normalisation, so:
+  //     'ailin' + '-' + '-byteplus-key' === 'ailin--byteplus-key'
+  //     'ailin' + '-' + 'byteplus-key'  === 'ailin-byteplus-key'
+  // Re-verified 2026-08-02 against the GCP project: `gcloud secrets
+  // list --filter="name~byteplus"` returns BOTH names, and each has exactly
+  // one ENABLED version. So either candidate resolves today; the
+  // double-hyphen one is listed first because it is the original
+  // provisioned name. Ordering is honoured by getSecretCandidates (no
+  // reordering), so that is the one actually used.
+  {
+    envVar: 'BYTEPLUS_API_KEY',
+    secretKeys: ['-byteplus-key', 'byteplus-key', 'byteplus-api-key', 'byteplus-modelark-key'],
+  },
   // IBM watsonx — note the env var is `WATSONX_APIKEY` (no underscore
   // between API and KEY) to match IBM's canonical SDK convention.
   // Side-car env vars (WATSONX_PROJECT_ID, WATSONX_URL) are wired below
@@ -476,6 +496,16 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // 'sakana-ai-key' listed first: it's the actual GCP secret name
   // (`ailin-sakana-ai-key`, prefix auto-added) confirmed live this lot.
   { envVar: 'SAKANA_AI_API_KEY', secretKeys: ['sakana-ai-key', 'sakana-key'] },
+  // ── LOTE V (2026-08-01) — Maritaca AI (Sabiá), chat-capable ─────────────
+  // 'maritaca-key' listed first: it's the actual GCP secret name
+  // (`ailin-maritaca-key`, prefix auto-added) confirmed live this lot.
+  { envVar: 'MARITACA_AI_API_KEY', secretKeys: ['maritaca-key', 'maritaca-ai-key'] },
+  // ── LOTE AB (2026-08-10) — DigitalOcean Serverless Inference, chat-capable ──
+  // 'digitalocean-key' listed first: it's the actual GCP secret name
+  // (`ailin-digitalocean-key`, prefix auto-added) confirmed live this lot —
+  // GcpSecretsProvider.resolveSecretId concatenates 'ailin' + '-' +
+  // 'digitalocean-key', no double-hyphen gotcha (unlike byteplus above).
+  { envVar: 'DIGITALOCEAN_API_KEY', secretKeys: ['digitalocean-key', 'digitalocean-api-key'] },
 ] as const;
 
 // ─── Provider Key Status Tracking ──────────────────────────────────────────
@@ -639,6 +669,7 @@ const ENV_VAR_TO_PROVIDER: Record<string, string> = {
   V0_API_KEY: 'v0',
   VERCEL_AI_GATEWAY_API_KEY: 'vercel-ai-gateway',
   VOLCANO_API_KEY: 'volcano',
+  BYTEPLUS_API_KEY: 'byteplus',
   WATSONX_APIKEY: 'watsonx',
   SNOWFLAKE_PAT: 'snowflake',
   SAP_AI_CORE_CLIENT_ID: 'sap',
@@ -665,6 +696,10 @@ const ENV_VAR_TO_PROVIDER: Record<string, string> = {
   AILIN_API_KEY: 'ailin',
   // ── LOTE U (2026-07-29) ────────────────────────────────────────────────
   SAKANA_AI_API_KEY: 'sakana-ai',
+  // ── LOTE V (2026-08-01) ────────────────────────────────────────────────
+  MARITACA_AI_API_KEY: 'maritaca-ai',
+  // ── LOTE AB (2026-08-10) ───────────────────────────────────────────────
+  DIGITALOCEAN_API_KEY: 'digitalocean',
 };
 
 /**
@@ -813,6 +848,10 @@ const LLM_PROVIDER_ENV_VARS = [
   'V0_API_KEY',
   'VERCEL_AI_GATEWAY_API_KEY',
   'VOLCANO_API_KEY',
+  // BytePlus ModelArk is chat-capable (Seed / Dola Seed / DeepSeek / GLM
+  // families over an OpenAI-shaped /chat/completions), so its key counts
+  // toward the "at least one LLM key present" boot gate.
+  'BYTEPLUS_API_KEY',
   'WATSONX_APIKEY',
   'SNOWFLAKE_PAT',
   'SAP_AI_CORE_CLIENT_ID',
@@ -831,6 +870,10 @@ const LLM_PROVIDER_ENV_VARS = [
   'AILIN_API_KEY',
   // ── LOTE U (2026-07-29) — Sakana AI (Fugu), chat-capable ────────────────
   'SAKANA_AI_API_KEY',
+  // ── LOTE V (2026-08-01) — Maritaca AI (Sabiá), chat-capable ─────────────
+  'MARITACA_AI_API_KEY',
+  // ── LOTE AB (2026-08-10) — DigitalOcean Serverless Inference, chat-capable ──
+  'DIGITALOCEAN_API_KEY',
 ] as const;
 
 /**

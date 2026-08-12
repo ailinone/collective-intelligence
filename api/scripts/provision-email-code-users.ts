@@ -35,13 +35,10 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { container } from 'tsyringe';
 
 import { initializeDIContainer } from '@/di/container';
 import { config } from '@/config';
 import type { JWTPayload } from '@/services/auth-service';
-import { RegisterUserHandler } from '@/application/handlers/register-user.handler';
-import { RegisterUserCommand } from '@/application/commands/register-user.command';
 import { syncDefaultRoles } from '@/services/rbac-sync-service';
 import { assignRoleToUser, getUserRoles } from '@/services/rbac-service';
 import {
@@ -55,6 +52,10 @@ import {
   createApiKey,
   type ApiKeyGenerationOptions,
 } from '@/services/api-key-rotation';
+import {
+  ensureOrganizationByName,
+  ensureUserInOrganization,
+} from './lib/provision-principal';
 
 interface OrganizationConfig {
   name: string;
@@ -168,31 +169,8 @@ async function loadConfig(pathArg: string): Promise<SetupFile> {
 async function ensureOrganization(
   configEntry: OrganizationConfig
 ): Promise<{ id: string; name: string }> {
-  const existing = await prisma.organization.findFirst({
-    where: { name: configEntry.name },
-  });
-
-  if (existing) {
-    if (existing.tier !== configEntry.tier || existing.status !== 'active') {
-      await prisma.organization.update({
-        where: { id: existing.id },
-        data: {
-          tier: configEntry.tier,
-          status: 'active',
-        },
-      });
-    }
-    return { id: existing.id, name: existing.name };
-  }
-
-  const created = await prisma.organization.create({
-    data: {
-      name: configEntry.name,
-      tier: configEntry.tier,
-      status: 'active',
-    },
-  });
-  return { id: created.id, name: created.name };
+  const org = await ensureOrganizationByName(configEntry.name, configEntry.tier);
+  return { id: org.id, name: org.name };
 }
 
 async function ensureEmailCodeAuth(organizationId: string): Promise<void> {
@@ -232,41 +210,29 @@ async function ensureEnterpriseSubscription(
   });
 }
 
+/**
+ * Provision the organization's owner account DIRECTLY.
+ *
+ * This used to go through `RegisterUserHandler`, i.e. through the anonymous
+ * `POST /v1/auth/register` code path, naming an organization this very script
+ * had just created. That only worked while anonymous registration was allowed
+ * to join an existing tenant — which is precisely the hole that had to be
+ * closed. An operator script provisions directly and grants authority
+ * explicitly (step 4 below).
+ */
 async function ensureUser(
   org: { id: string; name: string },
-  configEntry: OrganizationConfig,
-  registerHandler: RegisterUserHandler
+  configEntry: OrganizationConfig
 ): Promise<{ userId: string; temporaryPassword?: string }> {
-  const normalizedEmail = configEntry.ownerEmail.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
+  const password = configEntry.ownerPassword ?? randomPassword();
+  const result = await ensureUserInOrganization({
+    email: configEntry.ownerEmail,
+    name: configEntry.ownerName,
+    password,
+    organizationId: org.id,
   });
 
-  if (existing) {
-    if (existing.name !== configEntry.ownerName) {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: { name: configEntry.ownerName },
-      });
-    }
-    return { userId: existing.id };
-  }
-
-  const password = configEntry.ownerPassword ?? randomPassword();
-  const command = new RegisterUserCommand(
-    normalizedEmail,
-    password,
-    configEntry.ownerName,
-    configEntry.name
-  );
-  const result = await registerHandler.execute(command);
-  if (!result.success || !result.userId) {
-    throw new Error(
-      `Failed to register user ${normalizedEmail}: ${result.error ?? 'unknown error'}`
-    );
-  }
-
-  return { userId: result.userId, temporaryPassword: password };
+  return { userId: result.userId, temporaryPassword: result.temporaryPassword };
 }
 
 async function createApiKeyForUser(
@@ -284,8 +250,7 @@ async function createApiKeyForUser(
 }
 
 async function provisionOrganization(
-  configEntry: OrganizationConfig,
-  registerHandler: RegisterUserHandler
+  configEntry: OrganizationConfig
 ): Promise<ProvisionResult> {
   // 1. Organization
   const organization = await ensureOrganization(configEntry);
@@ -294,18 +259,14 @@ async function provisionOrganization(
   await ensureEmailCodeAuth(organization.id);
 
   // 3. User
-  const { userId, temporaryPassword } = await ensureUser(
-    organization,
-    configEntry,
-    registerHandler
-  );
+  const { userId, temporaryPassword } = await ensureUser(organization, configEntry);
 
   // 4. Assign owner role
-  const roles = await assignRoleToUser(
-    userId,
-    organization.id,
-    'owner'
-  );
+  // Operator-run provisioning script: explicit, deliberate owner grant.
+  const roles = await assignRoleToUser(userId, organization.id, 'owner', {
+    allowOwner: true,
+    assignedBy: 'script:provision-email-code-users',
+  });
 
   // 5. Subscription
   await ensureEnterpriseSubscription(organization.id, configEntry.trialDays);
@@ -359,12 +320,10 @@ async function main(): Promise<void> {
     await prisma.$connect();
     await syncDefaultRoles();
 
-    const registerHandler = container.resolve(RegisterUserHandler);
-
     const results: Record<string, ProvisionResult> = {};
 
     for (const orgConfig of setup.organizations) {
-      const result = await provisionOrganization(orgConfig, registerHandler);
+      const result = await provisionOrganization(orgConfig);
 
       // Refresh cached roles to ensure future requests see fresh data
       await getUserRoles(result.userId, result.organizationId);

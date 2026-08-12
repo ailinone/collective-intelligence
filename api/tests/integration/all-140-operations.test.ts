@@ -285,9 +285,8 @@ describe(`All OpenAPI Operations (${OPERATIONS.length} from spec - strict)`, () 
       if (path === '/auth/api-keys') return { name: 'Test' };
       return {};
     }
-    if (path === '/chat/completions' || path === '/chat/completions/intelligent')
+    if (path === '/chat/completions')
       return { model: 'auto', messages: [{ role: 'user', content: 'Hi' }], stream: false };
-    if (path === '/analyze-requirements') return { messages: [{ role: 'user', content: 'Hi' }] };
     if (path === '/embeddings' || path === '/embeddings/create') return { input: 'test', model: 'auto' };
     if (path === '/audio/speech')
       return { input: 'Hi', model: 'auto', voice: 'alloy', response_format: 'mp3' };

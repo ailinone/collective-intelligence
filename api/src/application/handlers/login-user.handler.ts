@@ -25,8 +25,18 @@ export interface LoginUserResult {
   userId?: string;
   email?: string;
   organizationId?: string;
+  /**
+   * The DECLARED `users.role` column. Display/diagnostics only.
+   *
+   * SECURITY (rbac-silent-role-downgrade): this handler deliberately no longer
+   * returns a `roles` array. It used to return `[user.role]`, and the route fed
+   * that straight into the JWT `roles` claim — so the access token asserted
+   * whatever the denormalized hint column happened to say, with no `user_roles`
+   * row behind it. The route now mints the claim from `getUserRoles()`, the
+   * authoritative join. A claim must never assert a role the database does not
+   * back.
+   */
   role?: string;
-  roles?: string[];
   error?: string;
 }
 
@@ -69,14 +79,14 @@ export class LoginUserHandler {
         };
       }
 
-      // 5. Return user data for JWT generation
+      // 5. Return user data for JWT generation. NO `roles` — the caller resolves
+      //    effective roles from the RBAC join table (see LoginUserResult).
       return {
         success: true,
         userId: user.id, // Already string from getter
         email: user.email, // Already string from getter
         organizationId: user.organizationId,
         role: user.role as string,
-        roles: [user.role as string],
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

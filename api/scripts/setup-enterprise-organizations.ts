@@ -25,11 +25,11 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '@/utils/logger';
-import { RegisterUserHandler } from '@/application/handlers/register-user.handler';
-import { RegisterUserCommand } from '@/application/commands/register-user.command';
-import { container } from 'tsyringe';
-import { initializeDIContainer } from '@/di/container';
 import { assignRoleToUser } from '@/services/rbac-service';
+import {
+  ensureOrganizationByName,
+  ensureUserInOrganization,
+} from './lib/provision-principal';
 import { createSubscription } from '@/services/billing-service';
 import { prisma } from '@/database/client';
 import { syncDefaultRoles } from '@/services/rbac-sync-service';
@@ -100,71 +100,39 @@ while (process.env[`SETUP_ORG_${orgIndex}_NAME`]) {
 }
 
 /**
- * Verifica se um usuário existe
- */
-async function userExists(email: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
-  return user !== null;
-}
-
-/**
- * Verifica se uma organização existe pelo nome
- */
-async function organizationExists(name: string): Promise<string | null> {
-  const org = await prisma.organization.findFirst({
-    where: { name },
-    select: { id: true },
-  });
-  return org?.id ?? null;
-}
-
-/**
- * Cria ou obtém um usuário
+ * Cria ou obtém a organização e o seu usuário owner.
+ *
+ * SECURITY: este script provisiona DIRETAMENTE (scripts/lib/provision-principal).
+ * Antes ele reutilizava `RegisterUserHandler`, ou seja, o caminho do endpoint
+ * anônimo `POST /v1/auth/register` — que agora (corretamente) recusa entrar em
+ * qualquer organização pré-existente e nunca concede papel acima do baseline.
+ * Provisionamento de operador é uma decisão humana explícita e por isso concede
+ * o papel `owner` logo abaixo, em `ensureOwnerRole`.
  */
 async function ensureUser(
   email: string,
   name: string,
   password: string,
-  organizationName: string
+  organizationName: string,
+  tier: string
 ): Promise<{ userId: string; organizationId: string; created: boolean }> {
-  const exists = await userExists(email);
-  
-  if (exists) {
-    log.info({ email }, 'User already exists, retrieving');
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { email },
-      select: { id: true, organizationId: true },
-    });
-    return {
-      userId: user.id,
-      organizationId: user.organizationId,
-      created: false,
-    };
-  }
+  const organization = await ensureOrganizationByName(organizationName, tier);
+  log.info(
+    { organizationName, organizationId: organization.id, created: organization.created },
+    'Organization ready'
+  );
 
-  log.info({ email, organizationName }, 'Creating new user via RegisterUserHandler');
-  
-  // Usar o handler existente para criar o usuário
-  initializeDIContainer();
-  const registerHandler = container.resolve(RegisterUserHandler);
-  
-  const command = new RegisterUserCommand(email, password, name, organizationName);
-  const result = await registerHandler.execute(command);
-
-  if (!result.success) {
-    throw new Error(`Failed to create user: ${result.error}`);
-  }
-
-  if (!result.userId || !result.organizationId) {
-    throw new Error('User creation succeeded but missing userId or organizationId');
-  }
+  const user = await ensureUserInOrganization({
+    email,
+    name,
+    password,
+    organizationId: organization.id,
+  });
 
   return {
-    userId: result.userId,
-    organizationId: result.organizationId,
-    created: true,
+    userId: user.userId,
+    organizationId: organization.id,
+    created: user.created,
   };
 }
 
@@ -197,12 +165,12 @@ async function ensureOwnerRole(userId: string, organizationId: string): Promise<
   }
 
   log.info({ userId, organizationId }, 'Assigning owner role');
-  await assignRoleToUser(userId, organizationId, 'owner');
-  
-  // Atualizar o role primário do usuário
-  await prisma.user.update({
-    where: { id: userId },
-    data: { role: 'owner' },
+  // Operator-run script: an owner grant here is a deliberate human action, so
+  // it opts in explicitly. assignRoleToUser keeps the denormalized
+  // `users.role` column coherent via updatePrimaryRole — no direct write.
+  await assignRoleToUser(userId, organizationId, 'owner', {
+    allowOwner: true,
+    assignedBy: 'script:setup-enterprise-organizations',
   });
 }
 
@@ -307,7 +275,8 @@ async function setupEnterpriseOrganizations(): Promise<void> {
         orgSetup.ownerEmail,
         orgSetup.ownerName,
         orgSetup.ownerPassword,
-        orgSetup.name
+        orgSetup.name,
+        orgSetup.tier
       );
 
       log.info(

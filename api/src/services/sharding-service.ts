@@ -274,7 +274,7 @@ class ShardingService {
         sampleShardId,
       };
     } catch (error) {
-      logger.error('[Sharding] Health check failed:', error);
+      logger.error({ err: error }, '[Sharding] Health check failed:');
       return {
         enabled: false,
         shardCount: 0,

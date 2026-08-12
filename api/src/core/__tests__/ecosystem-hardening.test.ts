@@ -242,6 +242,29 @@ describe('PoolBuilder', () => {
     expect(result.models.find((m) => m.id === 'no-credits-model')).toBeUndefined();
   });
 
+  it('treats combined input and output rates as the request cost ceiling', () => {
+    const atBudget = mockModel({
+      id: 'at-economy-budget',
+      inputCostPer1k: 0.0005,
+      outputCostPer1k: 0.0015,
+    });
+    const aboveBudget = mockModel({
+      id: 'above-economy-budget',
+      inputCostPer1k: 0.0005,
+      outputCostPer1k: 0.0016,
+    });
+
+    const result = new PoolBuilder([atBudget, aboveBudget]).filterByCost(0.002).build();
+
+    expect(result.models.map((model) => model.id)).toEqual(['at-economy-budget']);
+    expect(result.stages[0]).toMatchObject({
+      name: 'cost_filter',
+      inputCount: 2,
+      outputCount: 1,
+      droppedReasons: { above_cost_ceiling: 1 },
+    });
+  });
+
   it('tracks all stages with drop reasons', () => {
     const result = buildChatExecutionPool(models, 0.4);
 
