@@ -323,7 +323,17 @@ export class MassiveParallelStrategy extends BaseStrategy {
             response.usage?.prompt_tokens || 0,
             response.usage?.completion_tokens || 0
           ),
-          success: true,
+          // `executeModel` does NOT throw on provider failure — it RETURNS an
+          // execution with success:false and an empty content string (provider
+          // error, resilience-stack rejection, or the near-zero known-bad skip).
+          // Hardcoding `true` here erased that, and the erasure was not benign:
+          // empty responses tokenize to empty sets, `calculateContentAgreement`
+          // scored empty-vs-empty as perfect agreement, and the early-exit gate
+          // then resolved the whole fan-out on ~3 fast failures — cancelling the
+          // healthy models still in flight and returning nothing, which the
+          // engine surfaced as "[DEGRADED] All execution attempts failed."
+          success: exec.success && this.hasUsableAssistantResponse(response),
+          error: exec.error,
         };
       } catch (error: unknown) {
         const execEnd = Date.now();
@@ -415,7 +425,11 @@ export class MassiveParallelStrategy extends BaseStrategy {
         const b = tokenSets[j];
         const intersection = new Set([...a].filter((t) => b.has(t)));
         const union = new Set([...a, ...b]);
-        totalSim += union.size > 0 ? intersection.size / union.size : 1.0;
+        // Two empty responses are not evidence of agreement, they are an absence
+        // of evidence. Scoring that 1.0 is what let failures satisfy the
+        // early-exit gate. Filtering unusable executions above should keep this
+        // branch unreachable; it is corrected as a safety net, not as the fix.
+        totalSim += union.size > 0 ? intersection.size / union.size : 0;
         pairs++;
       }
     }

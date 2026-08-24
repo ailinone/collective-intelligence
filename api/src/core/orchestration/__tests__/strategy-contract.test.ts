@@ -35,6 +35,38 @@ describe('strategy-contract', () => {
     expect(mapExecutionToCanonical('parallel')).toBe('parallel');
   });
 
+  // A value can sit in STRATEGY_INPUT_VALUES — so AJV admits it at the route —
+  // while having no entry in aliasToCanonical, in which case
+  // canonicalizeStrategyInput returns undefined and normalizeChatRequest passes the
+  // RAW wire string through to the engine. That happens to work whenever the wire
+  // string equals the registered strategy id, which is why it went unnoticed:
+  // 'sensitivity-consensus' and 'tri-role-collective' both executed correctly.
+  //
+  // It is not harmless, though. chat-routes derives isCollectiveStrategyRequest
+  // from resolveExecutionStrategy(), which was also undefined for those two, so
+  // streaming requests for them took the non-collective path.
+  //
+  // Asserted as a sweep rather than two cases, so a strategy added to the enum
+  // without an alias entry fails here instead of in production.
+  it.each(STRATEGY_INPUT_VALUES.map((v) => [v]))(
+    'accepted wire value %s canonicalizes and resolves',
+    (value) => {
+      const canonical = canonicalizeStrategyInput(value);
+      expect(
+        canonical,
+        `'${value}' is accepted by the route but has no aliasToCanonical entry`
+      ).toBeDefined();
+      // NOTE: resolveExecutionStrategy takes a WIRE value and canonicalizes
+      // internally, so it must be given `value`, not `canonical`. Passing the
+      // canonical name double-canonicalizes and reports a false failure for any
+      // canonical name that is not itself an accepted alias key.
+      expect(
+        resolveExecutionStrategy(value),
+        `'${value}' canonicalizes to '${canonical}' but has no execution mapping`
+      ).toBeDefined();
+    }
+  );
+
   it('rejects unsupported strategy values', () => {
     expect(normalizeStrategyInput('unsupported-strategy')).toBeUndefined();
     expect(resolveExecutionStrategy('unsupported-strategy')).toBeUndefined();
