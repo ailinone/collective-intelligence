@@ -18,6 +18,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
@@ -35,7 +37,13 @@ export async function registerOrganizationSettingsRoutes(server: FastifyInstance
   server.patch(
     '/v1/organization/settings',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('org:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+        requirePermission('org:update'),
+      ],
       schema: {
         tags: ['Organization'],
         description: 'Update organization settings (admin only)',

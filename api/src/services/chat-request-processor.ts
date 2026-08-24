@@ -648,16 +648,38 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
       lower
     );
 
-  const image = getRequestString(chatRequest, 'image') ?? lastUserContent.image;
+  // FIX (2026-08-19): vision-chat regression — an image_url part inside the
+  // last user message is NORMAL multimodal chat input, not a request to
+  // generate a video from that image. The old logic treated ANY attached
+  // image as `hasConditioningMedia` and unconditionally rerouted the request
+  // through VideoOrchestrationService (image-to-video), which then failed 422
+  // for every model and made ALL image chat impossible. Conditioning media now
+  // splits into two classes:
+  //   - EXPLICIT top-level request fields (image/start_image/end_image/audio/
+  //     video) — the documented image-to-video / video-to-video API surface.
+  //     These still force the video early-path unconditionally.
+  //   - An image extracted from message content — only a conditioning input
+  //     when the prompt ITSELF expresses video-generation intent
+  //     (video keyword + generation verb, no dev/discussion context).
+  // Plain "describe this image" chat flows through the regular vision path.
+  const explicitImage = getRequestString(chatRequest, 'image');
   const startImage = getRequestString(chatRequest, 'start_image');
   const endImage = getRequestString(chatRequest, 'end_image');
   const audio = getRequestString(chatRequest, 'audio');
   const video = getRequestString(chatRequest, 'video');
-  const hasConditioningMedia = !!(image || startImage || endImage || audio || video);
+  const hasExplicitConditioningMedia = !!(
+    explicitImage ||
+    startImage ||
+    endImage ||
+    audio ||
+    video
+  );
+  const hasVideoIntent =
+    hasVideoKeyword && hasGenerationVerb && !hasDevContext && !hasDiscussionContext;
+  const hasConditioningMedia =
+    hasExplicitConditioningMedia || (!!lastUserContent.image && hasVideoIntent);
 
-  const shouldGenerate =
-    hasConditioningMedia ||
-    (hasVideoKeyword && hasGenerationVerb && !hasDevContext && !hasDiscussionContext);
+  const shouldGenerate = hasConditioningMedia || hasVideoIntent;
   if (!shouldGenerate) return null;
 
   const responseFormatRaw = getRequestString(chatRequest, 'response_format');
@@ -665,7 +687,7 @@ export function detectVideoGenerationIntent(chatRequest: ChatRequest): VideoInte
 
   return {
     prompt,
-    image,
+    image: explicitImage ?? (hasVideoIntent ? lastUserContent.image : undefined),
     startImage,
     endImage,
     audio,
@@ -693,6 +715,35 @@ async function executeToolCallsAutomatically(
   }
 
   const toolCalls = response.choices[0].message.tool_calls;
+
+  // A caller that supplies its own `tools` owns the resulting tool_calls: the
+  // OpenAI contract says we return them and the caller executes them. Only
+  // tools THIS server registered may be auto-executed.
+  //
+  // This ran ungated on every non-streaming completion, and on failure it
+  // overwrote `message.content` with
+  //   "Executed 1 tool call(s): 0 succeeded, 1 failed."
+  // so a client's own tool call came back as a report that its tool had failed
+  // — for a tool this server was never meant to run.
+  //
+  // Failing closed here is also strictly safer than before: a blocked tool is
+  // now never dispatched, rather than dispatched and then refused.
+  const { toolRegistry } = await import('@/core/tools/tool-registry');
+  const serverOwnsEveryToolCall =
+    toolRegistry.isInitialized() &&
+    toolCalls.every(
+      (toolCall) =>
+        !CHAT_AUTO_EXECUTE_BLOCKED_TOOLS.has(toolCall.function?.name ?? '') &&
+        toolRegistry.get(toolCall.function?.name ?? '')?.safeForStrategies === true
+    );
+  if (!serverOwnsEveryToolCall) {
+    log.info(
+      { toolCallCount: toolCalls.length },
+      'Tool calls are client-owned; returning them to the caller unexecuted'
+    );
+    return response;
+  }
+
   log.info({ toolCallCount: toolCalls.length }, 'Executing tool calls automatically');
 
   // Multiple tool_calls on one response are independent by the OpenAI

@@ -15,6 +15,8 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@/database/client';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -41,7 +43,12 @@ export async function registerUsageRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/usage/stats',
     {
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Usage'],
         description: 'Get usage statistics for organization',

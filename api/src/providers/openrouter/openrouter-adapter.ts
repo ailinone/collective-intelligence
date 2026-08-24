@@ -22,6 +22,7 @@ import {
 } from '../base/provider-adapter';
 import { MODERATION_ANALYZER_SYSTEM_PROMPT } from '../base/moderation-prompt';
 import type {
+  ChatChoice,
   ChatMessage,
   ChatRequest,
   ChatResponse,
@@ -30,6 +31,7 @@ import type {
   ModelCapability,
   EmbeddingRequest,
   EmbeddingResponse,
+  ToolCall,
 } from '@/types';
 import type {
   AudioSTTRequest,
@@ -104,6 +106,33 @@ interface OpenRouterModelsResponse {
 /**
  * OpenRouter Provider Adapter Implementation
  */
+/**
+ * Recover the upstream HTTP status from a thrown error.
+ *
+ * Prefers a real `statusCode`/`status` property; falls back to parsing the
+ * message, because some upstream shapes only carry it in text. The message
+ * pattern deliberately matches this adapter's own format
+ * (`OpenRouter API error: 404 - ...`), which the shared classifier's stricter
+ * patterns (`HTTP 404`, `[404]`, `status: 404`) do not.
+ */
+function extractUpstreamStatusCode(error: unknown): number | undefined {
+  if (error && typeof error === 'object') {
+    const candidate = error as { statusCode?: unknown; status?: unknown };
+    for (const value of [candidate.statusCode, candidate.status]) {
+      if (typeof value === 'number' && value >= 100 && value <= 599) {
+        return value;
+      }
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const match = message.match(/\b(?:error|status|code|HTTP)\s*[:=]?\s*(\d{3})\b/i);
+  if (match) {
+    const parsed = Number(match[1]);
+    if (parsed >= 100 && parsed <= 599) return parsed;
+  }
+  return undefined;
+}
+
 export class OpenRouterAdapter extends ProviderAdapter {
   private providerLog = logger.child({ provider: 'openrouter' });
 
@@ -639,7 +668,14 @@ export class OpenRouterAdapter extends ProviderAdapter {
         }
 
         if (!response || !response.ok) {
-          throw new Error(`OpenRouter API error: ${response?.status ?? 0} - ${errorData}`);
+          // Carry the real status as a property, not only inside the message.
+          // Everything downstream that decides retry-vs-failover reads
+          // `.statusCode`; message parsing is a lossy fallback that does not
+          // even match this message's shape.
+          throw Object.assign(
+            new Error(`OpenRouter API error: ${response?.status ?? 0} - ${errorData}`),
+            { statusCode: response?.status ?? 0 }
+          );
         }
 
         const data = await response.json();
@@ -669,19 +705,26 @@ export class OpenRouterAdapter extends ProviderAdapter {
         object: 'chat.completion' as const,
         created: Math.floor(Date.now() / 1000),
         model: typedData.model,
-        choices: (typedData.choices || []).map((choice) => {
+        // The `: ChatChoice` annotation is load-bearing, not decoration. Without
+        // it TypeScript infers the callback's return type and the object literal
+        // loses freshness, so excess-property checking never fires — which is
+        // exactly how `toolCalls` (camelCase) shipped here as the message key
+        // while every other adapter emits `tool_calls`. Since `tool_calls` is
+        // optional, its absence was legal too, so nothing caught it. Annotating
+        // turns this whole class of key-name drift into a compile error.
+        choices: (typedData.choices || []).map((choice): ChatChoice => {
           const finishReason = choice.finish_reason
             ? (choice.finish_reason as 'stop' | 'length' | 'tool_calls' | 'content_filter')
             : null;
           return {
             index: choice.index || 0,
             message: {
-              role: (choice.message?.role || 'assistant') as
-                'function' | 'system' | 'user' | 'assistant' | 'tool',
+              role: (choice.message?.role || 'assistant') as ChatMessage['role'],
               content: choice.message?.content || '',
-              toolCalls: choice.message?.tool_calls,
+              ...(Array.isArray(choice.message?.tool_calls) && choice.message.tool_calls.length > 0
+                ? { tool_calls: choice.message.tool_calls as ToolCall[] }
+                : {}),
             },
-            finishReason,
             finish_reason: finishReason,
           };
         }),
@@ -705,8 +748,16 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const providerError = new Error(
         error instanceof Error ? error.message : 'OpenRouter chat completion failed'
       );
+      // Preserve the upstream status. Hardcoding 500 here laundered permanent
+      // failures into transient ones: a 404 "model unavailable" was classified
+      // as a retryable server error, so `isPaymentFailure` (402/403/404) never
+      // fired, `classifyProviderFailure` saw >=500 and returned TRANSIENT, the
+      // route was never marked dead, and the dead-model registry was never
+      // written. The chain then spent its whole retry budget on a model that
+      // could never succeed — which is why a request with a live candidate pool
+      // still came back [DEGRADED].
       throw Object.assign(providerError, {
-        statusCode: 500,
+        statusCode: extractUpstreamStatusCode(error) ?? 500,
         provider: this.name,
         code: 'provider_chat_completion_failed',
       });
@@ -1072,7 +1123,14 @@ export class OpenRouterAdapter extends ProviderAdapter {
         chunks.push(contentText.slice(i, i + chunkSize));
       }
 
-      // Yield chunks progressively
+      const finishReason = fullResponse.choices[0]?.finish_reason || 'stop';
+      const toolCalls = fullResponse.choices[0]?.message?.tool_calls;
+
+      // Yield content chunks progressively. The final frame is emitted
+      // separately below so that it always happens — a tool-call response has
+      // EMPTY content, which made `chunks` empty, which made this loop body
+      // never run, which made the whole generator yield nothing at all. The
+      // client saw an empty stream and no tool call.
       for (let i = 0; i < chunks.length; i++) {
         yield {
           id: fullResponse.id,
@@ -1086,17 +1144,42 @@ export class OpenRouterAdapter extends ProviderAdapter {
                 role: 'assistant',
                 content: chunks[i],
               },
-              finish_reason:
-                i === chunks.length - 1 ? fullResponse.choices[0]?.finish_reason || 'stop' : null,
+              finish_reason: null,
               logprobs: null,
             },
           ],
-          usage: i === chunks.length - 1 ? fullResponse.usage : undefined,
         };
 
         // Small delay to simulate streaming
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+
+      // Terminal frame: carries finish_reason, usage, and — critically — the
+      // tool calls. Without them a tool-calling response streamed through this
+      // adapter announced `finish_reason: 'tool_calls'` while never delivering
+      // a single tool call, so every OpenAI-spec consumer had nothing to
+      // execute and silently fell back to prose.
+      yield {
+        id: fullResponse.id,
+        object: 'chat.completion.chunk',
+        created: fullResponse.created,
+        model: fullResponse.model,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: 'assistant',
+              content: '',
+              ...(Array.isArray(toolCalls) && toolCalls.length > 0
+                ? { tool_calls: toolCalls }
+                : {}),
+            },
+            finish_reason: finishReason,
+            logprobs: null,
+          },
+        ],
+        usage: fullResponse.usage,
+      };
 
       const totalDuration = Date.now() - startTime;
       this.providerLog.debug(

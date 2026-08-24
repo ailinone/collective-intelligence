@@ -535,6 +535,19 @@ export async function createServer(): Promise<FastifyInstance> {
     logger.warn({ error: errorMessage }, 'anonymous-guest-key config check failed to run at boot');
   }
 
+  // Chat-free-tier-key config sanity check — same reasoning as the anonymous
+  // one above, for the authenticated `ailin-auto` free-tier gate. See
+  // free-tier-quota-gate.ts.
+  try {
+    const { logChatFreeTierApiKeyConfigStatus } = await import(
+      './services/free-tier-quota-gate.js'
+    );
+    await logChatFreeTierApiKeyConfigStatus();
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.warn({ error: errorMessage }, 'chat-free-tier-key config check failed to run at boot');
+  }
+
   // ==========================================
   // Security Middleware (v5.0)
   // ==========================================

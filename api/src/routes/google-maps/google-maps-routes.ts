@@ -21,6 +21,8 @@
 import type { FastifyInstance } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { GoogleMapsService } from '@/services/google-maps-service';
 
 const log = logger.child({ module: 'google-maps-routes' });
@@ -172,7 +174,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request, reply) => {
       try {
         if (!googleMapsService.isAvailable()) {
@@ -300,7 +306,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request, reply) => {
       try {
         if (!googleMapsService.isAvailable()) {
@@ -430,7 +440,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request, reply) => {
       try {
         if (!googleMapsService.isAvailable()) {
@@ -609,7 +623,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request, reply) => {
       try {
         if (!googleMapsService.isAvailable()) {
@@ -739,7 +757,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request, reply) => {
       try {
         if (!googleMapsService.isAvailable()) {
@@ -851,7 +873,11 @@ export async function registerGoogleMapsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (_request, reply) => {
       return reply.send({
         message:

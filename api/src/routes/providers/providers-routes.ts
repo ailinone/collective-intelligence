@@ -14,6 +14,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { providerAvailabilityService } from '@/services/provider-availability-service';
 import { prisma } from '@/database/client';
@@ -26,7 +28,11 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
   server.get(
     '/v1/providers',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Providers'],
         summary: 'List available AI providers',
@@ -190,7 +196,11 @@ export async function registerProvidersRoutes(server: FastifyInstance): Promise<
   server.get(
     '/v1/providers/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Providers'],
         summary: 'Get provider details',

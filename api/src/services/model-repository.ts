@@ -14,8 +14,11 @@
  * Fornece funcionalidades avançadas de busca, filtragem e gerenciamento de metadados.
  */
 
+import { createHash } from 'node:crypto';
+
 import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
+import { getDistributedCacheService } from '@/cache/distributed-cache-service';
 import { Prisma } from '@/generated/prisma/index.js';
 import { getModelSelectionCache } from '@/core/selection/model-selection-cache';
 import type { Model, ModelCapability, ModelPerformance, TaskType } from '@/types';
@@ -84,7 +87,40 @@ export class ModelRepository {
       return cached;
     }
 
-    return this.searchModelsUncachedPage(criteria, cacheKey);
+    // L2: shared Redis cache so concurrent processes don't each hammer the DB
+    // (hot-path for function_calling; DB storms here caused 57014 timeouts).
+    // Criteria already carries limit/offset, so the hash covers pagination.
+    const criteriaHash = createHash('sha1').update(JSON.stringify(criteria)).digest('hex');
+    const l2Key = `searchModels:${criteriaHash}`;
+
+    try {
+      const l2 = await getDistributedCacheService().getValue({
+        namespace: 'modelcache',
+        key: l2Key,
+      });
+      if (l2.hit && Array.isArray(l2.value)) {
+        const models = l2.value as Model[];
+        this.cache.set(cacheKey, models, 10 * 60 * 1000); // 10 minutes
+        return models;
+      }
+    } catch (error) {
+      this.log.warn({ error }, 'Redis L2 lookup failed for model search; falling back to DB');
+    }
+
+    const result = await this.searchModelsUncachedPage(criteria, cacheKey);
+
+    try {
+      await getDistributedCacheService().setValue({
+        namespace: 'modelcache',
+        key: l2Key,
+        value: result,
+        ttlSeconds: 300,
+      });
+    } catch (error) {
+      this.log.warn({ error }, 'Redis L2 write failed for model search; result not shared');
+    }
+
+    return result;
   }
 
   /**

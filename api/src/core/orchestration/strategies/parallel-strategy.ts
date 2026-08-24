@@ -134,20 +134,23 @@ export class ParallelStrategy extends BaseStrategy {
     };
 
     // Execute both models in parallel
-    let executions = await this.executeModelsInParallel([
-      {
-        adapter: selectedModels[0].adapter,
-        model: selectedModels[0].model,
-        request: enhancedRequest,
-        role: 'primary',
-      },
-      {
-        adapter: selectedModels[1].adapter,
-        model: selectedModels[1].model,
-        request: enhancedRequest,
-        role: 'secondary',
-      },
-    ]);
+    let executions = await this.executeModelsInParallel(
+      [
+        {
+          adapter: selectedModels[0].adapter,
+          model: selectedModels[0].model,
+          request: enhancedRequest,
+          role: 'primary',
+        },
+        {
+          adapter: selectedModels[1].adapter,
+          model: selectedModels[1].model,
+          request: enhancedRequest,
+          role: 'secondary',
+        },
+      ],
+      context.signal
+    );
 
     // Check if at least one execution succeeded
     let successful = executions.filter((e) => e.success);
@@ -170,20 +173,23 @@ export class ParallelStrategy extends BaseStrategy {
           },
           'All parallel executions failed — retrying fan-out with fresh providers (excluding failed)'
         );
-        executions = await this.executeModelsInParallel([
-          {
-            adapter: retryModels[0].adapter,
-            model: retryModels[0].model,
-            request: enhancedRequest,
-            role: 'primary',
-          },
-          {
-            adapter: retryModels[1].adapter,
-            model: retryModels[1].model,
-            request: enhancedRequest,
-            role: 'secondary',
-          },
-        ]);
+        executions = await this.executeModelsInParallel(
+          [
+            {
+              adapter: retryModels[0].adapter,
+              model: retryModels[0].model,
+              request: enhancedRequest,
+              role: 'primary',
+            },
+            {
+              adapter: retryModels[1].adapter,
+              model: retryModels[1].model,
+              request: enhancedRequest,
+              role: 'secondary',
+            },
+          ],
+          context.signal
+        );
         successful = executions.filter((e) => e.success);
       }
     }

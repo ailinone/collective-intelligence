@@ -20,6 +20,8 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '@/config';
 import { getAuthService } from '@/services/auth-service';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { logger } from '@/utils/logger';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -546,7 +548,11 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
   server.post(
     '/v1/auth/api-keys',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Auth'],
         description: 'Generate new API key',
@@ -638,7 +644,11 @@ export async function registerAuthRoutes(server: FastifyInstance): Promise<void>
   server.delete(
     '/v1/auth/api-keys/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Auth'],
         description: 'Revoke API key',

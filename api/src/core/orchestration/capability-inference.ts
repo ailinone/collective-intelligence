@@ -557,13 +557,38 @@ const FILE_GEN_GENERIC_KEYWORDS = new RegExp(
  * @returns A {@link CapabilityInferenceResult} describing the request.
  */
 export function inferCapabilities(
-  messages: Array<{ role: string; content: string }>,
+  messages: Array<{
+    role: string;
+    /**
+     * Plain text OR OpenAI multimodal content parts. Callers used to flatten
+     * arrays to a JSON string before calling, which silently disabled the
+     * image_url vision detection below — the signature now accepts the raw
+     * shape and text extraction happens here.
+     */
+    content: string | Array<Record<string, unknown>>;
+  }>,
   metadata?: { tools?: unknown[]; max_tokens?: number }
 ): CapabilityInferenceResult {
+  const contentToText = (content: string | Array<Record<string, unknown>>): string => {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    // Concatenate text parts ONLY — image/audio data URLs must not pollute
+    // allUserText (keyword scoring) nor the char-based token estimate.
+    return content
+      .filter(
+        (part) =>
+          part && typeof part === 'object' && (part as { type?: unknown }).type === 'text'
+      )
+      .map((part) => {
+        const text = (part as { text?: unknown }).text;
+        return typeof text === 'string' ? text : '';
+      })
+      .join(' ');
+  };
   const userMessages = messages.filter((m) => m.role === 'user');
   const _lastUserMessage =
-    userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
-  const allUserText = userMessages.map((m) => m.content).join('\n');
+    userMessages.length > 0 ? contentToText(userMessages[userMessages.length - 1].content) : '';
+  const allUserText = userMessages.map((m) => contentToText(m.content)).join('\n');
   const totalCharCount = allUserText.length;
 
   // ---- Task type detection (ordered by specificity) ----
@@ -681,10 +706,14 @@ export function inferCapabilities(
     capabilities.add('file_generation');
   }
 
-  // Vision: detect image_url content parts in messages
+  // Vision: detect image_url content parts in messages. This requires the
+  // caller to pass the RAW multimodal content (not a JSON.stringify'd string) —
+  // see the signature note on inferCapabilities.
   const hasImageContent = messages.some((m) => {
     if (typeof m.content !== 'string' && Array.isArray(m.content)) {
-      return (m.content as Array<{ type?: string }>).some((part) => part.type === 'image_url');
+      return m.content.some(
+        (part) => (part as { type?: string }).type === 'image_url'
+      );
     }
     return false;
   });

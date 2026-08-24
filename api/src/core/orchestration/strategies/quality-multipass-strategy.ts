@@ -14,6 +14,7 @@ import {
   normalizeJudgeOutput,
 } from '@/core/quality/judge-schema';
 import { resolvePreferredExecutor } from './preferred-model-helper';
+import { runtimeHealthRank } from '../dead-candidate-skip';
 import type {
   ChatRequest,
   ChatResponse,
@@ -23,6 +24,11 @@ import type {
   Model,
   ModelRole,
 } from '@/types';
+
+/** Inline error-message extraction (avoids a new shared import for one line). */
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * Quality-First Multi-Pass Strategy
@@ -300,11 +306,12 @@ export class QualityMultiPassStrategy extends BaseStrategy {
       );
     }
 
-    const primaryModel = this.selectPrimaryModel(models, context);
+    let primaryModel = this.selectPrimaryModel(models, context);
     const validatorModel = this.selectValidatorModel(models, primaryModel);
     const qualityThreshold = context.qualityTarget || this.QUALITY_THRESHOLD;
     let bestExecution: ModelExecution | null = null;
     let bestQualityScore = 0;
+    const triedModelIds = new Set<string>();
     let currentRequest = request;
 
     yield this.progressChunk(
@@ -313,11 +320,56 @@ export class QualityMultiPassStrategy extends BaseStrategy {
       this.MAX_PASSES + 1
     );
 
+    // Bounded candidate rotation budget across the whole stream (dead
+    // candidates cost ~0ms via the near-zero skip, so walking past them is
+    // cheap; live-but-failing candidates cost one attempt each).
+    let rotationBudget = Number(process.env.QMP_STREAM_ROTATION_BUDGET ?? 10);
+
     for (let pass = 1; pass <= this.MAX_PASSES; pass++) {
-      const generation = await this.generateResponse(primaryModel, currentRequest, context);
-      const validation = await this.validateResponse(validatorModel, request, generation, context);
-      const qualityScore = this.extractQualityScore(validation);
-      const issues = this.extractIssues(validation);
+      let generation = await this.generateResponse(primaryModel, currentRequest, context);
+
+      // DEAD-ROUTE ROTATION: when the primary fails (402/auth/dead-route/
+      // no-adapter), walk to the NEXT candidate instead of letting the
+      // failure poison the pass. Catalog balanceStatus is stale, so the
+      // first alternates may also be dead — rotate as many times as the
+      // budget allows before giving up on this pass.
+      while (!generation.success && rotationBudget > 0) {
+        rotationBudget--;
+        const alternate = models.find(
+          (m) => m.id !== primaryModel.id && !triedModelIds.has(m.id)
+        );
+        if (!alternate) break;
+        this.log.warn(
+          { pass, failed: primaryModel.id, next: alternate.id, error: generation.error },
+          'Stream pass generation failed — rotating primary model'
+        );
+        triedModelIds.add(primaryModel.id);
+        primaryModel = alternate;
+        generation = await this.generateResponse(primaryModel, currentRequest, context);
+      }
+      if (!generation.success) {
+        this.log.warn(
+          { pass, model: primaryModel.id, rotationsLeft: rotationBudget },
+          'Stream pass generation failed after rotation — skipping pass'
+        );
+        continue;
+      }
+
+      // Validator failure must not kill the pass: fall back to the content
+      // heuristic so refinement continues with a conservative score.
+      let validation: ModelExecution | null = null;
+      try {
+        validation = await this.validateResponse(validatorModel, request, generation, context);
+      } catch (err) {
+        this.log.warn(
+          { pass, error: getErrorMessage(err) },
+          'Validator threw — scoring pass with content heuristic'
+        );
+      }
+      const qualityScore = validation
+        ? this.extractQualityScore(validation)
+        : this.calculateQualityScore(generation);
+      const issues = validation ? this.extractIssues(validation) : [];
 
       if (qualityScore > bestQualityScore) {
         bestQualityScore = qualityScore;
@@ -352,7 +404,15 @@ export class QualityMultiPassStrategy extends BaseStrategy {
     }
     const primaryAdapter = await this.getAdapterForModel(primaryModel, context);
     if (!primaryAdapter) {
-      throw new Error(`No adapter found for model: ${primaryModel.id}`);
+      // DEGRADE, don't throw (2026-08-21): all routes for the rotated primary
+      // may be dead at synthesis time — the best pass content is already
+      // generated and is a valid answer.
+      this.log.warn(
+        { model: primaryModel.id },
+        'Final synthesis adapter unavailable — degrading to best pass content'
+      );
+      yield bestExecution.response;
+      return;
     }
 
     const finalRequest = this.buildFinalSynthesisRequest(request, bestExecution, this.MAX_PASSES);
@@ -426,7 +486,16 @@ export class QualityMultiPassStrategy extends BaseStrategy {
       }
       if (preference.pinnedExecutor) return preference.pinnedExecutor;
     }
+    // The eligible pool arrives pre-ranked by runtime health (see
+    // base-strategy.getEligibleModels → rankByRuntimeHealth). Keep a
+    // health-aware comparator here too so any re-sort still surfaces live
+    // routes over static-catalog favorites (balanceStatus/quality are stale
+    // — they kept electing dead providers as primaries).
+    const health = (m: Model) => runtimeHealthRank(m.provider, m.id);
     return [...models].sort((a, b) => {
+      const aHealth = health(a);
+      const bHealth = health(b);
+      if (aHealth !== bHealth) return aHealth - bHealth;
       // Prefer models with known credits or local over unknown/no-credits
       const balancePriority = (m: Model) => {
         const bs = m.balanceStatus || 'unknown';
@@ -468,7 +537,41 @@ export class QualityMultiPassStrategy extends BaseStrategy {
     }
     const adapter = await this.getAdapterForModel(model, context);
     if (!adapter) {
-      throw new Error(`No adapter found for model: ${model.id}`);
+      // DEAD-ROUTE ROTATION (2026-08-21, probes mAUd5n7PTnssGlo1ok04S/
+      // dCG2M4-ss9HL9Zd5yKVYG): adapter resolution can legitimately return
+      // null when every provider able to serve this model is dead/quarantined
+      // or rejected by the function-calling guard. Throwing here crashed the
+      // WHOLE strategy ("Streaming strategy threw before any content"), even
+      // though the eligible pool has other live models. Return a failed
+      // execution so the pass loop rotates to the next candidate.
+      this.log.warn(
+        { modelId: model.id, requestId: context?.requestId },
+        'No adapter could be resolved for model — returning failed execution for rotation'
+      );
+      return {
+        modelId: model.id,
+        modelName: model.name || model.id,
+        role: 'primary',
+        request,
+        response: {
+          id: `no-adapter-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: model.name || model.id,
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: '' },
+              finish_reason: 'stop' as const,
+            },
+          ],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        },
+        cost: 0,
+        durationMs: 0,
+        success: false,
+        error: `No adapter found for model: ${model.id}`,
+      };
     }
     const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
     const reasoningEnabled = this.isReasoningEnabled(request);

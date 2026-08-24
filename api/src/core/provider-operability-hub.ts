@@ -34,6 +34,10 @@
 
 import { logger } from '@/utils/logger';
 import {
+  classifyProviderFailure,
+  extractHttpStatusFromMessage,
+} from './operability/provider-failure-classification';
+import {
   buildRouteKey,
   extractModelFamily,
   type OperabilitySnapshot,
@@ -216,6 +220,19 @@ class ProviderOperabilityHubImpl {
   private readonly manualOverrides = new Map<string, { state: OperabilityState; until: number }>();
   private snapshotVersion = 0;
 
+  // getProviderState() memo (P0.8, 2026-08-18): the derived-state computation
+  // runs several Array.filter passes over the 10-minute event ring and allocates
+  // a fresh record per call — and the per-request hot path calls it O(pool size)
+  // times (pool-builder's filterByOperability + cost-cascade's breakerRank /
+  // isQuarantined over a 52k-model catalog = ~150k calls per anonymous request,
+  // measured at ~2.1s of pure CPU in buildCascadeCandidates). Provider state
+  // changes at event granularity and all cooldown windows are >= 30s, so a 1s
+  // TTL memo is semantically transparent while collapsing those 150k computes
+  // into one per unique key. Invalidated eagerly on every state mutation
+  // (recordEvent, overrides, overlay writes) — the TTL is only a safety net.
+  private readonly stateMemo = new Map<string, { expiresAt: number; record: ProviderOperabilityRecord }>();
+  private static readonly STATE_MEMO_TTL_MS = 1_000;
+
   // Persisted overlay (Camada 1a): last-known state per flat provider key,
   // loaded from the DB on boot (hydrateFromStore) and consulted by
   // getProviderState ONLY when there is no fresh runtime event. Runtime always
@@ -249,6 +266,14 @@ class ProviderOperabilityHubImpl {
     const key = providerKey.toLowerCase();
     const now = Date.now();
 
+    const memo = this.stateMemo.get(key);
+    if (memo && memo.expiresAt > now) return memo.record;
+    const record = this.computeProviderState(key, now);
+    this.stateMemo.set(key, { expiresAt: now + ProviderOperabilityHubImpl.STATE_MEMO_TTL_MS, record });
+    return record;
+  }
+
+  private computeProviderState(key: string, now: number): ProviderOperabilityRecord {
     // Manual override takes precedence (admin can force a state)
     const override = this.manualOverrides.get(key);
     if (override && override.until > now) {
@@ -601,6 +626,7 @@ class ProviderOperabilityHubImpl {
       this.runtimeEvents.set(key, ring);
     }
     ring.push(event);
+    this.stateMemo.delete(key);
 
     // Trim old events
     const cutoff = Date.now() - RUNTIME_WINDOW_MS;
@@ -708,6 +734,69 @@ class ProviderOperabilityHubImpl {
   isSelfHostedProvider(providerKey: string): boolean {
     const key = providerKey.toLowerCase();
     return SELF_HOSTED_PROVIDERS.has(key) || key.startsWith('local-') || key.includes('local');
+  }
+
+  // ── Quarantine / revalidation (Workstream F, 2026-08-17) ─────────────
+  //
+  // QUARANTINE CONTRACT: providers whose derived state is auth_failed or
+  // no_credits (the OperabilityState projection of AUTH_INVALID /
+  // AUTH_MISSING / BILLING_EXHAUSTED / ACCOUNT_RESTRICTED) are excluded
+  // from eligible-pool building (pool-builder filterByOperability) and
+  // demoted to the bottom tier of cascade candidate selection. The
+  // background revalidation worker (operability/quarantine-revalidation-
+  // worker.ts) re-probes them out-of-band and restores them on recovery —
+  // real user requests must never be the probe.
+
+  /**
+   * All providers currently quarantined (auth_failed / no_credits), from
+   * live runtime state AND the un-expired persisted overlay (covers the
+   * window right after a restart, before any traffic). Lowercased keys.
+   */
+  getQuarantinedProviders(): string[] {
+    const now = Date.now();
+    const keys = new Set<string>();
+    for (const key of this.runtimeEvents.keys()) {
+      const state = this.getProviderState(key).operabilityState;
+      if (state === 'auth_failed' || state === 'no_credits') keys.add(key);
+    }
+    for (const [key, overlay] of this.persistedOverlay) {
+      if (overlay.expiresAt <= now) continue;
+      if (overlay.state === 'auth_failed' || overlay.state === 'no_credits') keys.add(key);
+    }
+    return [...keys];
+  }
+
+  /**
+   * Record a successful out-of-band REVALIDATION probe (a real
+   * adapter healthCheck that returned healthy). Unlike
+   * recordProbeResult('healthy') — which deliberately cannot clear
+   * auth_failed/no_credits because a list-models probe proves neither —
+   * this is only called by the revalidation worker after a probe that
+   * DOES prove the quarantined condition is gone. It clears the durable
+   * overlay (in-memory + DB) so recovery survives the 10-minute runtime
+   * window, and records a success event so derived state flips
+   * immediately.
+   */
+  recordRevalidationSuccess(providerKey: string): void {
+    const key = providerKey.toLowerCase();
+    void this.clearPersistedState(key);
+    this.recordEvent(key, true, 200);
+    log.info({ provider: key }, 'quarantine revalidation succeeded — provider restored');
+  }
+
+  /**
+   * Remove a provider's persisted operability overlay entry (in-memory +
+   * DB). Fire-and-forget safe; never throws.
+   */
+  async clearPersistedState(providerKey: string): Promise<void> {
+    const key = providerKey.toLowerCase();
+    this.persistedOverlay.delete(key);
+    try {
+      const { prisma } = await import('@/database/client.js');
+      await prisma.providerOperabilitySnapshot.deleteMany({ where: { providerKey: key } });
+    } catch (err) {
+      log.warn({ err: String(err), key }, 'clearPersistedState DB delete failed (non-fatal)');
+    }
   }
 
   /**
@@ -852,7 +941,7 @@ class ProviderOperabilityHubImpl {
    * healthy providers". Only non-expired rows are loaded. Never throws — a
    * cold/unavailable DB just yields an empty overlay (today's behaviour).
    */
-  async hydrateFromStore(): Promise<{ loaded: number }> {
+  async hydrateFromStore(): Promise<{ loaded: number; skippedHealthy: number }> {
     try {
       const { prisma } = await import('@/database/client.js');
       const now = Date.now();
@@ -860,7 +949,23 @@ class ProviderOperabilityHubImpl {
         where: { expiresAt: { gt: new Date(now) } },
       });
       let loaded = 0;
+      let skippedHealthy = 0;
       for (const row of rows) {
+        // 2026-08-21 cold-restart fix (request 7CN_Dg8wWlEcA9FcadbxA): do NOT
+        // rehydrate `healthy` rows. A persisted healthy is a WEAK preference
+        // signal captured at the last persist tick — it can be stale next to
+        // a billing/auth failure that happened after it (observed: openrouter/
+        // phala/nanogpt/cometapi all hydrated as `healthy` right after a
+        // deploy, so runtime-health ranking PROMOTED dead providers to
+        // rank-0 primaries and every pass burned its budget re-learning them).
+        // Rehydrating only bad states keeps the actual value of the overlay
+        // (skip known-dead providers after a restart) without the false
+        // promotion; unknown (the no-data default) ranks below healthy but
+        // above proven-bad, which is the correct epistemic ordering.
+        if (row.state === 'healthy') {
+          skippedHealthy++;
+          continue;
+        }
         this.persistedOverlay.set(row.providerKey, {
           state: row.state as OperabilityState,
           // Collapse any accumulated 'persisted_' display prefix from older
@@ -871,11 +976,14 @@ class ProviderOperabilityHubImpl {
         });
         loaded++;
       }
-      log.info({ loaded }, 'Operability overlay hydrated from store');
-      return { loaded };
+      log.info(
+        { loaded, skippedHealthy },
+        'Operability overlay hydrated from store (healthy rows skipped — runtime must re-prove)'
+      );
+      return { loaded, skippedHealthy };
     } catch (err) {
       log.warn({ err: String(err) }, 'Operability overlay hydrate failed (continuing cold)');
-      return { loaded: 0 };
+      return { loaded: 0, skippedHealthy: 0 };
     }
   }
 
@@ -980,104 +1088,36 @@ class ProviderOperabilityHubImpl {
   }
 
   private classifyError(httpStatus?: number, errorMessage?: string): RuntimeEvent['errorType'] {
-    const msg = (errorMessage || '').toLowerCase();
-
-    // Credit/balance errors. Two paths:
-    //  (a) 402/403 with any credit-ish wording (the classic signal), OR
-    //  (b) an UNAMBIGUOUS credit-balance message on ANY status — critical because
-    //      Anthropic returns HTTP 400 with "Your credit balance is too low" (NOT
-    //      402/403), so a status-only gate misclassified it as 'unknown' → the
-    //      provider was never marked no_credits → the judge/selector re-picked it on
-    //      every cold start, wasting the first cascade attempt (2026-06-29).
-    const creditWords =
-      msg.includes('insufficient') ||
-      msg.includes('balance') ||
-      msg.includes('quota') ||
-      msg.includes('credit') ||
-      msg.includes('funds') ||
-      msg.includes('subscription') ||
-      msg.includes('payment') ||
-      msg.includes('top up') ||
-      msg.includes('recharge');
-    const unambiguousCredit =
-      msg.includes('credit balance') ||
-      msg.includes('balance is too low') ||
-      msg.includes('insufficient') ||
-      msg.includes('out of credit') ||
-      msg.includes('top up') ||
-      msg.includes('recharge') ||
-      msg.includes('billing');
-    if (((httpStatus === 402 || httpStatus === 403) && creditWords) || unambiguousCredit) {
-      return 'credit';
+    // Workstream F (2026-08-17): classification now delegates to the typed
+    // taxonomy in operability/provider-failure-classification.ts so that the
+    // hub, the pool builder, the cascade and the quarantine revalidator all
+    // agree on ONE mapping. This also fixes the observed gap where a Google
+    // 401 `ACCESS_TOKEN_TYPE_UNSUPPORTED` (wrong credential TYPE — an OAuth
+    // token stored where an AI-Studio API key belongs) matched NO pattern
+    // here and classified as 'unknown', so the hub never quarantined google
+    // and every request re-paid the 401 rung.
+    const message = errorMessage ?? '';
+    const effectiveStatus = httpStatus ?? extractHttpStatusFromMessage(message);
+    const { state, reason } = classifyProviderFailure({
+      httpStatus: effectiveStatus,
+      message,
+    });
+    switch (state) {
+      case 'BILLING_EXHAUSTED':
+        return 'credit';
+      case 'AUTH_INVALID':
+      case 'AUTH_MISSING':
+      case 'ACCOUNT_RESTRICTED':
+        return 'auth';
+      case 'PROVIDER_DEAD':
+        return 'not_found';
+      case 'RATE_LIMITED':
+        return 'rate_limit';
+      case 'TRANSIENT_FAILURE':
+        return reason === 'timeout' ? 'timeout' : 'server';
+      default:
+        return 'unknown';
     }
-
-    // Auth / forbidden errors. Note: some providers (e.g. Google Generative AI)
-    // signal an invalid key as API_KEY_INVALID / "API key not valid" rather than
-    // 401 — and the Google adapter further normalizes its status to 500 — so we
-    // match these message variants regardless of status.
-    //
-    // A non-credit 403 is a FORBIDDEN/ban (e.g. routeway returned a Cloudflare
-    // "error 1006 — the owner has banned your IP address" HTML page). Before, a
-    // credit-less 403 fell through to 'unknown', so a hard IP ban did NOT stick —
-    // it only degraded the route after ≥3 failures while the selector kept
-    // re-picking the banned route on every request. Classifying it as 'auth'
-    // (sticky, 12h TTL, self-heals on a real success) gates it after the FIRST
-    // ban. Credit-403s were already caught above; this is the forbidden path.
-    if (
-      httpStatus === 401 ||
-      httpStatus === 403 ||
-      msg.includes('unauthorized') ||
-      msg.includes('forbidden') ||
-      msg.includes('access denied') ||
-      msg.includes('banned') ||
-      msg.includes('invalid api key') ||
-      msg.includes('api key not valid') ||
-      msg.includes('api_key_invalid') ||
-      msg.includes('invalid_api_key') ||
-      msg.includes('api key invalid') ||
-      msg.includes('api key expired') ||
-      msg.includes('authentication') ||
-      msg.includes('not configured')
-    ) {
-      return 'auth';
-    }
-
-    // Rate limiting
-    if (
-      httpStatus === 429 ||
-      msg.includes('rate limit') ||
-      msg.includes('rate_limit') ||
-      msg.includes('too many requests')
-    ) {
-      return 'rate_limit';
-    }
-
-    // Server errors
-    if (httpStatus && httpStatus >= 500) {
-      return 'server';
-    }
-
-    // Timeout
-    if (msg.includes('timeout') || msg.includes('aborted') || msg.includes('etimedout')) {
-      return 'timeout';
-    }
-
-    // Dead model/route: a 404 (or explicit model-not-found wording) means the model
-    // does not exist at this provider — PERMANENT, not transient. Gate it so the
-    // selector stops re-picking a dead route (the "404 dead-model not gated" cascade).
-    if (
-      httpStatus === 404 ||
-      msg.includes('model_not_found') ||
-      msg.includes('model not found') ||
-      msg.includes('no such model') ||
-      msg.includes('model does not exist') ||
-      msg.includes('does not exist') ||
-      msg.includes('unknown model')
-    ) {
-      return 'not_found';
-    }
-
-    return 'unknown';
   }
 
   private classifyProviderKind(key: string): ProviderKind {

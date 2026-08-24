@@ -19,6 +19,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { getToolsBaseDir, clampWorkingDirectory } from '@/utils/tools-workspace-guard';
 import { nanoid } from 'nanoid';
@@ -327,13 +328,15 @@ export async function registerToolsRoutes(rootServer: FastifyInstance): Promise<
   // weakening this one. The shell/FS executors must stay admin-gated.
   await rootServer.register(async (server: FastifyInstance) => {
     server.addHook('preHandler', authenticate);
-    // The dedicated anonymous-chat-guest M2M key (see anonymous-quota-gate.ts)
-    // has no legitimate reason to ever reach the tool surface. requireRole
-    // below should already block it (the guest key is provisioned with a
-    // minimal, non-admin role) — this is an explicit, role-independent
-    // backstop so tool access for this one key never depends on its role
-    // being configured correctly.
+    // The two dedicated single-purpose M2M keys — the anonymous-chat-guest key
+    // (see anonymous-quota-gate.ts) and the chat-free-tier key (see
+    // free-tier-quota-gate.ts) — have no legitimate reason to ever reach the
+    // tool surface. requireRole below should already block them (both are
+    // provisioned with a minimal, non-admin role) — these are explicit,
+    // role-independent backstops so tool access for those keys never depends on
+    // their roles being configured correctly.
     server.addHook('preHandler', rejectAnonymousGuestKeyPreHandler);
+    server.addHook('preHandler', rejectChatFreeTierKeyPreHandler);
     server.addHook('preHandler', requireRole('admin', 'owner'));
     // SECURITY (js/missing-rate-limiting): these handlers execute shell
     // commands / filesystem + git operations — expensive, authorization-gated

@@ -25,6 +25,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   ContextCachingService,
   type CacheTTL,
@@ -239,7 +241,11 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const parseResult = CreateCachedContextSchema.safeParse(request.body);
@@ -409,7 +415,11 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const query = request.query as { limit?: number; offset?: number };
@@ -601,7 +611,11 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { context_id } = request.params as { context_id: string };
@@ -744,7 +758,11 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { context_id } = request.params as { context_id: string };
@@ -916,7 +934,11 @@ export async function registerContextCachingRoutes(server: FastifyInstance): Pro
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { context_id } = request.params as { context_id: string };

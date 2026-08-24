@@ -653,17 +653,44 @@ export class DynamicModelSelector {
       sanitizedCriteria.requiredCapabilities.length > 0
     ) {
       const requiredUris = legacyArrayToUriArray(sanitizedCriteria.requiredCapabilities);
-      mapped = mapped.filter((model) => {
-        // Prefer canonical URI track when available.
-        if (model.capabilityUris && model.capabilityUris.length > 0) {
-          return requiredUris.every((uri) => model.capabilityUris!.includes(uri));
+      // `function_calling` is DEFERRED, not hard-dropped (2026-08-21
+      // pool-recovery): the capability is sparsely declared across the
+      // catalog, and hard-filtering here was the direct cause of
+      // `ailin_selection_no_eligible_model_total` (selector returned 0
+      // models for every tools request → recovery always degraded).
+      // Unknowns are ranked behind declared-FC candidates and verified at
+      // execution by the lazy cached probe (function-calling-probe.ts).
+      const hardRequiredUris = requiredUris.filter(
+        (u) => !u.includes('function_calling')
+      );
+      const hardRequiredLegacy = sanitizedCriteria.requiredCapabilities.filter(
+        (c) => c !== 'function_calling'
+      );
+      if (hardRequiredUris.length > 0 || hardRequiredLegacy.length > 0) {
+        const preFilter = mapped;
+        mapped = mapped.filter((model) => {
+          if (model.capabilityUris && model.capabilityUris.length > 0) {
+            return hardRequiredUris.every((uri) => model.capabilityUris!.includes(uri));
+          }
+          const modelCaps = model.capabilities || [];
+          return hardRequiredLegacy.every((reqCap) => modelCaps.includes(reqCap));
+        });
+        // NEVER-EMPTY failsafe (mirrors the requiredTools one below): a
+        // capability filter that empties the pool degrades to the unfiltered
+        // pool — the execution gate still enforces the capability.
+        if (mapped.length === 0 && preFilter.length > 0) {
+          logger.warn(
+            { requiredCapabilities: sanitizedCriteria.requiredCapabilities, preFilterCount: preFilter.length },
+            'FAILSAFE: required-capability filter would empty the pool — keeping unfiltered pool; capability enforced at execution'
+          );
+          mapped = preFilter;
         }
-        // Legacy fallback (pre-HCRA-backfill rows).
-        const modelCaps = model.capabilities || [];
-        return sanitizedCriteria.requiredCapabilities!.every((reqCap) =>
-          modelCaps.includes(reqCap)
+      } else if (requiredUris.length > 0) {
+        logger.debug(
+          { count: mapped.length },
+          'requiredCapabilities is function_calling only — deferred to execution-time probe'
         );
-      });
+      }
     }
 
     // Filter by required tools (stored in metadata.tools).

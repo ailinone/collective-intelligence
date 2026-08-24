@@ -44,6 +44,7 @@ import type {
 import { logger } from '@/utils/logger';
 import { getModelsByProvider } from '@/services/model-catalog-service';
 import { getErrorMessage } from '@/utils/type-guards';
+import { classifyGoogleCredentialShape } from '@/core/operability/provider-failure-classification';
 
 /**
  * Google Gemini Adapter
@@ -65,6 +66,50 @@ export class GoogleAdapter extends ProviderAdapter {
         ? pooledKeys.map((key) => new GoogleGenerativeAI(key))
         : [new GoogleGenerativeAI(config.apiKey)];
     this.client = this.clientPool[0]!;
+    // Credential TYPE check (Workstream F, 2026-08-17): the Generative
+    // Language API expects an AI Studio key (`AIza...`) sent as x-goog-api-key.
+    // If the secret slot holds a DIFFERENT credential type (OAuth access
+    // token / service-account JSON / JWT), every call 401s with
+    // ACCESS_TOKEN_TYPE_UNSUPPORTED — observed live 47+ times on 2026-08-17.
+    // Detect the mismatch at construction and quarantine the provider
+    // immediately (boot-time auth_failed), instead of re-paying the 401 on
+    // every request. Logs the SHAPE only — never the value.
+    this.validateCredentialShape(pooledKeys.length > 0 ? pooledKeys : [config.apiKey]);
+  }
+
+  /**
+   * Classify the stored credential shapes (never the values). A non-
+   * `api_key` shape is a secret-slot TYPE mismatch: quarantine via the
+   * operability hub so the cascade stops trying this provider until the
+   * secret holds the right credential type.
+   */
+  private validateCredentialShape(keys: string[]): void {
+    const badShapes = new Set<string>();
+    for (const key of keys) {
+      const shape = classifyGoogleCredentialShape(key);
+      if (shape !== 'api_key') badShapes.add(shape);
+    }
+    if (badShapes.size === 0) return;
+    const shapes = [...badShapes].join(',');
+    this.providerLog.error(
+      { credentialShapes: shapes, expected: 'api_key (AIza...)' },
+      'GOOGLE_API_KEY secret holds the wrong credential TYPE — Generative Language API expects an AI Studio key; got ' +
+        shapes +
+        '. Update the google-key secret in Secret Manager to an AI Studio API key.'
+    );
+    // Quarantine at boot: hub classifyError maps this message to auth.
+    import('@/core/provider-operability-hub')
+      .then(({ getProviderOperabilityHub }) => {
+        getProviderOperabilityHub().recordExecution(
+          'google',
+          false,
+          401,
+          `credential_type_mismatch: stored credential shape [${shapes}] is not an api_key — ACCESS_TOKEN_TYPE_UNSUPPORTED expected`
+        );
+      })
+      .catch(() => {
+        /* hub unavailable at construction time — runtime 401s will still quarantine */
+      });
   }
 
   /** Round-robins across clientPool when GOOGLE_API_KEY_POOL is configured. */

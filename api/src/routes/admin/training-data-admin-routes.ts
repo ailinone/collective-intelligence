@@ -23,6 +23,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 import { runTrainingDataExport } from '@/jobs/training-data-export-job';
 import { prisma } from '@/database/client';
@@ -38,7 +40,12 @@ interface ExtractionStateRow {
 }
 
 export async function registerTrainingDataAdminRoutes(server: FastifyInstance): Promise<void> {
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  const adminPreHandler = [
+    authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    requireRole('admin', 'owner'),
+  ];
 
   // ═══════════════════════════════════════════════════════════════════════════
   // POST /v1/admin/training-data/export — Trigger an ad-hoc export

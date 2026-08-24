@@ -23,6 +23,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { generateNonce, storeNonce } from '@/middleware/nonce-middleware';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
@@ -47,7 +49,11 @@ export async function registerNonceRoutes(server: FastifyInstance): Promise<void
   server.get(
     '/v1/nonce',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Auth', 'Security'],
         summary: 'Generate nonce for sensitive operations',

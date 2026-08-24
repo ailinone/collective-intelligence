@@ -9,6 +9,8 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -49,7 +51,12 @@ export async function registerEnterpriseUsageAnalyticsRoutes(
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request: FastifyRequest<{ Body: { events: UsageEvent[] } }>, reply: FastifyReply) => {
       const tenantContext = getTenantContext(request);
@@ -109,7 +116,12 @@ export async function registerEnterpriseUsageAnalyticsRoutes(
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request: FastifyRequest<{ Querystring: UsageMetricsRequest }>, reply: FastifyReply) => {
       const tenantContext = getTenantContext(request);

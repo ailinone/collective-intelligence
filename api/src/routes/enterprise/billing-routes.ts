@@ -10,6 +10,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -176,7 +178,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'Get billing configuration',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:read'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -217,7 +225,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:read'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -234,7 +248,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'Create payment method setup intent',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -263,7 +283,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           additionalProperties: false,
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -284,7 +310,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'Detach payment method',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -326,7 +358,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           additionalProperties: false,
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -357,7 +395,12 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       getTenantContext(request); // Ensures tenant context is present
@@ -418,7 +461,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -475,7 +524,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'List invoices',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:read'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -514,7 +569,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:read'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -546,7 +607,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -602,7 +669,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -661,7 +734,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'List subscriptions',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:read'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -682,7 +761,13 @@ export async function registerEnterpriseBillingRoutes(server: FastifyInstance): 
         summary: 'Cancel subscription',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext(), requirePermission('billing:update')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('billing:update'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);

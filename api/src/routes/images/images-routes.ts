@@ -24,6 +24,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -322,7 +324,11 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Body: ImageGenerationRequest }>,
       reply: FastifyReply
@@ -648,7 +654,11 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -1039,7 +1049,11 @@ export async function registerImagesRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;

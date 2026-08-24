@@ -25,6 +25,8 @@ import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { narrowAs } from '@/utils/type-guards';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requireTenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import { ModerationsOrchestrationService } from '@/services/moderations-orchestration-service';
 import {
@@ -295,7 +297,12 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
         },
       },
     },
-    preHandler: [authenticateRequest, requireTenantContext()],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+      requireTenantContext(),
+    ],
     handler: async (request: FastifyRequest<{ Body: ModerationRequest }>, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -390,7 +397,12 @@ export async function registerModerationsRoutes(server: FastifyInstance): Promis
   // ==========================================
   // Custom moderation policies (per-tenant CRUD)
   // ==========================================
-  const policyPreHandler = [authenticateRequest, requireTenantContext()];
+  const policyPreHandler = [
+    authenticateRequest,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    requireTenantContext(),
+  ];
 
   // POST /v1/moderations/policies — create a policy for the caller's org.
   server.post<{ Body: CreatePolicyBody }>(

@@ -19,6 +19,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
@@ -36,7 +38,13 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
   server.get(
     '/v1/admin/users',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner'), requirePermission('users:read')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+        requirePermission('users:read'),
+      ],
       schema: {
         tags: ['Admin'],
         description: 'List users in organization (admin only)',
@@ -181,6 +189,8 @@ export async function registerAdminRoutes(server: FastifyInstance): Promise<void
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
         requirePermission('users:role_assign'),
       ],

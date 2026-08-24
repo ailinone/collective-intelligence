@@ -87,18 +87,20 @@ import { isModelCapability } from '@/types';
 import { logger } from '@/utils/logger';
 import { nanoid } from 'nanoid';
 import { autoLearningSystem } from '@/core/learning/auto-learning-system';
-import { TriagingService } from './triage-service';
+import { TriagingService, applyFreeTierStrategyCap } from './triage-service';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { RealtimeFeedbackLoop } from '@/core/feedback/realtime-feedback-loop';
 import { getQualityScorer } from '@/core/quality/quality-scorer';
 import { getReasoningTransparency } from '@/core/transparency/reasoning-transparency';
 import { getSemanticCache } from '@/core/cache/semantic-cache';
+import { isTrivialSingleTurn } from '@/core/orchestration/trivial-request-triage';
 import { isCacheEnabled } from '@/cache/cache-runtime-state';
 import {
   recordStrategyExecution,
   recordTriage,
   recordModelSelection,
   recordSpeculativeSelectionOutcome,
+  recordStreamingStrategyRecovery,
 } from '@/observability/ci-metrics';
 import { getMemoryContextService } from '@/core/memory/memory-context-service';
 import { errorLearningSystem } from '@/core/learning/error-learning-system';
@@ -128,7 +130,9 @@ import {
   getBestFromFrontier,
   loadFrontiersFromOutcomes,
 } from '@/core/learning/pareto-champion-challenger';
-import { injectExecutionSystemPrompt } from './execution-system-prompt';
+import { buildExecutionSystemPrompt } from './execution-system-prompt';
+import { explicitlyLacksFunctionCalling, hasDeclaredFunctionCalling } from './function-calling-guard';
+import { getFunctionCallingVerdict } from './function-calling-probe';
 import { injectPeerReviewPrompt, shouldInjectPeerReviewPrompt } from './prompts/peer-review-prompt';
 import { recordOutcome } from '@/core/evaluation/outcome-measurement';
 import { shouldRunShadowEval, recordShadowEvaluation } from '@/core/evaluation/shadow-evaluation';
@@ -767,11 +771,19 @@ export class OrchestrationEngine {
         // unreachable (HF API 404, no local embedder), buildContext blocks on
         // retry-and-fallback before yielding a zero-vector match; the env gate
         // lets local/dev environments skip the round-trip entirely.
+        // Workstream G (2026-08-17): trivially-short single-turn requests
+        // ("oi", anonymous, no history/tools/attachments) skip the lookup —
+        // provably unused for them, and it is a serial embedding+pgvector
+        // cost on the first-token path. See trivial-request-triage.ts.
+        const skipMemoryForTrivial = isTrivialSingleTurn(request);
+        if (skipMemoryForTrivial) {
+          this.log.debug({ requestId }, 'Trivial single-turn request — skipping memory-context lookup');
+        }
         type MemoryContextResult = Awaited<
           ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>
         >;
         const memoryContextPromise: Promise<MemoryContextResult | null> =
-          process.env.MEMORY_CONTEXT_ENABLED !== 'false'
+          process.env.MEMORY_CONTEXT_ENABLED !== 'false' && !skipMemoryForTrivial
             ? getMemoryContextService()
                 .buildContext(request, organizationId, userId, {
                   maxMemories: 5,
@@ -892,8 +904,26 @@ export class OrchestrationEngine {
 
         // Enrich request with semantic memory context (lookup started above,
         // concurrently with the semantic-cache check — LAT-2).
+        // Same MEMORY_LOOKUP_BUDGET_MS deadline as the streaming path — see the
+        // rationale there (prod-measured 8.6-8.9s degraded lookups).
         let enrichedRequest = request;
-        const memoryContext = await memoryContextPromise;
+        const memoryContext = await Promise.race([
+          memoryContextPromise,
+          new Promise<null>((resolve) =>
+            setTimeout(
+              () => resolve(null),
+              Number(process.env.MEMORY_LOOKUP_BUDGET_MS ?? 750)
+            )
+          ),
+        ]).then((v) => {
+          if (v === null) {
+            this.log.warn(
+              { requestId },
+              'Memory-context lookup exceeded budget — proceeding without memory enrichment'
+            );
+          }
+          return v as Awaited<MemoryContextResult | null>;
+        });
         if (memoryContext?.hasContext) {
           enrichedRequest = getMemoryContextService().enrichRequest(request, memoryContext);
           this.log.debug(
@@ -909,9 +939,12 @@ export class OrchestrationEngine {
         let triageDecision = context.triage;
 
         // LAT-3: tell strategies the engine already ran the memory search for
-        // this request — strategy-level enrichWithMemories() must not repeat the
-        // embedding + pgvector lookup (which would also duplicate the injected
-        // memory block in the prompt).
+        // this request — strategy-level enrichWithMemories() must not repeat
+        // the embedding + pgvector lookup. `memorySearched` covers hit-or-miss
+        // (the search resolved, even if it found nothing); `memoryEnriched`
+        // additionally means the request was actually mutated with a memory
+        // block, so strategies reusing `enrichedRequest` get the merged content.
+        context.memorySearched = memoryContext?.searched === true;
         if (enrichedRequest !== request) {
           context.memoryEnriched = true;
         }
@@ -932,6 +965,10 @@ export class OrchestrationEngine {
               context,
               context.capabilityInference,
               context.models
+            );
+            triageDecision = applyFreeTierStrategyCap(
+              triageDecision,
+              request.ailin_free_tier_scope === true
             );
             if (triageDecision) {
               // ── Confidence Gate: reject low-confidence triage decisions ──────
@@ -1263,8 +1300,55 @@ export class OrchestrationEngine {
             // Set that missed several real collective strategies (debate, consensus,
             // blind-debate, expert-panel, war-room, ...). BaseStrategy.getMetadata().minModels
             // is the single source of truth for multi-model strategies.
-            context.isCollectiveStrategy = (strategy.getMetadata().minModels ?? 1) > 1;
-            injectExecutionSystemPrompt(request, context);
+            //
+            // isCascading exclusion (2026-08-13): minModels>1 alone also matches
+            // CostCascadeStrategy, whose minModels:2 means "at least 2 cost tiers
+            // must exist to escalate through" — not "multiple models collaborate".
+            // Every cascade rung was being told it's part of a peer-reviewed
+            // collective even though only one model's output is ever used. See
+            // StrategyMetadata.isCascading's doc comment.
+            const strategyMetadata = strategy.getMetadata();
+            context.isCollectiveStrategy =
+              (strategyMetadata.minModels ?? 1) > 1 && !strategyMetadata.isCascading;
+            // LAT-3-style sync (2026-08-13, same pattern the peer-review-prompt
+            // injection below already uses): injectExecutionSystemPrompt() used
+            // to mutate `request.messages` in place and was called ONLY on
+            // `request` — but whenever memory context was found earlier,
+            // `enrichedRequest` (the object LAT-3 made the confidenceGate branch
+            // actually execute from, via strategy.enrichWithMemories()'s
+            // short-circuit) had already forked into an independent object with
+            // its own `messages` array BEFORE this point. The mutation landed on
+            // the now-abandoned `request`, so every memory-enriched (returning
+            // user / multi-turn) conversation silently lost the platform
+            // identity prompt while fresh conversations got it correctly —
+            // adversarially confirmed via a fresh conversation "working" while
+            // hiding the bug for exactly the users where consistent identity
+            // framing matters most. Fix: compute the prompt string once (against
+            // `request`, since it's `enrichedRequest`'s pre-fork state and the
+            // one `hasSystemMessage` check should reflect) and apply it to
+            // whichever variant(s) are actually in play, keeping them in
+            // lockstep exactly like the peer-review injection does two blocks
+            // down. A second system message (persona, then any memory-context
+            // note already on enrichedRequest) is fine — normalizeSystemMessages()
+            // downstream already collapses multiple system messages into one.
+            const executionSystemPrompt = buildExecutionSystemPrompt(request, context);
+            if (executionSystemPrompt) {
+              const requestBeforePersonaPrompt = request;
+              request = {
+                ...request,
+                messages: [{ role: 'system', content: executionSystemPrompt }, ...request.messages],
+              };
+              enrichedRequest =
+                enrichedRequest === requestBeforePersonaPrompt
+                  ? request
+                  : {
+                      ...enrichedRequest,
+                      messages: [
+                        { role: 'system', content: executionSystemPrompt },
+                        ...enrichedRequest.messages,
+                      ],
+                    };
+            }
 
             // ── Social Facilitation Prompt ────────────────────────────────
             // For collective strategies (multi-model), inform models that their work
@@ -1310,32 +1394,11 @@ export class OrchestrationEngine {
             // returns 401/402/empty — synthesize an EMPTY OrchestrationResult instead of
             // letting the throw escape to a 500. The shared post-execution pipeline below
             // (recoverEmptyFinalResponse) then re-selects funded candidates (anthropic,
-            // etc.), so the request routes around the dead gateways.
-            const buildExecThrewResult = (err: unknown): OrchestrationResult => ({
-              strategyUsed: strategy.getMetadata().name,
-              modelsUsed: [],
-              finalResponse: {
-                id: `exec-threw-${Date.now()}`,
-                object: 'chat.completion',
-                created: Math.floor(Date.now() / 1000),
-                model: 'auto',
-                choices: [
-                  {
-                    index: 0,
-                    message: { role: 'assistant', content: '' },
-                    finish_reason: 'stop',
-                    logprobs: null,
-                  },
-                ],
-              },
-              totalCost: 0,
-              totalDuration: 0,
-              qualityScore: 0,
-              metadata: {
-                strategy_execution_threw: true,
-                strategy_execution_error: getErrorMessage(err),
-              },
-            });
+            // etc.), so the request routes around the dead gateways. Shared with
+            // executeStream()'s non-streaming-strategy branch — see
+            // buildStrategyThrewResult() below.
+            const buildExecThrewResult = (err: unknown): OrchestrationResult =>
+              this.buildStrategyThrewResult(strategy, err);
 
             if (confidenceGateEnabled) {
               // C3 P0.2: Skip memory enrichment when ablated.
@@ -1578,41 +1641,7 @@ export class OrchestrationEngine {
             };
           }
 
-          if (!this.hasUsableAssistantResponse(result.finalResponse)) {
-            this.log.warn(
-              { requestId },
-              'Orchestration produced empty response after fallback attempts — returning degraded response'
-            );
-            const degradedResponse: ChatResponse = {
-              id: `degraded-${Date.now()}`,
-              object: 'chat.completion',
-              created: Math.floor(Date.now() / 1000),
-              model: 'auto',
-              choices: [
-                {
-                  index: 0,
-                  message: {
-                    role: 'assistant',
-                    content: '[DEGRADED] All execution attempts failed. No response produced.',
-                  },
-                  finish_reason: 'stop',
-                  logprobs: null,
-                },
-              ],
-              // Explicit zeroed usage — without this, callers that read
-              // `usage?.total_tokens ?? 0` can't distinguish "no usage reported"
-              // from "no usage block at all", and a 200 OK + non-empty content +
-              // absent usage silently reads as an ordinary free/cached success.
-              usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-            };
-            result.finalResponse = degradedResponse;
-            result.qualityScore = 0;
-            result.metadata = {
-              ...result.metadata,
-              degraded: true,
-              degraded_reason: 'empty_response_after_fallback',
-            };
-          }
+          result = this.applyDegradedFallback(result, requestId);
 
           const totalDuration = Date.now() - startTime;
 
@@ -2665,6 +2694,10 @@ export class OrchestrationEngine {
           context.capabilityInference,
           context.models
         );
+        triageDecision = applyFreeTierStrategyCap(
+          triageDecision,
+          planningRequest.ailin_free_tier_scope === true
+        );
         if (triageDecision) {
           triageDecision = this.applyTriageRoute(triageDecision, planningRequest);
           context = {
@@ -2782,249 +2815,526 @@ export class OrchestrationEngine {
       },
     } as ChatResponse;
 
-    // Latency: kick off the memory-context lookup (embedding + pgvector)
-    // CONCURRENTLY with buildContext() instead of serially after it.
-    // Before this fix, executeStream() never set context.memoryEnriched,
-    // so strategy.enrichWithMemories() (called below, right before
-    // strategy.executeStream()) unconditionally repeated the FULL
-    // embedding + pgvector search AFTER buildContext/triage had already
-    // run — an extra sequential network+DB round trip blocking every
-    // strategy's first real yield. Mirrors the memoryContextPromise
-    // pattern already used in execute() (LAT-2), adapted for the
-    // streaming path (which has no semantic-cache step to pair it with,
-    // so it's raced directly against buildContext instead).
-    type MemoryContextResult = Awaited<
-      ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>
-    >;
-    const memoryContextPromise: Promise<MemoryContextResult | null> =
-      process.env.MEMORY_CONTEXT_ENABLED !== 'false'
-        ? getMemoryContextService()
-            .buildContext(request, organizationId, userId, { maxMemories: 5, minSimilarity: 0.7 })
-            .catch((memoryError: unknown) => {
-              this.log.warn(
-                { error: getErrorMessage(memoryError) },
-                'Failed to enrich request with memory context (stream)'
-              );
-              return null;
-            })
+    // Whole-request hard ceiling (2026-08). Each model call is now correctly
+    // bounded (boundModelExecution's real AbortController wiring), but a
+    // strategy that chains several bounded calls in sequence (fallback
+    // chains, multi-round collectives — double-diamond has 7
+    // boundModelExecution sites) still has no upper bound on TOTAL latency.
+    // This is a coarse safety net, not a replacement for the per-call
+    // timeout. Tunable via STREAM_REQUEST_DEADLINE_MS — the default below is
+    // a placeholder; validate against real p99 end-to-end latency for
+    // double-diamond/sequential (the heaviest multi-round strategies) before
+    // relying on it in production, per the design doc's rollout note.
+    const requestDeadlineMs = Number(process.env.STREAM_REQUEST_DEADLINE_MS ?? 180000);
+    // Latency waterfall (P0.8): decompose the pre-strategy phases of the
+    // streaming path. Anonymous "oi" evidence (2026-08-18): SSE opens in
+    // ~50ms, but the strategy's first yield (progress chunk) lands at
+    // ~3.3s — the gap is somewhere between engine entry and the first
+    // strategy yield, and none of the phases below logged their cost.
+    // These timestamps make each phase's contribution visible at INFO so
+    // the next fix targets the real rung, not a guess.
+    const wfT0 = Date.now();
+    const requestController = new AbortController();
+    const requestDeadlineTimer = setTimeout(() => {
+      this.log.warn(
+        { requestId, requestDeadlineMs },
+        'Streaming request exceeded overall deadline'
+      );
+      // No custom abort reason — forwarded transitively through
+      // boundModelExecution's own controller.abort() call, so
+      // error.name === 'AbortError' survives at every layer (see
+      // base-strategy.ts's wasDeliberatelyCancelled health-exemption check).
+      requestController.abort();
+    }, requestDeadlineMs);
+    try {
+      // Latency: kick off the memory-context lookup (embedding + pgvector)
+      // CONCURRENTLY with buildContext() instead of serially after it.
+      // Before this fix, executeStream() never set context.memoryEnriched,
+      // so strategy.enrichWithMemories() (called below, right before
+      // strategy.executeStream()) unconditionally repeated the FULL
+      // embedding + pgvector search AFTER buildContext/triage had already
+      // run — an extra sequential network+DB round trip blocking every
+      // strategy's first real yield. Mirrors the memoryContextPromise
+      // pattern already used in execute() (LAT-2), adapted for the
+      // streaming path (which has no semantic-cache step to pair it with,
+      // so it's raced directly against buildContext instead).
+      // Workstream G (2026-08-17): trivially-short single-turn requests skip
+      // the lookup entirely (see trivial-request-triage.ts).
+      const skipMemoryForTrivial = isTrivialSingleTurn(request);
+      if (skipMemoryForTrivial) {
+        this.log.debug(
+          { requestId },
+          'Trivial single-turn request — skipping memory-context lookup (stream)'
+        );
+      }
+      type MemoryContextResult = Awaited<
+        ReturnType<ReturnType<typeof getMemoryContextService>['buildContext']>
+      >;
+      const memoryContextPromise: Promise<MemoryContextResult | null> =
+        process.env.MEMORY_CONTEXT_ENABLED !== 'false' && !skipMemoryForTrivial
+          ? getMemoryContextService()
+              .buildContext(request, organizationId, userId, { maxMemories: 5, minSimilarity: 0.7 })
+              .catch((memoryError: unknown) => {
+                this.log.warn(
+                  { error: getErrorMessage(memoryError) },
+                  'Failed to enrich request with memory context (stream)'
+                );
+                return null;
+              })
+          : Promise.resolve(null);
+
+      const context = await this.buildContext(request, organizationId, userId, requestId);
+      const wfBuildContextMs = Date.now() - wfT0;
+      context.signal = requestController.signal;
+
+      // Speculative parallel selection (2026-07-14, kill-switch
+      // ORCHESTRATION_SPECULATIVE_SELECTION — default OFF until validated in
+      // canary): unlike createStreamingPlan(), the strategy CLASS here really
+      // does depend on triage.recommendedStrategy, so this only speculates on
+      // the single-model case (the dominant one for auto requests without
+      // media/tools) — a collective recommendation simply discards it below at
+      // zero cost (planStreaming() never invokes a provider).
+      const speculationEnabled = process.env.ORCHESTRATION_SPECULATIVE_SELECTION === 'true';
+      const singleStrategyCandidate = speculationEnabled
+        ? this.strategies.get('single')
+        : undefined;
+      const singleStrategyForSpeculation =
+        singleStrategyCandidate instanceof SingleModelStrategy
+          ? singleStrategyCandidate
+          : undefined;
+      if (singleStrategyForSpeculation) this.injectProviderRegistry(singleStrategyForSpeculation);
+      const speculativeSelectionPromise = singleStrategyForSpeculation
+        ? this.resolveSpeculativeSingleSelection(
+            singleStrategyForSpeculation,
+            request,
+            context,
+            requestId
+          )
         : Promise.resolve(null);
 
-    const context = await this.buildContext(request, organizationId, userId, requestId);
-
-    // Speculative parallel selection (2026-07-14, kill-switch
-    // ORCHESTRATION_SPECULATIVE_SELECTION — default OFF until validated in
-    // canary): unlike createStreamingPlan(), the strategy CLASS here really
-    // does depend on triage.recommendedStrategy, so this only speculates on
-    // the single-model case (the dominant one for auto requests without
-    // media/tools) — a collective recommendation simply discards it below at
-    // zero cost (planStreaming() never invokes a provider).
-    const speculationEnabled = process.env.ORCHESTRATION_SPECULATIVE_SELECTION === 'true';
-    const singleStrategyCandidate = speculationEnabled ? this.strategies.get('single') : undefined;
-    const singleStrategyForSpeculation =
-      singleStrategyCandidate instanceof SingleModelStrategy ? singleStrategyCandidate : undefined;
-    if (singleStrategyForSpeculation) this.injectProviderRegistry(singleStrategyForSpeculation);
-    const speculativeSelectionPromise = singleStrategyForSpeculation
-      ? this.resolveSpeculativeSingleSelection(
-          singleStrategyForSpeculation,
-          request,
-          context,
-          requestId
-        )
-      : Promise.resolve(null);
-
-    const streamMemoryContext = await memoryContextPromise;
-    let memRequestFromMemory = request;
-    if (streamMemoryContext?.hasContext) {
-      memRequestFromMemory = getMemoryContextService().enrichRequest(request, streamMemoryContext);
-      context.memoryEnriched = true;
-    }
-
-    let triageDecision = context.triage;
-    const autoStrategyRequested = !request.strategy || request.strategy === 'auto';
-    const shouldRunTriage = this.shouldRunTriage(request, context);
-
-    if (this.triageService && autoStrategyRequested && shouldRunTriage) {
-      try {
-        triageDecision = await this.triageService.triage(
-          request,
-          context,
-          context.capabilityInference,
-          context.models
-        );
-        if (triageDecision) {
-          triageDecision = this.applyTriageRoute(triageDecision, request);
-        }
-      } catch (err) {
-        this.log.warn({ error: getErrorMessage(err), requestId }, 'Triage failed in executeStream');
-      }
-    }
-
-    const enrichedContext: OrchestrationContext = {
-      ...context,
-      triage: triageDecision,
-      taskType: triageDecision
-        ? this.applyTriageTaskType(request, context.taskType, triageDecision)
-        : context.taskType,
-    };
-
-    if (triageDecision) {
-      await this.applyPreferredModels(request, enrichedContext, triageDecision);
-    }
-
-    const { strategy } = this.selectStrategy(request, enrichedContext);
-    this.injectProviderRegistry(strategy);
-
-    // Reconciliation: reuse the speculative pick only when the FINAL strategy
-    // choice landed on the same 'single' instance we speculated with — any
-    // other strategy (a collective) discards it below at zero execution
-    // cost. Metric records the outcome so real production traffic can
-    // confirm the assumed reuse rate before enabling this broadly.
-    if (speculationEnabled && strategy === singleStrategyForSpeculation) {
-      const speculative = await speculativeSelectionPromise;
-      if (speculative) {
-        let finalSelection = speculative;
-        let outcome: 'reused' | 'repinned' = 'reused';
-        if (
-          request.model &&
-          request.model !== 'auto' &&
-          request.model !== speculative.model.id &&
-          request.model !== speculative.model.name
-        ) {
-          // applyPreferredModels() pinned a different model than the
-          // speculative call resolved — re-derive, but request.model is now
-          // concrete so this hits selectBestModel()'s cheap exact-match path,
-          // not another full DynamicModelSelector pass.
-          const repinned = await singleStrategyForSpeculation.planStreaming(
-            request,
-            enrichedContext
+      // Memory-lookup deadline (P0.8, 2026-08-18): prod waterfall measured
+      // memoryLookupMs at 8.6-8.9s on multi-turn requests when the embedder
+      // chain degraded to timeouts — silently dominating TTFT. Memory is an
+      // ENRICHMENT: when it cannot resolve within the budget, proceed without
+      // it rather than making the user wait. The underlying promise keeps
+      // running (its cache write is still useful) — only the AWAIT is bounded.
+      const memoryBudgetMs = Number(process.env.MEMORY_LOOKUP_BUDGET_MS ?? 750);
+      let memoryLookupTimedOut = false;
+      const streamMemoryContext = await Promise.race([
+        memoryContextPromise,
+        new Promise<null>((resolve) =>
+          setTimeout(() => {
+            memoryLookupTimedOut = true;
+            resolve(null);
+          }, memoryBudgetMs)
+        ),
+      ]).then((v) => {
+        if (memoryLookupTimedOut) {
+          this.log.warn(
+            { requestId, memoryBudgetMs },
+            'Memory-context lookup exceeded budget — proceeding without memory enrichment (stream)'
           );
-          if (repinned) {
-            finalSelection = repinned;
-            outcome = 'repinned';
-          }
         }
-        enrichedContext.precomputedModelSelection = finalSelection;
-        recordSpeculativeSelectionOutcome(outcome);
-      } else {
-        recordSpeculativeSelectionOutcome('discarded_error');
+        return v as MemoryContextResult | null;
+      });
+      const wfMemoryMs = Date.now() - wfT0 - wfBuildContextMs;
+      let memRequestFromMemory = request;
+      // LAT-3: mirror the non-streaming path — record hit-or-miss resolution
+      // via memorySearched regardless of whether anything was found, so the
+      // strategy-level fallback search below (and enrichWithMemories() inside
+      // strategy.executeStream()) doesn't repeat a search that already ran.
+      context.memorySearched = streamMemoryContext?.searched === true;
+      if (streamMemoryContext?.hasContext) {
+        memRequestFromMemory = getMemoryContextService().enrichRequest(
+          request,
+          streamMemoryContext
+        );
+        context.memoryEnriched = true;
       }
-    } else if (speculationEnabled && singleStrategyForSpeculation) {
-      recordSpeculativeSelectionOutcome('discarded_collective');
-    }
 
-    // ── Observer wiring (streaming path) ──
-    // The engine's execute() path wires the observer, but executeStream() did
-    // NOT — so collective streaming (chat-routes collective branch) silently
-    // dropped every narration (getObserverFeed() returned the no-op). Wire it
-    // here too. Narration is default-ON for collective (multi-model) streaming
-    // only — the single-model streaming fallback has nothing to narrate, so we
-    // gate on minModels>1 (same signal as context.isCollectiveStrategy). Degrades
-    // to a silent no-op when no backend resolves. OBSERVER_DEFAULT_ENABLED=false
-    // is the global kill-switch; enable_observer:false is the per-request opt-out.
-    const streamObserverEnabled =
-      process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
-      request.ailin_constraints?.enable_observer !== false;
-    // Opt-in "inline process header": promote the first narration to the main
-    // channel so naive OpenAI clients get visible opening tokens in ~4s instead of
-    // ~30-52s of silence. DEFAULT OFF — it puts a process preamble inside the answer,
-    // clean for the API by default; interactive clients (the ailin app) opt in.
-    const inlineNarration =
-      process.env.COLLECTIVE_INLINE_NARRATION === 'true' ||
-      request.ailin_constraints?.inline_narration === true;
-    let streamObserverFeed = createNoOpObserverFeed();
-    if (streamObserverEnabled && (strategy.getMetadata().minModels ?? 1) > 1) {
-      const observer = new ObserverService(
-        { enabled: true, language: ObserverService.extractUserSample(request.messages) },
-        strategy.getMetadata().name
+      let triageDecision = context.triage;
+      const autoStrategyRequested = !request.strategy || request.strategy === 'auto';
+      const shouldRunTriage = this.shouldRunTriage(request, context);
+
+      if (this.triageService && autoStrategyRequested && shouldRunTriage) {
+        try {
+          triageDecision = await this.triageService.triage(
+            request,
+            context,
+            context.capabilityInference,
+            context.models
+          );
+          triageDecision = applyFreeTierStrategyCap(
+            triageDecision,
+            request.ailin_free_tier_scope === true
+          );
+          if (triageDecision) {
+            triageDecision = this.applyTriageRoute(triageDecision, request);
+          }
+        } catch (err) {
+          this.log.warn(
+            { error: getErrorMessage(err), requestId },
+            'Triage failed in executeStream'
+          );
+        }
+      }
+
+      const enrichedContext: OrchestrationContext = {
+        ...context,
+        triage: triageDecision,
+        taskType: triageDecision
+          ? this.applyTriageTaskType(request, context.taskType, triageDecision)
+          : context.taskType,
+      };
+
+      if (triageDecision) {
+        await this.applyPreferredModels(request, enrichedContext, triageDecision);
+      }
+
+      const { strategy } = this.selectStrategy(request, enrichedContext);
+      this.injectProviderRegistry(strategy);
+      const wfSelectMs = Date.now() - wfT0 - wfBuildContextMs - wfMemoryMs;
+
+      // Streaming-persona fix (2026-08-13): execute() (the non-streaming path)
+      // has ALWAYS injected the platform/collective-intelligence identity system
+      // prompt here — right after strategy selection, once triage has populated
+      // enrichedContext.triage. executeStream() never did, for ANY strategy,
+      // streaming-capable or not: every SSE request (the UI's actual default)
+      // let the raw underlying provider model answer identity questions ("who
+      // are you?") with its own training identity instead of behaving as the
+      // platform.
+      //
+      // Same lockstep-sync pattern as execute()'s analogous fix: `request` and
+      // `memRequestFromMemory` are the SAME object only when the concurrent
+      // memory-context lookup (started at the top of this generator) found
+      // nothing — when it DID find context, memRequestFromMemory was already
+      // forked into an independent object (getMemoryContextService().enrichRequest
+      // returns a new object, not a mutation) BEFORE this point, so a plain
+      // mutate-in-place injection on `request` alone would land on the
+      // now-abandoned object and every memory-enriched streaming conversation
+      // would silently lose the identity prompt while a fresh conversation
+      // "worked", hiding the bug.
+      // isCascading exclusion: see the analogous comment in execute() — a
+      // cascade's minModels>1 means "escalation depth", not "models
+      // collaborate", and only one model's output is ever used per request.
+      const streamStrategyMetadata = strategy.getMetadata();
+      enrichedContext.isCollectiveStrategy =
+        (streamStrategyMetadata.minModels ?? 1) > 1 && !streamStrategyMetadata.isCascading;
+      const streamExecutionSystemPrompt = buildExecutionSystemPrompt(request, enrichedContext);
+      if (streamExecutionSystemPrompt) {
+        const requestBeforePersonaPrompt = request;
+        request = {
+          ...request,
+          messages: [{ role: 'system', content: streamExecutionSystemPrompt }, ...request.messages],
+        };
+        memRequestFromMemory =
+          memRequestFromMemory === requestBeforePersonaPrompt
+            ? request
+            : {
+                ...memRequestFromMemory,
+                messages: [
+                  { role: 'system', content: streamExecutionSystemPrompt },
+                  ...memRequestFromMemory.messages,
+                ],
+              };
+      }
+
+      // Reconciliation: reuse the speculative pick only when the FINAL strategy
+      // choice landed on the same 'single' instance we speculated with — any
+      // other strategy (a collective) discards it below at zero execution
+      // cost. Metric records the outcome so real production traffic can
+      // confirm the assumed reuse rate before enabling this broadly.
+      if (speculationEnabled && strategy === singleStrategyForSpeculation) {
+        const speculative = await speculativeSelectionPromise;
+        if (speculative) {
+          let finalSelection = speculative;
+          let outcome: 'reused' | 'repinned' = 'reused';
+          if (
+            request.model &&
+            request.model !== 'auto' &&
+            request.model !== speculative.model.id &&
+            request.model !== speculative.model.name
+          ) {
+            // applyPreferredModels() pinned a different model than the
+            // speculative call resolved — re-derive, but request.model is now
+            // concrete so this hits selectBestModel()'s cheap exact-match path,
+            // not another full DynamicModelSelector pass.
+            const repinned = await singleStrategyForSpeculation.planStreaming(
+              request,
+              enrichedContext
+            );
+            if (repinned) {
+              finalSelection = repinned;
+              outcome = 'repinned';
+            }
+          }
+          enrichedContext.precomputedModelSelection = finalSelection;
+          recordSpeculativeSelectionOutcome(outcome);
+        } else {
+          recordSpeculativeSelectionOutcome('discarded_error');
+        }
+      } else if (speculationEnabled && singleStrategyForSpeculation) {
+        recordSpeculativeSelectionOutcome('discarded_collective');
+      }
+
+      // ── Observer wiring (streaming path) ──
+      // The engine's execute() path wires the observer, but executeStream() did
+      // NOT — so collective streaming (chat-routes collective branch) silently
+      // dropped every narration (getObserverFeed() returned the no-op). Wire it
+      // here too. Narration is default-ON for collective (multi-model) streaming
+      // only — the single-model streaming fallback has nothing to narrate, so we
+      // gate on minModels>1 (same signal as context.isCollectiveStrategy). Degrades
+      // to a silent no-op when no backend resolves. OBSERVER_DEFAULT_ENABLED=false
+      // is the global kill-switch; enable_observer:false is the per-request opt-out.
+      const streamObserverEnabled =
+        process.env.OBSERVER_DEFAULT_ENABLED !== 'false' &&
+        request.ailin_constraints?.enable_observer !== false;
+      // Opt-in "inline process header": promote the first narration to the main
+      // channel so naive OpenAI clients get visible opening tokens in ~4s instead of
+      // ~30-52s of silence. DEFAULT OFF — it puts a process preamble inside the answer,
+      // clean for the API by default; interactive clients (the ailin app) opt in.
+      const inlineNarration =
+        process.env.COLLECTIVE_INLINE_NARRATION === 'true' ||
+        request.ailin_constraints?.inline_narration === true;
+      let streamObserverFeed = createNoOpObserverFeed();
+      if (streamObserverEnabled && (strategy.getMetadata().minModels ?? 1) > 1) {
+        const observer = new ObserverService(
+          { enabled: true, language: ObserverService.extractUserSample(request.messages) },
+          strategy.getMetadata().name
+        );
+        if (observer.isActive()) {
+          streamObserverFeed = observer;
+          // Universal "setup" narration — fired the moment the collective is assembled,
+          // BEFORE the strategy starts its phases, so the FIRST narration reports the
+          // earlier pipeline (request analyzed → routed to this collective → models
+          // selected) instead of the client waiting through selection in silence. The
+          // interleaver below delivers it as soon as it's generated. Applies to EVERY
+          // collective strategy, not just debate.
+          streamObserverFeed.emit({
+            type: 'phase_start',
+            timestamp: Date.now(),
+            strategy: strategy.getMetadata().name,
+            models: [],
+            // Describe the routing qualitatively. Do NOT surface the raw candidate-pool
+            // size here (it is the whole eligible catalog — tens of thousands — not the
+            // handful the collective will actually use, so narrating it misleads the user
+            // and the narrator sometimes echoes the giant number literally). The real
+            // participant count is reported by the strategy's own phase_start moments later.
+            summary:
+              `Your request has been analyzed and routed to the "${strategy.getMetadata().name}" collective, ` +
+              `where several specialized AI models will now work on it together.`,
+          });
+        }
+      }
+      (enrichedContext as { observerFeed?: typeof streamObserverFeed }).observerFeed =
+        streamObserverFeed;
+
+      // NOTE: see the analogous comment in execute() — cross-modal capability
+      // access comes from `enrichedContext.invoker` (request-scoped, built in
+      // buildContext()). The old `strategy.capabilityInvoker` write here mutated
+      // the shared strategy singleton per-request, which is racy under
+      // concurrent load and was never read by any strategy; removed.
+
+      // Memory enrichment for streaming path
+      // C3 P0.2: Skip when memory is ablated. Mirrors the non-streaming path's
+      // gating (see base-strategy.ts's enrichWithMemories() guard for the
+      // full rationale): key off `memoryEnriched` (HIT), not `memorySearched`
+      // (resolved, hit-or-miss). On a HIT, use memRequestFromMemory directly —
+      // it already carries the merged memory block that the concurrent
+      // memoryContextPromise above fetched, and calling strategy.enrichWith-
+      // Memories() here would just early-return its RAW `request` param,
+      // silently dropping that block. On a MISS (memorySearched true,
+      // memoryEnriched false) — or when the engine's search never resolved at
+      // all — call strategy.enrichWithMemories(): its own guard now runs a
+      // scope-appropriate fallback (narrowed to the engine's coverage gap on
+      // a miss; the full unscoped search when nothing resolved) instead of
+      // unconditionally skipping, so episodic/org-wide recall isn't silently
+      // lost on the streaming path either.
+      const memRequest = this.applyRecommendedTools(
+        enrichedContext.ablationFlags?.disabled?.has('memory')
+          ? request
+          : enrichedContext.memoryEnriched
+            ? memRequestFromMemory
+            : await strategy.enrichWithMemories(request, enrichedContext),
+        enrichedContext
       );
-      if (observer.isActive()) {
-        streamObserverFeed = observer;
-        // Universal "setup" narration — fired the moment the collective is assembled,
-        // BEFORE the strategy starts its phases, so the FIRST narration reports the
-        // earlier pipeline (request analyzed → routed to this collective → models
-        // selected) instead of the client waiting through selection in silence. The
-        // interleaver below delivers it as soon as it's generated. Applies to EVERY
-        // collective strategy, not just debate.
-        streamObserverFeed.emit({
-          type: 'phase_start',
-          timestamp: Date.now(),
+      const wfMemoryEnrichMs = Date.now() - wfT0 - wfBuildContextMs - wfMemoryMs - wfSelectMs;
+      this.log.info(
+        {
+          component: 'latency-waterfall',
+          requestId,
+          buildContextMs: wfBuildContextMs,
+          memoryLookupMs: wfMemoryMs,
+          selectStrategyMs: wfSelectMs,
+          memoryEnrichMs: wfMemoryEnrichMs,
+          totalPreStrategyMs: Date.now() - wfT0,
           strategy: strategy.getMetadata().name,
-          models: [],
-          // Describe the routing qualitatively. Do NOT surface the raw candidate-pool
-          // size here (it is the whole eligible catalog — tens of thousands — not the
-          // handful the collective will actually use, so narrating it misleads the user
-          // and the narrator sometimes echoes the giant number literally). The real
-          // participant count is reported by the strategy's own phase_start moments later.
-          summary:
-            `Your request has been analyzed and routed to the "${strategy.getMetadata().name}" collective, ` +
-            `where several specialized AI models will now work on it together.`,
-        });
+          memoryEnriched: enrichedContext.memoryEnriched,
+          memorySearched: enrichedContext.memorySearched,
+        },
+        'Streaming pre-strategy waterfall (cost-cascade latency decomposition)'
+      );
+
+      // Leader removed — strategies call executeModel() directly
+
+      if (strategy.supportsStreaming()) {
+        // UNIVERSAL narration interleave: stream observer narrations AS THEY BECOME
+        // READY while the strategy is internally awaiting a phase, for EVERY
+        // collective strategy — not just the ones that hand-wired drainWhile(). Any
+        // strategy that emits observer events now gets continuous narration instead
+        // of a boundary burst. Off-channel; no-op when the observer is inactive.
+        //
+        // Streaming-strategy throw guard (2026-08-16). The ELSE branch below
+        // wraps strategy.execute() in buildStrategyThrewResult() →
+        // recoverEmptyFinalResponse() → applyDegradedFallback(); THIS branch
+        // had no equivalent, so any throw out of strategy.executeStream()
+        // escaped to chat-routes.ts:1547's sendSSEError as a hard,
+        // client-facing failure. Latent while every streaming strategy
+        // happened to swallow its own failures; load-bearing the moment
+        // cost-cascade (100% of anonymous/ailin-economy traffic) started
+        // returning supportsStreaming()=true, since BOTH of its throws —
+        // buildCascadeCandidates()'s "requires at least N models"
+        // (cost-cascade-strategy.ts:176) and execute()'s "No successful
+        // executions in cost cascade" (:328, reached via the elevated-quality
+        // branch) — are reachable from executeStream().
+        //
+        // Gated on "no answer text emitted yet": once real assistant content
+        // has reached the client, substituting an independently-produced
+        // answer would splice two different answers into one response — the
+        // same rule streamSynthesisWithFallback enforces internally
+        // (base-strategy.ts:600-606). A post-content throw keeps today's
+        // behavior and propagates.
+        //
+        // ACCEPTED TRADEOFF (reviewed 2026-08-16, deliberately NOT "fixed"):
+        // this guard also swallows a genuine strategy MISCONFIGURATION — e.g.
+        // cost-cascade's "requires at least 2 models" throw when the pool was
+        // built wrong — and recovers it into a plausible single-model answer
+        // instead of surfacing a client error. That is the intended product
+        // behavior (a user must never eat a 500 for our routing bug), but it
+        // means misconfiguration is silent AT THE CLIENT by design. It is NOT
+        // silent operationally: `recordStreamingStrategyRecovery` below counts
+        // every such recovery, and the `ailin_metadata.type='stream_recovery'`
+        // block travels on the wire. Watch
+        // `ci_streaming_strategy_recovery_total{outcome="recovered"}` — a
+        // sustained non-zero rate there IS the misconfiguration alarm.
+        let emittedAnswerContent = false;
+        try {
+          for await (const chunk of this.interleaveNarration(
+            strategy.executeStream(memRequest, enrichedContext),
+            streamObserverFeed,
+            undefined,
+            inlineNarration
+          )) {
+            if (!emittedAnswerContent && this.chunkCarriesAnswerContent(chunk)) {
+              emittedAnswerContent = true;
+            }
+            yield chunk;
+          }
+        } catch (streamErr) {
+          if (emittedAnswerContent) throw streamErr;
+          this.log.error(
+            {
+              requestId,
+              strategy: strategy.getMetadata().name,
+              error: getErrorMessage(streamErr),
+            },
+            'Streaming strategy threw before any content — synthesizing empty result so cross-provider recovery can run'
+          );
+          // Heartbeat during recovery. interleaveNarration has already
+          // terminated (its source generator is what threw), so without this
+          // the SSE connection goes COMPLETELY silent for the whole recovery
+          // window — and the realistic trigger (cost-cascade's
+          // "requires at least N models") fires at request start, so the
+          // client would eat that silence from byte zero. Bounded by
+          // recoverStrategyThrow's own candidate cap + wall-clock budget; the
+          // heartbeat is the belt to that fix's braces.
+          const recoveryPromise = this.recoverStrategyThrow(
+            strategy,
+            streamErr,
+            request,
+            enrichedContext,
+            requestId
+          );
+          yield* this.emitRecoveryHeartbeat(recoveryPromise, requestId);
+          const recovered = await recoveryPromise;
+          const isDegraded = recovered.metadata?.degraded === true;
+          recordStreamingStrategyRecovery({
+            strategy: strategy.getMetadata().name,
+            outcome: isDegraded ? 'degraded' : 'recovered',
+          });
+          strategy.recordExecution(enrichedContext, recovered).catch(() => {});
+          yield this.withStreamRecoveryMetadata(recovered, streamErr);
+        }
+      } else {
+        // Non-streaming strategy (e.g. consensus — its executeStream is disabled
+        // because token streaming would bypass the voting/aggregation). It returns
+        // the whole answer at the end, but it DOES emit observer events while it runs.
+        // Interleave those narrations while execute() is in flight so the client sees
+        // the process live instead of sitting in silence for the whole computation,
+        // then yield the final answer. Makes narration UNIVERSAL across streaming AND
+        // non-streaming collectives.
+        //
+        // Streaming-recovery fix (2026-08-13): execute()'s own caller (this
+        // class's execute() method) wraps this exact call in a try/catch that
+        // synthesizes an empty result via buildStrategyThrewResult() and then
+        // unconditionally runs it through recoverEmptyFinalResponse() (re-selects
+        // a funded candidate, routing around dead providers) and, if STILL empty
+        // after that, applyDegradedFallback() (an explicit "[DEGRADED]" message +
+        // metadata.degraded, never a silent empty 200). This branch used to call
+        // strategy.execute() directly with none of that — a strategy throw (e.g.
+        // cost-cascade exhausting every candidate in its cascade) became an
+        // unrecovered hard failure for EVERY streaming request, while the
+        // identical throw on the non-streaming path silently recovered.
+        //
+        // recoverEmptyFinalResponse() can make up to 4 more real, sequentially
+        // awaited provider calls — chaining it into the SAME promise that
+        // interleaveNarration races (rather than awaiting it separately,
+        // afterward) keeps the narration heartbeat alive for that entire window
+        // instead of leaving the SSE connection silent while it runs.
+        const execPromise = strategy
+          .execute(memRequest, enrichedContext)
+          .catch((execErr) => {
+            this.log.error(
+              {
+                requestId,
+                strategy: strategy.getMetadata().name,
+                error: getErrorMessage(execErr),
+              },
+              'Strategy execution threw — synthesizing empty result so cross-provider recovery can run (streaming path)'
+            );
+            return this.buildStrategyThrewResult(strategy, execErr);
+          })
+          .then(async (execResult) => {
+            execResult.finalResponse = this.ensureResponseUsage(execResult.finalResponse);
+            const recovered = await this.recoverEmptyFinalResponse(
+              execResult,
+              request,
+              enrichedContext,
+              requestId
+            );
+            recovered.finalResponse = this.ensureResponseUsage(recovered.finalResponse);
+            return recovered;
+          });
+        yield* this.interleaveNarration(
+          // Driver generator: it awaits the strategy to completion so
+          // interleaveNarration can race it against the narration feed, but it
+          // intentionally yields NOTHING (the final answer comes from execPromise
+          // below). A yield-less async generator is the point here.
+          // eslint-disable-next-line require-yield
+          (async function* (): AsyncGenerator<ChatResponse, void, unknown> {
+            await execPromise;
+          })(),
+          streamObserverFeed,
+          undefined,
+          inlineNarration
+        );
+        let result = await execPromise;
+        result = this.applyDegradedFallback(result, requestId);
+        strategy.recordExecution(enrichedContext, result).catch(() => {});
+        yield result.finalResponse;
       }
-    }
-    (enrichedContext as { observerFeed?: typeof streamObserverFeed }).observerFeed =
-      streamObserverFeed;
-
-    // NOTE: see the analogous comment in execute() — cross-modal capability
-    // access comes from `enrichedContext.invoker` (request-scoped, built in
-    // buildContext()). The old `strategy.capabilityInvoker` write here mutated
-    // the shared strategy singleton per-request, which is racy under
-    // concurrent load and was never read by any strategy; removed.
-
-    // Memory enrichment for streaming path
-    // C3 P0.2: Skip when memory is ablated. When the concurrent
-    // memoryContextPromise above already resolved the search (memoryEnriched
-    // is true), use its result directly — strategy.enrichWithMemories() would
-    // just early-return the RAW `request` param in that case (it only skips
-    // re-querying, it does not carry the merged content), so calling it here
-    // would silently drop the memory block that was already fetched.
-    const memRequest = this.applyRecommendedTools(
-      enrichedContext.ablationFlags?.disabled?.has('memory')
-        ? request
-        : enrichedContext.memoryEnriched
-          ? memRequestFromMemory
-          : await strategy.enrichWithMemories(request, enrichedContext),
-      enrichedContext
-    );
-
-    // Leader removed — strategies call executeModel() directly
-
-    if (strategy.supportsStreaming()) {
-      // UNIVERSAL narration interleave: stream observer narrations AS THEY BECOME
-      // READY while the strategy is internally awaiting a phase, for EVERY
-      // collective strategy — not just the ones that hand-wired drainWhile(). Any
-      // strategy that emits observer events now gets continuous narration instead
-      // of a boundary burst. Off-channel; no-op when the observer is inactive.
-      yield* this.interleaveNarration(
-        strategy.executeStream(memRequest, enrichedContext),
-        streamObserverFeed,
-        undefined,
-        inlineNarration
-      );
-    } else {
-      // Non-streaming strategy (e.g. consensus — its executeStream is disabled
-      // because token streaming would bypass the voting/aggregation). It returns
-      // the whole answer at the end, but it DOES emit observer events while it runs.
-      // Interleave those narrations while execute() is in flight so the client sees
-      // the process live instead of sitting in silence for the whole computation,
-      // then yield the final answer. Makes narration UNIVERSAL across streaming AND
-      // non-streaming collectives.
-      const execPromise = strategy.execute(memRequest, enrichedContext);
-      yield* this.interleaveNarration(
-        // Driver generator: it awaits the strategy to completion so
-        // interleaveNarration can race it against the narration feed, but it
-        // intentionally yields NOTHING (the final answer comes from execPromise
-        // below). A yield-less async generator is the point here.
-        // eslint-disable-next-line require-yield
-        (async function* (): AsyncGenerator<ChatResponse, void, unknown> {
-          await execPromise;
-        })(),
-        streamObserverFeed,
-        undefined,
-        inlineNarration
-      );
-      const result = await execPromise;
-      strategy.recordExecution(enrichedContext, result).catch(() => {});
-      yield result.finalResponse;
+    } finally {
+      clearTimeout(requestDeadlineTimer);
     }
   }
 
@@ -3514,7 +3824,20 @@ export class OrchestrationEngine {
       // SingleModelStrategy's exact-match lookup and the request silently
       // falls through to DynamicModelSelector, which substitutes an
       // unrelated external model. Auto-routing (no pin) is unaffected.
+      //
+      // Self-hosted-inclusion fix (2026-08-13) -- TEMPORARILY REVERTED
+      // 2026-08-14, see CostCascadeStrategy.includeSelfHostedInPool()'s doc
+      // comment for the full story (short version: with self-hosted
+      // included, cost-cascade's own per-call timeout only stops WAITING on
+      // a stuck self-hosted candidate, it doesn't abort the real HTTP call —
+      // confirmed live to take 25-60+s before actually resolving — so every
+      // ailin-economy request was burning that whole window on one doomed
+      // rung before ever reaching the recovery path that already worked
+      // reliably and fast before this change). Re-enable together with that
+      // flag once the AbortController fix lands. Passing includeSelfHosted:
+      // false unconditionally here matches the pre-2026-08-13 behavior.
       allModels = await getChatEligibleModels({
+        includeSelfHosted: false,
         allowSelfHostedModelIds: preferredModelFromRequest
           ? [preferredModelFromRequest]
           : undefined,
@@ -3744,9 +4067,13 @@ export class OrchestrationEngine {
     }
 
     // ── Layer 3: Semantic heuristic inference (local, <1ms) ──────────────
+    // Pass the RAW content (string or multimodal parts array). The previous
+    // JSON.stringify flatten turned every image_url part into opaque text,
+    // disabling vision detection and letting strategies route image requests
+    // to text-only models (2026-08-19 vision-chat outage).
     const messages = request.messages.map((m) => ({
       role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      content: m.content as string | Array<Record<string, unknown>>,
     }));
     const capabilityInference = inferCapabilities(messages, {
       tools: request.tools,
@@ -3938,7 +4265,13 @@ export class OrchestrationEngine {
     for (const rc of inference.requiredCapabilities) {
       switch (rc) {
         case 'tool_use':
-          caps.push('tool_use');
+          // Tools requests need BOTH capability markers downstream: pool
+          // filtering (base-strategy getEligibleModels) checks
+          // context.requiredCapabilities, and the adapter-resolution
+          // re-validation gate (injectProviderRegistry) keys on
+          // 'function_calling' to reject registry-resolved models that
+          // explicitly lack it (2026-08-20 incident).
+          caps.push('tool_use', 'function_calling');
           break;
         case 'code_execution':
           caps.push('code_generation');
@@ -3962,7 +4295,11 @@ export class OrchestrationEngine {
           caps.push('image_generation');
           break;
         case 'vision':
-          caps.push('vision', 'multimodal');
+          // Catalog tags are inconsistent: ~234 active models carry "vision"
+          // WITHOUT "multimodal". Requiring both emptied the pool for a large
+          // slice of vision-capable candidates — "vision" alone is the
+          // essential constraint.
+          caps.push('vision');
           break;
         case 'audio_generation':
           caps.push('audio_generation', 'text_to_speech');
@@ -4749,11 +5086,358 @@ export class OrchestrationEngine {
     return false;
   }
 
+  /**
+   * True when an SSE chunk carries real ASSISTANT ANSWER text, as opposed to
+   * the metadata-only chunks the streaming path also emits: progress chunks
+   * (base-strategy.ts:397, ailin_metadata.type='progress'), off-channel
+   * observer narrations ('observer'), and the opt-in inline narration
+   * ('observer_inline', observer-service.ts:654) which DOES put text in
+   * delta.content but is a process preamble, not the answer — treating it as
+   * answer content would disable the throw guard above for every client that
+   * opts into inline narration.
+   *
+   * hasUsableAssistantResponse() cannot be reused here: it inspects
+   * choices[0].message, which real streaming chunks never populate.
+   */
+  private chunkCarriesAnswerContent(chunk: ChatResponse): boolean {
+    const metaType = (chunk.ailin_metadata as { type?: string } | undefined)?.type;
+    if (metaType === 'progress' || metaType === 'observer' || metaType === 'observer_inline') {
+      return false;
+    }
+    const choice = chunk.choices?.[0];
+    const delta = choice?.delta?.content;
+    if (typeof delta === 'string' && delta.trim().length > 0) return true;
+    const message = choice?.message?.content;
+    return typeof message === 'string' && message.trim().length > 0;
+  }
+
+  /**
+   * Emit periodic "still working" progress chunks while `pending` (the
+   * strategy-throw recovery) is in flight, then stop the moment it settles.
+   *
+   * Why (2026-08-16 follow-up): the streaming throw guard runs recovery from
+   * inside a catch block, AFTER interleaveNarration has already terminated —
+   * its source generator is the thing that threw. Every other long await on
+   * the streaming path has a narration heartbeat racing it; this one had
+   * none, so recovery was pure SSE silence, and STREAM_REQUEST_DEADLINE_MS
+   * (180s default) is far too coarse to cut it short. Same zero-token
+   * progress-chunk shape BaseStrategy.progressChunk() already emits
+   * (`ailin_metadata.type='progress'`, empty delta.content), so naive
+   * OpenAI-compatible clients see nothing extra while the connection stays
+   * demonstrably alive.
+   *
+   * `total` is a nominal upper bound, not a promise: recovery normally
+   * settles well before it.
+   */
+  private async *emitRecoveryHeartbeat(
+    pending: Promise<unknown>,
+    requestId: string
+  ): AsyncGenerator<ChatResponse, void, unknown> {
+    const intervalMs = Number(process.env.STREAM_RECOVERY_HEARTBEAT_MS ?? 4000);
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
+
+    let settled = false;
+    // Derive ONE settled-signal promise up front and swallow its rejection
+    // here: `pending` is awaited (and its rejection handled) by the caller,
+    // and creating a fresh .then() per tick would allocate a new unhandled
+    // rejection path on every loop.
+    const done = pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+
+    let step = 0;
+    while (!settled) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const tick = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, intervalMs);
+      });
+      try {
+        await Promise.race([done, tick]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      if (settled) break;
+      step += 1;
+      this.log.debug({ requestId, step }, 'Strategy-throw recovery still in flight — heartbeat');
+      yield {
+        id: `recovery-hb-${step}-${Date.now()}`,
+        object: 'chat.completion.chunk' as const,
+        created: Math.floor(Date.now() / 1000),
+        model: 'auto',
+        choices: [
+          {
+            index: 0,
+            delta: { role: 'assistant' as const, content: '' },
+            finish_reason: null,
+            logprobs: null,
+          },
+        ],
+        ailin_metadata: {
+          type: 'progress' as const,
+          message: 'Selecting an alternate model…',
+          step,
+          total: step + 1,
+        },
+      } as ChatResponse;
+    }
+  }
+
+  /**
+   * Put the recovery's degraded/recovered markers ON THE WIRE.
+   *
+   * The streaming path never runs chat-request-processor's OrchestrationResult
+   * → AilinMetadata projection, so before this the `degraded`,
+   * `degraded_reason` and `strategy_execution_error` keys existed only on the
+   * in-process OrchestrationResult and died there: a total provider outage was
+   * byte-indistinguishable from a healthy answer to every client, proxy and
+   * log-scraper downstream. Additive — `choices[]` is untouched, so an
+   * OpenAI-compatible client that ignores `ailin_metadata` is unaffected.
+   *
+   * Emitted as the COMPLETION shape (`AilinMetadata`, no `type` discriminator),
+   * NOT as a new SSE chunk variant. Both of this codebase's `'type' in metadata`
+   * consumers make that mandatory:
+   *  - `responses-routes.ts` treats any `type`-carrying chunk as metadata-only
+   *    and reads text from `delta.content` alone — a `type` here would silently
+   *    DROP the recovered answer (it arrives as `message.content`, the buffered
+   *    shape) on the /v1/responses streaming path;
+   *  - `applyBranding()` (utils/branding.ts) only redacts the `type`-less
+   *    completion variant, so a `type` here would leak the fallback provider's
+   *    real model name straight past AILIN_HIDE_MODELS — which production now
+   *    has enabled.
+   * Carrying the recovered model in the standard `models_used` /
+   * `resolved_model` fields means branding redacts it exactly as it does for
+   * every other response.
+   */
+  private withStreamRecoveryMetadata(recovered: OrchestrationResult, err: unknown): ChatResponse {
+    const meta = recovered.metadata ?? {};
+    const asString = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.length > 0 ? v : undefined;
+    const modelNames = recovered.modelsUsed
+      .map((execution) => execution.modelName)
+      .filter((name): name is string => typeof name === 'string' && name.length > 0);
+    const recoverySource = asString(meta.empty_response_recovery_source);
+    return {
+      ...recovered.finalResponse,
+      ailin_metadata: {
+        strategy_used: recovered.strategyUsed,
+        models_used: modelNames,
+        model_count: modelNames.length,
+        execution_time_ms: recovered.totalDuration,
+        cost_usd: recovered.totalCost,
+        quality_score: recovered.qualityScore,
+        cache_hit: false,
+        resolved_model: modelNames[0],
+        degraded: meta.degraded === true,
+        degraded_reason: asString(meta.degraded_reason),
+        stream_recovery: true,
+        stream_recovery_source: recoverySource,
+        strategy_execution_error: asString(meta.strategy_execution_error) ?? getErrorMessage(err),
+      },
+    };
+  }
+
+  /**
+   * Synthesize an EMPTY OrchestrationResult when a strategy's execute() throws,
+   * instead of letting the throw escape as a hard failure. Callers pass the
+   * result through recoverEmptyFinalResponse() next, which re-selects a funded
+   * candidate and routes around the dead provider(s) that caused the throw.
+   * Shared by execute() and executeStream() — see the executeStream()
+   * non-streaming-strategy branch, which previously had no such recovery and
+   * let cost-cascade (and any other collective without its own executeStream())
+   * hard-fail every request whose cascade exhausted its candidates, even when
+   * the exact same throw was silently recovered on the non-streaming path.
+   */
+  private buildStrategyThrewResult(strategy: BaseStrategy, err: unknown): OrchestrationResult {
+    return {
+      strategyUsed: strategy.getMetadata().name,
+      modelsUsed: [],
+      finalResponse: {
+        id: `exec-threw-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'auto',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: '' },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+      },
+      totalCost: 0,
+      totalDuration: 0,
+      qualityScore: 0,
+      metadata: {
+        strategy_execution_threw: true,
+        strategy_execution_error: getErrorMessage(err),
+      },
+    };
+  }
+
+  /**
+   * Score an answer that recovery genuinely produced, so downstream
+   * quality-gated consumers can act on it.
+   *
+   * Before this (2026-08-16 follow-up), the streaming throw-recovery path's
+   * `strategy.recordExecution()` call was provably DEAD CODE:
+   * buildStrategyThrewResult() sets qualityScore:0, recoverEmptyFinalResponse
+   * never touched it, and applyDegradedFallback either passes it through or
+   * re-sets 0 — so the recorded score was ALWAYS 0 and recordExecution's
+   * internal `quality >= 0.7` gate rejected it every single time, silently.
+   * Net effect: even when recovery found a REAL answer from a fallback
+   * provider, that answer was never written to episodic memory, while the
+   * code read as though it was.
+   *
+   * Deliberately scoped to the two GENUINE-recovery return paths. The
+   * degraded placeholder keeps qualityScore 0 (applyDegradedFallback re-sets
+   * it) and therefore stays correctly unrecorded — the same "don't poison
+   * memory with a non-answer" rule as cost-cascade's own allCandidatesFailed
+   * sentinel.
+   *
+   * Uses the engine's existing heuristic scorer (the same
+   * `qualityScorer.calculateScore` the preliminary/observability paths use),
+   * NOT a hardcoded constant. On the buffered path this is harmless
+   * bookkeeping: __finalize re-scores whenever `metadata.quality` is absent,
+   * which it is here, so the real (judge-backed) score still wins.
+   */
+  private scoreRecoveredResponse(
+    response: ChatResponse,
+    context: OrchestrationContext,
+    execution: import('@/types').ModelExecution,
+    previous: number | undefined
+  ): number | undefined {
+    try {
+      return this.qualityScorer.calculateScore(response, context, execution).overall;
+    } catch {
+      // Scoring is best-effort — never let it break a successful recovery.
+      return previous;
+    }
+  }
+
+  /**
+   * Last-resort safety net: if a result's finalResponse is still unusable
+   * after recoverEmptyFinalResponse() has already tried existing executions
+   * and dynamic fallback candidates, replace it with an explicit "[DEGRADED]"
+   * message and metadata.degraded=true rather than returning an empty (but
+   * HTTP-200-shaped) completion that a client or metric can't distinguish
+   * from the assistant legitimately saying nothing. Shared by execute() and
+   * executeStream() so the two paths can't drift the way they did before —
+   * only execute() had this check, which is what let a total-outage streaming
+   * request silently resolve as an empty "successful" chunk.
+   */
+  private applyDegradedFallback(
+    result: OrchestrationResult,
+    requestId: string
+  ): OrchestrationResult {
+    if (this.hasUsableAssistantResponse(result.finalResponse)) {
+      return result;
+    }
+    this.log.warn(
+      { requestId },
+      'Orchestration produced empty response after fallback attempts — returning degraded response'
+    );
+    const degradedResponse: ChatResponse = {
+      id: `degraded-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: 'auto',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: '[DEGRADED] All execution attempts failed. No response produced.',
+          },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+      // Explicit zeroed usage — without this, callers that read
+      // `usage?.total_tokens ?? 0` can't distinguish "no usage reported"
+      // from "no usage block at all", and a 200 OK + non-empty content +
+      // absent usage silently reads as an ordinary free/cached success.
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+    return {
+      ...result,
+      finalResponse: degradedResponse,
+      qualityScore: 0,
+      metadata: {
+        ...result.metadata,
+        degraded: true,
+        degraded_reason: 'empty_response_after_fallback',
+      },
+    };
+  }
+
+  /**
+   * Shared tail for "a strategy threw before producing anything usable":
+   * synthesize an empty result, run cross-provider recovery, then guarantee a
+   * non-empty (possibly [DEGRADED]) answer. Same pipeline the non-streaming-
+   * strategy branch runs inline — extracted so the streaming throw guard can
+   * reuse it without re-running strategy.execute() (which would double a
+   * doomed cascade's latency and spend), and so it is unit testable without
+   * standing up the whole SSE pipeline.
+   *
+   * LATENCY BOUND (2026-08-16 follow-up) — the one deliberate difference from
+   * the buffered path. There, recovery runs with a live narration heartbeat
+   * racing it and the client is already waiting on a non-streaming request.
+   * HERE it runs inside the streaming catch block with the narration
+   * interleaver already dead, so every millisecond is client-visible silence,
+   * and the realistic trigger (cost-cascade's "requires at least N models")
+   * fires at request start — meaning the client can eat the ENTIRE recovery
+   * window from byte zero. Unbounded, that was up to 4 candidates x
+   * COLLECTIVE_MODEL_TIMEOUT_MS (25s default) = ~100s of silence, well under
+   * STREAM_REQUEST_DEADLINE_MS (180s) so nothing cut it short, and long enough
+   * to blow past most client-side timeouts — i.e. a fast, clear error was
+   * being turned into a near-total client timeout.
+   *
+   * So this path caps recovery at 2 candidates and ~30s of wall clock.
+   * Why that barely costs real recovery success: recoverEmptyFinalResponse
+   * asks the dynamic selector for RANKED candidates with preferSpeed=true, so
+   * candidates 1-2 are its best/fastest picks and 3-4 are strictly worse
+   * fallbacks of last resort. If BOTH of the top picks fail, the cause is
+   * essentially never "candidate 2 was transiently unlucky" — it is a
+   * provider-wide or account-wide outage, exactly the case where candidates
+   * 3-4 fail too and the user has simply paid another 50s to reach the same
+   * `[DEGRADED]` placeholder. Trading that vanishing tail for a bounded,
+   * predictable worst case is the whole point of this workstream. Both knobs
+   * are env-tunable if production evidence ever contradicts this.
+   */
+  private async recoverStrategyThrow(
+    strategy: BaseStrategy,
+    err: unknown,
+    request: ChatRequest,
+    context: OrchestrationContext,
+    requestId: string
+  ): Promise<OrchestrationResult> {
+    let result = this.buildStrategyThrewResult(strategy, err);
+    result.finalResponse = this.ensureResponseUsage(result.finalResponse);
+    result = await this.recoverEmptyFinalResponse(result, request, context, requestId, {
+      maxCandidates: Number(process.env.STREAM_RECOVERY_MAX_CANDIDATES ?? 2),
+      budgetMs: Number(process.env.STREAM_RECOVERY_BUDGET_MS ?? 30000),
+    });
+    result.finalResponse = this.ensureResponseUsage(result.finalResponse);
+    return this.applyDegradedFallback(result, requestId);
+  }
+
   private async recoverEmptyFinalResponse(
     result: OrchestrationResult,
     request: ChatRequest,
     context: OrchestrationContext,
-    requestId: string
+    requestId: string,
+    opts?: {
+      /** Max fallback candidates to select AND try. Default 4 (buffered path). */
+      maxCandidates?: number;
+      /** Wall-clock ceiling for the whole candidate loop. Default: unbounded. */
+      budgetMs?: number;
+    }
   ): Promise<OrchestrationResult> {
     if (this.hasUsableAssistantResponse(result.finalResponse)) {
       return result;
@@ -4776,6 +5460,12 @@ export class OrchestrationEngine {
       return {
         ...result,
         finalResponse: successfulExisting.response,
+        qualityScore: this.scoreRecoveredResponse(
+          successfulExisting.response,
+          context,
+          successfulExisting,
+          result.qualityScore
+        ),
         metadata: {
           ...result.metadata,
           empty_response_recovered: true,
@@ -4790,6 +5480,24 @@ export class OrchestrationEngine {
         .map((execution) => execution.modelId)
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
     );
+
+    // Candidate cap: default 4 (buffered path, unchanged). The streaming
+    // throw-recovery path passes 2 — see recoverStrategyThrow's doc comment
+    // for why the tail candidates cost latency without buying success there.
+    // Applied to the SELECTION too, not just the loop, so we never pay to rank
+    // candidates we have already decided not to try.
+    const maxCandidates =
+      Number.isFinite(opts?.maxCandidates) && (opts?.maxCandidates ?? 0) > 0
+        ? Math.floor(opts!.maxCandidates!)
+        : 4;
+    // Wall-clock ceiling for the whole loop (streaming path only). Bounds the
+    // worst case even if a single candidate somehow rides its full per-model
+    // timeout: no NEW candidate is started past the deadline, and the one in
+    // flight gets at most the remaining budget rather than a fresh 25s.
+    const recoveryDeadline =
+      Number.isFinite(opts?.budgetMs) && (opts?.budgetMs ?? 0) > 0
+        ? Date.now() + (opts?.budgetMs ?? 0)
+        : undefined;
 
     try {
       const { getDynamicModelSelector } = await import('../selection/dynamic-model-selector.js');
@@ -4809,13 +5517,42 @@ export class OrchestrationEngine {
           requiredCapabilities: ['chat'] as ModelCapability[],
         },
         context,
-        4
+        maxCandidates
       );
 
+      let attempted = 0;
       for (const candidate of fallbackCandidates) {
         if (triedModelIds.has(candidate.model.id)) {
           continue;
         }
+
+        if (attempted >= maxCandidates) {
+          this.log.warn(
+            { requestId, strategy: result.strategyUsed, maxCandidates },
+            'Empty-response recovery candidate cap reached — stopping'
+          );
+          break;
+        }
+
+        // Whole-request deadline already blown — don't spend another full
+        // fallbackTimeoutMs (default 25s) trying yet another candidate for a
+        // request the caller has already given up on.
+        if (context.signal?.aborted) {
+          this.log.warn(
+            { requestId, strategy: result.strategyUsed },
+            'Request deadline exceeded — abandoning empty-response recovery loop'
+          );
+          break;
+        }
+
+        if (recoveryDeadline !== undefined && Date.now() >= recoveryDeadline) {
+          this.log.warn(
+            { requestId, strategy: result.strategyUsed, budgetMs: opts?.budgetMs },
+            'Empty-response recovery wall-clock budget exhausted — stopping'
+          );
+          break;
+        }
+        attempted += 1;
 
         const resolved = await this.providerRegistry.findModel(candidate.model.id);
         const adapter = resolved?.adapter;
@@ -4831,8 +5568,40 @@ export class OrchestrationEngine {
         };
         const fallbackStart = Date.now();
 
+        // This loop previously had NO timeout at all — a hung candidate could
+        // ride the adapter's own internal retry budget (tens of seconds) once
+        // per candidate, up to 4 times, with nothing to cut a straggler off.
+        // Same per-model deadline convention as BaseStrategy.boundModelExecution
+        // (COLLECTIVE_MODEL_TIMEOUT_MS / PARALLEL_MODEL_TIMEOUT_MS, default 25s),
+        // further clamped to whatever remains of this path's wall-clock budget
+        // when one is set (streaming throw-recovery), so the LAST candidate
+        // can't overshoot the budget by a full per-model timeout.
+        const perCandidateTimeoutMs = Number(
+          process.env.COLLECTIVE_MODEL_TIMEOUT_MS ?? process.env.PARALLEL_MODEL_TIMEOUT_MS ?? 25000
+        );
+        const fallbackTimeoutMs =
+          recoveryDeadline !== undefined
+            ? Math.max(1, Math.min(perCandidateTimeoutMs, recoveryDeadline - Date.now()))
+            : perCandidateTimeoutMs;
+        const fallbackController = new AbortController();
+        // Forward the whole-request deadline into this candidate's own
+        // controller too, same composition as BaseStrategy.boundModelExecution
+        // — so a mid-flight overall-deadline trip cuts this candidate off
+        // immediately instead of riding out its own 25s per-candidate budget.
+        const onRequestAbort = () => fallbackController.abort();
+        context.signal?.addEventListener('abort', onRequestAbort, { once: true });
+        const fallbackTimeoutHandle = setTimeout(() => {
+          // No custom abort reason — fetch()/undici would surface it verbatim
+          // as the rejection value in place of the standard
+          // DOMException('AbortError'), which downstream error-name checks
+          // (e.g. base-strategy's health-tracking exemption) rely on.
+          fallbackController.abort();
+        }, fallbackTimeoutMs);
+
         try {
-          const fallbackResponseRaw = await adapter.chatCompletion(fallbackRequest);
+          const fallbackResponseRaw = await adapter.chatCompletion(fallbackRequest, {
+            signal: fallbackController.signal,
+          });
           const fallbackResponse = this.ensureResponseUsage(fallbackResponseRaw);
           const durationMs = Date.now() - fallbackStart;
           const usable = this.hasUsableAssistantResponse(fallbackResponse);
@@ -4884,6 +5653,12 @@ export class OrchestrationEngine {
             modelsUsed: [...result.modelsUsed, recoveredExecution],
             totalCost: result.totalCost + cost,
             totalDuration: result.totalDuration + durationMs,
+            qualityScore: this.scoreRecoveredResponse(
+              fallbackResponse,
+              context,
+              recoveredExecution,
+              result.qualityScore
+            ),
             metadata: {
               ...result.metadata,
               empty_response_recovered: true,
@@ -4901,6 +5676,9 @@ export class OrchestrationEngine {
             },
             'Fallback candidate execution failed while recovering empty response'
           );
+        } finally {
+          clearTimeout(fallbackTimeoutHandle);
+          context.signal?.removeEventListener('abort', onRequestAbort);
         }
       }
     } catch (error) {
@@ -5009,8 +5787,24 @@ export class OrchestrationEngine {
         }
 
         if (context.budget) {
+          // Estimation candidate set (2026-08-17 anonymous-chat outage):
+          // the old `context.models.slice(0, metadata.maxModels)` sampled an
+          // ARBITRARY 5-model slice of the pool (pool ordering is not
+          // cost-sorted), so the pre-flight estimate depended on which models
+          // happened to sit in that slice. With pool drift, the cheapest model
+          // IN THE SLICE crossed ailin-economy's maxCost (0.003) while far
+          // cheaper eligible models existed elsewhere in the pool — 100% of
+          // anonymous requests rejected with strategy_budget_exceeded. For
+          // isCascading strategies (cost-cascade: stops at first success, its
+          // own estimate picks the cheapest candidate) the estimate must
+          // consider the FULL budget-eligible pool. Sum-semantics strategies
+          // (parallel/consensus/sequential) keep the maxModels slice — they
+          // genuinely pay for every model they invoke.
+          const estimationSet = metadata.isCascading
+            ? context.models
+            : context.models.slice(0, metadata.maxModels);
           const estimatedCost = strategy.calculateEstimatedCost(
-            context.models.slice(0, metadata.maxModels),
+            estimationSet,
             context.contextSize,
             1000
           );
@@ -5370,6 +6164,62 @@ export class OrchestrationEngine {
       // id (e.g. an aihubmix variant that 402s). This is what lets HF-router models actually run.
       const preferredProvider = context.preferredProviders?.[0] ?? model.provider;
       const result = await this.providerRegistry.findModel(model.id, preferredProvider);
+      // FUNCTION-CALLING RE-VALIDATION (2026-08-20 incident): catalog/DB rows
+      // can claim function_calling for a model whose REGISTRY-resolved variant
+      // explicitly declares otherwise. When the context requires
+      // function_calling (request carried tools — see mapInferredCapabilities),
+      // reject the resolution so the calling strategy walks to its next
+      // candidate instead of executing a model that cannot carry tool calls.
+      // Conservative: only reject on an explicit non-empty capability list
+      // lacking function_calling; unknown metadata passes.
+        // FUNCTION-CALLING GATE (probe-aware, 2026-08-21): declared-FC is
+        // the fast path. For everything else the lazy cached probe decides —
+        // catalog capability lists are frequently incomplete (OpenAI-compatible
+        // /models endpoints omit tools even when supported; the 2026-08-20/21
+        // incidents left the tools-request pool tiny and dead). Semantics:
+        //   probe=true  → allow (verified tool-shape acceptance)
+        //   probe=false → reject (explicit tools-not-supported)
+        //   probe=null  → inconclusive (billing/auth/timeout): keep the PRE-probe
+        //                behavior — reject on a declared non-empty list lacking
+        //                FC, pass on absent/empty metadata (never empty the chain
+        //                over a failed probe).
+        if (result && !hasDeclaredFunctionCalling(result.model)) {
+          if ((context.requiredCapabilities ?? []).includes('function_calling')) {
+            // Probe with the EXECUTION model id (model.id — the id the calling
+            // strategy puts on the request), not the registry-resolved variant:
+            // orqai 404'd the real request while the probe had verified a
+            // '-latest' variant id (live 2026-08-21 mismatch).
+            const verdict = await getFunctionCallingVerdict(
+              result.adapter,
+              result.model.provider || model.provider || '',
+              model.id
+            );
+            if (verdict === true) {
+              // verified — fall through and return the adapter
+            } else if (verdict === false || verdict === 'provider-dead') {
+              // false: explicit tools-not-supported. provider-dead: the probe
+              // itself hit billing/auth/timeout — executing here would just
+              // burn an attempt (recorded in the hub for ranking).
+              this.log.info(
+                { modelId: model.id, resolvedProvider: result.model.provider, verdict },
+                verdict === 'provider-dead'
+                  ? 'FC probe: provider currently unexecutable — skipping candidate'
+                  : 'FC probe: model rejected the tools request shape — skipping candidate'
+              );
+              return null;
+            } else if (explicitlyLacksFunctionCalling(result.model)) {
+              this.log.warn(
+                {
+                  modelId: model.id,
+                  resolvedProvider: result.model.provider,
+                  resolvedCapabilities: result.model.capabilities,
+                },
+                'Resolved model lacks declared function_calling and probe was inconclusive — rejecting adapter resolution, selection continues'
+              );
+              return null;
+            }
+          }
+        }
       return result?.adapter || null;
     };
 

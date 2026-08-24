@@ -54,8 +54,13 @@ function createTraceExporter(): OTLPTraceExporter | JaegerExporter {
     }
   }
 
+  // P0.23 (2026-08-17): URL resolution is left to the SDK env contract.
+  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT (signal-specific) is used verbatim;
+  // the generic OTEL_EXPORTER_OTLP_ENDPOINT is a BASE the SDK appends
+  // /v1/traces to. Passing the env value as an explicit `url` here caused
+  // path-doubling 404s in production whenever exporter construction reached
+  // the env-only path (reproduced with otlp-exporter-base@0.221).
   return new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
     headers,
   });
 }

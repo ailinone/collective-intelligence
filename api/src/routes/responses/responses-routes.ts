@@ -50,6 +50,7 @@ import { withIdempotency } from '@/middleware/idempotency-middleware';
 import { setupSSEHeaders } from '@/utils/sse';
 import { anonymousGuestApiKeyId } from '@/services/anonymous-quota-gate';
 import { executeRouteWithRetry } from '@/utils/route-retry';
+import { sanitizeToolSchemas } from '@/utils/tool-schema-sanitizer';
 import type { ChatResponse } from '@/types';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
@@ -1142,7 +1143,7 @@ class ResponsesService {
   private convertTools(tools?: ResponseTool[]): Tool[] {
     if (!tools) return [];
 
-    return tools
+    const converted = tools
       .filter((t) => t.type === 'function' && t.function)
       .map((t) => ({
         type: 'function' as const,
@@ -1152,6 +1153,7 @@ class ResponsesService {
           parameters: t.function?.parameters ?? {},
         },
       }));
+    return sanitizeToolSchemas(converted) ?? converted;
   }
 
   /**

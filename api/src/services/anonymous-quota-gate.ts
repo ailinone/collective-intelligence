@@ -29,24 +29,43 @@
  *    which exists specifically to turn that silent failure into a loud
  *    boot-time log line instead.
  *
- * NOT an authentication mechanism — read before assuming this is a real
- * per-visitor control: `X-Anonymous-Visitor-Id` is an UNSIGNED, entirely
- * client (chat-backend)-supplied header. The SHA-256 in `hashVisitorId` is
- * key hygiene (never store the raw header value), not proof of identity.
- * Nothing on the ci side stops the caller from sending a fresh value per
- * request — a visitor reloading in a new incognito tab, or any script that
- * rotates the header, gets a fresh 2-message bucket for free every time.
- * There is deliberately no attempt here to invent a stronger anti-abuse
- * mechanism (e.g. binding to TLS session, proof-of-work, CAPTCHA) — that's
- * real user friction for a free tier, and this repo's own token-bucket
- * per-API-key rate limiter (`api-key-rate-limit-middleware.ts`) already
- * bounds the REAL worst case for this one dedicated key regardless of how
- * many visitor-id buckets it's spread across. Treat "2/day" as the
- * advertised allowance for a compliant caller, and the per-key rate limit
- * as the actual ceiling on abuse — not the other way around. The IP
- * whitelist restricts which HOST can present ANY visitor id on this key's
- * behalf; it says nothing about how many distinct visitor ids that host
- * presents.
+ * NOT a strong authentication mechanism — read before assuming this is
+ * unspoofable: the visitor-id cookie is still an UNSIGNED, entirely
+ * chat-backend-supplied value. As of this revision the quota bucket key is
+ * no longer that cookie alone — it's a composite fingerprint over the
+ * cookie PLUS the visitor's IP, User-Agent, and Accept-Language (all
+ * forwarded by chat-backend as `X-Anonymous-Visitor-*` headers, see
+ * `computeVisitorFingerprint` below). This is a deliberate reversal of this
+ * module's original design, which explicitly avoided combining signals to
+ * keep the free tier frictionless. Combining them meaningfully raises the
+ * bar (clearing cookies alone, or spoofing one header alone, no longer
+ * resets the bucket — all four have to change together), but it is a
+ * real, conscious trade-off, not a free win:
+ *   - PRIVACY/COMPLIANCE: hashing IP + User-Agent + Accept-Language together
+ *     to persist an identifier across a cookie reset is functionally closer
+ *     to device fingerprinting than to simple pseudonymization — under the
+ *     ePrivacy Directive Art. 5(3) (per CNIL/EDPB guidance), this class of
+ *     technique can require the same consent treatment as a tracking
+ *     cookie. As of this writing there is no cookie-consent banner or
+ *     documented legal-basis analysis for anonymous-visitor fingerprinting
+ *     anywhere in chat/ci/gateway. This was a knowing, explicit choice made
+ *     without a prior legal review — flag to whoever owns privacy/legal
+ *     compliance before this ships broadly, not something to assume is
+ *     already covered.
+ *   - Only the SHA-256 hash of the combined signals is ever computed or
+ *     stored (mirroring the prior single-signal design) — none of the raw
+ *     IP/UA/Accept-Language/cookie values are persisted anywhere by this
+ *     module.
+ *   - Still not proof of identity, and still bounded by the SAME backstop
+ *     as before: this repo's own token-bucket per-API-key rate limiter
+ *     (`api-key-rate-limit-middleware.ts`) bounds the real worst case for
+ *     this one dedicated key regardless of how many fingerprint buckets it
+ *     spreads across. Treat "2/day" as the advertised allowance for a
+ *     compliant caller, and the per-key rate limit as the actual ceiling on
+ *     abuse — not the other way around. The IP whitelist on the API key
+ *     itself restricts which HOST can present ANY fingerprint on this key's
+ *     behalf; it says nothing about how many distinct fingerprints that
+ *     host presents.
  *
  * Billing: `ailin-economy` is a legacy `ailin-*` preset alias. Empirically
  * verified (see the deploy report) that it never populates
@@ -93,8 +112,14 @@ const log = logger.child({ component: 'anonymous-quota-gate' });
 const REDIS_KEY_PREFIX = 'anon_quota:';
 const DEFAULT_DAILY_LIMIT = 2;
 const ANONYMOUS_ECONOMY_MODEL = 'ailin-economy';
-/** Defensive cap on the caller-supplied visitor id header before it's hashed. */
-const MAX_VISITOR_ID_HEADER_LENGTH = 512;
+/** Defensive cap on each caller-supplied fingerprint component before hashing. */
+const MAX_FINGERPRINT_COMPONENT_LENGTH = 512;
+/** Separator between joined fingerprint components — ASCII Unit Separator
+ * (0x1F), same convention as ADR-016's field-separated HMAC input and the
+ * `_hash_key(*parts)` multi-part-join-then-SHA-256 shape already used in
+ * gateway/quota-service. Never appears in real header values, so two
+ * different (ip, ua) pairs can't collide onto the same joined string. */
+const FINGERPRINT_SEPARATOR = '';
 
 /** The one API key id this gate is allowed to fire for. Unset => never fires. */
 export function anonymousGuestApiKeyId(): string | undefined {
@@ -118,10 +143,33 @@ function nextUtcMidnight(now: Date): Date {
   );
 }
 
-/** Bound + hash the caller-supplied visitor id before it ever becomes a Redis key fragment. */
-function hashVisitorId(rawVisitorId: string): string {
-  const bounded = rawVisitorId.slice(0, MAX_VISITOR_ID_HEADER_LENGTH);
-  return createHash('sha256').update(bounded).digest('hex');
+/** Bound a single fingerprint component before it's joined into the composite string. */
+function boundComponent(value: string): string {
+  return value.trim().slice(0, MAX_FINGERPRINT_COMPONENT_LENGTH);
+}
+
+/**
+ * Combine the visitor-id cookie with whatever additional signals chat-backend
+ * forwarded (IP, User-Agent, Accept-Language) into ONE composite fingerprint.
+ * Missing optional signals are represented by an empty component rather than
+ * omitted entirely, so `(cookie, ip="", ua="X")` can never collide with
+ * `(cookie, ip="X", ua="")` — position in the joined string is fixed
+ * regardless of which components are present. See file header for why this
+ * combination was added and its privacy trade-off.
+ */
+function computeVisitorFingerprint(components: {
+  visitorId: string;
+  clientIp?: string;
+  userAgent?: string;
+  acceptLanguage?: string;
+}): string {
+  const parts = [
+    boundComponent(components.visitorId),
+    boundComponent(components.clientIp ?? ''),
+    boundComponent(components.userAgent ?? ''),
+    boundComponent(components.acceptLanguage ?? ''),
+  ];
+  return createHash('sha256').update(parts.join(FINGERPRINT_SEPARATOR)).digest('hex');
 }
 
 export interface AnonymousQuotaScopeInput {
@@ -129,8 +177,23 @@ export interface AnonymousQuotaScopeInput {
   apiKeyId: string | undefined;
   /** The RAW, client-submitted `model` field — read BEFORE `normalizeChatRequest`. */
   rawModel: string | undefined;
-  /** The `X-Anonymous-Visitor-Id` header value, if present. */
+  /** The `X-Anonymous-Visitor-Id` header value, if present. Required — the
+   * other three signals below are additive, this one is the base. */
   visitorIdHeader: string | undefined;
+  /** `X-Anonymous-Visitor-Ip` — the ORIGINAL browser's IP as chat-backend's
+   * own inbound request resolved it. NOT the same as the connection-level IP
+   * ci itself observes for this request, which is always chat-backend's own
+   * (whitelisted) egress IP regardless of which visitor is asking — that
+   * signal is useless for distinguishing visitors from each other, which is
+   * why chat-backend must forward the browser's IP explicitly as data. */
+  visitorIpHeader?: string;
+  /** `X-Anonymous-Visitor-User-Agent` — the browser's real User-Agent, forwarded
+   * because the HTTP client chat-backend uses to call ci sends its OWN
+   * User-Agent on the wire, not the browser's. */
+  visitorUserAgentHeader?: string;
+  /** `X-Anonymous-Visitor-Accept-Language` — the browser's Accept-Language,
+   * forwarded for the same reason as User-Agent above. */
+  visitorAcceptLanguageHeader?: string;
 }
 
 export interface AnonymousQuotaScope {
@@ -158,7 +221,13 @@ export function inAnonymousQuotaScope(input: AnonymousQuotaScopeInput): Anonymou
   if (!visitorId) {
     return { inScope: false };
   }
-  return { inScope: true, visitorIdHash: hashVisitorId(visitorId) };
+  const visitorIdHash = computeVisitorFingerprint({
+    visitorId,
+    clientIp: input.visitorIpHeader,
+    userAgent: input.visitorUserAgentHeader,
+    acceptLanguage: input.visitorAcceptLanguageHeader,
+  });
+  return { inScope: true, visitorIdHash };
 }
 
 export interface AnonymousQuotaResult {
@@ -177,9 +246,39 @@ export interface AnonymousQuotaResult {
  * Fail-OPEN on Redis errors (see file header): never blocks anonymous chat
  * on a cache outage.
  */
+/**
+ * Secondary per-IP daily ceiling for the anonymous path (2026-08-20).
+ *
+ * WHY: the primary quota bucket keys on the composite fingerprint
+ * (cookie + IP + UA + Accept-Language). A visitor who clears the cookie
+ * (or uses a fresh private window) mints a new visitor-id → new fingerprint
+ * → a FULL fresh daily allowance, while their IP stays the same. Confirmed
+ * live: visitors were sending more messages than the advertised 2/day.
+ * This per-IP bucket is the backstop — it counts EVERY anonymous message
+ * from the same IP against one shared, higher limit.
+ *
+ * Deliberately HIGHER than the per-visitor limit (default 10 vs 2): NAT'd
+ * households, corporate egress, and university networks share one IP across
+ * many legitimate visitors, so this must absorb several honest users while
+ * still capping cookie-reset abuse at a bounded multiple.
+ */
+const DEFAULT_IP_DAILY_LIMIT = 10;
+
+function ipDailyLimit(): number {
+  const raw = process.env.ANONYMOUS_IP_DAILY_LIMIT;
+  const n = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_IP_DAILY_LIMIT;
+}
+
+/** SHA-256 of the visitor IP — never persist or log the raw IP as a quota key. */
+function hashIp(ip: string): string {
+  return createHash('sha256').update(boundComponent(ip)).digest('hex');
+}
+
 export async function checkAndConsumeAnonymousQuota(
   apiKeyId: string,
-  visitorIdHash: string
+  visitorIdHash: string,
+  clientIp?: string
 ): Promise<AnonymousQuotaResult> {
   const limit = dailyLimit();
   const now = new Date();
@@ -198,9 +297,30 @@ export async function checkAndConsumeAnonymousQuota(
     await redis.expire(key, ttlSeconds);
 
     if (count > limit) {
-      log.info({ apiKeyId, count, limit }, 'anonymous quota exceeded');
+      log.info({ apiKeyId, count, limit, bucket: 'visitor' }, 'anonymous quota exceeded');
       return { allowed: false, remaining: 0, limit, resetAt };
     }
+
+    // ── Per-IP backstop bucket ────────────────────────────────────────────
+    // See ipDailyLimit()'s header: catches cookie-clearing quota resets that
+    // the composite fingerprint cannot (new cookie = new fingerprint, same
+    // IP). Skipped when no IP was forwarded (older chat-backend) — the
+    // visitor bucket alone still applies, so this degrades to the previous
+    // behavior rather than to no limit at all.
+    if (clientIp && clientIp.trim()) {
+      const ipLimit = ipDailyLimit();
+      const ipKey = `${REDIS_KEY_PREFIX}ip:${apiKeyId}:${hashIp(clientIp.trim())}:${utcDateStamp(now)}`;
+      const ipCount = await redis.incr(ipKey);
+      await redis.expire(ipKey, ttlSeconds);
+      if (ipCount > ipLimit) {
+        log.info(
+          { apiKeyId, ipCount, ipLimit, bucket: 'ip' },
+          'anonymous per-IP quota exceeded (cookie-reset abuse backstop)'
+        );
+        return { allowed: false, remaining: 0, limit: ipLimit, resetAt };
+      }
+    }
+
     return { allowed: true, remaining: Math.max(0, limit - count), limit, resetAt };
   } catch (error) {
     log.error(
@@ -314,14 +434,36 @@ export async function logAnonymousGuestApiKeyConfigStatus(): Promise<void> {
     });
     if (result.status === 'unset' || result.status === 'ok') {
       log.info({ status: result.status }, 'anonymous-guest-key config check');
-      return;
+    } else {
+      log.error(
+        { status: result.status, configuredId: result.configuredId, detail: result.detail },
+        'ANONYMOUS_GUEST_API_KEY_ID is set but misconfigured — the anonymous quota gate is SILENTLY INERT ' +
+          'for the real guest key right now. Fix the env var (must be the api_keys.id UUID) — see ' +
+          'docs/anonymous-chat-guest-key-setup.md.'
+      );
     }
-    log.error(
-      { status: result.status, configuredId: result.configuredId, detail: result.detail },
-      'ANONYMOUS_GUEST_API_KEY_ID is set but misconfigured — the anonymous quota gate is SILENTLY INERT ' +
-        'for the real guest key right now. Fix the env var (must be the api_keys.id UUID) — see ' +
-        'docs/anonymous-chat-guest-key-setup.md.'
-    );
+    // Duplicate-name detection: the gate matches on the api_keys ROW ID, but
+    // provisioning conventionally names the guest key 'chat-anonymous-guest'.
+    // If more than one such row exists (re-provisioning, rotation, env drift),
+    // the key VALUE chat-backend holds can authenticate as a DIFFERENT row
+    // than the ID configured here — the gate then skips silently (no 429, no
+    // 403, request still 200s). The request-time diagnostic in chat-routes.ts
+    // catches it live; this boot check catches it before the first victim.
+    try {
+      const duplicates = await prisma.apiKey.count({
+        where: { name: 'chat-anonymous-guest', status: 'active' },
+      });
+      if (duplicates > 1) {
+        log.error(
+          { duplicateActiveRows: duplicates, configuredId: result.configuredId },
+          'MULTIPLE active api_keys rows named "chat-anonymous-guest" exist. The anonymous quota gate ' +
+            'matches the configured ROW ID only — if chat-backend\'s ANONYMOUS_GUEST_API_KEY value belongs ' +
+            'to a different row, the gate is silently inert for it. Deactivate/reconcile the stale row(s).'
+        );
+      }
+    } catch (error) {
+      log.warn({ error }, 'anonymous-guest-key duplicate-name check failed to run');
+    }
   } catch (error) {
     log.error({ error }, 'anonymous-guest-key config check itself failed to run');
   }

@@ -23,6 +23,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getJWKS, isJWKSEnabled, getJWKSStatus } from '../services/jwks-service.js';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 
 // JWKS response schema
 const jwksResponseSchema = {
@@ -164,6 +166,16 @@ export async function registerJWKSRoutes(server: FastifyInstance): Promise<void>
   server.get(
     '/internal/jwks/status',
     {
+      // Unlike the two JWKS endpoints above (`/.well-known/jwks.json` and
+      // `/console/api/v1/jwks`, both listed in `PUBLIC_ROUTES` and deliberately
+      // credential-free), `/internal/jwks/status` matches the `/internal` entry
+      // in `PROTECTED_ROUTE_PREFIXES` and is NOT public — the global
+      // `apiKeyAuthMiddleware` authenticates it and populates `request.apiKey`,
+      // so the two dedicated single-purpose M2M keys can reach it. Guard it.
+      // (Intentionally NOT applied to the two public endpoints: they never
+      // resolve an api key, so the guard there would be dead weight, and the
+      // public JWKS contract must stay reachable without credentials.)
+      preHandler: [rejectAnonymousGuestKeyPreHandler, rejectChatFreeTierKeyPreHandler],
       schema: {
         tags: ['Internal', 'JWKS'],
         summary: 'Get JWKS status',

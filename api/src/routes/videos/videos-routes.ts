@@ -16,6 +16,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { VideoOrchestrationService } from '@/services/video-orchestration-service';
@@ -155,7 +157,11 @@ export async function registerVideosRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Body: VideoGenerationRequest }>,
       reply: FastifyReply

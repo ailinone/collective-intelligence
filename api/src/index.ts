@@ -476,6 +476,26 @@ async function bootstrap(): Promise<void> {
       );
     }
 
+    // ── Quarantine revalidation (Workstream F, 2026-08-17) ───────────────────
+    // Background worker that re-probes quarantined (auth_failed / no_credits)
+    // providers out-of-band and restores them on recovery, so exclusion from
+    // the eligible pool never becomes a permanent ban. Disabled by setting
+    // QUARANTINE_REVALIDATION_INTERVAL_MS=0.
+    try {
+      if (Number(process.env.QUARANTINE_REVALIDATION_INTERVAL_MS) !== 0) {
+        const { startQuarantineRevalidation } = await import(
+          '@/core/operability/quarantine-revalidation-worker.js'
+        );
+        startQuarantineRevalidation();
+        logger.info('✅ Quarantine revalidation worker started');
+      }
+    } catch (err) {
+      logger.warn(
+        { err: serializeError(err) },
+        '⚠️ Quarantine revalidation worker failed to start (non-fatal)'
+      );
+    }
+
     // Pre-warm the catalog cache so the FIRST chat request after boot doesn't pay
     // the full ~64k-row catalog load on the hot path (cold-start mitigation). The
     // single-flight guard in model-catalog-service dedups any concurrent first
@@ -1282,6 +1302,17 @@ async function bootstrap(): Promise<void> {
           'Failed to start broadcast poller — staged traces will not be delivered'
         );
       }
+    }
+
+    // TTFT probe poller (P0.8) — per-replica synthetic seeding of the
+    // in-memory TTFT tracker the cost cascade reads. Post-listen so it never
+    // delays the server accepting traffic; self-gating (no-op once enough
+    // fast routes are known) and env-gated (CI_TTFT_PROBE_ENABLED=false).
+    try {
+      const { startTtftProbePoller } = await import('./jobs/ttft-probe-job.js');
+      startTtftProbePoller();
+    } catch (err) {
+      logger.warn({ err }, 'Failed to start TTFT probe poller — rung-1 selection stays cost-ordered until real traffic seeds the tracker');
     }
 
     // R7 (2026-05-11): Post-listen deferred heavy init. The Fastify server is

@@ -24,6 +24,8 @@ import { ApiKeyRotationService } from '@/services/api-key-rotation';
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
@@ -70,6 +72,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -203,6 +207,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -346,6 +352,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -456,6 +464,8 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],

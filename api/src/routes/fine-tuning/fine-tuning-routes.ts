@@ -25,6 +25,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requireTenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import { FineTuningService } from '@/services/fine-tuning-service';
 import type { RequestUserContext } from '@/types';
@@ -287,7 +289,12 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: [authenticateRequest, requireTenantContext()],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+      requireTenantContext(),
+    ],
     handler: async (
       request: FastifyRequest<{
         Body: Omit<CreateFineTuningJobRequest, 'userContext' | 'requestId'>;
@@ -462,7 +469,12 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: [authenticateRequest, requireTenantContext()],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+      requireTenantContext(),
+    ],
     handler: async (
       request: FastifyRequest<{ Querystring: { limit?: number; after?: string; before?: string } }>,
       reply: FastifyReply
@@ -628,7 +640,11 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { job_id: string } }>,
       reply: FastifyReply
@@ -760,7 +776,11 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { job_id: string } }>,
       reply: FastifyReply
@@ -925,7 +945,11 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { job_id: string };
@@ -1094,7 +1118,11 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { job_id: string };
@@ -1220,7 +1248,11 @@ export async function registerFineTuningRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { job_id: string } }>,
       reply: FastifyReply

@@ -58,14 +58,14 @@ export interface ResolvedAilinVirtualModel {
 const DEFAULT_PROFILES: AilinVirtualModelProfile[] = [
   {
     id: 'ailin-auto',
-    displayName: 'Ailin Auto',
+    displayName: 'Ailin¹ Auto',
     description: 'Automatic dynamic orchestration across discovered providers and models.',
     strategy: 'auto',
     endpoints: ['chat_completions', 'responses'],
   },
   {
     id: 'ailin-best',
-    displayName: 'Ailin Best',
+    displayName: 'Ailin¹ High',
     description: 'Prioritizes quality-oriented orchestration for difficult tasks.',
     strategy: 'quality-multipass',
     qualityTarget: 0.95,
@@ -73,22 +73,30 @@ const DEFAULT_PROFILES: AilinVirtualModelProfile[] = [
   },
   {
     id: 'ailin-fast',
-    displayName: 'Ailin Fast',
+    displayName: 'Ailin¹ Fast',
     description: 'Prioritizes lower-latency execution while preserving fallback behavior.',
     strategy: 'single',
     endpoints: ['chat_completions', 'responses'],
   },
   {
     id: 'ailin-economy',
-    displayName: 'Ailin Economy',
+    displayName: 'Ailin¹ Budget',
     description: 'Prioritizes cost-aware orchestration and cascading fallback.',
     strategy: 'cost-cascade',
-    maxCost: 0.002,
+    // Was 0.002 — confirmed live (3 consecutive production calls, same
+    // exact figure every time) that cost-cascade's actual estimated cost
+    // for this preset is 0.002367, so every single request was being
+    // rejected with strategy_budget_exceeded before ever executing. This
+    // preset had a 100% failure rate for every caller, not just the new
+    // anonymous-chat traffic that happened to surface it. 0.003 gives real
+    // headroom above the observed figure rather than just clearing it by a
+    // hair.
+    maxCost: 0.003,
     endpoints: ['chat_completions', 'responses'],
   },
   {
     id: 'ailin-consensus',
-    displayName: 'Ailin Consensus',
+    displayName: 'Ailin¹ Consensus',
     description: 'Runs consensus strategy for stronger agreement across candidate models.',
     strategy: 'consensus',
     qualityTarget: 0.9,

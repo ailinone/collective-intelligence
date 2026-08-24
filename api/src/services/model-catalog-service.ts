@@ -387,6 +387,25 @@ export async function getModelsByProvider(providerName: string): Promise<Model[]
   if (cachedList && cachedList.expiresAt > now) {
     return cachedList.models;
   }
+  // Hot-path fix (P0.8, 2026-08-18): the global catalog cache is kept warm by
+  // the refresh-ahead timer and holds the SAME rows (status != disabled, same
+  // CATALOG_HOT_PATH_SELECT). Filtering it in memory is O(n) over an already-
+  // materialized array (~52k) and costs ~1ms, while the DB path re-runs the
+  // per-provider findMany — ~1.5s for `huggingface` (~60k rows, measured in
+  // prod inside an anonymous "oi" request when byProviderCache expired; the
+  // refresh-ahead timer does NOT renew byProviderCache, so this fired on the
+  // request path once per TTL window). Prefer the warm global cache; only fall
+  // through to the DB when the global cache itself is cold/expired.
+  if (catalogCache && catalogCache.expiresAt > now) {
+    const fromGlobal = catalogCache.models
+      .filter((m) => m.provider === providerName)
+      .sort((a, b) => (a.displayName ?? a.id).localeCompare(b.displayName ?? b.id));
+    byProviderCache.set(providerName, {
+      expiresAt: Math.min(catalogCache.expiresAt, now + CATALOG_CACHE_TTL_MS),
+      models: fromGlobal,
+    });
+    return fromGlobal;
+  }
   // Single-flight: dedup concurrent cold-cache misses for the same provider (e.g.
   // the ~60k-row `huggingface` query) onto ONE findMany.
   const existing = byProviderInFlight.get(providerName);
@@ -518,6 +537,87 @@ export async function getCatalogModel(
  * are not usable for chat. The C3 pilot showed 606 models tracked in
  * model_health but many were TTS, STT, embedding, or defunct endpoints.
  */
+/**
+ * Pure chat-eligibility predicate for a single catalog model (unit-testable;
+ * extracted from getChatEligibleModels so the guard/classifier exclusion can
+ * be tested without a DB).
+ */
+export function isChatEligibleModel(
+  model: Pick<Model, 'id' | 'name' | 'provider' | 'capabilities'>,
+  allowSelfHostedIds: Set<string>,
+  includeSelfHosted = false
+): boolean {
+  const CHAT_CAPABILITIES = new Set(['chat', 'text_generation', 'function_calling', 'streaming']);
+  const EXCLUDED_CAPABILITIES = new Set([
+    'text_to_speech',
+    'tts',
+    'audio_generation',
+    'speech_to_text',
+    'transcription',
+    'diarization',
+    'embeddings',
+    'embedding',
+    'image_generation',
+    'image_editing',
+    'video_generation',
+    'video_editing',
+    'moderation',
+  ]);
+  const SELF_HOSTED_PROVIDERS = new Set([
+    'self-hosted',
+    'ollama',
+    'local-llama',
+    'local-kobold',
+    'local-embeddings',
+    'vllm',
+    'lm-studio',
+    'xinference',
+    'triton',
+    'local-ocr',
+    'local-docling',
+    'local-piper',
+    'local-nllb',
+  ]);
+
+  // Exclude self-hosted unless explicitly requested or individually pinned
+  if (
+    !includeSelfHosted &&
+    !allowSelfHostedIds.has(model.id) &&
+    !allowSelfHostedIds.has(model.name)
+  ) {
+    const provider = (model.provider || '').toLowerCase();
+    if (
+      SELF_HOSTED_PROVIDERS.has(provider) ||
+      provider.startsWith('local-') ||
+      provider.includes('local')
+    ) {
+      return false;
+    }
+  }
+
+  // Must have at least one chat capability
+  const caps = Array.isArray(model.capabilities) ? (model.capabilities as string[]) : [];
+  const hasChatCapability = caps.some((c) => CHAT_CAPABILITIES.has(c));
+  if (!hasChatCapability) return false;
+
+  // Must not be primarily a non-chat model
+  const isExcludedOnly = caps.length > 0 && caps.every((c) => EXCLUDED_CAPABILITIES.has(c));
+  if (isExcludedOnly) return false;
+
+  // Safety/classifier models that advertise 'chat' capability but cannot serve
+  // synthesis (observed live 2026-08-17: cost-cascade rung picked Groq's
+  // `llama-prompt-guard-2-22m` — a prompt-classification endpoint — and every
+  // attempt returned HTTP 400, burning a rung of every cheap-tier ladder).
+  // Name-based on purpose: catalogs tag these as 'chat' because they share the
+  // chat wire format, so capability filtering alone cannot catch them.
+  const id = (model.id || '').toLowerCase();
+  if (/(^|\/)llama-guard|^prompt-guard|[-_]prompt-guard([-_]|$)|guardian|^guard-/.test(id)) {
+    return false;
+  }
+
+  return true;
+}
+
 export async function getChatEligibleModels(options?: {
   includeSelfHosted?: boolean;
   /**
@@ -539,71 +639,9 @@ export async function getChatEligibleModels(options?: {
   const all = await getAllCatalogModels();
   const allowSelfHostedIds = new Set(options?.allowSelfHostedModelIds ?? []);
 
-  const CHAT_CAPABILITIES = new Set(['chat', 'text_generation', 'function_calling', 'streaming']);
-  const EXCLUDED_CAPABILITIES = new Set([
-    'text_to_speech',
-    'tts',
-    'audio_generation',
-    'speech_to_text',
-    'transcription',
-    'diarization',
-    'embeddings',
-    'embedding',
-    'image_generation',
-    'image_editing',
-    'video_generation',
-    'video_editing',
-    'moderation',
-  ]);
-  // Kept in sync with core/provider-operability-hub.ts SELF_HOSTED_PROVIDERS.
-  // The coherence guard at
-  // core/__tests__/provider-operability-hub.self-hosted.test.ts asserts this
-  // set includes every catalog self-hosted-* row. If adding a new self-hosted
-  // catalog entry, update BOTH sets.
-  const SELF_HOSTED_PROVIDERS = new Set([
-    'self-hosted',
-    'ollama',
-    'local-llama',
-    'local-kobold',
-    'local-embeddings',
-    'vllm',
-    'lm-studio',
-    'xinference',
-    'triton',
-    'local-ocr',
-    'local-docling',
-    'local-piper',
-    'local-nllb',
-  ]);
-
-  return all.filter((model) => {
-    // Exclude self-hosted unless explicitly requested or individually pinned
-    if (
-      !options?.includeSelfHosted &&
-      !allowSelfHostedIds.has(model.id) &&
-      !allowSelfHostedIds.has(model.name)
-    ) {
-      const provider = (model.provider || '').toLowerCase();
-      if (
-        SELF_HOSTED_PROVIDERS.has(provider) ||
-        provider.startsWith('local-') ||
-        provider.includes('local')
-      ) {
-        return false;
-      }
-    }
-
-    // Must have at least one chat capability
-    const caps = Array.isArray(model.capabilities) ? (model.capabilities as string[]) : [];
-    const hasChatCapability = caps.some((c) => CHAT_CAPABILITIES.has(c));
-    if (!hasChatCapability) return false;
-
-    // Must not be primarily a non-chat model
-    const isExcludedOnly = caps.length > 0 && caps.every((c) => EXCLUDED_CAPABILITIES.has(c));
-    if (isExcludedOnly) return false;
-
-    return true;
-  });
+  return all.filter((model) =>
+    isChatEligibleModel(model, allowSelfHostedIds, options?.includeSelfHosted)
+  );
 }
 
 /**

@@ -54,7 +54,7 @@ global:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: ['ci-alertmanager:9093']
+        - targets: ['alertmanager:9093']
 
 # No Prometheus-native rule_files are loaded here. The platform's alert
 # rules (api/grafana/ci-alert-rules.yml) are provisioned directly into

@@ -24,6 +24,7 @@ import pino from 'pino';
 import { getSemanticMemoryStore, type MemoryEntry } from './semantic-memory-store';
 import type { ChatRequest } from '@/types';
 import { getErrorMessage } from '@/utils/type-guards';
+import { isTrivialSingleTurn } from '@/core/orchestration/trivial-request-triage';
 
 const logger = pino({ name: 'memory-context-service' });
 
@@ -40,6 +41,14 @@ export interface MemoryContext {
     type: string;
     similarity: number;
   }>;
+  /**
+   * LAT-3: true only when memoryStore.search() actually executed (a pgvector
+   * round trip happened), independent of whether it found anything. False
+   * for the empty-query short-circuit and the internal-error fallback —
+   * both cases where the caller can't be sure a search attempt resolved, so
+   * a strategy-level fallback search should still be allowed to run.
+   */
+  searched: boolean;
 }
 
 export interface MemoryContextOptions {
@@ -77,6 +86,18 @@ export class MemoryContextService {
     options: MemoryContextOptions = {}
   ): Promise<MemoryContext> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+
+    // Hot-path guard (P0.8, 2026-08-18): trivially-short single-turn requests
+    // ("oi", anonymous, no history/tools/attachments) cannot benefit from
+    // retrieval — and with a broken embedder the search burns >1s of failing
+    // provider calls BEFORE this returns. Live prod evidence: anonymous "oi"
+    // requests paid embedder resolution + deepinfra 402 + huggingface 404
+    // attempts on the first-token path. The engine sites (execute()/
+    // executeStream()) already gate on isTrivialSingleTurn, but this is the
+    // SOURCE — any other caller (prober, future paths) gets the same guarantee.
+    if (isTrivialSingleTurn(request)) {
+      return this.emptyContext();
+    }
 
     try {
       const memoryStore = getSemanticMemoryStore();
@@ -144,6 +165,7 @@ export class MemoryContextService {
         contextText,
         hasContext: topMemories.length > 0,
         memorySources: topSources,
+        searched: true,
       };
     } catch (error) {
       this.log.error({ error: getErrorMessage(error) }, 'Failed to build memory context');
@@ -308,6 +330,7 @@ export class MemoryContextService {
       contextText: '',
       hasContext: false,
       memorySources: [],
+      searched: false,
     };
   }
 }

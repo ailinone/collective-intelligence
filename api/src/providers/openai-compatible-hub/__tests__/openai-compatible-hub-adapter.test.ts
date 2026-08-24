@@ -293,6 +293,75 @@ describe('openai-compatible-hub-adapter', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards an AbortSignal to fetch on chat completion', async () => {
+    mockedGetModelsByProvider.mockResolvedValueOnce([buildCatalogModel('alibaba@qvq-max')]);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'chatcmpl-signal',
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: 'alibaba/qvq-max',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'pong' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const adapter = createAdapter();
+    const controller = new AbortController();
+
+    await adapter.chatCompletion(
+      { model: 'alibaba@qvq-max', messages: [{ role: 'user', content: 'ping' }] } as any,
+      { signal: controller.signal }
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  it('does not retry a deliberately aborted request and preserves AbortError', async () => {
+    mockedGetModelsByProvider.mockResolvedValueOnce([buildCatalogModel('gpt-4o-mini')]);
+    const controller = new AbortController();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      controller.abort();
+      throw new DOMException('This operation was aborted', 'AbortError');
+    });
+
+    const adapter = new OpenAICompatibleHubAdapter({
+      name: 'heliconeai',
+      providerName: 'heliconeai',
+      apiKey: 'test-key',
+      baseUrl: 'https://ai-gateway.helicone.ai/v1',
+      enabled: true,
+      maxRetries: 3,
+      retryDelay: 1,
+    });
+
+    let rejected: unknown;
+    try {
+      await adapter.chatCompletion(
+        { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'ping' }] } as any,
+        { signal: controller.signal }
+      );
+    } catch (err) {
+      rejected = err;
+    }
+
+    expect(rejected).toBeInstanceOf(Error);
+    expect((rejected as Error).name).toBe('AbortError');
+    // A retry would pointlessly re-issue a request the caller already gave up
+    // on; maxRetries: 3 would otherwise mean up to 4 calls.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry terminal 429 daily rate limit errors', async () => {
     mockedGetModelsByProvider.mockResolvedValueOnce([buildCatalogModel('gpt-4o-mini')]);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(

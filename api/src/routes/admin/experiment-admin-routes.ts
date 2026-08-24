@@ -32,6 +32,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
 import {
@@ -58,7 +60,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Create Experiment ───────────────────────────────────────────────
   server.post(
     '/v1/admin/experiment/create',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as Partial<ExperimentConfig>;
 
@@ -96,7 +105,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Start / Resume Experiment ───────────────────────────────────────
   server.post(
     '/v1/admin/experiment/run',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.body as { experimentId: string };
       if (!experimentId) {
@@ -132,7 +148,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Status ──────────────────────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/status',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const status = getExperimentStatus();
       if (status.experimentId) return reply.send(status);
@@ -161,7 +184,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Pause ───────────────────────────────────────────────────────────
   server.post(
     '/v1/admin/experiment/pause',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (_req: FastifyRequest, reply: FastifyReply) => {
       try {
         await pauseExperiment();
@@ -175,7 +205,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Raw Results ─────────────────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/results',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const query = req.query as {
         experimentId?: string;
@@ -207,7 +244,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Statistical Analysis ───────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/analysis',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.query as { experimentId?: string };
       if (!experimentId) {
@@ -278,7 +322,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Full Report ─────────────────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/report',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.query as { experimentId?: string };
       if (!experimentId) {
@@ -316,7 +367,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── History ─────────────────────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/history',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { limit } = req.query as { limit?: string };
       const maxLimit = Math.min(parseInt(limit ?? '20', 10), 100);
@@ -343,7 +401,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── Suite Info ──────────────────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/suite',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (_req: FastifyRequest, reply: FastifyReply) => {
       const coverage = getSuiteCoverage();
       return reply.send({
@@ -363,7 +428,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── GO/NO-GO Decision Report ────────────────────────────────────────
   server.get(
     '/v1/admin/experiment/go-no-go',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.query as { experimentId?: string };
       if (!experimentId) {
@@ -389,7 +461,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // validation. See segmented-benchmark-report.ts for the full rationale.
   server.get(
     '/v1/admin/experiment/segmented-benchmark',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.query as { experimentId?: string };
       if (!experimentId) {
@@ -417,7 +496,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // pre-registered regimes. See strategy-scenario-matrix.ts.
   server.get(
     '/v1/admin/experiment/strategy-matrix',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { experimentId } = req.query as { experimentId?: string };
       if (!experimentId) {
@@ -442,7 +528,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
     // Auth to match every other /v1/admin/experiment route: this endpoint fires
     // real (paid) judge calls, so an unauthenticated handler was a public
     // cost-amplification hole. The v4 driver already sends the admin bearer.
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (request, reply) => {
       const q = request.query as Record<string, string>;
       const runs = Number(q?.runs ?? 10);
@@ -479,7 +572,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── C3 Validation: Pre-built experiment configs ─────────────────────
   server.get(
     '/v1/admin/experiment/c3-configs',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (_req: FastifyRequest, reply: FastifyReply) => {
       const configs = await getAllC3Configs();
       const summary = Object.entries(configs).map(([key, config]) => ({
@@ -504,7 +604,14 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
   // ─── C3 Validation: Create experiment from pre-built config ─────────
   server.post(
     '/v1/admin/experiment/c3-create',
-    { preHandler: [authenticate, requireRole('admin', 'owner')] },
+    {
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { configKey, overrides } = req.body as {
         configKey: string;

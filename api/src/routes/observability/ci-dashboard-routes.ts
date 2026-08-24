@@ -25,6 +25,8 @@ import { getSemanticCache } from '@/core/cache/semantic-cache';
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { isCacheEnabled } from '@/cache/cache-runtime-state';
 
 const log = logger.child({ component: 'ci-dashboard' });
@@ -53,7 +55,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/health',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get Collective Intelligence system health and status',
         tags: ['Observability'],
@@ -145,7 +151,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/strategies',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get orchestration strategy usage statistics',
         tags: ['Observability'],
@@ -196,7 +206,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/models',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get model performance metrics',
         tags: ['Observability'],
@@ -283,7 +297,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/learning',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get auto-learning system insights and patterns',
         tags: ['Observability'],
@@ -358,7 +376,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/cache',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get semantic cache statistics',
         tags: ['Observability'],
@@ -412,7 +434,11 @@ export async function registerCIDashboardRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/ci/dashboard/overview',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get comprehensive CI dashboard overview with all metrics',
         tags: ['Observability'],

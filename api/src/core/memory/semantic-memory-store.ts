@@ -158,6 +158,8 @@ const DEFAULT_OPTIONS: MemoryStoreOptions = {
 export class SemanticMemoryStore {
   private options: MemoryStoreOptions;
   private embeddingCache: Map<string, number[]> = new Map();
+  /** Embedder circuit: timestamp until which provider embedding calls are skipped. */
+  private embedderCooldownUntil = 0;
 
   constructor(options: Partial<MemoryStoreOptions> = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -437,6 +439,19 @@ export class SemanticMemoryStore {
       return this.normalizeEmbeddingDimensions(cached);
     }
 
+    // Embedder circuit (P0.8, 2026-08-18): live prod evidence showed every
+    // memory-enabled request re-attempting the SAME dead embedder chain
+    // (deepinfra 402 no-balance → 864ms + HALF_OPEN probe, huggingface 404
+    // ~350ms ×N) on the first-token path. Quarantine-class failures do not
+    // self-correct within a request budget, so open a short local circuit:
+    // skip all provider work until the cooldown expires. Search then falls
+    // through to the zero-vector fallback (similarity ≈ 0, no results) at
+    // ~0ms instead of burning seconds.
+    const now = Date.now();
+    if (this.embedderCooldownUntil && now < this.embedderCooldownUntil) {
+      return this.zeroEmbedding();
+    }
+
     try {
       const { getProviderRegistry } = await import('@/providers/provider-registry.js');
       const registry = getProviderRegistry();
@@ -482,10 +497,29 @@ export class SemanticMemoryStore {
       return normalizedEmbedding;
     } catch (error) {
       log.error({ error: getErrorMessage(error) }, 'Failed to generate embedding');
-      // Return zero vector as fallback. `Array.from` returns typed `number[]`
-      // (vs `new Array().fill()` which returns `any[]`).
-      return Array.from({ length: this.options.embeddingDimensions || 1536 }, (): number => 0);
+      // Open the embedder circuit: quarantine-class failures (401/402/403/404,
+      // circuit breaker, no balance) repeat identically on the next call, so
+      // stop paying for them on every request. P0.8 follow-up (2026-08-18):
+      // prod waterfall showed memory lookups taking 8.6-8.9s on multi-turn
+      // requests — the failing chain was timeouts/network errors, which the
+      // original 40x-only regex missed, so EVERY request re-paid the full
+      // embedder resolution + timeout chain. Any failure now opens the
+      // circuit: quarantine-class for the full window, anything else
+      // (timeouts, aborts, 5xx, network) for the fallback window — a
+      // transient error costs at most one retry per window instead of one
+      // per request.
+      const message = getErrorMessage(error);
+      const quarantineClass = /HTTP 40[1244]|circuit breaker|no balance|not found|permission|unauthorized/i.test(message);
+      const windowMs = quarantineClass
+        ? Number(process.env.MEMORY_EMBEDDER_COOLDOWN_MS) || 60_000
+        : Number(process.env.MEMORY_EMBEDDER_COOLDOWN_FALLBACK_MS) || 30_000;
+      this.embedderCooldownUntil = now + windowMs;
+      return this.zeroEmbedding();
     }
+  }
+
+  private zeroEmbedding(): number[] {
+    return Array.from({ length: this.options.embeddingDimensions || 1536 }, (): number => 0);
   }
 
   /**

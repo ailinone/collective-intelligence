@@ -27,6 +27,8 @@ import {
 } from '@/queue/dlq-manager';
 import { narrowAs } from '@/utils/type-guards';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'dlq-admin-routes' });
@@ -37,7 +39,12 @@ export async function registerDLQAdminRoutes(server: FastifyInstance): Promise<v
   // covers `/v1/...`), so without an explicit preHandler these endpoints were
   // fully unauthenticated. Replaying DLQ jobs re-runs arbitrary queued work and
   // listing exposes job payloads, so gate every route behind admin/owner auth.
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  const adminPreHandler = [
+    authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    requireRole('admin', 'owner'),
+  ];
 
   /**
    * GET /admin/queues/dlq — Overview of all DLQ queues and sizes
