@@ -105,6 +105,15 @@ const aliasToCanonical: Record<string, CanonicalStrategyName> = {
   'persona-exploration': 'persona-exploration',
   personas: 'persona-exploration',
   agentic: 'agentic',
+  // Both of these were reachable only by accident: they are in
+  // STRATEGY_INPUT_VALUES, so AJV admits them, but with no entry here
+  // canonicalizeStrategyInput() returned undefined and normalizeChatRequest left
+  // the RAW wire string on the request. That happens to equal the registered id,
+  // so execution worked — but resolveExecutionStrategy() also returned undefined,
+  // and chat-routes derives isCollectiveStrategyRequest from it, so streaming
+  // requests for these two took the non-collective path.
+  'sensitivity-consensus': 'sensitivity-consensus',
+  'tri-role-collective': 'tri-role-collective',
   fast: 'sensitivity-consensus',
   dynamic: 'dynamic',
   auto: 'dynamic',

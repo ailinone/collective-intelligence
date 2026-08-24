@@ -98,7 +98,10 @@ export class WarRoomStrategy extends BaseStrategy {
     const subTasks = decomposition.subTasks;
 
     if (subTasks.length === 0) {
-      yield decomposition.execution.response;
+      // Same correction as the buffered path: yield an actual answer to the
+      // user's question, not the commander's (empty) decomposition output.
+      const direct = await this.executeSingleModel(commander, request, 'primary', context);
+      yield direct.response;
       return;
     }
 
@@ -259,15 +262,29 @@ export class WarRoomStrategy extends BaseStrategy {
     const subTasks = decomposition.subTasks;
 
     if (subTasks.length === 0) {
-      // Commander couldn't decompose → fall back to single execution
+      // Commander produced no sub-tasks → answer the question directly.
+      //
+      // This branch used to return `decomposition.execution.response`, i.e. the
+      // COMMANDER'S OWN decomposition output, despite the comment claiming a
+      // fallback to single execution. No model was ever asked the user's
+      // question on this path, so the best case was a body of "[]" and the
+      // observed case was "[DEGRADED] All execution attempts failed" whenever the
+      // single un-retried commander call came back empty.
+      //
+      // Reaching zero sub-tasks is not necessarily an error: the commander is
+      // instructed to return an empty array when the task is simple enough for
+      // one pass, which is exactly what a short factual question is.
+      const direct = await this.executeSingleModel(commander, request, 'primary', context);
+      allExecutions.push(direct);
+
       return {
         strategyUsed: this.getMetadata().name,
         modelsUsed: allExecutions,
-        finalResponse: decomposition.execution.response,
-        totalCost: decomposition.execution.cost,
+        finalResponse: direct.response,
+        totalCost: decomposition.execution.cost + direct.cost,
         totalDuration: Date.now() - startTime,
-        qualityScore: 0.7,
-        metadata: { phase: 'decompose_failed', subTasks: 0 },
+        qualityScore: direct.success ? 0.7 : 0,
+        metadata: { phase: 'single_pass', subTasks: 0 },
       };
     }
 
