@@ -17,6 +17,14 @@ const REPO = process.env.STAR_HISTORY_REPO || 'ailinone/collective-intelligence'
 const TOKEN = process.env.GITHUB_TOKEN;
 const OUT_DIR = process.env.CONTRIBUTORS_OUT_DIR || '.github/contributors';
 
+// Every commit in this repo's history is authored by a human, never by an AI
+// assistant. GitHub's /contributors endpoint is cached separately from the
+// commit history it summarizes, so a login can still show up here for a
+// while after the commit(s) that put it there have been corrected. This
+// denylist keeps the widget honest in the meantime, and stays harmless once
+// the cache catches up (the filter just never matches again).
+const EXCLUDED_LOGINS = new Set(['claude']);
+
 if (!TOKEN) {
   console.error('GITHUB_TOKEN is required.');
   process.exit(1);
@@ -96,8 +104,14 @@ async function renderSvg(contributors) {
 
 async function main() {
   console.log(`Fetching contributors for ${REPO}...`);
-  const contributors = await fetchAllContributors(REPO);
-  console.log(`Fetched ${contributors.length} contributors: ${contributors.map((c) => c.login).join(', ')}`);
+  const fetched = await fetchAllContributors(REPO);
+  console.log(`Fetched ${fetched.length} contributors: ${fetched.map((c) => c.login).join(', ')}`);
+
+  const excluded = fetched.filter((c) => EXCLUDED_LOGINS.has(c.login.toLowerCase()));
+  if (excluded.length > 0) {
+    console.log(`Excluding: ${excluded.map((c) => c.login).join(', ')}`);
+  }
+  const contributors = fetched.filter((c) => !EXCLUDED_LOGINS.has(c.login.toLowerCase()));
   if (contributors.length === 0) {
     throw new Error('No contributors returned; refusing to render an empty widget.');
   }
