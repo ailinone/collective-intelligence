@@ -203,7 +203,7 @@
     "testcontainers": "^12.1.0",
     "tsc-alias": "^1.9.1",
     "tsx": "^4.23.11",
-    "typescript": "^5.3.3",
+    "typescript": "^7.0.2",
     "vitest": "3.2.6",
     "vitest-evals": "^0.5.0",
     "ws": "^8.16.0",
