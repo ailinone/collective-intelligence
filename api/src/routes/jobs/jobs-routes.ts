@@ -14,6 +14,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { prisma } from '@/database/client';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
@@ -25,7 +27,11 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
   server.get(
     '/v1/jobs',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Jobs'],
         summary: 'List all jobs',
@@ -193,7 +199,11 @@ export async function registerJobsRoutes(server: FastifyInstance): Promise<void>
   server.get(
     '/v1/jobs/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Jobs'],
         summary: 'Get job details',

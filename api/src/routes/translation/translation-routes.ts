@@ -21,6 +21,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getProviderRegistry } from '@/providers/provider-registry';
 import {
   PalabraAIAdapter,
@@ -40,7 +42,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
   server.post(
     '/v1/translation/session',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Translation'],
         summary: 'Create real-time translation session',
@@ -131,7 +137,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
   server.delete(
     '/v1/translation/session/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Translation'],
         summary: 'Delete translation session',
@@ -173,7 +183,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
   server.post(
     '/v1/translation/text',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Translation'],
         summary: 'Translate text (NLLB-200)',
@@ -233,7 +247,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
   server.post(
     '/v1/translation/batch',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Translation'],
         summary: 'Batch translate texts',
@@ -283,7 +301,11 @@ export async function registerTranslationRoutes(server: FastifyInstance): Promis
   server.get(
     '/v1/translation/languages',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Translation'],
         summary: 'List supported translation languages',

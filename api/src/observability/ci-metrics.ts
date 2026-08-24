@@ -77,6 +77,19 @@ function createGauge(config: GaugeConfig): Gauge<string> {
 // Strategy Metrics
 // ============================================
 
+/**
+ * Degraded synthesis emissions (Workstream F, 2026-08-17): responses served
+ * as the fallback placeholder ("All available models were unavailable...") or
+ * another degraded marker. These are HTTP 200 to the client but are NOT
+ * semantic successes — request-level success metrics must not count them.
+ */
+export const degradedSynthesisTotal = createCounter({
+  name: 'ci_orchestration_degraded_synthesis_total',
+  help: 'Total responses served as degraded synthesis (fallback placeholder, no provider succeeded)',
+  labelNames: ['strategy', 'reason'],
+  registers: [registry],
+});
+
 export const strategyExecutionTotal = createCounter({
   name: 'ci_strategy_execution_total',
   help: 'Total number of strategy executions',
@@ -157,6 +170,41 @@ export const streamingTimeToFirstByte = createHistogram({
   buckets: [100, 250, 500, 1000, 2000, 3000, 5000, 8000, 15000, 30000],
   registers: [registry],
 });
+
+/**
+ * Streaming strategy-throw recovery (2026-08-16 follow-up).
+ *
+ * The streaming throw guard (orchestration-engine.ts) catches a strategy that
+ * threw before emitting any answer content and recovers it into a normal 200
+ * SSE response. That is the right client behavior, but it made a TOTAL OUTAGE
+ * invisible to every dashboard: `streamingTimeToFirstByte` above already
+ * recorded result='success' on the observer's "request received" chunk — which
+ * is emitted BEFORE the strategy even runs — and the old chat-routes error log
+ * line plus the SSE error frame that alerting keyed on both went silent by
+ * design once the guard started swallowing the throw.
+ *
+ * This counter is the replacement signal, incremented at the exact point of
+ * recovery so the outage class is observable without inspecting wire content:
+ *   outcome='recovered' — a fallback provider produced a REAL answer (the
+ *     strategy failed, the request did not: elevated rate = strategy/pool
+ *     misconfiguration, not a user-visible outage);
+ *   outcome='degraded'  — every fallback also failed and the client got the
+ *     `[DEGRADED]` placeholder. ANY sustained non-zero rate here is a real
+ *     user-facing outage delivered as an HTTP 200. Alert on it.
+ */
+export const streamingStrategyRecoveryTotal = createCounter({
+  name: 'ci_streaming_strategy_recovery_total',
+  help: 'Streaming strategy threw before any content and was recovered by the engine throw guard',
+  labelNames: ['strategy', 'outcome'],
+  registers: [registry],
+});
+
+export function recordStreamingStrategyRecovery(params: {
+  strategy: string;
+  outcome: 'recovered' | 'degraded';
+}): void {
+  streamingStrategyRecoveryTotal.inc({ strategy: params.strategy, outcome: params.outcome });
+}
 
 // ============================================
 // Semantic Memory Metrics

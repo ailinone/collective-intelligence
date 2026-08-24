@@ -78,9 +78,23 @@ export class ThreadsService {
         },
       });
 
-      // If messages provided, create message records
+      // If messages provided, create message records.
+      //
+      // These are inserted SEQUENTIALLY, not with Promise.all. `created_at` is
+      // `TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP`, i.e. transaction-start time at
+      // millisecond resolution, and `listMessages` orders by it. Two inserts
+      // dispatched concurrently routinely begin inside the same millisecond and
+      // receive byte-identical timestamps, at which point the readback order is
+      // whatever the plan happens to yield — Postgres's sort is unstable for tied
+      // keys and the ids are random (`nanoid`), so there is no fallback ordering.
+      //
+      // Measured against the real schema: with concurrent inserts, two initial
+      // messages tied on `created_at` in 167/200 runs and came back transposed in
+      // 46% of them; awaiting them in sequence produced 0/100 ties and the correct
+      // order 100/100. The order of `messages` is caller-meaningful (a thread
+      // seeded with a user turn then an assistant turn), so it must be preserved.
       if (messages && messages.length > 0) {
-        const messagePromises = messages.map((msg) => {
+        for (const msg of messages) {
           const messageId = `msg_${nanoid(24)}`;
           const contentArray = Array.isArray(msg.content)
             ? msg.content
@@ -95,7 +109,7 @@ export class ThreadsService {
             messageMetadata.tool_name = msg.name;
           }
 
-          return prisma.threadMessage.create({
+          await prisma.threadMessage.create({
             data: {
               id: messageId,
               threadId: threadId,
@@ -109,9 +123,8 @@ export class ThreadsService {
               metadata: messageMetadata,
             },
           });
-        });
+        }
 
-        await Promise.all(messagePromises);
         log.info(
           { requestId, threadId, messageCount: messages.length },
           'Thread created with messages'
@@ -446,7 +459,16 @@ export class ThreadsService {
       const messages = await prisma.threadMessage.findMany({
         where,
         take: limit + 1, // Get one extra to check has_more
-        orderBy: order === 'desc' ? { createdAt: 'desc' } : { createdAt: 'asc' },
+        // `createdAt` alone is not a total order: it is millisecond-resolution, so
+        // rows written in the same tick tie exactly and Postgres may return them in
+        // any order. `id` is appended purely as a stable tiebreaker, so repeated
+        // reads at least agree with each other. It is NOT insertion order — ids are
+        // random — so ordering correctness rests on the writes being sequenced,
+        // above, not on this.
+        orderBy:
+          order === 'desc'
+            ? [{ createdAt: 'desc' }, { id: 'desc' }]
+            : [{ createdAt: 'asc' }, { id: 'asc' }],
       });
 
       const has_more = messages.length > limit;

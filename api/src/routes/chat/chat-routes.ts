@@ -19,7 +19,14 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { ChatRequest, ChatResponse, ChatMessage, MessageContent, Model } from '@/types';
+import type {
+  ChatRequest,
+  ChatResponse,
+  ChatMessage,
+  ExecutionStrategyName,
+  MessageContent,
+  Model,
+} from '@/types';
 import type { Logger } from 'pino';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import type { TierContext } from '@/services/pricing-tier-billing';
@@ -28,6 +35,11 @@ import {
   detectMediaGenerationModality,
 } from '@/core/orchestration/orchestration-engine';
 import { inferCapabilities } from '@/core/orchestration/capability-inference';
+import {
+  requestRequiresFunctionCalling,
+  explicitlyLacksFunctionCalling,
+} from '@/core/orchestration/function-calling-guard';
+import { isDeadCandidateProvider } from '@/core/orchestration/dead-candidate-skip';
 import { authenticate as _authenticate } from '@/middleware/auth-middleware';
 import {
   requireTenantContext as _requireTenantContext,
@@ -51,6 +63,7 @@ import {
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { computeDynamicFirstChunkTimeoutMs } from '@/routes/chat/streaming-first-chunk-timeout';
 import { getFailoverService } from '@/services/provider-failover-service';
+import { sanitizeToolSchemas } from '@/utils/tool-schema-sanitizer';
 import { checkQuota } from '@/services/quota-service';
 import { evaluateGovernance } from '@/services/org-governance-service';
 import { gateChatRequest } from '@/services/prepaid-wallet-gate';
@@ -84,12 +97,64 @@ import {
   checkAndConsumeAnonymousQuota,
   inAnonymousQuotaScope,
 } from '@/services/anonymous-quota-gate';
+import { recordAnonymousChat } from '@/services/anonymous-chat-audit';
 import {
+  anonymousOutputViolation,
+  ANONYMOUS_TRIPWIRE_REFUSAL,
+  ANONYMOUS_TRIPWIRE_OVERLAP_CHARS,
+} from '@/services/anonymous-output-tripwire';
+import {
+  chatFreeTierApiKeyId,
   checkAndConsumeFreeTierAutoQuota,
   freeTierQuotaExceededBody,
-  isFreeTierAutoRawModel,
   isFreeTierAutoQuotaEnabled,
+  isInChatFreeTierScope,
 } from '@/services/free-tier-quota-gate';
+import {
+  FREE_TIER_ALLOWED_STRATEGIES,
+  FREE_TIER_FALLBACK_STRATEGY,
+} from '@/core/orchestration/triage-service';
+
+/**
+ * Per-request cost ceiling applied when `ailin_free_tier_scope` is set (see
+ * that field's doc in types/index.ts). Matches `ailin-economy`'s own
+ * cost-cascade cap (ailin-virtual-model-service.ts's DEFAULT_PROFILES) — the
+ * platform's existing notion of what a free-tier request is allowed to cost,
+ * applied here to `ailin-auto`'s per-model-call ceiling too.
+ */
+const FREE_TIER_MAX_COST_USD = 0.003;
+
+/**
+ * Apply the free-tier cost/strategy ceiling to a request already confirmed to
+ * be in free-tier scope (anonymous or the dedicated chat-free-tier key).
+ * Mutates and returns `chatRequest`.
+ *
+ * Both halves close a real bypass, found in security review: the earlier
+ * version only DEFAULTED `max_cost` (`?? FREE_TIER_MAX_COST_USD`), so a
+ * client that supplied its own — higher, or absent-cap-meaning — value kept
+ * it verbatim. And `applyFreeTierStrategyCap` (triage-service.ts) only runs
+ * inside orchestration-engine.ts's triage-gated branches, which are skipped
+ * entirely whenever `request.strategy` is explicitly set — so a request with
+ * `model:"ailin-auto", strategy:"consensus"` reached dispatch with the
+ * client's explicit strategy untouched, never seeing the cap at all. Clearing
+ * an out-of-allowlist explicit `strategy` here, before the request ever
+ * reaches orchestration, closes that gap without touching the shared
+ * dispatch code every other request (paid, authenticated, or otherwise) also
+ * runs through.
+ */
+export function applyFreeTierCeiling(chatRequest: ChatRequest): void {
+  chatRequest.max_cost = Math.min(
+    chatRequest.max_cost ?? FREE_TIER_MAX_COST_USD,
+    FREE_TIER_MAX_COST_USD
+  );
+  if (
+    chatRequest.strategy &&
+    !FREE_TIER_ALLOWED_STRATEGIES.has(chatRequest.strategy as ExecutionStrategyName)
+  ) {
+    chatRequest.strategy = FREE_TIER_FALLBACK_STRATEGY;
+  }
+  chatRequest.ailin_free_tier_scope = true;
+}
 
 /**
  * Request body schema
@@ -374,7 +439,7 @@ const chatCompletionSchema = {
   },
 };
 
-const chatCompletionResponseSchema = {
+export const chatCompletionResponseSchema = {
   type: 'object',
   required: ['id', 'object', 'created', 'model', 'choices', 'usage'],
   additionalProperties: true,
@@ -394,9 +459,15 @@ const chatCompletionResponseSchema = {
         properties: {
           index: { type: 'integer', description: 'Index of the choice (0-based)' },
           finish_reason: {
-            type: 'string',
-            description:
-              'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required), content_filter (content filtered), or function_call (deprecated)',
+            anyOf: [
+              { type: 'null', description: 'Completion reason not reported by the provider' },
+              {
+                type: 'string',
+                description:
+                  'Reason for completion: stop (natural end), length (token limit), tool_calls (tool usage required), content_filter (content filtered), or function_call (deprecated)',
+              },
+            ],
+            description: 'Reason the model stopped generating',
           },
           logprobs: {
             anyOf: [
@@ -418,6 +489,11 @@ const chatCompletionResponseSchema = {
               role: { type: 'string', description: 'Message role: assistant (model response)' },
               content: {
                 oneOf: [
+                  {
+                    type: 'null',
+                    description:
+                      'No text content — an assistant message that only carries tool_calls has a null content per the OpenAI wire format',
+                  },
                   { type: 'string', description: 'Text content as a string' },
                   {
                     type: 'array',
@@ -510,13 +586,28 @@ function normalizeChatRequest(chatRequest: ChatRequest): ChatRequest {
   const strategyFromAlias =
     !chatRequest.strategy && aliasResolution?.strategy ? aliasResolution.strategy : undefined;
 
+  // FIX (2026-08-22, request Td9Rzv...): tools with absent/`{}`/non-object
+  // `function.parameters` (or `type: ['object']`) poison the WHOLE request at
+  // strict providers (OpenAI 400 invalid_function_parameters). The sanitizer
+  // rewrites them; log once per request so a misbehaving chat client is
+  // visible without spamming per-tool lines.
+  const normalizedToolNames: string[] = [];
   const normalizedRequest: ChatRequest = {
     ...chatRequest,
     model: aliasResolution ? aliasResolution.model : chatRequest.model,
     strategy:
       resolvedStrategy ?? (normalizedStrategyInput === 'dynamic' ? 'auto' : chatRequest.strategy),
     messages: normalizedMessages,
+    tools: sanitizeToolSchemas(chatRequest.tools, {
+      onNormalization: (event) => normalizedToolNames.push(event.name),
+    }),
   };
+  if (normalizedToolNames.length > 0) {
+    logger.warn(
+      { normalizedTools: normalizedToolNames },
+      'Normalized invalid tool parameter schemas (absent/empty/non-object parameters or invalid root type)'
+    );
+  }
 
   if (strategyFromAlias) {
     normalizedRequest.strategy = strategyFromAlias;
@@ -823,22 +914,53 @@ export async function registerChatRoutes(
       // post-normalization value). Every other request is untouched — this
       // never runs, and never consults the wallet, for normal traffic.
       const requestApiKeyId = (request as ExtendedFastifyRequest).apiKey?.id;
+      const anonHeaders = request.headers as Record<string, string | string[] | undefined>;
       const anonScope = inAnonymousQuotaScope({
         apiKeyId: requestApiKeyId,
         rawModel,
-        visitorIdHeader: getHeaderString(
-          request.headers as Record<string, string | string[] | undefined>,
-          'x-anonymous-visitor-id'
+        visitorIdHeader: getHeaderString(anonHeaders, 'x-anonymous-visitor-id'),
+        // Chat-backend forwards the ORIGINAL browser's IP/UA/Accept-Language
+        // as data (custom headers), not via the connection itself — every
+        // anonymous request reaches ci from chat-backend's own (whitelisted)
+        // egress IP regardless of which visitor is asking, so the connection
+        // -level signal can't distinguish visitors from each other.
+        visitorIpHeader: getHeaderString(anonHeaders, 'x-anonymous-visitor-ip'),
+        visitorUserAgentHeader: getHeaderString(anonHeaders, 'x-anonymous-visitor-user-agent'),
+        visitorAcceptLanguageHeader: getHeaderString(
+          anonHeaders,
+          'x-anonymous-visitor-accept-language'
         ),
       });
       if (anonScope.inScope && anonScope.visitorIdHash && requestApiKeyId) {
+        const anonVisitorIp = getHeaderString(anonHeaders, 'x-anonymous-visitor-ip');
         const anonResult = await checkAndConsumeAnonymousQuota(
           requestApiKeyId,
-          anonScope.visitorIdHash
+          anonScope.visitorIdHash,
+          anonVisitorIp || undefined
         );
         if (!anonResult.allowed) {
           return reply.status(429).send(anonymousQuotaExceededBody(anonResult.resetAt));
         }
+        // Cost/strategy ceiling, not just a request counter (see
+        // applyFreeTierCeiling's doc above): a daily count bounds how many
+        // free calls a visitor gets, not what any single one can cost or
+        // which strategy it runs. `ailin-economy` already had its own
+        // maxCost via ailin-virtual-model-service.ts's DEFAULT_PROFILES; this
+        // is the equivalent for the anonymous path generally, applied
+        // uniformly here rather than per-alias.
+        applyFreeTierCeiling(chatRequest);
+        // Audit context for anonymous-chat-audit.ts — one investigable row per
+        // anonymous completion (visitor fingerprint/IP/UA + messages + response
+        // + models served). Server-set from trusted headers; overwrite any
+        // client-supplied value unconditionally.
+        chatRequest.ailin_anonymous_context = {
+          apiKeyId: requestApiKeyId,
+          visitorFingerprint: anonScope.visitorIdHash,
+          visitorIp: anonVisitorIp || undefined,
+          userAgent: getHeaderString(anonHeaders, 'x-anonymous-visitor-user-agent') || undefined,
+          acceptLanguage:
+            getHeaderString(anonHeaders, 'x-anonymous-visitor-accept-language') || undefined,
+        };
       } else if (requestApiKeyId && requestApiKeyId === anonymousGuestApiKeyId()) {
         // Defense in depth: the dedicated anonymous-guest M2M key exists for
         // exactly one purpose (ailin-economy chat completions carrying the
@@ -855,26 +977,78 @@ export async function registerChatRoutes(
               'This API key is restricted to POST /v1/chat/completions with model "ailin-economy" and the X-Anonymous-Visitor-Id header set.',
           },
         });
+      } else if (
+        rawModel === 'ailin-economy' &&
+        getHeaderString(anonHeaders, 'x-anonymous-visitor-id')
+      ) {
+        // Diagnostic for the quota-gate blind spot: the request LOOKS like an
+        // anonymous-visitor call (guest model + visitor header present) but
+        // the gate did not fire and the defense-in-depth branch above did not
+        // match either. The only way both skip silently is `request.apiKey?.id`
+        // differing from the configured ANONYMOUS_GUEST_API_KEY_ID — e.g. the
+        // key VALUE chat-backend sends resolves to a different api_keys row
+        // than the row ID configured here (duplicate/rotated key), or the
+        // global apiKeyAuthMiddleware did not attach the key at all. Log the
+        // two IDs (plus the authenticated key's name to spot duplicate
+        // 'chat-anonymous-guest' rows instantly) so ONE probe pinpoints the
+        // mismatch. Never logs header values or the key itself.
+        request.log.warn(
+          {
+            apiKeyId: requestApiKeyId ?? null,
+            apiKeyName: (request as ExtendedFastifyRequest).apiKey?.name ?? null,
+            configuredGuestKeyId: anonymousGuestApiKeyId() ?? null,
+            hasVisitorIdHeader: true,
+          },
+          'Anonymous-looking request skipped quota gate: authenticated API key id does not match ANONYMOUS_GUEST_API_KEY_ID'
+        );
       }
 
       // ── Authenticated daily free quota (ailin-auto) ─────────────────────
-      // In scope ONLY when the RAW, pre-normalization model is exactly the
-      // literal string 'ailin-auto' (checked the same way as the anonymous
-      // gate above — NOT via the post-normalization `ailin_alias`, which
-      // `resolveAilinVirtualModelAlias` deliberately leaves unset for bare
-      // 'auto' / an omitted model, even though both execute identically to
-      // 'ailin-auto' today; see free-tier-quota-gate.ts's file header for
-      // why bare 'auto' is deliberately NOT also brought into scope here).
-      // Within the allowance this is a no-op (request proceeds as today,
-      // still exempt from the wallet gate below). Once exceeded, the
-      // ailin-auto request is rejected outright — never silently swapped to
-      // a billed model. Any other model skips this entirely and goes
-      // straight to the normal gates.
-      if (isFreeTierAutoQuotaEnabled() && isFreeTierAutoRawModel(rawModel)) {
-        const freeTierResult = await checkAndConsumeFreeTierAutoQuota(organizationId);
+      // In scope ONLY for the one designated chat-free-tier API key id +
+      // literal model:"ailin-auto" (checked on the RAW body) + a real userId —
+      // see `isInChatFreeTierScope` / free-tier-quota-gate.ts's file header
+      // for why this is keyed on a dedicated key id rather than
+      // organizationId (an org-scoped counter over `ailin-auto` would also
+      // cap financial's and guide's unrelated usage of the same org).
+      // Any request authenticated normally (not through the dedicated key)
+      // is untouched — this never runs, and never consults the wallet, for
+      // normal traffic. Within the allowance this is a no-op (request
+      // proceeds as today, still exempt from the wallet gate below). Once
+      // exceeded, the ailin-auto request is rejected outright — never
+      // silently swapped to a billed model.
+      const chatFreeTierScope = isInChatFreeTierScope({
+        apiKeyId: requestApiKeyId,
+        rawModel,
+        userId,
+      });
+      if (isFreeTierAutoQuotaEnabled() && chatFreeTierScope) {
+        const freeTierResult = await checkAndConsumeFreeTierAutoQuota(
+          requestApiKeyId as string,
+          userId
+        );
         if (!freeTierResult.allowed) {
           return reply.status(429).send(freeTierQuotaExceededBody(freeTierResult.resetAt));
         }
+        // Cost/strategy ceiling, same reasoning as the anonymous path above.
+        applyFreeTierCeiling(chatRequest);
+      } else if (
+        requestApiKeyId &&
+        requestApiKeyId === chatFreeTierApiKeyId() &&
+        !chatFreeTierScope
+      ) {
+        // Defense in depth, same reasoning as the anonymous-guest-key check
+        // above: chat's backend is expected to only ever send model:"ailin-auto"
+        // over this dedicated key. Independent of `isFreeTierAutoQuotaEnabled()`
+        // on purpose — this rejects misuse of the credential itself (leaked key,
+        // chat-backend bug sending the wrong model) regardless of whether the
+        // quota-counting feature happens to be toggled on right now.
+        return reply.status(403).send({
+          error: {
+            code: 'chat_free_tier_key_scope_violation',
+            message:
+              'This API key is restricted to POST /v1/chat/completions with model "ailin-auto".',
+          },
+        });
       }
 
       // Three independent gates against three different data sources (quota
@@ -1081,6 +1255,52 @@ export async function registerChatRoutes(
                 response?.usage?.completion_tokens ?? 0,
                 requestId
               );
+            }
+
+            // Anonymous audit row (non-streaming path). Fire-and-forget —
+            // audit failure never breaks the response.
+            const anonCtxNs = chatRequest.ailin_anonymous_context;
+            // Anonymous output tripwire (non-streaming): narrow deny-list
+            // backstop for the exact incident class (2026-08-20 "vadia").
+            // The full ORIGINAL text is still persisted below for
+            // investigation — only the DELIVERED payload is sanitized.
+            let anonNsTripped: string | undefined;
+            let anonNsOriginalText: string | undefined;
+            if (anonCtxNs && typeof response?.choices?.[0]?.message?.content === 'string') {
+              const nsViolation = anonymousOutputViolation(response.choices[0].message.content);
+              if (nsViolation) {
+                anonNsTripped = nsViolation.category;
+                anonNsOriginalText = response.choices[0].message.content;
+                requestLog.warn(
+                  { category: nsViolation.category, model: response.model },
+                  'anonymous-output tripwire: replaced violating non-streaming response'
+                );
+                response.choices[0].message.content = ANONYMOUS_TRIPWIRE_REFUSAL;
+              }
+            }
+            if (anonCtxNs) {
+              recordAnonymousChat({
+                requestId,
+                apiKeyId: anonCtxNs.apiKeyId,
+                visitorFingerprint: anonCtxNs.visitorFingerprint,
+                visitorIp: anonCtxNs.visitorIp,
+                userAgent: anonCtxNs.userAgent,
+                acceptLanguage: anonCtxNs.acceptLanguage,
+                modelRequested: chatRequest.model,
+                modelsServed:
+                  (response as { ailin_metadata?: { models_used?: string[] } } | undefined)
+                    ?.ailin_metadata?.models_used ??
+                  (typeof response?.model === 'string' ? [response.model] : []),
+                messages: chatRequest.messages,
+                responseText:
+                  anonNsOriginalText ??
+                  (response?.choices?.[0]?.message?.content as string | undefined) ??
+                  undefined,
+                inputTokens: response?.usage?.prompt_tokens ?? 0,
+                outputTokens: response?.usage?.completion_tokens ?? 0,
+                status: 'success',
+                metadata: { streaming: false, outputTripwire: anonNsTripped },
+              });
             }
 
             return { httpStatus: 200, body: response };
@@ -1501,9 +1721,27 @@ async function handleStreamingRequest(
     !!resolvedExecutionStrategy &&
     resolvedExecutionStrategy !== 'single' &&
     resolvedExecutionStrategy !== 'auto';
+  // Anonymous-audit + output-tripwire state for the SINGLE/fast streaming
+  // path — the path anonymous chat requests actually take (no strategy ⇒
+  // resolved 'auto'/'single' lands here, NOT in the collective branch).
+  // Until now this path neither persisted an anonymous_chat_logs row nor
+  // had any output-side guard: both lived only in the collective/
+  // non-streaming branches. Declared BEFORE the outer try so the terminal
+  // catch (all-providers-failed) can persist the failed-run audit row too.
+  const anonFastCtx = chatRequest.ailin_anonymous_context;
+  let anonFastText = '';
+  let anonFastTrippedCategory: string | undefined;
+  const anonFastModels = new Set<string>();
   if (isCollectiveStrategyRequest) {
     setupSSEHeaders(reply);
     let firstChunkAt = false;
+    // Anonymous-audit accumulators: full streamed response text + every model
+    // that yielded a chunk, persisted once the stream settles (success OR
+    // error — a failed anonymous run is just as investigable as a good one).
+    const anonCtx = chatRequest.ailin_anonymous_context;
+    let anonResponseText = '';
+    const anonModelsServed = new Set<string>();
+    let anonErrorCode: string | undefined;
     // OTel coverage gap fix (2026-08-03): orchestrationEngine.executeStream()
     // itself is an async generator (too large/complex to safely wrap
     // internally in this pass — see orchestration-engine.ts:2737), so the
@@ -1515,7 +1753,13 @@ async function handleStreamingRequest(
     const tracer = trace.getTracer('ci-orchestration');
     await tracer.startActiveSpan(
       'orchestration.executeStream',
-      { attributes: { 'request.id': requestId, 'org.id': organizationId, 'request.strategy': requestedStrategy } },
+      {
+        attributes: {
+          'request.id': requestId,
+          'org.id': organizationId,
+          'request.strategy': requestedStrategy,
+        },
+      },
       async (span) => {
         try {
           for await (const chunk of orchestrationEngine.executeStream(
@@ -1531,6 +1775,11 @@ async function handleStreamingRequest(
               );
             }
             sendSSEChunk(reply, chunk);
+            if (anonCtx) {
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') anonResponseText += delta;
+              if (typeof chunk.model === 'string' && chunk.model) anonModelsServed.add(chunk.model);
+            }
           }
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (err) {
@@ -1541,12 +1790,30 @@ async function handleStreamingRequest(
             );
           }
           const errorMsg = err instanceof Error ? err.message : String(err);
+          anonErrorCode = err instanceof Error ? err.name : 'stream_error';
           span.recordException(err instanceof Error ? err : new Error(errorMsg));
           span.setStatus({ code: SpanStatusCode.ERROR, message: errorMsg });
           requestLog.error({ error: errorMsg }, 'Collective strategy stream failed');
           sendSSEError(reply, err instanceof Error ? err : new Error(errorMsg));
         } finally {
           span.end();
+        }
+        if (anonCtx) {
+          recordAnonymousChat({
+            requestId,
+            apiKeyId: anonCtx.apiKeyId,
+            visitorFingerprint: anonCtx.visitorFingerprint,
+            visitorIp: anonCtx.visitorIp,
+            userAgent: anonCtx.userAgent,
+            acceptLanguage: anonCtx.acceptLanguage,
+            modelRequested: chatRequest.model,
+            modelsServed: [...anonModelsServed],
+            messages: chatRequest.messages,
+            responseText: anonResponseText || undefined,
+            status: anonErrorCode ? 'error' : 'success',
+            errorCode: anonErrorCode,
+            metadata: { streaming: true, strategy: requestedStrategy },
+          });
         }
       }
     );
@@ -1573,7 +1840,8 @@ async function handleStreamingRequest(
 
     // Extract required capabilities from request
     const requiredCapabilities: string[] = ['streaming'];
-    if (chatRequest.tools && chatRequest.tools.length > 0) {
+    const toolsRequired = requestRequiresFunctionCalling(chatRequest.tools);
+    if (toolsRequired) {
       requiredCapabilities.push('function_calling', 'tool_use');
     }
 
@@ -1618,7 +1886,41 @@ async function handleStreamingRequest(
       });
     };
 
-    pushCandidate(plan.model, plan.adapter, plan.request);
+    // FUNCTION-CALLING RE-VALIDATION (2026-08-20 incident, request
+    // 91YJ-kZPPLHjodsSSKLkz): the capability filter above runs on CATALOG/DB
+    // rows, but the model actually executed is the one RESOLVED from the
+    // provider registry — and the two can diverge (stale vendor listing,
+    // different provider variant). The incident had 4 consecutive attempts
+    // on registry models whose capabilities were
+    // ["chat","text_generation","streaming"] (no function_calling) for a
+    // tools request. So for tools requests we re-validate the RESOLVED model,
+    // both for the PRIMARY and for fallback candidates. Conservative
+    // semantics: reject only when capabilities are explicitly declared AND
+    // lack function_calling (unknown metadata passes — see
+    // function-calling-guard.ts). Never empties the chain: if every
+    // candidate is rejected we fall back to today's behavior (primary as
+    // last resort).
+    let primaryPushed = false;
+    if (!toolsRequired) {
+      pushCandidate(plan.model, plan.adapter, plan.request);
+      primaryPushed = true;
+    } else {
+      const resolvedPrimary = await providerRegistry.findModel(plan.model.id);
+      const primaryModel = resolvedPrimary?.model ?? plan.model;
+      if (explicitlyLacksFunctionCalling(primaryModel)) {
+        requestLog.warn(
+          {
+            primaryModel: plan.model.id,
+            resolvedProvider: primaryModel.provider,
+            resolvedCapabilities: primaryModel.capabilities,
+          },
+          'Primary streaming model resolved WITHOUT function_calling for tools request — demoted from chain head'
+        );
+      } else {
+        pushCandidate(primaryModel, resolvedPrimary?.adapter ?? plan.adapter, plan.request);
+        primaryPushed = true;
+      }
+    }
 
     // Bound how many fallback candidates we RESOLVE up front. selectFallbackOptions
     // returns EVERY capable model ("no artificial limit") — in prod that is ~5000+
@@ -1628,17 +1930,90 @@ async function handleStreamingRequest(
     // ever needs a handful: if the primary + N fallbacks all fail, the request is
     // doomed regardless. Env-tunable; not a model pin (it caps the chain length,
     // selection order is unchanged and fully dynamic).
+    //
+    // DEAD-CANDIDATE SKIP (2026-08-19): selectFallbackOptions ranks purely by
+    // quality/cost/context — dead providers (open circuit breaker, exhausted
+    // balance, invalid credentials) are usually the CHEAPEST, so they dominated
+    // the top of the list and the whole capped chain could be dead providers,
+    // failing the request without ever reaching a healthy one (live incident:
+    // 9/9 attempts = alibaba access-denied / nanogpt+gmi no-balance / phala 401 /
+    // openrouter model-404 → "Upstream provider error while streaming"). Skipped
+    // candidates do NOT count toward the cap: we keep walking the ranked list
+    // until maxStreamFallbacks LIVE candidates are resolved. Providers whose
+    // circuit is HALF_OPEN are also skipped — a permanently-dead provider
+    // oscillates OPEN→HALF_OPEN→OPEN forever (RC-3 lesson).
     const maxStreamFallbacks = Number(process.env.STREAMING_MAX_FALLBACKS ?? 8);
+    // PROVIDER DIVERSITY CAP (2026-08-21, request k0QPvOU6tetSXz9gOJU-k): the
+    // ranked list clustered 5 of 9 chain slots on ONE provider (alibaba ×5);
+    // when that provider died on attempt 1 (HTTP 400 billing), attempts 2-5
+    // were guaranteed circuit-OPEN failures — 4 wasted slots while live
+    // providers sat below the cap. Cap candidates per provider (selection
+    // order is unchanged; excess models of a saturated provider simply yield
+    // their slot to the next provider's model). Env-tunable, not a model pin.
+    const maxPerProvider = Number(process.env.STREAMING_MAX_CANDIDATES_PER_PROVIDER ?? 2);
+    const perProviderCount = new Map<string, number>();
+    let skippedDeadCandidates = 0;
+    let skippedNoFunctionCalling = 0;
+    const isDeadCandidate = (adapterProvider: string, model: Model): boolean => {
+      // Shared selection-time gate (dead-candidate-skip.ts) — same
+      // PROVEN_BAD_STATES + OPEN/HALF_OPEN circuit semantics, now also applied
+      // to the collective-strategy eligible pool in base-strategy.
+      if (isDeadCandidateProvider(adapterProvider, model.id)) return true;
+      if ((model as Model & { balanceStatus?: string }).balanceStatus === 'no-credits') return true;
+      return false;
+    };
     for (const fallback of fallbackModels) {
       if (candidates.length > maxStreamFallbacks) break;
       const result = await providerRegistry.findModel(fallback.id);
-      if (result) {
-        pushCandidate(result.model, result.adapter, plan.request);
+      if (!result) continue;
+      const adapterProvider = result.adapter.getName() || result.model.provider;
+      // Tools requests: re-validate the RESOLVED registry model (see
+      // FUNCTION-CALLING RE-VALIDATION note above). Skipped candidates do
+      // not count toward the cap — we keep walking the ranked list.
+      if (toolsRequired && explicitlyLacksFunctionCalling(result.model)) {
+        skippedNoFunctionCalling += 1;
+        continue;
       }
+      // Keep the primary (already pushed) — only gate FALLBACK candidates, and
+      // never let the skip empty the chain entirely.
+      if (
+        (primaryPushed || candidates.length > 0) &&
+        isDeadCandidate(adapterProvider, result.model)
+      ) {
+        skippedDeadCandidates += 1;
+        continue;
+      }
+      const providerCount = perProviderCount.get(adapterProvider) ?? 0;
+      if (providerCount >= maxPerProvider) {
+        continue;
+      }
+      perProviderCount.set(adapterProvider, providerCount + 1);
+      pushCandidate(result.model, result.adapter, plan.request);
+    }
+    if (skippedNoFunctionCalling > 0) {
+      requestLog.warn(
+        { skippedNoFunctionCalling, liveCandidates: candidates.length },
+        'Skipped fallback candidates that explicitly lack function_calling for tools request'
+      );
+    }
+    if (skippedDeadCandidates > 0) {
+      requestLog.info(
+        { skippedDeadCandidates, liveCandidates: candidates.length },
+        'Skipped dead fallback candidates (open circuit / no credits / proven bad)'
+      );
     }
 
     if (candidates.length === 0) {
-      throw new Error('No streaming-capable providers available');
+      // Safety net: the re-validation gates above must never empty the chain
+      // (a tools request with zero FC-declared candidates still deserves the
+      // old behavior — try the primary — rather than an instant 500).
+      if (toolsRequired) {
+        requestLog.warn(
+          { primaryModel: plan.model.id },
+          'No function-calling-capable live streaming candidates — falling back to primary as last resort'
+        );
+      }
+      pushCandidate(plan.model, plan.adapter, plan.request);
     }
 
     // Hot-first reorder (residual-cascade fix, 2026-07-13): the hot-aware
@@ -1705,6 +2080,32 @@ async function handleStreamingRequest(
       const candidate = candidates[index];
       const attempt = index + 1;
       const attemptStart = Date.now();
+
+      // INTER-ATTEMPT DEAD RE-CHECK (2026-08-21, request k0QPvOU6tetSXz9gOJU-k):
+      // candidates are resolved UP FRONT, so a provider that dies mid-chain
+      // (attempt 1 gets HTTP 402/401/400-billing → circuit opens) keeps its
+      // remaining pre-resolved slots in the list and attempts 2..N fail with
+      // "Circuit breaker X is OPEN" — wasted wall-clock on providers already
+      // known dead, while live candidates wait below. Re-evaluate liveness
+      // right before each attempt; skip (do not burn the attempt) when the
+      // provider turned dead since the chain was built. Never empties the
+      // chain alone: index 0 is never skipped (a chain of one dead candidate
+      // still gets its attempt — same never-empty semantics as the build-time
+      // skip above).
+      if (
+        index > 0 &&
+        isDeadCandidate(candidate.adapter.getName() || candidate.model.provider, candidate.model)
+      ) {
+        requestLog.info(
+          {
+            attempt,
+            provider: candidate.adapter.getName(),
+            modelId: candidate.model.id,
+          },
+          'Candidate provider died mid-chain (circuit opened / proven bad since build) — skipping attempt'
+        );
+        continue;
+      }
       let chunkCount = 0;
       let totalTokens = 0;
       let lastChunk: ChatResponse | null = null;
@@ -1750,8 +2151,14 @@ async function handleStreamingRequest(
         // comfortably above any observed healthy TTFB (avoids false-positive aborts
         // on legitimately slower reasoning models) while cutting the worst-case tail
         // more than 3x.
+        //
+        // RELAXED (2026-08-22, request Td9Rzv...): 6s proved too tight for mid/large
+        // open-weight models (arcee deepseek-v4-pro, empiriolabs mistral-small —
+        // both aborted by "first-chunk timeout after 6000ms" while queueing).
+        // Default raised 6000ms -> 10000ms. Env-tunable via STREAMING_FIRST_CHUNK_MS;
+        // the dynamic shortening below (hot fallback waiting) still applies.
         const iterator = providerStream[Symbol.asyncIterator]();
-        const staticFirstChunkTimeoutMs = Number(process.env.STREAMING_FIRST_CHUNK_MS ?? 6000);
+        const staticFirstChunkTimeoutMs = Number(process.env.STREAMING_FIRST_CHUNK_MS ?? 10000);
         // Dynamic first-chunk deadline (2026-07-14) — see
         // streaming-first-chunk-timeout.ts for the rationale.
         const firstChunkTimeoutMs = computeDynamicFirstChunkTimeoutMs(
@@ -1813,6 +2220,49 @@ async function handleStreamingRequest(
             );
           }
           firstChunkSent = true;
+          // Anonymous streaming: audit-accumulate, and tripwire-check BEFORE
+          // the chunk goes on the wire. The overlap window re-includes the
+          // tail of already-checked text so a slur split across a chunk
+          // boundary ("va"|"dia") is still caught. On violation the offending
+          // chunk is replaced by the safe refusal, the stream is terminated
+          // (iterator closed, loop broken — the sendSSEDone right after the
+          // loop still runs exactly once) and the category is logged +
+          // persisted on the audit row. Text streamed BEFORE the match may
+          // already have reached the client — accepted limitation of a
+          // streaming output filter; the full original text is kept in
+          // anonFastText for the audit row.
+          const anonDelta = chunk.choices?.[0]?.delta?.content;
+          if (anonFastCtx && typeof chunk.model === 'string' && chunk.model) {
+            anonFastModels.add(chunk.model);
+          }
+          if (
+            anonFastCtx &&
+            !anonFastTrippedCategory &&
+            typeof anonDelta === 'string' &&
+            anonDelta.length > 0
+          ) {
+            anonFastText += anonDelta;
+            const fastViolation = anonymousOutputViolation(
+              anonFastText.slice(-ANONYMOUS_TRIPWIRE_OVERLAP_CHARS * 2)
+            );
+            if (fastViolation) {
+              anonFastTrippedCategory = fastViolation.category;
+              requestLog.warn(
+                { category: fastViolation.category, model: chunk.model },
+                'anonymous-output tripwire: terminating violating anonymous stream'
+              );
+              chunk.choices = [
+                {
+                  index: 0,
+                  delta: { content: ANONYMOUS_TRIPWIRE_REFUSAL },
+                  finish_reason: 'stop',
+                },
+              ];
+              sendSSEChunk(reply, chunk);
+              closeIterator();
+              break;
+            }
+          }
           sendSSEChunk(reply, chunk);
           // Flush response if available
           if ('flush' in reply.raw && typeof reply.raw.flush === 'function') {
@@ -1900,6 +2350,33 @@ async function handleStreamingRequest(
             },
           ],
         });
+
+        // Anonymous audit row (single/fast streaming path — previously
+        // missing entirely; only the collective and non-streaming branches
+        // persisted one). Fire-and-forget. Note anonFastText keeps the FULL
+        // original text even when the tripwire replaced what was streamed.
+        if (anonFastCtx) {
+          recordAnonymousChat({
+            requestId,
+            apiKeyId: anonFastCtx.apiKeyId,
+            visitorFingerprint: anonFastCtx.visitorFingerprint,
+            visitorIp: anonFastCtx.visitorIp,
+            userAgent: anonFastCtx.userAgent,
+            acceptLanguage: anonFastCtx.acceptLanguage,
+            modelRequested: chatRequest.model,
+            modelsServed: [...anonFastModels],
+            messages: chatRequest.messages,
+            responseText: anonFastText || undefined,
+            inputTokens: 0,
+            outputTokens: 0,
+            status: 'success',
+            metadata: {
+              streaming: true,
+              strategy: 'single-streaming',
+              outputTripwire: anonFastTrippedCategory,
+            },
+          });
+        }
 
         requestLog.info(
           {
@@ -2060,6 +2537,31 @@ async function handleStreamingRequest(
       new Error(`Upstream provider error while streaming (request ${requestId}).`)
     );
     sendSSEDone(reply);
+
+    // Anonymous audit row (failed fast-path stream) — a failed anonymous run
+    // is just as investigable as a successful one, mirroring the collective
+    // branch's finally-block behavior.
+    if (anonFastCtx) {
+      recordAnonymousChat({
+        requestId,
+        apiKeyId: anonFastCtx.apiKeyId,
+        visitorFingerprint: anonFastCtx.visitorFingerprint,
+        visitorIp: anonFastCtx.visitorIp,
+        userAgent: anonFastCtx.userAgent,
+        acceptLanguage: anonFastCtx.acceptLanguage,
+        modelRequested: chatRequest.model,
+        modelsServed: [...anonFastModels],
+        messages: chatRequest.messages,
+        responseText: anonFastText || undefined,
+        status: 'error',
+        errorCode: error instanceof Error ? error.name : 'stream_error',
+        metadata: {
+          streaming: true,
+          strategy: 'single-streaming',
+          outputTripwire: anonFastTrippedCategory,
+        },
+      });
+    }
 
     requestLogger
       .logError(

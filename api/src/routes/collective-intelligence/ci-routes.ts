@@ -27,6 +27,8 @@ import { getReasoningTransparency } from '@/core/transparency/reasoning-transpar
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getLearningScopeConfig } from '@/config/learning-scope';
 
 const log = logger.child({ component: 'ci-routes' });
@@ -90,7 +92,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   server.get(
     '/v1/collective-intelligence/learning-scope',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Returns active collective learning scope and guardrails',
         tags: ['Collective Intelligence'],
@@ -134,7 +140,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/memory',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Store a new semantic memory',
         tags: ['Collective Intelligence'],
@@ -208,7 +218,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/memory/search',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Search semantic memories by similarity',
         tags: ['Collective Intelligence'],
@@ -290,7 +304,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   server.get(
     '/v1/memory/stats',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get semantic memory statistics for organization',
         tags: ['Collective Intelligence'],
@@ -335,7 +353,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/memory/:memoryId',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Delete a semantic memory',
         tags: ['Collective Intelligence'],
@@ -388,7 +410,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/workflows/create',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Create an agentic workflow from a natural language task description',
         tags: ['Collective Intelligence'],
@@ -505,7 +531,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/workflows/execute',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Execute an agentic workflow',
         tags: ['Collective Intelligence'],
@@ -609,7 +639,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/reasoning/:requestId',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get reasoning transparency trace for a request',
         tags: ['Collective Intelligence'],
@@ -663,7 +697,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   }>(
     '/v1/reasoning/:requestId/explain',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get human-readable explanation of AI decision-making for a request',
         tags: ['Collective Intelligence'],
@@ -709,7 +747,11 @@ export async function registerCollectiveIntelligenceRoutes(server: FastifyInstan
   server.get(
     '/v1/critique/config',
     {
-      preHandler: authenticatedServer.authenticate,
+      preHandler: [
+        authenticatedServer.authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         description: 'Get self-critique engine configuration',
         tags: ['Collective Intelligence'],

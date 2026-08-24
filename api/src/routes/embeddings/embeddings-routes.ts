@@ -15,6 +15,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { EmbeddingRequest, ChatRequest, ModelCapability, Model } from '@/types';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -332,7 +334,12 @@ export async function registerEmbeddingsRoutes(
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     embeddingsHandler
   );
@@ -377,7 +384,12 @@ export async function registerEmbeddingsRoutes(
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     embeddingsHandler
   );

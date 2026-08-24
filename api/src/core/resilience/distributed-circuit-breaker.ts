@@ -254,6 +254,19 @@ export class DistributedCircuitBreaker extends EventEmitter {
   }
 
   /**
+   * Zero-I/O snapshot of the most recently synced circuit state — reads the
+   * local cache (or the in-memory state under Redis-fallback mode) and NEVER
+   * triggers a Redis round trip. Safe for hot paths such as per-request
+   * candidate ordering (RC-2 rung demotion in cost-cascade). Freshness is
+   * bounded by the breaker's own `syncInterval`; the worst staleness is one
+   * sync window of an OPEN state, which costs at most one wasted rung
+   * attempt — the breaker still fast-fails at execution time.
+   */
+  getRecentStateSync(): CircuitState {
+    return this.useLocalFallback ? this.localState.state : this.localCache.state;
+  }
+
+  /**
    * Set circuit state (distributed or local fallback)
    */
   private async setState(state: CircuitState): Promise<void> {
@@ -724,6 +737,36 @@ export class DistributedCircuitBreakerManager {
   async getOpenCircuits(): Promise<CircuitBreakerStats[]> {
     const all = await this.getAllStats();
     return all.filter((s) => s.state === 'OPEN');
+  }
+
+  /**
+   * Zero-I/O set of circuit NAMES currently OPEN, from each breaker's local
+   * cache (RC-2). This is the selection-time input for candidate demotion on
+   * hot request paths: `getOpenCircuits()` fans out one Redis GET per
+   * registered breaker, which is fine for the health API but not for
+   * per-request routing. Names are the raw circuit keys (e.g.
+   * `myprovider-api`), matching what `getBreaker()` was called with.
+   */
+  getRecentOpenCircuitNames(): Set<string> {
+    return this.getRecentCircuitNamesByState('OPEN');
+  }
+
+  /**
+   * Zero-I/O snapshot of circuit names currently in any of `states`, reading
+   * each breaker's local cache only (same contract as
+   * getRecentOpenCircuitNames — no Redis round trips on the request hot path).
+   *
+   * Added (2026-08-17, RC-3) for HALF_OPEN-aware demotion: a permanently-dead
+   * provider (bad credentials / exhausted billing) oscillates OPEN →(30s)→
+   * HALF_OPEN →(probe fails)→ OPEN forever, so an OPEN-only snapshot misses it
+   * every time it happens to be sampled in HALF_OPEN.
+   */
+  getRecentCircuitNamesByState(...states: string[]): Set<string> {
+    const matched = new Set<string>();
+    for (const [circuitName, breaker] of this.breakers) {
+      if (states.includes(breaker.getRecentStateSync())) matched.add(circuitName);
+    }
+    return matched;
   }
 
   /**

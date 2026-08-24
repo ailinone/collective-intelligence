@@ -70,6 +70,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { PROVIDER_CATALOG } from '../providers.catalog';
+import { AILIN_ALIAS_PROVIDER_ID } from '../../../routes/models/models-list-serialization';
 import {
   DISCOVERY_COMPLIANCE_BUCKETS,
   DISCOVERY_COMPLIANCE_REGISTRY,
@@ -118,6 +119,14 @@ describe('discovery-compliance-registry: SOTA dynamic-discovery invariant', () =
   const switchIds = new Set(extractSwitchCaseProviderIds(registrySource));
   const catalogIds = new Set(PROVIDER_CATALOG.map((e) => e.providerId));
   const canonicalIds = new Set<string>([...catalogIds, ...switchIds]);
+  // 'ailin-virtual' (AILIN_ALIAS_PROVIDER_ID) is a first-party, code-defined
+  // alias surface (ailin-auto, ailin-best, …) resolved server-side at request
+  // time — deliberately NOT a PROVIDER_CATALOG entry and not a registry switch
+  // case, so neither derivation above sees it. The compliance registry still
+  // classifies it ('not-applicable-non-model-surface') so alias rows don't read
+  // as a compliance gap; adding it here keeps J1/J5's canonical set coherent
+  // with that classification.
+  canonicalIds.add(AILIN_ALIAS_PROVIDER_ID);
 
   // Flatten registry once. Throw on duplicates immediately for readable errors.
   const bucketOf = new Map<string, DiscoveryComplianceClass>();

@@ -451,6 +451,25 @@ export interface ChatRequest {
   triageStrategy?: TriageStrategy; // Strategy for triage model selection (speed/cost/quality/balanced/adaptive)
   triageCollective?: number; // Number of models for collective triage (1-3, default: 1). Multiple models will vote/consensus
   max_cost?: number; // Maximum cost in USD
+  /** Server-set ONLY (never trust a client-supplied value) by chat-routes.ts's
+   *  anonymous/free-tier gates — see free-tier-quota-gate.ts and
+   *  anonymous-quota-gate.ts. Caps `orchestration-engine.ts`'s triage-recommended
+   *  strategy to a bounded-cost one (see `applyFreeTierStrategyCap`), since a raw
+   *  `max_cost` ceiling alone bounds each model call within a collective strategy
+   *  but not the sum across a multi-round one (debate/consensus). */
+  ailin_free_tier_scope?: boolean;
+  /** Server-set ONLY by chat-routes.ts's anonymous gate. Carries the
+   *  visitor-identity signals (fingerprint, IP, UA, Accept-Language) the
+   *  anonymous-chat-audit service needs to persist one investigable row per
+   *  anonymous completion. Clients cannot set this — the handler overwrites
+   *  it from the trusted `X-Anonymous-Visitor-*` headers. */
+  ailin_anonymous_context?: {
+    apiKeyId: string;
+    visitorFingerprint: string;
+    visitorIp?: string;
+    userAgent?: string;
+    acceptLanguage?: string;
+  };
   quality_target?: number; // 0-1 target quality
   no_cache?: boolean; // Skip semantic cache lookup (for experiment validation)
   freeze_learning?: boolean; // Do not feed learning/bandit updates from this request (experiment 'frozen' phase — keeps the measured system fixed)
@@ -662,6 +681,28 @@ export interface AilinMetadata {
   degraded?: boolean;
   /** Machine-readable reason for `degraded` (e.g. 'empty_response_after_fallback'). */
   degraded_reason?: string;
+  /**
+   * Streaming throw-guard recovery (2026-08-16 follow-up). Present ONLY on the
+   * final chunk of a streaming request whose strategy threw before emitting any
+   * answer content, and which the engine recovered rather than failing the
+   * stream. Absent on every normal response.
+   *
+   * Deliberately part of `AilinMetadata` (the completion shape, which carries NO
+   * `type` discriminator) rather than a new SSE chunk variant: this IS the final
+   * completion chunk, and the two consumers that key off the presence of `type`
+   * would both misbehave otherwise — `responses-routes.ts` would classify the
+   * chunk as metadata-only and DROP the recovered answer text, and
+   * `applyBranding()` skips redaction for `type`-carrying variants, which would
+   * leak the fallback provider's real model name past AILIN_HIDE_MODELS. Carried
+   * here, the recovered model travels in the already-redacted `models_used` /
+   * `resolved_model` fields instead.
+   */
+  stream_recovery?: boolean;
+  /** How the recovered answer was obtained ('models_used' | 'dynamic_fallback').
+   *  Absent when recovery produced only the `[DEGRADED]` placeholder. */
+  stream_recovery_source?: string;
+  /** The original strategy throw that triggered the recovery. */
+  strategy_execution_error?: string;
   /**
    * Best-of-N observability (#2): how the collective selected its final answer
    * ('synthesis' | 'best_individual_fallback' | 'verified_individual' |
@@ -979,6 +1020,21 @@ export interface OrchestrationContext extends RequestUserContext {
    * duplicate embedding + pgvector retrieval (and duplicate prompt block).
    */
   memoryEnriched?: boolean;
+  /**
+   * LAT-3: true whenever the engine's own concurrent semantic-memory search
+   * has RESOLVED for this request (hit or miss) — a pgvector round trip
+   * already happened for memoryTypes ['semantic', 'procedural'], scoped to
+   * this user (or NULL-owner rows). Independent of whether anything was
+   * found; see memoryEnriched for that.
+   *
+   * LAT-3.1: this does NOT mean strategy-level enrichWithMemories() should
+   * skip its own search outright — the engine's search never covers
+   * 'episodic' memories or other users' rows in the org, so on a miss
+   * (memorySearched true, memoryEnriched false) the strategy-level fallback
+   * still runs, narrowed to that uncovered slice. See
+   * BaseStrategy.enrichWithMemories()'s guard for the exact behavior.
+   */
+  memorySearched?: boolean;
   /** LAT-1: when true, run the judge + learning tail synchronously (no deferral). */
   syncJudge?: boolean;
 
@@ -1044,6 +1100,16 @@ export interface OrchestrationContext extends RequestUserContext {
     degradationDepth: number;
     isDegraded: boolean;
   };
+
+  /**
+   * Whole-request cancellation signal (2026-08). Set once by
+   * OrchestrationEngine.executeStream() at the request's overall deadline;
+   * undefined on the non-streaming execute() path. Read by
+   * boundModelExecution()/executeModelWithRetry()'s fallback loop to abandon
+   * in-flight or not-yet-started model calls once the whole request has
+   * blown its budget, independent of any single call's own timeout.
+   */
+  signal?: AbortSignal;
 }
 
 /**

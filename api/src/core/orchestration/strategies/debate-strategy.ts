@@ -854,16 +854,24 @@ export class DebateStrategy extends BaseStrategy {
 
       const openingRequest = { ...request, messages };
       const execution = await this.boundModelExecution(
-        () =>
+        (signal) =>
           reasoningEnabled
             ? this.executeModelWithReasoning(
                 debater.adapter,
                 debater.model,
                 openingRequest,
-                'primary'
+                'primary',
+                signal
               )
-            : this.executeModel(debater.adapter, debater.model, openingRequest, 'primary'),
-        { adapter: debater.adapter, model: debater.model, request: openingRequest, role: 'primary' }
+            : this.executeModel(debater.adapter, debater.model, openingRequest, 'primary', signal),
+        {
+          adapter: debater.adapter,
+          model: debater.model,
+          request: openingRequest,
+          role: 'primary',
+        },
+        undefined,
+        context.signal
       );
 
       if (execution.success) {
@@ -964,16 +972,19 @@ export class DebateStrategy extends BaseStrategy {
           max_tokens: Math.min(Number(request.max_tokens) || debateCap, debateCap),
         };
         const execution = await this.boundModelExecution(
-          () =>
+          (signal) =>
             reasoningEnabled
               ? this.executeModelWithReasoning(
                   debater.adapter,
                   debater.model,
                   debaterReq,
-                  'primary'
+                  'primary',
+                  signal
                 )
-              : this.executeModel(debater.adapter, debater.model, debaterReq, 'primary'),
-          { adapter: debater.adapter, model: debater.model, request: debaterReq, role: 'primary' }
+              : this.executeModel(debater.adapter, debater.model, debaterReq, 'primary', signal),
+          { adapter: debater.adapter, model: debater.model, request: debaterReq, role: 'primary' },
+          undefined,
+          context.signal
         );
         return { debater, execution, respondingTo };
       })

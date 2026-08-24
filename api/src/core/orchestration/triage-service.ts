@@ -1821,3 +1821,62 @@ export class TriagingService {
     return undefined;
   }
 }
+
+/**
+ * ALLOWLIST, not a denylist, on purpose: `ExecutionStrategyName` has ~25
+ * variants (debate, consensus, war-room, safety-quorum, diversity-ensemble,
+ * persona-exploration, ...) and grows over time. Enumerating "the expensive
+ * ones" to exclude means every new multi-model strategy is free-tier-eligible
+ * by default until someone remembers to add it to a denylist here — the
+ * opposite of what a cost ceiling should fail-safe to. `single` and
+ * `cost-cascade` are the two strategies this codebase already treats as
+ * bounded-cost by construction (cost-cascade escalates serially through a
+ * cost-sorted list and stops at the first passing candidate; single is one
+ * model, one call) — everything else gets downgraded to `cost-cascade`.
+ */
+export const FREE_TIER_ALLOWED_STRATEGIES: ReadonlySet<ExecutionStrategyName> = new Set([
+  'single',
+  'cost-cascade',
+]);
+
+/** What a downgraded recommendation falls back to — same reasoning as above. */
+export const FREE_TIER_FALLBACK_STRATEGY: ExecutionStrategyName = 'cost-cascade';
+
+/**
+ * Cap a triage decision's recommended strategy to a bounded-cost one when the
+ * request is in free-tier scope (`request.ailin_free_tier_scope`, set
+ * server-side by chat-routes.ts — see that field's doc in types/index.ts).
+ *
+ * WHY THIS EXISTS ALONGSIDE `request.max_cost`: `max_cost` (via
+ * `context.maxCost`/`budget` in orchestration-engine.ts and the per-model
+ * eligibility filter in base-strategy.ts) bounds the cost of EACH INDIVIDUAL
+ * model call within whatever strategy runs — it does not bound the SUM across
+ * a multi-round collective strategy. A `debate` with 3 participants and 2
+ * rounds run entirely under a compliant per-call cap can still cost several
+ * times that cap in aggregate. This closes that gap by keeping free-tier
+ * traffic on single-call-shaped strategies in the first place, rather than
+ * trying to retrofit a total-request budget into every collective strategy.
+ *
+ * Pure function, no side effects — call right after `triageService.triage()`
+ * resolves, before the decision is spread into any `OrchestrationContext`
+ * (`context.triage.recommendedStrategy` is what strategy dispatch actually
+ * reads — see orchestration-engine.ts's `selectStrategy`).
+ */
+export function applyFreeTierStrategyCap(
+  decision: TriageDecision | undefined,
+  isFreeTierScope: boolean
+): TriageDecision | undefined {
+  if (!decision || !isFreeTierScope) {
+    return decision;
+  }
+  if (!decision.recommendedStrategy || FREE_TIER_ALLOWED_STRATEGIES.has(decision.recommendedStrategy)) {
+    return decision;
+  }
+  return {
+    ...decision,
+    recommendedStrategy: FREE_TIER_FALLBACK_STRATEGY,
+    reason: decision.reason
+      ? `${decision.reason} (downgraded from "${decision.recommendedStrategy}" — free-tier cost cap)`
+      : `Downgraded from "${decision.recommendedStrategy}" to "${FREE_TIER_FALLBACK_STRATEGY}" — free-tier cost cap`,
+  };
+}

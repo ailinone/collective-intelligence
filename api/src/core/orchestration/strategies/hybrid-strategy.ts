@@ -165,20 +165,23 @@ export class HybridStrategy extends BaseStrategy {
       // Complex: Use parallel execution
       this.log.debug('Phase 2: Complex task - parallel execution');
 
-      const parallelExecutions = await this.executeModelsInParallel([
-        {
-          adapter: executors[0].adapter,
-          model: executors[0].model,
-          request,
-          role: 'primary',
-        },
-        {
-          adapter: executors[1].adapter,
-          model: executors[1].model,
-          request,
-          role: 'secondary',
-        },
-      ]);
+      const parallelExecutions = await this.executeModelsInParallel(
+        [
+          {
+            adapter: executors[0].adapter,
+            model: executors[0].model,
+            request,
+            role: 'primary',
+          },
+          {
+            adapter: executors[1].adapter,
+            model: executors[1].model,
+            request,
+            role: 'secondary',
+          },
+        ],
+        context.signal
+      );
 
       executions.push(...parallelExecutions);
 

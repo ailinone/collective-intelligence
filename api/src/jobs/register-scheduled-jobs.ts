@@ -222,6 +222,10 @@ interface ScheduledJobDef {
 
 const SCHEDULED_JOBS: ScheduledJobDef[] = [
   { name: 'revoke-expired-keys', pattern: '0 * * * *' },
+  // NOTE: ttft-probe is NOT a BullMQ cron — the TTFT tracker is in-memory
+  // per replica, so each API replica runs its own in-process poller
+  // (index.ts → startTtftProbePoller). A BullMQ job would execute once on
+  // the ci_worker process and seed a tracker the API never reads.
   { name: 'auto-rotation-check', pattern: '0 2 * * *' },
   {
     name: 'billing-reconciliation',
@@ -367,6 +371,22 @@ export async function registerScheduledJobs(): Promise<void> {
     );
     registered++;
     log.debug({ jobName: jobDef.name, pattern }, 'Scheduled job registered');
+  }
+
+  // Stale-scheduler cleanup (P0.8 follow-up, 2026-08-18): the ttft-probe
+  // BullMQ cron was replaced by the in-process per-replica poller
+  // (ttft-probe-job.ts), but the repeatable job persisted in Redis and kept
+  // firing every 60s to "Unknown scheduled job: ttft-probe" on the worker.
+  // upsertJobScheduler never deletes entries removed from SCHEDULED_JOBS, so
+  // retire it explicitly here. Keep this list in sync with any future job
+  // migrated OFF BullMQ.
+  for (const staleName of ['ttft-probe']) {
+    try {
+      await scheduledQueue.removeJobScheduler(staleName);
+      log.info({ jobName: staleName }, 'Removed stale BullMQ job scheduler');
+    } catch {
+      // Not registered (or already removed) — nothing to do.
+    }
   }
 
   log.info({ registered, total: SCHEDULED_JOBS.length }, 'BullMQ scheduled jobs registered');

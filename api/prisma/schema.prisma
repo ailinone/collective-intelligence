@@ -2268,6 +2268,51 @@ model CreditTransaction {
   @@map("credit_transaction")
 }
 
+// ── Anonymous chat audit trail (2026-08-20) ─────────────────────────────
+// Full persistence for UNAUTHENTICATED (anonymous) chat traffic. Anonymous
+// responses were previously streamed and discarded — no message content, IP,
+// or model attribution existed anywhere, making abuse incidents (e.g. the
+// 2026-08-20 slur incident) uninvestigable retroactively. One row per
+// anonymous chat completion: who (fingerprint/IP/UA), what (messages +
+// response), which model served it, and outcome.
+//
+// PRIVACY: this table contains raw message content and IPs of anonymous
+// visitors. It exists for abuse investigation and rate-limit enforcement —
+// treat as sensitive PII: restrict query access, and prefer retention-window
+// deletion (see ops docs) over indefinite accumulation.
+model AnonymousChatLog {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId         String   @unique @map("request_id")
+  apiKeyId          String   @map("api_key_id") @db.Uuid
+  // SHA-256 composite fingerprint (cookie+IP+UA+lang) — same value the quota
+  // gate buckets on, so quota-abuse investigation joins directly to usage.
+  visitorFingerprint String  @map("visitor_fingerprint")
+  visitorIp         String?  @map("visitor_ip")
+  ipHash            String?  @map("ip_hash")
+  userAgent         String?  @map("user_agent")
+  acceptLanguage    String?  @map("accept_language")
+  // Best-effort IP geolocation, resolved async post-insert (never blocks the
+  // chat response). Null when lookup fails or IP is private.
+  country           String?
+  region            String?
+  city              String?
+  modelRequested    String?  @map("model_requested")
+  modelsServed      Json     @default("[]") @map("models_served")
+  messages          Json     @default("[]")
+  responseText      String?  @map("response_text")
+  inputTokens       Int      @default(0) @map("input_tokens")
+  outputTokens      Int      @default(0) @map("output_tokens")
+  status            String   @default("success")
+  errorCode         String?  @map("error_code")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([visitorFingerprint, createdAt(sort: Desc)])
+  @@index([ipHash, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("anonymous_chat_logs")
+}
+
 // Persisted operability overlay (Camada 1a / prove-before-advertise).
 // The ProviderOperabilityHub is otherwise in-memory and forgets every restart,
 // which is why a freshly-restarted process reports "0 healthy providers". This

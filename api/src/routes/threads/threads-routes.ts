@@ -23,6 +23,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { ThreadsService } from '@/services/threads-service';
 import type { RequestUserContext } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -244,7 +246,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Body: Omit<CreateThreadRequest, 'userContext' | 'requestId'> }>,
       reply: FastifyReply
@@ -366,7 +372,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string } }>,
       reply: FastifyReply
@@ -495,7 +505,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string };
@@ -620,7 +634,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string } }>,
       reply: FastifyReply
@@ -878,7 +896,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string };
@@ -1074,7 +1096,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string };
@@ -1245,7 +1271,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string };
@@ -1430,7 +1460,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string };
@@ -1617,7 +1651,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>,
       reply: FastifyReply
@@ -1777,7 +1815,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>,
       reply: FastifyReply
@@ -1928,7 +1970,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string; message_id: string };
@@ -2058,7 +2104,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string; message_id: string } }>,
       reply: FastifyReply
@@ -2222,7 +2272,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string; run_id: string };
@@ -2370,7 +2424,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string; run_id: string } }>,
       reply: FastifyReply
@@ -2565,7 +2623,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { thread_id: string; run_id: string };
@@ -2737,7 +2799,11 @@ export async function registerThreadsRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { thread_id: string; run_id: string; step_id: string } }>,
       reply: FastifyReply

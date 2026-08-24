@@ -28,6 +28,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { logger } from '@/utils/logger';
@@ -82,6 +84,8 @@ export async function registerOrgGovernanceRoutes(server: FastifyInstance): Prom
   // token bucket. See route-rate-limit.ts.
   const adminPreHandler = [
     authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
     requireRole('admin', 'owner'),
     createRouteRateLimit('org-governance', { capacity: 30, refillRate: 0.5 }),
   ];

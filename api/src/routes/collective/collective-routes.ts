@@ -29,6 +29,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import {
@@ -132,7 +134,12 @@ export async function registerCollectiveRoutes(server: FastifyInstance): Promise
   // route-scoped (not the global per-identity budget) so it adds a real
   // ceiling here without double-spending the global token bucket. See
   // route-rate-limit.ts.
-  const collectivePreHandler = [authenticate, createRouteRateLimit('collective-runs')];
+  const collectivePreHandler = [
+    authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    createRouteRateLimit('collective-runs'),
+  ];
 
   // ─── GET /v1/collective/runs/:id ──────────────────────────────────────
   server.get(

@@ -121,16 +121,32 @@ export class PoolBuilder {
 
   /**
    * Filter by required capabilities.
+   *
+   * `function_calling` is NOT hard-dropped here (2026-08-21): the capability
+   * is sparsely declared across the catalog, and hard-filtering collapsed
+   * tools-request pools to a handful of mostly-dead models. Selection RANKS
+   * declared-FC first (see base-strategy) and the execution gate verifies
+   * unknowns with the lazy cached probe (function-calling-probe.ts).
    */
   filterByCapabilities(requiredCaps: string[]): this {
-    if (requiredCaps.length === 0) return this;
+    const hardRequired = requiredCaps.filter((rc) => rc !== 'function_calling');
+    if (hardRequired.length === 0 && requiredCaps.includes('function_calling')) {
+      this.stages.push({
+        name: 'capability_filter',
+        inputCount: this.models.length,
+        outputCount: this.models.length,
+        droppedReasons: { function_calling_deferred_to_probe: this.models.length },
+      });
+      return this;
+    }
+    if (hardRequired.length === 0) return this;
 
     const inputCount = this.models.length;
     const reasons: Record<string, number> = {};
 
     this.models = this.models.filter((model) => {
       const caps = (model.capabilities ?? []) as readonly string[];
-      for (const rc of requiredCaps) {
+      for (const rc of hardRequired) {
         if (!caps.includes(rc)) {
           reasons[`missing_${rc}`] = (reasons[`missing_${rc}`] ?? 0) + 1;
           return false;
@@ -326,25 +342,33 @@ export class PoolBuilder {
     // competitive instead of sinking below 0-download fine-tunes.
     const pop = (m: Model): number =>
       popularityPriorFromMetadata(m.metadata as Record<string, unknown> | undefined) ?? 0.5;
-    this.models.sort((a, b) => {
-      const qa = a.performance?.quality ?? 0;
-      const qb = b.performance?.quality ?? 0;
-      if (qa !== qb) return qb - qa;
-      // Same catalog quality (usually 0 — sparse data) → prefer PROVEN/popular
-      // models so strong models aren't buried under merely-cheaper junk. This
-      // only reorders within a quality tie; it never overrides real quality data.
-      const pa = pop(a);
-      const pb = pop(b);
-      if (pa !== pb) return pb - pa;
-      // Same quality + popularity → prefer native provider
-      const srcA = SOURCE_PRIORITY[safeMetadata(a.metadata).sourceType ?? ''] ?? 9;
-      const srcB = SOURCE_PRIORITY[safeMetadata(b.metadata).sourceType ?? ''] ?? 9;
-      if (srcA !== srcB) return srcA - srcB;
-      // Otherwise → prefer cheaper
-      const costA = Number(a.inputCostPer1k) + Number(a.outputCostPer1k);
-      const costB = Number(b.inputCostPer1k) + Number(b.outputCostPer1k);
-      return costA - costB;
-    });
+    // Decorate-sort-undecorate (P0.8, 2026-08-18): the comparator below used to
+    // call pop() (metadata object traversal) and safeMetadata() on EVERY
+    // comparison — at the production catalog size (52k+ models × ~16
+    // comparisons each) that is hundreds of millions of metadata walks, measured
+    // as ~2s of pure CPU inside buildCascadeCandidates on the anonymous hot
+    // path. Precompute each model's sort keys exactly once; ordering is
+    // unchanged: quality desc → popularity desc → native-source first → cost asc.
+    this.models = this.models
+      .map((m) => ({
+        m,
+        q: m.performance?.quality ?? 0,
+        p: pop(m),
+        src: SOURCE_PRIORITY[safeMetadata(m.metadata).sourceType ?? ''] ?? 9,
+        cost: Number(m.inputCostPer1k) + Number(m.outputCostPer1k),
+      }))
+      .sort((a, b) => {
+        if (a.q !== b.q) return b.q - a.q;
+        // Same catalog quality (usually 0 — sparse data) → prefer PROVEN/popular
+        // models so strong models aren't buried under merely-cheaper junk. This
+        // only reorders within a quality tie; it never overrides real quality data.
+        if (a.p !== b.p) return b.p - a.p;
+        // Same quality + popularity → prefer native provider
+        if (a.src !== b.src) return a.src - b.src;
+        // Otherwise → prefer cheaper
+        return a.cost - b.cost;
+      })
+      .map((d) => d.m);
     return this;
   }
 
@@ -380,20 +404,27 @@ export class PoolBuilder {
 /**
  * Convenience: build a standard chat execution pool from all models.
  * Applies the full filter chain used by getEligibleModels().
+ *
+ * @param options.includeSelfHosted Skip the self-hosted exclusion stage.
+ *   Default false (unchanged behavior for every existing caller). Intended
+ *   for cascading/fallback strategies (e.g. cost-cascade) whose own
+ *   candidate logic already treats self-hosted models as a preferred, free
+ *   tier and can tolerate one being occasionally unavailable by moving to
+ *   the next candidate — see CostCascadeStrategy's getEligibleModels()
+ *   override, the only current caller that passes this.
  */
 export function buildChatExecutionPool(
   allModels: Model[],
   qualityThreshold: number,
   maxCost?: number,
-  requiredCapabilities?: string[]
+  requiredCapabilities?: string[],
+  options?: { includeSelfHosted?: boolean }
 ): PoolResult {
-  let builder = new PoolBuilder(allModels)
-    .filterByModality('chat')
-    .filterByStatus()
-    .excludeSelfHosted()
-    .filterByOperability()
-    .filterByCredits()
-    .filterByQuality(qualityThreshold);
+  let builder = new PoolBuilder(allModels).filterByModality('chat').filterByStatus();
+  if (!options?.includeSelfHosted) {
+    builder = builder.excludeSelfHosted();
+  }
+  builder = builder.filterByOperability().filterByCredits().filterByQuality(qualityThreshold);
 
   if (requiredCapabilities && requiredCapabilities.length > 0) {
     builder = builder.filterByCapabilities(requiredCapabilities);

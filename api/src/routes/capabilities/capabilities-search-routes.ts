@@ -40,6 +40,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getCapabilitySearchService } from '@/capability/search/capability-search-singleton';
 import { logger } from '@/utils/logger';
 
@@ -139,7 +141,11 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
         description:
           'Hybrid lexical + vector search over the capability ontology. Returns RRF-fused hits with provenance of which path matched.',
       },
-      preHandler: [authenticateRequest],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
     },
     async (request: FastifyRequest<{ Querystring: OntologySearchQuery }>, reply) => {
       const q = (request.query.q ?? '').trim();
@@ -208,7 +214,11 @@ export async function registerCapabilitySearchRoutes(server: FastifyInstance): P
         description:
           'Hybrid lexical + vector + capability-filter search over the model catalog. Use require_capabilities for hard filters and prefers_capabilities for soft boost.',
       },
-      preHandler: [authenticateRequest],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
     },
     async (request: FastifyRequest<{ Querystring: ModelSearchQuery }>, reply) => {
       const q = request.query.q?.trim();

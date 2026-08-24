@@ -29,6 +29,7 @@ import type { ObserverFeed } from './observer/observer-types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import type { ObserverNarration } from '@/types';
 import { safeMetadata } from '@/types/model-metadata.schema';
+import { skipDeadCandidates, rankByRuntimeHealth } from './dead-candidate-skip';
 // Strategy Leader removed — was a no-op pass-through (quality threshold 0.3, length-only heuristic)
 import { logger } from '@/utils/logger';
 import {
@@ -50,6 +51,9 @@ import { isNonGenerativeModel } from '@/core/pool/non-generative-filter';
 import type { PoolResult } from '@/core/pool/pool-types';
 import { getExecutionFeedbackCollector } from '@/core/feedback/execution-feedback-collector';
 import { normalizeCost } from '@/services/cost-normalization-service';
+import { extractHttpStatusFromMessage } from '@/core/operability/provider-failure-classification';
+import { degradedSynthesisTotal } from '@/observability/ci-metrics';
+import { getTtftTracker } from '@/core/selection/ttft-tracker';
 import {
   getPromptVariantBandit,
   isPromptVariantBanditEnabled,
@@ -94,6 +98,24 @@ export interface StrategyMetadata {
   estimatedQualityBoost: number; // 0-1, improvement over baseline
   estimatedDurationMultiplier: number; // Relative to single model
   suitableFor: TaskType[];
+  /**
+   * Set true for strategies where minModels/maxModels describe a SEQUENTIAL
+   * escalation depth (try candidate 1, fall back to candidate 2, ...) whose
+   * output is a single model's answer — not a genuine multi-model collective
+   * whose outputs are combined, voted on, or peer-reviewed together.
+   *
+   * orchestration-engine.ts derives context.isCollectiveStrategy from
+   * `minModels > 1` alone, which drives BOTH the "you are participating in a
+   * collective intelligence strategy where multiple AI models collaborate"
+   * framing in the execution system prompt AND whether the peer-review
+   * ("your response will be reviewed by peers") prompt gets injected.
+   * CostCascadeStrategy declares minModels:2 purely as an "at least 2 cost
+   * tiers must exist" requirement, not a collaboration signal — without this
+   * flag every cascade rung was being told it's part of a peer-reviewed
+   * collective even though only ONE model's output is ever used. Default
+   * false/omitted preserves current behavior for every other strategy.
+   */
+  isCascading?: boolean;
 }
 
 /**
@@ -199,6 +221,14 @@ function extractQueryText(request: ChatRequest): string {
 /**
  * Abstract base class for execution strategies
  */
+
+// Eligible-pool TTL cache (P0.8): see getEligibleModels() for rationale.
+const eligiblePoolCache: {
+  key: string | null;
+  models: Model[];
+  expiresAt: number;
+} = { key: null, models: [], expiresAt: 0 };
+
 export abstract class BaseStrategy {
   protected log = logger.child({ component: 'strategy' });
 
@@ -225,7 +255,49 @@ export abstract class BaseStrategy {
    *
    * Returns sorted by quality descending (best models first).
    */
+  /**
+   * Whether this strategy's own candidate logic can safely include
+   * self-hosted/ollama/local-* models in its eligible pool. Default false —
+   * self-hosted infra is a less-reliable tier and most strategies (a single
+   * pick, or several models run in parallel/consensus with no substitution)
+   * have no way to route around one being down. Override to true only for
+   * strategies whose execution model already tolerates a candidate being
+   * unavailable by trying the next one (e.g. CostCascadeStrategy).
+   */
+  protected includeSelfHostedInPool(): boolean {
+    return false;
+  }
+
   protected getEligibleModels(context: OrchestrationContext): Model[] {
+    const pool = this.getEligibleModelsRaw(context);
+    // DEAD-CANDIDATE SKIP (2026-08-21): every strategy (collective
+    // quality-multipass/debate/consensus AND single-model local scoring)
+    // selects from this pool — apply the runtime operability/circuit gate
+    // HERE so no strategy fixes a circuit-OPEN/no_credits provider as its
+    // primary (incident: quality-multipass re-picked openrouter with circuit
+    // OPEN on every pass → empty_response_after_fallback). Applied AFTER the
+    // TTL cache (fresh dead-state per call, cache stores the raw pool) and
+    // with never-empty semantics — see dead-candidate-skip.ts. Function-calling
+    // filtering is unaffected: it runs inside the raw pool build
+    // (requiredCapabilities), this gate only removes known-dead providers.
+    const live = skipDeadCandidates(pool);
+    if (live.length < pool.length) {
+      this.log.debug(
+        { poolSize: pool.length, liveSize: live.length },
+        'Eligible pool: skipped dead candidates (proven-bad operability / open circuit)'
+      );
+    }
+    // RUNTIME-HEALTH RANKING (2026-08-21 pool recovery): static catalog
+    // ordering kept surfacing dead/no-credit providers as the first picks.
+    // Stable ordering — healthy routes first, dead last; with a tools
+    // request, declared-FC candidates lead over probe-pending unknowns.
+    return rankByRuntimeHealth(
+      live,
+      (context.requiredCapabilities ?? []).includes('function_calling')
+    );
+  }
+
+  private getEligibleModelsRaw(context: OrchestrationContext): Model[] {
     // Quality threshold: at least DEFAULT_MIN_QUALITY, and at least 70% of the target.
     const qualityThreshold = Math.max(DEFAULT_MIN_QUALITY, (context.qualityTarget ?? 0) * 0.7);
     const requiredCaps = context.requiredCapabilities ?? [];
@@ -235,11 +307,23 @@ export abstract class BaseStrategy {
     // import (no `require`) — pool-builder doesn't import base-strategy back,
     // so there's no circular-dep risk and we get full type safety on PoolResult.
     try {
+      const cacheTtlMs = Number(process.env.ELIGIBLE_POOL_CACHE_TTL_MS ?? 5000);
+      const selfHosted = this.includeSelfHostedInPool();
+      const cacheKey = `${qualityThreshold.toFixed(3)}|${maxCost ?? ''}|${requiredCaps.join(',')}|${selfHosted}`;
+      const now = Date.now();
+      if (
+        cacheTtlMs > 0 &&
+        eligiblePoolCache.key === cacheKey &&
+        now < eligiblePoolCache.expiresAt
+      ) {
+        return [...eligiblePoolCache.models];
+      }
       const poolResult: PoolResult = buildChatExecutionPool(
         context.models,
         qualityThreshold,
         maxCost,
-        requiredCaps
+        requiredCaps,
+        { includeSelfHosted: selfHosted }
       );
 
       // Log pool reduction for observability
@@ -256,6 +340,11 @@ export abstract class BaseStrategy {
         );
       }
 
+      if (cacheTtlMs > 0) {
+        eligiblePoolCache.key = cacheKey;
+        eligiblePoolCache.models = poolResult.models;
+        eligiblePoolCache.expiresAt = now + cacheTtlMs;
+      }
       return poolResult.models;
     } catch {
       // Fallback to inline filtering if PoolBuilder throws (defensive)
@@ -448,7 +537,20 @@ export abstract class BaseStrategy {
     candidates: Array<{ adapter: ProviderAdapter; model: Model }>,
     fallbackContent: () => string,
     opts?: {
-      firstChunkTimeoutMs?: number;
+      /**
+       * Deadline for the FIRST chunk of each candidate's stream. Number, or a
+       * per-attempt resolver — the resolver form (RC-2, 2026-08-17) lets
+       * callers give the FIRST rung a tighter TTFB window than the escalation
+       * rungs behind it (cost-cascade's rung 1 is the cheapest model, normally
+       * small and fast; a dead one should not enjoy the full 25s window the
+       * later, deliberately-larger rungs need).
+       */
+      firstChunkTimeoutMs?:
+        | number
+        | ((
+            attemptIndex: number,
+            candidate?: { adapter: ProviderAdapter; model: Model }
+          ) => number);
       idleTimeoutMs?: number;
       throwOnTotalFailure?: boolean;
       /**
@@ -471,9 +573,10 @@ export abstract class BaseStrategy {
     // single/auto streaming path in chat-routes.ts — same reasoning: a healthy
     // synthesizer's TTFB is sub-2s in practice, so 6s comfortably avoids
     // false-positive aborts while cutting the worst-case stall more than 3x.
-    const firstChunkTimeoutMs = opts?.firstChunkTimeoutMs ?? 6000;
+    const firstChunkTimeoutSpec = opts?.firstChunkTimeoutMs ?? 6000;
     let started = false;
     const failures: string[] = [];
+    let candidateIndex = 0;
     for (const cand of candidates) {
       // Frontier-parity: honor an explicit synthesis max_tokens, else request
       // THIS synthesizer model's own output capability (dynamic, per-model).
@@ -482,6 +585,20 @@ export abstract class BaseStrategy {
       const synthRequest =
         synthMaxTokens !== undefined ? { ...pinnedSynth, max_tokens: synthMaxTokens } : pinnedSynth;
       const iterator = cand.adapter.chatCompletionStream(synthRequest)[Symbol.asyncIterator]();
+      const firstChunkTimeoutMs =
+        typeof firstChunkTimeoutSpec === 'function'
+          ? firstChunkTimeoutSpec(candidateIndex, cand)
+          : firstChunkTimeoutSpec;
+      candidateIndex += 1;
+      // TTFT telemetry (Workstream G, 2026-08-17): measure when THIS
+      // candidate's first chunk actually lands and feed the per-route tracker
+      // that powers latency-aware rung ranking and the dynamic first-chunk
+      // budget. A SUCCESS sample is recorded only when real provider content
+      // arrives; every pre-first-chunk failure (timeout included) records a
+      // FAILURE sample — so degraded/empty-output responses never pollute the
+      // latency history with fake 200-successes (semantic-success guarantee).
+      const attemptStartedAt = Date.now();
+      const ttft = getTtftTracker();
       try {
         // Race the FIRST chunk against a deadline.
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -500,6 +617,17 @@ export abstract class BaseStrategy {
         if (!first.done) {
           if (first.value !== undefined) {
             started = true;
+            // Semantic success (Workstream G): only chunks carrying actual
+            // content count as TTFT successes — a metadata-only or empty-output
+            // 200 must not feed the latency history a fake fast sample.
+            const firstDelta = first.value.choices?.[0]?.delta?.content;
+            if (typeof firstDelta === 'string' && firstDelta.length > 0) {
+              ttft.recordFirstChunk(
+                cand.adapter.getName(),
+                cand.model.id,
+                Date.now() - attemptStartedAt
+              );
+            }
             yield first.value;
           }
           // First chunk arrived — stream the remainder under a per-chunk IDLE
@@ -558,6 +686,7 @@ export abstract class BaseStrategy {
         }
         return; // synthesizer streamed to completion
       } catch (err) {
+        ttft.recordFailure(cand.adapter.getName(), cand.model.id);
         const msg = getErrorMessage(err);
         failures.push(`${cand.adapter.getName()}(${cand.model.id}): ${msg}`);
         // Best-effort, NON-blocking: signal the underlying stream to close so a
@@ -617,6 +746,10 @@ export abstract class BaseStrategy {
       { attempts: candidates.length, failures },
       'All synthesizers failed — emitting degraded synthesis (no provider produced output)'
     );
+    degradedSynthesisTotal.inc({
+      strategy: this.getMetadata().name,
+      reason: 'all_synthesizers_failed',
+    });
     yield {
       id: `synthesis-degraded-${Date.now()}`,
       object: 'chat.completion.chunk' as const,
@@ -844,7 +977,8 @@ export abstract class BaseStrategy {
     adapter: ProviderAdapter,
     model: Model,
     request: ChatRequest,
-    role: ModelRole = 'primary'
+    role: ModelRole = 'primary',
+    signal?: AbortSignal
   ): Promise<ModelExecution> {
     const tracer = trace.getTracer('ci-orchestration');
     return tracer.startActiveSpan(
@@ -956,7 +1090,7 @@ export abstract class BaseStrategy {
             'Executing model'
           );
 
-          const response = await adapter.chatCompletion(pinnedRequest);
+          const response = await adapter.chatCompletion(pinnedRequest, { signal });
           const durationMs = Date.now() - startTime;
 
           // Calculate actual cost (raw, as reported by the adapter's pricing).
@@ -1166,6 +1300,16 @@ export abstract class BaseStrategy {
           const durationMs = Date.now() - startTime;
           const errorMessage = getErrorMessage(error);
 
+          // A caller-supplied signal we ourselves aborted (e.g. boundModelExecution's
+          // per-model timeout) surfaces here as an AbortError once the underlying
+          // fetch rejects. That's not a provider failure — it's us giving up on a
+          // call that may still have succeeded — so it must not poison provider
+          // health / near-zero-skip the way a genuine failure would. Gated on
+          // `signal?.aborted` (not just the error name) so an adapter's own
+          // unrelated internal abort (e.g. a hardcoded local timeout) still counts.
+          const isAbortError = error instanceof Error && error.name === 'AbortError';
+          const wasDeliberatelyCancelled = isAbortError && signal?.aborted === true;
+
           // Extract detailed error information for better debugging
           let errorDetails: Record<string, unknown> = { message: errorMessage };
           if (isObject(error)) {
@@ -1214,10 +1358,9 @@ export abstract class BaseStrategy {
           // Detect payment/auth failures (402/403/404) and mark provider as no-credits
           // This closes the feedback loop: runtime failures update balance status for future selections
           const errMsg = errorMessage.toLowerCase();
-          const httpStatusMatch = errorMessage.match(/HTTP\s+(\d{3})/);
+          const httpStatusFromMsg = extractHttpStatusFromMessage(errorMessage);
           const detectedStatus =
-            (errorDetails.statusCode as number | undefined) ||
-            (httpStatusMatch ? parseInt(httpStatusMatch[1], 10) : undefined);
+            (errorDetails.statusCode as number | undefined) || httpStatusFromMsg;
           const isPaymentFailure =
             detectedStatus === 402 || detectedStatus === 403 || detectedStatus === 404;
           const isBalanceError =
@@ -1243,42 +1386,44 @@ export abstract class BaseStrategy {
           // remain wired. The new registry is granular by (providerId, modelId)
           // and powers shouldSkipNearZero on the next request.
           const failedProviderForHealth = (adapter.getName() || model.provider || '').toLowerCase();
-          try {
-            const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } =
-              await import('@/core/operability');
-            const classification = classifyProviderError(error);
-            const registry = getProviderHealthRegistry();
-            // Use classification.scope to decide granularity:
-            //   - 'provider_model' → key by (providerId, modelId) — only that
-            //     tuple is poisoned. Other models on the same provider keep
-            //     their health.
-            //   - 'account' or 'provider' → key by (providerId) — all models
-            //     for this provider share the fate.
-            //   - 'request' → don't update registry (request-scoped error).
-            if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
-              const key =
-                classification.scope === 'provider_model'
-                  ? { providerId: failedProviderForHealth, modelId: model.id }
-                  : { providerId: failedProviderForHealth };
-              registry.recordExecution({
-                key,
-                success: false,
-                classification,
-                latencyMs: durationMs,
-              });
-              emitCandidateTrace({
-                providerId: failedProviderForHealth,
-                modelId: model.id,
-                modelFamily: model.provider,
-                stage: 'failed',
-                included: false,
-                reason: classification.errorClass,
-                healthState: classification.healthState,
-                latencyMs: durationMs,
-              });
+          if (!wasDeliberatelyCancelled) {
+            try {
+              const { classifyProviderError, getProviderHealthRegistry, emitCandidateTrace } =
+                await import('@/core/operability');
+              const classification = classifyProviderError(error);
+              const registry = getProviderHealthRegistry();
+              // Use classification.scope to decide granularity:
+              //   - 'provider_model' → key by (providerId, modelId) — only that
+              //     tuple is poisoned. Other models on the same provider keep
+              //     their health.
+              //   - 'account' or 'provider' → key by (providerId) — all models
+              //     for this provider share the fate.
+              //   - 'request' → don't update registry (request-scoped error).
+              if (classification.scope !== 'request' && classification.scope !== 'endpoint') {
+                const key =
+                  classification.scope === 'provider_model'
+                    ? { providerId: failedProviderForHealth, modelId: model.id }
+                    : { providerId: failedProviderForHealth };
+                registry.recordExecution({
+                  key,
+                  success: false,
+                  classification,
+                  latencyMs: durationMs,
+                });
+                emitCandidateTrace({
+                  providerId: failedProviderForHealth,
+                  modelId: model.id,
+                  modelFamily: model.provider,
+                  stage: 'failed',
+                  included: false,
+                  reason: classification.errorClass,
+                  healthState: classification.healthState,
+                  latencyMs: durationMs,
+                });
+              }
+            } catch {
+              /* operability module not available */
             }
-          } catch {
-            /* operability module not available */
           }
 
           if (isBalanceError || isAuthFailure) {
@@ -1654,56 +1799,59 @@ export abstract class BaseStrategy {
             ],
           };
 
-          // Record failure metric
-          recordModelExecution({
-            modelId: model.id,
-            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-            // an openai/gpt-4o model and fails, the failure must be counted against the hub
-            // — not against native openai — otherwise native providers get penalized for
-            // failures they didn't cause, eventually collapsing the candidate pool.
-            provider: adapter.getName(),
-            taskType: 'unknown',
-            durationMs,
-            costUsd: 0,
-            success: false,
-          });
-          modelPerformanceTracker.record({
-            modelId: model.id,
-            // Attribute to the EXECUTION provider (the adapter that actually ran the call),
-            // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
-            // an openai/gpt-4o model and fails, the failure must be counted against the hub
-            // — not against native openai — otherwise native providers get penalized for
-            // failures they didn't cause, eventually collapsing the candidate pool.
-            provider: adapter.getName(),
-            qualityScore: 0,
-            latencyMs: durationMs,
-            success: false,
-            costUsd: 0,
-          });
+          // Record failure metric — skipped for a self-inflicted cancellation
+          // (see wasDeliberatelyCancelled above): we gave up on this call at our
+          // own soft-deadline, so it carries no real signal about the provider.
+          if (!wasDeliberatelyCancelled) {
+            recordModelExecution({
+              modelId: model.id,
+              // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+              // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+              // an openai/gpt-4o model and fails, the failure must be counted against the hub
+              // — not against native openai — otherwise native providers get penalized for
+              // failures they didn't cause, eventually collapsing the candidate pool.
+              provider: adapter.getName(),
+              taskType: 'unknown',
+              durationMs,
+              costUsd: 0,
+              success: false,
+            });
+            modelPerformanceTracker.record({
+              modelId: model.id,
+              // Attribute to the EXECUTION provider (the adapter that actually ran the call),
+              // not the logical provider from model metadata. When a hub (e.g. aihubmix) runs
+              // an openai/gpt-4o model and fails, the failure must be counted against the hub
+              // — not against native openai — otherwise native providers get penalized for
+              // failures they didn't cause, eventually collapsing the candidate pool.
+              provider: adapter.getName(),
+              qualityScore: 0,
+              latencyMs: durationMs,
+              success: false,
+              costUsd: 0,
+            });
 
-          // Record execution failure in unified operability hub (route-level precision)
-          try {
-            const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
-            const httpStatusMatch2 = errorMessage.match(/HTTP\s+(\d{3})/);
-            const httpStatus2 = httpStatusMatch2 ? parseInt(httpStatusMatch2[1], 10) : undefined;
-            getProviderOperabilityHub().recordRouteExecution(
-              adapter.getName(),
-              model.id,
-              false,
-              httpStatus2,
-              errorMessage
-            );
-            // #1 prove-before-admit: a 404 / model_not_found means THIS exact model
-            // is a dead catalog entry — flag it so the selector stops re-picking it
-            // (the hub is keyed per-family and cannot gate a single dead model).
-            const { getDeadModelRegistry, isModelNotFound } =
-              await import('@/core/operability/dead-model-registry.js');
-            if (isModelNotFound(httpStatus2, errorMessage)) {
-              getDeadModelRegistry().markDead(model.id, `status=${httpStatus2 ?? 'msg'}`);
+            // Record execution failure in unified operability hub (route-level precision)
+            try {
+              const { getProviderOperabilityHub } = await import('@/core/provider-operability-hub');
+              const httpStatus2 = extractHttpStatusFromMessage(errorMessage);
+              getProviderOperabilityHub().recordRouteExecution(
+                adapter.getName(),
+                model.id,
+                false,
+                httpStatus2,
+                errorMessage
+              );
+              // #1 prove-before-admit: a 404 / model_not_found means THIS exact model
+              // is a dead catalog entry — flag it so the selector stops re-picking it
+              // (the hub is keyed per-family and cannot gate a single dead model).
+              const { getDeadModelRegistry, isModelNotFound } =
+                await import('@/core/operability/dead-model-registry.js');
+              if (isModelNotFound(httpStatus2, errorMessage)) {
+                getDeadModelRegistry().markDead(model.id, `status=${httpStatus2 ?? 'msg'}`);
+              }
+            } catch {
+              /* non-critical */
             }
-          } catch {
-            /* non-critical */
           }
 
           span.setAttribute('model.duration_ms', durationMs);
@@ -1746,13 +1894,18 @@ export abstract class BaseStrategy {
     const isCollective = (this.getMetadata().minModels ?? 1) > 1;
     const runAttempt = (a: ProviderAdapter, m: Model, r: ModelRole): Promise<ModelExecution> =>
       isCollective
-        ? this.boundModelExecution(() => this.executeModel(a, m, request, r), {
-            adapter: a,
-            model: m,
-            request,
-            role: r,
-          })
-        : this.executeModel(a, m, request, r);
+        ? this.boundModelExecution(
+            (signal) => this.executeModel(a, m, request, r, signal),
+            {
+              adapter: a,
+              model: m,
+              request,
+              role: r,
+            },
+            undefined, // resolves to collectiveModelTimeoutMs() — see default param
+            context.signal
+          )
+        : this.executeModel(a, m, request, r, context.signal);
 
     const execution = await runAttempt(adapter, model, role);
     if (execution.success) return execution;
@@ -1801,6 +1954,19 @@ export abstract class BaseStrategy {
       });
 
     for (let i = 0; i < Math.min(maxRetries, fallbackCandidates.length); i++) {
+      // Whole-request deadline already blown — don't burn a real
+      // getAdapterForModel() lookup (and a misleading "trying fallback" log
+      // line) on a fallback that boundModelExecution's own parentSignal
+      // check would short-circuit anyway. Defense-in-depth, not correctness:
+      // no HTTP call would be made regardless, but this makes the
+      // abandonment visible in logs instead of silently swallowed.
+      if (context.signal?.aborted) {
+        this.log.warn(
+          { requestId: context.requestId },
+          'Request deadline exceeded — abandoning fallback retry loop'
+        );
+        break;
+      }
       const fallback = fallbackCandidates[i];
       const fallbackAdapter = this.getAdapterForModel
         ? await this.getAdapterForModel(fallback, context)
@@ -1849,15 +2015,30 @@ export abstract class BaseStrategy {
 
   /**
    * Run a single model-execution thunk under a hard per-call deadline. On timeout
-   * the straggler is dropped (the underlying call keeps running but no longer
-   * blocks the strategy) and a FAILED (empty) ModelExecution is returned, so the
-   * degraded-synthesis / merge fallback can proceed with whatever responded in
-   * time. Works for both plain executeModel() and executeModelWithReasoning().
+   * the straggler is actually cancelled — `fn` receives an AbortSignal that this
+   * method aborts once `timeoutMs` elapses, so an adapter wired for cancellation
+   * closes its underlying HTTP request instead of running it to completion in
+   * the background (previously the timeout only stopped the orchestration layer
+   * from *waiting* on the call; the real request, and any bulkhead lease it held,
+   * kept running until the provider eventually responded). A FAILED (empty)
+   * ModelExecution is returned on timeout, so the degraded-synthesis / merge
+   * fallback can proceed with whatever responded in time. Works for
+   * executeModel(), executeModelWithReasoning(), and executeModelWithTools().
+   *
+   * @param parentSignal Optional whole-request deadline (see
+   * OrchestrationContext.signal, set by executeStream()'s overall timeout).
+   * When already aborted at call time, this attempt is abandoned before `fn`
+   * ever runs — no doomed HTTP call is issued. When it fires mid-flight, it
+   * is forwarded into the same AbortController as the per-call timeout, so
+   * every downstream consumer (adapters, the AbortError health-exemption
+   * check) sees one consistent signal shape regardless of which deadline
+   * tripped. Always undefined on the non-streaming execute() path.
    */
   protected async boundModelExecution(
-    fn: () => Promise<ModelExecution>,
+    fn: (signal: AbortSignal) => Promise<ModelExecution>,
     ctx: { adapter: ProviderAdapter; model: Model; request: ChatRequest; role: ModelRole },
-    timeoutMs: number = this.collectiveModelTimeoutMs()
+    timeoutMs: number = this.collectiveModelTimeoutMs(),
+    parentSignal?: AbortSignal
   ): Promise<ModelExecution> {
     const startTime = Date.now();
     const failedExecution = (reason: string, prefix: string): ModelExecution =>
@@ -1886,9 +2067,30 @@ export abstract class BaseStrategy {
         reason
       );
 
+    // Parent deadline already blown before this attempt even starts — don't
+    // issue a doomed call. Matters most inside executeModelWithRetry's
+    // fallback loop and inside strategies that call boundModelExecution
+    // repeatedly across rounds (multi-round collectives, cascades).
+    if (parentSignal?.aborted) {
+      return failedExecution('request deadline exceeded before attempt started', 'deadline');
+    }
+
+    const controller = new AbortController();
+    let timedOutByParent = false;
+    const onParentAbort = () => {
+      timedOutByParent = true;
+      // No custom abort reason — see the timeout branch below for why.
+      controller.abort();
+    };
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true });
+
     // Guarantee the underlying call never rejects, so a late rejection (after the timeout has
     // already won the race) cannot surface as an unhandled promise rejection.
-    const exec = fn().catch((err) => failedExecution(`error: ${getErrorMessage(err)}`, 'error'));
+    const exec = fn(controller.signal).catch((err) =>
+      timedOutByParent
+        ? failedExecution('request deadline exceeded', 'deadline')
+        : failedExecution(`error: ${getErrorMessage(err)}`, 'error')
+    );
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<ModelExecution>((resolve) => {
@@ -1897,12 +2099,21 @@ export abstract class BaseStrategy {
           { provider: ctx.adapter.getName(), model: ctx.model.name, role: ctx.role, timeoutMs },
           'Model exceeded per-call timeout — dropping straggler'
         );
+        // No custom abort reason: fetch()/undici surface whatever reason is
+        // passed to abort() as the rejection value verbatim, which would
+        // otherwise replace the standard `DOMException('AbortError')` and
+        // break the `error.name === 'AbortError'` check that keeps this
+        // self-inflicted cancellation from being recorded as a provider
+        // health failure below. The human-readable reason is already
+        // attached to the synthetic ModelExecution this method returns.
+        controller.abort();
         resolve(failedExecution(`per-model timeout (${timeoutMs}ms)`, 'timeout'));
       }, timeoutMs);
     });
 
     return Promise.race([exec, timeoutPromise]).finally(() => {
       if (timer) clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', onParentAbort);
     });
   }
 
@@ -1912,7 +2123,8 @@ export abstract class BaseStrategy {
       model: Model;
       request: ChatRequest;
       role: ModelRole;
-    }>
+    }>,
+    parentSignal?: AbortSignal
   ): Promise<ModelExecution[]> {
     // C3 latency fix (2026-06-11): per-model timeout so the collective fan-out is never held hostage
     // by the single slowest model. Prod measured a `parallel` request at ~43s because Promise.all
@@ -1925,12 +2137,16 @@ export abstract class BaseStrategy {
       'Executing models in parallel (per-model timeout)'
     );
 
+    // Promise.all runs everything concurrently, so there's no loop to
+    // short-circuit here — parentSignal just needs to reach every fanned-out
+    // boundModelExecution call so its own fast-path check applies uniformly.
     return Promise.all(
       executions.map(({ adapter, model, request, role }) =>
         this.boundModelExecution(
-          () => this.executeModel(adapter, model, request, role),
+          (signal) => this.executeModel(adapter, model, request, role, signal),
           { adapter, model, request, role },
-          perModelTimeoutMs
+          perModelTimeoutMs,
+          parentSignal
         )
       )
     );
@@ -2332,7 +2548,8 @@ export abstract class BaseStrategy {
     adapter: ProviderAdapter,
     model: Model,
     request: ChatRequest,
-    role: ModelRole = 'primary'
+    role: ModelRole = 'primary',
+    signal?: AbortSignal
   ): Promise<ModelExecution> {
     let reqForExecution = request;
 
@@ -2366,7 +2583,7 @@ export abstract class BaseStrategy {
       reqForExecution = { ...request, messages };
     }
 
-    const execution = await this.executeModel(adapter, model, reqForExecution, role);
+    const execution = await this.executeModel(adapter, model, reqForExecution, role, signal);
 
     if (this.isReasoningEnabled(request) && execution.success) {
       const content = safeResponseContent(execution.response);
@@ -2424,7 +2641,8 @@ export abstract class BaseStrategy {
     model: Model,
     request: ChatRequest,
     role: ModelRole = 'primary',
-    maxToolIterations: number = 5
+    maxToolIterations: number = 5,
+    signal?: AbortSignal
   ): Promise<ModelExecution> {
     let currentRequest = request;
     let totalCost = 0;
@@ -2432,7 +2650,7 @@ export abstract class BaseStrategy {
     let lastExecution: ModelExecution | null = null;
 
     for (let iteration = 0; iteration < maxToolIterations; iteration++) {
-      const execution = await this.executeModel(adapter, model, currentRequest, role);
+      const execution = await this.executeModel(adapter, model, currentRequest, role, signal);
       totalCost += execution.cost;
       totalDuration += execution.durationMs;
       lastExecution = execution;
@@ -2444,6 +2662,33 @@ export abstract class BaseStrategy {
 
       // If no tool calls, we're done
       if (finishReason !== 'tool_calls' || !toolCalls?.length) {
+        execution.cost = totalCost;
+        execution.durationMs = totalDuration;
+        return execution;
+      }
+
+      // Only tools THIS server owns may be auto-executed here. A caller that
+      // supplies its own `tools` in the request owns those calls: by the OpenAI
+      // contract we must hand the tool_call back and let the caller execute it.
+      //
+      // Without this check the loop tried to run every tool call through the
+      // registry, and a client-owned name simply is not there —
+      // `Tool "X" not found in registry.` came back, got appended as a
+      // role:'tool' message, and the next iteration showed the model its own
+      // tool "failing". The model then apologised in prose and the caller
+      // received a response with NO tool_calls at all.
+      //
+      // That is the exact mechanism behind the PIS/COFINS agent never invoking
+      // `conciliar_pis_cofins`: the schema reached the model, the model emitted
+      // the call, and this loop consumed it. Server-registered tools
+      // (safeForStrategies) keep auto-executing exactly as before.
+      const { toolRegistry } = await import('@/core/tools/tool-registry');
+      const serverOwnsEveryToolCall =
+        toolRegistry.isInitialized() &&
+        toolCalls.every(
+          (toolCall) => toolRegistry.get(toolCall.function?.name ?? '')?.safeForStrategies === true
+        );
+      if (!serverOwnsEveryToolCall) {
         execution.cost = totalCost;
         execution.durationMs = totalDuration;
         return execution;
@@ -2658,10 +2903,20 @@ export abstract class BaseStrategy {
     request: ChatRequest,
     context: OrchestrationContext
   ): Promise<ChatRequest> {
-    // LAT-3: the orchestration engine already ran the memory search and
-    // prepended the memory block for this request — a second per-strategy
-    // retrieval would duplicate the embedding + pgvector round-trip AND the
-    // injected prompt context.
+    // LAT-3 (corrected — see LAT-3.1 below): the orchestration engine already
+    // ran a memory search for this request, but it is NOT the same query as
+    // the one below. The engine (MemoryContextService.buildContext(), via
+    // its DEFAULT_OPTIONS) only ever searches memoryTypes ['semantic',
+    // 'procedural'] — 'episodic' is never included — and scopes every query
+    // to this user's own rows or NULL-owner rows (userId is threaded through
+    // to memoryStore.search()). `memoryEnriched` means that search HIT and
+    // the engine already prepended a memory block onto `request` — genuinely
+    // nothing left to add, so skip below. `memorySearched` only means the
+    // engine's search RESOLVED (hit or miss); on a miss it tells us nothing
+    // about episodic memories or other users' rows in the org, because the
+    // engine's query structurally cannot see them. So a miss does not skip
+    // the fallback — it narrows it (see the searchMemories() call below) to
+    // just that uncovered slice, which is real, non-duplicate work.
     if (context.memoryEnriched) return request;
     try {
       const userContent = request.messages
@@ -2671,7 +2926,20 @@ export abstract class BaseStrategy {
 
       if (!userContent || userContent.length < 10) return request;
 
-      const memories = await this.searchMemories(context, userContent, 3);
+      // LAT-3.1: context.memorySearched === true means the engine's
+      // ['semantic', 'procedural'], user-or-NULL-scoped search already ran
+      // and missed for this exact query text — re-running that same slice
+      // here would be the genuine duplicate the original LAT-3 fix meant to
+      // eliminate. So narrow to only the coverage gap the engine's search
+      // cannot reach by construction: 'episodic' memories, unscoped by user
+      // (org-wide), which searchMemories() already never filters by userId.
+      // When memorySearched is false (engine search never resolved — memory
+      // context disabled, empty query, or an internal error), we have no
+      // guarantee ANY search happened, so fall back to the full, unscoped
+      // search across all types — the original pre-LAT-3 behavior.
+      const memories = context.memorySearched
+        ? await this.searchMemories(context, userContent, 3, { type: 'episodic' })
+        : await this.searchMemories(context, userContent, 3);
       if (memories.length === 0) return request;
 
       const memoryContext = memories.map((m) => `[${m.type}] ${m.content}`).join('\n');
@@ -2774,11 +3042,19 @@ export abstract class BaseStrategy {
   /**
    * Search memories relevant to the current request.
    * Returns matching memories that can be injected as context.
+   *
+   * Deliberately org-wide (no userId filter) regardless of `options.type` —
+   * that breadth is what makes this a genuine coverage gap relative to the
+   * engine-level search (MemoryContextService.buildContext()), which always
+   * scopes to the requesting user (or NULL-owner rows). See
+   * enrichWithMemories()'s call site for when `options.type` is narrowed to
+   * 'episodic' to avoid re-querying the slice the engine already covered.
    */
   protected async searchMemories(
     context: OrchestrationContext,
     query: string,
-    limit: number = 5
+    limit: number = 5,
+    options?: { type?: 'episodic' | 'semantic' | 'procedural' }
   ): Promise<Array<{ content: string; similarity: number; type: string }>> {
     try {
       const { getSemanticMemoryStore } = await import('@/core/memory/semantic-memory-store');
@@ -2786,6 +3062,7 @@ export abstract class BaseStrategy {
       const results = await store.search({
         organizationId: context.organizationId || 'default',
         query,
+        type: options?.type,
         limit,
         minSimilarity: 0.7,
       });

@@ -14,6 +14,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getOrchestrationEngine } from '@/core/orchestration/orchestration-engine';
 
 export async function registerOrchestrationRoutes(server: FastifyInstance): Promise<void> {
@@ -24,7 +26,11 @@ export async function registerOrchestrationRoutes(server: FastifyInstance): Prom
   server.get(
     '/v1/orchestration/strategies',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Orchestration'],
         summary: 'List orchestration strategies',

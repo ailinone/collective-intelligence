@@ -16,6 +16,7 @@ import type { FastifyReply } from 'fastify';
 import type { OutgoingHttpHeaders } from 'node:http';
 import type { ChatResponse, AilinMetadata } from '@/types';
 import { logger } from './logger';
+import { applyBranding } from './branding';
 
 /**
  * Format SSE data
@@ -42,9 +43,19 @@ interface ErrorWithCode extends Error {
 
 /**
  * Send SSE chunk
+ *
+ * Applies `applyBranding()` here — the single choke point every streaming
+ * caller in the codebase already goes through — rather than at each call
+ * site. Confirmed live: a self-hosted response's `message.content` correctly
+ * refused to name the underlying model while the SAME JSON payload's
+ * `model`/`system_fingerprint` fields carried it verbatim, because the
+ * non-streaming path (`chat-request-processor.ts`) already calls
+ * `applyBranding()` before responding, but nothing on the streaming path
+ * did. A per-call-site fix would need to be re-applied at every future SSE
+ * emitter; this one covers all of them, including ones not yet written.
  */
 export function sendSSEChunk(reply: FastifyReply, chunk: ChatResponse): void {
-  reply.raw.write(formatSSE(chunk));
+  reply.raw.write(formatSSE(applyBranding(chunk)));
 }
 
 /**

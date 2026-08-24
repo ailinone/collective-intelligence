@@ -315,7 +315,10 @@ export class OpenAIAdapter extends ProviderAdapter {
   /**
    * Chat completion (non-streaming)
    */
-  async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
+  async chatCompletion(
+    request: ChatRequest,
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse> {
     const startTime = Date.now();
 
     // Check if this is a realtime model that requires WebSocket
@@ -488,10 +491,15 @@ export class OpenAIAdapter extends ProviderAdapter {
       // Execute the request using the appropriate endpoint
       const rawResponse = await this.withRetry(
         async () => {
-          return await this.executeModelRequest(endpoint, params as Record<string, unknown>);
+          return await this.executeModelRequest(
+            endpoint,
+            params as Record<string, unknown>,
+            options?.signal
+          );
         },
         'model request',
-        this.estimateTokenCost(request)
+        this.estimateTokenCost(request),
+        options?.signal
       );
 
       // Convert Responses API format to ChatCompletion format if needed
@@ -1565,13 +1573,15 @@ export class OpenAIAdapter extends ProviderAdapter {
    */
   private async executeModelRequest(
     endpoint: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<unknown> {
     switch (endpoint) {
       case 'chat_completions':
       case 'chat_completions_special':
         return await this.getRequestClient().chat.completions.create(
-          this.toChatCompletionParams(params)
+          this.toChatCompletionParams(params),
+          { signal }
         );
 
       case 'responses':

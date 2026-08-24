@@ -25,6 +25,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { SearchOrchestrationService } from '@/services/search-orchestration-service';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
@@ -270,7 +272,11 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest<{ Body: SearchRequest }>, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -471,7 +477,11 @@ export async function registerSearchRoutes(server: FastifyInstance): Promise<voi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Body: z.infer<typeof GroundingRequestSchema> }>,
       reply: FastifyReply

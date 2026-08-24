@@ -14,6 +14,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { logger } from '@/utils/logger';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { providerAvailabilityService } from '@/services/provider-availability-service';
 import { getProviderRegistry } from '@/providers/provider-registry';
 
@@ -21,6 +23,17 @@ import { getProviderRegistry } from '@/providers/provider-registry';
  * Register provider health check routes
  */
 export async function registerProviderHealthRoutes(server: FastifyInstance): Promise<void> {
+  // These routes carry NO route-level `authenticate` preHandler of their own —
+  // `/v1/health/providers*` is not in `PUBLIC_ROUTES` but does match the `/v1`
+  // prefix in `PROTECTED_ROUTE_PREFIXES`, so the GLOBAL `apiKeyAuthMiddleware`
+  // hook (registered in index.ts, ahead of every route-level preHandler) is what
+  // authenticates them and populates `request.apiKey`. The two dedicated
+  // single-purpose M2M keys therefore CAN reach this provider-topology surface,
+  // which is why the scope guards are wired here anyway. Ordering is still
+  // correct: an instance-level `preHandler` hook runs before a route's own
+  // `preHandler`, so `request.apiKey` is already resolved when these run.
+  const scopeGuards = [rejectAnonymousGuestKeyPreHandler, rejectChatFreeTierKeyPreHandler];
+
   /**
    * GET /v1/health/providers
    * Returns health status of all providers
@@ -28,6 +41,7 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/health/providers',
     {
+      preHandler: scopeGuards,
       schema: {
         tags: ['Health'],
         description: 'Detailed health status of all LLM providers',
@@ -117,6 +131,7 @@ export async function registerProviderHealthRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/health/providers/:providerName',
     {
+      preHandler: scopeGuards,
       schema: {
         tags: ['Health'],
         summary: 'Get specific provider health',

@@ -14,6 +14,8 @@
 
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -149,7 +151,12 @@ export async function registerCacheRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/cache/value',
     {
-      onRequest: [authenticate, requireTenantContext()],
+      onRequest: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Cache'],
         description: 'Retrieve a cached value by key and optional namespace',
@@ -251,7 +258,12 @@ export async function registerCacheRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/cache/value',
     {
-      onRequest: [authenticate, requireTenantContext()],
+      onRequest: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Cache'],
         description: 'Store a value in the distributed cache',
@@ -310,7 +322,12 @@ export async function registerCacheRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/cache/value',
     {
-      onRequest: [authenticate, requireTenantContext()],
+      onRequest: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Cache'],
         description: 'Delete a cached value by key',
@@ -376,7 +393,12 @@ export async function registerCacheRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/cache/clear',
     {
-      onRequest: [authenticate, requireTenantContext()],
+      onRequest: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Cache'],
         description: 'Clear all entries from a cache namespace',
@@ -451,7 +473,12 @@ export async function registerCacheRoutes(server: FastifyInstance): Promise<void
   }>(
     '/v1/cache/stats',
     {
-      onRequest: [authenticate, requireTenantContext()],
+      onRequest: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
       schema: {
         tags: ['Cache'],
         description: 'Retrieve cache statistics for a namespace',

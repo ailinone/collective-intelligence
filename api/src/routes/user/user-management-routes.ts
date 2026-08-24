@@ -19,6 +19,8 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@/database/client';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { getAuthService } from '@/services/auth-service';
 import { logger } from '@/utils/logger';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -185,7 +187,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/users',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
       schema: {
         tags: ['Users'],
         description: 'List users in organization',
@@ -334,7 +341,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/users/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Users'],
         description: 'Get user details',
@@ -499,7 +510,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.put(
     '/v1/users/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Users'],
         description: 'Update user',
@@ -749,7 +764,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.patch(
     '/v1/users/:id',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Users'],
         description: 'Update user (PATCH)',
@@ -1000,7 +1019,12 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.delete(
     '/v1/users/:id',
     {
-      preHandler: [authenticate, requireRole('admin', 'owner')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireRole('admin', 'owner'),
+      ],
       schema: {
         tags: ['Users'],
         description: 'Delete user',
@@ -1142,7 +1166,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.post(
     '/v1/users/:id/change-password',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Users'],
         description: 'Change password',
@@ -1272,7 +1300,11 @@ export async function registerUserManagementRoutes(server: FastifyInstance): Pro
   server.get(
     '/v1/users/:id/api-keys',
     {
-      preHandler: authenticate,
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+      ],
       schema: {
         tags: ['Users'],
         description: "List user's API keys",

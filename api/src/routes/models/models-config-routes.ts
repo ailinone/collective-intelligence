@@ -18,6 +18,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -35,6 +37,8 @@ export async function registerModelsConfigRoutes(server: FastifyInstance): Promi
     {
       preHandler: [
         authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
         requireRole('admin', 'developer', 'owner'),
         async (request, reply) => {
           // Ensure requireRole has been checked - if reply was sent, stop here

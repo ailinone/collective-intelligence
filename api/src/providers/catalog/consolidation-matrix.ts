@@ -1787,6 +1787,13 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'deepgram', // /v1/models lists STT engines, not LLM ontology
     'elevenlabs', // /v1/voices, not /v1/models — TTS specialty
     'palabraai', // session-based real-time translation, no model ontology
+    // First-party virtual alias surface (ailin-auto, ailin-best, …) exposed
+    // on /v1/models. Code-defined presets resolved server-side at request
+    // time — not discovered inventory, so the discovery contract doesn't
+    // apply. Classified here (not 'unclassified') so alias rows don't read
+    // as a compliance gap. ('ailin-virtual', not 'ailin', because plain
+    // 'ailin' is a real discovered hub provider — see compliant bucket.)
+    'ailin-virtual',
     // 'topaz' moved to pinnedFallback-by-design (2026-06-11): the
     // runnable-gap pass gave it a curated pinnedFallback inventory
     // (reason: 'no-list-endpoint'), which is exactly that bucket's

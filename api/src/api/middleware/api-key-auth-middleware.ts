@@ -110,7 +110,15 @@ export const PUBLIC_ROUTES = [
   '/v1/internal', // matches /v1/internal and /v1/internal/*
 ] as const;
 
-const PROTECTED_ROUTE_PREFIXES = ['/v1', '/console/api', '/internal'] as const;
+/**
+ * Every path under these prefixes that is not in `PUBLIC_ROUTES` is
+ * authenticated by this GLOBAL hook — which is also what populates
+ * `request.apiKey` for routes that carry no `authenticate` preHandler of their
+ * own. Exported so the dedicated-key scope-guard coverage test can reason about
+ * exactly which route files an M2M API key can reach (see
+ * `src/tests/security/dedicated-key-scope-guard-coverage.test.ts`).
+ */
+export const PROTECTED_ROUTE_PREFIXES = ['/v1', '/console/api', '/internal'] as const;
 
 /**
  * Extended request with authenticated user context
@@ -410,6 +418,180 @@ async function validateJwtAndGetUser(
 }
 
 /** IP whitelist check — always run against the CURRENT request's IP, cache hit or not. */
+/**
+ * Number of proxy hops between the public internet and this service that are
+ * OURS and therefore trusted to have appended (not fabricated) an X-Forwarded-For
+ * entry: nginx (public edge) -> WAF (ModSecurity) -> ci-api. Both hops use nginx's
+ * `$proxy_add_x_forwarded_for` (append-only, never replaces a client-supplied
+ * value) — see gateway/nginx/conf.d/security/proxy-common.conf and
+ * gateway/waf/waf.conf. That means the LEFTMOST entry in X-Forwarded-For is
+ * whatever the ORIGINAL caller declared, unverified — trusting index [0]
+ * (the prior behavior here) let any caller spoof `ipWhitelist` on ANY API key
+ * by simply sending their own `X-Forwarded-For: <whitelisted-ip>` header.
+ */
+const TRUSTED_PROXY_HOP_COUNT = 2;
+
+/**
+ * Cloudflare's published edge IP ranges (https://www.cloudflare.com/ips-v4,
+ * ips-v6 — fetched directly from that endpoint when this was written; verify
+ * against the live list periodically, Cloudflare occasionally adds ranges).
+ * Used ONLY to decide whether the entity that connected directly to nginx
+ * (the hop immediately in front of this whole chain) was really Cloudflare's
+ * edge — see `isRequestFromCloudflareEdge` for why this check exists at all.
+ */
+const CLOUDFLARE_CIDRS = [
+  '173.245.48.0/20',
+  '103.21.244.0/22',
+  '103.22.200.0/22',
+  '103.31.4.0/22',
+  '141.101.64.0/18',
+  '108.162.192.0/18',
+  '190.93.240.0/20',
+  '188.114.96.0/20',
+  '197.234.240.0/22',
+  '198.41.128.0/17',
+  '162.158.0.0/15',
+  '104.16.0.0/13',
+  '104.24.0.0/14',
+  '172.64.0.0/13',
+  '131.0.72.0/22',
+  '2400:cb00::/32',
+  '2606:4700::/32',
+  '2803:f800::/32',
+  '2405:b500::/32',
+  '2405:8100::/32',
+  '2a06:98c0::/29',
+  '2c0f:f248::/32',
+];
+
+function ipv4ToInt(ip: string): number | null {
+  const octets = ip.split('.');
+  if (octets.length !== 4) return null;
+  let result = 0;
+  for (const octet of octets) {
+    const n = Number(octet);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    result = (result << 8) | n;
+  }
+  return result >>> 0;
+}
+
+function isIpv4InCidr(ip: string, cidr: string): boolean {
+  const [range, bitsStr] = cidr.split('/');
+  const bits = Number(bitsStr);
+  const ipInt = ipv4ToInt(ip);
+  const rangeInt = ipv4ToInt(range);
+  if (ipInt === null || rangeInt === null) return false;
+  if (bits === 0) return true;
+  const mask = (0xffffffff << (32 - bits)) >>> 0;
+  return (ipInt & mask) === (rangeInt & mask);
+}
+
+/**
+ * Whether `ip` falls within Cloudflare's published edge ranges. IPv4-only —
+ * every CLOUDFLARE_CIDRS v6 entry is skipped by isIpv4InCidr (no ':' in a v4
+ * address never matches a v6 range's arithmetic), which is fine: this is a
+ * defense-in-depth allowlist check, not the sole gate, and api.ailin.one's
+ * production traffic observed so far has been IPv4.
+ */
+function isCloudflareIp(ip: string): boolean {
+  return CLOUDFLARE_CIDRS.some((cidr) => isIpv4InCidr(ip, cidr));
+}
+
+/**
+ * Whether the entity that connected DIRECTLY to nginx (the outermost of our
+ * two trusted hops) was actually Cloudflare's edge, not some other caller
+ * hitting nginx's origin IP directly (a real, common gap: origin IPs behind
+ * a CDN routinely leak via DNS history / certificate-transparency logs
+ * unless a firewall additionally restricts inbound to Cloudflare's ranges —
+ * that firewall rule isn't verifiable from this codebase). Answers this by
+ * reading the SAME position `resolveTrustedClientIp`'s XFF fallback already
+ * trusts (`TRUSTED_PROXY_HOP_COUNT` from the right — nginx's own,
+ * TCP-level-true `$remote_addr` append, never attacker-suppliable) and
+ * checking whether THAT value is a real Cloudflare IP.
+ */
+function isRequestFromCloudflareEdge(headers: FastifyRequest['headers']): boolean {
+  const forwarded = getHeaderString(headers, 'x-forwarded-for');
+  if (!forwarded) return false;
+  const parts = forwarded
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < TRUSTED_PROXY_HOP_COUNT) return false;
+  return isCloudflareIp(parts[parts.length - TRUSTED_PROXY_HOP_COUNT]);
+}
+
+/**
+ * KNOWN LIMITATION (not closed by this function, documented so it isn't
+ * mistaken for solved): everything below assumes the request's actual
+ * DIRECT TCP peer is nginx or the WAF — it reads X-Forwarded-For/
+ * CF-Connecting-IP but never verifies who's actually connecting to ci-api at
+ * the socket level (Fastify's `trustProxy: true`, api/src/server.ts, trusts
+ * every peer unconditionally, same class of gap this whole fix was written
+ * to close for the header layer). ci-api's `gateway-net` Docker network is
+ * shared with other co-tenant services in this stack (ci-worker,
+ * coord-serving, tei-embedder, etc. — see docker-compose.production.yml).
+ * Any of those, or anything else ever attached to that network, could
+ * connect DIRECTLY to ci-api holding a valid key and supply fabricated
+ * X-Forwarded-For/CF-Connecting-IP values that pass every check here,
+ * bypassing that key's ipWhitelist entirely — a lateral-movement risk (it
+ * requires a foothold inside the internal network already, not an
+ * open-internet attack surface like the bug this function fixes), not
+ * closed by header-layer logic alone. Real fix needs either a network-level
+ * restriction (only nginx/WAF's actual addresses can reach ci-api's port)
+ * or pinning Fastify's own `trustProxy` to nginx/WAF's real peer address
+ * instead of `true` — tracked as a follow-up, not attempted here without
+ * being able to verify the live network topology as rigorously as the
+ * Cloudflare-edge check above was verified.
+ */
+/**
+ * Resolve the client IP ci-api should trust for IP-whitelist enforcement and
+ * audit logging, without trusting a value the caller could have fabricated.
+ *
+ * Preference order:
+ * 1. `CF-Connecting-IP` — but ONLY when `isRequestFromCloudflareEdge` confirms
+ *    nginx's own directly-observed peer for THIS request really was
+ *    Cloudflare. Cloudflare itself never lets a caller spoof this header when
+ *    a request genuinely transits its edge — but nothing stops a caller from
+ *    bypassing Cloudflare entirely and sending a fabricated CF-Connecting-IP
+ *    straight to nginx's origin IP if that's reachable, so the header alone
+ *    is not sufficient to trust; it's only trustworthy once the hop that would
+ *    have carried Cloudflare's real traffic is confirmed to actually be
+ *    Cloudflare.
+ * 2. X-Forwarded-For, read from `TRUSTED_PROXY_HOP_COUNT` positions from the
+ *    RIGHT (not the left) — recovers the IP the first trusted hop (nginx)
+ *    actually observed (TCP-level `$remote_addr`, never attacker-suppliable,
+ *    Cloudflare or not), ignoring any attacker-prepended entries to its left.
+ *    This is the fallback whenever step 1 doesn't apply — including when
+ *    Cloudflare wasn't confirmed, so the same non-spoofable value that
+ *    verification itself relied on is what ends up trusted either way.
+ * 3. X-Real-IP, then Fastify's own `request.ip` (trustProxy: true) — last
+ *    resort fallbacks, unchanged from prior behavior, for requests with
+ *    neither header at all.
+ */
+function resolveTrustedClientIp(headers: FastifyRequest['headers'], socketIp: string): string {
+  const cfConnectingIp = getHeaderString(headers, 'cf-connecting-ip')?.trim();
+  if (cfConnectingIp && isRequestFromCloudflareEdge(headers)) {
+    return cfConnectingIp;
+  }
+
+  const forwarded = getHeaderString(headers, 'x-forwarded-for');
+  if (forwarded) {
+    const parts = forwarded
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length >= TRUSTED_PROXY_HOP_COUNT) {
+      return parts[parts.length - TRUSTED_PROXY_HOP_COUNT];
+    }
+    // Fewer entries than trusted hops (e.g. dev environment missing a hop) —
+    // no verifiably-appended entry exists; fall through rather than trust
+    // an under-populated header at an arbitrary position.
+  }
+
+  return getHeaderString(headers, 'x-real-ip')?.trim() || socketIp || 'unknown';
+}
+
 function checkIpWhitelist(ipWhitelist: string[], clientIp: string, keyId: string): boolean {
   if (!ipWhitelist || ipWhitelist.length === 0) return true;
   if (ipWhitelist.includes(clientIp)) return true;
@@ -818,13 +1000,9 @@ export async function apiKeyAuthMiddleware(
     });
   }
 
-  // Get client IP (respecting X-Forwarded-For for proxies/load balancers)
-  const forwarded = getHeaderString(request.headers, 'x-forwarded-for');
-  const clientIp =
-    forwarded?.split(',')[0]?.trim() ||
-    getHeaderString(request.headers, 'x-real-ip') ||
-    request.ip ||
-    'unknown';
+  // Get client IP — see resolveTrustedClientIp() for why this can't just be
+  // "first X-Forwarded-For entry" (that was spoofable by any caller).
+  const clientIp = resolveTrustedClientIp(request.headers, request.ip);
 
   // Validate API key and get user context
   const authContext = await validateApiKeyAndGetUser(apiKey, clientIp);

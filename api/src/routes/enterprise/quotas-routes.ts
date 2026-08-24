@@ -9,6 +9,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
 import {
   requireTenantContext,
@@ -41,7 +43,12 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
         summary: 'List usage quotas for the organization',
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -78,7 +85,13 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
         },
       },
       // Configuring org quotas is a privileged override operation.
-      preHandler: [authenticate, requireTenantContext(), requirePermission('quotas:override')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('quotas:override'),
+      ],
     },
     async (request, reply) => {
       const tenantContext = getTenantContext(request);
@@ -135,7 +148,12 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -167,7 +185,12 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -194,7 +217,13 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
         },
       },
       // Resetting quota usage is a privileged override operation.
-      preHandler: [authenticate, requireTenantContext(), requirePermission('quotas:override')],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+        requirePermission('quotas:override'),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);
@@ -220,7 +249,12 @@ export async function registerEnterpriseQuotaRoutes(server: FastifyInstance): Pr
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const { organizationId } = getTenantContext(request);

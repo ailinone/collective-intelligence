@@ -54,6 +54,50 @@ describe('detectVideoGenerationIntent', () => {
   });
 });
 
+describe('detectVideoGenerationIntent — in-message image is vision chat, not video (2026-08-19)', () => {
+  const imageMsg = (text: string) =>
+    ({
+      model: 'auto',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+          ],
+        },
+      ],
+    }) as unknown as ChatRequest;
+
+  it('does NOT reroute plain image chat (no video intent) to video generation', () => {
+    expect(detectVideoGenerationIntent(imageMsg('What is in this image?'))).toBeNull();
+  });
+
+  it('does NOT reroute image chat with Portuguese text', () => {
+    expect(detectVideoGenerationIntent(imageMsg('O que há nesta imagem?'))).toBeNull();
+  });
+
+  it('does NOT reroute image chat even with a generation verb but no video keyword', () => {
+    expect(detectVideoGenerationIntent(imageMsg('Create a caption for this image'))).toBeNull();
+  });
+
+  it('DOES treat in-message image as conditioning when prompt asks for video', () => {
+    const intent = detectVideoGenerationIntent(
+      imageMsg('Generate a video animating this image')
+    );
+    expect(intent).not.toBeNull();
+    expect(intent?.image).toBe('data:image/png;base64,AAAA');
+  });
+
+  it('explicit top-level image field still forces video early-path', () => {
+    const intent = detectVideoGenerationIntent(
+      req('anything', { image: 'https://example.com/frame.png' } as Partial<ChatRequest>)
+    );
+    expect(intent).not.toBeNull();
+    expect(intent?.image).toBe('https://example.com/frame.png');
+  });
+});
+
 describe('detectVideoGenerationIntent — discussion/comparison false positives (2026-08-04 audit)', () => {
   it('does NOT trigger on a comparison question naming video-model products', () => {
     // Real audit finding: "sora"/"veo" matched hasVideoKeyword and "create"

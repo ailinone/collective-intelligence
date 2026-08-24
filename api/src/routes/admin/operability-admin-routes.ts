@@ -32,12 +32,19 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'operability-admin-routes' });
 
 export async function registerOperabilityAdminRoutes(server: FastifyInstance): Promise<void> {
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  const adminPreHandler = [
+    authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    requireRole('admin', 'owner'),
+  ];
 
   // ─── GET /v1/admin/operability/health ─────────────────────────────────
   server.get(

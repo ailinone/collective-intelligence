@@ -16,11 +16,15 @@ import { OrchestrationEngine, detectMediaGenerationModality, detectFileGeneratio
 import { toolRegistry } from '@/core/tools/tool-registry';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
+import type { BaseStrategy } from '@/core/orchestration/base-strategy';
 import type {
   ChatRequest,
+  ChatResponse,
   Model,
   ExecutionStrategyName,
   OrchestrationContext,
+  OrchestrationResult,
+  TaskType,
   TriageDecision,
   TriageStage,
 } from '@/types';
@@ -1116,6 +1120,506 @@ describe('OrchestrationEngine', () => {
       expect(callForA?.[2]).toBe('user-A');
       expect(callForB?.[1]).toBe('org-B');
       expect(callForB?.[2]).toBe('user-B');
+    });
+  });
+
+  describe('recoverStrategyThrow (streaming throw-guard recovery, 2026-08-16)', () => {
+    // Private method — accessed via cast, same pattern as applyTriageRoute
+    // above. Shared tail behind BOTH the non-streaming-strategy branch
+    // (inlined at :3105-3113/:3129) and the streaming throw guard
+    // (:3068-3121) — this test exercises it directly so the degraded-
+    // response contract is pinned without needing to drive either whole
+    // pipeline.
+    function callRecoverStrategyThrow(
+      strategy: BaseStrategy,
+      err: unknown,
+      request: ChatRequest,
+      context: OrchestrationContext,
+      requestId: string
+    ): Promise<OrchestrationResult> {
+      return (
+        engine as unknown as {
+          recoverStrategyThrow: (
+            s: BaseStrategy,
+            e: unknown,
+            r: ChatRequest,
+            c: OrchestrationContext,
+            id: string
+          ) => Promise<OrchestrationResult>;
+        }
+      ).recoverStrategyThrow(strategy, err, request, context, requestId);
+    }
+
+    it('degrades to the standard [DEGRADED] placeholder when the strategy threw and no fallback candidate exists', async () => {
+      // Stub strategy — recoverStrategyThrow only ever reads getMetadata()
+      // off it (via buildStrategyThrewResult()).
+      const stubStrategy = {
+        getMetadata: () => ({ id: 'stub', name: 'stub' }),
+      } as unknown as BaseStrategy;
+      const request: ChatRequest = { messages: [{ role: 'user', content: 'oi' }] };
+      // Empty model pool: recoverEmptyFinalResponse()'s dynamic-fallback
+      // loop (getDynamicModelSelectorMock, mocked at the top of this file to
+      // mirror context.models) has nothing to select, so it returns the
+      // still-empty result unchanged and applyDegradedFallback() is what
+      // actually produces the final content below.
+      const context: OrchestrationContext = {
+        models: [],
+        strategy: 'cost-cascade',
+        requestId: 'test-request-recover-throw',
+        userId: 'test-user',
+        organizationId: 'test-org',
+        taskType: 'chat' as TaskType,
+        contextSize: 100,
+      };
+
+      const result = await callRecoverStrategyThrow(
+        stubStrategy,
+        new Error('boom: strategy threw'),
+        request,
+        context,
+        'test-request-recover-throw'
+      );
+
+      expect(result.finalResponse.choices[0]?.message?.content).toBe(
+        '[DEGRADED] All execution attempts failed. No response produced.'
+      );
+      expect(result.metadata?.degraded).toBe(true);
+      expect(result.metadata?.degraded_reason).toBe('empty_response_after_fallback');
+      expect(result.metadata?.strategy_execution_threw).toBe(true);
+      expect(result.metadata?.strategy_execution_error).toBe('boom: strategy threw');
+      expect(result.finalResponse.usage).toEqual({
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      });
+      // Genuinely degraded ⇒ score stays 0 ⇒ recordExecution's quality gate
+      // correctly REJECTS it, so a non-answer never reaches episodic memory.
+      // Same rule as cost-cascade's own allCandidatesFailed sentinel.
+      expect(result.qualityScore).toBe(0);
+    });
+
+    /**
+     * Four-model pool so an UNCAPPED recovery loop would visibly try 4
+     * candidates. Every adapter fails, so the loop runs to whatever bound it
+     * actually has — which is exactly what these tests measure.
+     */
+    function fourModelContext(): OrchestrationContext {
+      const pool: Model[] = [0, 1, 2, 3].map((i) => ({
+        ...mockModels[0],
+        id: `recovery-candidate-${i}`,
+        name: `recovery-candidate-${i}`,
+        performance: { latencyMs: 100, throughput: 10, quality: 0.9 - i * 0.1, reliability: 0.9 },
+      }));
+      return {
+        models: pool,
+        strategy: 'cost-cascade',
+        requestId: 'test-request-recovery-cap',
+        userId: 'test-user',
+        organizationId: 'test-org',
+        taskType: 'chat' as TaskType,
+        contextSize: 100,
+      };
+    }
+
+    const stubStrategy = (): BaseStrategy =>
+      ({ getMetadata: () => ({ id: 'stub', name: 'stub' }) }) as unknown as BaseStrategy;
+
+    it('caps the streaming throw-recovery path at 2 candidates instead of 4 (worst-case SSE silence)', async () => {
+      // F3: this path runs inside the streaming catch block with the
+      // narration interleaver already dead, so every candidate attempt is
+      // client-visible SILENCE. 4 x COLLECTIVE_MODEL_TIMEOUT_MS (25s) was up
+      // to ~100s of it, under STREAM_REQUEST_DEADLINE_MS (180s) so nothing
+      // cut it short.
+      const context = fourModelContext();
+      const attempted: string[] = [];
+      mockRegistry.findModel = vi.fn(async (modelId: string) => ({
+        model: context.models.find((m) => m.id === modelId)!,
+        adapter: {
+          ...mockAdapter,
+          getName: () => 'openai',
+          calculateCost: () => 0,
+          chatCompletion: vi.fn(async (req: ChatRequest) => {
+            attempted.push(String(req.model));
+            throw new Error('candidate unavailable');
+          }),
+        } as unknown as ProviderAdapter,
+      }));
+
+      const selectModelsSpy = getDynamicModelSelectorMock.mock.results[0]?.value?.selectModels;
+
+      const result = await callRecoverStrategyThrow(
+        stubStrategy(),
+        new Error('cost-cascade requires at least 2 models'),
+        { messages: [{ role: 'user', content: 'oi' }] },
+        context,
+        'test-request-recovery-cap'
+      );
+
+      // EXACTLY 2 provider round-trips (all 4 candidates fail, so an
+      // uncapped loop would visibly make 4). Pinned as an equality, not a
+      // <=, so a future change that silently drops recovery to a single
+      // attempt — or restores 4 — fails here instead of passing quietly.
+      expect(attempted.length).toBe(2);
+      // ...and the cap is applied to SELECTION too, so we never pay to rank
+      // candidates we already decided not to try.
+      const selector =
+        getDynamicModelSelectorMock.mock.results.at(-1)?.value?.selectModels ?? selectModelsSpy;
+      expect(selector).toBeDefined();
+      const maxModelsArg = selector.mock.calls.at(-1)?.[3];
+      expect(maxModelsArg).toBe(2);
+
+      // Every candidate failed ⇒ still the standard degraded contract.
+      expect(result.metadata?.degraded).toBe(true);
+      expect(result.qualityScore).toBe(0);
+    });
+
+    it('gives a genuinely recovered answer a real qualityScore so recordExecution can actually fire', async () => {
+      // F4: buildStrategyThrewResult sets qualityScore 0 and nothing on the
+      // recovery path used to touch it, so recordExecution's internal
+      // `quality >= 0.7` gate rejected EVERY recovery — even a real answer
+      // from a working fallback provider was silently never recorded, while
+      // the call site read as though it was.
+      const context = fourModelContext();
+      const recoveredText =
+        '# Answer\n\n' +
+        'Here is a complete, well-structured response that covers the question end to end.\n\n' +
+        '1. First, the context: the request asks for a greeting, so we respond directly and clearly.\n' +
+        '2. Second, the detail: a good answer explains what it is doing and why, without padding.\n' +
+        '3. Third, an example, because concrete illustrations beat abstract description:\n\n' +
+        '```ts\nconst greet = (name: string): string => `Hello, ${name}!`;\nconsole.log(greet("world"));\n```\n\n' +
+        'In summary, the response above is specific, structured, illustrated with a worked example, ' +
+        'and long enough to clear the heuristic scorer thresholds that gate what is worth remembering.\n';
+
+      mockRegistry.findModel = vi.fn(async (modelId: string) => ({
+        model: context.models.find((m) => m.id === modelId)!,
+        adapter: {
+          ...mockAdapter,
+          getName: () => 'openai',
+          calculateCost: () => 0.0001,
+          chatCompletion: vi.fn(async () => ({
+            id: 'recovered-1',
+            object: 'chat.completion' as const,
+            created: Math.floor(Date.now() / 1000),
+            model: 'recovery-candidate-0',
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant' as const, content: recoveredText },
+                finish_reason: 'stop' as const,
+                logprobs: null,
+              },
+            ],
+            usage: { prompt_tokens: 5, completion_tokens: 40, total_tokens: 45 },
+          })),
+        } as unknown as ProviderAdapter,
+      }));
+
+      const result = await callRecoverStrategyThrow(
+        stubStrategy(),
+        new Error('cost-cascade requires at least 2 models'),
+        { messages: [{ role: 'user', content: 'oi' }] },
+        context,
+        'test-request-recovery-quality'
+      );
+
+      expect(result.finalResponse.choices[0]?.message?.content).toBe(recoveredText);
+      expect(result.metadata?.degraded).toBeUndefined();
+      expect(result.metadata?.empty_response_recovered).toBe(true);
+      expect(result.metadata?.empty_response_recovery_source).toBe('dynamic_fallback');
+      // The whole point: no longer the constant 0 that made recordExecution
+      // dead code on this path. Pinned against recordExecution's OWN gate
+      // (base-strategy.ts: `quality < 0.7 -> return`), because "non-zero" is
+      // not enough — the score has to actually be able to CLEAR that gate for
+      // a genuinely good recovered answer, or the fix would still be dead
+      // code with nicer numbers. (Measured 0.807 for the answer above; a
+      // short/thin answer scores ~0.63 and stays correctly unrecorded.)
+      expect(result.qualityScore).toBeGreaterThanOrEqual(0.7);
+      // modelsUsed[0].request must carry the user's messages, or the memory
+      // row's "Q:" line comes out empty even when the gate does pass.
+      expect(result.modelsUsed[0]?.request?.messages?.[0]?.content).toBe('oi');
+    });
+  });
+
+  describe('emitRecoveryHeartbeat (streaming recovery liveness, 2026-08-16)', () => {
+    // F3(b): recovery runs from inside the streaming catch block, where
+    // interleaveNarration has already terminated — without this the SSE
+    // connection is completely silent for the whole recovery window.
+    async function* callEmitRecoveryHeartbeat(
+      pending: Promise<unknown>
+    ): AsyncGenerator<ChatResponse, void, unknown> {
+      yield* (
+        engine as unknown as {
+          emitRecoveryHeartbeat: (
+            p: Promise<unknown>,
+            requestId: string
+          ) => AsyncGenerator<ChatResponse, void, unknown>;
+        }
+      ).emitRecoveryHeartbeat(pending, 'test-request-heartbeat');
+    }
+
+    it('emits zero-token progress chunks while recovery is in flight, then stops when it settles', async () => {
+      process.env.STREAM_RECOVERY_HEARTBEAT_MS = '20';
+      try {
+        const pending = new Promise((resolve) => setTimeout(resolve, 120));
+        const chunks: ChatResponse[] = [];
+        for await (const chunk of callEmitRecoveryHeartbeat(pending)) {
+          chunks.push(chunk);
+        }
+
+        expect(chunks.length).toBeGreaterThan(0);
+        for (const chunk of chunks) {
+          // Off-channel: empty delta.content, so a naive OpenAI-compatible
+          // client that concatenates deltas sees nothing extra.
+          expect(chunk.choices[0]?.delta?.content).toBe('');
+          expect((chunk.ailin_metadata as { type?: string })?.type).toBe('progress');
+        }
+        // The generator terminated on its own once `pending` settled — the
+        // for-await completing at all is the assertion.
+      } finally {
+        delete process.env.STREAM_RECOVERY_HEARTBEAT_MS;
+      }
+    });
+
+    it('emits nothing when recovery settles immediately', async () => {
+      process.env.STREAM_RECOVERY_HEARTBEAT_MS = '5000';
+      try {
+        const chunks: ChatResponse[] = [];
+        for await (const chunk of callEmitRecoveryHeartbeat(Promise.resolve())) {
+          chunks.push(chunk);
+        }
+        expect(chunks).toEqual([]);
+      } finally {
+        delete process.env.STREAM_RECOVERY_HEARTBEAT_MS;
+      }
+    });
+
+    it('is disabled entirely when the interval is set to 0', async () => {
+      process.env.STREAM_RECOVERY_HEARTBEAT_MS = '0';
+      try {
+        const chunks: ChatResponse[] = [];
+        for await (const chunk of callEmitRecoveryHeartbeat(
+          new Promise((resolve) => setTimeout(resolve, 50))
+        )) {
+          chunks.push(chunk);
+        }
+        expect(chunks).toEqual([]);
+      } finally {
+        delete process.env.STREAM_RECOVERY_HEARTBEAT_MS;
+      }
+    });
+  });
+
+  describe('withStreamRecoveryMetadata (degraded markers on the wire, 2026-08-16)', () => {
+    // F2: the streaming path never runs chat-request-processor's
+    // OrchestrationResult → AilinMetadata projection, so before this the
+    // degraded markers died in-process and a total outage was
+    // byte-indistinguishable from a healthy 200 to every client and proxy.
+    function callWithStreamRecoveryMetadata(
+      recovered: OrchestrationResult,
+      err: unknown
+    ): ChatResponse {
+      return (
+        engine as unknown as {
+          withStreamRecoveryMetadata: (r: OrchestrationResult, e: unknown) => ChatResponse;
+        }
+      ).withStreamRecoveryMetadata(recovered, err);
+    }
+
+    const baseResult = (
+      metadata: Record<string, unknown>,
+      modelName?: string
+    ): OrchestrationResult =>
+      ({
+        strategyUsed: 'cost-cascade' as ExecutionStrategyName,
+        modelsUsed: modelName
+          ? [
+              {
+                modelId: modelName,
+                modelName,
+                role: 'secondary',
+                request: { messages: [] },
+                response: { choices: [] },
+                cost: 0,
+                durationMs: 0,
+                success: true,
+              },
+            ]
+          : [],
+        finalResponse: {
+          id: 'r-1',
+          object: 'chat.completion',
+          created: 0,
+          model: 'auto',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'answer' },
+              finish_reason: 'stop',
+              logprobs: null,
+            },
+          ],
+        },
+        totalCost: 0,
+        totalDuration: 0,
+        qualityScore: 0,
+        metadata,
+      }) as unknown as OrchestrationResult;
+
+    it('marks a degraded recovery on the chunk itself', () => {
+      const chunk = callWithStreamRecoveryMetadata(
+        baseResult({
+          degraded: true,
+          degraded_reason: 'empty_response_after_fallback',
+          strategy_execution_error: 'cost-cascade requires at least 2 models',
+        }),
+        new Error('cost-cascade requires at least 2 models')
+      );
+
+      const meta = chunk.ailin_metadata as Record<string, unknown>;
+      expect(meta.stream_recovery).toBe(true);
+      expect(meta.degraded).toBe(true);
+      expect(meta.degraded_reason).toBe('empty_response_after_fallback');
+      expect(meta.strategy_execution_error).toBe('cost-cascade requires at least 2 models');
+      expect(meta.stream_recovery_source).toBeUndefined();
+      // Additive only — the OpenAI-compatible payload is untouched.
+      expect(chunk.choices[0]?.message?.content).toBe('answer');
+    });
+
+    it('emits the COMPLETION metadata shape (no `type`), or the answer is dropped and branding is bypassed', () => {
+      // Two independent consumers key off `'type' in ailin_metadata`:
+      //  - responses-routes.ts treats a type-carrying chunk as metadata-only
+      //    and reads text from delta.content alone, so a `type` here would
+      //    silently DROP this recovered answer (it arrives as message.content);
+      //  - applyBranding() only redacts the type-less completion variant, so a
+      //    `type` here would leak the fallback model name past AILIN_HIDE_MODELS.
+      const chunk = callWithStreamRecoveryMetadata(
+        baseResult({ empty_response_recovery_source: 'dynamic_fallback' }, 'gpt-4o'),
+        new Error('boom')
+      );
+      expect(chunk.ailin_metadata).toBeDefined();
+      expect('type' in (chunk.ailin_metadata as object)).toBe(false);
+      // The recovered model rides the standard, branding-redacted fields —
+      // not a bespoke key applyMetadataBranding() has never heard of.
+      const meta = chunk.ailin_metadata as Record<string, unknown>;
+      expect(meta.models_used).toEqual(['gpt-4o']);
+      expect(meta.resolved_model).toBe('gpt-4o');
+    });
+
+    it('marks a successful (non-degraded) recovery with its source and model', () => {
+      const chunk = callWithStreamRecoveryMetadata(
+        baseResult(
+          {
+            strategy_execution_error: 'boom',
+            empty_response_recovered: true,
+            empty_response_recovery_source: 'dynamic_fallback',
+            empty_response_recovery_model: 'gpt-4o',
+          },
+          'gpt-4o'
+        ),
+        new Error('boom')
+      );
+
+      const meta = chunk.ailin_metadata as Record<string, unknown>;
+      expect(meta.stream_recovery).toBe(true);
+      expect(meta.degraded).toBe(false);
+      expect(meta.stream_recovery_source).toBe('dynamic_fallback');
+      expect(meta.models_used).toEqual(['gpt-4o']);
+      expect(meta.model_count).toBe(1);
+      expect(meta.strategy_used).toBe('cost-cascade');
+    });
+
+    it('falls back to the raw throw when the result carries no strategy_execution_error', () => {
+      const chunk = callWithStreamRecoveryMetadata(baseResult({}), new Error('raw throw text'));
+      expect(
+        (chunk.ailin_metadata as { strategy_execution_error?: string }).strategy_execution_error
+      ).toBe('raw throw text');
+    });
+  });
+
+  describe('chunkCarriesAnswerContent (streaming throw-guard content gate, 2026-08-16)', () => {
+    // Private method — accessed via cast, same pattern as applyTriageRoute
+    // above. Gates the streaming throw guard: a throw is only recovered
+    // (rather than propagated) while this returns false for every chunk
+    // emitted so far.
+    function callChunkCarriesAnswerContent(chunk: ChatResponse): boolean {
+      return (
+        engine as unknown as {
+          chunkCarriesAnswerContent: (c: ChatResponse) => boolean;
+        }
+      ).chunkCarriesAnswerContent(chunk);
+    }
+
+    const baseChunk = (overrides: Partial<ChatResponse>): ChatResponse => ({
+      id: 'chunk-1',
+      object: 'chat.completion.chunk',
+      created: Math.floor(Date.now() / 1000),
+      model: 'test-model',
+      choices: [{ index: 0, delta: {}, finish_reason: null, logprobs: null }],
+      ...overrides,
+    });
+
+    it('is false for progress/observer/observer_inline metadata chunks, even with non-empty delta.content', () => {
+      const metaVariants: ChatResponse['ailin_metadata'][] = [
+        { type: 'progress', message: 'working', step: 1, total: 3 },
+        { type: 'observer', event: 'test-event', narration: 'narrating…' },
+        { type: 'observer_inline', event: 'test-event', narration: 'narrating…' },
+      ];
+
+      for (const ailin_metadata of metaVariants) {
+        const chunk = baseChunk({
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'some narration text' },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+          ailin_metadata,
+        });
+        expect(callChunkCarriesAnswerContent(chunk)).toBe(false);
+      }
+    });
+
+    it('is false for empty, whitespace-only, or absent delta content', () => {
+      expect(
+        callChunkCarriesAnswerContent(
+          baseChunk({
+            choices: [{ index: 0, delta: { content: '' }, finish_reason: null, logprobs: null }],
+          })
+        )
+      ).toBe(false);
+      expect(
+        callChunkCarriesAnswerContent(
+          baseChunk({
+            choices: [{ index: 0, delta: { content: '   ' }, finish_reason: null, logprobs: null }],
+          })
+        )
+      ).toBe(false);
+      expect(callChunkCarriesAnswerContent(baseChunk({}))).toBe(false);
+    });
+
+    it('is true for a real streaming delta.content chunk', () => {
+      const chunk = baseChunk({
+        choices: [
+          { index: 0, delta: { role: 'assistant', content: 'Hello' }, finish_reason: null, logprobs: null },
+        ],
+      });
+      expect(callChunkCarriesAnswerContent(chunk)).toBe(true);
+    });
+
+    it('is true for a buffered message.content chunk (elevated-quality-target / non-streaming path)', () => {
+      const chunk = baseChunk({
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'Buffered answer' },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+      });
+      expect(callChunkCarriesAnswerContent(chunk)).toBe(true);
     });
   });
 });

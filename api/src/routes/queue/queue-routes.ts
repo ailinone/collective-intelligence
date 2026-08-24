@@ -9,6 +9,8 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -82,7 +84,12 @@ export async function registerQueueRoutes(server: FastifyInstance): Promise<void
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext({ requireUser: false })],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext({ requireUser: false }),
+      ],
     },
     async (request: FastifyRequest<{ Params: QueueStatusParams }>, reply: FastifyReply) => {
       const queueId = request.params.id;
@@ -167,7 +174,12 @@ export async function registerQueueRoutes(server: FastifyInstance): Promise<void
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext({ requireUser: false })],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext({ requireUser: false }),
+      ],
     },
     async (request: FastifyRequest<{ Params: QueueStatusParams }>, reply: FastifyReply) => {
       const queueId = request.params.id;

@@ -23,6 +23,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { VectorStoresService } from '@/services/vector-stores-service';
 import type { RequestUserContext } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -218,7 +220,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Body: Omit<CreateVectorStoreRequest, 'userContext' | 'requestId'>;
@@ -419,7 +425,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Querystring: {
@@ -599,7 +609,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { vector_store_id: string } }>,
       reply: FastifyReply
@@ -753,7 +767,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { vector_store_id: string };
@@ -877,7 +895,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { vector_store_id: string } }>,
       reply: FastifyReply
@@ -1017,7 +1039,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { vector_store_id: string }; Body: { file_id: string } }>,
       reply: FastifyReply
@@ -1182,7 +1208,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { vector_store_id: string };
@@ -1368,7 +1398,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { vector_store_id: string };
@@ -1521,7 +1555,11 @@ export async function registerVectorStoresRoutes(server: FastifyInstance): Promi
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { vector_store_id: string; file_id: string } }>,
       reply: FastifyReply

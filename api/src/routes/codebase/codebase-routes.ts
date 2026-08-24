@@ -9,6 +9,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import {
   requireTenantContext,
   getTenantContext,
@@ -92,7 +94,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {
@@ -140,7 +147,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {
@@ -252,7 +264,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {
@@ -327,7 +344,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {
@@ -387,7 +409,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {
@@ -442,7 +469,12 @@ export async function registerCodebaseRoutes(server: FastifyInstance): Promise<v
           },
         },
       },
-      preHandler: [authenticate, requireTenantContext()],
+      preHandler: [
+        authenticate,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       try {

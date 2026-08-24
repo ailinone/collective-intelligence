@@ -186,7 +186,10 @@ export class AnthropicAdapter extends ProviderAdapter {
   /**
    * Chat completion (non-streaming)
    */
-  async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
+  async chatCompletion(
+    request: ChatRequest,
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse> {
     const startTime = Date.now();
 
     try {
@@ -217,10 +220,11 @@ export class AnthropicAdapter extends ProviderAdapter {
           if (request.tools && request.tools.length > 0) {
             params.tools = this.convertTools(request.tools);
           }
-          return await this.getRequestClient().messages.create(params);
+          return await this.getRequestClient().messages.create(params, { signal: options?.signal });
         },
         'chat completion',
-        this.estimateTokenCost(request)
+        this.estimateTokenCost(request),
+        options?.signal
       );
 
       const duration = Date.now() - startTime;

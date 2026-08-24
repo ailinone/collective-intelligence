@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { BatchService } from '@/services/batch-service';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
@@ -272,7 +273,11 @@ export async function registerBatchesRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest<{ Body: BatchCreateRequest }>, reply: FastifyReply) => {
       const requestId = request.id;
       const extendedRequest = request as ExtendedFastifyRequest;
@@ -514,7 +519,11 @@ export async function registerBatchesRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { batch_id: string } }>,
       reply: FastifyReply
@@ -647,7 +656,11 @@ export async function registerBatchesRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { batch_id: string } }>,
       reply: FastifyReply
@@ -819,7 +832,11 @@ export async function registerBatchesRoutes(server: FastifyInstance): Promise<vo
         },
       },
     },
-    preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Querystring: { limit?: number; after?: string } }>,
       reply: FastifyReply

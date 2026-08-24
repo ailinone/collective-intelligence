@@ -338,8 +338,17 @@ export abstract class ProviderAdapter {
   /**
    * Chat completion (non-streaming)
    * Note: Actual implementations should call this.executeThroughBulkhead()
+   *
+   * @param options.signal Optional cancellation signal. When aborted, an
+   * implementation SHOULD abort its underlying HTTP request rather than let
+   * it run to completion in the background — a caller that aborted has
+   * already given up on the result. Adapters that haven't been wired for
+   * cancellation yet may safely ignore this (existing callers omit it).
    */
-  abstract chatCompletion(request: ChatRequest): Promise<ChatResponse>;
+  abstract chatCompletion(
+    request: ChatRequest,
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse>;
 
   /**
    * Execute operation through full resilience stack (v5.0 - INTEGRATED)
@@ -675,7 +684,8 @@ export abstract class ProviderAdapter {
   protected async withRetry<T>(
     operation: () => Promise<T>,
     operationName: string,
-    estimatedTokens?: number
+    estimatedTokens?: number,
+    signal?: AbortSignal
   ): Promise<T> {
     return this.executeThroughBulkhead(
       async () => {
@@ -683,10 +693,39 @@ export abstract class ProviderAdapter {
         let lastError: Error | undefined;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          // Re-check right before firing the next attempt: abort can land
+          // while we're asleep in the backoff below (routine — the
+          // collective per-call timeout commonly lands a retry's backoff
+          // sleep across the abort boundary), and without this the loop
+          // wakes up and fires one more HTTP call anyway — sometimes fully
+          // uncancelled, for endpoints that don't forward `signal` (e.g.
+          // OpenAI's responses/images/embeddings/audio).
+          //
+          // Must throw a genuine AbortError here, not lastError as-is:
+          // lastError is whatever real error failed on the previous attempt
+          // (e.g. ECONNRESET, HTTP 500) and its .name is never 'AbortError',
+          // so base-strategy.ts's wasDeliberatelyCancelled check (error.name
+          // === 'AbortError' && signal?.aborted) would misclassify this
+          // deliberate cancellation as a genuine provider failure and poison
+          // provider health / trip the near-zero-skip logic. Synthesize the
+          // same DOMException('AbortError') shape a real aborted fetch/SDK
+          // call would throw, preserving the original failure's message for
+          // debuggability.
+          if (signal?.aborted) {
+            throw new DOMException(lastError?.message ?? 'Aborted', 'AbortError');
+          }
+
           try {
             return await operation();
           } catch (error) {
             lastError = error as Error;
+
+            // Deliberate cancellation — retrying just re-issues a call the
+            // caller already gave up on; rethrow immediately, preserving
+            // AbortError so callers can tell this apart from a real failure.
+            if (signal?.aborted) {
+              throw error;
+            }
 
             // Don't retry on client errors (4xx)
             if (this.isClientError(error)) {
@@ -700,6 +739,9 @@ export abstract class ProviderAdapter {
 
             // Exponential backoff
             const delay = this.config.retryDelay! * Math.pow(2, attempt);
+            if (signal?.aborted) {
+              throw lastError; // don't sleep through backoff either
+            }
             await this.sleep(delay);
           }
         }

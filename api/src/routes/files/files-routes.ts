@@ -26,6 +26,8 @@ import { z } from 'zod';
 import * as crypto from 'crypto';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { FilesService } from '@/services/files-service';
 import type { RequestUserContext } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
@@ -247,7 +249,11 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const requestId = request.id;
       const userContext = getUserContext(request);
@@ -493,7 +499,11 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Querystring: { purpose?: string; limit?: number; after?: string; before?: string };
@@ -644,7 +654,11 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { file_id: string } }>,
       reply: FastifyReply
@@ -785,7 +799,11 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { file_id: string } }>,
       reply: FastifyReply
@@ -918,7 +936,11 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { file_id: string } }>,
       reply: FastifyReply

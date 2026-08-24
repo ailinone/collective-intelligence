@@ -528,7 +528,10 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     return {};
   }
 
-  async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
+  async chatCompletion(
+    request: ChatRequest,
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse> {
     const path = this.metadata.chatCompletionsPath || '/chat/completions';
 
     if (request.model && request.model.trim().length > 0) {
@@ -536,6 +539,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       const response = await this.sendJsonRequestWithRetry({
         path,
         operation: 'chat completion',
+        signal: options?.signal,
         payload: {
           model: normalizedModel,
           messages: request.messages,
@@ -592,6 +596,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         const response = await this.sendJsonRequestWithRetry({
           path,
           operation: 'chat completion',
+          signal: options?.signal,
           payload: {
             model: candidate,
             messages: request.messages,
@@ -1971,6 +1976,8 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
      * videoGenerate, incident 2026-07-17).
      */
     maxRetriesOverride?: number;
+    /** Optional cancellation signal — propagated straight to fetch(). */
+    signal?: AbortSignal;
   }): Promise<Response> {
     // Route the whole retry sequence through the resilience stack
     // (bulkhead → circuit breaker → adaptive timeout). Wrapping the entire
@@ -1990,6 +1997,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     operation: string;
     payload: Record<string, unknown>;
     maxRetriesOverride?: number;
+    signal?: AbortSignal;
   }): Promise<Response> {
     const maxRetries = Math.max(0, options.maxRetriesOverride ?? this.config.maxRetries ?? 3);
     const baseDelayMs = Math.max(250, this.config.retryDelay ?? 1000);
@@ -2001,6 +2009,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
           method: 'POST',
           headers: this.buildRequestHeaders(true),
           body: JSON.stringify(options.payload),
+          signal: options.signal,
         });
 
         if (response.ok) {
@@ -2042,6 +2051,16 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         attempt += 1;
       } catch (error) {
         if (error instanceof Error && (error as Error & { terminal?: boolean }).terminal === true) {
+          throw error;
+        }
+
+        // A deliberate cancellation (caller's signal fired) is not a transient
+        // provider failure — retrying just re-issues a request the caller has
+        // already given up on. Rethrow as-is (preserving error.name ===
+        // 'AbortError') so the caller can tell "we cancelled this" apart from
+        // "the provider failed", instead of wrapping it into a generic Error
+        // below, which would strip that distinction.
+        if (options.signal?.aborted) {
           throw error;
         }
 

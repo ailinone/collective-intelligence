@@ -21,6 +21,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
 import { detectDrift, getOpenDriftEvents } from '@/core/evaluation/drift-detection';
 import { validateAllStrategies } from '@/core/evaluation/learning-validation';
@@ -33,7 +35,12 @@ import { runEvaluationPipeline } from '@/jobs/evaluation-cron-job';
 const log = logger.child({ component: 'evaluation-admin' });
 
 export async function registerEvaluationAdminRoutes(server: FastifyInstance): Promise<void> {
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  const adminPreHandler = [
+    authenticate,
+    rejectAnonymousGuestKeyPreHandler,
+    rejectChatFreeTierKeyPreHandler,
+    requireRole('admin', 'owner'),
+  ];
 
   // ═══════════════════════════════════════════════════════════════════════════
   // GET /v1/admin/evaluation/drift — Open drift events

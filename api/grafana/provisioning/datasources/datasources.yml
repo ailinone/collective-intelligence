@@ -35,7 +35,7 @@ datasources:
     type: prometheus
     uid: ${DS_PROMETHEUS}
     access: proxy
-    url: http://ci-prometheus:9090
+    url: http://prometheus:9090
     isDefault: true
     editable: false
     jsonData:

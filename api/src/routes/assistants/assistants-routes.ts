@@ -23,6 +23,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requireTenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import { AssistantsService } from '@/services/assistants-service';
 import type { RequestUserContext } from '@/types';
@@ -276,7 +278,12 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: [authenticateRequest, requireTenantContext()],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+      requireTenantContext(),
+    ],
     handler: async (
       request: FastifyRequest<{ Body: Omit<CreateAssistantRequest, 'userContext' | 'requestId'> }>,
       reply: FastifyReply
@@ -443,7 +450,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { assistant_id: string } }>,
       reply: FastifyReply
@@ -688,7 +699,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { assistant_id: string };
@@ -809,7 +824,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { assistant_id: string } }>,
       reply: FastifyReply
@@ -948,7 +967,12 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: [authenticateRequest, requireTenantContext()],
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+      requireTenantContext(),
+    ],
     handler: async (
       request: FastifyRequest<{
         Querystring: {
@@ -1098,7 +1122,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { assistant_id: string }; Body: { file_id: string } }>,
       reply: FastifyReply
@@ -1258,7 +1286,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{
         Params: { assistant_id: string };
@@ -1401,7 +1433,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>,
       reply: FastifyReply
@@ -1521,7 +1557,11 @@ export async function registerAssistantsRoutes(server: FastifyInstance): Promise
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (
       request: FastifyRequest<{ Params: { assistant_id: string; file_id: string } }>,
       reply: FastifyReply

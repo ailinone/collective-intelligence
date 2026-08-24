@@ -28,16 +28,23 @@ import {
   type ModelOperationEndpoint,
 } from '@/services/model-capability-inference';
 import { Readable } from 'node:stream';
+import { getAilinVirtualModelProfiles } from '@/services/ailin-virtual-model-service';
 // Serialization + pagination core. Extracted into a dependency-light module so
 // the row-shaping and pagination logic is unit-testable without the heavy
 // provider-registry/DB import chain. See models-list-serialization.ts for the
 // 2026-06-10 OOM background that motivated bounded-by-default responses.
 import {
+  AILIN_VIRTUAL_DISCOVERY_SOURCE,
+  buildAilinAliasEntry,
   buildModelDto,
+  buildModelsFacets,
   entrySupportsEndpoint,
+  filterRankedEntries,
   getModelMetadata,
+  hasModelsListFilters,
   resolveModelsPage,
   streamModelsResponse,
+  type ModelsListFilters,
   type RankedEntry,
 } from './models-list-serialization';
 
@@ -92,6 +99,14 @@ type ModelsListQuery = {
   // ignored and the entire scoped+filtered result set is streamed as a JSON
   // array (memory-bounded). Default false → bounded page.
   all?: boolean;
+  // Server-side search/filter params (2026-08). All optional, case-insensitive,
+  // applied in-memory over the cached ranked list BEFORE pagination, so they
+  // compose with limit/offset/all. When none is present the behavior is
+  // byte-identical to the pre-search endpoint.
+  search?: string;
+  provider?: string;
+  capability?: string;
+  modality?: string;
 };
 
 let runtimeSignalsCache: {
@@ -289,6 +304,25 @@ const MODELS_LIST_QUERYSTRING_SCHEMA = {
       description:
         'Opt-in to the FULL inventory, streamed as a JSON array so peak memory stays bounded regardless of catalog size. Ignores limit/offset. Default false → bounded page. Prefer paging via limit/offset; only set all=true when you genuinely need every row.',
     },
+    search: {
+      type: 'string',
+      description:
+        'Case-insensitive server-side search over id/name/displayName. Whitespace-separated tokens are combined with AND; each token matches by substring (which covers id prefixes). Example: ?search=qwen3 next. When present, the response also includes a `facets` object with provider/capability counts over the filtered result.',
+    },
+    provider: {
+      type: 'string',
+      description:
+        'Exact (case-insensitive) provider filter — matches the row `provider` or `originProvider` field.',
+    },
+    capability: {
+      type: 'string',
+      description:
+        'Filter to models whose `capabilities` array contains this value (e.g. chat, function_calling).',
+    },
+    modality: {
+      type: 'string',
+      description: 'Filter to models whose `modalities` (input or output) contain this value (e.g. text, image).',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -317,9 +351,15 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
         },
         matched: {
           type: 'number',
-          description: 'After applying optional endpoint filter (full result set being paged)',
+          description:
+            'After applying optional endpoint + search/provider/capability/modality filters (full filtered result set being paged)',
         },
-        returned: { type: 'number', description: 'Rows in THIS page (length of data array)' },
+        returned: { type: 'number', description: 'Rows in THIS page (length of data array, INCLUDING the additive ailin-* alias rows)' },
+        aliases: {
+          type: 'number',
+          description:
+            'Additive first-party ailin-* virtual alias rows prepended to data. NOT included in catalog/runnable/scoped/matched, and exempt from limit/offset.',
+        },
       },
       required: ['catalog', 'runnable', 'scoped', 'matched', 'returned'],
     },
@@ -332,11 +372,11 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
         offset: { type: 'number', description: 'Effective 0-based offset after clamping to >= 0' },
         total: {
           type: 'number',
-          description: 'Total rows matching scope+endpoint filter (== counts.matched)',
+          description: 'Total rows matching scope+endpoint+search filters (== counts.matched)',
         },
         returned: {
           type: 'number',
-          description: 'Rows in this page (== counts.returned == data.length)',
+          description: 'Rows in this page (== counts.returned == data.length, INCLUDING additive ailin-* alias rows)',
         },
         hasMore: { type: 'boolean', description: 'True when more rows exist beyond this page' },
         nextOffset: {
@@ -345,6 +385,35 @@ const MODELS_LIST_RESPONSE_200_SCHEMA = {
         },
       },
       required: ['limit', 'offset', 'total', 'returned', 'hasMore', 'nextOffset'],
+    },
+    facets: {
+      type: 'object',
+      description:
+        'Present only when ?search= is given: provider/capability counts computed over the FILTERED result set (top 12 by count), so clients can render drill-down facets.',
+      properties: {
+        providers: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              count: { type: 'number' },
+            },
+            required: ['name', 'count'],
+          },
+        },
+        capabilities: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              count: { type: 'number' },
+            },
+            required: ['name', 'count'],
+          },
+        },
+      },
     },
     data: {
       type: 'array',
@@ -603,6 +672,68 @@ export async function registerModelRoutes(
 
       const matchedEntries = computation.matchedEntries;
 
+      // ── Server-side search/filters (2026-08) ──────────────────────────────
+      // Applied per-request IN MEMORY over the cached ranked list. The
+      // rankedComputationCache key stays `scope|endpoint` (the BASE ranked
+      // list): a regex-free lowercase+includes pass over ~105k entries costs
+      // well under 50ms, so caching per-search keys would buy nothing and
+      // evict the hot base entries. Filtering runs BEFORE resolveModelsPage so
+      // pagination.total, counts.matched and facets all describe the same
+      // post-filter set. When no filter param is present the ORIGINAL array
+      // reference flows through untouched — byte-identical legacy behavior.
+      const modelsListFilters: ModelsListFilters = {
+        search: request.query.search,
+        provider: request.query.provider,
+        capability: request.query.capability,
+        modality: request.query.modality,
+      };
+      const searchActive = hasModelsListFilters(modelsListFilters);
+      const filteredEntries = searchActive
+        ? filterRankedEntries(matchedEntries, modelsListFilters)
+        : matchedEntries;
+      if (searchActive) {
+        requestLog.info(
+          {
+            filters: modelsListFilters,
+            beforeCount: matchedEntries.length,
+            afterCount: filteredEntries.length,
+          },
+          'Applied server-side search filters'
+        );
+      }
+      const facets =
+        typeof request.query.search === 'string' && request.query.search.trim().length > 0
+          ? buildModelsFacets(filteredEntries)
+          : undefined;
+
+      // ── Ailin first-party virtual aliases (flagship surface) ─────────────
+      // ailin-auto/best/fast/… are request-time orchestration aliases (no DB
+      // catalog row; resolved server-side in normalizeChatRequest, so listing
+      // them is safe — selecting one just works). They are deliberately NOT
+      // gated by AILIN_HIDE_MODELS: that flag masks raw *provider* model names
+      // in chat responses, while these aliases ARE the brand's own first-party
+      // presets and must always be visible. Semantics are strictly ADDITIVE:
+      // prepended first in `data`, never counted in the DB-derived
+      // counts.catalog/runnable/scoped/matched (surfaced separately in
+      // counts.aliases), and never consuming page slots — limit/offset apply
+      // to the DB result set only, so existing pagination walks are unaffected.
+      const baseAliasEntries = getAilinVirtualModelProfiles()
+        .map((profile) => buildAilinAliasEntry(profile))
+        .filter(
+          (entry) =>
+            endpointFilter === undefined ||
+            entrySupportsEndpoint(entry, endpointFilter as ModelOperationEndpoint)
+        );
+      // Search filters apply to alias rows too — searching "qwen" must not
+      // surface ailin-auto at the top of every page.
+      const ailinAliasEntries = searchActive
+        ? filterRankedEntries(baseAliasEntries, modelsListFilters)
+        : baseAliasEntries;
+      requestLog.debug(
+        { aliasCount: ailinAliasEntries.length, endpointFilter },
+        `Exposed ${AILIN_VIRTUAL_DISCOVERY_SOURCE} model aliases`
+      );
+
       // Expose count metadata so callers can see the runnable-vs-catalog
       // gap WITHOUT a second request to scope=all. Historically the gap
       // was severe (~5k runnable vs 64k catalog) which left users
@@ -615,7 +746,7 @@ export async function registerModelRoutes(
       const runnableCount = computation.runnableCount;
       const scopedCount = computation.scopedCount;
       const catalogTotal = models.length;
-      const matchedTotal = matchedEntries.length;
+      const matchedTotal = filteredEntries.length;
       // Operator visibility: when runnable/catalog ratio is very low,
       // surface it. Indicates many providers lack registered adapters
       // (likely missing API keys / plugin not loaded).
@@ -645,7 +776,8 @@ export async function registerModelRoutes(
           runnable: runnableCount,
           scoped: scopedCount,
           matched: matchedTotal,
-          returned: matchedTotal,
+          returned: matchedTotal + ailinAliasEntries.length,
+          aliases: ailinAliasEntries.length,
         };
         requestLog.info({ ...counts, streamed: true }, 'Streaming full model inventory (all=true)');
         const head = {
@@ -654,10 +786,18 @@ export async function registerModelRoutes(
           endpointFilter: endpointFilter ?? null,
           streamed: true,
           counts,
+          ...(facets ? { facets } : {}),
         };
         reply.header('content-type', 'application/json; charset=utf-8');
+        // Alias rows stream FIRST, then the DB-derived matched set — without
+        // copying the (potentially ~64k-entry) array; a generator keeps the
+        // stream lazy so peak memory stays O(1 row).
+        const aliasFirstEntries = (function* (): Generator<RankedEntry> {
+          yield* ailinAliasEntries;
+          yield* filteredEntries;
+        })();
         return reply.send(
-          Readable.from(streamModelsResponse(head, matchedEntries), { objectMode: false })
+          Readable.from(streamModelsResponse(head, aliasFirstEntries), { objectMode: false })
         );
       }
 
@@ -665,18 +805,22 @@ export async function registerModelRoutes(
       // resolveModelsPage clamps limit to [1, MAX_PAGE_SIZE] and offset to >= 0,
       // then slices the matched set. Only THIS page's rows are turned into DTOs
       // and serialized, so peak memory is O(page) not O(catalog).
-      const page = resolveModelsPage(matchedEntries, {
+      const page = resolveModelsPage(filteredEntries, {
         limit: request.query.limit,
         offset: request.query.offset,
       });
-      const data = page.pageEntries.map((entry) => buildModelDto(entry));
+      const data = [
+        ...ailinAliasEntries.map((entry) => buildModelDto(entry)),
+        ...page.pageEntries.map((entry) => buildModelDto(entry)),
+      ];
 
       const counts = {
         catalog: catalogTotal, // total rows in DB
         runnable: runnableCount, // pass operability gate
         scoped: scopedCount, // after scope filter
         matched: matchedTotal, // after endpoint filter (full result set)
-        returned: page.returned, // rows in THIS page
+        returned: data.length, // rows in THIS response (page + additive aliases)
+        aliases: ailinAliasEntries.length, // additive alias rows, not in the counts above
       };
 
       return reply.send({
@@ -684,11 +828,12 @@ export async function registerModelRoutes(
         scope,
         endpointFilter: endpointFilter ?? null,
         counts,
+        ...(facets ? { facets } : {}),
         pagination: {
           limit: page.limit,
           offset: page.offset,
           total: page.total,
-          returned: page.returned,
+          returned: data.length,
           hasMore: page.hasMore,
           nextOffset: page.nextOffset,
         },
@@ -717,7 +862,8 @@ export async function registerModelRoutes(
         description:
           'List available models (OpenAI-compatible endpoint).\n\n' +
           'PAGINATED BY DEFAULT: returns a bounded page (default 100 rows, `?limit=` up to 1000, `?offset=` to page). The `pagination` field carries `total`/`hasMore`/`nextOffset` — follow `nextOffset` until `hasMore` is false to enumerate everything. Use `?all=true` to stream the entire inventory as one JSON array (memory-bounded, but large). This replaced the old buffer-everything behavior that serialized ~64k rows into a single ~53MB string and OOM-crashed the container (2026-06-10).\n\n' +
-          'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned so callers can confirm the runnable-vs-catalog gap without a second request. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).',
+          'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned so callers can confirm the runnable-vs-catalog gap without a second request. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).\n\n' +
+          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.',
         querystring: MODELS_LIST_QUERYSTRING_SCHEMA,
         response: {
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
@@ -738,7 +884,8 @@ export async function registerModelRoutes(
         description:
           'List available models from all providers.\n\n' +
           'PAGINATED BY DEFAULT: returns a bounded page (default 100 rows, `?limit=` up to 1000, `?offset=` to page). Follow `pagination.nextOffset` until `pagination.hasMore` is false to enumerate everything, or use `?all=true` to stream the full inventory as one JSON array (memory-bounded). This replaced the old buffer-everything behavior that OOM-crashed the container (2026-06-10).\n\n' +
-          'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).',
+          'NOTE: by default `scope=runnable` — only models whose execution provider has a registered adapter at runtime are returned. The `counts` field exposes catalog/runnable/scoped/matched/returned. Use `?scope=all` to include catalog rows whose adapters are not currently registered (e.g. providers with missing keys or proprietary-schema providers in inventory-only mode).\n\n' +
+          'FIRST-PARTY ALIASES: the ailin-* virtual model aliases (ailin-auto, ailin-best, ailin-fast, ailin-economy, ailin-consensus, ailin-voice, ailin-stt, ailin-realtime) are always listed FIRST in `data` (discoverySource="ailin-virtual"). They are additive: counted separately in `counts.aliases`, never in catalog/runnable/scoped/matched, and exempt from limit/offset — pagination windows over the DB-derived result set are unchanged.',
         querystring: MODELS_LIST_QUERYSTRING_SCHEMA,
         response: {
           200: MODELS_LIST_RESPONSE_200_SCHEMA,
@@ -805,6 +952,17 @@ export async function registerModelRoutes(
 
       try {
         requestLog.debug('Fetching model details');
+
+        // First-party ailin-* aliases (ailin-auto, …) have no DB catalog row —
+        // they resolve server-side at request time (normalizeChatRequest) —
+        // so serve the same DTO the list endpoints emit for them.
+        const aliasProfile = getAilinVirtualModelProfiles().find(
+          (profile) => profile.id === normalizedId.trim().toLowerCase()
+        );
+        if (aliasProfile) {
+          requestLog.info({ aliasId: aliasProfile.id }, 'Ailin virtual model alias fetched');
+          return reply.send(buildModelDto(buildAilinAliasEntry(aliasProfile)));
+        }
 
         let result = await getModelById(normalizedId);
         if (!result && normalizedId !== rawId) {

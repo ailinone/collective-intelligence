@@ -22,6 +22,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { CodeExecutionService } from '@/services/code-execution-service';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
 import { executeRouteWithRetry } from '@/utils/route-retry';
@@ -170,7 +172,11 @@ export async function registerCodeExecutionRoutes(server: FastifyInstance): Prom
         },
       },
     },
-    preHandler: authenticateRequest,
+    preHandler: [
+      authenticateRequest,
+      rejectAnonymousGuestKeyPreHandler,
+      rejectChatFreeTierKeyPreHandler,
+    ],
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const userContext = createOrchestrationContext(request, {
         taskType: 'code-generation',

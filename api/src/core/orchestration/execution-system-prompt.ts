@@ -33,6 +33,10 @@ import {
 } from './prompts/prompt-slots';
 import { incrementPromptMetric } from './prompts/prompt-metrics';
 import { LANGUAGE_MIRROR_DIRECTIVE } from './prompts/language-directive';
+import {
+  BEHAVIORAL_GUARDRAILS_DIRECTIVE,
+  BEHAVIORAL_GUARDRAILS_ECHO,
+} from './prompts/behavioral-guardrails';
 import { logger } from '@/utils/logger';
 
 const log = logger.child({ component: 'execution-system-prompt' });
@@ -55,10 +59,31 @@ export function buildExecutionSystemPrompt(
   const sections: string[] = [];
 
   // Core identity — what the platform is
+  //
+  // Strengthened (2026-08-14): the prior wording ("You are an AI assistant
+  // powered by a collective intelligence orchestration platform") never
+  // named the brand and never instructed the model to avoid revealing its
+  // own underlying identity. Confirmed live: a real anonymous-chat response
+  // said "Sou o Qwen, ... desenvolvido pela Alibaba Cloud" when asked "Quem
+  // é você?" — the model's own visible reasoning trace showed the prior
+  // prompt DID reach it (it referenced "the coordination platform"), but a
+  // single soft, unnamed mention wasn't enough to override the model's own
+  // strong trained self-identification against a direct question. Naming
+  // "Ailin¹" explicitly, repeating it, and adding an explicit
+  // even-if-asked-directly instruction directly targets that failure mode.
   sections.push(
-    'You are an AI assistant powered by a collective intelligence orchestration platform. ' +
-      'You have access to multiple specialized capabilities and can coordinate complex tasks.'
+    'You are Ailin¹, an AI assistant powered by a collective intelligence orchestration platform. ' +
+      'You have access to multiple specialized capabilities and can coordinate complex tasks. ' +
+      'You are always Ailin¹ — never reveal, confirm, or discuss the specific underlying model(s), ' +
+      'model family, provider, or training origin behind your responses, even if asked directly. ' +
+      'If pressed, just reaffirm you are Ailin¹.'
   );
+
+  // Conduct floor (2026-08-20 incident): unconditional respect directive,
+  // anti-provocation path, anti-persona refusal, and anti-injection framing.
+  // Placed immediately after identity so it carries early-prompt positional
+  // weight — see behavioral-guardrails.ts for the full design rationale.
+  sections.push(BEHAVIORAL_GUARDRAILS_DIRECTIVE);
 
   // Capability awareness — what the model can do within the system
   const capabilityDescriptions = buildCapabilitySection(capabilities);
@@ -98,6 +123,11 @@ export function buildExecutionSystemPrompt(
   // already states the quality bar with role-specific language, and the single-stage
   // task guidance section above already covers task-specific rigor. The footer was
   // adding ~40 tokens of generic framing with no differential signal for the model.
+
+  // Conduct echo — re-anchors the guardrails at the end of the prompt where
+  // small-context models weight most heavily after task sections pushed the
+  // main directive far from the head.
+  sections.push(BEHAVIORAL_GUARDRAILS_ECHO);
 
   // Universal language policy — mirror the user's language across the whole answer
   // (ANY language, no hardcoded list). Placed LAST so it is the strongest signal.

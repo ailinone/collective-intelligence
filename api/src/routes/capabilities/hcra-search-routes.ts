@@ -58,6 +58,8 @@
 import type { FastifyInstance } from 'fastify';
 import { logger } from '@/utils/logger';
 import { authenticate } from '@/middleware/auth-middleware';
+import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
 import { prisma } from '@/database/client';
 import { tryGetEmbedder } from '@/capability/embeddings/embedder';
@@ -351,6 +353,8 @@ export default async function hcraSearchRoutes(fastify: FastifyInstance): Promis
   // / public, anything inside it requires credentials.
   await fastify.register(async (gated) => {
     gated.addHook('preHandler', authenticate);
+    gated.addHook('preHandler', rejectAnonymousGuestKeyPreHandler);
+    gated.addHook('preHandler', rejectChatFreeTierKeyPreHandler);
     // SECURITY (js/missing-rate-limiting): these handlers run pg_trgm +
     // vector-similarity queries against the ontology/model tables on every
     // call — expensive, authorization-gated reads. Route-scoped (not the

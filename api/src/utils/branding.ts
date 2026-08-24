@@ -35,6 +35,17 @@ export function applyBranding(response: ChatResponse): ChatResponse {
   // Replace model name with brand name
   if (brandingConfig.hideModels) {
     branded.model = brandingConfig.brandName;
+
+    // `system_fingerprint` isn't in the ChatResponse type (no adapter sets
+    // it) but reaches this function anyway on responses that pass a
+    // provider's raw upstream JSON straight through -- TS structural typing
+    // doesn't strip excess runtime properties a variable carries, only
+    // flags object literals. Confirmed live: a self-hosted vLLM response
+    // leaked "system_fingerprint":"vllm-0.21.0-..." verbatim in the exact
+    // JSON payload whose message.content correctly refused to name the
+    // underlying model — the branding filter needs to catch fields it
+    // doesn't know the shape of, not just the ones it does.
+    delete (branded as Record<string, unknown>).system_fingerprint;
   }
 
   // Process metadata.

@@ -193,6 +193,53 @@ describe('checkAndConsumeAnonymousQuota', () => {
     const result = await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, 'visitor-down');
     expect(result.allowed).toBe(true);
   });
+
+  // ── Per-IP backstop (2026-08-20): cookie-reset abuse ─────────────────
+  it('blocks cookie-reset abuse: same IP, fresh visitor fingerprints each time, is capped by the per-IP bucket', async () => {
+    // Default IP limit is 10. Simulate a visitor clearing cookies: a NEW
+    // fingerprint (fresh allowance) but the SAME IP, 12 times.
+    const results = [];
+    for (let i = 0; i < 12; i++) {
+      results.push(await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, `fresh-fp-${i}`, '203.0.113.7'));
+    }
+    // First 10 pass (each fingerprint is fresh — the visitor bucket never
+    // trips), the 11th and 12th are blocked by the per-IP backstop.
+    expect(results.slice(0, 10).every((r) => r.allowed)).toBe(true);
+    expect(results[10].allowed).toBe(false);
+    expect(results[11].allowed).toBe(false);
+  });
+
+  it('per-IP bucket counts across fingerprints but not across IPs', async () => {
+    for (let i = 0; i < 10; i++) {
+      const r = await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, `fp-x-${i}`, '198.51.100.9');
+      expect(r.allowed).toBe(true);
+    }
+    const blocked = await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, 'fp-x-more', '198.51.100.9');
+    expect(blocked.allowed).toBe(false);
+    // A different IP is a different bucket — still allowed.
+    const otherIp = await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, 'fp-y', '198.51.100.10');
+    expect(otherIp.allowed).toBe(true);
+  });
+
+  it('respects ANONYMOUS_IP_DAILY_LIMIT override', async () => {
+    process.env['ANONYMOUS_IP_DAILY_LIMIT'] = '3';
+    try {
+      const results = [];
+      for (let i = 0; i < 4; i++) {
+        results.push(await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, `fp-z-${i}`, '192.0.2.44'));
+      }
+      expect(results.slice(0, 3).every((r) => r.allowed)).toBe(true);
+      expect(results[3].allowed).toBe(false);
+    } finally {
+      delete process.env['ANONYMOUS_IP_DAILY_LIMIT'];
+    }
+  });
+
+  it('skips the per-IP bucket when no IP is forwarded (degrades to prior behavior)', async () => {
+    // No third argument — exactly the pre-2026-08-20 call shape.
+    const r = await checkAndConsumeAnonymousQuota(GUEST_KEY_ID, 'fp-no-ip');
+    expect(r.allowed).toBe(true);
+  });
 });
 
 describe('anonymousQuotaExceededBody', () => {

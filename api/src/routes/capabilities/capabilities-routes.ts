@@ -12,6 +12,7 @@ import { logger } from '@/utils/logger';
 import { authenticate as authenticateRequest } from '@/middleware/auth-middleware';
 import { requireTenantContext } from '@/api/middleware/tenant-isolation-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
+import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import type { ChatMessage, ModelCapability } from '@/types';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
@@ -987,7 +988,12 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         description:
           'Universal capability execution endpoint with capability-plan driven dispatch, fallback execution paths, and normalized result envelope.',
       },
-      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler, requireTenantContext()],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const capabilityInput = request.params.capability;
@@ -1114,7 +1120,12 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         description:
           'Universal capability streaming endpoint. Stream-capable capabilities are proxied to streaming-compatible routes.',
       },
-      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler, requireTenantContext()],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const capability = normalizeCapabilityName(request.params.capability);
@@ -1203,7 +1214,12 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         description:
           'Capability health and operability report with inventory, runnable coverage, and dependency diagnostics.',
       },
-      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler, requireTenantContext()],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (request, reply) => {
       const capabilityInput = request.params.capability;
@@ -1343,7 +1359,12 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         description:
           'List complete capability matrix with execution metadata and dependency hints.',
       },
-      preHandler: [authenticateRequest, rejectAnonymousGuestKeyPreHandler, requireTenantContext()],
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
     },
     async (_request, reply) => {
       const capabilities = listCapabilityDefinitions().map((item) => ({
