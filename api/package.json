@@ -172,7 +172,7 @@
     "tsyringe": "^4.10.0",
     "undici": "^8.10.0",
     "ws": "^8.21.3",
-    "zod": "^3.22.4"
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "@google-cloud/kms": "^4.5.0"
