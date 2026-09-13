@@ -39,6 +39,7 @@ import {
   type ModelOperationEndpoint,
 } from '@/services/model-capability-inference';
 import { getDiscoveryComplianceClass } from '@/providers/catalog/consolidation-matrix';
+import { listOfferedPricingCells, type OfferedCell } from '@/services/pricing-tiers';
 
 /** Default rows per page when `?limit=` is omitted. */
 export const DEFAULT_PAGE_SIZE = 100;
@@ -159,6 +160,118 @@ export function buildAilinAliasEntry(profile: AilinVirtualModelProfile): RankedE
   };
 
   return { model, operability };
+}
+
+// ── `<strategy>:<tier>` composite rows (e.g. `consensus:large`) ─────────────
+// Found independently by a chat-repo agent shipping reasoning-effort UI (PR
+// #61 there): these are real, `executionReady` selectable targets per
+// pricing-tiers.ts's STRATEGY_POLICY (normalizeChatRequest resolves them
+// through the identical resolveAilinVirtualModelAlias() path as the legacy
+// ailin-* presets above, reasoning_effort included), but /v1/models never
+// listed them as rows — only buildAilinAliasEntry()'s 8 legacy presets. Chat's
+// ModelSelector.svelte resets any model id absent from this endpoint's
+// response back to empty, so a strategy:tier composite was impossible to
+// select from chat's UI at all. Pure discoverability gap: chat's own gating
+// (derive_gateway_capabilities' is_chat_router_alias / modelCapabilities.ts)
+// keys off `provider === 'ailin-virtual'` + `'chat' in capabilities` only —
+// never the specific id — so listing these with the SAME provider id and
+// serializer (buildModelDto) as the legacy aliases is sufficient; no chat-side
+// change is needed.
+
+/** discoverySource stamped on strategy:tier composite rows — same synthetic
+ * surface as the legacy ailin-* aliases (both are ailin-virtual, request-time
+ * orchestration targets with no DB catalog row), so chat's provider-keyed
+ * gating picks them up identically. */
+export const AILIN_STRATEGY_TIER_DISCOVERY_SOURCE = AILIN_VIRTUAL_DISCOVERY_SOURCE;
+
+/**
+ * Project one offered `<strategy>:<tier>` pricing cell into a RankedEntry that
+ * `buildModelDto` serializes with the exact same shape/fields as
+ * `buildAilinAliasEntry` — `provider`/`capabilities`/`modalities` in particular,
+ * since those are what chat's gating and reasoning-effort control read.
+ *
+ * Unlike the legacy presets (whose pricing is deliberately 0/"dynamic" — an
+ * alias's budget is a per-REQUEST cap, not a per-token rate), a strategy:tier
+ * cell has a real, published per-1M-token rate (the whole point of the tier
+ * system: predictable, provider-compatible pricing metered on the user's own
+ * tokens) — so its DTO carries that real rate instead of zeros.
+ */
+export function buildStrategyTierCompositeEntry(cell: OfferedCell): RankedEntry {
+  // Every executionReady strategy today (auto/best/fast/economy/single/
+  // parallel/consensus/expert-panel) operates within the chat/completions
+  // pipeline — pricing-tiers.ts's own docs describe billing on "the user's
+  // prompt + the final synthesised answer", and STRATEGY_POLICY carries no
+  // per-strategy endpoint distinction. Same two endpoints the chat-oriented
+  // legacy presets (ailin-auto/best/fast/economy/consensus) already use.
+  const endpoints = ['chat_completions', 'responses'];
+  const capabilities = new Set<ModelCapability>();
+  const inputModalities = new Set<string>();
+  const outputModalities = new Set<string>();
+  for (const endpoint of endpoints) {
+    for (const capability of ALIAS_ENDPOINT_CAPABILITIES[endpoint] ?? []) {
+      capabilities.add(capability);
+    }
+    const modalities = ALIAS_ENDPOINT_MODALITIES[endpoint];
+    if (modalities) {
+      for (const item of modalities.input) inputModalities.add(item);
+      for (const item of modalities.output) outputModalities.add(item);
+    }
+  }
+
+  const model: Model = {
+    id: cell.id,
+    providerId: AILIN_ALIAS_PROVIDER_ID,
+    provider: AILIN_ALIAS_PROVIDER_ID,
+    name: cell.id,
+    displayName: `${cell.strategy}:${cell.tier}`,
+    // 0 = "not fixed", same reasoning as the legacy aliases: the concrete
+    // context/output envelope is decided per request by the resolved
+    // execution strategy, not by this composite row.
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    inputCostPer1k: cell.inputCostPer1k,
+    outputCostPer1k: cell.outputCostPer1k,
+    capabilities: Array.from(capabilities),
+    performance: { latencyMs: 0, throughput: 0, quality: cell.qualityTarget, reliability: 0 },
+    status: 'active',
+    metadata: {
+      supportedEndpoints: [...endpoints],
+      input_modalities: [...inputModalities],
+      output_modalities: [...outputModalities],
+      discoverySource: AILIN_STRATEGY_TIER_DISCOVERY_SOURCE,
+      description: `${cell.strategy} strategy at the ${cell.tier} pricing tier (quality target ${cell.qualityTarget}).`,
+      strategy: cell.strategy,
+      tier: cell.tier,
+      qualityTarget: cell.qualityTarget,
+    },
+  };
+
+  const operability: ModelOperability = {
+    // Same as the legacy aliases: always selectable, resolved server-side at
+    // request time via resolveAilinVirtualModelAlias/normalizeChatRequest.
+    runnable: true,
+    originProvider: AILIN_ALIAS_PROVIDER_ID,
+    executionProvider: AILIN_ALIAS_PROVIDER_ID,
+    resolvedProvider: null,
+    fallbackChain: [],
+    nonOperationalReasons: [],
+    warnings: [],
+  };
+
+  return { model, operability };
+}
+
+/**
+ * Every `<strategy>:<tier>` composite row currently offered, as RankedEntry
+ * inputs ready for buildModelDto — the single source of truth is
+ * `listOfferedPricingCells()` (pricing-tiers.ts), which already enumerates
+ * only executionReady cells in the real, established `<strategy>:<tier>` id
+ * format used elsewhere in the codebase (ailin-virtual-model-service.ts,
+ * resolveStrategyTier/parseStrategyTier) — this does not invent a new naming
+ * scheme, it lists exactly what already resolves.
+ */
+export function buildStrategyTierCompositeEntries(): RankedEntry[] {
+  return listOfferedPricingCells().map((cell) => buildStrategyTierCompositeEntry(cell));
 }
 
 /** Normalize a model's loosely-typed `metadata` blob into a plain object. */

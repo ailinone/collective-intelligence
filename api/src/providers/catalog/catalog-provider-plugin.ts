@@ -166,26 +166,32 @@ export class CatalogProviderPlugin implements ProviderPlugin {
     // Volcano) effectively ignore this fetcher — constructing it is usually
     // cheap and harmless, so historically we always built it.
     //
-    // BUT for `execution-only` entries with a populated `pinnedFallback`
-    // (azure-openai, inworld, aws-bedrock, ...), `listModels()` below never
-    // touches the fetcher at all — and neither does anything else in the
-    // codebase (`getFetcher()` has no external callers). Building it anyway
-    // forces `mapAuthScheme()` to resolve the entry's real `authScheme`
-    // (`custom`, `hmac-sigv4`, etc.) even though the OAI-compat bridge has no
-    // representation for those — which fires the "Unsupported authScheme for
-    // oai-compat bridge — falling back to Bearer" warning on every boot for
-    // a fetcher that is provably dead code. That log reads as "azure-openai's
-    // auth is broken", when in fact the dedicated adapter (built below) has
-    // the correct `api-key` header contract; only the unused discovery
-    // fetcher was ever misconfigured. Skip building it in that case.
-    const rawPinnedForFetcherGate =
-      this.entry.pinnedFallback?.models ?? this.entry.staticModels ?? null;
-    const servedFromPinnedFallback =
-      this.entry.integrationMode === 'execution-only' &&
-      !!rawPinnedForFetcherGate &&
-      rawPinnedForFetcherGate.length > 0;
+    // BUT for `execution-only` entries (azure-openai, inworld, aws-bedrock,
+    // ...), `listModels()` below never touches the fetcher at all — and
+    // neither does anything else in the codebase (`getFetcher()` has no
+    // external callers). Building it anyway forces `mapAuthScheme()` to
+    // resolve the entry's real `authScheme` (`custom`, `hmac-sigv4`, etc.)
+    // even though the OAI-compat bridge has no representation for those —
+    // which fires the "Unsupported authScheme for oai-compat bridge — falling
+    // back to Bearer" warning on every boot for a fetcher that is provably
+    // dead code. That log reads as "azure-openai's auth is broken", when in
+    // fact the dedicated adapter (built below) has the correct `api-key`
+    // header contract; only the unused discovery fetcher was ever
+    // misconfigured. Skip building it in that case.
+    //
+    // 2026-09-04 (LOTE AK): the gate used to require a populated
+    // `pinnedFallback`, which silently excluded the rows that declare
+    // `discoveryStatus: 'unavailable-upstream'` — execution-only rows that
+    // deliberately ship ZERO inventory because the vendor exposes no
+    // machine-readable listing. Those rows were still handed a discovery
+    // fetcher pointed at a `/models` path that provably does not exist, so
+    // every boot probed a known-dead endpoint. `execution-only` already MEANS
+    // "no model listing endpoint" (see ProviderIntegrationMode), and the
+    // central-model-discovery-service has always keyed off the mode alone, so
+    // the gate is now the mode itself — which makes the two code paths agree.
+    const servedWithoutDiscovery = this.entry.integrationMode === 'execution-only';
 
-    if (!servedFromPinnedFallback) {
+    if (!servedWithoutDiscovery) {
       this.fetcher = new OpenAICompatibleHubModelFetcher({
         providerName: this.entry.providerId,
         apiKey: apiKey || '',
@@ -241,6 +247,14 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         chatCompletionsPath: this.entry.paths?.chatCompletions,
         embeddingsPath: this.entry.paths?.embeddings,
         moderationsPath: this.entry.paths?.moderation,
+        // Rerank is the one path with no blind default (LOTE AP). It is
+        // populated ONLY when the entry declares `supports.rerank` — the
+        // docs-verified operator assertion — so a hub that never claimed
+        // rerank fails closed instead of POSTing into a 404. When the
+        // provider uses a non-standard path (empiriolabs: `/reranks`) the
+        // explicit `paths.rerank` wins.
+        rerankPath:
+          this.entry.paths?.rerank ?? (this.entry.supports?.rerank === true ? '/rerank' : undefined),
         videosPath: this.entry.paths?.videoGenerate,
         videoPollPath: this.entry.paths?.videoPoll,
         videoRequestStyle: this.entry.videoRequestStyle,
@@ -298,9 +312,16 @@ export class CatalogProviderPlugin implements ProviderPlugin {
     //
     // This branch is checked BEFORE the `this.fetcher` guard below because
     // `initialize()` intentionally skips constructing the fetcher when this
-    // branch is guaranteed to be taken (see `servedFromPinnedFallback` there).
-    const rawPinned = this.entry.pinnedFallback?.models ?? this.entry.staticModels ?? null;
-    if (this.entry.integrationMode === 'execution-only' && rawPinned && rawPinned.length > 0) {
+    // branch is guaranteed to be taken (see `servedWithoutDiscovery` there).
+    //
+    // 2026-09-04 (LOTE AK): execution-only rows WITHOUT a pinned list are the
+    // `discoveryStatus: 'unavailable-upstream'` case — the vendor publishes no
+    // machine-readable inventory, so the honest answer is an empty list, not
+    // an invented one and not a crash. Previously these fell through to the
+    // `!this.fetcher` guard and threw "listModels called before initialize",
+    // which misreported a deliberate zero-inventory row as a wiring bug.
+    if (this.entry.integrationMode === 'execution-only') {
+      const rawPinned = this.entry.pinnedFallback?.models ?? this.entry.staticModels ?? [];
       return rawPinned.map((rawEntry) => {
         const { id, capabilities } = normalizePinnedModelEntry(rawEntry);
         return {
@@ -368,9 +389,10 @@ export class CatalogProviderPlugin implements ProviderPlugin {
   /**
    * Expose the fetcher for downstream wiring (central-model-discovery-service).
    * Returns undefined if not yet initialized, if the entry is catalog-only,
-   * or if the entry is `execution-only` with a populated `pinnedFallback`
-   * (in which case `listModels()` is served entirely from the catalog and
-   * no discovery fetcher is ever constructed — see `initialize()`).
+   * or if the entry is `execution-only` (in which case `listModels()` is
+   * served from the catalog's pinnedFallback — or is empty, for
+   * `discoveryStatus: 'unavailable-upstream'` rows — and no discovery fetcher
+   * is ever constructed; see `initialize()`).
    */
   getFetcher(): OpenAICompatibleHubModelFetcher | undefined {
     return this.fetcher;
@@ -406,8 +428,16 @@ export class CatalogProviderPlugin implements ProviderPlugin {
   /**
    * Base URL resolution order:
    *   1. config.baseURL (plugin-manager convention: `<PROVIDER>_BASE_URL`)
-   *   2. process.env[entry.baseUrlEnvVar] (catalog-declared override)
-   *   3. entry.baseUrl (catalog default)
+   *   2. process.env[entry.baseUrlEnvVar] (catalog-declared FULL-STRING override)
+   *   3. entry.baseUrl (catalog default), with `{placeholder}` template
+   *      substitution applied if the entry declares `baseUrlTemplateVars`
+   *      (GAP-A11, LOTE AM 2026-09-05).
+   *
+   * Steps 1-2 return their value verbatim, untouched by templating — a full
+   * override is a full override. This keeps the change purely ADDITIVE: none
+   * of the 175+ existing rows using `baseUrlEnvVar` as a whole-string swap
+   * are affected, whether or not they also happen to declare
+   * `baseUrlTemplateVars` (they don't, today).
    */
   private resolveBaseUrl(config: ProviderConfig): string {
     if (config.baseURL && config.baseURL.length > 0) {
@@ -419,7 +449,49 @@ export class CatalogProviderPlugin implements ProviderPlugin {
         return viaCatalog;
       }
     }
-    return this.entry.baseUrl;
+    return this.applyBaseUrlTemplate(this.entry.baseUrl);
+  }
+
+  /**
+   * GAP-A11 (LOTE AM, 2026-09-05): generic `{placeholder}` substitution for
+   * product/account/workspace-scoped base URLs (Infomaniak's
+   * `.../ai/{product_id}/openai/v1` being the motivating case — previously
+   * the literal `{product_id}` shipped straight into every request unless
+   * the operator reconstructed the ENTIRE URL by hand via `baseUrlEnvVar`).
+   *
+   * Every placeholder the catalog declares in `baseUrlTemplateVars` MUST
+   * resolve from its mapped env var, or we fail loudly here — sending a
+   * request with a literal `{product_id}` still in the path is a silent,
+   * confusing 404/DNS failure at the HTTP layer; failing at plugin
+   * initialization with a clear "which env var is missing" message is the
+   * fail-closed choice, consistent with how a missing API key is already
+   * handled a few lines up in `initialize()`.
+   */
+  private applyBaseUrlTemplate(baseUrl: string): string {
+    const templateVars = this.entry.baseUrlTemplateVars;
+    if (!templateVars || Object.keys(templateVars).length === 0) {
+      return baseUrl;
+    }
+    let resolved = baseUrl;
+    const missing: string[] = [];
+    for (const [placeholder, envVar] of Object.entries(templateVars)) {
+      const token = `{${placeholder}}`;
+      if (!resolved.includes(token)) continue;
+      const value = process.env[envVar];
+      if (value && value.length > 0) {
+        resolved = resolved.split(token).join(value);
+      } else {
+        missing.push(`${token} (set ${envVar})`);
+      }
+    }
+    if (missing.length > 0) {
+      throw new CatalogPluginUnsupportedError(
+        this.entry.providerId,
+        this.entry.integrationClass,
+        `baseUrl template unresolved — missing: ${missing.join(', ')}`
+      );
+    }
+    return resolved;
   }
 
   /**

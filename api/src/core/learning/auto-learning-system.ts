@@ -280,6 +280,14 @@ export class AutoLearningSystem {
         `;
       } else {
         // Create new bucket
+        //
+        // `jsonb_build_object` is declared as `jsonb_build_object(VARIADIC "any")`
+        // — a bare parameter with no other type context gives Postgres nothing
+        // to resolve its type from, which fails PARSE-time inference with
+        // `42P18 could not determine data type of parameter $8` (confirmed live
+        // in production, 2026-09-08: every request through this branch hit it).
+        // An explicit `::text` cast makes the parameter's type unambiguous
+        // regardless of what (if any) type hint the driver supplies.
         await prisma.$executeRaw`
           INSERT INTO learning_data (
             bucket, task_type, complexity,
@@ -291,7 +299,7 @@ export class AutoLearningSystem {
             ${bucket}, ${insight.taskType}, ${insight.complexity},
             1, ${insight.success ? 1 : 0},
             ${insight.qualityScore}, ${insight.cost}, ${insight.latency},
-            jsonb_build_object(${insight.strategy}, 1),
+            jsonb_build_object(${insight.strategy}::text, 1),
             '[]'::jsonb,
             NOW(),
             NOW()

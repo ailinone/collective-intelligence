@@ -169,19 +169,37 @@ describe('Caminho-C Q2: user-specified model wiring contract', () => {
     expect(hybridSource).toMatch(/pinReason\s*===\s*['"]pin-not-in-pool['"]/);
   });
 
-  it('HybridStrategy uses assembleExecutors with a quality-descending comparator', () => {
+  it('HybridStrategy uses assembleExecutors with a calibrated quality comparator', () => {
     // Two assertions form the contract:
     //   (a) assembleExecutors is invoked — confirms the helper-driven
     //       assembly path (pinned first, quality-sorted fallback) is
     //       wired, not bypassed by a hand-rolled .sort().slice().
-    //   (b) The quality-descending comparator literal exists in the
-    //       file — the comparator is passed AS the third argument to
-    //       assembleExecutors so this guarantees the strategy keeps its
-    //       premium-quality executor preference rather than silently
-    //       dropping to e.g. latency-sort.
+    //   (b) The comparator passed as the third argument still ranks by
+    //       quality — the strategy must keep its premium-quality executor
+    //       preference rather than silently dropping to e.g. latency-sort.
+    //
+    // This assertion USED to pin the literal
+    // `(a, b) => b.performance.quality - a.performance.quality`, which
+    // locked in a defect rather than a contract: `performance.quality`
+    // carries both a real measurement and the constant discovery prior
+    // that `bulkUpsertModels` writes for every model, and raw subtraction
+    // cannot tell them apart. With the whole pool on the prior, every
+    // difference was 0 and the sort silently became catalog order; in a
+    // mixed pool the optimistic prior outranked measured models. The
+    // requirement was always "rank executors by quality", never "compute
+    // it with that exact expression" — so the guard now pins the
+    // calibrated ranking. See strategies/quality-ranking.ts and its
+    // co-located suite for the behavioural coverage.
     expect(hybridSource).toMatch(/assembleExecutors\s*\(/);
     expect(hybridSource).toMatch(
-      /\(a,\s*b\)\s*=>\s*b\.performance\.quality\s*-\s*a\.performance\.quality/
+      /import\s*\{[\s\S]{0,80}?rankByCalibratedQuality[\s\S]{0,80}?\}\s*from\s*['"]\.\/quality-ranking['"]/
+    );
+    expect(hybridSource).toMatch(/rankByCalibratedQuality\s*\(\s*preference\.fallbackPool\s*\)/);
+    expect(hybridSource).toMatch(/assembleExecutors\s*\([\s\S]{0,60}?ranking\.comparator\s*\)/);
+
+    // Forward guard: the raw subtraction must not come back.
+    expect(hybridSource).not.toMatch(
+      /performance\??\.quality\s*-\s*\w+\.performance\??\.quality/
     );
   });
 });

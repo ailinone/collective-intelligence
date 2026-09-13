@@ -1,17 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "_comment": "MCP server configuration for Ailin CI. Loaded by mcp-client-service.ts when MCP_SERVERS_CONFIG env var is not set.",
-  "servers": [
-    {
-      "name": "filesystem",
-      "transport": "stdio",
-      "command": "node",
-      "args": [
-        "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-        "/app"
-      ],
-      "safeForStrategies": true,
-      "category": "file"
-    }
-  ]
+  "_comment": "MCP server configuration for Ailin CI. Loaded by mcp-client-service.ts when MCP_SERVERS_CONFIG is not set, AND only when MCP_CLIENT_ENABLED=true (ADR-024). Ships EMPTY on purpose: enabling the client must not, by itself, connect anything.",
+  "_security": "The previous default declared a filesystem server rooted at /app (the deployed application tree, including its source) with safeForStrategies=true, exposed to every orchestration strategy. It was dormant in production only because tsc does not copy .json into dist/ — a build accident, not a control. Any server added here must scope its root to a scratch directory, never the app tree, and should leave safeForStrategies=false unless the tools are genuinely safe for autonomous strategy use.",
+  "_example": {
+    "name": "scratch-files",
+    "transport": "stdio",
+    "command": "node",
+    "args": ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", "/tmp/ci-mcp-scratch"],
+    "safeForStrategies": false,
+    "category": "file"
+  },
+  "servers": []
 }

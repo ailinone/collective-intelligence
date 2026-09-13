@@ -24,32 +24,51 @@ import { logger } from '@/utils/logger';
  */
 export class DeepSeekModelFetcher extends BaseProviderModelFetcher {
   protected providerName = 'deepseek';
-  private client: OpenAI;
+  private client: OpenAI | null;
+  private apiKey: string;
   private log = logger.child({ component: 'deepseek-fetcher' });
 
   constructor(apiKey: string, baseUrl: string = 'https://api.deepseek.com/v1') {
     super();
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: baseUrl,
-      timeout: 30000,
-    });
+    this.apiKey = apiKey;
+    // Guard against constructing the raw `openai` SDK client (reused here as
+    // a thin OpenAI-COMPATIBLE HTTP client — DeepSeek's own API is OpenAI-
+    // shaped, this fetcher does not talk to OpenAI) with an empty/mock key.
+    // The SDK's own constructor throws a synchronous, OpenAI-branded
+    // "Missing credentials... OPENAI_API_KEY or OPENAI_ADMIN_KEY..." error
+    // when apiKey is falsy, which bypassed getModels()'s own graceful
+    // missing-key handling below entirely and was genuinely confusing in
+    // production (2026-09-08 incident: a DeepSeek discovery failure logged
+    // an OpenAI-branded credential error). Constructing lazily means a
+    // missing/mock key surfaces through this fetcher's own DeepSeek-branded
+    // log line instead.
+    this.client = DeepSeekModelFetcher.isUsableApiKey(apiKey)
+      ? new OpenAI({
+          apiKey,
+          baseURL: baseUrl,
+          timeout: 30000,
+        })
+      : null;
+  }
+
+  private static isUsableApiKey(key: string | undefined): key is string {
+    return Boolean(key) && !key!.includes('mock') && !key!.includes('test-');
   }
 
   async getModels(): Promise<ProviderModel[]> {
-    // Validate API key is not mock - check the client's apiKey
-    const apiKey = (this.client as { apiKey?: string }).apiKey;
-    if (!apiKey || apiKey.includes('mock') || apiKey.includes('test-')) {
+    if (!this.client) {
       this.log.warn(
-        { keyPresent: Boolean(apiKey) },
-        'DeepSeek API key appears to be mock/test key - skipping model discovery'
+        { keyPresent: Boolean(this.apiKey) },
+        'DeepSeek API key appears to be missing/mock/test key - skipping model discovery'
       );
       return [];
     }
 
+    const client = this.client;
+
     try {
       // DeepSeek uses OpenAI-compatible API
-      const response = await this.client.models.list();
+      const response = await client.models.list();
 
       return response.data.map((model) => this.convertDeepSeekModel(model));
     } catch (error) {
@@ -104,9 +123,13 @@ export class DeepSeekModelFetcher extends BaseProviderModelFetcher {
     // DeepSeek models have strong reasoning capabilities
     capabilities.push('reasoning', 'thinking_mode');
 
-    // Coder models are specialized for coding
+    // Coder models are specialized for coding. NOTE: `code_generation` (this
+    // model writes/understands code well), NOT `code_interpreter` (a REAL,
+    // provider-declared server-side sandbox/execution tool — DeepSeek
+    // declares no such parameter; see alibaba-model-fetcher.ts's identical
+    // fix for the full incident writeup, 2026-09).
     if (modelId.includes('coder')) {
-      capabilities.push('code_interpreter', 'text_generation');
+      capabilities.push('code_generation', 'text_generation');
     }
 
     // V3 models support vision

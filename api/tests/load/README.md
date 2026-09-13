@@ -142,7 +142,7 @@ k6 run auth-load-test.js -e API_URL=http://localhost:3000
 
 ```bash
 # Get staging API key
-export TEST_API_KEY=$(gcloud secrets versions access latest --secret="ailin-staging-test-key")
+export TEST_API_KEY=$(gcloud secrets versions access latest --secret="<prefix>-staging-test-key")
 
 # Run against staging
 k6 run auth-load-test.js \
@@ -156,7 +156,7 @@ k6 run auth-load-test.js \
 
 ```bash
 # Get production test key (read-only)
-export TEST_API_KEY=$(gcloud secrets versions access latest --secret="ailin-production-loadtest-key")
+export TEST_API_KEY=$(gcloud secrets versions access latest --secret="<prefix>-production-loadtest-key")
 
 # Run with reduced load
 k6 run auth-load-test.js \

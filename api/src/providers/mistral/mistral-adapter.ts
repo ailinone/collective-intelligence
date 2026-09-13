@@ -32,8 +32,45 @@ import type {
   ImageVariationResponse,
 } from '@/types/model-client';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { deriveSessionKey } from '@/services/session-affinity-service';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 
 const log = logger.child({ provider: 'mistral-adapter' });
+
+/**
+ * Surface Mistral's own reported cache-hit tokens into ci's provider-cache
+ * observability metric (ADR-025 follow-up, 2026-09).
+ *
+ * Mistral's usage object nests the cached count under
+ * `prompt_tokens_details.cached_tokens` — the SAME shape as OpenAI/xAI —
+ * per docs.mistral.ai/studio-api/conversations/advanced/prompt-caching
+ * (verified live 2026-09-08), which also documents that prompts under 64
+ * tokens never produce a cache hit (Mistral's cache blocks are 64 tokens
+ * each; this is the vendor's own internal eligibility rule, not something
+ * this adapter's request needs to gate on — `prompt_cache_key` is just a
+ * stable string, unconditionally safe to send regardless of prompt size,
+ * exactly like OpenAI's identical mechanism). Mistral only reports the hit
+ * count directly, so the miss count is derived as
+ * `prompt_tokens - cached_tokens`. A no-op when the field is absent.
+ */
+function recordMistralCacheUsage(usage: unknown): void {
+  if (!usage || typeof usage !== 'object') return;
+  const usageObj = usage as Record<string, unknown>;
+  const promptTokens =
+    typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : undefined;
+  const details = usageObj.prompt_tokens_details;
+  const cachedTokens =
+    details && typeof details === 'object'
+      ? (details as Record<string, unknown>).cached_tokens
+      : undefined;
+  if (typeof cachedTokens !== 'number') return;
+
+  recordProviderPromptCacheUsage({
+    provider: 'mistral',
+    hitTokens: cachedTokens,
+    missTokens: typeof promptTokens === 'number' ? Math.max(0, promptTokens - cachedTokens) : undefined,
+  });
+}
 
 /**
  * Mistral AI Provider Adapter
@@ -172,6 +209,20 @@ export class MistralAdapter extends ProviderAdapter {
           // Mistral supports function calling (OpenAI compatible)
           tools: request.tools,
           tool_choice: request.tool_choice,
+          // Prompt caching (ADR-025 follow-up, 2026-09): Mistral's own API
+          // reference documents `prompt_cache_key` as a request field with
+          // the SAME contract as OpenAI's field of the same name — "use the
+          // same key for requests with shared prompt prefixes ... to
+          // increase cache hits", with cached tokens billed at 10% of the
+          // standard input token price (docs.mistral.ai/api, `Chat
+          // Completion` -> request body, verified live 2026-09-08). Mistral
+          // documents no minimum-prompt-length gate for this field (same as
+          // OpenAI's identical mechanism) — it is just a stable string, so
+          // there is nothing to conditionally omit below a size threshold.
+          // Reuses the SAME derivation session affinity uses
+          // (session-affinity-service.ts) so it stays stable turn-to-turn
+          // independent of whether session affinity itself is enabled.
+          prompt_cache_key: deriveSessionKey(request),
         }),
       });
 
@@ -180,7 +231,9 @@ export class MistralAdapter extends ProviderAdapter {
         throw new Error(`Mistral API error: ${JSON.stringify(error)}`);
       }
 
-      return (await response.json()) as ChatResponse;
+      const parsed = (await response.json()) as ChatResponse;
+      recordMistralCacheUsage(parsed.usage);
+      return parsed;
     }, 'chat completion');
   }
 
@@ -209,6 +262,10 @@ export class MistralAdapter extends ProviderAdapter {
           stream: true,
           tools: request.tools,
           tool_choice: request.tool_choice,
+          // Prompt caching (ADR-025 follow-up, 2026-09) — see the
+          // non-streaming chatCompletion()'s identical field for the
+          // rationale and citation.
+          prompt_cache_key: deriveSessionKey(request),
         }),
       });
 
@@ -227,6 +284,16 @@ export class MistralAdapter extends ProviderAdapter {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+
+    // Real Mistral (OpenAI-compatible) streaming only sends `id` +
+    // `function.name` on the FIRST delta chunk of a given tool call; every
+    // continuation chunk carries only `{index, function: {arguments:
+    // <fragment>}}`. This map tracks the id/name already seen per `index` so
+    // continuation fragments can be correctly tagged instead of dropped. It
+    // is a plain local variable scoped to this single generator invocation
+    // (one per request) — it is never stored on `this`, so concurrent
+    // requests never share or leak state through it.
+    const toolCallState = new Map<number, { id: string; name: string }>();
 
     try {
       // Narrow each chunk to `Uint8Array` via runtime guard. This avoids both
@@ -253,7 +320,7 @@ export class MistralAdapter extends ProviderAdapter {
               // SSE `data` is `unknown` after JSON.parse — `convertStreamChunk`
               // does its own validation/narrowing internally.
               const data: unknown = JSON.parse(trimmed.slice(6));
-              yield this.convertStreamChunk(data, modelToUse);
+              yield this.convertStreamChunk(data, modelToUse, toolCallState);
             } catch {
               // Skip invalid SSE data
               continue;
@@ -390,8 +457,22 @@ export class MistralAdapter extends ProviderAdapter {
 
   /**
    * Convert stream chunk to ChatResponse format
+   *
+   * @param toolCallState Per-stream accumulator (see the call site in
+   * `chatCompletionStream`) tracking the `id`/`function.name` already seen
+   * for each in-progress tool call `index`. Real Mistral (OpenAI-compatible)
+   * streaming sends those only on the first delta chunk of a tool call;
+   * every continuation chunk carries just `{index, function: {arguments:
+   * <fragment>}}`. Without this, continuation-only fragments have no
+   * `id`/`name` to satisfy the (non-optional) `ToolCall` shape and were
+   * previously dropped outright, silently truncating/corrupting
+   * multi-fragment tool-call arguments.
    */
-  private convertStreamChunk(rawChunk: unknown, requestedModel: string): ChatResponse {
+  private convertStreamChunk(
+    rawChunk: unknown,
+    requestedModel: string,
+    toolCallState?: Map<number, { id: string; name: string }>
+  ): ChatResponse {
     // Narrow the wire-format chunk to the shape we consume. Any field that
     // doesn't match falls back to a safe default — bad JSON yields an empty
     // chunk, never a crash.
@@ -471,25 +552,11 @@ export class MistralAdapter extends ProviderAdapter {
         }
       }
 
-      // Type guard for tool_calls. Predicate-style narrow gives us a real
-      // typed `tc` inside the loop (vs the previous inline-cast chain that
-      // left `tc` as `any` and cascaded 12 unsafe-* errors).
-      const isToolCallShape = (
-        value: unknown
-      ): value is {
-        id: string;
-        type: 'function';
-        function: { name: string; arguments?: unknown };
-      } => {
-        if (typeof value !== 'object' || value === null) return false;
-        const v = value as { id?: unknown; type?: unknown; function?: unknown };
-        if (typeof v.id !== 'string') return false;
-        if (v.type !== 'function') return false;
-        if (typeof v.function !== 'object' || v.function === null) return false;
-        const fn = v.function as { name?: unknown };
-        return typeof fn.name === 'string';
-      };
-
+      // Handle tool calls with an id/name accumulator: real streaming only
+      // sends id+name on the first chunk of a tool call, so a strict
+      // "id+type+function.name" shape guard would silently drop every
+      // continuation-only fragment. Track identity per wire-protocol
+      // `index` instead of requiring it on every chunk.
       let toolCalls: ToolCall[] | undefined = undefined;
       if (
         choice.delta?.tool_calls !== undefined &&
@@ -497,16 +564,50 @@ export class MistralAdapter extends ProviderAdapter {
         Array.isArray(choice.delta.tool_calls)
       ) {
         const validToolCalls: ToolCall[] = [];
-        for (const tc of choice.delta.tool_calls) {
-          if (!isToolCallShape(tc)) continue;
-          const args = typeof tc.function.arguments === 'string' ? tc.function.arguments : '{}';
+        for (const [position, tcRaw] of choice.delta.tool_calls.entries()) {
+          if (!tcRaw || typeof tcRaw !== 'object') continue;
+          const tc = tcRaw as Record<string, unknown>;
+
+          // The real wire-protocol `index` is what correlates fragments of
+          // the SAME tool call across chunks — array position is only a
+          // fallback for a malformed/legacy payload that omits it.
+          const index = typeof tc.index === 'number' ? tc.index : position;
+
+          const func =
+            tc.function && typeof tc.function === 'object'
+              ? (tc.function as Record<string, unknown>)
+              : undefined;
+          const rawId = typeof tc.id === 'string' ? tc.id : undefined;
+          const rawName = func && typeof func.name === 'string' ? func.name : undefined;
+          const rawArgs = func && typeof func.arguments === 'string' ? func.arguments : undefined;
+
+          // First chunk of a tool call carries id and/or name — remember it
+          // so later continuation chunks (which omit both) can still be
+          // tagged with the right identity.
+          let tracked = toolCallState?.get(index);
+          if (rawId !== undefined || rawName !== undefined) {
+            tracked = {
+              id: rawId ?? tracked?.id ?? '',
+              name: rawName ?? tracked?.name ?? '',
+            };
+            toolCallState?.set(index, tracked);
+          }
+
+          // Nothing usable at all (no tracked identity yet, no fragment) —
+          // this is the only case worth dropping.
+          if (!tracked && rawArgs === undefined) continue;
+
           validToolCalls.push({
-            id: tc.id,
+            id: tracked?.id ?? rawId ?? '',
             type: 'function',
             function: {
-              name: tc.function.name,
-              arguments: args,
+              name: tracked?.name ?? rawName ?? '',
+              // Forward the fragment as-is (NOT the accumulated total) so a
+              // caller doing the standard OpenAI-client-style
+              // `arguments += delta` reconstruction gets the right result.
+              arguments: rawArgs ?? '',
             },
+            index,
           });
         }
         if (validToolCalls.length > 0) {
@@ -531,6 +632,7 @@ export class MistralAdapter extends ProviderAdapter {
       { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined =
       undefined;
     if (chunk.usage && typeof chunk.usage === 'object') {
+      recordMistralCacheUsage(chunk.usage);
       const usageObj = chunk.usage as Record<string, unknown>;
       const promptTokens =
         typeof usageObj.prompt_tokens === 'number'

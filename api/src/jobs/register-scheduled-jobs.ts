@@ -196,6 +196,18 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
     const m = await import('./capability-materialise-job.js');
     return () => m.runCapabilityMaterialiseNow();
   },
+  // Structural capability derivation — writes modality-derived assertions for
+  // capabilities implied by combinations of already-materialised base
+  // capabilities (analysis←reasoning, qa←chat+reasoning, coding←any code
+  // capability, visual_question_answering←vision+chat, ...). Was previously
+  // reachable only from the one-shot `scripts/hcra-close-coverage.ts`; this
+  // closes the same "manual script, never wired" gap the ontology seed had.
+  'structural-derivation': async () => {
+    const m = await import('./structural-derivation-job.js');
+    return async () => {
+      await m.runStructuralDerivationNow();
+    };
+  },
   // Metadata backfill — idempotent drift-catcher for metadata.endpoint and
   // metadata.tools. Steady-state cost is two indexed COUNT queries; the
   // first run after deploy is the only one that does meaningful UPDATEs.
@@ -203,6 +215,82 @@ const JOB_HANDLERS: Record<string, () => Promise<JobHandler>> = {
     const m = await import('./metadata-backfill-job.js');
     return async () => {
       await m.runMetadataBackfillNow();
+    };
+  },
+  // Provider balance probe — hourly snapshot of every adapter's billing
+  // balance. Emits provider_balance gauges (scraped via /metrics) and
+  // optionally pushes the snapshot to Ailin Systems for durable history.
+  'provider-balance-probe': async () => {
+    const m = await import('./provider-balance-probe-job.js');
+    return async () => {
+      await m.runProviderBalanceProbeNow();
+    };
+  },
+  // Pricing integrity — quarantines catalog rows discovery hasn't reconfirmed
+  // within the staleness threshold (metadata.pricingSource = 'stale-unverified'),
+  // auto-disables (status='disabled') a model unconfirmed for much longer
+  // (MODEL_AUTO_DISABLE_THRESHOLD_MS, default 14d — a real, reversible
+  // catalog-membership change; see central-model-discovery-service.ts for the
+  // matching auto-re-enable path), and logs any cheap/fast-tier model priced
+  // at or above its own family's flagship price. See pricing-integrity-job.ts
+  // for the 2026-09 incident this closes.
+  'pricing-integrity-check': async () => {
+    const m = await import('./pricing-integrity-job.js');
+    return async () => {
+      await m.runPricingIntegrityCheckNow();
+    };
+  },
+  // Catalog cache refresh-ahead (capacity-scaling plan, Track 1 §2.3): the
+  // single fleet-wide writer for the full-catalog hot-path cache (all
+  // non-disabled models — 111k+ rows and growing, no static cap). This
+  // job's Redis-locked repeatable schedule is what guarantees exactly ONE
+  // process (any of the 2 `ci_api` replicas or `ci_worker` — whichever wins
+  // this tick's claim) runs the real Postgres findMany and publishes the
+  // result to Redis; every other replica hydrates from that Redis snapshot
+  // instead of repeating the query. See model-catalog-service.ts's
+  // refreshCatalogCacheAhead()/hydrateCatalogCacheFromRedis() for the
+  // publish/hydrate halves, and cache-refresh-ahead.ts for the per-process
+  // timer that now only does the cheap Redis-hydrate side.
+  'catalog-cache-refresh': async () => {
+    const m = await import('@/services/model-catalog-service.js');
+    return async () => {
+      await m.refreshCatalogCacheAhead();
+    };
+  },
+  // Model discovery fleet-dedup fix (2026-09): the ~95 provider fetchers used
+  // to run on a plain per-process `setInterval` in EVERY `ci_api` replica AND
+  // `ci_worker` (services/model-discovery-runner.ts) — real outbound HTTP
+  // calls against every provider's live API, tripled across the fleet every
+  // hour. This job is now the single fleet-wide trigger for that recurring
+  // sweep; BullMQ's Redis lock elects exactly one process per tick, same
+  // mechanism as catalog-cache-refresh above. The one-time at-boot discovery
+  // (still per-process, deliberately — see model-discovery-runner.ts's
+  // top-of-file comment) is unaffected.
+  'model-discovery-hourly': async () => {
+    const m = await import('@/services/model-discovery-runner.js');
+    return async () => {
+      await m.runScheduledModelDiscovery();
+    };
+  },
+  // Tiered Capability Fingerprint (TCF) — empirical, tiered capability
+  // discovery across the full catalog. See capability-fingerprint-job.ts's
+  // module doc for the tier design and cost/safety guardrails. Two handlers,
+  // one per bucket: 'curated' gets a full daily sweep, 'aggregated' (the
+  // HuggingFace hub-index long tail) gets a bounded, rotating daily slice.
+  // Both are opt-in (CAPABILITY_FINGERPRINT_JOB_ENABLED — see `enabled`
+  // below AND the job's own internal re-check) — registered so the schedule
+  // exists, deliberately NOT defaulted on, so a production sweep is a
+  // decision an operator makes explicitly.
+  'capability-fingerprint-daily': async () => {
+    const m = await import('./capability-fingerprint-job.js');
+    return async () => {
+      await m.runCapabilityFingerprintDailyNow();
+    };
+  },
+  'capability-fingerprint-rotation': async () => {
+    const m = await import('./capability-fingerprint-job.js');
+    return async () => {
+      await m.runCapabilityFingerprintRotationNow();
     };
   },
 };
@@ -292,6 +380,17 @@ const SCHEDULED_JOBS: ScheduledJobDef[] = [
     timeout: 1_800_000, // 30 min
     enabled: () => process.env.HCRA_MATERIALISE_DISABLED !== 'true',
   },
+  // Every 6 hours at :30 — between embedding-refresh (:15, reads
+  // capability_uris) and capability-materialise (:45, re-fuses assertions).
+  // Writing here means the derived assertions (analysis, qa, coding, ...)
+  // land in time for the SAME cycle's materialise tick to project them into
+  // capability_uris, instead of lagging a full 6-hour cycle behind.
+  {
+    name: 'structural-derivation',
+    pattern: '30 */6 * * *',
+    timeout: 1_800_000, // 30 min
+    enabled: () => process.env.HCRA_STRUCTURAL_DERIVATION_DISABLED !== 'true',
+  },
   // Daily 04:30 UTC — runs after the heavy nightly crons (log-retention,
   // billing-reconciliation at 02:00, secret-rotation at 03:00, outbox
   // 03:30) so it doesn't pile on. Idempotent: a no-op tick is two COUNT
@@ -303,6 +402,91 @@ const SCHEDULED_JOBS: ScheduledJobDef[] = [
     pattern: '30 4 * * *',
     timeout: 1_800_000, // 30 min — first run is the long one
     enabled: () => process.env.METADATA_BACKFILL_DISABLED !== 'true',
+  },
+  // Hourly at :20 (offset from the heavy nightly crons). Probes are cheap
+  // but hit every provider's billing API, so hourly with in-run jitter is
+  // the ceiling — do not lower this without checking provider rate limits.
+  {
+    name: 'provider-balance-probe',
+    pattern: '20 * * * *',
+    timeout: 600_000, // 10 min — ~60 providers × ~1s each
+    enabled: () => process.env.CI_PROVIDER_BALANCE_JOB_DISABLED !== 'true',
+  },
+  // Daily 05:00 UTC — after daily-full-discovery-adjacent crons (metadata-backfill
+  // at 04:30) so it sees that tick's writes. Idempotent: a no-op tick is one
+  // COUNT query plus a catalog-wide read for the cross-tier check.
+  {
+    name: 'pricing-integrity-check',
+    pattern: '0 5 * * *',
+    timeout: 1_800_000, // 30 min
+    enabled: () => process.env.PRICING_INTEGRITY_CHECK_DISABLED !== 'true',
+  },
+  // Every 4 minutes — matches the pre-existing CACHE_REFRESH_AHEAD_INTERVAL_MS
+  // default (4 * 60_000ms) that services/cache-refresh-ahead.ts's per-process
+  // timer used before this job existed. Deliberately its own env override
+  // (CATALOG_CACHE_REFRESH_CRON) rather than reusing CACHE_REFRESH_AHEAD_INTERVAL_MS:
+  // that ms-based var still controls the per-process keep-warm timer's cadence
+  // (selection prewarm + local Redis-hydrate), a genuinely different, still
+  // per-replica concern from this fleet-wide, cron-scheduled Postgres refresh.
+  // Gated by the SAME kill-switch as the per-process timer (both are part of
+  // one feature) so CACHE_REFRESH_AHEAD_ENABLED=false disables refresh-ahead
+  // entirely rather than leaving one half running.
+  {
+    name: 'catalog-cache-refresh',
+    pattern: '*/4 * * * *',
+    envOverride: 'CATALOG_CACHE_REFRESH_CRON',
+    enabled: () => process.env.CACHE_REFRESH_AHEAD_ENABLED !== 'false',
+  },
+  // Hourly by default — matches the prior per-process MODEL_DISCOVERY_INTERVAL_MINUTES=60
+  // default (verified unused/un-overridden in docker-compose.production.yml,
+  // so this is a no-op change for the standard deployment). Override the
+  // cadence via MODEL_DISCOVERY_CRON. Gated by the SAME kill-switch
+  // (MODEL_DISCOVERY_AUTO_SYNC) as the per-process at-boot discovery in
+  // model-discovery-runner.ts, so =false disables discovery entirely rather
+  // than leaving one half running. Timeout generous: ~95 provider fetchers,
+  // some hitting slow or rate-limited upstream APIs.
+  {
+    name: 'model-discovery-hourly',
+    pattern: '0 * * * *',
+    envOverride: 'MODEL_DISCOVERY_CRON',
+    timeout: 1_800_000, // 30 min
+    enabled: () => process.env.MODEL_DISCOVERY_AUTO_SYNC !== 'false',
+  },
+  // Tiered Capability Fingerprint — curated bucket (full daily sweep).
+  // Daily 06:00 UTC — after every other nightly/early-morning cron in this
+  // list (log-retention 02:00, billing 02:00, secret-rotation 03:00, outbox
+  // 03:30, embedding-refresh/materialise/structural-derivation :15/:30/:45
+  // past various 6-hour marks, metadata-backfill 04:30, pricing-integrity
+  // 05:00) so the heaviest new job in this file runs when the least other
+  // scheduled work is competing for DB/Redis/network. Opt-in: default OFF
+  // (`enabled` below) — see capability-fingerprint-job.ts's module doc for
+  // why a catalog-wide probing job's first production run must be an
+  // explicit operator decision, never a side effect of merging this change.
+  // Timeout is generous (curated bucket can be 37k+ real, growing models
+  // across ~95 provider lanes, one of which alone carries ~22k rows) —
+  // the job's own bounded concurrency (global + per-lane caps) and shared
+  // daily probe budget are the real pacing controls, not this timeout.
+  {
+    name: 'capability-fingerprint-daily',
+    pattern: '0 6 * * *',
+    envOverride: 'CAPABILITY_FINGERPRINT_DAILY_CRON',
+    timeout: 6 * 60 * 60 * 1000, // 6h
+    enabled: () => process.env.CAPABILITY_FINGERPRINT_JOB_ENABLED === 'true',
+  },
+  // Tiered Capability Fingerprint — aggregated/long-tail bucket (bounded,
+  // rotating daily slice — see capability-fingerprint-job.ts's module doc).
+  // Offset 30 min after the curated sweep starts; both share ONE daily
+  // probe budget (Redis-backed, see the job module), so running this after
+  // curated means curated's real, larger sweep claims its budget first and
+  // the rotation only spends whatever curated didn't need. Same opt-in gate
+  // as the sibling job above — NOT a separate on/off switch, deliberately,
+  // so enabling TCF is one decision, not two half-enabled jobs.
+  {
+    name: 'capability-fingerprint-rotation',
+    pattern: '30 6 * * *',
+    envOverride: 'CAPABILITY_FINGERPRINT_ROTATION_CRON',
+    timeout: 60 * 60 * 1000, // 1h — bounded slice (~2,500 models default)
+    enabled: () => process.env.CAPABILITY_FINGERPRINT_JOB_ENABLED === 'true',
   },
 ];
 

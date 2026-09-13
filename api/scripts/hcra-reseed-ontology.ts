@@ -16,6 +16,14 @@
  * touch model_capability_assertions — fetchers remain the source of truth
  * for assertions, and the materialiser reconstructs the projection.
  *
+ * NOTE (2026-09-07): the API now runs this same idempotent upsert
+ * (`seedCapabilityOntology`) on every boot — see the "Capability ontology
+ * bootstrap" step in `src/index.ts`, right after `connectDatabase()`. A
+ * production deploy no longer depends on someone remembering to run this
+ * script; it stays useful for a manual out-of-band reseed (e.g. against a
+ * DB the API process can't reach) or for local dev without booting the
+ * full server.
+ *
  * Usage:
  *   DATABASE_URL="postgresql://ci_user:ci_password@localhost:5434/ci_db" \
  *     npx tsx scripts/hcra-reseed-ontology.ts

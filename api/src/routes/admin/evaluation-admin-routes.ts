@@ -20,7 +20,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -35,11 +35,16 @@ import { runEvaluationPipeline } from '@/jobs/evaluation-cron-job';
 const log = logger.child({ component: 'evaluation-admin' });
 
 export async function registerEvaluationAdminRoutes(server: FastifyInstance): Promise<void> {
+  // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): drift/learning/
+  // outcome/rollback data and the evaluation pipeline are platform-wide,
+  // with no organizationId scoping anywhere in this file or the underlying
+  // services — requireRole('admin','owner') alone is per-org and any
+  // tenant's own self-promoted admin satisfies it.
   const adminPreHandler = [
     authenticate,
     rejectAnonymousGuestKeyPreHandler,
     rejectChatFreeTierKeyPreHandler,
-    requireRole('admin', 'owner'),
+    requirePlatformAdmin(),
   ];
 
   // ═══════════════════════════════════════════════════════════════════════════

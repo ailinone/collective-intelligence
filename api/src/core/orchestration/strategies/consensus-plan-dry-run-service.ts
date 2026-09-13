@@ -40,9 +40,9 @@ const log = logger.child({ component: 'consensus-plan-dry-run-service' });
 export interface DryRunInput {
   readonly chatRequest: ChatRequest;
   /** Eligible candidate pool. The caller is responsible for sourcing
-   *  it (from `getModelRepository().searchModels(...)` or by reusing
-   *  the orchestration context the live engine would build). The
-   *  service does NOT touch the DB itself. */
+   *  it (the full catalog via `buildConsensusRoleSpecificCandidatePools`,
+   *  or by reusing the orchestration context the live engine would
+   *  build). The service does NOT touch the DB itself. */
   readonly candidatePool: readonly Model[];
   /** Optional context overrides (taskType, maxCost, etc.). When absent,
    *  the service infers from chatRequest. */

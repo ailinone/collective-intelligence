@@ -90,6 +90,20 @@ export const degradedSynthesisTotal = createCounter({
   registers: [registry],
 });
 
+/**
+ * Requests where the client PINNED a model and a different one answered
+ * (2026-09). These are HTTP 200 with `degraded: false` — correctly so, since a
+ * real answer was produced — but the caller did not get what it asked for, and
+ * until this counter existed a provider-wide circuit-breaker trip that shifted
+ * traffic to another vendor was invisible in aggregate.
+ */
+export const modelSubstitutionTotal = createCounter({
+  name: 'ci_model_substitution_total',
+  help: 'Total responses where a client-pinned model was replaced by a different model',
+  labelNames: ['strategy', 'served_provider'],
+  registers: [registry],
+});
+
 export const strategyExecutionTotal = createCounter({
   name: 'ci_strategy_execution_total',
   help: 'Total number of strategy executions',
@@ -136,7 +150,7 @@ export const modelSelectionDuration = createHistogram({
   name: 'ci_model_selection_duration_ms',
   help: 'Time to select model in milliseconds',
   labelNames: ['task_type'],
-  buckets: [1, 5, 10, 25, 50, 100, 250, 500],
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000],
   registers: [registry],
 });
 
@@ -717,6 +731,53 @@ export const bulkheadMode = createGauge({
 });
 
 /**
+ * Inbound admission control (Track 1 §2.1, CAPACITY-SCALING-PLAN-10K-USERS.md).
+ *
+ * Unlike `bulkheadActiveLeases` above (fleet-wide, Redis-leased, OUTBOUND
+ * provider concurrency), these three are deliberately PER-PROCESS — there is
+ * no distributed-bulkhead equivalent for inbound admission yet. With 2
+ * `ci_api` replicas, `ci_admission_control_in_flight_requests` summed across
+ * both replicas' `/metrics` scrapes is the real fleet-wide in-flight count;
+ * neither this gauge nor the enforcing cap it can drive (see
+ * `middleware/admission-control.ts`) is aware of the other replica. See that
+ * file's module comment for the full reasoning and the same footgun
+ * `distributed-bulkhead.ts` already solved on the outbound side.
+ */
+export const admissionControlInFlightRequests = createGauge({
+  name: 'ci_admission_control_in_flight_requests',
+  help: 'Current in-flight requests to expensive routes (per-process — see module comment on multiplying with replica count)',
+  labelNames: ['route'],
+  registers: [registry],
+});
+
+/**
+ * Fires every time `@fastify/under-pressure`'s pressureHandler observes a
+ * configured resource axis over threshold (heapUsedBytes, rssBytes, and —
+ * once measured and configured — eventLoopDelay/eventLoopUtilization). In
+ * shadow mode (ADMISSION_CONTROL_ENFORCE=false, the default) this fires
+ * without any request being rejected; it is the signal to watch to decide
+ * when enforcement is safe to turn on.
+ */
+export const admissionControlPressureEventsTotal = createCounter({
+  name: 'ci_admission_control_pressure_events_total',
+  help: 'Total resource-pressure events observed by the inbound admission-control layer',
+  labelNames: ['metric'],
+  registers: [registry],
+});
+
+/**
+ * Requests actually rejected (503 + Retry-After) by admission control.
+ * Always zero unless ADMISSION_CONTROL_ENFORCE=true — shadow mode logs and
+ * increments `admissionControlPressureEventsTotal` but never this counter.
+ */
+export const admissionControlRejectedTotal = createCounter({
+  name: 'ci_admission_control_rejected_total',
+  help: 'Total requests rejected by inbound admission control (only non-zero when enforce mode is on)',
+  labelNames: ['route', 'reason'],
+  registers: [registry],
+});
+
+/**
  * Requests rejected by the per-provider TPM/RPM token bucket (scale-to-100k
  * Phase 2 follow-up, issue #152) — distinct from bulkheadRejectedTotal
  * (concurrency cap): this fires when a provider's estimated token-per-minute
@@ -726,6 +787,103 @@ export const providerTpmRejectedTotal = createCounter({
   name: 'ci_provider_tpm_rejected_total',
   help: 'Requests rejected by the provider TPM/RPM token bucket (budget exhausted)',
   labelNames: ['provider'],
+  registers: [registry],
+});
+
+// ============================================
+// SAB Candidate Index Metrics (ADR-027,
+// SELECTION_USE_SAB_CANDIDATE_INDEX — default OFF)
+// ============================================
+// `getSabCandidateIndexStatus()` (core/selection/sab-candidate-index/
+// manager.ts) is a synchronous, per-process observability snapshot with no
+// natural "scrape" hook of its own. Rather than poll it from a `collect()`
+// callback, these are pushed at the exact call sites in manager.ts where
+// each field already changes (worker 'rebuilt'/'rebuild-failed'/'exit'
+// messages) — the same push-model convention this file already uses for
+// circuitBreakerState/bulkheadActiveLeases/providerDiscoveredModelsTotal.
+// All per-process (no distributed-bulkhead equivalent — SAB is explicitly
+// single-replica scope, see ADR-027), so summing across replicas' /metrics
+// scrapes is meaningless for `sabCandidateIndexActiveGen`/`ready`/`version`
+// (each replica runs its own independent worker + generation); it IS
+// meaningful for the two `_total` counters.
+
+export const sabCandidateIndexReady = createGauge({
+  name: 'ci_sab_candidate_index_ready',
+  help: 'SAB candidate index readiness per process (1 = at least one generation built and serving reads, 0 = not ready or not started)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexActiveGen = createGauge({
+  name: 'ci_sab_candidate_index_active_gen',
+  help: 'SAB candidate index active double-buffer slot per process (-1 = none built yet, 0 or 1 = the generation currently serving reads)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexVersion = createGauge({
+  name: 'ci_sab_candidate_index_version',
+  help: 'SAB candidate index generation version per process (increments by 1 on every successful rebuild since worker start)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexBuildsTotal = createCounter({
+  name: 'ci_sab_candidate_index_builds_total',
+  help: 'Total successful SAB candidate index rebuilds per process since worker start',
+  registers: [registry],
+});
+
+export const sabCandidateIndexCrashesTotal = createCounter({
+  name: 'ci_sab_candidate_index_crashes_total',
+  help: 'Total SAB candidate index worker crashes/unexpected exits per process (each triggers an automatic respawn; reads keep serving the last-good generation throughout, so this is a health signal, not a user-facing failure)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexLastBuildMs = createGauge({
+  name: 'ci_sab_candidate_index_last_build_ms',
+  help: 'Wall-clock duration of the most recent successful SAB candidate index rebuild, in milliseconds',
+  registers: [registry],
+});
+
+/**
+ * 0 = redis (fleet-wide snapshot, the cheap/expected path), 1 = postgres
+ * (direct fallback query — expected on a cold boot or when Redis is
+ * unreachable/empty; persistently 1 is worth investigating, same posture as
+ * the `sab-candidate-index: generation built from the Postgres fallback`
+ * warn log in manager.ts).
+ */
+export const sabCandidateIndexLastBuildSource = createGauge({
+  name: 'ci_sab_candidate_index_last_build_source',
+  help: 'Data source of the most recent successful SAB candidate index rebuild (0 = redis fleet-wide snapshot, 1 = postgres fallback)',
+  registers: [registry],
+});
+
+// The 2026-09-11 canary (ADR-027, "Canary 2") failed every rebuild on a
+// capacity error and NOTHING below changed: builds_total stayed 0,
+// crashes_total stayed 0 (a failed build is not a crash; the worker stays
+// alive), ready stayed 0 — indistinguishable from a process that had just
+// booted. The only evidence was the worker's log line. These four exist so
+// the next canary is diagnosable from Prometheus alone.
+export const sabCandidateIndexBuildFailuresTotal = createCounter({
+  name: 'ci_sab_candidate_index_build_failures_total',
+  help: 'Total failed SAB candidate index rebuilds per process (worker alive, last-good generation kept; ready stays 0 if no generation was ever built). reason: capacity | fetch | other',
+  labelNames: ['reason'],
+  registers: [registry],
+});
+
+export const sabCandidateIndexDistinctCapabilities = createGauge({
+  name: 'ci_sab_candidate_index_distinct_capabilities',
+  help: 'Distinct legacy capability strings encoded in the most recent successful SAB candidate index generation (hard limit: MAX_CAPABILITIES in capacity.ts, currently 128)',
+  registers: [registry],
+});
+
+export const sabCandidateIndexMetadataBlobUsedBytes = createGauge({
+  name: 'ci_sab_candidate_index_metadata_blob_used_bytes',
+  help: 'Bytes of per-model metadata JSON written into the most recent successful SAB candidate index generation',
+  registers: [registry],
+});
+
+export const sabCandidateIndexMetadataBlobCapacityBytes = createGauge({
+  name: 'ci_sab_candidate_index_metadata_blob_capacity_bytes',
+  help: 'Fixed capacity of the SAB candidate index metadata blob per generation (METADATA_BLOB_BYTES; override via SAB_CANDIDATE_METADATA_BLOB_BYTES)',
   registers: [registry],
 });
 
@@ -1265,6 +1423,66 @@ export function recordBanditSuccessStoryState(params: {
     banditRewardRate.set(params.rewardRate);
   }
   banditSnapshotCount.set(params.snapshotCount);
+}
+
+// ============================================
+// Provider-Native Prompt Cache Observability (ADR-025 follow-up, 2026-09)
+// ============================================
+
+/**
+ * Provider-native prompt/context cache tokens actually reported back by a
+ * vendor's own response `usage` payload, split hit vs miss.
+ *
+ * This is a DIFFERENT concept from `cacheHitsTotal`/`cacheMissesTotal` above
+ * (ci's own semantic response cache, keyed by `organization_id` +
+ * `match_type`): this counter is provider-side prefix/context caching —
+ * Bedrock's `cachePoint`, Vertex AI's `cachedContentTokenCount`, Cohere's
+ * `cached_tokens`, DeepSeek's `prompt_cache_hit_tokens`/
+ * `prompt_cache_miss_tokens`, Moonshot's `cached_tokens`, Gemini's
+ * `cachedContentTokenCount`, xAI's `prompt_tokens_details.cached_tokens`,
+ * and the OpenAI-compatible-ecosystem's nested
+ * `prompt_tokens_details.cached_tokens` (Groq, Azure, Cerebras, SambaNova,
+ * Databricks) — none of which touch ci's own response cache at all. See
+ * ADR-025 (`api/docs/adr/ADR-025-prompt-caching-scope-across-providers.md`)
+ * for the full per-provider inventory this closes the observability gap for.
+ *
+ * Deliberately NOT folded into the shared `Usage` type
+ * (`api/src/types/index.ts`) — ADR-025's own "Alternatives considered"
+ * rejected that as scope creep shared by every provider, not something to
+ * fix piecemeal per adapter. This counter is the additive, non-breaking
+ * alternative: adapters record it as a side effect without changing the
+ * `ChatResponse`/`Usage` contract any caller already depends on.
+ */
+export const providerPromptCacheTokensTotal = createCounter({
+  name: 'ci_provider_prompt_cache_tokens_total',
+  help: 'Provider-native prompt/context cache tokens reported in response usage, by hit/miss',
+  labelNames: ['provider', 'outcome'], // outcome: 'hit' | 'miss'
+  registers: [registry],
+});
+
+/**
+ * Record provider-native cache hit/miss tokens for one response. Call sites
+ * pass whichever of `hitTokens`/`missTokens` their vendor's response
+ * actually reported — a provider that only reports a hit count (e.g.
+ * Vertex AI's `cachedContentTokenCount`, Cohere's `cached_tokens`, Gemini's
+ * `cachedContentTokenCount`, Moonshot's `cached_tokens`) can derive
+ * `missTokens` as `promptTokens - hitTokens` at the call site, while one that
+ * reports both directly (DeepSeek) passes both verbatim. Either field being
+ * `undefined` or `0` is silently skipped — this only increments counters for
+ * values a vendor actually sent, never a fabricated zero.
+ */
+export function recordProviderPromptCacheUsage(params: {
+  provider: string;
+  hitTokens?: number;
+  missTokens?: number;
+}): void {
+  const { provider, hitTokens, missTokens } = params;
+  if (typeof hitTokens === 'number' && hitTokens > 0) {
+    providerPromptCacheTokensTotal.inc({ provider, outcome: 'hit' }, hitTokens);
+  }
+  if (typeof missTokens === 'number' && missTokens > 0) {
+    providerPromptCacheTokensTotal.inc({ provider, outcome: 'miss' }, missTokens);
+  }
 }
 
 // ============================================

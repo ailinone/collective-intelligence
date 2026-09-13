@@ -11,61 +11,136 @@ import { describe, expect, it } from 'vitest';
 import { AWSBedrockModelFetcher } from '@/services/model-fetchers/aws-bedrock-model-fetcher';
 
 /**
- * Regression tests for the Bedrock pricing estimates.
+ * Bedrock reports no token economics — and we no longer invent any.
  *
- * Incident: the flagship heuristic treated any id with a 100B+ parameter
- * count (405b, 120b, ...) as a proprietary flagship and priced it $15/$75 per
- * 1M tokens. Large open-weights models on Bedrock are commodity-priced —
- * openai.gpt-oss-120b-1:0 is $0.15/$0.60 per 1M (https://aws.amazon.com/bedrock/pricing/),
- * so the estimate was inflated 100x/125x in the production catalog.
+ * ## History
+ *
+ * This file used to bound an `estimateModelSpecs()` keyword table that mapped
+ * substrings of the model id to a context window and a per-1M price. It existed
+ * because that table had already caused a production incident: any id carrying
+ * a 100B+ parameter count was treated as a proprietary flagship and priced at
+ * $15/$75 per 1M, inflating commodity open-weights models (gpt-oss-120b is
+ * $0.15/$0.60) by 100-125x in the live catalog.
+ *
+ * Bounding the estimate was the wrong fix, because the premise was wrong:
+ * `ListFoundationModels` returns modelId / modelName / providerName /
+ * modalities / inferenceTypesSupported and NO pricing and NO context window.
+ * There was never anything to estimate FROM. A number written into
+ * `models.input_cost_per_1k` is indistinguishable downstream from a real one,
+ * and the cost and selection layers read that column.
+ *
+ * LOTE AN (2026-09-05, GAP-AK-6) deleted the table. These tests now pin the
+ * stronger property — Bedrock discovery emits "unknown", not a guess — which
+ * subsumes every bound the old suite checked.
  */
 
-type Specs = {
-  contextWindow: number;
-  maxOutputTokens: number;
-  pricing: { inputCostPer1M: number; outputCostPer1M: number; currency?: string };
+type BedrockSummary = {
+  modelId?: string;
+  modelName?: string;
+  providerName?: string;
+  inputModalities?: string[];
+  outputModalities?: string[];
+  inferenceTypesSupported?: string[];
 };
 
-function specsFor(modelId: string): Specs {
+function convert(summary: BedrockSummary) {
   const fetcher = new AWSBedrockModelFetcher({ accessKeyId: '', secretAccessKey: '' });
-  return fetcher['estimateModelSpecs'](modelId);
+  return (
+    fetcher as unknown as {
+      convertBedrockModel: (m: BedrockSummary) => {
+        contextWindow: number;
+        maxOutputTokens: number;
+        pricing: { inputCostPer1M: number; outputCostPer1M: number };
+        capabilities: string[];
+        metadata: Record<string, unknown>;
+        displayName?: string;
+        id: string;
+      };
+    }
+  ).convertBedrockModel(summary);
 }
 
-describe('aws-bedrock-model-fetcher pricing estimates', () => {
-  it('does not price large open-weights models as proprietary flagships', () => {
-    for (const id of ['openai.gpt-oss-120b-1:0', 'meta.llama3-1-405b-instruct-v1:0']) {
-      const { pricing } = specsFor(id);
-      expect(pricing.inputCostPer1M, `${id} input`).toBeLessThanOrEqual(3);
-      expect(pricing.outputCostPer1M, `${id} output`).toBeLessThanOrEqual(5);
-    }
-  });
-
-  it('keeps flagship pricing for proprietary flagship keywords', () => {
-    const { pricing } = specsFor('anthropic.claude-opus-4-20250514-v1:0');
-    expect(pricing.inputCostPer1M).toBe(15.0);
-    expect(pricing.outputCostPer1M).toBe(75.0);
-  });
-
-  it('keeps the fast tier for small models', () => {
-    const { pricing } = specsFor('anthropic.claude-3-haiku-20240307-v1:0');
-    expect(pricing.inputCostPer1M).toBe(0.25);
-    expect(pricing.outputCostPer1M).toBe(1.25);
-  });
-
-  it('never emits input pricing above the most expensive real Bedrock text model for non-flagship ids', () => {
-    const nonFlagshipIds = [
-      'openai.gpt-oss-120b-1:0',
-      'openai.gpt-oss-20b-1:0',
+describe('aws-bedrock-model-fetcher — no fabricated specs', () => {
+  it('emits zero pricing for every model, flagship keywords included', () => {
+    const ids = [
+      'anthropic.claude-opus-4-20250514-v1:0', // used to hit the $15/$75 flagship branch
+      'anthropic.claude-3-haiku-20240307-v1:0', // used to hit the $0.25/$1.25 fast branch
+      'openai.gpt-oss-120b-1:0', // the model the 2026 incident mispriced
       'meta.llama3-1-405b-instruct-v1:0',
-      'meta.llama3-3-70b-instruct-v1:0',
-      'deepseek.r1-v1:0',
       'amazon.titan-text-express-v1',
-      'mistral.mistral-large-2407-v1:0',
+      'deepseek.r1-v1:0',
     ];
-    for (const id of nonFlagshipIds) {
-      const { pricing } = specsFor(id);
-      expect(pricing.inputCostPer1M, `${id} input`).toBeLessThanOrEqual(5);
-      expect(pricing.outputCostPer1M, `${id} output`).toBeLessThanOrEqual(20);
+    for (const modelId of ids) {
+      const model = convert({ modelId });
+      expect(model.pricing.inputCostPer1M, `${modelId} input`).toBe(0);
+      expect(model.pricing.outputCostPer1M, `${modelId} output`).toBe(0);
     }
+  });
+
+  it('emits zero context window / max output rather than a keyword-derived guess', () => {
+    const model = convert({ modelId: 'anthropic.claude-opus-4-20250514-v1:0' });
+    expect(model.contextWindow).toBe(0);
+    expect(model.maxOutputTokens).toBe(0);
+  });
+
+  it('no longer exposes the estimator at all', () => {
+    const fetcher = new AWSBedrockModelFetcher({ accessKeyId: '', secretAccessKey: '' });
+    expect(
+      (fetcher as unknown as Record<string, unknown>).estimateModelSpecs,
+      'estimateModelSpecs was removed — reintroducing it reintroduces fabricated pricing'
+    ).toBeUndefined();
+  });
+});
+
+describe('aws-bedrock-model-fetcher — capabilities from declared modalities', () => {
+  it('uses the API-reported modalities instead of guessing from the model id', () => {
+    // ListFoundationModels really returns these arrays; they were previously
+    // stashed in metadata and ignored while capabilities came from substring
+    // matches on the id.
+    const model = convert({
+      modelId: 'vendor.opaque-sku-v1:0', // no 'claude'/'vision'/'image' substring to key off
+      inputModalities: ['TEXT', 'IMAGE'],
+      outputModalities: ['TEXT'],
+    });
+
+    expect(model.capabilities).toContain('vision');
+    expect(model.capabilities).toContain('multimodal');
+    expect(model.capabilities).toContain('chat');
+  });
+
+  it('does not claim vision for a text-only model whose id merely looks modern', () => {
+    // The old id heuristic gave vision to anything matching /claude/ + /\d+\.\d+/.
+    const model = convert({
+      modelId: 'anthropic.claude-3.5-text-only-v1:0',
+      inputModalities: ['TEXT'],
+      outputModalities: ['TEXT'],
+    });
+
+    expect(model.capabilities).not.toContain('vision');
+  });
+
+  it('marks an embedding-only model from its declared modalities', () => {
+    const model = convert({
+      modelId: 'amazon.titan-embed-text-v2:0',
+      inputModalities: ['TEXT'],
+      outputModalities: ['EMBEDDING'],
+    });
+
+    expect(model.capabilities).not.toContain('chat');
+  });
+
+  it('falls back to id-based extraction only when no modalities are reported', () => {
+    const model = convert({ modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0' });
+    expect(model.capabilities).toContain('chat');
+  });
+
+  it('keeps the raw declared modalities in metadata for audit', () => {
+    const model = convert({
+      modelId: 'x.y-v1:0',
+      inputModalities: ['TEXT', 'IMAGE'],
+      outputModalities: ['TEXT'],
+    });
+    expect(model.metadata.inputModalities).toEqual(['TEXT', 'IMAGE']);
+    expect(model.metadata.outputModalities).toEqual(['TEXT']);
   });
 });

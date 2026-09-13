@@ -103,6 +103,9 @@ export class LLMJudgeEvaluator implements StrategyOutputEvaluator {
       role: input.role,
       maxCostUsd: this.config.maxCostUsd,
       timeoutMs: this.config.timeoutMs,
+      // LOTE AZ — forward the original request's effort signal so a
+      // high-effort request doesn't silently get a low-effort judge.
+      originalRequestReasoning: input.originalRequestReasoning,
     };
 
     let raw: LLMJudgeRawResult;

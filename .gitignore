@@ -59,7 +59,6 @@ api/.env.*.local
 !.env.example.*
 !api/.env.example
 !api/.env.example.*
-!api/.env.test
 !api/.env.production
 
 # Local production credentials and generated runtime config
@@ -120,3 +119,4 @@ api/.ailin/
 
 # OSS-fork audit workspace (manifests, clearance notes — never for VCS)
 audit_workspace/
+api/.env.test

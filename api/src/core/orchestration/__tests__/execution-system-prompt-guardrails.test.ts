@@ -73,14 +73,16 @@ describe('execution system prompt — behavioral guardrails', () => {
     expect(languageIdx).toBeGreaterThan(echoIdx);
   });
 
-  it('does not inject any prompt when the caller supplied a system message (existing contract preserved)', () => {
+  it('STILL injects the conduct directive when the caller supplied a system message (2026-09-08 fix: this used to return null entirely)', () => {
     const request = buildRequest({
       messages: [
         { role: 'system', content: 'custom system' },
         { role: 'user', content: 'oi' },
       ],
     });
-    expect(buildExecutionSystemPrompt(request, buildContext())).toBeNull();
+    const prompt = buildExecutionSystemPrompt(request, buildContext());
+    expect(prompt).not.toBeNull();
+    expect(prompt).toContain(BEHAVIORAL_GUARDRAILS_DIRECTIVE);
   });
 
   it('directive enumerates the concrete prohibitions that failed in the incident', () => {

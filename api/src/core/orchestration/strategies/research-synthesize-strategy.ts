@@ -22,7 +22,7 @@
  *   4. Synthesizer produces final research summary with confidence levels
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -250,6 +250,7 @@ export class ResearchSynthesizeStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalCost: executions.reduce((s, e) => s + e.cost, 0),
       totalDuration: Date.now() - startTime,
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'research-synthesize',
         researchers: researchResults.length,

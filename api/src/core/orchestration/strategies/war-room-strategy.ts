@@ -27,7 +27,12 @@
  * Quality: Very high for complex tasks where no single model has complete expertise.
  */
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import {
+  BaseStrategy,
+  safeResponseContent,
+  mergeArtifacts,
+  type StrategyMetadata,
+} from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -284,6 +289,7 @@ export class WarRoomStrategy extends BaseStrategy {
         totalCost: decomposition.execution.cost + direct.cost,
         totalDuration: Date.now() - startTime,
         qualityScore: direct.success ? 0.7 : 0,
+        toolArtifacts: mergeArtifacts(allExecutions),
         metadata: { phase: 'single_pass', subTasks: 0 },
       };
     }
@@ -423,6 +429,7 @@ export class WarRoomStrategy extends BaseStrategy {
       totalCost,
       totalDuration: duration,
       qualityScore: 0.9,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         subTasks: subTasks.length,
         specialistsUsed: specialistResults.length,

@@ -29,6 +29,7 @@ import {
   getArrayFromObject,
   isObject,
   getErrorMessage,
+  narrowAs,
 } from '@/utils/type-guards';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
@@ -38,7 +39,7 @@ import { getModelPerformanceTracker } from '@/services/model-performance-tracker
 import { getProviderRegistry } from '@/providers/provider-registry';
 import { createModelSelectionConfig } from '@/config/model-selection-config';
 import { popularityPriorFromMetadata } from './popularity-prior';
-import { getAllCatalogModels } from '@/services/model-catalog-service';
+import { getAllCatalogModels, getCatalogIndices } from '@/services/model-catalog-service';
 import { getModelRepository } from '@/services/model-repository';
 import { validateSelectionCriteria } from './selection-criteria-validator';
 import { getModelSelectionCache as _getModelSelectionCache } from './model-selection-cache';
@@ -48,6 +49,7 @@ import { modelPerformanceTracker as corePerformanceTracker } from '@/core/select
 import { getCentralModelDiscoveryService } from '@/services/central-model-discovery-service';
 import { classifyProviderKind } from './provider-kind';
 import { legacyArrayToUriArray } from '@/capability/legacy-capability-uri';
+import { capabilityOntology } from '@/core/capabilities/capability-ontology';
 import { getCapabilitySearchService } from '@/capability/search/capability-search-singleton';
 import type { ModelSearchHit } from '@/capability/search/capability-search-service';
 import {
@@ -56,71 +58,939 @@ import {
   recordNativePreferred,
   recordProviderSelected,
 } from './selection-metrics';
+import {
+  ensureSabCandidateIndexStarted,
+  getSabCandidateModels,
+  isSabCandidateIndexEnabled,
+} from './sab-candidate-index/manager';
 
 const log = logger.child({ component: 'dynamic-model-selector' });
 
-// PROVE-BEFORE-ADMIT (2026-06-27): process-wide cache of the runtime-verified
-// (non-hub-index) model PKs. The underlying query is REQUEST-INDEPENDENT (the same
-// set for every request) but the chat selection cache key embeds per-request
-// contextSize, so without this cache the raw catalog scan would run on essentially
-// every request. A short TTL keeps it fresh as discovery (re)classifies rows.
-// Module scope so it survives per-request selector instances.
-let verifiedHubUidCache: { uids: string[]; expiresAt: number } | null = null;
-const VERIFIED_HUB_TTL_MS = 60_000;
+type ModelWithProvider = Prisma.ModelGetPayload<{ include: { provider: true } }>;
 
-/**
- * Return the PKs (uid) of catalog models that are NOT unverified HuggingFace
- * hub-INDEX rows (metadata.hubInventoryClass='aggregated_index' — ~63k/72k catalog
- * rows that are catalog-only with no live endpoint → 404 model_not_found when
- * selected). Cached process-wide behind VERIFIED_HUB_TTL_MS. Returns [] on error
- * (callers fail open to the full catalog) or when the marker is unpopulated.
- */
-async function getVerifiedHubUids(): Promise<string[]> {
+// ─── Bucket-fair candidate retrieval (2026-09-07 catalog-visibility fix) ──────
+//
+// REPLACES the previous two module-scope caches/queries
+// (`getVerifiedHubUids`/`verifiedHubUidCache` — PROVE-BEFORE-ADMIT 2026-06-27,
+// and `getPopularitySeedRows`/`popularitySeedCache` — 2026-08-01/2026-06-29
+// popularity-seed patch). Both existed to patch around the same underlying
+// defect: a single `OR`-filter + `ORDER BY usage_count DESC LIMIT N` query
+// over two disjoint, wildly differently-sized populations —
+//   - ~37.6k curated/native rows (openai/anthropic/google/xai/mistral/
+//     cohere/deepseek/perplexity/...), tagged non-`aggregated_index`, ZERO
+//     overlap with `serverless_callable=true` (confirmed live, 2026-09-07)
+//   - ~74k HuggingFace hub-index rows tagged `aggregated_index`, of which
+//     ~73.8k are `serverless_callable=true`
+// — where EVERY row in BOTH populations ties at usage_count=0 (the column
+// has never been written anywhere in this codebase; see
+// usage-count-tracker.ts, which closes that gap going forward). With every
+// row tied, physical/ctid scan order decides the winner, and the bigger
+// population (74k) wins essentially every slot. Live repro (2026-09-07):
+// the old query's final `ORDER BY usage_count DESC LIMIT 800` returned
+// 0 curated / 800 aggregated candidates for a representative request —
+// every premium native provider was structurally invisible to selection.
+//
+// Two INDEPENDENTLY-limited branches (curated top-N, aggregated top-M),
+// UNIONed, structurally guarantee both buckets are reachable regardless of
+// relative population size or how ties break — no single ORDER BY/LIMIT over
+// one UNION can offer that guarantee, which is why this replaces rather than
+// tunes the old query.
+//
+// Raw SQL (not Prisma's query builder), same reason the two retired
+// functions used raw SQL: Prisma cannot express `ORDER BY` over a JSON path,
+// and the aggregated-bucket predicate must use the JSONB containment
+// operator (`metadata @> '{"serverless_callable":true}'::jsonb`), not
+// `metadata->>'serverless_callable' = 'true'` — the text-extraction form
+// forces the planner off the `models_usage_count_idx` backward index scan
+// onto a sequential scan (measured live, 2026-09-07: 92ms vs 2.8ms for the
+// identical predicate, only the operator changed).
+export interface BucketFairFilters {
+  contextSize?: number;
+  /** Provider NAMEs (matches `providers.name`), same shape SelectionCriteria
+   *  already carries in preferredProviders/excludeProviders — resolved to
+   *  provider_id via a subquery inside the raw SQL rather than requiring
+   *  callers to pre-resolve IDs. */
+  includeProviderNames?: string[];
+  excludeProviderNames?: string[];
+}
+
+export interface BucketFairCandidateResult {
+  uids: string[];
+  curatedCount: number;
+  aggregatedCount: number;
+  /** Distinct providers actually represented in the curated portion of
+   *  `uids` (2026-09-07 per-provider-fairness follow-up). 0 when
+   *  curatedCount is 0. Real observability so a future regression like the
+   *  featherless-ai-59%-of-curated one below is visible in logs/metrics
+   *  immediately instead of requiring another live audit to discover. */
+  curatedDistinctProviders: number;
+  /** Share (0..1) of the curated portion of `uids` supplied by its single
+   *  most-represented provider. Should track close to curatedMaxProviderShare
+   *  under normal operation — see the warning emitted below when it doesn't. */
+  curatedTopProviderShare: number;
+}
+
+function buildBucketFilterFragments(filters: BucketFairFilters): Prisma.Sql {
+  const fragments: Prisma.Sql[] = [];
+  if (filters.contextSize) {
+    fragments.push(Prisma.sql`AND context_window >= ${filters.contextSize}`);
+  }
+  if (filters.includeProviderNames && filters.includeProviderNames.length > 0) {
+    fragments.push(
+      Prisma.sql`AND provider_id IN (SELECT id FROM providers WHERE name = ANY(${filters.includeProviderNames}::text[]))`
+    );
+  }
+  if (filters.excludeProviderNames && filters.excludeProviderNames.length > 0) {
+    fragments.push(
+      Prisma.sql`AND provider_id NOT IN (SELECT id FROM providers WHERE name = ANY(${filters.excludeProviderNames}::text[]))`
+    );
+  }
+  return fragments.length > 0 ? Prisma.join(fragments, ' ') : Prisma.empty;
+}
+
+// ─── Curated-bucket per-provider fairness (2026-09-07 follow-up) ────────────
+//
+// Adversarial re-audit of the bucket-level fix above found the SAME defect
+// one level down. Live-prod data (2026-09-07): the 37,625-row curated bucket
+// is itself 59% ONE non-premium aggregator/proxy —
+//   featherless-ai 22,144 · orqai 1,464 · aiml 1,292 · ... · openai 136 ·
+//   cohere 35 · xai 21 · anthropic 15 · google 12 · deepseek 3
+//   (95 distinct providers total)
+// — so the bucket-level `ORDER BY usage_count DESC LIMIT curatedTake` (every
+// row still tied at usage_count=0, see the module doc above) returns 100%
+// featherless-ai in production. Every premium provider this whole fix exists
+// to make reachable was STILL unreachable after the bucket split alone.
+//
+// A per-provider LATERAL join (tried during the adversarial review) is a real
+// trap: EXPLAIN ANALYZE on live prod showed Postgres does NOT use
+// `models_provider_id_status_usage_count_idx` against the JSONB bucket
+// predicate — 10.86s / ~2.96M buffer reads, effectively a full-table scan
+// once per one of the ~95 distinct providers. A single-request
+// `ROW_NUMBER() OVER (PARTITION BY provider_id ...)` avoids that specific
+// trap (one bucket scan, not N) but was ALSO measured too slow for the
+// request-hot-path budget this file already commits to elsewhere: 195ms
+// (live prod, unwindowed) to 785ms (local replica, windowed+sorted) — a
+// window function forces materializing + sorting the ENTIRE curated bucket
+// before any row can be discarded (LIMIT cannot push down through a
+// partitioned ORDER BY), which is fundamentally incompatible with a
+// single-digit-ms common-case request.
+//
+// Fix: the SAME pattern this file already uses everywhere else for a
+// request-independent, slowly-changing population (the aggregated-bucket
+// popularity backstop below; the retired getVerifiedHubUids/
+// getPopularitySeedRows PR #465 itself replaced) — cache the raw curated
+// bucket ONCE per TTL (measured live prod, 2026-09-07: 195ms for the flat,
+// un-windowed scan of all ~37.6k curated rows — done at most once per
+// CURATED_BUCKET_SNAPSHOT_TTL_MS, off the request path), then do the actual
+// per-provider ranking/round-robin/cap in memory on every request.
+// In-memory means genuinely O(bucket size) per request with zero I/O — orders
+// of magnitude cheaper than any SQL shape that has to re-earn the fairness
+// ranking from scratch per request, and stays cheap at 150k+ rows the same
+// way it is at 37.6k (still one pass over the cached array, no per-provider
+// query fan-out).
+export interface CuratedBucketRow {
+  uid: string;
+  providerId: string;
+  providerName: string;
+  contextWindow: number;
+  usageCount: number;
+}
+
+let curatedBucketSnapshotCache: { rows: CuratedBucketRow[]; expiresAt: number } | null = null;
+// 2 minutes: short enough that a newly-onboarded/removed provider or a burst
+// of real usage-count writes (the new 60s-flushed tracker — see
+// usage-count-tracker.ts) shows up in the fairness ranking within one or two
+// cycles; long enough that the ~195ms snapshot query runs at most ~30x/hour
+// regardless of request volume.
+const CURATED_BUCKET_SNAPSHOT_TTL_MS = 120_000;
+// Background-refresh path, NOT the per-request hot path: a generous timeout
+// is safe here because only the one unlucky request that happens to trigger
+// a cache-miss refresh pays it, and it fails open to an empty snapshot (which
+// downstream degrades to "curated bucket empty this cycle", not an error or
+// a blocked request) — contrast with BUCKET_FAIR_QUERY_TIMEOUT_MS below,
+// which bounds a query that DOES run on every request.
+const CURATED_SNAPSHOT_QUERY_TIMEOUT_MS = 3_000;
+
+async function getCuratedBucketSnapshot(): Promise<{ rows: CuratedBucketRow[]; queried: boolean }> {
   const now = Date.now();
-  if (verifiedHubUidCache && verifiedHubUidCache.expiresAt > now) {
-    return verifiedHubUidCache.uids;
+  if (curatedBucketSnapshotCache && curatedBucketSnapshotCache.expiresAt > now) {
+    return { rows: curatedBucketSnapshotCache.rows, queried: false };
   }
   try {
-    // NULL-safe: `IS DISTINCT FROM` keeps rows where hubInventoryClass is ABSENT (the
-    // common case for callable rows) — a plain `<>` would wrongly drop them. uid is the
-    // PK; `id` is NON-unique (@@unique([id, providerId])) so filtering on it would
-    // re-admit an aggregated_index sibling sharing the same id under another provider.
-    const rows = await prisma.$queryRaw<Array<{ uid: string }>>`
-      SELECT uid FROM models
-      WHERE status <> 'disabled'
-        AND (metadata->>'hubInventoryClass') IS DISTINCT FROM 'aggregated_index'
-      ORDER BY usage_count DESC
-      LIMIT 4000`;
-    const uids = rows.map((r) => r.uid);
-    verifiedHubUidCache = { uids, expiresAt: now + VERIFIED_HUB_TTL_MS };
-    return uids;
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SET LOCAL statement_timeout = ${CURATED_SNAPSHOT_QUERY_TIMEOUT_MS}`
+      );
+      return tx.$queryRaw<CuratedBucketRow[]>(Prisma.sql`
+        SELECT m.uid AS "uid", m.provider_id AS "providerId", p.name AS "providerName",
+               m.context_window AS "contextWindow", m.usage_count AS "usageCount"
+        FROM models m
+        JOIN providers p ON p.id = m.provider_id
+        WHERE m.status <> 'disabled'
+          AND (m.metadata->>'hubInventoryClass') IS DISTINCT FROM 'aggregated_index'
+      `);
+    });
+    curatedBucketSnapshotCache = { rows, expiresAt: now + CURATED_BUCKET_SNAPSHOT_TTL_MS };
+    return { rows, queried: true };
   } catch (rawErr) {
     log.warn(
       { error: getErrorMessage(rawErr) },
-      'Unverified-hub exclusion query failed — selecting over the full catalog (fail-open)'
+      'curated-bucket snapshot query failed or exceeded its backstop — curated fairness pool empty this cycle (fail-open)'
     );
     // Brief negative cache so a failing DB is not hammered on every request.
-    verifiedHubUidCache = { uids: [], expiresAt: now + 5_000 };
-    return [];
+    curatedBucketSnapshotCache = { rows: [], expiresAt: now + 5_000 };
+    return { rows: [], queried: true };
   }
 }
 
-type ModelWithProvider = Prisma.ModelGetPayload<{ include: { provider: true } }>;
+interface CuratedFairSelection {
+  uids: string[];
+  distinctProviders: number;
+  topProviderShare: number;
+}
 
-// Popularity-seed pool (2026-08-01): the raw top-300-by-downloads query below
-// used to run uncached on effectively every selection that reaches the
-// database path (measured in prod: 14-19s selection-time spikes under
-// concurrency, ~76.5k-row table). HF download counts move slowly, so a long
-// TTL is safe — this is the request-independent part (which 300 rows are the
-// global popularity seed); per-request de-duplication against that request's
-// own candidate pool still happens at the call site, in memory, on every call.
-let popularitySeedCache: { rows: ModelWithProvider[]; expiresAt: number } | null = null;
-const POPULARITY_SEED_TTL_MS = 30 * 60_000;
+function sortByUsageThenUid(a: CuratedBucketRow, b: CuratedBucketRow): number {
+  if (b.usageCount !== a.usageCount) return b.usageCount - a.usageCount;
+  // usage_count ties (the dominant case today — see module doc) fall back to
+  // `uid` for a deterministic, repeatable order — NOT physical/ctid order,
+  // which is exactly the non-determinism the original bug rode on.
+  return a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0;
+}
 
-async function getPopularitySeedRows(): Promise<{ rows: ModelWithProvider[]; queried: boolean }> {
+// ─── Bounded top-K partial selection (perf fix, 2026-09-08) ────────────────
+//
+// SELECTION_USE_FULL_CACHE_INDEX's real-scale benchmark (see
+// full-cache-index-benchmark.test.ts) profiled getFullCacheFairCandidateModels
+// at 66-98ms average per call against the real production catalog shape
+// (111,666 rows) — far slower than the SQL path it's meant to beat (~2ms
+// warm). Root-caused via phase-by-phase instrumentation to TWO instances of
+// the classic "sort the whole array just to take the top K" antipattern:
+//
+//   1. `aggregatedCandidates.sort(...)` full-sorting all ~73,782 aggregated-
+//      bucket candidates (O(n log n), ~1.19M comparisons) to then discard all
+//      but the first `aggregatedTake` (300 by default) — measured at ~30ms of
+//      the ~93ms total by itself.
+//   2. selectCuratedFairUids's `list.sort(sortByUsageThenUid)` fully sorting
+//      EACH per-provider bucket (up to 22,144 rows for the largest real
+//      provider) when the round-robin selection below it only ever reads the
+//      first `perProviderCap` (60 by default) elements of each list —
+//      measured at ~20ms of the ~93ms total (of selectCuratedFairUids' own
+//      ~31ms).
+//
+// Both call sites only need the FIRST k elements in correctly sorted order —
+// the rest of the array is discarded and its relative order is irrelevant.
+// `partialSortPrefixByComparator` exploits exactly that: a bounded max-heap
+// of size k (ordered by the REVERSE of `comparator`, so its root is always
+// the current worst-of-top-k) turns this into O(n log k) instead of
+// O(n log n) — for k=300/n=73,782, log2(k)=8.2 vs log2(n)=16.2, roughly
+// halving the comparison count, and local microbenchmarking (plain Node,
+// isolated from V8 JIT warmup effects of the wider test suite) showed a
+// ~1.8-2.8x wall-clock improvement on data shaped exactly like these two call
+// sites. Verified against a naive full-sort-then-slice reference across 900+
+// randomized trials (varying sizes, k values, tie-heavy comparators including
+// the REAL production case of a uniformly-zero usageCount) before being wired
+// into either call site — see this PR's description for the correctness
+// methodology.
+function boundedTopKByComparator<T>(items: T[], k: number, comparator: (a: T, b: T) => number): T[] {
+  const heap: T[] = new Array<T>(k);
+  let size = 0;
+
+  // Max-heap by `comparator`: heap[0] is always the single WORST-ranked
+  // element (the one that would sort LAST) among the k elements currently
+  // held — i.e. the first one to evict when a better candidate shows up.
+  function siftUp(i: number): void {
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (comparator(heap[i], heap[parent]) > 0) {
+        const tmp = heap[i];
+        heap[i] = heap[parent];
+        heap[parent] = tmp;
+        i = parent;
+      } else break;
+    }
+  }
+  function siftDown(i: number): void {
+    for (;;) {
+      const l = 2 * i + 1;
+      const r = 2 * i + 2;
+      let worst = i;
+      if (l < size && comparator(heap[l], heap[worst]) > 0) worst = l;
+      if (r < size && comparator(heap[r], heap[worst]) > 0) worst = r;
+      if (worst === i) break;
+      const tmp = heap[i];
+      heap[i] = heap[worst];
+      heap[worst] = tmp;
+      i = worst;
+    }
+  }
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const x = items[idx];
+    if (size < k) {
+      heap[size] = x;
+      siftUp(size);
+      size++;
+    } else if (comparator(x, heap[0]) < 0) {
+      // x ranks before (is better than) the current worst-of-top-k -> evict.
+      heap[0] = x;
+      siftDown(0);
+    }
+  }
+  const result = heap.slice(0, size);
+  result.sort(comparator);
+  return result;
+}
+
+/**
+ * Rearranges `items` IN PLACE so that `items[0 .. min(k, items.length) - 1]`
+ * hold the exact same elements, in the exact same order, that a full
+ * `items.sort(comparator)` would produce for that prefix — without paying for
+ * a full O(n log n) sort when only a bounded prefix is ever read afterward
+ * (both of this function's call sites immediately `.slice(0, k)` the result).
+ * Elements beyond the prefix are left in unspecified order — callers must
+ * never read past index k-1. See the module doc above for the profiled cost
+ * this removes and the correctness methodology.
+ */
+function partialSortPrefixByComparator<T>(
+  items: T[],
+  k: number,
+  comparator: (a: T, b: T) => number
+): void {
+  if (k <= 0 || items.length === 0) return;
+  if (items.length <= k) {
+    // Nothing to save — the whole array is the "prefix" anyway.
+    items.sort(comparator);
+    return;
+  }
+  const top = boundedTopKByComparator(items, k, comparator);
+  for (let i = 0; i < top.length; i++) items[i] = top[i];
+}
+
+/**
+ * Pure, in-memory per-provider-fair selection over a curated-bucket snapshot.
+ * Round-robin by per-provider usage-rank tier (every provider's best row
+ * before any provider's 2nd-best, etc.) — dynamic over however many distinct
+ * providers are present in `rows`, no allowlist, no hardcoded provider names.
+ *
+ * `maxProviderShare` bounds any single provider to at most
+ * `ceil(curatedTake * maxProviderShare)` rows of the output — a HARD cap,
+ * never relaxed — regardless of how large that provider's own share of the
+ * bucket is. Providers that run out of rows before the cap simply stop
+ * contributing; the round-robin structure means every OTHER still-supplying,
+ * not-yet-capped provider keeps contributing in their place, which is what
+ * keeps e.g. a 15-row provider fully reachable instead of crowded out by a
+ * single 22k-row aggregator. When the bucket's real per-provider diversity
+ * is too thin to fill curatedTake without exceeding the cap (a handful of
+ * distinct providers, none of which is allowed past its share), this
+ * deliberately returns FEWER than curatedTake uids rather than relax the cap
+ * — a hard fairness bound that can be silently defeated under low diversity
+ * is not actually a hard bound. The caller's own never-collapse fallback
+ * covers genuine under-fill; this function's only job is fairness.
+ */
+export function selectCuratedFairUids(
+  rows: CuratedBucketRow[],
+  filters: BucketFairFilters,
+  curatedTake: number,
+  maxProviderShare: number
+): CuratedFairSelection {
+  if (rows.length === 0 || curatedTake <= 0) {
+    return { uids: [], distinctProviders: 0, topProviderShare: 0 };
+  }
+  const includeSet =
+    filters.includeProviderNames && filters.includeProviderNames.length > 0
+      ? new Set(filters.includeProviderNames)
+      : null;
+  const excludeSet =
+    filters.excludeProviderNames && filters.excludeProviderNames.length > 0
+      ? new Set(filters.excludeProviderNames)
+      : null;
+  const minContext = filters.contextSize ?? 0;
+
+  const byProvider = new Map<string, CuratedBucketRow[]>();
+  for (const row of rows) {
+    if (minContext > 0 && row.contextWindow < minContext) continue;
+    if (includeSet && !includeSet.has(row.providerName)) continue;
+    if (excludeSet && excludeSet.has(row.providerName)) continue;
+    let list = byProvider.get(row.providerId);
+    if (!list) {
+      list = [];
+      byProvider.set(row.providerId, list);
+    }
+    list.push(row);
+  }
+  if (byProvider.size === 0) {
+    return { uids: [], distinctProviders: 0, topProviderShare: 0 };
+  }
+
+  const perProviderCap = Math.max(1, Math.ceil(curatedTake * maxProviderShare));
+  // PERF (2026-09-08): the round-robin below only ever reads the first
+  // `perProviderCap` elements of each provider's list (`rank < perProviderCap`
+  // in the loop below) — a full `list.sort(...)` of e.g. featherless-ai's
+  // 22,144-row bucket to obtain a top-60 prefix is the "sort everything to
+  // take the top K" antipattern (see partialSortPrefixByComparator's own doc
+  // for the profiled cost and correctness methodology). Computing
+  // `perProviderCap` before this step (moved up from below) lets each
+  // provider's list be partially, not fully, sorted.
+  for (const list of byProvider.values()) {
+    partialSortPrefixByComparator(list, perProviderCap, sortByUsageThenUid);
+  }
+
+  // Sorted by providerId (NOT left as raw Map/insertion order): the round-
+  // robin below can legitimately terminate mid-round once curatedTake is
+  // reached (see the loop's own comment), and whichever providers are
+  // iterated first in that terminal round get the boundary row. The
+  // snapshot's raw SQL has no ORDER BY (a deliberate perf choice — see
+  // getCuratedBucketSnapshot's doc), so byProvider's insertion order is
+  // Postgres's own scan order: not usage-based, and not guaranteed stable
+  // across snapshot refreshes (autovacuum/HOT updates from the 60s-flushed
+  // usage-count tracker can and do move tuples). Left unsorted, WHICH
+  // providers land in that boundary round — and therefore which long-tail
+  // providers are visible at all when distinctProviders ever approaches or
+  // exceeds curatedTake — would flicker every TTL cycle for reasons
+  // unrelated to real popularity, instead of being determined by this
+  // function's own (documented, tested) fairness rule.
+  const providerLists = [...byProvider.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const uids: string[] = [];
+  const takenPerProvider = new Map<string, number>();
+
+  // Fair round-robin, HARD-capped at perProviderCap per provider: rank goes
+  // 0..perProviderCap-1, and every provider contributes its rank-th row (if
+  // it has one) before any provider contributes its (rank+1)-th — so a
+  // provider that runs out of rows below the cap simply stops contributing
+  // (its "remainder" is implicitly backfilled by every OTHER still-supplying
+  // provider continuing to contribute in the same and later rounds), while a
+  // provider that has far more rows than the cap is still hard-stopped at
+  // exactly perProviderCap. This can legitimately return fewer than
+  // curatedTake uids when the bucket's real per-provider diversity can't
+  // fill it without exceeding the cap (e.g. only 2-3 distinct providers) —
+  // that is the correct, safe outcome: the point of a HARD cap is that
+  // nothing ever relaxes it, including "budget not otherwise filled". The
+  // caller's own never-collapse fallback (models.length < 5) is the backstop
+  // for genuine emptiness, not this function's job.
+  for (let rank = 0; rank < perProviderCap && uids.length < curatedTake; rank++) {
+    let addedThisRound = false;
+    for (const [providerId, list] of providerLists) {
+      if (uids.length >= curatedTake) break;
+      if (rank >= list.length) continue;
+      uids.push(list[rank].uid);
+      takenPerProvider.set(providerId, (takenPerProvider.get(providerId) ?? 0) + 1);
+      addedThisRound = true;
+    }
+    if (!addedThisRound) break; // every provider exhausted before reaching the cap
+  }
+
+  const topProviderCount = takenPerProvider.size > 0 ? Math.max(...takenPerProvider.values()) : 0;
+  return {
+    uids,
+    distinctProviders: takenPerProvider.size,
+    topProviderShare: uids.length > 0 ? topProviderCount / uids.length : 0,
+  };
+}
+
+/** Parse a positive-integer env override for a candidate-pool take, falling
+ *  back to the configured default on anything absent/invalid. */
+function readTakeEnvOverride(envVar: string, fallback: number): number {
+  const raw = process.env[envVar];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+/** Parse a fractional (0,1] env override for the per-provider fairness cap,
+ *  falling back to the configured default on anything absent/invalid. */
+function readShareEnvOverride(envVar: string, fallback: number): number {
+  const raw = process.env[envVar];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : fallback;
+}
+
+// Hard per-query latency backstop for the AGGREGATED bucket's own live query
+// (2026-09-07, found during implementation — not part of the original design
+// doc, documented deviation). EXPLAIN ANALYZE against BOTH live prod and a
+// representative local replica (2026-09-07) showed the bucket-only form of
+// this query resolves in 5-90ms via `models_usage_count_idx` — but Postgres's
+// planner cannot reliably estimate the selectivity of a JSONB-containment
+// bucket predicate ANDed with a `context_window` range filter (measured: it
+// misjudged a 109-row true intersection as ~16,553 and picked an access path
+// that scans nearly the whole table). Neither an inline ORDER-BY/LIMIT nor a
+// MATERIALIZED-prefilter rewrite is a universal fix — each is fast for one
+// selectivity regime and ~150-620ms for the other, and the regime isn't
+// knowable in application code without a stats query per request. `SET
+// LOCAL` scopes the timeout to just this transaction (auto-reverts at
+// commit); a cancelled query raises here, which the existing catch below
+// treats like any other raw-SQL failure — fail open to the caller's own
+// already-fast, unaffected never-collapse fallback (plain `context_window`
+// alone, no JSONB correlation, stays accurate) rather than let one rare
+// request run to hundreds of ms.
+const BUCKET_FAIR_QUERY_TIMEOUT_MS = 200;
+
+/**
+ * Aggregated-index bucket retrieval: top-`aggregatedTake` uids by
+ * usage_count. Deliberately NO per-provider fairness here — live-prod audit
+ * (2026-09-07) confirms this bucket is 73,768/73,770 (99.997%) a single
+ * provider (huggingface) BY CONSTRUCTION (it IS the HF hub aggregated index;
+ * the other 2 rows are stray novita/nvidia-hub entries), so a per-provider
+ * cap on this branch would have no meaningful effect. Contrast with the
+ * curated bucket above, which has 95 real distinct providers none of which
+ * is "supposed" to dominate.
+ */
+async function getAggregatedBucketUids(
+  filters: BucketFairFilters,
+  aggregatedTake: number
+): Promise<{ uids: string[]; aggregatedCount: number }> {
+  try {
+    const commonSql = buildBucketFilterFragments(filters);
+    const rows = await prisma.$transaction(async (tx) => {
+      // `SET` does not accept bind parameters (confirmed: PostgreSQL rejects
+      // `PREPARE ... AS SET LOCAL statement_timeout = $1` with a syntax
+      // error) — $executeRawUnsafe is required here, and is safe: the
+      // interpolated value is the compile-time constant above, never
+      // request-derived input.
+      await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${BUCKET_FAIR_QUERY_TIMEOUT_MS}`);
+      return tx.$queryRaw<Array<{ uid: string }>>(Prisma.sql`
+        SELECT uid FROM models
+        WHERE status <> 'disabled'
+          AND metadata @> '{"serverless_callable":true}'::jsonb
+          ${commonSql}
+        ORDER BY usage_count DESC
+        LIMIT ${aggregatedTake}
+      `);
+    });
+    return { uids: rows.map((r) => r.uid), aggregatedCount: rows.length };
+  } catch (rawErr) {
+    log.warn(
+      { error: getErrorMessage(rawErr) },
+      'Aggregated-bucket candidate query failed or exceeded its latency backstop — falling back to the unrestricted pool (fail-open)'
+    );
+    return { uids: [], aggregatedCount: 0 };
+  }
+}
+
+/**
+ * Two-part bucket-fair retrieval: a per-provider-FAIR top-`curatedTake`
+ * curated/native selection (in-memory, over a periodically-cached snapshot —
+ * see selectCuratedFairUids) UNIONed with a top-`aggregatedTake`
+ * aggregated-index selection (live query — see getAggregatedBucketUids).
+ * Returns per-bucket counts, plus real per-provider distribution visibility
+ * for the curated bucket, so the caller can observe/log either bucket coming
+ * back empty OR one provider still dominating despite the fairness cap — the
+ * old code had no equivalent of either (a 0-curated pool, or a
+ * 100%-one-provider curated pool, were both silent). Fails open (empty
+ * result) on any query error OR timeout so callers fall through to their own
+ * never-collapse fallback rather than throwing or blocking the hot path.
+ */
+async function getBucketFairCandidateUids(
+  filters: BucketFairFilters,
+  curatedTake: number,
+  aggregatedTake: number,
+  curatedMaxProviderShare: number
+): Promise<BucketFairCandidateResult & { curatedSnapshotQueried: boolean }> {
+  const [{ rows: curatedRows, queried: curatedSnapshotQueried }, { uids: aggregatedUids, aggregatedCount }] =
+    await Promise.all([getCuratedBucketSnapshot(), getAggregatedBucketUids(filters, aggregatedTake)]);
+
+  const {
+    uids: curatedUids,
+    distinctProviders: curatedDistinctProviders,
+    topProviderShare: curatedTopProviderShare,
+  } = selectCuratedFairUids(curatedRows, filters, curatedTake, curatedMaxProviderShare);
+
+  return {
+    uids: [...curatedUids, ...aggregatedUids],
+    curatedCount: curatedUids.length,
+    aggregatedCount,
+    curatedDistinctProviders,
+    curatedTopProviderShare,
+    curatedSnapshotQueried,
+  };
+}
+
+/** Reads the feature flag on every call (not module-load-cached) so tests and
+ *  a future A/B toggle can flip it without re-importing this module. Default
+ *  OFF — see the module doc below for why this ships flagged, not as a
+ *  replacement. */
+function isFullCacheIndexEnabled(): boolean {
+  return process.env.SELECTION_USE_FULL_CACHE_INDEX === 'true';
+}
+
+// ─── Full-cache in-memory candidate retrieval (SELECTION_USE_FULL_CACHE_INDEX) ─
+//
+// Alternative to getBucketFairCandidateUids above. That function (and the SQL
+// it wraps) is itself already a real fix for the tie-breaking bug documented
+// at the top of this file — but it still draws from a BOUNDED SQL slice
+// (curatedTake/aggregatedTake, ~400 rows each by default) of a catalog that
+// is 111k+ rows today and growing without a static ceiling. Any fixed-size
+// slice structurally caps how much of the catalog selection can ever see,
+// independent of how fair the slice itself is once drawn.
+//
+// This function draws candidates from the SAME full catalog snapshot
+// model-catalog-service.ts already keeps warm in-process for
+// getAllCatalogModels() (refreshed fleet-wide every
+// CACHE_REFRESH_AHEAD_INTERVAL_MS, default 4min — see cache-refresh-ahead.ts),
+// via its capability/provider indices (getCatalogIndices()), instead of
+// issuing the two live Postgres queries getBucketFairCandidateUids depends on
+// — zero request-time DB round trips on this path, by construction.
+//
+// Reuses selectCuratedFairUids() COMPLETELY UNCHANGED for the actual fairness
+// ranking (round-robin + hard per-provider cap) — this function only changes
+// WHERE candidate rows are drawn from, never how the fair split over them is
+// computed. Same curated-vs-aggregated bucket predicate as the SQL path
+// (`hubInventoryClass !== 'aggregated_index'` for curated,
+// `serverless_callable === true` for aggregated), read directly off each
+// cached Model's `metadata` field (CATALOG_HOT_PATH_SELECT already includes
+// `metadata` — see model-catalog-service.ts).
+//
+// KNOWN, DOCUMENTED LIMITATIONS (why this defaults OFF, additive-only, not a
+// replacement — see SELECTION_USE_FULL_CACHE_INDEX below):
+//
+//   1. usage_count is unavailable. CATALOG_HOT_PATH_SELECT deliberately
+//      excludes `usage_count` (see model-catalog-service-select.test.ts's
+//      "excludes known heavy/unused columns" contract test — usageCount is
+//      IN that excluded list, guarded by a test) for wire-size reasons. Every
+//      row here sorts as usageCount=0. This is NOT a regression relative to
+//      the SQL path's own live-measured reality TODAY (2026-09-07 audit:
+//      usage_count is 0 for all 111,651 catalog rows — see this file's module
+//      doc), but it silently stops tracking real writes once
+//      usage-count-tracker.ts's 60s-flushed writes actually move the column,
+//      unlike the SQL path which reads that column live. Do not flip this
+//      flag on as a long-term default without first deciding whether
+//      usage_count needs to join the hot-path select (a real wire-size/perf
+//      trade-off of its own — a single scalar column is far cheaper than the
+//      JSONB columns that select was built to keep out, but it is still a
+//      trade-off that deserves its own measurement, not a silent default).
+//   2. capability_uris (canonical HCRA/ADR-022 projection) is unavailable for
+//      the SAME reason — the catalog hot-path select excludes it. The
+//      byCapability index (and this function's capability pre-narrowing) can
+//      therefore only ever see the LEGACY `capabilities` string-array
+//      projection, never the canonical URI track. findModelsByRequirements'
+//      OWN post-hydration hard-capability filter (below, unconditional,
+//      unchanged by this flag) still runs against whatever `capabilityUris`
+//      the hydrated rows carry — but for this path those are always empty
+//      (see toSyntheticModelWithProvider), so it too falls back to the legacy
+//      track. A row whose ONLY correct capability signal is a
+//      capability_uris entry with no legacy-array equivalent is invisible to
+//      this path even though the SQL path (which hydrates fresh from Postgres,
+//      full row) would see it once that row is HCRA-backfilled.
+//   3. The aggregated-popularity-seed backstop (aggregatedPopularityReserve)
+//      is skipped on this path — its own seed pool is itself sourced via a
+//      live Postgres query (getAggregatedPopularitySeedRows), which this flag
+//      exists specifically to avoid reintroducing. Logged once per call when
+//      the reserve would otherwise have applied (see findModelsByRequirements).
+//
+// None of these limitations can silently under-serve a hard requirement:
+// findModelsByRequirements' existing post-hydration filters (capability,
+// tools, endpoint, cost) run UNCONDITIONALLY after this function returns,
+// exactly as they do for the SQL path — this function is a candidate-
+// retrieval optimization, never the sole correctness gate.
+//
+// ─── ROLLOUT-READINESS DECISION (2026-09-09) — see ADR-026 ──────────────────
+// This flag's default was evaluated for promotion to `true` (removing the SQL
+// path's 400/bucket ceiling fleet-wide) per an explicit operator directive.
+// Decision: NOT promoted. Real, measured event-loop-blocking risk under
+// concurrent load — this function is 100% synchronous, CPU-bound, and scans
+// the full catalog on every call, so Node's single JS thread cannot service
+// any other in-flight request while it runs. Measured at N=500 concurrent
+// callers: ~14.6s p50 / ~32.5s max effective latency, vs the SQL path's own
+// real (Postgres-backed) concurrent-load numbers at the same N: 14.7s total
+// wall-clock, ZERO failures, better throughput. Full evidence, exact
+// benchmark numbers, and the concrete preconditions for revisiting this are
+// in `api/docs/adr/ADR-026-full-cache-index-rollout-readiness.md` — read it
+// before changing this flag's default or removing this comment.
+export interface FullCacheFairCandidateResult extends BucketFairCandidateResult {
+  models: Model[];
+}
+
+export function getFullCacheFairCandidateModels(
+  criteria: Pick<
+    SelectionCriteria,
+    'contextSize' | 'preferredProviders' | 'excludeProviders' | 'requiredCapabilities'
+  >,
+  curatedTake: number,
+  aggregatedTake: number,
+  curatedMaxProviderShare: number
+): FullCacheFairCandidateResult {
+  const empty: FullCacheFairCandidateResult = {
+    models: [],
+    uids: [],
+    curatedCount: 0,
+    aggregatedCount: 0,
+    curatedDistinctProviders: 0,
+    curatedTopProviderShare: 0,
+  };
+  const indices = getCatalogIndices();
+  if (!indices || indices.byId.size === 0) {
+    // Indices not warm yet (fresh boot before the first catalog hydrate) —
+    // fail open to empty so the caller's existing never-collapse fallback
+    // (models.length < 5 in findModelsByRequirements) takes over, exactly
+    // like getBucketFairCandidateUids fails open on a query error/timeout.
+    return empty;
+  }
+
+  // Best-effort capability pre-narrowing via the LEGACY-capability index
+  // (index intersection, AND semantics) — mirrors the hard-required-
+  // capability filter's own exclusion of `function_calling` (deferred to the
+  // execution-time probe — see findModelsByRequirements) so this never
+  // narrows the working set BELOW what that later, authoritative filter
+  // would keep anyway. Pure optimization: if no catalog row satisfies every
+  // hard-required legacy capability, fail open to the UNNARROWED pool rather
+  // than assert emptiness here — the real fail-closed decision (which also
+  // considers capability_uris, unavailable to this index — see limitation #2
+  // above) belongs solely to findModelsByRequirements' own filter downstream.
+  let candidateIds: Set<string> | null = null;
+  const hardRequiredCaps = (criteria.requiredCapabilities ?? []).filter(
+    (c) => c !== 'function_calling'
+  );
+  if (hardRequiredCaps.length > 0) {
+    for (const cap of hardRequiredCaps) {
+      const matchesCap = indices.byCapability.get(cap) ?? new Set<string>();
+      if (candidateIds === null) {
+        candidateIds = new Set(matchesCap);
+      } else {
+        for (const id of candidateIds) {
+          if (!matchesCap.has(id)) candidateIds.delete(id);
+        }
+      }
+    }
+    if (candidateIds && candidateIds.size === 0) {
+      candidateIds = null; // fail open — see doc above
+    }
+  }
+
+  const includeSet =
+    criteria.preferredProviders && criteria.preferredProviders.length > 0
+      ? new Set(criteria.preferredProviders)
+      : null;
+  const excludeSet =
+    criteria.excludeProviders && criteria.excludeProviders.length > 0
+      ? new Set(criteria.excludeProviders)
+      : null;
+  const minContext = criteria.contextSize ?? 0;
+
+  const curatedRows: CuratedBucketRow[] = [];
+  const aggregatedCandidates: Model[] = [];
+
+  // NOTE (2026-09-08): a precomputed curatedIds/aggregatedIds Set (built once
+  // per refresh in buildCatalogIndices, checked here via Set.has(model.id)
+  // instead of re-parsing metadata per request) was tried and MEASURED HERE
+  // via this same profiling harness — it made this loop slower, not faster
+  // (~26ms -> ~60ms average), not the ~2ms-equivalent win a smaller isolated
+  // microbenchmark predicted. Root cause: two ~40-110k-entry Sets are too
+  // large to stay cache-resident, so each Set.has(model.id) is a
+  // cache-unfriendly random-access hash lookup, while the metadata check
+  // below reads a field already resident on the SAME Model object this loop
+  // is already touching for status/contextWindow/provider — cache-friendly
+  // despite doing "more work" by operation count. Reverted; kept as a
+  // documented dead end (see this PR's description) rather than re-attempted
+  // without a real before/after measurement.
+  for (const model of indices.byId.values()) {
+    if (model.status === 'disabled') continue;
+    if (candidateIds && !candidateIds.has(model.id)) continue;
+    if (minContext > 0 && model.contextWindow < minContext) continue;
+    if (includeSet && !includeSet.has(model.provider)) continue;
+    if (excludeSet && excludeSet.has(model.provider)) continue;
+
+    const metadata = model.metadata ?? {};
+    const hubInventoryClass =
+      typeof metadata.hubInventoryClass === 'string' ? metadata.hubInventoryClass : undefined;
+    const serverlessCallable = metadata.serverless_callable === true;
+
+    if (hubInventoryClass !== 'aggregated_index') {
+      // Curated/native bucket — same predicate as getCuratedBucketSnapshot's
+      // raw SQL (`hubInventoryClass IS DISTINCT FROM 'aggregated_index'`).
+      curatedRows.push({
+        // `uid` here is the catalog cache's business `id`, NOT the physical
+        // `models.uid` DB column (the catalog cache never selects that
+        // column — see mapPrismaModel). Used purely as an opaque handle back
+        // into indices.byId below; never compared against a real DB `uid`.
+        uid: model.id,
+        providerId: model.providerId,
+        providerName: model.provider,
+        contextWindow: model.contextWindow,
+        usageCount: 0, // unavailable here — see limitation #1 above.
+      });
+    } else if (serverlessCallable) {
+      aggregatedCandidates.push(model);
+    }
+  }
+
+  // Every filter (context/provider/capability) already applied while
+  // building curatedRows above — call with an empty filter object so
+  // selectCuratedFairUids' own filtering is a documented no-op here, not
+  // skipped: this keeps the function call identical in shape to the SQL
+  // path's own call, so a future change to selectCuratedFairUids' filtering
+  // logic can't silently diverge between the two callers.
+  const {
+    uids: curatedUids,
+    distinctProviders: curatedDistinctProviders,
+    topProviderShare: curatedTopProviderShare,
+  } = selectCuratedFairUids(curatedRows, {}, curatedTake, curatedMaxProviderShare);
+
+  // Aggregated bucket: deterministic id-sort tie-break, same rationale as
+  // sortByUsageThenUid above (usage_count is uniformly 0 here — limitation
+  // #1) — never physical/scan order. Same LIMIT semantics as
+  // getAggregatedBucketUids' `ORDER BY usage_count DESC LIMIT`.
+  //
+  // PERF (2026-09-08): only the first `aggregatedTake` (300 by default) of
+  // this array are ever read (via the `.slice(0, aggregatedTake)` below) —
+  // fully sorting all ~73,782 candidates just to discard everything past that
+  // prefix was the single largest measured cost on this path (~30ms of
+  // ~93ms average — see full-cache-index-benchmark.test.ts and this file's
+  // partialSortPrefixByComparator doc). partialSortPrefixByComparator
+  // rearranges only that prefix into correct order in place, in O(n log k)
+  // instead of O(n log n).
+  partialSortPrefixByComparator(
+    aggregatedCandidates,
+    aggregatedTake,
+    (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+  const aggregatedSelected = aggregatedCandidates.slice(0, aggregatedTake);
+
+  const curatedModels = curatedUids
+    .map((id) => indices.byId.get(id))
+    .filter((m): m is Model => Boolean(m));
+
+  return {
+    models: [...curatedModels, ...aggregatedSelected],
+    uids: [...curatedUids, ...aggregatedSelected.map((m) => m.id)],
+    curatedCount: curatedModels.length,
+    aggregatedCount: aggregatedSelected.length,
+    curatedDistinctProviders,
+    curatedTopProviderShare,
+  };
+}
+
+/**
+ * Adapts an already-fully-mapped catalog-cache `Model` (see
+ * model-catalog-service.ts's mapPrismaModel — the shape returned by
+ * getAllCatalogModels()) into the `ModelWithProvider` (raw Prisma-row) shape
+ * the rest of findModelsByRequirements expects downstream of candidate
+ * retrieval. Used ONLY by the SELECTION_USE_FULL_CACHE_INDEX path — the SQL
+ * path always hydrates genuine Prisma rows via `prisma.model.findMany`.
+ *
+ * This is NOT a general-purpose ModelWithProvider stand-in: it populates only
+ * the fields findModelsByRequirements actually reads off a `ModelWithProvider`
+ * after this point (the "map to Model type" projection at the top of the
+ * function, and the requiredTools/requiredEndpoint metadata lookups later) —
+ * verified by reading that function in full before writing this adapter.
+ * Must never be exposed outside this module.
+ */
+function toSyntheticModelWithProvider(model: Model): ModelWithProvider {
+  // Single sanctioned cast (narrowAs, @/utils/type-guards) rather than the
+  // banned `as unknown as X` double-cast (see .eslintrc.cjs's no-restricted-syntax
+  // rule) — this is trust-boundary case (2) from narrowAs' own doc: the value
+  // is shaped, right here, by the object literal above it, and we're
+  // committing the narrow to the (much larger) real Prisma type deliberately,
+  // for the documented reasons in this function's own doc comment.
+  return narrowAs<ModelWithProvider>({
+    id: model.id,
+    providerId: model.providerId,
+    name: model.name,
+    displayName: model.displayName,
+    contextWindow: model.contextWindow,
+    maxOutputTokens: model.maxOutputTokens,
+    inputCostPer1k: model.inputCostPer1k,
+    outputCostPer1k: model.outputCostPer1k,
+    capabilities: model.capabilities,
+    // Unavailable on catalog-cache rows (limitation #2 above) — empty array
+    // is the documented "not HCRA-backfilled, fall back to legacy" signal
+    // the rest of the pipeline already knows how to handle.
+    capabilityUris: model.capabilityUris ?? [],
+    capabilityConfidence: model.capabilityConfidence ?? null,
+    performance: model.performance,
+    status: model.status,
+    metadata: model.metadata ?? null,
+    provider: { name: model.provider },
+  });
+}
+
+/** Shared anomaly logging for BOTH candidate-retrieval paths (SQL and
+ *  full-cache-index) — pure extraction of the SQL path's original inline
+ *  logging, behavior-identical, so the two paths cannot silently diverge in
+ *  what they consider worth warning about. */
+function logBucketFairAnomalies(
+  result: Pick<
+    BucketFairCandidateResult,
+    'curatedCount' | 'aggregatedCount' | 'curatedDistinctProviders' | 'curatedTopProviderShare'
+  >,
+  curatedTake: number,
+  aggregatedUsageTake: number,
+  curatedMaxProviderShare: number,
+  hasProviderPreference: boolean
+): void {
+  const { curatedCount, aggregatedCount, curatedDistinctProviders, curatedTopProviderShare } = result;
+  if (curatedCount === 0 && aggregatedCount > 0) {
+    log.warn(
+      { aggregatedCount, curatedTake, aggregatedUsageTake },
+      'bucket-fair retrieval: curated/native bucket came back EMPTY — selection is running on aggregated-index candidates only'
+    );
+  } else if (aggregatedCount === 0 && curatedCount > 0) {
+    log.warn(
+      { curatedCount, curatedTake, aggregatedUsageTake },
+      'bucket-fair retrieval: aggregated-index bucket came back EMPTY — selection is running on curated/native candidates only'
+    );
+  }
+  if (
+    curatedCount > 0 &&
+    curatedDistinctProviders > 1 &&
+    curatedTopProviderShare > curatedMaxProviderShare + 0.05 &&
+    !hasProviderPreference
+  ) {
+    log.warn(
+      { curatedTopProviderShare, curatedDistinctProviders, curatedCount, curatedMaxProviderShare },
+      'bucket-fair retrieval: a single provider still dominates the curated bucket beyond its configured fairness cap — investigate catalog composition or SELECTION_CURATED_MAX_PROVIDER_SHARE'
+    );
+  }
+}
+
+// ─── Aggregated-bucket popularity backstop ────────────────────────────────────
+//
+// DEVIATION FROM THE DESIGN DOC (documented, see PR description for the full
+// writeup): the design called for deleting getPopularitySeedRows() outright,
+// reasoning that the aggregated bucket's own `ORDER BY usage_count DESC` would
+// "naturally surface popular rows once real data lands, and until then falls
+// back to the same physical order the old popularity-seed patch was
+// compensating for". Re-checked against live data (2026-09-07): usage_count is
+// 0 for ALL 111,651 catalog rows today, and usage_count only ever grows via
+// the new usage-count-tracker.ts hook on a model that actually got SELECTED —
+// which means whichever ~74k-row-bucket rows happen to sort first in physical
+// order today would receive 100% of future traffic and keep winning every
+// future tie forever (a self-reinforcing lock-in), never giving the other
+// ~73k aggregated rows a chance to accumulate the very signal that would let
+// them compete. That is not a transient cold-start artifact that fixes
+// itself — it is a permanent structural bias unless something orthogonal to
+// usage_count keeps candidate rows diverse. This is exactly the
+// "…moist_beaked_chameleon" / "…badendings" failure mode the original
+// 2026-06-29 popularity-seed patch was written to fix; retiring it outright
+// would silently reintroduce that regression for the whole aggregated bucket.
+//
+// Kept, in slimmed-down form: a small RESERVE carved out of the aggregated
+// bucket's own take (never enlarges the curated bucket's guarantee or the
+// total pool ceiling — see the getBucketFairCandidateUids caller), filled
+// with the top-by-downloads HF rows via the exact already-proven raw
+// query/index this repo ships (`models_callable_downloads_idx`, measured
+// 2.1-7ms live, 2026-09-07).
+//
+// PROVIDER-FAIRNESS FOLLOW-UP (2026-09-07, this file): the initial version of
+// this backstop cached only the 300 seed UIDS (30-min TTL) and then ran an
+// UNCACHED `prisma.model.findMany` hydration on every single request that
+// reached this branch — a "just chat" request cost ~3 DB round trips instead
+// of the ~1 the original (pre-bucket-fair) `getPopularitySeedRows()` cost,
+// because that original cached the FULLY HYDRATED rows, not just their uids.
+// Restored here: cache the hydrated `ModelWithProvider[]` rows themselves
+// (same 30-min TTL), and apply this request's status/context/provider filter
+// to the cached rows IN MEMORY (`matchesRequestWhere` below) instead of via a
+// per-request DB round trip. This keeps the real fix the uid-only version
+// introduced (a seeded row must satisfy the SAME filter every other candidate
+// does, not bypass it — the pre-bucket-fair original merged `seeded` straight
+// into `models` with no context_window check at all) while removing the
+// per-request DB cost that fix accidentally reintroduced.
+let aggregatedPopularitySeedCache: { rows: ModelWithProvider[]; expiresAt: number } | null = null;
+const AGGREGATED_POPULARITY_SEED_TTL_MS = 30 * 60_000;
+
+async function getAggregatedPopularitySeedRows(): Promise<{ rows: ModelWithProvider[]; queried: boolean }> {
   const now = Date.now();
-  if (popularitySeedCache && popularitySeedCache.expiresAt > now) {
-    return { rows: popularitySeedCache.rows, queried: false };
+  if (aggregatedPopularitySeedCache && aggregatedPopularitySeedCache.expiresAt > now) {
+    return { rows: aggregatedPopularitySeedCache.rows, queried: false };
   }
   try {
     const seedRows = await prisma.$queryRaw<Array<{ uid: string }>>`
@@ -138,17 +1008,54 @@ async function getPopularitySeedRows(): Promise<{ rows: ModelWithProvider[]; que
             include: { provider: true },
           })
         : [];
-    popularitySeedCache = { rows, expiresAt: now + POPULARITY_SEED_TTL_MS };
+    aggregatedPopularitySeedCache = { rows, expiresAt: now + AGGREGATED_POPULARITY_SEED_TTL_MS };
     return { rows, queried: true };
   } catch (rawErr) {
     log.warn(
       { error: getErrorMessage(rawErr) },
-      'popularity-seed query failed — selection continues without seed (fail-open)'
+      'aggregated-bucket popularity-seed query failed — continuing without it (fail-open)'
     );
     // Brief negative cache so a failing DB is not hammered on every request.
-    popularitySeedCache = { rows: [], expiresAt: now + 5_000 };
+    aggregatedPopularitySeedCache = { rows: [], expiresAt: now + 5_000 };
     return { rows: [], queried: true };
   }
+}
+
+/**
+ * In-memory equivalent of the same status/context/provider `where` filter
+ * every other candidate already passes at the query level (see the `where`
+ * builder near the top of findModelsByRequirements) — applied here so the
+ * cached, fully-hydrated popularity-seed pool
+ * (getAggregatedPopularitySeedRows) can be filtered per-request WITHOUT a
+ * per-request DB round trip. Deliberately mirrors that `where` builder's
+ * precedence exactly, including its pre-existing quirk of preferredProviders
+ * overriding rather than combining with excludeProviders when both are set —
+ * this function stands IN for that query-level filter, so silently
+ * "improving" the precedence here would make the two diverge instead of
+ * agreeing on which rows are eligible. */
+function matchesRequestWhere(
+  model: ModelWithProvider,
+  criteria: Pick<SelectionCriteria, 'contextSize' | 'excludeProviders' | 'preferredProviders'>
+): boolean {
+  if (model.status === 'disabled') return false;
+  if (criteria.contextSize && model.contextWindow < criteria.contextSize) return false;
+  if (criteria.preferredProviders && criteria.preferredProviders.length > 0) {
+    return criteria.preferredProviders.includes(model.provider.name);
+  }
+  if (criteria.excludeProviders && criteria.excludeProviders.length > 0) {
+    return !criteria.excludeProviders.includes(model.provider.name);
+  }
+  return true;
+}
+
+/** Test-only: clear the module-scope bucket-fair caches (curated-bucket
+ *  snapshot + aggregated popularity-seed pool) so tests get a deterministic
+ *  cache-miss on their first call regardless of what ran earlier in the same
+ *  worker/suite — hardening against the exact class of order/parallelism-
+ *  dependent flakiness a prior version of this test suite hit. */
+export function __resetBucketFairCachesForTests(): void {
+  curatedBucketSnapshotCache = null;
+  aggregatedPopularitySeedCache = null;
 }
 
 /**
@@ -267,6 +1174,21 @@ export interface DynamicModelSelectorConfig {
     maxModelsPerTaskPreference: number;
     maxModelsPerTaskFallback: number;
     minModelsForSelection: number;
+    /** Bucket-fair retrieval (2026-09-07): top-N curated/native uids taken
+     *  before the usage-ranked fallback. Env override: SELECTION_CURATED_TAKE. */
+    curatedCandidateTake: number;
+    /** Bucket-fair retrieval: total budget for the aggregated-index bucket
+     *  (usage-ranked take + the popularity backstop reserve carved out of it).
+     *  Env override: SELECTION_AGGREGATED_TAKE. */
+    aggregatedCandidateTake: number;
+    /** Per-provider fairness cap WITHIN the curated bucket (2026-09-07
+     *  provider-fairness follow-up), expressed as a fraction of
+     *  curatedCandidateTake (0 < share <= 1). No single provider's rows can
+     *  supply more than `ceil(curatedCandidateTake * curatedMaxProviderShare)`
+     *  of the curated take, however many distinct providers exist in the
+     *  catalog today or after it grows — see selectCuratedFairUids(). Env
+     *  override: SELECTION_CURATED_MAX_PROVIDER_SHARE. */
+    curatedMaxProviderShare: number;
   };
   costEstimation: {
     defaultOutputTokens: number;
@@ -339,12 +1261,43 @@ interface ModelMetrics {
   recentTrend: number; // -1 to 1 (negative = degrading)
 }
 
+const RECENT_TREND_CACHE_TTL_MS = Number(process.env.RECENT_TREND_CACHE_TTL_MS) || 60_000;
+const RECENT_TREND_RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_TREND_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Recent-vs-historical quality trend in [-1, 1] (positive = improving).
+ * Pure so the batched prefetch and the per-candidate fallback share one
+ * definition and cannot drift.
+ */
+export function computeRecentTrend(
+  recent: ReadonlyArray<{ qualityScore: number | null }>,
+  historical: ReadonlyArray<{ qualityScore: number | null }>
+): number {
+  if (recent.length === 0 || historical.length === 0) {
+    return 0;
+  }
+
+  const recentAvgQuality =
+    recent.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / recent.length;
+  const historicalAvgQuality =
+    historical.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / historical.length;
+
+  if (historicalAvgQuality === 0) {
+    return 0;
+  }
+
+  const trend = (recentAvgQuality - historicalAvgQuality) / historicalAvgQuality;
+  return Math.max(-1, Math.min(1, trend));
+}
+
 /**
  * Dynamic Model Selector
  */
 export class DynamicModelSelector {
   private readonly config: DynamicModelSelectorConfig;
   private performanceCache: Map<string, PerformanceHistory | null> = new Map();
+  private recentTrendCache: Map<string, { value: number; expiresAt: number }> = new Map();
   private selectionCache: Map<string, Model[]> = new Map();
   private taskPreferenceCache: Map<string, { ids: string[]; expiresAt: number }> = new Map();
   private lastCacheUpdate = 0;
@@ -468,75 +1421,223 @@ export class DynamicModelSelector {
     // unfiltered query when the flag is not yet populated (fresh DB) so selection never collapses.
     const prefilterCallable = process.env.SELECTION_PREFILTER_CALLABLE !== 'false';
 
-    // PROVE-BEFORE-ADMIT (2026-06-27): ~87% of the catalog (~63k/72k) is HuggingFace
-    // hub-INDEX rows tagged metadata.hubInventoryClass='aggregated_index' — catalog-only
-    // entries with no live inference endpoint that 404 `model_not_found` when selected.
-    // The serverless_callable prefilter is unpopulated in prod (measured 0/72825), so the
-    // usage-ranked fallback below otherwise surfaces 100% index junk (measured: the top
-    // 800 by usage_count are ALL aggregated_index → the per-request model_not_found /
-    // retry-loop / ~24s tax). Restrict the candidate pool to the NON-index rows at the
-    // QUERY level. A raw NULL-safe filter is required because most callable rows have the
-    // key ABSENT and a Prisma `!=` would wrongly drop them (`IS DISTINCT FROM` keeps
-    // absent-key rows). Env kill-switch + fail-open + never-collapse (below).
-    let verifiedHubFilter: Prisma.ModelWhereInput = {};
-    if (process.env.SELECTION_EXCLUDE_UNVERIFIED_HUB !== 'false') {
-      const verifiedUids = await getVerifiedHubUids(); // process-wide TTL-cached, request-independent
-      // never-collapse: only restrict selection if it yields a real candidate pool.
-      if (verifiedUids.length >= 5) verifiedHubFilter = { uid: { in: verifiedUids } };
-    }
-    const restrictVerified = Object.keys(verifiedHubFilter).length > 0;
+    // BUCKET-FAIR CANDIDATE RETRIEVAL (2026-09-07): see getBucketFairCandidateUids
+    // above for the full root-cause writeup. Two independently-capped branches
+    // (curated top-N, aggregated top-M) unioned, capped at the same 800 ceiling
+    // the pool has always used so downstream scoring/rerank cost is unchanged —
+    // this is a retrieval fix, not a "scan more" fix.
+    const curatedTake = readTakeEnvOverride(
+      'SELECTION_CURATED_TAKE',
+      this.config.limits?.curatedCandidateTake ?? 400
+    );
+    const aggregatedTakeTotal = readTakeEnvOverride(
+      'SELECTION_AGGREGATED_TAKE',
+      this.config.limits?.aggregatedCandidateTake ?? 400
+    );
+    // Popularity backstop (see getAggregatedPopularitySeedRows doc): reserve a
+    // slice of the aggregated bucket's OWN budget — never grows the curated
+    // bucket's guarantee or the 800 total ceiling (curatedTake +
+    // aggregatedTakeTotal is unchanged either way).
+    const popularitySeedEnabled = prefilterCallable && process.env.SELECTION_POPULARITY_SEED !== 'false';
+    const aggregatedPopularityReserve = popularitySeedEnabled
+      ? Math.min(100, Math.floor(aggregatedTakeTotal / 4))
+      : 0;
+    const aggregatedUsageTake = aggregatedTakeTotal - aggregatedPopularityReserve;
+    // Per-provider fairness follow-up (2026-09-07): see selectCuratedFairUids
+    // doc above. Fraction, not a row count or provider name — dynamic over
+    // however many distinct providers the curated bucket has today or later.
+    const curatedMaxProviderShare = readShareEnvOverride(
+      'SELECTION_CURATED_MAX_PROVIDER_SHARE',
+      this.config.limits?.curatedMaxProviderShare ?? 0.15
+    );
 
-    // Mudança 4+5 (HF integration): the candidate pool must be the UNION of two
-    // proven-operable sets, because serverless_callable is only written for HF
-    // rows (the HF fetcher's transform), NOT for the curated/native catalog:
-    //   - serverless_callable=true  → proven HF (HF's own status:live signal)
-    //   - non-aggregated_index      → curated/native premium (openai/anthropic/…)
-    //                                  which legitimately have no serverless_callable
-    // Using serverless_callable ALONE would wrongly exclude every premium model.
-    // This WHERE is only the candidate pool — real operability is still enforced
-    // in-memory afterwards by filterModelsByProviderOperability (1c). The take is
-    // capped below so the in-memory ranker stays fast regardless of pool size.
-    const callableOr: Prisma.ModelWhereInput[] = [
-      { metadata: { path: ['serverless_callable'], equals: true } },
-    ];
-    if (verifiedHubFilter.uid) callableOr.push({ uid: verifiedHubFilter.uid });
-    const callableWhere: Prisma.ModelWhereInput = prefilterCallable
-      ? { ...where, OR: callableOr }
-      : { ...where, ...verifiedHubFilter };
-    let models = await prisma.model.findMany({
-      where: callableWhere,
-      include: { provider: true },
-      // Mudança 5: CAP the candidate pool. serverless_callable now matches ~60k
-      // (HF) → the previous `limit*3` (=6000) flooded the in-memory ranker
-      // (scoring + semantic rerank) and blew model=auto to a 90s timeout. Bound to
-      // 800 (same ceiling the fallback already uses) and pre-rank by usage so the
-      // capped sample leads with proven/known-good models.
-      take: Math.min(limit * 3, 800),
-      orderBy: [{ usageCount: 'desc' }],
-    });
-    databaseQueries++;
-    if ((prefilterCallable || restrictVerified) && models.length < 5) {
-      // Flag not populated (or too sparse) — degrade gracefully to the full candidate set.
-      // C3 perf fix (2026-06-11): BOUND the fallback to the TOP-N most-used models via the existing
-      // `models_usage_count_idx` (ORDER BY usage_count DESC). Previously this fetched `limit*3` (=6000)
-      // heavy-JSONB rows over the full ~68k catalog with NO bound, which dominated request latency
-      // (~7-10s observed in prod) whenever serverless_callable is unpopulated (e.g. after a reboot
-      // wipes the flag — prod measured 0/68568 populated on 2026-06-11). usage_count DESC is indexed
-      // (fast index scan, no full sort) AND returns the popular / known-good models, so the in-memory
-      // ranker below still sees a high-quality candidate pool — without serializing the entire catalog.
-      // The verifiedHubFilter is carried so this fallback also stays on non-index rows.
-      models = await prisma.model.findMany({
-        where: { ...where, ...verifiedHubFilter },
-        include: { provider: true },
-        orderBy: { usageCount: 'desc' },
-        take: Math.min(limit * 3, 800),
-      });
-      databaseQueries++;
+    const hasProviderPreference = Boolean(
+      sanitizedCriteria.preferredProviders && sanitizedCriteria.preferredProviders.length > 0
+    );
+
+    let models: ModelWithProvider[] = [];
+    // ── SELECTION_USE_SAB_CANDIDATE_INDEX path (highest priority) ───────────
+    // See sab-candidate-index/manager.ts's module doc for the full design.
+    // A worker_threads-owned SharedArrayBuffer double-buffer index — the
+    // production successor to SELECTION_USE_FULL_CACHE_INDEX below, built to
+    // fix that flag's own documented, measured problem (ADR-026): its scan
+    // runs synchronously on the MAIN thread, blocking the event loop for
+    // every other in-flight request on this process for the full duration of
+    // the scan (14.6s median / 32.5s max at N=500 concurrent, measured).
+    // This path moves that scan to a separate OS thread entirely — reads
+    // here are synchronous but O(candidates), never O(catalog): no request
+    // ever blocks on (or waits for) the rebuild.
+    //
+    // `ensureSabCandidateIndexStarted()` is idempotent and lazy (mirrors
+    // `getAllCatalogModels()`'s own cold-start posture) — the worker and its
+    // SharedArrayBuffers (455.01 MiB virtual per replica, real, measured — see
+    // sab-candidate-index/__tests__/memory-footprint.test.ts and ADR-027)
+    // are only ever allocated in a process that actually has this flag on.
+    // `getSabCandidateModels` returns `null` when
+    // the index hasn't completed its first build yet (fresh boot) — that is
+    // treated EXACTLY like a cold `getCatalogIndices()` result: fall through
+    // to the next path in this chain, never block/throw waiting for it.
+    let sabCandidateResult: FullCacheFairCandidateResult | null = null;
+    if (prefilterCallable && isSabCandidateIndexEnabled()) {
+      ensureSabCandidateIndexStarted();
+      sabCandidateResult = getSabCandidateModels(
+        {
+          contextSize: sanitizedCriteria.contextSize,
+          preferredProviders: sanitizedCriteria.preferredProviders,
+          excludeProviders: sanitizedCriteria.excludeProviders,
+          requiredCapabilities: sanitizedCriteria.requiredCapabilities,
+        },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare
+      );
+      if (!sabCandidateResult) {
+        log.debug(
+          'sab-candidate-index path: index not ready yet (cold start or a worker respawn in progress) — falling back to the next candidate-retrieval path this request'
+        );
+      }
     }
-    if (restrictVerified && models.length < 5) {
-      // Terminal never-collapse: the verified-hub restriction combined with this request's
-      // other filters left too few rows — drop the restriction rather than return an empty
-      // pool (a degraded callable model still beats no model on the hot path).
+
+    if (sabCandidateResult) {
+      const { models: sabModels, curatedCount, aggregatedCount, curatedDistinctProviders, curatedTopProviderShare } =
+        sabCandidateResult;
+      // Deliberately NOT incremented: zero request-time DB round trips by
+      // construction, same reasoning as the full-cache-index path below —
+      // the worker's own periodic rebuild cost is amortized off the request
+      // path entirely (it doesn't even share getAllCatalogModels()'s
+      // occasional cold-cache round trip, since the worker fetches
+      // independently on its own thread).
+      logBucketFairAnomalies(
+        { curatedCount, aggregatedCount, curatedDistinctProviders, curatedTopProviderShare },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare,
+        hasProviderPreference
+      );
+      if (aggregatedPopularityReserve > 0) {
+        log.debug(
+          { aggregatedPopularityReserve },
+          "sab-candidate-index path: skipping the aggregated-popularity-seed backstop (its own pool is Postgres-sourced, same limitation as the full-cache-index path); relying on the aggregated bucket's own deterministic take instead"
+        );
+      }
+      if (sabModels.length > 0) {
+        models = sabModels.map(toSyntheticModelWithProvider);
+      }
+    } else if (prefilterCallable && isFullCacheIndexEnabled()) {
+      // ── SELECTION_USE_FULL_CACHE_INDEX path ──────────────────────────────
+      // See getFullCacheFairCandidateModels' module doc for the full
+      // rationale/limitations. Ensure the in-process catalog cache (and its
+      // indices, built alongside it — model-catalog-service.ts's
+      // setCatalogCache) is warm before reading it synchronously; on a warm
+      // cache (the overwhelmingly common case given the 4min fleet-wide
+      // refresh-ahead timer) this resolves with zero I/O.
+      await getAllCatalogModels();
+      const {
+        models: fairModels,
+        curatedCount,
+        aggregatedCount,
+        curatedDistinctProviders,
+        curatedTopProviderShare,
+      } = getFullCacheFairCandidateModels(
+        {
+          contextSize: sanitizedCriteria.contextSize,
+          preferredProviders: sanitizedCriteria.preferredProviders,
+          excludeProviders: sanitizedCriteria.excludeProviders,
+          requiredCapabilities: sanitizedCriteria.requiredCapabilities,
+        },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare
+      );
+      // Deliberately NOT incremented: this path issues zero request-time DB
+      // round trips by construction (that is the entire point of the flag).
+      // getAllCatalogModels() above MAY cost one round trip on a cold cache,
+      // but that cost is shared/amortized across every concurrent caller via
+      // its own single-flight guard, not attributable to this one request.
+      logBucketFairAnomalies(
+        { curatedCount, aggregatedCount, curatedDistinctProviders, curatedTopProviderShare },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare,
+        hasProviderPreference
+      );
+      if (aggregatedPopularityReserve > 0) {
+        log.debug(
+          { aggregatedPopularityReserve },
+          'full-cache-index path: skipping the aggregated-popularity-seed backstop (its own pool is Postgres-sourced — see getFullCacheFairCandidateModels limitation #3); relying on the aggregated bucket\'s own deterministic take instead'
+        );
+      }
+      if (fairModels.length > 0) {
+        models = fairModels.map(toSyntheticModelWithProvider);
+      }
+    } else if (prefilterCallable) {
+      const {
+        uids,
+        curatedCount,
+        aggregatedCount,
+        curatedDistinctProviders,
+        curatedTopProviderShare,
+        curatedSnapshotQueried,
+      } = await getBucketFairCandidateUids(
+        {
+          contextSize: sanitizedCriteria.contextSize,
+          includeProviderNames: sanitizedCriteria.preferredProviders,
+          excludeProviderNames: sanitizedCriteria.excludeProviders,
+        },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare
+      );
+      databaseQueries++; // aggregated-bucket query — always a live round trip
+      if (curatedSnapshotQueried) databaseQueries++; // curated snapshot cache miss this request
+      logBucketFairAnomalies(
+        { curatedCount, aggregatedCount, curatedDistinctProviders, curatedTopProviderShare },
+        curatedTake,
+        aggregatedUsageTake,
+        curatedMaxProviderShare,
+        hasProviderPreference
+      );
+      if (uids.length > 0) {
+        // Hydrate via Prisma (type-safe path for everything downstream) — the
+        // raw query/snapshot above already applied every filter, so the uid
+        // membership check is sufficient here (mirrors the pre-existing
+        // getPopularitySeedRows hydration pattern this replaces).
+        models = await prisma.model.findMany({
+          where: { uid: { in: uids } },
+          include: { provider: true },
+        });
+        databaseQueries++;
+      }
+
+      if (aggregatedPopularityReserve > 0) {
+        try {
+          const { rows: seedPool, queried } = await getAggregatedPopularitySeedRows();
+          if (queried) databaseQueries++;
+          const have = new Set(models.map((m) => m.uid));
+          // In-memory equivalent of `where` (status/context/provider) — see
+          // matchesRequestWhere's doc. No per-request DB round trip: the
+          // cached, fully-hydrated seed pool is filtered here instead of via
+          // another `prisma.model.findMany` call every request.
+          const eligibleSeed = seedPool.filter(
+            (m) => !have.has(m.uid) && matchesRequestWhere(m, sanitizedCriteria)
+          );
+          const seeded = eligibleSeed.slice(0, aggregatedPopularityReserve);
+          if (seeded.length > 0) models = [...models, ...seeded];
+        } catch (err) {
+          log.warn(
+            { error: getErrorMessage(err) },
+            'aggregated-bucket popularity backstop skipped (selector pool)'
+          );
+        }
+      }
+    }
+    if (!prefilterCallable || models.length < 5) {
+      // Terminal never-collapse: either the SELECTION_PREFILTER_CALLABLE=false
+      // escape hatch is active, or the bucket-fair split (both buckets empty, or
+      // a preferredProviders/excludeProviders filter with no matches in either
+      // bucket) left too few rows. Drop every restriction rather than return an
+      // empty/near-empty pool — a degraded model still beats no model on the hot
+      // path. Same top-N-by-usage ceiling the pool has always used.
       models = await prisma.model.findMany({
         where,
         include: { provider: true },
@@ -544,33 +1645,6 @@ export class DynamicModelSelector {
         take: Math.min(limit * 3, 800),
       });
       databaseQueries++;
-    }
-
-    // POPULARITY SEED (2026-06-29): `orderBy usage_count` cannot surface popular
-    // models when usage_count is uniformly 0 (the state right after a restart) —
-    // the take:800 cap then returns physical-order rows, dominated by zero-signal
-    // HF junk (measured: top-10 was `…moist_beaked_chameleon`, `…badendings`,
-    // Gensyn-Swarm artifacts burying xai/grok-3). Prisma can't ORDER BY a JSON
-    // field, so pull the top callable rows by metadata.downloads via a raw UID
-    // lookup and merge them in. This is the WRITE-side companion to the cold-start
-    // popularity prior: it guarantees the popular models are IN the candidate pool
-    // so the (popularity-aware) scorer can actually rank them to the top.
-    if (prefilterCallable && process.env.SELECTION_POPULARITY_SEED !== 'false') {
-      try {
-        // 30min-cached pool (getPopularitySeedRows) — per-request de-dup against
-        // this call's own candidate set still happens here, every time, in memory.
-        const { rows: seedPool, queried } = await getPopularitySeedRows();
-        if (queried) databaseQueries++;
-        const have = new Set(models.map((m) => m.uid));
-        const seeded = seedPool.filter((m) => !have.has(m.uid));
-        if (seeded.length > 0) {
-          // Lead with the popular seed, keep the usage-ranked set, re-cap to the
-          // in-memory ranker ceiling so scoring latency stays bounded.
-          models = [...seeded, ...models].slice(0, 800);
-        }
-      } catch (err) {
-        logger.warn({ err }, 'popularity-seed query skipped (selector pool)');
-      }
     }
 
     // Map to Model type
@@ -660,12 +1734,30 @@ export class DynamicModelSelector {
       // models for every tools request → recovery always degraded).
       // Unknowns are ranked behind declared-FC candidates and verified at
       // execution by the lazy cached probe (function-calling-probe.ts).
-      const hardRequiredUris = requiredUris.filter(
-        (u) => !u.includes('function_calling')
-      );
+      //
+      // Alias-aware (2026-09-08 fix): `mapInferredCapabilities`
+      // (orchestration-engine.ts) always emits BOTH `tool_use` and
+      // `function_calling` together for a tools-bearing request — the
+      // ontology (capability-ontology.ts) treats them as the SAME
+      // capability (canonical id `tools`). The previous filter only
+      // stripped the literal string `function_calling`, so `tool_use`
+      // stayed hard-required and — since it's a distinct string with no
+      // alias resolution — silently re-imposed the exact hard-filter this
+      // deferral exists to avoid. Resolve through the ontology instead of
+      // hardcoding a second exclusion literal, so ANY alias of the same
+      // capability (`tool_use`, `tool_calling`, `tools`, ...) defers
+      // together. This also fixes the URI track: `legacyToUri` is a plain
+      // string-concat translator with no alias awareness of its own, so
+      // `.../tool_use` and `.../function_calling` are different URI
+      // strings even though they name the same capability — deriving both
+      // hard-required arrays from the SAME alias-filtered legacy list
+      // (instead of independently substring-filtering the URI array) keeps
+      // the two tracks consistent.
+      const FUNCTION_CALLING_CANONICAL = capabilityOntology.normalize('function_calling');
       const hardRequiredLegacy = sanitizedCriteria.requiredCapabilities.filter(
-        (c) => c !== 'function_calling'
+        (c) => capabilityOntology.normalize(c) !== FUNCTION_CALLING_CANONICAL
       );
+      const hardRequiredUris = legacyArrayToUriArray(hardRequiredLegacy);
       if (hardRequiredUris.length > 0 || hardRequiredLegacy.length > 0) {
         const preFilter = mapped;
         mapped = mapped.filter((model) => {
@@ -675,15 +1767,28 @@ export class DynamicModelSelector {
           const modelCaps = model.capabilities || [];
           return hardRequiredLegacy.every((reqCap) => modelCaps.includes(reqCap));
         });
-        // NEVER-EMPTY failsafe (mirrors the requiredTools one below): a
-        // capability filter that empties the pool degrades to the unfiltered
-        // pool — the execution gate still enforces the capability.
-        if (mapped.length === 0 && preFilter.length > 0) {
+        if (mapped.length > 0) {
+          const dropped = preFilter.length - mapped.length;
+          if (dropped > 0) {
+            logger.debug(
+              { requiredCapabilities: sanitizedCriteria.requiredCapabilities, dropped },
+              'hard required-capability filter applied (fail-closed)'
+            );
+          }
+        } else {
+          // FAIL-CLOSED (2026-09-03, SOTA §20): a hard functional capability
+          // requirement (vision, reasoning, structured output, ...) may NOT
+          // be bypassed by a never-empty failsafe. Unlike function_calling
+          // — which is deferred above because the execution-time lazy probe
+          // genuinely verifies it — these capabilities have no execution
+          // gate downstream: restoring the unfiltered pool here would route
+          // a vision-required request to a blind model with no enforcement.
+          // An empty pool is the honest outcome; the caller's no-eligible-
+          // model recovery handles it.
           logger.warn(
             { requiredCapabilities: sanitizedCriteria.requiredCapabilities, preFilterCount: preFilter.length },
-            'FAILSAFE: required-capability filter would empty the pool — keeping unfiltered pool; capability enforced at execution'
+            'HARD-CAPABILITY FAIL-CLOSED: no model in the pool declares every required capability — returning empty pool (no failsafe bypass)'
           );
-          mapped = preFilter;
         }
       } else if (requiredUris.length > 0) {
         logger.debug(
@@ -1374,6 +2479,15 @@ export class DynamicModelSelector {
       '✅ COMPLETED: Runtime capability validation for models'
     );
 
+    // Superset of the candidates for which scoreModel() will ask for a trend
+    // (it additionally requires few real-time samples), so every trend lookup
+    // in the fan-out below is a cache hit instead of two queries per model.
+    await this.prefetchRecentTrends(
+      modelsWithHistory
+        .filter(({ history }) => history && history.totalCount >= 5)
+        .map(({ model }) => model.id)
+    );
+
     // ─── Caminho-C closure: HCRA semantic rerank via CapabilitySearchService ──
     //
     // When a `semanticQuery` is supplied on the criteria (or forwarded from
@@ -1575,6 +2689,10 @@ export class DynamicModelSelector {
       strategy: availableModels ? 'provided' : 'database',
       result: validation.valid ? 'success' : 'error',
     });
+
+    // Selection runs inside the strategies, so the engine (which records the
+    // Prometheus histogram) only ever sees the request-scoped context.
+    context.selectionDurationMs = (context.selectionDurationMs ?? 0) + (Date.now() - startTime);
 
     return filtered;
   }
@@ -2039,10 +3157,15 @@ export class DynamicModelSelector {
    * Compares performance in last 7 days vs previous 30 days
    */
   private async calculateRecentTrend(modelId: string): Promise<number> {
+    const cached = this.recentTrendCache.get(modelId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     try {
       const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(now.getTime() - RECENT_TREND_RECENT_WINDOW_MS);
+      const thirtyDaysAgo = new Date(now.getTime() - RECENT_TREND_HISTORY_WINDOW_MS);
 
       // Get recent performance (last 7 days)
       const recentMetrics = await prisma.modelPerformanceMetric.findMany({
@@ -2073,32 +3196,78 @@ export class DynamicModelSelector {
         },
       });
 
-      if (recentMetrics.length === 0 || historicalMetrics.length === 0) {
-        // Not enough data to calculate trend
-        return 0;
-      }
-
-      // Calculate average quality score for recent period
-      const recentAvgQuality =
-        recentMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) / recentMetrics.length;
-
-      // Calculate average quality score for historical period
-      const historicalAvgQuality =
-        historicalMetrics.reduce((sum, m) => sum + (m.qualityScore || 0), 0) /
-        historicalMetrics.length;
-
-      if (historicalAvgQuality === 0) {
-        return 0;
-      }
-
-      // Calculate trend as percentage change (positive = improving, negative = degrading)
-      const trend = (recentAvgQuality - historicalAvgQuality) / historicalAvgQuality;
-
-      // Normalize to -1 to 1 range
-      return Math.max(-1, Math.min(1, trend));
+      const trend = computeRecentTrend(recentMetrics, historicalMetrics);
+      this.recentTrendCache.set(modelId, {
+        value: trend,
+        expiresAt: Date.now() + RECENT_TREND_CACHE_TTL_MS,
+      });
+      return trend;
     } catch (error) {
       log.warn({ error, modelId }, 'Failed to calculate recent trend');
       return 0;
+    }
+  }
+
+  /**
+   * Warm recentTrendCache for a whole candidate pool in ONE query. Without
+   * this, scoring fired two findMany per candidate with history (hundreds of
+   * round-trips per model=auto request). Same partition as the per-candidate
+   * path (timeBucket >= 7d vs [30d, 7d)) and the same computeRecentTrend, so
+   * the numbers are identical; `now` is fixed once per batch instead of once
+   * per candidate, a sub-second drift against hour-rounded buckets.
+   * Fail-open like prefetchModelPerformance: on error the cache is left
+   * untouched and calculateRecentTrend falls back to its own queries.
+   */
+  private async prefetchRecentTrends(modelIds: string[]): Promise<void> {
+    const now = Date.now();
+    const uncached = Array.from(new Set(modelIds)).filter((id) => {
+      const cached = this.recentTrendCache.get(id);
+      return !cached || cached.expiresAt <= now;
+    });
+    if (uncached.length === 0) {
+      return;
+    }
+
+    try {
+      const sevenDaysAgo = new Date(now - RECENT_TREND_RECENT_WINDOW_MS);
+      const thirtyDaysAgo = new Date(now - RECENT_TREND_HISTORY_WINDOW_MS);
+
+      const rows = await prisma.modelPerformanceMetric.findMany({
+        where: {
+          modelId: { in: uncached },
+          timeBucket: { gte: thirtyDaysAgo },
+        },
+        select: {
+          modelId: true,
+          timeBucket: true,
+          qualityScore: true,
+        },
+      });
+
+      const recentByModel = new Map<string, Array<{ qualityScore: number | null }>>();
+      const historicalByModel = new Map<string, Array<{ qualityScore: number | null }>>();
+      for (const row of rows) {
+        const target = row.timeBucket >= sevenDaysAgo ? recentByModel : historicalByModel;
+        const list = target.get(row.modelId);
+        if (list) {
+          list.push(row);
+        } else {
+          target.set(row.modelId, [row]);
+        }
+      }
+
+      const expiresAt = Date.now() + RECENT_TREND_CACHE_TTL_MS;
+      for (const id of uncached) {
+        this.recentTrendCache.set(id, {
+          value: computeRecentTrend(recentByModel.get(id) ?? [], historicalByModel.get(id) ?? []),
+          expiresAt,
+        });
+      }
+    } catch (error) {
+      log.warn(
+        { error: getErrorMessage(error), candidates: uncached.length },
+        'Bulk recent-trend prefetch failed - falling back to per-candidate lookups'
+      );
     }
   }
 
@@ -2712,6 +3881,7 @@ export class DynamicModelSelector {
     if (now - this.lastCacheUpdate > this.config.cacheExpiryMs) {
       log.debug('Refreshing performance and selection caches');
       this.performanceCache.clear();
+      this.recentTrendCache.clear();
       // selectionCache (findModelsByRequirements' candidate-pool cache) was never
       // cleared here — it lived for the lifetime of the process. A provider that
       // recovers/degrades, or a catalog change from discovery, would never be

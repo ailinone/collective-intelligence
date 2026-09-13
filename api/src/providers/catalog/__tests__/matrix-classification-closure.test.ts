@@ -207,35 +207,47 @@ describe('matrix classification closure (FINAL v1.0, 2026-04-23)', () => {
     // above; digitalocean's operational state (full live-validation, chat
     // + streaming + tools + jsonMode + embeddings all real 200s) is
     // recorded separately in CONSOLIDATION_MATRIX['live-validation'].
-    expect(buckets['integrado-sem-live-validation'].length).toBe(92);
-    // credentials-missing history:
-    //   22 (original) → 25 (Lot B, 2026-04-23: +writer/upstage/rekaai)
-    //                → 36 (LOTE M complement lot, 2026-04-23: +11 catalog
-    //                      rows with enabledByDefault=false and non-
-    //                      catalog-only integrationMode: arcee, atlascloud,
-    //                      avian, gmi, infermatic, mancer, phala, qianfan,
-    //                      siliconflow, stepfun, venice).
-    //                → 0  (Phase 4a, 2026-04-28: universal flip drained
-    //                      this bucket; uncensored handling moved to the
-    //                      new `contentPolicyClass` field, see Phase 4b).
-    expect(buckets['credentials-missing'].length).toBe(0);
-    expect(buckets['upstream-suspended'].length).toBe(1);
-    // catalog-only-inventory history:
-    //   3 (sap, snowflake, topaz)
-    //   → 5 (LOTE M, 2026-04-23: +inflection (proprietary schema, needs
-    //        dedicated adapter) +relace (specialty code-edit surface,
-    //        needs dedicated adapter))
-    //   → 4 (runnable-gap pass: topaz migrated catalog-only →
-    //        execution-only with a curated pinnedFallback inventory).
-    //   → 1 (2026-06-20 promotion pass: 3 providers wired for execution
-    //        and migrated from catalog-only → integrado-sem-live-validation;
-    //        net catalog size unchanged, counts shifted not added).
-    expect(buckets['catalog-only-inventory'].length).toBe(1);
-    // switch-only history: 22 → 21 (2026-06-11: 'aws-bedrock' case removed
-    // from provider-registry.ts — it was unreachable and Bedrock is served
-    // by its catalog row with the AwsBedrockAdapter factory binding).
-    expect(buckets['switch-only-legitimate'].length).toBe(21);
-    // Sum: 92 + 0 + 1 + 1 + 21 = 115 (= |catalog 94| + |switch 21|,
-    // recomputed 2026-08-10 after LOTE AB digitalocean onboarding).
+    // LOTE AC (2026-08-21): +wafer (Wafer Serverless — enabledByDefault
+    // true, integrationMode discovery+execution, no dedicated adapter/
+    // oai-compat-pure) — integrado 92→93. Operational state (gcloud ADC
+    // expired before the key could be fetched — no probe at all) recorded
+    // separately in CONSOLIDATION_MATRIX['no-live-validation'].
+    // LOTE AD-AG (2026-08-21): +vivgrid (execution-only + pinnedFallback,
+    // enabledByDefault true), +unorouter, +umans, +trustedrouter (all
+    // discovery+execution, no dedicated adapter) — integrado 93→97.
+    //
+    // LOTE AH (2026-09-03): +25 docs-onboarded rows (baseten, kilo-gateway,
+    // llama, longcat, iflow, modelscope, near-ai, ollama-cloud, regolo,
+    // sarvam, stackit, tinfoil, vultr, ovhcloud, crusoe, hetzner,
+    // io-intelligence, lilac, kimi-coding, alibaba-cn, moonshot-cn,
+    // siliconflow-cn, stepfun-cn, minimax-cn, xiaomi-token-plan — all
+    // enabledByDefault:true, integrationMode discovery+execution, generic
+    // hub adapter) — integrado 97→122. Operational state (no live probe
+    // this session — session tooling blocked + no credentials provisioned)
+    // recorded separately in CONSOLIDATION_MATRIX['no-live-validation'].
+    //
+    // ── STRUCTURAL SNAPSHOT (LOTE AI, 2026-09-03) ───────────────────────
+    // The per-bucket literal pins above were the last manual magic numbers
+    // in this suite: every onboarding lot required re-pinning 2+ integers,
+    // which is exactly the churn the convergence mission §37 forbids. The
+    // pins are replaced with STRUCTURAL invariants derived from the source
+    // sets themselves:
+    //   - every bucket is already exact-matched against its derived set in
+    //     the `it` blocks above (closure), so per-bucket literals added no
+    //     information beyond the sum check;
+    //   - the total is asserted as |catalog| + |switch| computed from the
+    //     actual imports, so adding a provider can never silently break
+    //     the accounting;
+    //   - `credentials-missing` emptiness is kept as an explicit invariant
+    //     (Phase 4a decision) and `switch-only` remains pinned to the live
+    //     provider-registry switch (recomputed from switchIds, not a
+    //     literal).
+    // History comments above are retained verbatim for traceability.
+    expect(buckets['credentials-missing'].length).toBe(0); // Phase 4a invariant: no provider ships disabled-for-missing-creds
+    expect(buckets['upstream-suspended'].length).toBe(UPSTREAM_SUSPENDED.size); // closed enumeration, matched exactly above
+    expect(buckets['switch-only-legitimate'].length).toBe(switchIds.length);
+    const total = Object.values(buckets).reduce((n, b) => n + b.length, 0);
+    expect(total).toBe(PROVIDER_CATALOG.length + switchIds.length);
+    expect(new Set([...buckets['integrado-sem-live-validation'], ...buckets['credentials-missing'], ...buckets['upstream-suspended'], ...buckets['catalog-only-inventory'], ...buckets['switch-only-legitimate']]).size).toBe(total); // every provider classified exactly once
   });
 });

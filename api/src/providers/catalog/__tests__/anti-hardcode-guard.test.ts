@@ -96,13 +96,32 @@ const REGISTRY_PATH = join(__dirname, '..', '..', 'provider-registry.ts');
 //                                 registration warnings. The same pass
 //                                 also closed the `302ai` residue (see
 //                                 below). Baseline drops by 4.
+//   2026-09-12 (cartesia)  — 20: cartesia migrated from a switch case to
+//                                 a catalog row (integrationClass:
+//                                 'speech-only', integrationMode:
+//                                 'execution-only', CartesiaAdapter
+//                                 factory binding) — same treatment as
+//                                 topaz/v0/bfl. It had no real /models
+//                                 endpoint to fix (see the discovery-audit
+//                                 comment in providers.catalog.ts), so a
+//                                 curated `pinnedFallback` replaces the
+//                                 legacy switch dispatch entirely. This
+//                                 also surfaced a SEPARATE, older, one-off
+//                                 undercount: `aws-bedrock`'s switch case
+//                                 was removed 2026-06-11 (see the comment
+//                                 above the import list in
+//                                 provider-registry.ts) but the baseline
+//                                 constant and the breakdown below were
+//                                 never updated for it, so the real
+//                                 pre-cartesia count was already 21, not
+//                                 22. Fixed here in the same pass rather
+//                                 than left as a second stale baseline.
 //
-// The 22 cases remaining are:
-//   - 13 first-party-native  (openai, anthropic, google, deepseek,
+// The 20 cases remaining are:
+//   - 12 first-party-native  (openai, anthropic, google, deepseek,
 //                              mistral, xai, cohere, openrouter,
-//                              vertex-ai, aws-bedrock, aws-sagemaker,
-//                              jina, self-hosted)
-//   - 4  specialty audio     (deepgram, cartesia, elevenlabs, palabraai)
+//                              vertex-ai, aws-sagemaker, jina, self-hosted)
+//   - 3  specialty audio     (deepgram, elevenlabs, palabraai)
 //   - 5  self-hosted non-OAI (local-ocr, local-docling, local-nllb,
 //                              local-cosyvoice, local-piper) — these
 //                              are NOT OpenAI-compatible on their
@@ -121,7 +140,7 @@ const REGISTRY_PATH = join(__dirname, '..', '..', 'provider-registry.ts');
 // To raise this baseline legitimately (e.g. new first-party native adapter),
 // update the constant in the same commit that adds the case. PR reviewers
 // should ask: "could this be a catalog entry instead?" If yes, reject.
-const SWITCH_CASE_BASELINE = 22;
+const SWITCH_CASE_BASELINE = 20;
 
 /**
  * Extract the lowercase-kebab provider ids that appear as `case 'x':`

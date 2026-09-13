@@ -27,6 +27,23 @@ const _createConfig = (): DynamicModelSelectorConfig => ({
     maxModelsPerTaskPreference: 9,
     maxModelsPerTaskFallback: 6,
     minModelsForSelection: 20,
+    // Bucket-fair candidate retrieval (2026-09-07): 400+400 preserves the
+    // pre-existing 800-row total pool ceiling, so downstream in-memory
+    // scoring/rerank cost is unchanged. Env overrides: SELECTION_CURATED_TAKE
+    // / SELECTION_AGGREGATED_TAKE (read directly in dynamic-model-selector.ts,
+    // matching this file's existing SELECTION_* feature-flag convention).
+    curatedCandidateTake: 400,
+    aggregatedCandidateTake: 400,
+    // Per-provider fairness follow-up (2026-09-07): live-prod audit of the
+    // curated bucket found one non-premium aggregator (featherless-ai) supplying
+    // 59% of the 37,625-row curated bucket, which alone was enough to occupy the
+    // entire curatedCandidateTake=400 budget and make openai/anthropic/google/
+    // xai/cohere/deepseek unreachable even after the bucket-level fix above.
+    // 0.15 = no single provider may supply more than 15% of curatedCandidateTake
+    // (60 of 400 today), dynamically recomputed from whatever curatedCandidateTake
+    // is configured/overridden to — never a fixed row count or provider name.
+    // Env override: SELECTION_CURATED_MAX_PROVIDER_SHARE.
+    curatedMaxProviderShare: 0.15,
   },
   costEstimation: {
     defaultOutputTokens: 1000,

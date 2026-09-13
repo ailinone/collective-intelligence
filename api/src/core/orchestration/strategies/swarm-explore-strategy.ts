@@ -20,7 +20,7 @@
  * Ideal for open-ended problems with multiple valid solution paths.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { narrowAs } from '@/utils/type-guards';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
@@ -207,6 +207,7 @@ export class SwarmExploreStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'swarm-explore',
         explorers: explorers.length,
@@ -372,6 +373,7 @@ export class SwarmExploreStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: 0,
+      toolArtifacts: mergeArtifacts(executions),
       metadata: { strategy: 'swarm-explore', error: 'all-failed' },
     };
   }

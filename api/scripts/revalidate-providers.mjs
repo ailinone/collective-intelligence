@@ -12,18 +12,48 @@
  * Provider Live Re-Validation (audit follow-up, 2026-06-15).
  *
  * After provisioning/recharging provider API keys, this re-probes EVERY
- * catalog provider against its live discovery endpoint and reports which
- * flipped red→green — replacing the stale `docs/provider-runtime-matrix.csv`
- * snapshot with a freshly measured one. It does NOT fake status: green here
- * means the provider's /models actually responded with ≥1 model under the
- * current keys.
+ * catalog provider and reports what actually changed — replacing the stale
+ * `docs/provider-runtime-matrix.csv` snapshot with a freshly measured one.
+ *
+ * ── Why this is NOT a single green/red (rewritten 2026-09-04, LOTE AK) ────
+ *
+ * The original version collapsed every provider to one traffic light derived
+ * from a single question: "did /models return ≥1 model?". That conflates at
+ * least five independent failure modes, and gets two of them backwards:
+ *
+ *   - An `execution-only` catalog row has NO /models endpoint BY DESIGN
+ *     (azure-openai, aws-bedrock, voyage, and every row declaring
+ *     `discoveryStatus: 'unavailable-upstream'`). Scoring it on discovery
+ *     manufactured a permanent red for a provider that may be perfectly
+ *     healthy — and buried real reds in the noise.
+ *   - A provider whose discovery answers fine can still be unusable: expired
+ *     key, zero balance, quota exhausted, or 5xx on the execution path.
+ *     "/models returned something" said green to all four.
+ *
+ * So each provider is now scored on five INDEPENDENT dimensions, each with
+ * its own `not-applicable` state, and the roll-up verdict is derived from
+ * them rather than replacing them:
+ *
+ *   discovery    can we enumerate this provider's inventory?
+ *   credential   does the key authenticate?
+ *   billing      is there balance/quota to actually spend?
+ *   upstream     is the vendor reachable and not rate-limiting us?
+ *   execution    has a real call to this provider succeeded recently?
+ *
+ * The first four come from the discovery snapshot's ProviderErrorClass
+ * taxonomy (auth_failed / insufficient_credit / quota_exceeded /
+ * rate_limited / provider_5xx / provider_timeout / endpoint_not_found ...),
+ * which the control plane already computes. The fifth comes from the
+ * ProviderHealthRegistry, which records per-(provider,model) execution
+ * outcomes. No new probing system is introduced — this reads what the
+ * operability plane already measures.
  *
  * Fetch-only, no project imports — runs against a DEPLOYED ci-api exactly
  * like an operator would (the API process holds the keys; this driver only
  * triggers the probe and reads results).
  *
- * Flow: POST /discover-now (force a live probe) → GET /discovery (read
- * per-provider results) → diff vs the committed CSV snapshot → write report.
+ * Flow: POST /discover-now (force a live probe) → GET /discovery + GET
+ * /health (read results) → diff vs the committed CSV snapshot → write report.
  *
  * Required env:
  *   API_BASE     internal target only, e.g. http://ci-api:3000 or
@@ -40,6 +70,8 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { classifyProvider, csvStatus } from './revalidate-providers-classify.mjs';
 
 const API_BASE = (process.env.API_BASE || '').replace(/\/+$/, '');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -61,24 +93,28 @@ async function api(method, path) {
   return json;
 }
 
-/** Map a live discovery result to the matrix status vocabulary. */
-function liveStatus(r) {
-  if (r.status === 'available' && (r.modelCount ?? 0) > 0) return 'green';
-  if (r.status === 'available') return 'amber';        // responded but 0 models (discovery/materialization)
-  return 'red';                                        // unavailable / error
-}
+// ─── Dimension classification ───────────────────────
+//
+// The scoring logic lives in a sibling module so it can be unit-tested
+// without importing this shebang-bearing driver (see that file for why the
+// shebang matters on a Windows checkout), and so this file stays what it is:
+// fetch, diff, report.
 
 /** Load the committed snapshot for the before/after diff. */
-function loadSnapshot() {
-  const csv = join(process.cwd(), 'docs', 'provider-runtime-matrix.csv');
+export function loadSnapshot(cwd = process.cwd()) {
+  const csv = join(cwd, 'docs', 'provider-runtime-matrix.csv');
   if (!existsSync(csv)) return {};
   const lines = readFileSync(csv, 'utf8').trim().split('\n');
   const head = lines[0].split(',');
-  const pid = head.indexOf('providerId'), st = head.indexOf('status');
+  const pid = head.indexOf('providerId');
+  const st = head.indexOf('status');
+  const mode = head.indexOf('integrationMode');
   const out = {};
   for (const line of lines.slice(1)) {
     const cols = line.split(',');
-    if (cols[pid]) out[cols[pid]] = cols[st] || 'unknown';
+    if (cols[pid]) {
+      out[cols[pid]] = { status: cols[st] || 'unknown', integrationMode: cols[mode] || '' };
+    }
   }
   return out;
 }
@@ -99,51 +135,115 @@ async function main() {
   const results = Array.isArray(disc.results) ? disc.results : [];
   if (results.length === 0) die('Discovery returned no results — is the scheduler enabled and providers loaded?');
 
+  // Execution evidence is a SEPARATE read: the health registry knows whether
+  // real calls have succeeded, which discovery cannot tell us.
+  log('Reading execution health records (GET /health) ...');
+  let healthByProvider = new Map();
+  try {
+    const health = await api('GET', '/v1/admin/operability/health');
+    for (const r of health.records ?? []) {
+      if (!healthByProvider.has(r.providerId)) healthByProvider.set(r.providerId, []);
+      healthByProvider.get(r.providerId).push(r);
+    }
+    log(`  health registry: ${health.totalRecords ?? 0} records over ${healthByProvider.size} providers`);
+  } catch (e) {
+    log(`  health read failed (execution dimension stays "unknown"): ${e.message}`);
+  }
+
   const before = loadSnapshot();
   const rows = results.map((r) => {
-    const now = liveStatus(r);
-    const prev = before[r.providerId] ?? 'unknown';
+    const snap = before[r.providerId] ?? { status: 'unknown', integrationMode: '' };
+    const dims = classifyProvider(r, healthByProvider.get(r.providerId) ?? [], snap.integrationMode);
+    const now = csvStatus(dims);
     return {
       providerId: r.providerId,
-      before: prev,
+      before: snap.status,
       after: now,
+      integrationMode: snap.integrationMode,
       modelCount: r.modelCount ?? 0,
       healthState: r.healthState,
       reason: r.reason,
       errorClass: r.errorClass,
-      flipped: prev !== now,
+      probeLatencyMs: r.probeLatencyMs,
+      dimensions: dims,
+      verdict: dims.verdict,
+      flipped: snap.status !== now,
     };
   }).sort((a, b) => a.providerId.localeCompare(b.providerId));
 
   const gained = rows.filter((r) => r.before !== 'green' && r.after === 'green');
   const lost = rows.filter((r) => r.before === 'green' && r.after !== 'green');
-  const stillRed = rows.filter((r) => r.after === 'red');
-  const greenNow = rows.filter((r) => r.after === 'green');
+  const byVerdict = {};
+  for (const r of rows) byVerdict[r.verdict] = (byVerdict[r.verdict] ?? 0) + 1;
+  const blocked = (v) => rows.filter((r) => r.verdict === v);
 
   // ── Write artifacts ───────────────────────────────────────────────────────
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const outDir = join(process.cwd(), 'reports');
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, `provider-revalidation-${ts}.json`), JSON.stringify({ generatedAt: new Date().toISOString(), summary: { total: rows.length, green: greenNow.length, gained: gained.length, lost: lost.length, stillRed: stillRed.length }, rows }, null, 2));
+  writeFileSync(
+    join(outDir, `provider-revalidation-${ts}.json`),
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        summary: {
+          total: rows.length,
+          byVerdict,
+          gained: gained.length,
+          lost: lost.length,
+        },
+        rows,
+      },
+      null,
+      2
+    )
+  );
+
+  const dimTable = (verdict, blurb) => {
+    const list = blocked(verdict);
+    return [
+      `## ${verdict} (${list.length}) — ${blurb}`,
+      list.length
+        ? '| Provider | modo | errorClass | reason |\n|---|---|---|---|\n' +
+          list
+            .map(
+              (r) =>
+                `| ${r.providerId} | ${r.integrationMode || '?'} | ${r.errorClass || ''} | ${(r.reason || '').slice(0, 60)} |`
+            )
+            .join('\n')
+        : '_(nenhum)_',
+      ``,
+    ].join('\n');
+  };
 
   const md = [
     `# Provider Re-Validation — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
     ``,
-    `Live probe of ${rows.length} providers via \`/v1/admin/operability/discovery\`. Status measured, not assumed: **green** = /models returned ≥1 model under current keys.`,
+    `Live probe of ${rows.length} providers. Cada provider é pontuado em CINCO dimensões independentes`,
+    `(discovery, credential, billing, upstream, execution) — "\`/models\` respondeu" NÃO é, sozinho, sinal de verde.`,
+    `Linhas \`execution-only\` não têm endpoint de listagem por design: a dimensão discovery é \`not-applicable\` nelas.`,
     ``,
-    `| Métrica | Valor |`,
+    `| Veredito | Providers |`,
     `|---|---|`,
-    `| Green agora | **${greenNow.length}** / ${rows.length} |`,
-    `| Recém-green (red/amber→green) | **${gained.length}** |`,
-    `| Regrediram (green→red/amber) | ${lost.length} |`,
-    `| Ainda red | ${stillRed.length} |`,
+    ...Object.entries(byVerdict)
+      .sort((a, b) => b[1] - a[1])
+      .map(([v, n]) => `| ${v} | **${n}** |`),
     ``,
-    `## ✅ Recém-green (${gained.length})`,
-    gained.length ? '| Provider | antes | depois | modelos |\n|---|---|---|---|\n' + gained.map((r) => `| ${r.providerId} | ${r.before} | ${r.after} | ${r.modelCount} |`).join('\n') : '_(nenhum)_',
+    `Recém-green: **${gained.length}** · Regressões: ${lost.length}`,
     ``,
-    `## ❌ Ainda red (${stillRed.length}) — chave/saldo/infra pendente`,
-    stillRed.length ? '| Provider | reason | errorClass |\n|---|---|---|\n' + stillRed.map((r) => `| ${r.providerId} | ${(r.reason || '').slice(0, 50)} | ${r.errorClass || ''} |`).join('\n') : '_(nenhum)_',
-    lost.length ? `\n## ⚠️ Regressões (${lost.length})\n` + lost.map((r) => `- ${r.providerId}: ${r.before}→${r.after} (${r.reason || ''})`).join('\n') : '',
+    dimTable('unusable-credential-missing', 'nenhuma chave provisionada — criar o secret'),
+    dimTable('unusable-credential', 'chave inválida/expirada — rotacionar'),
+    dimTable('unusable-billing', 'saldo ou cota esgotados — recarregar'),
+    dimTable('unusable-upstream', 'vendor 5xx/timeout — nada a fazer do nosso lado'),
+    dimTable('unusable-discovery', 'endpoint de listagem falhou/sumiu'),
+    dimTable('unusable-execution', 'chamadas reais falhando apesar da descoberta'),
+    dimTable('degraded-rate-limited', 'vendor limitando taxa — recuar, não rotacionar chave'),
+    dimTable('degraded-no-inventory', 'respondeu mas com zero modelos'),
+    dimTable('unproven', 'sem evidência suficiente ainda (execution-only sem chamada real)'),
+    lost.length
+      ? `\n## ⚠️ Regressões (${lost.length})\n` +
+        lost.map((r) => `- ${r.providerId}: ${r.before}→${r.after} (${r.verdict}${r.reason ? `: ${r.reason}` : ''})`).join('\n')
+      : '',
     ``,
   ].join('\n');
   const mdFile = join(outDir, `provider-revalidation-${ts}.md`);
@@ -151,12 +251,24 @@ async function main() {
 
   // ── Console summary ───────────────────────────────────────────────────────
   log('─────────────────────────────────────────────');
-  log(`green: ${greenNow.length}/${rows.length} | recém-green: ${gained.length} | ainda red: ${stillRed.length} | regressões: ${lost.length}`);
+  log(
+    Object.entries(byVerdict)
+      .sort((a, b) => b[1] - a[1])
+      .map(([v, n]) => `${v}: ${n}`)
+      .join(' | ')
+  );
+  log(`recém-green: ${gained.length} | regressões: ${lost.length}`);
   const focus = ONLY.length ? gained.filter((r) => ONLY.includes(r.providerId)) : gained;
   for (const r of focus.slice(0, 40)) log(`  ✅ ${r.providerId}: ${r.before}→${r.after} (${r.modelCount} modelos)`);
-  if (stillRed.length) log(`  … ${stillRed.length} ainda red — ver ${mdFile}`);
   log(`Relatório: ${mdFile}`);
   log('─────────────────────────────────────────────');
 }
 
-main().catch((err) => die(err instanceof Error ? err.message : String(err)));
+// Only run when invoked directly — the classifier above is imported by
+// `revalidate-providers-classification.test.ts`, and importing must not
+// trigger a live probe.
+const invokedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err) => die(err instanceof Error ? err.message : String(err)));
+}

@@ -25,19 +25,31 @@
  *  - No OAI-compat shim: this adapter goes through the `provider-registry.ts`
  *    switch path (native adapters), not the catalog+factory path. Counted
  *    against the anti-hardcode-guard baseline (21 → 22) deliberately.
+ *
+ * Prompt caching (LOTE AZ, 2026-09): see ADR-025. Claude models hosted on
+ * Bedrock support the same underlying prompt-cache mechanism as calling
+ * Anthropic directly, exposed here as a `cachePoint` content block in the
+ * Converse API rather than Anthropic's own `cache_control` field. Gated by
+ * `resolveClaudeCacheMinimumTokens()` below (real, AWS-documented per-model
+ * minimums) — never emitted unconditionally, and never applied to non-Claude
+ * Bedrock model families (Llama / Titan / Mistral / Nova), which have their
+ * own separate — and here, out-of-scope — caching contracts.
  */
 
 import {
   BedrockRuntimeClient,
   ConverseCommand,
   ConverseStreamCommand,
+  CachePointType,
   type ConverseCommandInput,
   type ConverseCommandOutput,
   type Message,
   type SystemContentBlock,
   type Tool,
+  type ToolChoice,
   type InferenceConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
+import { estimateTokensForText } from '@/core/orchestration/model-selection/dynamic-context-budget';
 
 /**
  * Local mirror of smithy's `DocumentType` — the recursive JSON-value type
@@ -67,6 +79,7 @@ import type {
   Provider,
   Model,
   ProviderConfig,
+  ToolCall,
 } from '@/types';
 import type {
   ImageEditRequest,
@@ -210,16 +223,8 @@ export class AWSBedrockAdapter extends ProviderAdapter {
       // string — so the ChatResponse's required `model: string` is satisfied
       // even when the caller didn't send one.
       const modelId = this.resolveModelId(request.model);
-      const { messages, system } = splitSystemFromMessages(request.messages);
-      const converseInput: ConverseCommandInput = {
-        modelId,
-        messages: messages.map(convertMessageToConverse),
-        ...(system.length > 0 ? { system } : {}),
-        inferenceConfig: buildInferenceConfig(request),
-        ...(request.tools && request.tools.length > 0
-          ? { toolConfig: { tools: convertTools(request.tools) } }
-          : {}),
-      };
+      const { messages, converseInput: baseInput } = buildConverseInput(request, modelId);
+      const converseInput: ConverseCommandInput = { ...baseInput, modelId };
 
       this.providerLog.debug({ modelId, messageCount: messages.length }, 'Converse request');
 
@@ -230,43 +235,148 @@ export class AWSBedrockAdapter extends ProviderAdapter {
 
   // ── Chat completion (streaming) ─────────────────────────────────────
 
+  /**
+   * Streams a Converse response, forwarding both text and tool-call deltas.
+   *
+   * Bedrock's ConverseStream event union (contract verified against
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html,
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ContentBlockStartEvent.html,
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ContentBlockDeltaEvent.html,
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolUseBlockStart.html and
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolUseBlockDelta.html,
+   * fetched 2026-09-08) announces a `tool_use` block's `toolUseId`/`name`
+   * ONCE via `contentBlockStart.start.toolUse`, then streams its arguments
+   * incrementally via `contentBlockDelta.delta.toolUse.input` — a STRING
+   * partial-JSON fragment, distinct from the non-streaming `ToolUseBlock`'s
+   * `input`, which is a complete JSON value (see
+   * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolUseBlock.html
+   * and `parseConverseResponse` below). Prior to this fix, this loop only
+   * ever inspected `contentBlockDelta.delta.text` and `messageStop` — every
+   * `contentBlockStart`/tool-use `contentBlockDelta` event was silently
+   * dropped, so `stream: true` + `tools` on Bedrock discarded every tool
+   * call from the stream (non-streaming was already unaffected by that
+   * particular bug, though see `parseConverseResponse`'s doc comment for a
+   * separate gap that WAS present there).
+   *
+   * `contentBlockIndex` is Bedrock's own content-block position counter
+   * (text and tool_use blocks share it), so — same fix pattern as the
+   * Anthropic adapter's `toolCallByBlockIndex` — it is remapped here to a
+   * dense, zero-based sequence covering only tool_use blocks, which is what
+   * an OpenAI-compatible client keys concurrent (parallel) tool-call
+   * accumulation on (`ChatMessage.tool_calls[].index`).
+   */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const modelId = this.resolveModelId(request.model);
-    const { messages, system } = splitSystemFromMessages(request.messages);
-    const streamInput: ConverseCommandInput = {
-      modelId,
-      messages: messages.map(convertMessageToConverse),
-      ...(system.length > 0 ? { system } : {}),
-      inferenceConfig: buildInferenceConfig(request),
-      ...(request.tools && request.tools.length > 0
-        ? { toolConfig: { tools: convertTools(request.tools) } }
-        : {}),
-    };
+    const { converseInput: baseInput } = buildConverseInput(request, modelId);
+    const streamInput: ConverseCommandInput = { ...baseInput, modelId };
 
     const streamResponse = await this.runtimeClient.send(new ConverseStreamCommand(streamInput));
     if (!streamResponse.stream) return;
 
-    // Accumulate deltas. Converse stream events are a discriminated union —
-    // contentBlockDelta events carry the text fragments.
     const created = Math.floor(Date.now() / 1000);
     const id = `bedrock-${Date.now()}`;
+    const toolCallByBlockIndex = new Map<
+      number,
+      { toolCallIndex: number; id: string; name: string }
+    >();
+    let nextToolCallIndex = 0;
+
     for await (const event of streamResponse.stream) {
-      const textDelta = event?.contentBlockDelta?.delta?.text;
-      if (typeof textDelta === 'string' && textDelta.length > 0) {
-        yield {
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model: modelId,
-          choices: [
-            {
-              index: 0,
-              delta: { role: 'assistant', content: textDelta },
-              finish_reason: null,
-            },
-          ],
-        };
+      if (event?.contentBlockStart) {
+        const { start, contentBlockIndex } = event.contentBlockStart;
+        const toolUse = start?.toolUse;
+        if (
+          toolUse?.toolUseId &&
+          toolUse.name &&
+          typeof contentBlockIndex === 'number'
+        ) {
+          const toolCallIndex = nextToolCallIndex++;
+          toolCallByBlockIndex.set(contentBlockIndex, {
+            toolCallIndex,
+            id: toolUse.toolUseId,
+            name: toolUse.name,
+          });
+          yield {
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model: modelId,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  role: 'assistant',
+                  tool_calls: [
+                    {
+                      id: toolUse.toolUseId,
+                      type: 'function',
+                      function: { name: toolUse.name, arguments: '' },
+                      index: toolCallIndex,
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          };
+        }
+        continue;
       }
+
+      if (event?.contentBlockDelta) {
+        const { delta, contentBlockIndex } = event.contentBlockDelta;
+        const textDelta = delta?.text;
+        if (typeof textDelta === 'string' && textDelta.length > 0) {
+          yield {
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model: modelId,
+            choices: [
+              {
+                index: 0,
+                delta: { role: 'assistant', content: textDelta },
+                finish_reason: null,
+              },
+            ],
+          };
+          continue;
+        }
+
+        const toolInputDelta = delta?.toolUse?.input;
+        if (typeof toolInputDelta === 'string' && typeof contentBlockIndex === 'number') {
+          const tracked = toolCallByBlockIndex.get(contentBlockIndex);
+          if (tracked) {
+            yield {
+              id,
+              object: 'chat.completion.chunk',
+              created,
+              model: modelId,
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    tool_calls: [
+                      {
+                        id: tracked.id,
+                        type: 'function',
+                        // Forward the raw fragment (not an accumulated
+                        // total) — a standard OpenAI-client-style
+                        // `arguments += delta` reconstruction depends on it.
+                        function: { name: tracked.name, arguments: toolInputDelta },
+                        index: tracked.toolCallIndex,
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                },
+              ],
+            };
+          }
+        }
+        continue;
+      }
+
       if (event?.messageStop) {
         yield {
           id,
@@ -487,24 +597,291 @@ export function convertTools(
   }));
 }
 
+// ═══ Prompt caching (LOTE AZ, 2026-09) — see ADR-025 ══════════════════
+//
+// AWS Bedrock's Converse API caches via a `cachePoint` content block placed
+// IN-LINE at the end of a stable section (`tools`, `system`, or `messages`)
+// rather than Anthropic-direct's per-block `cache_control` field. Bedrock
+// processes sections in a fixed `tools -> system -> messages` order and
+// evaluates the minimum-cacheable-size gate against the CUMULATIVE token
+// count up to the checkpoint, not each section in isolation — and AWS's own
+// guidance for Anthropic models on Bedrock is to place a SINGLE checkpoint
+// at the end of the static content rather than one per section ("simplified
+// cache management": a lone breakpoint lets Bedrock find the longest
+// matching prefix automatically). We follow that guidance here: one
+// checkpoint at the end of `system` (covering `tools` + `system`) when a
+// system prompt is present, else one at the end of `tools`.
+//
+// Per-model minimums below are the real, AWS-documented values (not a
+// guess) — see ADR-025 for the source and fetch date. Going below a model's
+// documented minimum is NOT an API error: Bedrock accepts the request and
+// silently skips caching that checkpoint ("your inference still succeeds,
+// but your prefix isn't cached"). The gate here exists so we don't emit a
+// cachePoint marker we already know cannot do anything, not to prevent a
+// request from failing.
+
+/**
+ * Per-model minimum token count required before Bedrock will actually cache
+ * a checkpoint for a Claude model, keyed by a distinguishing substring of
+ * the Bedrock model id. Checked in order — entries are mutually exclusive
+ * substrings of real Bedrock model ids, so ordering does not affect matches
+ * today, but keep more specific ids above `CLAUDE_CACHE_MIN_TOKENS_DEFAULT`.
+ *
+ * Source: AWS docs, "Prompt caching for faster model inference" —
+ * docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+ * (fetched 2026-09-06; see ADR-025).
+ */
+const CLAUDE_CACHE_MIN_TOKENS: ReadonlyArray<readonly [string, number]> = [
+  ['claude-fable-5-1', 512],
+  ['claude-mythos-5-1', 512],
+  ['claude-fable-5', 512],
+  ['claude-mythos-5', 512],
+  ['claude-mythos-preview', 4096],
+  ['claude-opus-5', 512],
+  ['claude-opus-4-8', 1024],
+  ['claude-opus-4-7', 4096],
+  ['claude-opus-4-6', 4096],
+  ['claude-opus-4-5', 4096],
+  ['claude-sonnet-5', 1024],
+  ['claude-sonnet-4-6', 1024],
+  ['claude-sonnet-4-5', 1024],
+  ['claude-3-7-sonnet', 1024],
+  ['claude-3-5-sonnet', 1024],
+  ['claude-haiku-4-5', 4096],
+];
+
+/**
+ * Conservative fallback for any Claude-on-Bedrock model id not in the table
+ * above (an older model AWS's current docs page no longer lists, or a new
+ * one this table hasn't been updated for yet). Set to the HIGHEST minimum
+ * documented for the Claude family rather than the lowest: undershooting a
+ * model's real minimum only costs a missed cache opportunity (see the file
+ * header note — it never causes an error), so the safe direction to guess
+ * wrong in is "requires more than it actually does," not the reverse.
+ */
+const CLAUDE_CACHE_MIN_TOKENS_DEFAULT = 4096;
+
+/**
+ * True for any Bedrock model id belonging to the Claude family (Anthropic's
+ * models hosted on Bedrock use the `anthropic.claude-...` vendor prefix,
+ * with region-routed variants like `us.anthropic.claude-...`). Caching here
+ * is scoped to Claude only — Nova, Llama, Titan, and Mistral on Bedrock have
+ * their own separate caching contracts, out of scope for this pass.
+ */
+export function isBedrockClaudeModel(modelId: string): boolean {
+  return modelId.toLowerCase().includes('claude');
+}
+
+/**
+ * Resolve the minimum cacheable-prefix token count for a Claude-on-Bedrock
+ * model id. See the `CLAUDE_CACHE_MIN_TOKENS` table doc comment for the
+ * source and the fallback's rationale.
+ */
+export function resolveClaudeCacheMinimumTokens(modelId: string): number {
+  const normalized = modelId.toLowerCase();
+  for (const [needle, minTokens] of CLAUDE_CACHE_MIN_TOKENS) {
+    if (normalized.includes(needle)) return minTokens;
+  }
+  return CLAUDE_CACHE_MIN_TOKENS_DEFAULT;
+}
+
+/**
+ * Extract the plain text Bedrock will actually see from a `SystemContentBlock`
+ * array built by `splitSystemFromMessages` (which only ever emits `{ text }`
+ * members) — narrowed defensively in case a caller passes one through twice.
+ */
+function systemBlocksToText(system: SystemContentBlock[]): string {
+  return system
+    .map((block) => ('text' in block && typeof block.text === 'string' ? block.text : ''))
+    .join('\n');
+}
+
+/**
+ * Append a Bedrock `cachePoint` checkpoint to `tools` and/or `system` for a
+ * Claude model, gated by `resolveClaudeCacheMinimumTokens()`. Non-Claude
+ * models and requests below the documented minimum pass through unchanged.
+ *
+ * Placement follows AWS's own "simplified cache management" recommendation
+ * for Anthropic models (see the section header comment above): ONE
+ * checkpoint at the end of `system` when a system prompt is present
+ * (covering the cumulative `tools` + `system` prefix, since Bedrock chains
+ * sections in that fixed order), else one at the end of `tools` alone.
+ * Message-content checkpoints (e.g. a large per-turn document or image) are
+ * out of scope for this pass — see ADR-025.
+ */
+export function applyClaudeCacheCheckpoint(
+  system: SystemContentBlock[],
+  tools: Tool[],
+  modelId: string
+): { system: SystemContentBlock[]; tools: Tool[] } {
+  if (!isBedrockClaudeModel(modelId)) {
+    return { system, tools };
+  }
+
+  const toolsTokens = tools.length > 0 ? estimateTokensForText(JSON.stringify(tools)) : 0;
+  const systemTokens = system.length > 0 ? estimateTokensForText(systemBlocksToText(system)) : 0;
+  const cumulativeTokens = toolsTokens + systemTokens;
+
+  if (cumulativeTokens < resolveClaudeCacheMinimumTokens(modelId)) {
+    return { system, tools };
+  }
+
+  const cachePointBlock = { cachePoint: { type: CachePointType.DEFAULT } };
+
+  if (system.length > 0) {
+    return { system: [...system, cachePointBlock], tools };
+  }
+  if (tools.length > 0) {
+    return { system, tools: [...tools, cachePointBlock] };
+  }
+  return { system, tools };
+}
+
+/**
+ * Bedrock's ToolChoice `tool` member (force one specific named tool) is
+ * documented as supported only by Anthropic Claude and Amazon Nova model
+ * families on Bedrock — see `resolveBedrockToolChoice`'s doc comment for the
+ * source. Reuses this file's existing coarse-grained id-substring family
+ * detection style (see `isBedrockClaudeModel`) rather than a maintained
+ * per-model allowlist.
+ */
+function supportsNamedBedrockToolChoice(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+  return normalized.includes('claude') || normalized.includes('nova');
+}
+
+/**
+ * Map the canonical OpenAI-shaped `tool_choice` onto the Bedrock Converse
+ * API's `ToolChoice` union — `{auto:{}}` | `{any:{}}` | `{tool:{name}}`, per
+ * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolChoice.html.
+ *
+ * Two precision points from that same reference page:
+ *  - The union has NO `none` member. There is no way to expose tool
+ *    definitions to the model while forbidding their use for a turn, so
+ *    `tool_choice: 'none'` is handled by the caller (`buildConverseInput`)
+ *    omitting `toolConfig`/`tools` entirely rather than by any value
+ *    returned here.
+ *  - `tool` (force one specific named tool) is documented as "Only
+ *    supported by Anthropic Claude 3 and Amazon Nova models" — sending it to
+ *    any other Bedrock model family (Llama, Titan, Mistral, DeepSeek, ...)
+ *    would get the request rejected outright. For those families this falls
+ *    back to `any` (forces *a* tool call, the closest safe approximation of
+ *    the caller's intent) rather than silently dropping the request down to
+ *    unconstrained `auto` — which would reproduce the exact silent-downgrade
+ *    bug this fix addresses.
+ *
+ * OpenAI's `'required'` maps to `any`: "call some tool" and "may call a
+ * tool" are different constraints. `ChatRequest['tool_choice']` doesn't
+ * carry a `'required'` literal in its type today, but a real
+ * OpenAI-compatible caller can still send the string at runtime, so it's
+ * handled defensively here rather than only through the type.
+ */
+function resolveBedrockToolChoice(
+  toolChoice: ChatRequest['tool_choice'] | 'required',
+  modelId: string
+): ToolChoice | undefined {
+  if (toolChoice === undefined || toolChoice === 'none') return undefined;
+  if (toolChoice === 'auto') return { auto: {} };
+  if (toolChoice === 'required') return { any: {} };
+  if (typeof toolChoice === 'object' && toolChoice.type === 'function') {
+    return supportsNamedBedrockToolChoice(modelId)
+      ? { tool: { name: toolChoice.function.name } }
+      : { any: {} };
+  }
+  return undefined;
+}
+
+/**
+ * Build the full Converse request body (minus `modelId`, added by the
+ * caller) shared by `chatCompletion` and `chatCompletionStream` — the two
+ * previously duplicated this construction verbatim, which is exactly the
+ * kind of divergence risk that let caching ship on one path and not the
+ * other in the first place.
+ */
+export function buildConverseInput(
+  request: ChatRequest,
+  modelId: string
+): { messages: ChatMessage[]; converseInput: Omit<ConverseCommandInput, 'modelId'> } {
+  const { messages, system } = splitSystemFromMessages(request.messages);
+  const tools =
+    request.tools && request.tools.length > 0 ? convertTools(request.tools) : ([] as Tool[]);
+  const cached = applyClaudeCacheCheckpoint(system, tools, modelId);
+
+  // `tool_choice: 'none'` has no native Bedrock equivalent (see
+  // `resolveBedrockToolChoice`) — the only faithful way to honor it is to
+  // suppress `tools` (and therefore `toolConfig`) entirely for this turn.
+  const toolsSuppressed = cached.tools.length > 0 && request.tool_choice === 'none';
+  const toolChoice = toolsSuppressed
+    ? undefined
+    : resolveBedrockToolChoice(request.tool_choice, modelId);
+
+  return {
+    messages,
+    converseInput: {
+      messages: messages.map(convertMessageToConverse),
+      ...(cached.system.length > 0 ? { system: cached.system } : {}),
+      inferenceConfig: buildInferenceConfig(request),
+      ...(cached.tools.length > 0 && !toolsSuppressed
+        ? { toolConfig: { tools: cached.tools, ...(toolChoice ? { toolChoice } : {}) } }
+        : {}),
+    },
+  };
+}
+
 /**
  * Parse a Converse response into an OAI-shaped ChatResponse.
+ *
+ * Audit finding, 2026-09-08: this previously extracted ONLY `text` content
+ * blocks — a non-streaming Converse response whose `stopReason` is
+ * `'tool_use'` (a model calling a tool) had its `toolUse` block(s) silently
+ * dropped entirely, with no `tool_calls` ever reaching the caller. This was
+ * NOT limited to the streaming path (see `chatCompletionStream`'s doc
+ * comment) — non-streaming tool calling was equally broken. Fixed per the
+ * documented `ToolUseBlock` shape (`toolUseId`, `name`, `input` as a
+ * complete JSON value — contrast with the streaming `ToolUseBlockDelta`,
+ * whose `input` is an incremental JSON *string* fragment):
+ * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolUseBlock.html
+ * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ContentBlock.html
+ * (fetched 2026-09-08).
  */
 export function parseConverseResponse(
   response: ConverseCommandOutput,
   modelName: string
 ): ChatResponse {
   const message = response.output?.message;
-  const text =
-    message?.content
-      ?.map((block) => {
-        if (block && typeof block === 'object' && 'text' in block) {
-          return typeof block.text === 'string' ? block.text : '';
-        }
-        return '';
-      })
-      .filter((s) => s.length > 0)
-      .join('') ?? '';
+  const blocks = message?.content ?? [];
+
+  const text = blocks
+    .map((block) => {
+      if (block && typeof block === 'object' && 'text' in block) {
+        return typeof block.text === 'string' ? block.text : '';
+      }
+      return '';
+    })
+    .filter((s) => s.length > 0)
+    .join('');
+
+  const toolUseBlocks = blocks
+    .map((block) => {
+      if (!block || typeof block !== 'object' || !('toolUse' in block) || !block.toolUse) {
+        return null;
+      }
+      const toolUse = block.toolUse as { toolUseId?: string; name?: string; input?: unknown };
+      if (typeof toolUse.toolUseId !== 'string' || typeof toolUse.name !== 'string') return null;
+      return { toolUseId: toolUse.toolUseId, name: toolUse.name, input: toolUse.input };
+    })
+    .filter((tu): tu is { toolUseId: string; name: string; input: unknown } => tu !== null);
+
+  // Dense zero-based index over tool_use blocks only — mirrors the
+  // Anthropic adapter's non-streaming `convertResponse` convention (array
+  // position among the filtered tool calls, not the raw content-block
+  // position, which may also count interleaved text blocks).
+  const toolCalls: ToolCall[] = toolUseBlocks.map((tu, index) => ({
+    id: tu.toolUseId,
+    type: 'function' as const,
+    function: { name: tu.name, arguments: JSON.stringify(tu.input ?? {}) },
+    index,
+  }));
 
   return {
     id: `bedrock-${Date.now()}`,
@@ -514,7 +891,11 @@ export function parseConverseResponse(
     choices: [
       {
         index: 0,
-        message: { role: 'assistant', content: text },
+        message: {
+          role: 'assistant',
+          content: text,
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        },
         finish_reason: mapStopReason(response.stopReason),
       },
     ],

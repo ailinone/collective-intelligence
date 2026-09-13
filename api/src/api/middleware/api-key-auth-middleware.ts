@@ -281,9 +281,11 @@ export function invalidateApiKeyAuthCacheForUser(userId: string | null | undefin
 // no request-layer import.
 registerRoleChangeListener((userId) => invalidateApiKeyAuthCacheForUser(userId));
 
-/** Test-only: clear the whole cache so each test resolves fresh. */
+/** Test-only: clear the whole cache (and the usage-write throttle state) so
+ *  each test resolves fresh and its first auth writes usage immediately. */
 export function __resetApiKeyAuthCacheForTests(): void {
   apiKeyAuthCache.clear();
+  apiKeyUsageWriteState.clear();
 }
 
 /**
@@ -772,22 +774,71 @@ async function resolveApiKeyContext(
 }
 
 /**
- * Fire-and-forget "last used" tracking — a single indexed UPDATE by primary
- * key, run on EVERY successful auth (cache hit or miss) since it's cheap and
- * keeps usage telemetry accurate even when the expensive lookup was skipped.
+ * Fire-and-forget "last used" tracking, throttled to one UPDATE per key per
+ * API_KEY_USAGE_WRITE_INTERVAL_MS (default 60 s) per process. It used to run on
+ * EVERY successful auth, which made one Postgres write per request; the data
+ * only feeds display (lastUsedAt / lastRequestIp) and a cumulative counter, so
+ * requests inside the window are accumulated and flushed with the next write
+ * (`requestCount: { increment: N }` keeps the counter exact; at most one
+ * window of increments is lost on a crash).
  */
+interface ApiKeyUsageWriteState {
+  lastWriteAt: number;
+  pendingIncrement: number;
+  lastIp: string;
+}
+const apiKeyUsageWriteState = new Map<string, ApiKeyUsageWriteState>();
+
+function apiKeyUsageWriteIntervalMs(): number {
+  return Number(process.env.API_KEY_USAGE_WRITE_INTERVAL_MS) || 60_000;
+}
+
+function pruneApiKeyUsageWriteState(now: number, intervalMs: number): void {
+  if (apiKeyUsageWriteState.size <= 5_000) return;
+  const staleBefore = now - 10 * intervalMs;
+  for (const [id, state] of apiKeyUsageWriteState) {
+    if (state.pendingIncrement === 0 && state.lastWriteAt < staleBefore) {
+      apiKeyUsageWriteState.delete(id);
+    }
+  }
+}
+
 function trackApiKeyUsage(apiKeyId: string, clientIp: string): void {
+  const now = Date.now();
+  const intervalMs = apiKeyUsageWriteIntervalMs();
+  const state = apiKeyUsageWriteState.get(apiKeyId);
+
+  if (state && now - state.lastWriteAt < intervalMs) {
+    state.pendingIncrement += 1;
+    state.lastIp = clientIp;
+    return;
+  }
+
+  const increment = (state?.pendingIncrement ?? 0) + 1;
+  const nextState: ApiKeyUsageWriteState = {
+    lastWriteAt: now,
+    pendingIncrement: 0,
+    lastIp: clientIp,
+  };
+  apiKeyUsageWriteState.set(apiKeyId, nextState);
+  pruneApiKeyUsageWriteState(now, intervalMs);
+
   prisma.apiKey
     .update({
       where: { id: apiKeyId },
       data: {
-        lastUsedAt: new Date(),
-        requestCount: { increment: 1 },
+        lastUsedAt: new Date(now),
+        requestCount: { increment },
         lastRequestIp: clientIp,
       },
     })
     .catch((error: unknown) => {
-      // Non-critical: Log but don't fail request
+      // Non-critical: log, and carry the lost increments into the next flush
+      // (whatever state object is current by then; a later flush may have
+      // replaced ours).
+      const current = apiKeyUsageWriteState.get(apiKeyId) ?? nextState;
+      current.pendingIncrement += increment;
+      apiKeyUsageWriteState.set(apiKeyId, current);
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(
         { error: errorMessage, keyId: apiKeyId },

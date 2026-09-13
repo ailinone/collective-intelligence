@@ -305,8 +305,26 @@ export class SearchOrchestrationService {
   }
 
   /**
-   * Extract content from URLs
-   * Uses Tavily or model-based extraction
+   * Extract content from URLs via Tavily.
+   *
+   * This previously had a "model-based extraction" branch gated on models
+   * carrying `web_scraping`/`content_extraction` capabilities. Neither
+   * capability was ever a member of `ModelCapability` (the filter cast the
+   * strings `as ModelCapability` to bypass the type system), and no
+   * assignment path anywhere in the codebase ever produced them: the
+   * `searchModelsComplete` capabilities filter requires a JSONB superset
+   * match, which is unsatisfiable for a capability no model can ever hold.
+   * `extractionModels` was therefore always `[]` and the branch was dead
+   * code from the day it was introduced (verified via git history: it
+   * shipped in the initial repository import with no incremental design
+   * history, and the branch's own error path referenced the unrelated
+   * `web_search` capability, evidence it was never exercised or reviewed
+   * against real behavior). Removed rather than repaired, since it always
+   * fell straight through to Tavily (removing it changes no observed
+   * behavior), and asking a chat model to "summarize the content at this
+   * URL" without giving it a real live-browsing capability was never a
+   * sound design (that need is already served by the `web_search`-gated
+   * strategy in `selectSearchStrategy`/`hasWebSearchCapability` above).
    */
   async extractContent(options: ExtractOptions): Promise<ExtractResult> {
     const startTime = Date.now();
@@ -315,141 +333,10 @@ export class SearchOrchestrationService {
     log.info({ requestId, urlCount: urls.length }, 'Content extraction orchestration started');
 
     try {
-      // Try to use models with content extraction capabilities first
-      // Otherwise fall back to Tavily (most reliable)
-      const extractionModels = await this.modelRepo.searchModels({
-        capabilities: ['web_scraping' as ModelCapability, 'content_extraction' as ModelCapability],
-        status: 'active',
+      const tavilyResult = await this.tavilyService.extract({
+        urls,
+        includeImages,
       });
-
-      let tavilyResult;
-
-      if (extractionModels.length > 0 && urls.length <= 3) {
-        // For small batches, try model-based extraction using chat completion
-        // This uses models with web_search capability to extract content
-        try {
-          const selectedModel = extractionModels[0];
-          log.info(
-            { requestId, model: selectedModel.name, provider: selectedModel.provider },
-            'Attempting model-based extraction'
-          );
-
-          const providerRegistry = this.getRegistry();
-          const resolution = providerRegistry.resolveAdapterForModel(selectedModel);
-          const adapter = resolution.adapter;
-
-          if (!adapter) {
-            throw this.createCapabilityNotOperationalError({
-              capability: 'web_search',
-              model: selectedModel,
-              nonOperationalReasons: resolution.operability.nonOperationalReasons,
-            });
-          }
-
-          // Extract content from each URL using chat completion
-          const extractionResults: Array<{ url: string; content: string; images?: string[] }> = [];
-          const failedResults: Array<{ url: string; error: string }> = [];
-
-          for (const url of urls) {
-            try {
-              // Use chat completion to extract content from URL
-              const extractionPrompt = `Extract and summarize the main content from this URL: ${url}. 
-Provide a clear, comprehensive summary of the key information, main points, and important details. 
-If the content includes images, describe them briefly. 
-Format your response as plain text, focusing on factual information.`;
-
-              const chatResponse = await adapter.chatCompletion({
-                model: selectedModel.id,
-                messages: [
-                  {
-                    role: 'user',
-                    content: extractionPrompt,
-                  },
-                ],
-                temperature: 0.3,
-                max_tokens: 2000,
-              });
-
-              // Extract content from chat response with proper type guards
-              const messageContent = chatResponse.choices[0]?.message?.content;
-              let content = '';
-
-              if (typeof messageContent === 'string') {
-                content = messageContent;
-              } else if (Array.isArray(messageContent)) {
-                // Handle array content (MessageContent[])
-                content = messageContent
-                  .map((item) => {
-                    if (typeof item === 'string') {
-                      return item;
-                    }
-                    if (item && typeof item === 'object' && 'type' in item) {
-                      // Type guard for TextContent
-                      if (item.type === 'text' && 'text' in item && typeof item.text === 'string') {
-                        return item.text;
-                      }
-                      // Type guard for ImageContent (skip images in extraction)
-                      if (item.type === 'image_url') {
-                        return ''; // Images are not extracted as text
-                      }
-                    }
-                    return '';
-                  })
-                  .filter((text) => text.length > 0)
-                  .join(' ');
-              }
-
-              extractionResults.push({
-                url,
-                content: content || '',
-                images: includeImages ? [] : undefined, // Model extraction doesn't return images directly
-              });
-            } catch (urlError: unknown) {
-              const errorMessage = urlError instanceof Error ? urlError.message : String(urlError);
-              log.warn(
-                { requestId, url, error: errorMessage },
-                'Failed to extract content from URL using model'
-              );
-              failedResults.push({
-                url,
-                error: errorMessage,
-              });
-            }
-          }
-
-          // If we got at least one successful extraction, return results
-          if (extractionResults.length > 0) {
-            const durationMs = Date.now() - startTime;
-            return {
-              results: extractionResults,
-              failedResults,
-              responseTime: durationMs,
-              providerUsed: selectedModel.provider,
-              durationMs,
-            };
-          } else {
-            // All extractions failed, fall back to Tavily
-            throw new Error('All model-based extractions failed');
-          }
-        } catch (modelError: unknown) {
-          const errorMessage =
-            modelError instanceof Error ? modelError.message : String(modelError);
-          log.warn(
-            { requestId, error: errorMessage },
-            'Model extraction failed, falling back to Tavily'
-          );
-          tavilyResult = await this.tavilyService.extract({
-            urls,
-            includeImages,
-          });
-        }
-      } else {
-        // Use Tavily for larger batches or when no models available
-        tavilyResult = await this.tavilyService.extract({
-          urls,
-          includeImages,
-        });
-      }
 
       const durationMs = Date.now() - startTime;
 
@@ -496,13 +383,22 @@ Format your response as plain text, focusing on factual information.`;
 
     // If explicit model specified, try to use it
     if (explicitModel) {
-      const models = await this.modelRepo.searchModels({ providers: [], capabilities: [] });
-      const model = models.find((m) => m.name === explicitModel);
+      // Direct id/name resolution across the WHOLE catalog. This used to be
+      // `searchModels({}).find(m => m.name === explicitModel)`, i.e. a scan of
+      // the 100 most recently discovered rows: any older model named here was
+      // reported as "does not support web_search" and silently downgraded to
+      // Tavily, even when it did. `findModelsByIdOrName` resolves in SQL and
+      // returns every provider row for the id (same id ships under N
+      // providers), so an operable deployment can still be found when the
+      // first one has no adapter.
+      const rows = await this.modelRepo.findModelsByIdOrName(explicitModel);
+      const capableRows = rows.filter((m) => this.hasWebSearchCapability(m));
+      const model = capableRows[0] ?? rows[0];
 
-      if (model && this.hasWebSearchCapability(model)) {
-        const resolution = providerRegistry.resolveAdapterForModel(model);
+      for (const candidate of capableRows) {
+        const resolution = providerRegistry.resolveAdapterForModel(candidate);
         if (resolution.adapter) {
-          return { type: 'model', model };
+          return { type: 'model', model: candidate };
         }
       }
 
@@ -530,7 +426,9 @@ Format your response as plain text, focusing on factual information.`;
     }
 
     // Check if we have models with web_search capability
-    const webSearchModels = await this.modelRepo.searchModels({
+    // searchModelsComplete: `searchModels` caps at `limit || 100` ordered by
+    // `created_at DESC`, so this pool was the newest-onboarded providers only.
+    const webSearchModels = await this.modelRepo.searchModelsComplete({
       capabilities: ['web_search' as ModelCapability],
       status: 'active',
     });

@@ -364,35 +364,51 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
     });
 
     it('should prevent organization ID manipulation in requests', async () => {
-      // Try to inject different organizationId in request
+      // REGRESSION (org-header-spoofing, 2026-09-09): this test previously hit
+      // `/v1/chat/completions`, a route never registered on this test server
+      // (only admin/models-config/org-settings/user-mgmt/usage/api-key-rotation
+      // routes are registered in beforeAll above) — every request therefore
+      // came back 404, the `if (response.statusCode === 200)` guard never ran,
+      // and the test passed WITHOUT EVER CHECKING ANYTHING, silently, even
+      // while the org-header-spoofing vulnerability was live. Fixed to hit a
+      // route that IS registered here and unambiguously proves the point: a
+      // WRITE endpoint (`PATCH /v1/organization/settings`) that resolves its
+      // target organization from `request.organizationId` (populated by
+      // `authenticate()` from the API key). Capture both orgs' current state
+      // unconditionally so the assertions below never depend on a status-code
+      // branch silently skipping them.
+      const org2Before = await prisma.organization.findUniqueOrThrow({ where: { id: org2Id } });
+
       const response = await server.inject({
-        method: 'POST',
-        url: '/v1/chat/completions',
+        method: 'PATCH',
+        url: '/v1/organization/settings',
         headers: {
-          'x-api-key': org1AdminKey,
-          'x-organization-id': org2Id, // Attempt to impersonate
+          'x-api-key': org1AdminKey, // Real owner: org1
+          'x-organization-id': org2Id, // Attempt to impersonate org2 via header
         },
         payload: {
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'test' }],
+          name: 'PWNED-BY-ORG1-VIA-HEADER-SPOOF',
         },
       });
 
-      // System should use organizationId from authenticated API key, not header
-      // This test ensures tenant context is derived from auth, not user input
-      if (response.statusCode === 200) {
-        // Verify the request was logged with correct org
-        const logs = await prisma.requestLog.findFirst({
-          where: {
-            organizationId: org1Id, // Should be org1 (from API key)
-          },
-          orderBy: { createdAt: 'desc' },
-        });
+      // org1AdminKey is a genuine admin — of org1. The request must succeed
+      // (200) against org1's OWN organization; it must never be silently
+      // treated as "not applicable" just because the status wasn't 200 for
+      // some other reason.
+      expect(response.statusCode).toBe(200);
 
-        expect(logs).toBeDefined();
-        expect(logs!.organizationId).toBe(org1Id);
-        expect(logs!.organizationId).not.toBe(org2Id);
-      }
+      const org1After = await prisma.organization.findUniqueOrThrow({ where: { id: org1Id } });
+      const org2After = await prisma.organization.findUniqueOrThrow({ where: { id: org2Id } });
+
+      // The write must land on the CALLER's real organization (org1, from the
+      // authenticated API key) ...
+      expect(org1After.name).toBe('PWNED-BY-ORG1-VIA-HEADER-SPOOF');
+      // ... and must NEVER land on org2, the organization named only by the
+      // client-controlled `X-Organization-Id` header. If this header were
+      // still able to override the authenticated identity, org2's name would
+      // have been overwritten instead of org1's.
+      expect(org2After.name).toBe(org2Before.name);
+      expect(org2After.name).not.toBe('PWNED-BY-ORG1-VIA-HEADER-SPOOF');
     });
   });
 
@@ -529,6 +545,21 @@ describe('RBAC Authorization Tests (Enterprise)', () => {
         const user = await prisma.user.findUnique({ where: { id: org1ViewerId } });
         expect(user!.role).toBe('developer');
       }
+
+      // RESTORE THE SHARED FIXTURE (2026-09-05, CI-coverage audit).
+      // org1ViewerId / org1ViewerKey are module-level fixtures that later
+      // suites reuse as "the viewer principal". Leaving this user promoted to
+      // `developer` made the endpoint matrix below wrong: the
+      // "POST /v1/models/configure should deny viewer" case then sent a key
+      // whose principal WAS a developer, sailed through
+      // requireRole('admin','developer','owner') and got a 400 from the
+      // handler ("modelId is required") instead of the expected 403. That
+      // looked exactly like an authorization bypass and is not one — it is
+      // intra-file fixture pollution. Put the role back so downstream cases
+      // test what their names say.
+      const { setUserRole, invalidateRbacCache } = await import('@/services/rbac-service');
+      await setUserRole(org1ViewerId, org1Id, 'viewer', { assignedBy: 'test-restore' });
+      invalidateRbacCache(org1ViewerId, org1Id);
     });
   });
 

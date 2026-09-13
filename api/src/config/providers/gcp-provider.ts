@@ -198,7 +198,7 @@ export class GcpSecretsProvider implements SecretsProvider {
     // Retry transient GCP errors (2026-06-29). At boot the loader fetches ~137
     // secrets in a burst; transient gRPC errors (UNAVAILABLE/DEADLINE/RESOURCE_
     // EXHAUSTED/INTERNAL/ABORTED) or socket resets caused VALID secrets (e.g.
-    // ailin-openai-key, confirmed present) to intermittently return empty → the
+    // <prefix>-openai-key, confirmed present) to intermittently return empty → the
     // env var stayed unset → the native provider was disabled → requests fell
     // through to broken hub resellers. No negative cache exists (getSecret caches
     // only on success), so a retry re-hits GCP and succeeds. NOT_FOUND/permission

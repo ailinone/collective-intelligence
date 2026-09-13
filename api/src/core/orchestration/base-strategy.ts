@@ -24,10 +24,13 @@ import type {
   ModelExecution,
   ModelRole,
   ObserverEvent,
+  ArtifactRef,
+  ToolCall,
 } from '@/types';
 import type { ObserverFeed } from './observer/observer-types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import type { ObserverNarration } from '@/types';
+import type { ModelResponse } from '@/core/aggregation/response-aggregator';
 import { safeMetadata } from '@/types/model-metadata.schema';
 import { skipDeadCandidates, rankByRuntimeHealth } from './dead-candidate-skip';
 // Strategy Leader removed — was a no-op pass-through (quality threshold 0.3, length-only heuristic)
@@ -44,6 +47,7 @@ import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { buildAilinFallbackPrompt } from './prompts/fallback-prompt';
 import { normalizeSystemMessages } from './system-message-normalizer';
 import { deriveModelMaxOutputTokens, resolveDynamicMaxTokens } from './dynamic-output-budget';
+import { ContextWindowExceededError } from '@/utils/custom-errors';
 import { getProviderBandit } from '@/core/learning/provider-bandit';
 import { rankRetryCandidates, computeOperabilityRanks } from './retry-candidate-ranking';
 import { buildChatExecutionPool } from '@/core/pool/pool-builder';
@@ -51,14 +55,22 @@ import { isNonGenerativeModel } from '@/core/pool/non-generative-filter';
 import type { PoolResult } from '@/core/pool/pool-types';
 import { getExecutionFeedbackCollector } from '@/core/feedback/execution-feedback-collector';
 import { normalizeCost } from '@/services/cost-normalization-service';
+import { guardCost } from '@/core/cost/cost-integrity-guard';
 import { extractHttpStatusFromMessage } from '@/core/operability/provider-failure-classification';
 import { degradedSynthesisTotal } from '@/observability/ci-metrics';
 import { getTtftTracker } from '@/core/selection/ttft-tracker';
+import { recordModelUsage } from '@/core/selection/usage-count-tracker';
 import {
   getPromptVariantBandit,
   isPromptVariantBanditEnabled,
 } from '@/core/learning/prompt-variant-bandit';
 import { PROMPT_VARIANTS, PROMPTS, type PromptVariant } from './prompts/sota-system-prompts';
+import { PEER_REVIEW_SYSTEM_PROMPT } from './prompts/peer-review-prompt';
+import {
+  EFFORT_THINKING_BUDGETS,
+  modelHasNativeThinking,
+  resolveReasoningEffort,
+} from '@/utils/reasoning-effort';
 
 // Module-level cache for credit monitor to avoid repeated dynamic imports in
 // hot error path. Returns `null` when the module fails to load (e.g. circular
@@ -122,10 +134,23 @@ export interface StrategyMetadata {
  * Non-chat capabilities that signal a model is NOT suitable for text generation tasks.
  * Models with ONLY these capabilities (and no 'chat' or 'text_generation') are excluded.
  */
+// A 'classification' entry was removed here (2026-09-09): it was never a
+// member of ModelCapability (types/index.ts), never an id/alias in the
+// unified capabilityOntology (capability-ontology.ts, which explicitly
+// aliases the closest real concepts, safety_classifier/safety-classifier, to
+// 'moderation' — already listed below), and no fetcher ever emits it as a
+// capability tag: the HF fetcher maps HuggingFace's text-classification /
+// token-classification / zero-shot-classification pipeline tags to
+// 'analysis', never to 'classification' (hf-hub-model-fetcher.ts). It
+// matched nothing, on any model, ever: dead weight from the same
+// phantom-string class as the image_upscaling typo fixed in GAP-AP-3, but
+// with no real intended target to fix it TO. See
+// pool-builder-non-chat-capability-typo.test.ts (api/src/core/pool/__tests__).
 const NON_CHAT_CAPABILITIES = new Set([
   'image_generation',
   'image_editing',
-  'image_upscaling',
+  'image_upscale',
+  'image_denoise',
   'video_generation',
   'video_editing',
   'audio_generation',
@@ -134,7 +159,6 @@ const NON_CHAT_CAPABILITIES = new Set([
   'embedding',
   'reranking',
   'moderation',
-  'classification',
 ]);
 
 /**
@@ -189,6 +213,27 @@ export function safeResponseContent(response: unknown): string {
       .join('');
   }
   return '';
+}
+
+/**
+ * Flatten every `.artifacts` array found across a list of `ModelExecution`s
+ * into a single array, preserving execution order (and, within an execution,
+ * array order). Executions with no `.artifacts` field simply contribute
+ * nothing — no error, no placeholder entry.
+ *
+ * No deduplication: plumbing only, matching `safeResponseContent()`'s "use
+ * this everywhere" role but for the artifact side of a response. Nothing
+ * populates `ModelExecution.artifacts` yet and no strategy calls this yet —
+ * a later change wires real generation tools into `.artifacts` and collective
+ * strategies into this helper.
+ */
+export function mergeArtifacts(executions: ModelExecution[]): ArtifactRef[] {
+  const merged: ArtifactRef[] = [];
+  for (const execution of executions) {
+    if (!Array.isArray(execution.artifacts)) continue;
+    merged.push(...execution.artifacts);
+  }
+  return merged;
 }
 
 /**
@@ -367,8 +412,14 @@ export abstract class BaseStrategy {
       const hasChatCapability = caps.includes('chat') || caps.includes('text_generation');
       if (!hasChatCapability) return false;
 
-      const hasOnlyNonChat =
-        caps.length > 0 && caps.every((c) => NON_CHAT_CAPABILITIES.has(c) || c === 'streaming');
+      // Set the 'chat'/'text_generation' gate tag aside before checking
+      // whether all REMAINING capabilities are non-chat — those two strings
+      // are never themselves members of NON_CHAT_CAPABILITIES, so checking
+      // caps.every() against the raw array (gate tag included) can never be
+      // true and made this branch permanently unreachable (found while
+      // fixing the image_upscaling/image_upscale typo above, GAP-AP-3).
+      const declaredCaps = caps.filter((c) => c !== 'chat' && c !== 'text_generation' && c !== 'streaming');
+      const hasOnlyNonChat = declaredCaps.length > 0 && declaredCaps.every((c) => NON_CHAT_CAPABILITIES.has(c));
       if (hasOnlyNonChat) return false;
 
       // Robust non-generative exclusion (corrupt capability tags) — keep
@@ -728,11 +779,25 @@ export abstract class BaseStrategy {
         { attempts: candidates.length, failures },
         'All candidates failed — throwing (throwOnTotalFailure)'
       );
-      throw new Error(
+      const aggregateMessage =
         failures.length > 0
           ? `All ${candidates.length} candidates failed: ${failures.join('; ')}`
-          : `All ${candidates.length} candidates failed`
+          : `All ${candidates.length} candidates failed`;
+      // Context-window preflight audit (2026-09): when EVERY real candidate
+      // failed because the request doesn't fit (a provider's genuine
+      // tokenizer rejection, or our own estimateContextSize() heuristic
+      // being wrong for one), surface it as the same well-classified 400
+      // ContextWindowExceededError produces elsewhere — not an opaque
+      // plain Error that extractStatusCode() (utils/type-guards.ts) can't
+      // classify, which previously fell through to a generic 500.
+      const { classifyProviderError } = await import('@/core/operability');
+      const isContextExceeded = failures.some(
+        (f) => classifyProviderError(new Error(f)).errorClass === 'context_exceeded'
       );
+      if (isContextExceeded) {
+        throw new ContextWindowExceededError(aggregateMessage);
+      }
+      throw new Error(aggregateMessage);
     }
 
     // Degrade gracefully instead of throwing so the collective stream never hard-errors.
@@ -874,13 +939,36 @@ export abstract class BaseStrategy {
     success: boolean = true,
     error?: string
   ): ModelExecution {
+    // Cost integrity guard (see api/src/core/cost/cost-integrity-guard.ts):
+    // this used to be `Math.max(0, cost) || 0`, an ad-hoc floor that silently
+    // swallowed negative/NaN costs with zero visibility — the same class of
+    // bug that let the debate strategy aggregate `avgCostPerRequest: -2786
+    // USD` in the 2026-02-20 incident (eval-baseline-metrics.json), and it
+    // also let a positive-Infinity cost through unguarded (`Infinity || 0`
+    // === Infinity). guardCost() rejects negative/NaN/Infinity/non-numeric
+    // values uniformly, floors to 0 (never null — ModelExecution.cost is a
+    // non-nullable number), and — depending on policy — logs a structured
+    // warning + Prometheus counter (production) or throws loudly (eval/dev)
+    // instead of hiding the corruption.
+    const guardedCost = guardCost(cost, {
+      callSite: 'base-strategy.createModelExecution',
+      strategy: this.getMetadata().name,
+      provider: model.provider ?? adapter.getName(),
+      modelId: model.id,
+    }).cost;
+
     const execution: ModelExecution = {
       modelId: model.id,
       modelName: model.name,
+      // Who actually served it. Same expression the feedback collector below
+      // already used; it simply was never carried on the record that reaches
+      // response-metadata assembly, which is why a cross-provider substitution
+      // was invisible to the caller.
+      provider: model.provider ?? adapter.getName(),
       role,
       request,
       response,
-      cost: Math.max(0, cost) || 0,
+      cost: guardedCost ?? 0,
       durationMs,
       success,
       error,
@@ -892,11 +980,34 @@ export abstract class BaseStrategy {
     // not captured in the formal types, so we narrow with a single structural
     // cast (NOT `as unknown as` — the source already overlaps structurally).
     try {
-      // Estimate quality from response content length (heuristic — judge score comes later via experiment runner)
-      const responseContent = safeResponseContent(response);
-      const estimatedQuality = success
-        ? Math.min(1, Math.max(0.1, responseContent.length / 3000)) // 3000+ chars ≈ 1.0
-        : 0;
+      // Quality signal persisted to models.performance.quality (via
+      // ExecutionFeedbackCollector.flushPerformanceUpdates). This value is NOT
+      // observability-only: it is written to the DB and then read back by the
+      // candidate-pool filter and every quality-based ranker.
+      //
+      // It used to be `min(1, max(0.1, content.length / 3000))` — literally a
+      // measure of how many characters the model emitted, with the comment
+      // "judge score comes later via experiment runner". The judge score does
+      // NOT come later on this path; this number is what reaches the DB.
+      //
+      // Consequence, VERIFIED against the production DB on 2026-08-28: a model
+      // that answers correctly and concisely scores 0.1 here, and the collector's
+      // EMA (q' = 0.3*x + 0.7*q, seeded 0.8) then walks its stored quality
+      //   0.8 -> 0.59 -> 0.443 -> 0.34 -> 0.268 -> ... -> 0.1
+      // The production quality histogram matches that sequence term for term
+      // (0.59: 15 rows, 0.443: 6 rows, 0.34: 4 rows, 0.101: 4 rows), while
+      // 106,630 of 107,146 rows sit untouched at the 0.8 discovery placeholder.
+      // getEligibleModels() hard-filters `quality < DEFAULT_MIN_QUALITY` (0.4),
+      // so after just THREE concise answers a model is evicted from the chat
+      // candidate pool outright — while models that ramble toward the 3000-char
+      // ceiling climb to 0.9+. The stored "quality" column was, quantitatively,
+      // a measure of verbosity.
+      //
+      // Use the strategy's own quality heuristic instead: 0 for a failed or
+      // unusable response, >= 0.7 for a successful one, with credit for
+      // completion integrity and structure rather than character count. It
+      // cannot detect a WRONG answer (see its doc comment) — but it no longer
+      // punishes a right one for being short.
       const requestRequestId = (request as { requestId?: string }).requestId;
       const modelUid = (model as { uid?: string }).uid;
       getExecutionFeedbackCollector().record({
@@ -908,7 +1019,7 @@ export abstract class BaseStrategy {
         success,
         latencyMs: durationMs,
         costUsd: execution.cost,
-        qualityScore: estimatedQuality,
+        qualityScore: this.calculateQualityScore(execution),
         errorType: error ? 'execution_error' : undefined,
         timestamp: new Date(),
         // F4-INT: bridge variant/slot metadata from execution to feedback collector
@@ -1244,6 +1355,13 @@ export abstract class BaseStrategy {
           } catch {
             /* non-critical */
           }
+
+          // Real usage-count signal for selection retrieval (bucket-fair fix,
+          // 2026-09-07): this is the one place a model execution is already
+          // confirmed to have genuinely SUCCEEDED, not merely been selected.
+          // Sync, in-memory, zero I/O — see usage-count-tracker.ts for the
+          // batched-flush design and why this is NOT a per-request UPDATE.
+          recordModelUsage(model.id, model.providerId);
 
           // Phase 1 control plane: record granular success in the new health
           // registry. Provider-level + model-level entries are both refreshed
@@ -2233,6 +2351,29 @@ export abstract class BaseStrategy {
   /**
    * Calculate quality score for a response
    * Returns 0-1 score
+   *
+   * This is deliberately SEPARATE from `QualityScorer` (core/quality): this one
+   * picks the winner WITHIN a request (hybrid/parallel `selectBestExecution`,
+   * cost-cascade's quality gate), while QualityScorer feeds the cross-request
+   * performance EMA. They are fixed independently on purpose.
+   *
+   * The defect fixed here: the score was a pure LENGTH ladder (+0.1 over 500
+   * chars, +0.1 more over 1000), with no correctness or completion signal at
+   * all. A verbose WRONG answer therefore reached 0.9 and beat a correct terse
+   * answer floored at 0.7 — so `selectBestExecution` was, in effect, "return
+   * whichever model wrote the most words".
+   *
+   * The replacement credits COMPLETION INTEGRITY instead of word count: a
+   * response the model chose to end (`finish_reason === 'stop'`) is worth more
+   * than one the token limit cut off mid-sentence. That is a real quality
+   * difference, and unlike length it does not scale with padding.
+   *
+   * INVARIANT — every successful, usable response still scores >= 0.7.
+   * cost-cascade's default quality gate (QUALITY_THRESHOLD_BASE = 0.7, which is
+   * every ailin-* alias request) relies on a successful rung never failing the
+   * gate; see the `executeStream` doc comment in cost-cascade-strategy.ts. The
+   * truncation signal therefore withholds credit rather than deducting below
+   * the floor. `base-strategy-quality-score.test.ts` pins this invariant.
    */
   protected calculateQualityScore(execution: ModelExecution): number {
     if (!execution.success || !this.hasUsableAssistantResponse(execution.response)) {
@@ -2240,13 +2381,13 @@ export abstract class BaseStrategy {
     }
 
     // Basic quality heuristics
-    let score = 0.7; // Base score for successful execution
+    let score = 0.7; // Base score for successful execution (load-bearing floor)
 
     const contentStr = safeResponseContent(execution.response);
 
-    // Boost score for longer, more detailed responses
-    if (contentStr.length > 500) score += 0.1;
-    if (contentStr.length > 1000) score += 0.1;
+    // Completion integrity, replacing the old raw-length ladder. A truncated
+    // answer simply does not earn this credit — it is never pushed below 0.7.
+    if (execution.response?.choices?.[0]?.finish_reason === 'stop') score += 0.15;
 
     // Boost score for structured responses (code blocks, lists, etc.)
     if (contentStr.includes('```') || contentStr.match(/^\d+\./m)) score += 0.1;
@@ -2266,10 +2407,12 @@ export abstract class BaseStrategy {
    */
   protected withPeerReviewPrompt(request: ChatRequest): ChatRequest {
     if (process.env.DISABLE_FACILITATION_PROMPT === 'true') return request;
+    // Canonical constant from peer-review-prompt.ts (audit F-01: this was an
+    // inline copy that had already drifted — it carried a "Note:" prefix the
+    // canonical version does not). Single source of truth from now on.
     const facilitationMsg: ChatMessage = {
       role: 'system',
-      content:
-        'Note: Your response will be reviewed and evaluated by expert peers. Provide your most thorough, accurate, and well-reasoned work.',
+      content: PEER_REVIEW_SYSTEM_PROMPT,
     };
     return {
       ...request,
@@ -2329,6 +2472,7 @@ export abstract class BaseStrategy {
     return (
       feed ?? {
         emit: () => {},
+        emitImmediate: () => {},
         getNarrations: () => [],
         isActive: () => false,
         drainReadyNarrations: () => [],
@@ -2378,6 +2522,11 @@ export abstract class BaseStrategy {
         narration: narration.narration,
         reasoning: narration.reasoning,
         observer_duration_ms: narration.durationMs,
+        // Token-level streaming (2026-09): forward the partial/narrationId
+        // markers so a client can tell an in-flight fragment from the final
+        // assembled narration — see ObserverNarration.partial's doc.
+        ...(narration.partial ? { partial: true as const } : {}),
+        ...(narration.narrationId ? { narration_id: narration.narrationId } : {}),
       },
     } as ChatResponse;
   }
@@ -2467,9 +2616,31 @@ export abstract class BaseStrategy {
 
   /**
    * Check if reasoning is enabled for this request.
+   *
+   * Every strategy (30 of them) gates its choice between
+   * `executeModelWithReasoning` (native-thinking budget injection AND
+   * chain-of-thought prompt injection for non-native models) and plain
+   * `executeModel` on this single check — so this MUST recognize every
+   * signal `resolveReasoningEffort()` (LOTE AZ, `@/utils/reasoning-effort`)
+   * recognizes, not just the original boolean opt-in.
+   *
+   * Before this fix (found auditing the LOTE AZ reasoning-effort foundation,
+   * 2026-09): a caller that set ONLY `reasoning_effort` — the canonical,
+   * publicly documented field every provider adapter reads — with no
+   * `ailin_constraints.enable_reasoning`, hit `false` here. Every strategy
+   * then called plain `executeModel()`, which for a native-thinking model
+   * (DeepSeek-R1, QwQ, anything tagged `thinking_mode`) NEVER injects
+   * `thinking_budget` at all (that injection lives inside
+   * `executeModelWithReasoning`, never reached) and for every other model
+   * skips the chain-of-thought prompt fallback too — silently turning an
+   * explicit `reasoning_effort` request into a complete no-op for any model
+   * without its own dedicated wire-level mapping (OpenAI/xAI/Anthropic/
+   * Google/Groq/BytePlus read the field directly inside their own adapters
+   * regardless of this gate, so they were unaffected; every other provider
+   * in the catalog was not).
    */
   protected isReasoningEnabled(request: ChatRequest): boolean {
-    return request.ailin_constraints?.enable_reasoning === true;
+    return resolveReasoningEffort(request).thinkingBudget !== undefined;
   }
 
   /**
@@ -2503,13 +2674,14 @@ export abstract class BaseStrategy {
   /**
    * Check if a model has native extended thinking capability (DeepSeek-R1, QwQ, etc.).
    * These models generate <think> blocks internally without prompt injection.
+   *
+   * Delegates to the shared `modelHasNativeThinking()` in `@/utils/reasoning-effort`
+   * (LOTE AZ follow-up, 2026-09) so this exact heuristic is also available to
+   * non-strategy callers (the extended-thinking/ultra-thinking routes) without
+   * duplicating it.
    */
   protected hasNativeThinking(model: Model): boolean {
-    const capabilities = (model as { capabilities?: string[] }).capabilities;
-    if (Array.isArray(capabilities) && capabilities.includes('thinking_mode')) return true;
-    // Heuristic: model name contains thinking indicators
-    const name = (model.name || model.id || '').toLowerCase();
-    return /deepseek-r1|qwq|thinking|reasoner/.test(name);
+    return modelHasNativeThinking(model);
   }
 
   /**
@@ -2554,8 +2726,22 @@ export abstract class BaseStrategy {
     let reqForExecution = request;
 
     if (this.hasNativeThinking(model)) {
-      // Native thinking models: activate via thinking_budget
-      reqForExecution = { ...request, thinking_budget: request.thinking_budget || 2000 };
+      // Native thinking models: activate via thinking_budget, scaled by the
+      // request's resolved reasoning effort instead of one fixed constant
+      // for every caller (LOTE AZ, 2026-09 — see resolveReasoningEffort's
+      // doc comment in @/utils/reasoning-effort for the per-tier rationale).
+      // `resolveReasoningEffort` already honors an explicit
+      // `request.thinking_budget` verbatim, so this single call subsumes the
+      // old `request.thinking_budget || 2000` fallback chain; the
+      // EFFORT_THINKING_BUDGETS.medium literal only fires when NEITHER an
+      // explicit budget NOR `reasoning_effort` NOR `enable_reasoning` is set
+      // — i.e. `hasNativeThinking` matched purely on the model's own
+      // name/capability heuristic with zero caller signal at all.
+      const { thinkingBudget } = resolveReasoningEffort(request);
+      reqForExecution = {
+        ...request,
+        thinking_budget: thinkingBudget ?? EFFORT_THINKING_BUDGETS.medium,
+      };
     } else {
       // Non-native models: inject reasoning prompt into system message
       const messages = [...request.messages];
@@ -2635,6 +2821,16 @@ export abstract class BaseStrategy {
    * without each strategy needing its own tool execution logic.
    *
    * @param maxToolIterations Maximum tool call → response cycles (default: 5)
+   * @param quorumVoters Optional — ALL of the collective's voter responses for
+   *   this round (raw, pre-tool-execution; this voter's own response
+   *   included), used ONLY to authorize a `strategyExecutionMode:'quorumOnly'`
+   *   tool call via `computeQuorumToolCall()` (response-aggregator.ts) — the
+   *   SAME quorum mechanism the aggregator itself uses for its own tool_calls
+   *   policy, never a parallel implementation. Omit for a non-collective
+   *   (single-voter) call: a quorumOnly tool then never auto-executes,
+   *   exactly like a `safeForStrategies:false` tool always has. No strategy
+   *   passes this yet (collective strategies wire it in a later change) —
+   *   the parameter exists so the gate below has something real to test.
    */
   protected async executeModelWithTools(
     adapter: ProviderAdapter,
@@ -2642,12 +2838,24 @@ export abstract class BaseStrategy {
     request: ChatRequest,
     role: ModelRole = 'primary',
     maxToolIterations: number = 5,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    quorumVoters?: ModelResponse[]
   ): Promise<ModelExecution> {
     let currentRequest = request;
     let totalCost = 0;
     let totalDuration = 0;
     let lastExecution: ModelExecution | null = null;
+    // Artifacts (image/video/etc.) surfaced by executed tool calls this loop,
+    // across every iteration — folded onto whichever ModelExecution is
+    // ultimately returned. See ArtifactRef / ModelExecution.artifacts (@/types).
+    const collectedArtifacts: ArtifactRef[] = [];
+
+    const attachArtifacts = (execution: ModelExecution): ModelExecution => {
+      if (collectedArtifacts.length > 0) {
+        execution.artifacts = [...(execution.artifacts ?? []), ...collectedArtifacts];
+      }
+      return execution;
+    };
 
     for (let iteration = 0; iteration < maxToolIterations; iteration++) {
       const execution = await this.executeModel(adapter, model, currentRequest, role, signal);
@@ -2664,7 +2872,7 @@ export abstract class BaseStrategy {
       if (finishReason !== 'tool_calls' || !toolCalls?.length) {
         execution.cost = totalCost;
         execution.durationMs = totalDuration;
-        return execution;
+        return attachArtifacts(execution);
       }
 
       // Only tools THIS server owns may be auto-executed here. A caller that
@@ -2682,16 +2890,43 @@ export abstract class BaseStrategy {
       // `conciliar_pis_cofins`: the schema reached the model, the model emitted
       // the call, and this loop consumed it. Server-registered tools
       // (safeForStrategies) keep auto-executing exactly as before.
+      //
+      // A tool call is server-owned one of two ways:
+      //  - `safeForStrategies: true` — unconditional, as before this comment.
+      //  - `strategyExecutionMode: 'quorumOnly'` — ONLY when `quorumVoters`
+      //    shows a strict majority of the collective's voters independently
+      //    proposed this EXACT call (name + normalized args), via
+      //    `computeQuorumToolCall()`. This lets a billable/slow generation
+      //    tool (`generate_video`, `generate_media`) be server-owned without
+      //    letting one hallucinating voter fire a real generation.
       const { toolRegistry } = await import('@/core/tools/tool-registry');
+      const { computeQuorumToolCall, toolCallsMatch } = await import(
+        '@/core/aggregation/response-aggregator'
+      );
+      const quorumWinner = quorumVoters?.length ? computeQuorumToolCall(quorumVoters) : null;
+      const executionMode = new Map<ToolCall, 'safe' | 'quorum'>();
       const serverOwnsEveryToolCall =
         toolRegistry.isInitialized() &&
-        toolCalls.every(
-          (toolCall) => toolRegistry.get(toolCall.function?.name ?? '')?.safeForStrategies === true
-        );
+        toolCalls.every((toolCall) => {
+          const reg = toolRegistry.get(toolCall.function?.name ?? '');
+          if (reg?.safeForStrategies === true) {
+            executionMode.set(toolCall, 'safe');
+            return true;
+          }
+          if (
+            reg?.strategyExecutionMode === 'quorumOnly' &&
+            quorumWinner &&
+            toolCallsMatch(quorumWinner, toolCall)
+          ) {
+            executionMode.set(toolCall, 'quorum');
+            return true;
+          }
+          return false;
+        });
       if (!serverOwnsEveryToolCall) {
         execution.cost = totalCost;
         execution.durationMs = totalDuration;
-        return execution;
+        return attachArtifacts(execution);
       }
 
       // Execute tool calls concurrently and build messages with results.
@@ -2700,25 +2935,40 @@ export abstract class BaseStrategy {
       // toolResultMessages still matches toolCalls (Promise.all preserves
       // input order regardless of completion order), and each call is
       // caught individually so one failure doesn't drop its siblings.
-      const { executeToolForStrategy } = await import('@/services/strategy-tool-executor');
-      const toolResultMessages: ChatMessage[] = await Promise.all(
-        toolCalls.map(async (toolCall): Promise<ChatMessage> => {
+      const { executeToolForStrategy, executeQuorumApprovedToolForStrategy } = await import(
+        '@/services/strategy-tool-executor'
+      );
+      const toolResults: Array<{ message: ChatMessage; artifact?: ArtifactRef }> = await Promise.all(
+        toolCalls.map(async (toolCall): Promise<{ message: ChatMessage; artifact?: ArtifactRef }> => {
           try {
-            const result = await executeToolForStrategy(toolCall, logger);
+            const result =
+              executionMode.get(toolCall) === 'quorum'
+                ? await executeQuorumApprovedToolForStrategy(toolCall, logger)
+                : await executeToolForStrategy(toolCall, logger);
             return {
-              role: 'tool',
-              content: result.output || result.error || 'No output',
-              tool_call_id: toolCall.id,
+              message: {
+                role: 'tool',
+                content: result.output || result.error || 'No output',
+                tool_call_id: toolCall.id,
+              },
+              artifact: result.artifact
+                ? { ...result.artifact, sourceToolCallId: toolCall.id, role }
+                : undefined,
             };
           } catch (err) {
             return {
-              role: 'tool',
-              content: `Tool execution error: ${err instanceof Error ? err.message : String(err)}`,
-              tool_call_id: toolCall.id,
+              message: {
+                role: 'tool',
+                content: `Tool execution error: ${err instanceof Error ? err.message : String(err)}`,
+                tool_call_id: toolCall.id,
+              },
             };
           }
         })
       );
+      for (const r of toolResults) {
+        if (r.artifact) collectedArtifacts.push(r.artifact);
+      }
 
       // Re-send with tool results appended to conversation
       currentRequest = {
@@ -2732,7 +2982,7 @@ export abstract class BaseStrategy {
             tool_calls: toolCalls,
           },
           // Include tool results
-          ...toolResultMessages,
+          ...toolResults.map((r) => r.message),
         ],
       };
     }
@@ -2741,7 +2991,7 @@ export abstract class BaseStrategy {
     if (lastExecution) {
       lastExecution.cost = totalCost;
       lastExecution.durationMs = totalDuration;
-      return lastExecution;
+      return attachArtifacts(lastExecution);
     }
     throw new Error('executeModelWithTools: no execution produced');
   }

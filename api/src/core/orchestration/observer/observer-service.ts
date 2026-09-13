@@ -31,6 +31,24 @@
  * - Strategies call drainObserverChunks() between phases to yield SSE chunks
  *
  * Fallback chain: Ollama -> Cloud model -> no-op (graceful degradation).
+ *
+ * Token-level streaming (2026-09 follow-up to PR #473's zero-latency opening
+ * template — Idea 2, deferred in that PR's body). Once a narration call
+ * starts, `generateNarration()` requests `stream: true` from the resolved
+ * backend and pushes each incremental token straight onto `narrationQueue`
+ * as a `partial: true` fragment (all fragments for one call share a
+ * `narrationId`) — the existing 400ms/500ms poll loops in
+ * `interleaveNarration()` (orchestration-engine.ts) and `drainWhile()`
+ * (base-strategy.ts) already drain this queue continuously, so fragments
+ * reach the client as SSE chunks progressively instead of arriving as one
+ * lump only once the whole call finishes. The 4-9s floor before the FIRST
+ * fragment of a milestone's narration is unchanged — this only makes what
+ * streams after that floor feel continuous. If the resolved backend does not
+ * actually stream anything (a non-streaming sidecar/proxy, or a backend that
+ * silently ignores `stream: true`), `emit()` detects that no fragment was
+ * produced and falls back to queuing the single complete narration exactly
+ * as before this feature existed — so a non-streaming deployment sees
+ * unchanged behavior, never a missing narration.
  */
 
 import { logger } from '@/utils/logger';
@@ -266,6 +284,11 @@ export class ObserverService implements ObserverFeed {
   // Claimed synchronously by the first narration to start, so exactly ONE uses the
   // fast opening model (see OBSERVER_FAST_MODEL in generateNarration).
   private firstNarrationClaimed = false;
+  // Monotonic counter for narrationId (token-streaming correlation) — see
+  // generateNarration(). A plain incrementing counter is sufficient (no
+  // crypto/uuid dependency needed): it only has to be unique WITHIN this
+  // ObserverService instance's lifetime (one per request).
+  private narrationSeq = 0;
 
   constructor(config: ObserverConfig, strategyName: string) {
     this.config = config;
@@ -369,11 +392,25 @@ export class ObserverService implements ObserverFeed {
       await this.ensureInitialized();
       if (!this.active || !this.backend) return;
 
-      const result = await this.generateNarration(event);
-      if (result) {
+      const generated = await this.generateNarration(event);
+      if (!generated) return;
+      const { result, streamed } = generated;
+      // getNarrations() (-> result.metadata.observer_narrations) ALWAYS gets
+      // the complete, final narration — unchanged regardless of whether the
+      // text arrived as one lump or as streamed fragments.
+      this.allNarrations.push(result);
+      if (!streamed) {
+        // Legacy single-lump delivery: the backend produced no fragments
+        // during generation (non-streaming backend/mock, or a backend that
+        // silently ignored `stream: true`) — queue the complete narration as
+        // ONE chunk, exactly as before token-level streaming existed.
         this.narrationQueue.push(result);
-        this.allNarrations.push(result);
       }
+      // When streamed === true, every fragment was already pushed onto
+      // narrationQueue as it arrived (see generateNarration()'s onDelta) —
+      // nothing left to enqueue here; re-queuing the assembled `result` too
+      // would re-deliver the whole narration a second time as a redundant
+      // final lump.
     })().catch((err) => {
       log.warn(
         { event: event.type, error: err instanceof Error ? err.message : String(err) },
@@ -385,10 +422,35 @@ export class ObserverService implements ObserverFeed {
   }
 
   /**
+   * Enqueue an already-written narration synchronously — zero LLM/network
+   * latency. See `ObserverFeed.emitImmediate`'s doc for why this exists
+   * (the deterministic opening line must land at t≈0, before the async
+   * `emit()` path's backend resolution + model call have even started).
+   * Deliberately does NOT touch `this.backend`/`ensureInitialized()` and
+   * pushes no promise onto `pendingPromises` — there is nothing to await.
+   */
+  emitImmediate(event: ObserverEvent, narrationText: string): void {
+    if (!this.config.enabled) return;
+    const narration: ObserverNarration = { event, narration: narrationText, durationMs: 0 };
+    this.narrationQueue.push(narration);
+    this.allNarrations.push(narration);
+  }
+
+  /**
    * Generate a narration for an event.
    * Routes to the resolved backend (Ollama or cloud adapter).
+   *
+   * Returns both the FINAL assembled `ObserverNarration` (used for
+   * `allNarrations`/`getNarrations()` — unchanged shape and content, always
+   * the complete text) and `streamed`, telling the caller (`emit()`) whether
+   * any token-level fragment was already pushed onto `narrationQueue` while
+   * this call was in flight — see `onDelta` below. When `streamed` is false
+   * the caller queues `result` itself, preserving the pre-streaming
+   * single-lump behavior for backends that don't actually stream.
    */
-  private async generateNarration(event: ObserverEvent): Promise<ObserverNarration | undefined> {
+  private async generateNarration(
+    event: ObserverEvent
+  ): Promise<{ result: ObserverNarration; streamed: boolean } | undefined> {
     if (!this.backend) return undefined;
 
     const start = Date.now();
@@ -433,6 +495,31 @@ export class ObserverService implements ObserverFeed {
       const firstMaxTokens = Number(process.env.OBSERVER_FIRST_MAX_TOKENS) || 80;
       const effMaxTokens = isFirst ? Math.min(maxTokens, firstMaxTokens) : maxTokens;
 
+      // Token-level streaming (2026-09): each fragment the backend produces is
+      // pushed onto narrationQueue IMMEDIATELY as a `partial: true` narration
+      // sharing this call's narrationId — the existing poll-based drain loops
+      // (interleaveNarration()/drainWhile()) pick these up on their next tick
+      // (400ms/500ms) and deliver them to the client as they arrive, instead
+      // of the whole narration landing as one chunk only once `content` below
+      // is fully assembled. NOTE: the <reasoning>/<think> tag strip below runs
+      // on the FULLY ASSEMBLED text, so a thinking-model's tag content can
+      // appear transiently in the raw fragment stream before it is known to
+      // strip it — an accepted tradeoff of true token streaming (the same
+      // trade every token-streaming LLM API makes).
+      const narrationId = `${this.strategyName}-${event.type}-${start}-${++this.narrationSeq}`;
+      let streamedAnyDelta = false;
+      const onDelta = (delta: string): void => {
+        if (!delta) return;
+        streamedAnyDelta = true;
+        this.narrationQueue.push({
+          event,
+          narration: delta,
+          durationMs: Date.now() - start,
+          partial: true,
+          narrationId,
+        });
+      };
+
       let content: string;
       if (this.backend.type === 'ollama') {
         content = await this.callOllama(
@@ -440,10 +527,17 @@ export class ObserverService implements ObserverFeed {
           systemPrompt,
           userPrompt,
           effMaxTokens,
-          fastModelId
+          fastModelId,
+          onDelta
         );
       } else {
-        content = await this.callCloudAdapter(this.backend, systemPrompt, userPrompt, effMaxTokens);
+        content = await this.callCloudAdapter(
+          this.backend,
+          systemPrompt,
+          userPrompt,
+          effMaxTokens,
+          onDelta
+        );
       }
 
       if (!content) return undefined;
@@ -464,6 +558,7 @@ export class ObserverService implements ObserverFeed {
         narration,
         reasoning,
         durationMs: Date.now() - start,
+        narrationId,
       };
 
       log.debug(
@@ -472,11 +567,12 @@ export class ObserverService implements ObserverFeed {
           backend: this.backend.type,
           durationMs: result.durationMs,
           narrationLength: narration.length,
+          streamed: streamedAnyDelta,
         },
         'Observer narration generated'
       );
 
-      return result;
+      return { result, streamed: streamedAnyDelta };
     } catch (err) {
       log.debug(
         {
@@ -497,13 +593,28 @@ export class ObserverService implements ObserverFeed {
 
   /**
    * Call local Ollama via direct fetch (fast path, no provider overhead).
+   *
+   * Requests `stream: true` (Ollama's OpenAI-compatible endpoint supports the
+   * same SSE `data: {...}` shape every ProviderAdapter's chatCompletionStream
+   * already parses — see openai-compatible-hub-adapter.ts). When the response
+   * carries a readable body, tokens are decoded and handed to `onDelta` as
+   * they arrive via `consumeSSEStream()`. When it doesn't (a non-streaming
+   * sidecar/proxy in front of Ollama, or a test double that returns a plain
+   * JSON envelope), falls back to the original single-shot `.json()` read —
+   * and deliberately does NOT invoke `onDelta` at all, so
+   * `generateNarration()`'s `streamedAnyDelta` stays false and `emit()`
+   * queues the single complete narration exactly as it did before token-level
+   * streaming existed (see emit()'s doc). Calling `onDelta` here too would
+   * make a non-streaming response indistinguishable from a genuinely streamed
+   * one, and the final narration would never get queued as a lump.
    */
   private async callOllama(
     backend: Extract<NarrationBackend, { type: 'ollama' }>,
     systemPrompt: string,
     userPrompt: string,
     maxTokens: number,
-    modelIdOverride?: string
+    modelIdOverride?: string,
+    onDelta?: (delta: string) => void
   ): Promise<string> {
     const response = await fetch(`${backend.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -516,7 +627,7 @@ export class ObserverService implements ObserverFeed {
         ],
         max_tokens: maxTokens,
         temperature: 0.3,
-        stream: false,
+        stream: true,
       }),
       signal: AbortSignal.timeout(10000),
     });
@@ -526,6 +637,13 @@ export class ObserverService implements ObserverFeed {
       return '';
     }
 
+    if (response.body) {
+      return this.consumeSSEStream(response.body, onDelta);
+    }
+
+    // Fallback: whole-response JSON (non-streaming backend, or a mock that
+    // returns a plain envelope regardless of the requested `stream` value).
+    // Intentionally does NOT call `onDelta` — see this method's doc comment.
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
@@ -533,14 +651,73 @@ export class ObserverService implements ObserverFeed {
   }
 
   /**
+   * Read an OpenAI-compatible SSE body (`data: {...}\n\n`, terminated by
+   * `data: [DONE]`) and deliver each token's delta to `onDelta` as it decodes,
+   * returning the fully assembled text. Mirrors the parsing every
+   * ProviderAdapter already does in its own `chatCompletionStream` (see
+   * openai-compatible-hub-adapter.ts) — duplicated here (not imported)
+   * because the Observer talks to Ollama directly via `fetch`, never through
+   * a ProviderAdapter instance.
+   */
+  private async consumeSSEStream(
+    body: ReadableStream<Uint8Array>,
+    onDelta?: (delta: string) => void
+  ): Promise<string> {
+    const reader = body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let content = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line || line === 'data: [DONE]') continue;
+          if (!line.startsWith('data: ')) continue;
+
+          try {
+            const payload = JSON.parse(line.slice(6)) as {
+              choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+            };
+            // Prefer the streaming `delta.content` shape; fall back to
+            // `message.content` for a server that sends whole-message JSON
+            // objects over an SSE transport instead of true deltas.
+            const delta =
+              payload.choices?.[0]?.delta?.content ?? payload.choices?.[0]?.message?.content;
+            if (typeof delta === 'string' && delta.length > 0) {
+              content += delta;
+              onDelta?.(delta);
+            }
+          } catch {
+            continue; // malformed/partial line — skip, keep reading
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return content;
+  }
+
+  /**
    * Call a cloud model via the ProviderRegistry adapter.
    * Uses a tight timeout — narrations are metadata, not primary responses.
+   *
+   * Streams via the adapter's own `chatCompletionStream()` (every
+   * ProviderAdapter implements it) so tokens reach `onDelta` progressively,
+   * exactly like the Ollama path above.
    */
   private async callCloudAdapter(
     backend: Extract<NarrationBackend, { type: 'cloud' }>,
     systemPrompt: string,
     userPrompt: string,
-    maxTokens: number
+    maxTokens: number,
+    onDelta?: (delta: string) => void
   ): Promise<string> {
     const request: ChatRequest = {
       model: backend.modelId,
@@ -550,18 +727,33 @@ export class ObserverService implements ObserverFeed {
       ],
       max_tokens: maxTokens,
       temperature: 0.3,
-      stream: false,
+      stream: true,
     };
 
+    let content = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
     // Wrap in a timeout — cloud calls should not delay the main response
-    const timeoutPromise = new Promise<ChatResponse>((_, reject) =>
-      setTimeout(() => reject(new Error('Observer cloud call timed out')), 15000)
-    );
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Observer cloud call timed out')), 15000);
+    });
 
-    const response = await Promise.race([backend.adapter.chatCompletion(request), timeoutPromise]);
+    const streamLoop = (async () => {
+      for await (const chunk of backend.adapter.chatCompletionStream(request)) {
+        const delta = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content;
+        if (typeof delta === 'string' && delta.length > 0) {
+          content += delta;
+          onDelta?.(delta);
+        }
+      }
+    })();
 
-    const content = response.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
+    try {
+      await Promise.race([streamLoop, timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
+    return content;
   }
 
   /**
@@ -612,6 +804,7 @@ export class ObserverService implements ObserverFeed {
 export function createNoOpObserverFeed(): ObserverFeed {
   return {
     emit: () => {},
+    emitImmediate: () => {},
     getNarrations: () => [],
     isActive: () => false,
     drainReadyNarrations: () => [],
@@ -645,6 +838,8 @@ export function buildObserverChunk(narration: ObserverNarration): ChatResponse {
       narration: narration.narration,
       reasoning: narration.reasoning,
       observer_duration_ms: narration.durationMs,
+      ...(narration.partial ? { partial: true as const } : {}),
+      ...(narration.narrationId ? { narration_id: narration.narrationId } : {}),
     },
   } as ChatResponse;
 }

@@ -21,6 +21,7 @@
 import { logger } from '@/utils/logger';
 import { prisma } from '@/database/client';
 import { Prisma, type UsageQuota } from '@/generated/prisma/index.js';
+import { getTenantEntitlements } from '@/services/billing-entitlements-client';
 
 // Alias for Prisma error type (Prisma 7+ compatible)
 const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
@@ -143,6 +144,70 @@ export function canPerformAction(tier: string, action: keyof TierConfig['feature
 }
 
 /**
+ * Fase 5 (cross-repo hardening program): resolves the EFFECTIVE TierConfig
+ * for an organization — the hardcoded TIER_CONFIGS entry, with
+ * `requestsPerMinute` overridden by the tenant's REAL billing entitlement
+ * when billing is reachable and has data for it.
+ *
+ * ## Why only `requestsPerMinute`
+ *
+ * TIER_CONFIGS' fields (infra-shaped: connections, storage, requests/time)
+ * and billing's PlanFeature resource_types (product-shaped: members, apps,
+ * vector_space, knowledge_rate_limit, documents_upload_quota,
+ * annotation_quota_limit) come from two different vocabularies — most of
+ * them have no honest 1:1 correspondence, and inventing one here would be
+ * worse than not mapping it at all. `knowledge_rate_limit` is the one
+ * documented exception: its configured values in billing (configs/billing.py
+ * PLANS) are 10 / 100 / 1000 for sandbox / professional / team — the EXACT
+ * same numbers as TIER_CONFIGS.{free,pro,enterprise}.requestsPerMinute. That
+ * is not a coincidence a best-effort mapping invents; it is evidence the two
+ * were originally meant to express the same rate-limit concept for
+ * equivalent tiers. No other field pair lines up this cleanly, so no other
+ * field is overridden here.
+ *
+ * ## Fallback
+ *
+ * When billing is unreachable, or has no `knowledge_rate_limit` entry for
+ * this tenant, this returns the unmodified hardcoded `TierConfig` — the
+ * exact value `getTierConfig(tier)` always returned before this function
+ * existed. `getTierConfig` itself, and its existing synchronous callers
+ * (organization-settings-service.ts already awaits this async wrapper
+ * instead; tenant-isolation-middleware.ts and token-bucket-rate-limit.ts —
+ * both hot, per-request paths — are UNCHANGED, deliberately not migrated in
+ * this phase to keep its blast radius small), are untouched.
+ */
+export async function resolveEffectiveTierConfig(
+  tier: string,
+  organizationId: string
+): Promise<TierConfig> {
+  const hardcoded = getTierConfig(tier);
+
+  if (!organizationId) {
+    return hardcoded;
+  }
+
+  const entitlements = await getTenantEntitlements(organizationId);
+  if (!entitlements) {
+    return hardcoded; // billing unavailable (network/config) — unchanged behavior
+  }
+
+  const knowledgeRateLimit = entitlements.limits.knowledge_rate_limit;
+  if (typeof knowledgeRateLimit !== 'number') {
+    return hardcoded; // billing reachable but no usable value for this field
+  }
+
+  log.debug(
+    { organizationId, tier, hardcodedRequestsPerMinute: hardcoded.requestsPerMinute, knowledgeRateLimit },
+    'overriding requestsPerMinute with billing-resolved entitlement'
+  );
+
+  return {
+    ...hardcoded,
+    requestsPerMinute: knowledgeRateLimit,
+  };
+}
+
+/**
  * Get Redis namespace for tenant
  * Ensures Redis key isolation between tenants
  */
@@ -184,47 +249,58 @@ export async function checkQuota(
   periodStart.setMinutes(0, 0, 0);
   const periodEnd = new Date(periodStart.getTime() + 60 * 60 * 1000);
 
+  // `organizationId_period_periodStart` stopped being a Prisma-declared
+  // compound unique key when `usage_quotas` gained a nullable `userId`
+  // column for per-user scope (cross-repo quota-scoping hardening, Phase 3,
+  // PR #582): Postgres cannot enforce one flat unique constraint that also
+  // tolerates every org-wide row's `userId IS NULL`, so it was replaced by
+  // two PARTIAL unique indexes, which Prisma's schema language cannot
+  // declare (see the `UsageQuota` doc comment in schema.prisma). This
+  // function has no notion of per-user quotas — it only ever reads/writes
+  // the org-wide row (`userId: null`) — so nothing about its behaviour
+  // changes here, only the query shape `.upsert()`/`.findUnique()` needed.
   const where = {
-    organizationId_period_periodStart: {
-      organizationId,
-      period: 'hourly',
-      periodStart,
-    },
+    organizationId,
+    userId: null,
+    period: 'hourly',
+    periodStart,
   };
 
-  let quota: UsageQuota | null = await prisma.usageQuota
-    .upsert({
-      where,
-      update: {
+  let quota: UsageQuota | null = await prisma.usageQuota.findFirst({ where });
+
+  if (quota) {
+    quota = await prisma.usageQuota.update({
+      where: { id: quota.id },
+      data: {
         requestLimit: config.requestsPerHour,
         periodEnd,
       },
-      create: {
-        organizationId,
-        period: 'hourly',
-        periodStart,
-        periodEnd,
-        requestLimit: config.requestsPerHour,
-      },
-    })
-    .catch(async (error) => {
-      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        const existing = await prisma.usageQuota.findUnique({
-          where,
-        });
-        if (existing) {
-          return existing;
-        }
-        return null;
-      }
-      throw error;
     });
+  } else {
+    quota = await prisma.usageQuota
+      .create({
+        data: {
+          organizationId,
+          userId: null,
+          period: 'hourly',
+          periodStart,
+          periodEnd,
+          requestLimit: config.requestsPerHour,
+        },
+      })
+      .catch(async (error) => {
+        if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+          // Lost the create race to a concurrent call for the same
+          // org/period — the row exists now, so read it back instead of
+          // failing the request over a benign collision.
+          return await prisma.usageQuota.findFirst({ where });
+        }
+        throw error;
+      });
+  }
 
   if (!quota) {
-    quota = await prisma.usageQuota.findUnique({ where });
-    if (!quota) {
-      throw new Error('Failed to load usage quota after conflict');
-    }
+    throw new Error('Failed to load usage quota after conflict');
   }
 
   if (resourceType === 'requests') {

@@ -135,6 +135,10 @@ export type ModelCapability =
   | 'audio_input'
   | 'audio_output'
   | 'audio_to_audio'
+  // Music/soundtrack composition — distinct from `audio_generation` (TTS):
+  // structured composition plans, minutes-long output, no "spoken text"
+  // input. Added LOTE AX (2026-09-06) for the ElevenLabs Music onboarding.
+  | 'music_generation'
   | 'image_to_video'
   | 'video_to_video'
   | 'video_to_text'
@@ -175,7 +179,29 @@ export type ModelCapability =
   // sonnet-4 (200k), GPT-4-turbo (128k), Gemini Pro (1M). Routing layer
   // uses this to direct workloads with long inputs to the right SKU
   // even when context-window numbers aren't comparable across families.
-  | 'long_context';
+  | 'long_context'
+  // ─── File-generation surfaces (promoted 2026-09-05, LOTE AO) ──────────
+  // These describe a DOWNLOADABLE ARTIFACT the platform renders, not a
+  // provider-side model skill. They lived only in
+  // `orchestration/capability-inference.ts#RequiredCapability` while the
+  // triage prompt REQUIRED the LLM to emit them from "the capability
+  // catalog provided" — a catalog built from MODEL_CAPABILITIES, which did
+  // not contain them. The prompt contradicted itself; promoting them here
+  // is the fix (the file-generation pipeline already consumes them in
+  // `orchestration-engine.ts#FILE_GEN_FORMAT_CAPS`).
+  //
+  // `code_file_generation` is deliberately NOT named `code_generation` —
+  // see the collision note in `capability-inference.ts`.
+  | 'csv_generation'
+  | 'json_generation'
+  | 'markdown_generation'
+  | 'docx_generation'
+  | 'xlsx_generation'
+  | 'pdf_generation'
+  | 'pptx_generation'
+  | 'zip_generation'
+  | 'code_file_generation'
+  | 'file_generation';
 
 /**
  * Enum-like pattern for string unions (single source of truth, no casts):
@@ -232,6 +258,7 @@ export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
   'audio_input',
   'audio_output',
   'audio_to_audio',
+  'music_generation',
   'image_to_video',
   'video_to_video',
   'video_to_text',
@@ -259,6 +286,17 @@ export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
   'safety',
   // Long-context routing target (≥128k tokens; added 2026-04-28).
   'long_context',
+  // File-generation surfaces (promoted 2026-09-05, LOTE AO — see the union).
+  'csv_generation',
+  'json_generation',
+  'markdown_generation',
+  'docx_generation',
+  'xlsx_generation',
+  'pdf_generation',
+  'pptx_generation',
+  'zip_generation',
+  'code_file_generation',
+  'file_generation',
 ];
 
 const MODEL_CAPABILITIES_SET = new Set<string>(MODEL_CAPABILITIES);
@@ -321,9 +359,37 @@ export interface ChatMessage {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   tool_results?: ToolResult[];
+  /**
+   * LOTE AZ, 2026-09: marks a synthetic `role: 'system'` message that
+   * `context-compaction-service.ts`'s `compact()` generated to summarize
+   * older conversation turns, as distinct from the caller's originally-
+   * authored system message(s). Additive/optional — every existing producer
+   * and consumer of `ChatMessage` is unaffected. Provider adapters that
+   * carry `system` content as cacheable blocks (see the Anthropic adapter's
+   * `convertMessages()`) use this to keep the summary's turn-to-turn-
+   * changing text OUT of the stable, cache_control-marked prefix; folding it
+   * in would invalidate the entire cached block on every request.
+   */
+  isCompactionSummary?: boolean;
 }
 
-export type MessageContent = TextContent | ImageContent;
+/**
+ * LOTE AT — additive widening for media-capable judge prompts (MediaJudgeEvaluator).
+ * `video_frame` / `audio_transcript` let a judge prompt carry a sampled video
+ * frame or an audio transcript as a DISTINCT, labeled part instead of folding
+ * them into an opaque `text` block — a consumer (or a future audio/video-native
+ * provider) can tell "this is a machine-sampled frame / transcript" from
+ * authored rubric prose. Existing `'text'|'image_url'`-only consumers are
+ * unaffected: this is a union WIDENING, and every provider adapter that maps
+ * content parts already does so via non-exhaustive `if/else if` chains (never
+ * an exhaustive `switch` with a `never` fallthrough), so an unrecognised part
+ * type is simply ignored by code that hasn't been taught about it yet.
+ * `MediaJudgeEvaluator` itself never sends these two variants over the wire —
+ * it normalizes them to plain `text`/`image_url` parts immediately before
+ * building the provider `ChatRequest`, so every existing adapter keeps working
+ * unmodified today.
+ */
+export type MessageContent = TextContent | ImageContent | VideoFrameContent | AudioTranscriptContent;
 
 export interface TextContent {
   type: 'text';
@@ -338,6 +404,28 @@ export interface ImageContent {
   };
 }
 
+/** A single sampled video frame, embedded as an image with its source offset. */
+export interface VideoFrameContent {
+  type: 'video_frame';
+  image_url: {
+    url: string;
+    detail?: 'low' | 'high' | 'auto';
+  };
+  /** Offset of this frame inside the source video, in seconds. */
+  timestamp_sec: number;
+  /** False when `timestamp_sec` is a nominal sampling-grid estimate rather than
+   *  a measured ffmpeg timestamp (mirrors `ExtractedFrame.timestampMeasured`
+   *  in `services/media/ffmpeg-media-toolkit.ts`) — a consumer must not present
+   *  an unmeasured offset as a fact. */
+  timestamp_measured: boolean;
+}
+
+/** A machine transcript of an audio candidate, labeled distinctly from authored text. */
+export interface AudioTranscriptContent {
+  type: 'audio_transcript';
+  text: string;
+}
+
 export interface FunctionCall {
   name: string;
   arguments: string; // JSON string
@@ -347,6 +435,26 @@ export interface ToolCall {
   id: string;
   type: 'function';
   function: FunctionCall;
+  /**
+   * Wire-protocol slot for this tool call within a single assistant turn.
+   *
+   * Mirrors OpenAI's `delta.tool_calls[].index`: the streaming SSE wire
+   * format sends multiple tool calls interleaved by this index — the first
+   * chunk of a call carries `index` + `id` + `function.name`, and every
+   * continuation chunk carries only `index` + a `function.arguments`
+   * fragment (no `id`/`name` repeated). A client reconstructing concurrent
+   * (parallel) tool calls from a stream MUST key accumulation on `index`,
+   * not on array position, since a provider can interleave fragments for
+   * several in-progress calls across the same stream.
+   *
+   * Optional and additive: non-streaming call sites (the final, complete
+   * `message.tool_calls` array) do not need it — array position already
+   * unambiguously identifies each call there. Every NEW construction site
+   * (streaming or non-streaming) should still populate it so downstream
+   * consumers have one consistent field to rely on instead of guessing
+   * whether a given array is a complete message or an in-progress delta.
+   */
+  index?: number;
 }
 
 export interface Tool {
@@ -432,6 +540,18 @@ export interface AilinBillingProfile {
   minOutputCostPer1kUsd?: number;
 }
 
+/**
+ * Closed, graded "effort" contract for `ChatRequest.reasoning_effort` (LOTE AZ,
+ * 2026-09). Deliberately `'low' | 'medium' | 'high'` only — matching OpenAI's
+ * public o-series API exactly — rather than the wider closed enum BytePlus
+ * invented (`none/minimal/low/medium/high/xhigh/max`, see
+ * byteplus-adapter.ts:265-272): the canonical, PUBLIC field targets the
+ * common industry convention, and a per-provider adapter remains free to
+ * fill in its own extra tiers around this 3-value core when it maps the
+ * canonical field onto its native surface (a later PR's job, not this one's).
+ */
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface ChatRequest {
   model?: string; // Optional - let orchestration decide if not specified
   messages: ChatMessage[];
@@ -470,6 +590,21 @@ export interface ChatRequest {
     userAgent?: string;
     acceptLanguage?: string;
   };
+  /**
+   * Server-set ONLY by chat-routes.ts (LOTE AW, session affinity, 2026-09).
+   * Carries the resolved API-key id (from the authenticated request, never
+   * client-supplied) and, when present, the client-supplied
+   * `x-ailin-conversation-id` header down through buildContext() so the
+   * session-affinity cache key can be scoped to the real caller instead of
+   * only organizationId/userId — a single org/user can hold multiple API
+   * keys whose conversations must not cross-pollinate. Clients cannot set
+   * this directly: the handler overwrites it unconditionally right after
+   * normalizeChatRequest(), mirroring `ailin_anonymous_context`'s pattern.
+   */
+  ailin_session_scope?: {
+    apiKeyId?: string;
+    conversationId?: string;
+  };
   quality_target?: number; // 0-1 target quality
   no_cache?: boolean; // Skip semantic cache lookup (for experiment validation)
   freeze_learning?: boolean; // Do not feed learning/bandit updates from this request (experiment 'frozen' phase — keeps the measured system fixed)
@@ -488,8 +623,29 @@ export interface ChatRequest {
   ailin_tier_rate?: TierRate;
 
   /** Thinking budget for models with native extended thinking (DeepSeek-R1, QwQ).
-   *  When set, the model uses its native thinking protocol instead of prompt injection. */
+   *  When set, the model uses its native thinking protocol instead of prompt injection.
+   *  A more specific, numeric override of `reasoning_effort` — when both are set,
+   *  this wins verbatim (see `resolveReasoningEffort` in `@/utils/reasoning-effort`). */
   thinking_budget?: number;
+
+  /**
+   * CANONICAL public "effort" dial (LOTE AZ, 2026-09) — matches the real OpenAI
+   * o-series API surface (`low` | `medium` | `high`), the most widely adopted
+   * convention for this concept. This is the field callers and downstream
+   * per-provider adapters (BytePlus, Groq, and the OpenAI/xAI, Anthropic,
+   * Google native-mapping PRs built on top of this one) should read/write
+   * going forward — NOT `thinking_budget` or `ailin_constraints.enable_reasoning`
+   * directly, both of which stay supported for backward compatibility.
+   *
+   * Resolve this (together with `thinking_budget`/`enable_reasoning`) via the
+   * single canonical translation function `resolveReasoningEffort()` exported
+   * from `@/utils/reasoning-effort` — never read this field ad hoc, since the
+   * reconciliation rules (explicit `thinking_budget` wins verbatim; otherwise
+   * this enum maps to a documented per-tier token budget; otherwise
+   * `enable_reasoning` alone defaults to `medium`) live there as the single
+   * source of truth.
+   */
+  reasoning_effort?: ReasoningEffort;
 
   // Multimodal extensions
   webSearch?: boolean;
@@ -560,7 +716,11 @@ export interface ChatResponse {
   // the `type` field — absent on completion metadata, present on chunk
   // variants.
   ailin_metadata?:
-    AilinMetadata | AilinProgressMetadata | AilinObserverMetadata | AilinClarificationMetadata;
+    | AilinMetadata
+    | AilinProgressMetadata
+    | AilinObserverMetadata
+    | AilinClarificationMetadata
+    | AilinErrorMetadata;
 }
 
 /** SSE progress chunk: incremental step indicator emitted during long strategies. */
@@ -580,6 +740,14 @@ export interface AilinObserverMetadata {
   narration: string;
   reasoning?: string;
   observer_duration_ms?: number;
+  /** Token-level streaming (2026-09): true when `narration` is an incremental
+   *  fragment (not the complete text) of an in-flight narration call — see
+   *  `ObserverNarration.partial`'s doc for the full contract. Absent on a
+   *  complete/final narration chunk. */
+  partial?: boolean;
+  /** Groups fragments (and the final chunk) belonging to the same underlying
+   *  narration call — see `ObserverNarration.narrationId`'s doc. */
+  narration_id?: string;
 }
 
 /**
@@ -591,6 +759,23 @@ export interface AilinClarificationMetadata {
   type: 'clarification';
   ambiguity_score: number;
   questions: string;
+}
+
+/**
+ * SSE error chunk (context-window preflight audit, 2026-09): signals a
+ * classified streaming failure without necessarily leaking raw provider
+ * error text. `sendSSEError` (utils/sse.ts) already always puts a safe,
+ * human-readable summary in `choices[0].message.content` for every SSE
+ * error — this is an ADDITIVE, machine-readable companion so an agentic
+ * client can react programmatically (e.g. `code === 'context_exceeded'` ->
+ * shrink the request) instead of only pattern-matching prose. `code`
+ * mirrors `error-classification.ts`'s `ProviderErrorClass` values where
+ * applicable, but is a plain string so callers don't need that module's
+ * type to consume it.
+ */
+export interface AilinErrorMetadata {
+  type: 'error';
+  code: string;
 }
 
 export interface ChatChoice {
@@ -664,6 +849,13 @@ export interface AilinMetadata {
   triage_intent?: string;
   triage_complexity?: string;
   triage_strategy?: string;
+  /** Mirrors TriageDecision.source — lets a caller detect a request that
+   *  silently degraded to heuristic triage without parsing `triage_reason`. */
+  triage_source?: 'llm' | 'heuristic';
+  /** Human-readable detail behind the triage decision (e.g. "Heuristic
+   *  media-intent fallback (broad safety net: video_generation)"). Absent
+   *  when triage didn't set `reason`. */
+  triage_reason?: string;
   // Per-subcall decomposition for benchmark auditability
   subcalls?: Array<{
     model_id: string;
@@ -681,6 +873,34 @@ export interface AilinMetadata {
   degraded?: boolean;
   /** Machine-readable reason for `degraded` (e.g. 'empty_response_after_fallback'). */
   degraded_reason?: string;
+  /**
+   * The model the CLIENT pinned, verbatim. Absent when the client sent `auto`,
+   * an `ailin-*` alias, or no model at all — i.e. when there was nothing to
+   * substitute in the first place.
+   */
+  requested_model?: string;
+  /**
+   * True when the client pinned a model and a DIFFERENT one answered.
+   *
+   * Added 2026-09 for a measured blind spot: a circuit breaker opening for a
+   * whole provider made traffic fall through to another provider, and the
+   * response reported `degraded: false` with no other signal — a caller asking
+   * for one vendor received another with nothing to distinguish it from a
+   * normal answer. `degraded` was not lying about its own meaning (it says "the
+   * `[DEGRADED]` placeholder was returned"); the substitution simply had no
+   * field, in a response that carried no provider either.
+   *
+   * Deliberately NOT folded into `degraded`: two readers key off that flag's
+   * current meaning (the preliminary-quality suppression in the engine and the
+   * `outcome: 'degraded'` metric label), and a served-by-a-substitute response
+   * is a real answer, not a placeholder.
+   */
+  model_substituted?: boolean;
+  /**
+   * Present only when `model_substituted` is true: the provider that served the
+   * substitute, and the provider the pinned model belongs to when known.
+   */
+  substituted_provider?: string;
   /**
    * Streaming throw-guard recovery (2026-08-16 follow-up). Present ONLY on the
    * final chunk of a streaming request whose strategy threw before emitting any
@@ -732,6 +952,37 @@ export interface AilinMetadata {
    * textual executions. Additive — `choices[].message.content` is unaffected.
    */
   artifacts?: AilinArtifact[];
+  /**
+   * Media/document artifacts surfaced by a participant model's tool calls
+   * during a collective strategy's execution (e.g. `generate_media`
+   * invoked by a voter/debater/panelist mid-conversation) — see
+   * `ModelExecution.artifacts` and `mergeArtifacts()` (base-strategy.ts).
+   *
+   * Also carries a SECOND family of independent producers
+   * (chat-request-processor.ts, `processChatRequestImpl`, non-streaming path
+   * only): proactive extras that scan the finished text response for a
+   * signal worth materializing without the caller asking for a file —
+   * `buildProactiveTableChartArtifact` (proactive-structured-extras.ts, a
+   * chart image for a genuine multi-row/multi-column markdown comparison
+   * table), `buildProactiveCodeFileArtifact` (proactive-code-file-extra.ts, a
+   * downloadable file for a large well-formed fenced code block), and
+   * `buildProactiveDocumentArtifact` (proactive-document-extra.ts, a
+   * markdown document or CSV for a long structured report or a flat list of
+   * uniform data records). None of these entries has a `sourceToolCallId`/
+   * `role` (none was produced by a tool call) — `meta.source` (one of
+   * `'proactive_table_chart'` / `'proactive_code_file'` /
+   * `'proactive_document_export'`) identifies which extra produced it.
+   *
+   * Deliberately a SEPARATE field from `artifacts` above: that field carries
+   * `AilinArtifact` (stage_name/stage_index — multi-stage triage plan
+   * provenance), while this one carries `ArtifactRef` (tool_call_id/role —
+   * collective-strategy provenance). The two pipelines produce differently
+   * shaped records and neither is a subset of the other, so they are not
+   * merged into one array. Absent when no contributing execution's tool
+   * calls produced an artifact and no proactive extra fired. Additive —
+   * `choices[].message.content` is unaffected either way.
+   */
+  tool_artifacts?: ArtifactRef[];
   /** Prompt variant ID selected by the variant bandit (if active). */
   prompt_variant?: string;
   /** SHA-256 hash (truncated) of the prompt slot values used (for audit). */
@@ -916,7 +1167,14 @@ export type ExecutionStrategyName =
   | 'sensitivity-consensus' // Iterative coordination: decision + sensitivity + state + convergence
   | 'tri-role-collective' // Cyclical Planner → Solver → Auditor with revise loop until acceptance
   | 'cached' // Response served from semantic cache
-  | 'auto'; // Let system decide
+  | 'auto' // Let system decide
+  // LOTE AT (Part 2): bounded agentic loop over the capability surface for
+  // multi-modal media composition. Gated behind MEDIA_PLANNER_ENABLED
+  // (default false) and NOT in STRATEGY_INPUT_VALUES / the triage-selectable
+  // set — reached only via the dedicated gate in
+  // `core/orchestration/strategies/media-planner-gate.ts`, never by a
+  // caller-specified `strategy` field.
+  | 'media-planner';
 
 export type TaskType =
   | 'code-generation'
@@ -1054,6 +1312,30 @@ export interface OrchestrationContext extends RequestUserContext {
   };
 
   /**
+   * Milliseconds spent inside `DynamicModelSelector.selectModels()` for this
+   * request, accumulated across calls (sequential/collaborative strategies
+   * select more than once). Stamped by the selector, which is the only place
+   * that knows the duration; read once by the engine when it records
+   * `ci_model_selection_duration_ms`.
+   */
+  selectionDurationMs?: number;
+
+  /**
+   * Session/conversation affinity (LOTE AW, 2026-09): the resolved cache
+   * identity for this request, computed once in `buildContext()` from the
+   * ORIGINAL (pre-compaction) messages so the write hooks
+   * (`chat-routes.ts`'s streaming fast path,
+   * `strategy.recordExecution()`'s sibling calls in
+   * `orchestration-engine.ts`) can record the model that actually served
+   * this turn without re-deriving (and risking drift from) the read-side
+   * key. See `services/session-affinity-service.ts`.
+   */
+  sessionAffinityKey?: {
+    identifier: string;
+    sessionKey: string;
+  };
+
+  /**
    * Best-of-N verification (#2, the thesis lever): objective checker for verifiable
    * tasks. Returns true iff a candidate's extracted final answer satisfies the task's
    * checkable property (plug it back into the constraints — no intended-answer peeking).
@@ -1147,11 +1429,37 @@ export interface OrchestrationResult {
   /** Media artifacts (image/video/audio) produced by multi-stage generation
    *  stages. Undefined for single-stage/purely textual executions. */
   artifacts?: AilinArtifact[];
+  /**
+   * Flattened `ModelExecution.artifacts` (tool-call-produced media/document
+   * artifacts) across every execution the strategy accumulated — see
+   * `mergeArtifacts()` (base-strategy.ts). Populated by collective and
+   * multi-phase strategies alongside their existing `safeResponseContent()`
+   * synthesis call. Always present (possibly `[]`) on strategies that set
+   * it — the wire-facing projection (`AilinMetadata.tool_artifacts`) is what
+   * omits an empty array. Deliberately separate from `artifacts` above
+   * (different shape, different pipeline — see that field's doc comment and
+   * `AilinMetadata.tool_artifacts`, which this is projected onto for the
+   * client).
+   */
+  toolArtifacts?: ArtifactRef[];
 }
 
 export interface ModelExecution {
   modelId: string;
   modelName: string;
+  /**
+   * Provider that ACTUALLY served this execution (`model.provider`, falling back
+   * to the resolved adapter's name).
+   *
+   * Added 2026-09: this record is what reaches response-metadata assembly, and
+   * it carried no provider at all. When a circuit breaker opened for a whole
+   * provider, traffic was silently served by a different one and the response
+   * reported `degraded: false` with nothing anywhere saying the substitution had
+   * happened — the facts existed in `ModelOperability.resolvedProvider`, in
+   * `CandidateAttempt[]`, and in a `model.retry_provider` span attribute, but
+   * none of them reached the caller.
+   */
+  provider?: string;
   role: ModelRole;
   request: ChatRequest;
   response: ChatResponse;
@@ -1180,6 +1488,41 @@ export interface ModelExecution {
   promptKey?: string;
   /** SHA-256 hash (truncated 16 hex chars) of the prompt slot values used. */
   promptSlotHash?: string;
+  /**
+   * Media/document artifacts surfaced by this execution's tool calls (e.g. an
+   * image or video generation tool invoked mid-conversation). Structurally
+   * identical to `ToolResult.artifact` (advanced-tool-execution-service.ts) so
+   * a tool result's artifact can be pushed in directly, plus bookkeeping to
+   * recover provenance once `mergeArtifacts()` (base-strategy.ts) flattens
+   * artifacts from many executions into one array.
+   *
+   * Optional and unpopulated today — plumbing only. Nothing constructs this
+   * yet (a future change wires real generation tools into it); nothing reads
+   * it yet beyond `mergeArtifacts()`, which no strategy calls yet either.
+   */
+  artifacts?: ArtifactRef[];
+}
+
+/**
+ * Reference to a single media/document artifact carried on a `ModelExecution`.
+ * Same shape as `ToolResult.artifact` (advanced-tool-execution-service.ts) —
+ * a `ToolResult.artifact` value is assignable here without a cast — plus
+ * provenance fields that only matter once artifacts from several executions
+ * are merged into one flat list (see `mergeArtifacts()` in base-strategy.ts).
+ */
+export interface ArtifactRef {
+  type: 'image' | 'video' | 'audio' | 'document' | 'file';
+  url: string;
+  mimeType?: string;
+  meta?: Record<string, unknown>;
+  /** `tool_call_id` of the `ToolResult` this artifact was extracted from — a
+   *  single execution's response can contain multiple tool calls. */
+  sourceToolCallId?: string;
+  /** Role of the `ModelExecution` that produced this artifact. Redundant while
+   *  still nested under that execution's own `.artifacts`, but load-bearing
+   *  once `mergeArtifacts()` flattens across executions and that context is
+   *  otherwise lost. */
+  role?: ModelRole;
 }
 
 /** Observer event emitted during collective strategy execution. */
@@ -1210,6 +1553,29 @@ export interface ObserverNarration {
   narration: string;
   reasoning?: string;
   durationMs: number;
+  /**
+   * Token-level streaming (2026-09 follow-up to PR #473). Present and `true`
+   * only on an IN-FLIGHT fragment emitted while the underlying Ollama/cloud
+   * call is still generating — `narration` on a partial entry carries ONLY
+   * the incremental text just produced, not the accumulated text, so a
+   * consumer reconstructs the running text by concatenating every partial
+   * sharing the same `narrationId` in arrival order. Absent (or falsy) on
+   * the single FINAL narration for an event, which — unchanged from before
+   * this feature existed — always carries the complete assembled text.
+   * `ObserverService.getNarrations()` (and therefore
+   * `result.metadata.observer_narrations`) never contains a partial entry;
+   * only the live `drainReadyNarrations()` queue does, transiently.
+   */
+  partial?: boolean;
+  /**
+   * Correlates a run of partial fragments — and the final narration that
+   * closes them — to the same underlying narration call, so a
+   * streaming-aware consumer can group fragments across a narration whose
+   * generation may interleave with OTHER concurrent narrations in the same
+   * queue. Present whenever `partial` is present; also stamped on the final
+   * narration for the same event.
+   */
+  narrationId?: string;
 }
 
 export interface TriageDecision {
@@ -1242,6 +1608,15 @@ export interface TriageDecision {
 
   /** Semantic execution plan generated by triage LLM — all parameters dynamic */
   executionPlan?: TriageExecutionPlan;
+
+  /**
+   * 'heuristic' when this decision came from the non-LLM heuristic fallback
+   * (triage-service.ts's runHeuristics) rather than a real triage LLM call —
+   * e.g. LLM timeout/429, unparseable output, or no triage-capable model
+   * resolved. 'llm' for a normal LLM-produced decision. Additive field;
+   * absence means the decision predates this field, not that it's LLM.
+   */
+  source?: 'llm' | 'heuristic';
 }
 
 /**
@@ -1283,6 +1658,30 @@ export interface TriageExecutionPlan {
 
   /** Multi-stage execution plan with per-stage sub-strategies, roles, and SOTA system prompts */
   stages: TriageStage[];
+
+  /**
+   * Set when this plan is a COMPOSITE multi-artifact media request (LOTE AT
+   * PR4, 2026-09-07) — a single user request that independently needs 2+
+   * DISTINCT media modalities (e.g. both an image AND a video), one
+   * dedicated stage per modality in `stages` (see
+   * `detectMediaGenerationModalities` in orchestration-engine.ts for the
+   * detection logic and its documented granularity decision). When present
+   * with length >= 2, `OrchestrationEngine.execute()` routes the whole plan
+   * through `executeCompositeMediaPlan()` (parallel fan-out + a real
+   * whole-pipeline deadline + per-artifact partial-failure accounting)
+   * instead of the sequential `executeMultiStagePlan()` loop.
+   *
+   * PR4 scope: only the HEURISTIC-fallback path (`TriagingService.
+   * runHeuristics()`) sets this today — it's the one path where
+   * `capability-inference.ts`'s independently-matched regex tags
+   * (image_generation/video_generation/audio_generation/file formats) are
+   * directly available as a Set that can genuinely hold 2+ of them. The
+   * LLM-driven triage path does not emit this field in PR4 (teaching the
+   * triage LLM prompt/schema to plan genuine multi-artifact composites is a
+   * separate, larger concern deliberately left out of this PR's scope).
+   * Undefined for every ordinary (non-composite) plan.
+   */
+  compositeMediaModalities?: Array<'image' | 'video' | 'audio' | 'file'>;
 }
 
 /**
@@ -1330,6 +1729,21 @@ export interface TriageStage {
    * context ("the image above") — describes the content to generate in full.
    */
   generationPrompt?: string;
+  /**
+   * Structured video-generation attributes (2026-09-06, LOTE AS finding #3).
+   * Present only when the triage LLM extracted them for a stage whose
+   * `requiredCapabilities` includes `video_generation` — absence means
+   * either a non-video stage or that the LLM found nothing explicit to
+   * extract, NOT that the user asked for a default.
+   */
+  /** Requested clip length in seconds. */
+  duration?: number;
+  /** Requested resolution as free text (e.g. "4K", "1080p", "1920x1080"). */
+  resolution?: string;
+  /** Requested aspect ratio as free text (e.g. "16:9", "9:16", "1:1"). */
+  aspectRatio?: string;
+  /** Whether the user asked for audio/soundtrack alongside the video. */
+  audioRequested?: boolean;
 }
 
 /**
@@ -1449,6 +1863,22 @@ export interface AppConfig {
   resilience: ResilienceConfig;
   featureFlags: FeatureFlagsConfig;
   notifications: NotificationsConfig;
+  mediaPlanner: MediaPlannerConfig;
+}
+
+/**
+ * LOTE AT (Part 2) — `MediaPlannerStrategy` configuration. The whole
+ * pathway is gated behind `enabled` (default false, `MEDIA_PLANNER_ENABLED`)
+ * — see `core/orchestration/strategies/media-planner-gate.ts`'s
+ * `resolveMediaPlanRouting`, the single choke point that reads this flag.
+ * `maxTurns` and `costCeilingMultiplier` are PROVISIONAL defaults per the
+ * architecture's §8 — each is a real product/cost decision still pending,
+ * exposed here purely so it can be tuned without a code change.
+ */
+export interface MediaPlannerConfig {
+  enabled: boolean;
+  maxTurns: number;
+  costCeilingMultiplier: number;
 }
 
 export interface ApiConfig {
@@ -1667,6 +2097,10 @@ export interface SecurityConfig {
     enabled: boolean;
     retentionDays: number;
   };
+  /** Reserved Organization id whose admin/owner grants count as platform-admin.
+   *  See requirePlatformAdmin() in auth-middleware.ts. null until provisioned —
+   *  every platform-admin-gated route fails closed while unset. */
+  platformOrganizationId: string | null;
 }
 
 export type AuthMode = 'email_code' | 'password' | 'sso';

@@ -54,11 +54,12 @@
  *
  * ### Rerank is the differentiator
  *
- * The `rerank()` method on this adapter is the reason Voyage gets a dedicated
- * class. The base `ProviderAdapter` has no rerank abstraction — so rerank is
- * exposed via a class-specific method that callers narrow to `VoyageAdapter`
- * when the capability routing resolves to Voyage. Until a first-class rerank
- * interface lands in `ProviderAdapter`, `rerank()` here is the contract.
+ * Rerank is the reason Voyage gets a dedicated class. Since LOTE AP the base
+ * `ProviderAdapter` DOES carry a first-class `rerank(model, request)`
+ * contract, so this adapter now overrides it and no caller has to narrow to
+ * `VoyageAdapter` any more. `rerankNative()` keeps the documented Voyage wire
+ * shape (`top_k`, `data[].document` as a bare string) for callers that want
+ * it verbatim; `rerank()` is the portable normalization on top.
  */
 
 import { logger } from '@/utils/logger';
@@ -83,6 +84,8 @@ import type {
   ImageVariationResponse,
   ModerationRequest,
   ModerationResponse,
+  RerankRequest,
+  RerankResponse,
 } from '@/types/model-client';
 
 export interface VoyageAdapterConfig extends BaseProviderConfig {
@@ -216,11 +219,12 @@ export class VoyageAdapter extends ProviderAdapter {
   }
 
   /**
-   * POST /v1/rerank — Voyage-specific. No shared `rerank()` on ProviderAdapter
-   * yet, so this lives on the concrete class. Callers obtain the adapter via
-   * the registry and narrow to VoyageAdapter when the capability is `rerank`.
+   * POST /v1/rerank in Voyage's own wire shape. Kept public so the wire
+   * contract stays directly testable and so callers that need Voyage-only
+   * knobs (`truncation`) can reach them; `rerank()` below is the portable
+   * entry point the orchestrator uses.
    */
-  async rerank(request: VoyageRerankRequest): Promise<VoyageRerankResponse> {
+  async rerankNative(request: VoyageRerankRequest): Promise<VoyageRerankResponse> {
     if (!request.query || request.query.trim().length === 0) {
       throw new Error('voyage.rerank: query must be non-empty');
     }
@@ -242,6 +246,43 @@ export class VoyageAdapter extends ProviderAdapter {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Shared `ProviderAdapter.rerank` contract (LOTE AP). Normalizes Voyage's
+   * `data[]` / `relevance_score` / bare-string `document` into the portable
+   * `RerankResponse`, and sorts defensively: the API documents descending
+   * order but the contract PROMISES it, so we do not depend on the vendor.
+   */
+  async rerank(model: Model, request: RerankRequest): Promise<RerankResponse> {
+    const native = await this.rerankNative({
+      query: request.query,
+      documents: request.documents,
+      model: model.name || model.id,
+      ...(typeof request.topN === 'number' ? { top_k: request.topN } : {}),
+      ...(typeof request.returnDocuments === 'boolean'
+        ? { return_documents: request.returnDocuments }
+        : {}),
+      ...(typeof request.options?.truncation === 'boolean'
+        ? { truncation: request.options.truncation }
+        : {}),
+    });
+
+    const results = native.data
+      .map((entry) => ({
+        index: entry.index,
+        relevanceScore: entry.relevance_score,
+        ...(entry.document !== undefined ? { document: entry.document } : {}),
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    return {
+      results,
+      ...(typeof native.usage?.total_tokens === 'number'
+        ? { totalTokens: native.usage.total_tokens }
+        : {}),
+      raw: native,
+    };
   }
 
   /**

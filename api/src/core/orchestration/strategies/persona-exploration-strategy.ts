@@ -22,7 +22,7 @@
  * scenarios where multiple stakeholder perspectives matter.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -132,6 +132,7 @@ export class PersonaExplorationStrategy extends BaseStrategy {
       modelsUsed: prep.executions,
       totalCost: prep.executions.reduce((s, e) => s + e.cost, 0),
       totalDuration: Date.now() - startTime,
+      toolArtifacts: mergeArtifacts(prep.executions),
       metadata: {
         strategy: 'persona-exploration',
         personas: prep.perspectivesCount,

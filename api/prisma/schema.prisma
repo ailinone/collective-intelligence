@@ -619,9 +619,35 @@ model ShardConfig {
 // Usage & Quotas
 // ============================================
 
+/// Cross-repo quota-scoping hardening, Phase 3 (PR #582): `userId` gives this
+/// table per-user scope alongside its original org-wide aggregate.
+///
+/// `userId IS NULL` rows are the org-wide aggregate — unchanged meaning, kept
+/// for every caller that does not pass a userId (fully backward compatible).
+/// `userId IS NOT NULL` rows are one user's own row within that same org
+/// (`organizationId`, `period`, `periodStart`).
+///
+/// Uniqueness for the two shapes is intentionally NOT a single `@@unique`
+/// here: Postgres treats every NULL as DISTINCT inside an ordinary unique
+/// index, so `@@unique([organizationId, userId, period, periodStart])` would
+/// NOT stop two concurrent first-requests-of-period from each inserting a
+/// second org-wide (`userId IS NULL`) row — reintroducing the exact race
+/// `usage_quotas_organization_id_period_period_start_key` existed to prevent.
+/// The fix is two PARTIAL unique indexes, which Prisma's schema language
+/// cannot express (same technique already used for
+/// `broadcast_dlq_active_envelope_destination_unique`, see
+/// `BroadcastDlqEntry` below). Both are raw SQL in
+/// `20260912000000_usage_quota_user_scope/migration.sql` and are
+/// intentionally invisible to `prisma migrate dev` / introspection:
+///   * `usage_quotas_org_period_start_org_wide_key` —
+///     UNIQUE (organization_id, period, period_start) WHERE user_id IS NULL
+///   * `usage_quotas_org_user_period_start_key` —
+///     UNIQUE (organization_id, user_id, period, period_start)
+///     WHERE user_id IS NOT NULL
 model UsageQuota {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
   period         String // daily, monthly, yearly
   periodStart    DateTime @map("period_start")
   periodEnd      DateTime @map("period_end")
@@ -643,8 +669,8 @@ model UsageQuota {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, period, periodStart])
   @@index([organizationId, periodStart])
+  @@index([organizationId, userId, periodStart])
   @@map("usage_quotas")
 }
 

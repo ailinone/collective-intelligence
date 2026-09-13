@@ -7,19 +7,132 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Source: https://github.com/ailinone/collective-intelligence
 
-allowBuilds:
-  '@playwright/browser-chromium': set this to true or false
-  '@prisma/engines': set this to true or false
-  '@sentry-internal/node-cpu-profiler': set this to true or false
-  '@swc/core': set this to true or false
-  bcrypt: set this to true or false
-  better-sqlite3: set this to true or false
-  cpu-features: set this to true or false
-  esbuild: set this to true or false
-  msgpackr-extract: set this to true or false
-  onnxruntime-node: set this to true or false
-  prisma: set this to true or false
-  promptfoo: set this to true or false
-  protobufjs: set this to true or false
-  sharp: set this to true or false
-  ssh2: set this to true or false
+# Install-time build-script policy for native/postinstall dependencies.
+#
+# `allowBuilds` is NOT a pnpm key (verified against pnpm 10.14.0 source);
+# the file previously here used it with unfilled `set this to true or false`
+# placeholders, so pnpm silently ignored the whole block on every install
+# and printed "Ignored build scripts: ..." for every package below. The
+# real key is `onlyBuiltDependencies` (see
+# https://pnpm.io/settings#onlybuiltdependencies) -- an ALLOWLIST: pnpm's
+# default (confirmed in pnpm.cjs, e.g. around the
+# `extendedOpts.onlyBuiltDependencies = []` fallback) is to run NO install
+# scripts for ANY dependency unless it is named here, so anything left off
+# this list simply keeps being ignored-with-a-warning, same as today.
+#
+# `neverBuiltDependencies` also exists, but it is the opposite of what its
+# name suggests: it's a DENYLIST applied on top of "run every script by
+# default", so setting it would flip every other dependency in this large,
+# multi-hundred-package tree to auto-approved. pnpm also hard-errors if
+# both keys are set at once ("Cannot have both neverBuiltDependencies and
+# onlyBuiltDependencies"). onlyBuiltDependencies (opt-in) is the safer
+# choice here and is what's used below.
+#
+# Each entry was decided by checking (a) whether the package is a real
+# prod/dev dependency actually reachable at runtime (`pnpm why <pkg>`) and
+# (b) what its install/preinstall/postinstall script actually does,
+# empirically confirmed with a clean `pnpm install --frozen-lockfile`.
+onlyBuiltDependencies:
+  # Real prod dependency (@prisma/client + prisma peer). postinstall
+  # downloads the query/schema engine binaries; without it Prisma cannot
+  # run at all.
+  - '@prisma/engines'
+  # Real prod dependency, actively used (nodeProfilingIntegration is wired
+  # up in src/utils/error-tracking.ts). Its install step fetches a
+  # prebuilt native profiler binary (detect-libc/node-abi based, same
+  # pattern as node-pre-gyp); with builds ignored it installs as a fully
+  # empty package, i.e. Sentry CPU profiling is currently silently broken.
+  # NOTE: the previous file had this under the stale/wrong package name
+  # `@sentry-internal/node-cpu-profiler`, which doesn't exist anywhere in
+  # this project's dependency graph (grep of pnpm-lock.yaml: zero matches)
+  # -- Sentry renamed it to `@sentry/node-cpu-profiler`. An entry under the
+  # old name is a silent no-op, which is presumably how this went unnoticed.
+  - '@sentry/node-cpu-profiler'
+  # Real direct devDependency. Its "preinstall" is just a guard that exits
+  # non-zero if the repo is installed with npm/yarn instead of pnpm --
+  # inert when pnpm is used, so allowing it is harmless and keeps the
+  # intended check active. (Not in the original list here -- discovered
+  # via a real `pnpm install --frozen-lockfile`, which also reported it as
+  # ignored.)
+  - autoevals
+  # Real devDependency pulled in by the vite/vitest/tsx toolchain. Its
+  # postinstall wires up the platform binary that the JS API resolves at
+  # require time; `pnpm exec vitest run` depends on this working.
+  - esbuild
+  # Real prod dependency (bullmq -> msgpackr -> msgpackr-extract) on the
+  # queue/job path. msgpackr already falls back to a pure-JS string
+  # extractor if the native addon is unavailable (see its node-index.js:
+  # `catch { // native module is optional }`), but prebuilt binaries are
+  # published for every platform this project targets (win32/linux/darwin
+  # x64+arm64), so there is no compile-from-source risk and allowing it
+  # buys back the native-speed path on a latency-sensitive queue.
+  - msgpackr-extract
+
+# Packages from the old (broken) list that were deliberately left OFF the
+# allowlist above -- their scripts keep being ignored (still show up in
+# "Ignored build scripts" on install), which is correct/intended, not an
+# oversight:
+#
+#   - '@playwright/browser-chromium': devDependency only reachable through
+#     promptfoo's own optional provider matrix, used for promptfoo's
+#     browser-automation providers. None of this repo's actual promptfoo
+#     configs (tests/evals/promptfoo/*.yaml) reference a browser provider,
+#     and its postinstall downloads a full Chromium binary -- not worth it
+#     for an unused optional feature.
+#   - '@swc/core': devDependency only reachable through promptfoo, not used
+#     by this repo's promptfoo configs or by `vitest.ci.config.ts` (which
+#     excludes `tests/**` entirely, where the promptfoo evals live). Its
+#     own package directory ships empty without the postinstall step,
+#     confirming it is unused rather than "works anyway".
+#   - bcrypt: real prod dependency (password hashing), but empirically
+#     confirmed unaffected -- `require('bcrypt')` + hash/compare all work
+#     correctly right now even with its install script ignored, because
+#     bcrypt ships prebuildify binaries bundled directly in the npm
+#     tarball for every target platform/libc. `node-gyp-build` (its
+#     install script) does the exact same bundled-prebuild lookup at
+#     require time, so the script adds nothing when a bundled prebuild
+#     already matches.
+#   - better-sqlite3: only present as a peer dependency declared by
+#     prisma/@prisma/client (Prisma's optional sqlite driver adapter). Not
+#     imported anywhere in src/ (only referenced in the generated Prisma
+#     client's own type definitions) -- this project uses Postgres.
+#     Building it would require a native compile (node-gyp) for a driver
+#     adapter nothing instantiates.
+#   - cpu-features: only pulled in as ssh2's optional crypto accelerator,
+#     and ssh2 itself is only a devDependency of testcontainers
+#     (dockerode's SSH-based Docker transport, an edge case this project's
+#     local/CI Docker setup doesn't use). ssh2's own install.js explicitly
+#     treats this as best-effort and exits 0 even when the build fails.
+#   - onnxruntime-node: devDependency only reachable through promptfoo's
+#     optional @huggingface/transformers integration (local embedding
+#     models for promptfoo's `similar` assertion type), which none of this
+#     repo's promptfoo configs use. Its postinstall would fetch a large
+#     ONNX runtime binary for no exercised code path.
+#   - prisma: real direct prod dependency (the Prisma CLI), but its
+#     preinstall (prisma/preinstall/index.js) only prints a Node-version
+#     compatibility warning -- it does not fetch or generate anything.
+#     Empirically confirmed: `pnpm exec prisma generate` succeeded in the
+#     project's own postinstall hook in the same install run where this
+#     script was ignored. The engine binaries that actually matter come
+#     from `@prisma/engines` above.
+#   - protobufjs: real prod dependency (@google-cloud/secret-manager ->
+#     google-gax -> @grpc/proto-loader -> protobufjs), but its postinstall
+#     (scripts/postinstall.js) only prints an advisory "use this version
+#     range" warning about protobufjs's own versioning scheme -- pure JS
+#     module, no native/generated artifacts depend on it. Empirically
+#     confirmed working (`new protobuf.Root()`) without running it.
+#   - ssh2: devDependency only, only reachable through testcontainers (same
+#     SSH-based Docker transport edge case as cpu-features above). Its
+#     install.js only attempts to build the *optional* native crypto
+#     binding and explicitly exits 0 even on failure -- never blocks ssh2
+#     itself.
+#
+# Also dropped entirely (not build-script-gated at all, so a decision here
+# would be a no-op either way -- confirmed absent from a real
+# `pnpm install --frozen-lockfile`'s "Ignored build scripts" warning):
+#   - '@sentry-internal/node-cpu-profiler': stale/wrong package name, does
+#     not exist anywhere in this project's dependency graph (see
+#     '@sentry/node-cpu-profiler' above for the correct name).
+#   - promptfoo: has no install/preinstall/postinstall script at all.
+#   - sharp: modern sharp (0.35.x) ships prebuilt binaries as per-platform
+#     optionalDependencies and has no lifecycle script either.

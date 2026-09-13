@@ -35,8 +35,46 @@ import type {
   ImageVariationResponse,
 } from '@/types/model-client';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { resolveReasoningEffort, type ReasoningEffort } from '@/utils/reasoning-effort';
+import { deriveSessionKey } from '@/services/session-affinity-service';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 
 const log = logger.child({ provider: 'xai-adapter' });
+
+/**
+ * xAI's Grok API only accepts the `reasoning_effort` request parameter for
+ * the Grok 3 Mini reasoning family (`grok-3-mini`, `grok-3-mini-fast`, and
+ * any dated/suffixed variant of them) — per xAI's reasoning guide
+ * (https://docs.x.ai/docs/guides/reasoning): "grok-3-mini and
+ * grok-3-mini-fast are currently the only models that support the
+ * reasoning_effort parameter." Every other Grok model either always reasons
+ * internally with no user-tunable knob (grok-4 and later) or doesn't reason
+ * at all, and REJECTS the field outright with an API error if it is sent —
+ * so this must gate, not just translate.
+ *
+ * Name-pattern detection (a family regex, not a hardcoded exact-model
+ * allowlist) mirrors this adapter's own `extractTier()` fetcher logic
+ * (xai-model-fetcher.ts), which already infers the "mini/fast" tier from
+ * the same substring — kept in sync automatically as xAI ships new dated
+ * snapshots of the same mini family.
+ */
+function xaiModelSupportsReasoningEffort(modelId: string | undefined): boolean {
+  if (!modelId) return false;
+  return /grok-3-mini/i.test(modelId);
+}
+
+/**
+ * Translate the canonical 3-tier `reasoning_effort` (low/medium/high — see
+ * utils/reasoning-effort.ts) onto xAI's real 2-tier wire enum, which is only
+ * `'low' | 'high'` (grok-3-mini has no `medium`). `medium` rounds UP to
+ * `high`: xAI's own docs reserve `low` for "simple problems", so an
+ * explicit non-minimal reasoning request is better served erring toward
+ * more reasoning budget than silently truncating the caller's intent down
+ * to xAI's most restrictive tier.
+ */
+function toXaiReasoningEffort(effort: ReasoningEffort): 'low' | 'high' {
+  return effort === 'low' ? 'low' : 'high';
+}
 
 /**
  * XAI (Grok) Provider Adapter
@@ -93,6 +131,65 @@ export class XAIAdapter extends ProviderAdapter {
     };
   }
 
+  /**
+   * Resolve the canonical `reasoning_effort` signal (LOTE AZ resolver) into
+   * the `{ reasoning_effort: 'low' | 'high' }` fragment to spread into an
+   * outgoing xAI request body — empty when the caller expressed no effort,
+   * or when the target model doesn't support the parameter at all (see
+   * `xaiModelSupportsReasoningEffort` above).
+   */
+  private buildReasoningEffortField(request: ChatRequest): { reasoning_effort?: 'low' | 'high' } {
+    if (!xaiModelSupportsReasoningEffort(request.model)) return {};
+    const { effort } = resolveReasoningEffort(request);
+    if (!effort) return {};
+    return { reasoning_effort: toXaiReasoningEffort(effort) };
+  }
+
+  /**
+   * Prompt caching (ADR-025 follow-up, 2026-09): xAI's prompt cache is
+   * automatic server-side, but per xAI's own docs
+   * (docs.x.ai/developers/advanced-api-usage/prompt-caching/how-it-works,
+   * verified live 2026-09-08) the `x-grok-conv-id` HTTP header "routes
+   * requests with the same conversation ID to the same server" on the
+   * standard `/v1/chat/completions` endpoint, maximizing cache hit rate the
+   * same way OpenAI's `prompt_cache_key` body field and Mistral's field of
+   * the same name do for their own APIs. Reuses the SAME derivation session
+   * affinity uses (session-affinity-service.ts) so it stays stable
+   * turn-to-turn independent of whether session affinity itself is enabled.
+   */
+  private buildCacheRoutingHeader(request: ChatRequest): Record<string, string> {
+    return { 'x-grok-conv-id': deriveSessionKey(request) };
+  }
+
+  /**
+   * Surface xAI's own reported cache-hit tokens into ci's provider-cache
+   * observability metric. xAI's OpenAI-compatible usage object nests the
+   * cached count under `prompt_tokens_details.cached_tokens` (same
+   * verified doc as `buildCacheRoutingHeader` above) rather than a flat
+   * `cached_tokens` field — xAI only reports the hit count directly, so the
+   * miss count is derived as `prompt_tokens - cached_tokens`. A no-op when
+   * the field is absent (e.g. an older response shape, or a request too
+   * small/fresh to have hit the cache at all).
+   */
+  private recordCacheUsage(usage: unknown): void {
+    if (!usage || typeof usage !== 'object') return;
+    const usageObj = usage as Record<string, unknown>;
+    const promptTokens =
+      typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : undefined;
+    const details = usageObj.prompt_tokens_details;
+    const cachedTokens =
+      details && typeof details === 'object'
+        ? (details as Record<string, unknown>).cached_tokens
+        : undefined;
+    if (typeof cachedTokens !== 'number') return;
+
+    recordProviderPromptCacheUsage({
+      provider: 'xai',
+      hitTokens: cachedTokens,
+      missTokens: typeof promptTokens === 'number' ? Math.max(0, promptTokens - cachedTokens) : undefined,
+    });
+  }
+
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
     // Route through the resilience stack (bulkhead → breaker → timeout) so an
     // X.AI outage fast-fails and is isolated from other providers.
@@ -102,6 +199,7 @@ export class XAIAdapter extends ProviderAdapter {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
+          ...this.buildCacheRoutingHeader(request),
         },
         body: JSON.stringify({
           model: request.model,
@@ -110,6 +208,14 @@ export class XAIAdapter extends ProviderAdapter {
           max_tokens: request.max_tokens,
           stream: false,
           tools: request.tools,
+          // xAI's chat API is byte-identical to OpenAI here: 'auto' | 'none' |
+          // 'required' | {type:'function', function:{name}} — confirmed
+          // against https://docs.x.ai/docs/guides/function-calling. Forwarded
+          // verbatim; `undefined` is dropped by JSON.stringify, preserving
+          // today's behavior when the caller doesn't ask for tool-choice
+          // control.
+          tool_choice: request.tool_choice,
+          ...this.buildReasoningEffortField(request),
         }),
       });
 
@@ -122,7 +228,9 @@ export class XAIAdapter extends ProviderAdapter {
         throw new Error(`XAI API error: ${JSON.stringify(error)}`);
       }
 
-      return (await response.json()) as ChatResponse;
+      const parsed = (await response.json()) as ChatResponse;
+      this.recordCacheUsage(parsed.usage);
+      return parsed;
     }, 'chat completion');
   }
 
@@ -135,6 +243,7 @@ export class XAIAdapter extends ProviderAdapter {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
+          ...this.buildCacheRoutingHeader(_request),
         },
         body: JSON.stringify({
           model: _request.model,
@@ -143,6 +252,9 @@ export class XAIAdapter extends ProviderAdapter {
           max_tokens: _request.max_tokens,
           stream: true,
           tools: _request.tools,
+          // See the non-streaming body above for the field's exact shape.
+          tool_choice: _request.tool_choice,
+          ...this.buildReasoningEffortField(_request),
         }),
       });
 
@@ -158,6 +270,16 @@ export class XAIAdapter extends ProviderAdapter {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+
+    // Real xAI (OpenAI-compatible) streaming only sends `id` + `function.name`
+    // on the FIRST delta chunk of a given tool call; every continuation chunk
+    // carries only `{index, function: {arguments: <fragment>}}`. This map
+    // tracks the id/name already seen per `index` so continuation fragments
+    // can be correctly tagged instead of dropped. It is a plain local
+    // variable scoped to this single generator invocation (one per request)
+    // — it is never stored on `this`, so concurrent requests never share or
+    // leak state through it.
+    const toolCallState = new Map<number, { id: string; name: string }>();
 
     try {
       let streamDone = false;
@@ -179,7 +301,7 @@ export class XAIAdapter extends ProviderAdapter {
           if (trimmed.startsWith('data: ')) {
             try {
               const data: unknown = JSON.parse(trimmed.slice(6));
-              yield this.convertStreamChunk(data, _request.model || 'grok-2-latest');
+              yield this.convertStreamChunk(data, _request.model || 'grok-2-latest', toolCallState);
             } catch {
               continue;
             }
@@ -351,10 +473,26 @@ export class XAIAdapter extends ProviderAdapter {
     return modelName;
   }
 
-  private convertStreamChunk(rawChunk: unknown, requestedModel: string): ChatResponse {
+  /**
+   * Convert streaming chunk to our format
+   *
+   * @param toolCallState Per-stream accumulator (see the call site in
+   * `chatCompletionStream`) tracking the `id`/`function.name` already seen
+   * for each in-progress tool call `index`. Real xAI (OpenAI-compatible)
+   * streaming sends those only on the first delta chunk of a tool call;
+   * every continuation chunk carries just `{index, function: {arguments:
+   * <fragment>}}`. Without this, continuation-only fragments have no
+   * `id`/`name` to satisfy the (non-optional) `ToolCall` shape and were
+   * previously dropped outright, silently truncating/corrupting
+   * multi-fragment tool-call arguments.
+   */
+  private convertStreamChunk(
+    rawChunk: unknown,
+    requestedModel: string,
+    toolCallState?: Map<number, { id: string; name: string }>
+  ): ChatResponse {
     // SSE chunk arrives as untrusted JSON. Narrow once at the entry point;
-    // the function body still uses optional chaining and the existing
-    // `isToolCallShape` guard for deeper levels.
+    // the function body still uses optional chaining for deeper levels.
     const chunk: {
       id?: string;
       created?: number;
@@ -388,25 +526,12 @@ export class XAIAdapter extends ProviderAdapter {
       return null;
     }
 
-    const isToolCallShape = (
-      value: unknown
-    ): value is {
-      id: string;
-      type: 'function';
-      function: { name: string; arguments?: unknown };
-    } => {
-      if (typeof value !== 'object' || value === null) return false;
-      const v = value as { id?: unknown; type?: unknown; function?: unknown };
-      if (typeof v.id !== 'string') return false;
-      if (v.type !== 'function') return false;
-      if (typeof v.function !== 'object' || v.function === null) return false;
-      const fn = v.function as { name?: unknown };
-      return typeof fn.name === 'string';
-    };
-
     const choices: ChatChoice[] = (chunk.choices || []).map((choice) => {
-      // Type guard for tool_calls — same predicate-style narrow used in
-      // mistral/deepseek adapters.
+      // Handle tool calls with an id/name accumulator: real streaming only
+      // sends id+name on the first chunk of a tool call, so a strict
+      // "id+type+function.name" shape guard would silently drop every
+      // continuation-only fragment. Track identity per wire-protocol
+      // `index` instead of requiring it on every chunk.
       let toolCalls: ToolCall[] | undefined = undefined;
       if (
         choice.delta?.tool_calls !== undefined &&
@@ -414,16 +539,50 @@ export class XAIAdapter extends ProviderAdapter {
         Array.isArray(choice.delta.tool_calls)
       ) {
         const validToolCalls: ToolCall[] = [];
-        for (const tc of choice.delta.tool_calls) {
-          if (!isToolCallShape(tc)) continue;
-          const args = typeof tc.function.arguments === 'string' ? tc.function.arguments : '{}';
+        for (const [position, tcRaw] of choice.delta.tool_calls.entries()) {
+          if (!tcRaw || typeof tcRaw !== 'object') continue;
+          const tc = tcRaw as Record<string, unknown>;
+
+          // The real wire-protocol `index` is what correlates fragments of
+          // the SAME tool call across chunks — array position is only a
+          // fallback for a malformed/legacy payload that omits it.
+          const index = typeof tc.index === 'number' ? tc.index : position;
+
+          const func =
+            tc.function && typeof tc.function === 'object'
+              ? (tc.function as Record<string, unknown>)
+              : undefined;
+          const rawId = typeof tc.id === 'string' ? tc.id : undefined;
+          const rawName = func && typeof func.name === 'string' ? func.name : undefined;
+          const rawArgs = func && typeof func.arguments === 'string' ? func.arguments : undefined;
+
+          // First chunk of a tool call carries id and/or name — remember it
+          // so later continuation chunks (which omit both) can still be
+          // tagged with the right identity.
+          let tracked = toolCallState?.get(index);
+          if (rawId !== undefined || rawName !== undefined) {
+            tracked = {
+              id: rawId ?? tracked?.id ?? '',
+              name: rawName ?? tracked?.name ?? '',
+            };
+            toolCallState?.set(index, tracked);
+          }
+
+          // Nothing usable at all (no tracked identity yet, no fragment) —
+          // this is the only case worth dropping.
+          if (!tracked && rawArgs === undefined) continue;
+
           validToolCalls.push({
-            id: tc.id,
+            id: tracked?.id ?? rawId ?? '',
             type: 'function',
             function: {
-              name: tc.function.name,
-              arguments: args,
+              name: tracked?.name ?? rawName ?? '',
+              // Forward the fragment as-is (NOT the accumulated total) so a
+              // caller doing the standard OpenAI-client-style
+              // `arguments += delta` reconstruction gets the right result.
+              arguments: rawArgs ?? '',
             },
+            index,
           });
         }
         if (validToolCalls.length > 0) {
@@ -453,6 +612,7 @@ export class XAIAdapter extends ProviderAdapter {
         if (!chunk.usage || typeof chunk.usage !== 'object') {
           return undefined;
         }
+        this.recordCacheUsage(chunk.usage);
         const usageObj = chunk.usage as Record<string, unknown>;
         return {
           prompt_tokens: typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : 0,

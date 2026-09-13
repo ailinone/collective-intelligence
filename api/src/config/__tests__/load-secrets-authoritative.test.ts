@@ -186,7 +186,7 @@ describe('loadSecretsIntoEnv — GCP authoritative mode', () => {
 
   it('leaves SENTRY_DSN unset when GCP has no secret and no env value is present (no default, not required)', async () => {
     // Default mock (set in beforeEach) resolves every candidate to undefined,
-    // i.e. no `ailin-sentry-dsn` secret exists in GCP yet. loadSecretsIntoEnv()
+    // i.e. no `<prefix>-sentry-dsn` secret exists in GCP yet. loadSecretsIntoEnv()
     // must not throw (required: false) and must not fabricate a value.
     await loadSecretsIntoEnv();
 

@@ -28,6 +28,7 @@ import type {
 } from '@/types';
 import { MODEL_CAPABILITIES } from '@/types';
 import { toolRegistry } from '@/core/tools/tool-registry';
+import { estimateContextSize as estimateContextSizeShared } from './context-size-estimator.js';
 import type { SelectionCriteria } from '../selection/dynamic-model-selector.js';
 import { triageLearningSystem } from './triage-learning-system.js';
 import { resolveExecutionStrategy } from './strategy-contract';
@@ -117,7 +118,11 @@ augments (does NOT replace) the catalog prompt for the stage.
         "required_capabilities": [<capabilities needed for this stage>],
         "max_tokens": <output budget for this stage>,
         "task_context": "<OPTIONAL: <=400 chars of task-specific context that augments the canonical strategy prompt. Examples: 'Focus on latency-risk tradeoffs in the current event orchestration path.' or 'The user is debugging a failing Postgres migration; surface lock contention as a hypothesis.' DO NOT restate identity, role, capabilities, or collective-intelligence framing — the catalog prompt already covers those. OMIT this field entirely if you have nothing task-specific to add.>",
-        "generation_prompt": "<OPTIONAL: only for stages whose required_capabilities includes image_generation/video_generation/audio_generation/text_to_speech/csv_generation/json_generation/markdown_generation/docx_generation/xlsx_generation/pdf_generation/pptx_generation/zip_generation/code_file_generation/file_generation. The literal, complete, self-contained prompt to send to the generator, MAX 2000 characters — do not depend on conversational context ('the image above'); spell out the visual/audio/file content in full. OMIT for text-only stages.>"
+        "generation_prompt": "<OPTIONAL: only for stages whose required_capabilities includes image_generation/video_generation/audio_generation/text_to_speech/csv_generation/json_generation/markdown_generation/docx_generation/xlsx_generation/pdf_generation/pptx_generation/zip_generation/code_file_generation/file_generation. The literal, complete, self-contained prompt to send to the generator, MAX 2000 characters — do not depend on conversational context ('the image above'); spell out the visual/audio/file content in full. OMIT for text-only stages.>",
+        "duration": "<OPTIONAL, video_generation stages ONLY: clip length in SECONDS as a number. Extract from explicit durations the user stated — '30 seconds' -> 30, 'a 2-minute video' -> 120, '1 minuto e meio' -> 90. OMIT entirely if the user did not state a duration; do not guess a default.>",
+        "resolution": "<OPTIONAL, video_generation stages ONLY: the literal resolution/quality term the user used, e.g. '4K', '1080p', '720p', '1920x1080'. OMIT if unstated.>",
+        "aspect_ratio": "<OPTIONAL, video_generation stages ONLY: the literal aspect ratio, e.g. '16:9' for widescreen/landscape/'paisagem', '9:16' for vertical/portrait/'retrato'/stories/reels, '1:1' for square. OMIT if unstated.>",
+        "audio_requested": "<OPTIONAL, video_generation stages ONLY: true if the user asked for audio/sound/a soundtrack/music alongside the video (e.g. 'with audio', 'com áudio', 'com trilha sonora', 'add a soundtrack'), false if they explicitly asked for silent/no audio. OMIT if the user said nothing about audio — do not default to either value.>"
       }
     ]
   }
@@ -129,7 +134,9 @@ augments (does NOT replace) the catalog prompt for the stage.
 - NEVER fabricate full system prompts. Only emit \`task_context\`, short and task-specific.
 - NEVER put "You are..." or role identity text in \`task_context\`.
 - \`task_context\` is OPTIONAL — omit it unless you have concrete task-specific guidance that the canonical prompt cannot infer.
-- Capabilities must come from the catalog provided
+- Capabilities must come from the "Available capabilities" catalog below —
+  every value you put in any \`required_capabilities\` or
+  \`preferred_capabilities\` array must appear VERBATIM in that list.
 - model_count = sum of all role counts across all stages. Media-generation
   stages (no model_roles) count as 1 each. model_count must ALWAYS be >= 1 —
   even for a plan made only of media-generation stages.
@@ -145,13 +152,49 @@ augments (does NOT replace) the catalog prompt for the stage.
   \`route: "planned_execution"\`.
 - Only set \`recommended_tools\` to names that appear verbatim in the tool
   catalog below, and only when the task genuinely requires them — do not
-  recommend tools speculatively.
+  recommend tools speculatively. The catalog is generated from the live tool
+  registry, so it is exactly the set that can be attached — anything not
+  listed there is silently discarded.
+- \`function_calling\` / \`tool_use\` do NOT behave like the other
+  capabilities. Capabilities such as vision, json_mode, image_generation or
+  speech_to_text are HARD filters: a model that does not declare them is
+  removed from the pool, so requiring one you do not need can empty the
+  pool. Tool support is instead DEFERRED — it is sparsely declared across
+  the catalog, so the selector ranks undeclared models behind declared ones
+  and verifies the real behaviour with a runtime probe at execution time.
+  Therefore:
+    * set \`requires_tools: true\` (and \`recommended_tools\`) to express that
+      the task needs tools — that is the signal the platform acts on;
+    * do NOT add \`function_calling\`/\`tool_use\` to
+      \`required_capabilities\` as a way of "making sure" — it buys no
+      guarantee and only adds noise. Include it only when the task is
+      SPECIFICALLY about tool/function-calling behaviour.
 - When the request mixes output modalities (e.g. "generate an image of X and
   write a caption"), decompose into ONE STAGE PER MODALITY: a stage whose
   required_capabilities is exactly the generation capability for that
   modality (image_generation | video_generation | audio_generation/
   text_to_speech) — it does not need chat model_roles and produces a
   non-text artifact, not prose.
+- INPUT modalities are a SEPARATE axis from output. When the request is
+  about CONSUMING audio the user supplied (transcribe/subtitle this,
+  "what does this recording say", translate this audio, identify who is
+  speaking), require the INPUT-side capability, never the output-side one:
+    * speech_to_text / transcription — turn speech into text (this is the
+      default for "transcribe", "subtitles", "what did they say")
+    * audio_input / listen — the model must merely ACCEPT audio, e.g. for
+      answering questions about a clip
+    * diarization — the answer must attribute segments to speakers
+    * video_transcription / video_to_text — the source is a video file
+    * translation alongside speech_to_text when the output language differs
+      from the spoken one
+  audio_generation / text_to_speech is the OPPOSITE direction (producing
+  speech) — NEVER use it for a transcription/understanding request, and
+  NEVER use speech_to_text for a "read this aloud"/"make a voiceover"
+  request. A live two-way voice conversation is realtime_audio; a
+  voice-in/voice-out transformation with no text step is audio_to_audio.
+- Input-side audio stages are ordinary stages (they DO take model_roles and
+  produce text); only the OUTPUT-side generation capabilities listed above
+  get the dedicated, single-purpose, generation_prompt-bearing treatment.
 - When the request asks for a downloadable FILE (a plain comma-separated
   table → csv_generation; a JSON payload → json_generation; a markdown
   document/report/notes → markdown_generation; a rich Word document with
@@ -189,6 +232,24 @@ augments (does NOT replace) the catalog prompt for the stage.
   for file formats it must fully describe the DATA/CONTENT to include
   (e.g. "a CSV of the 5 planets closest to the sun with columns name,
   distance_km, radius_km"), not just "generate a file".
+- For a video_generation stage, ALSO extract any explicit duration/
+  resolution/aspect-ratio/audio intent into the dedicated \`duration\`/
+  \`resolution\`/\`aspect_ratio\`/\`audio_requested\` fields — do not leave
+  them buried only in \`generation_prompt\` prose where nothing downstream
+  can act on them. Examples:
+    * "Generate a 30-second video of a sunset" -> duration: 30
+    * "um vídeo de 2 minutos" -> duration: 120
+    * "in 4K" / "em 4K" -> resolution: "4K"
+    * "1080p please" -> resolution: "1080p"
+    * "widescreen" / "landscape" / "paisagem" -> aspect_ratio: "16:9"
+    * "vertical video for stories" / "formato retrato" -> aspect_ratio: "9:16"
+    * "with audio" / "com áudio" / "add a soundtrack" / "com trilha sonora"
+      -> audio_requested: true
+    * "no sound" / "silent" / "sem áudio" -> audio_requested: false
+  Only set a field when the user actually said something that maps to it —
+  never fabricate a duration/resolution/aspect-ratio/audio value the user
+  did not express, and never let extracting these replace writing a full
+  \`generation_prompt\` (both are required independently).
 
 ## Available capabilities:
 {{CAPABILITIES}}
@@ -216,6 +277,106 @@ Respond with JSON only. No markdown, no explanation.`;
 
 const FALLBACK_INTENT: TaskType = 'general';
 
+// Multimodal e2e fix (2026-07-13): when the heuristic capability inference
+// (high-precision regex) detected a MEDIA-GENERATION intent, the heuristic
+// plan must contain a dedicated media stage — the engine's media gate
+// (detectMediaGenerationModality on stage.requiredCapabilities) is what
+// routes generation to the CapabilityInvoker for a REAL artifact. Without
+// this, a triage-LLM failure on "generate an image of X" fell into a text
+// strategy whose model pool was capability-filtered down to image models,
+// which then all failed chatCompletion -> [DEGRADED]. File-generation tags
+// (2026-07-14) reuse the exact same single-stage dedicated-plan mechanism as
+// media generation. Hoisted to module scope (2026-09-06, LOTE AS finding
+// #4) so `detectHeuristicMediaIntent` below can share it.
+const MEDIA_GEN_CAPS = [
+  'image_generation',
+  'video_generation',
+  'audio_generation',
+  'text_to_speech',
+  'csv_generation',
+  'json_generation',
+  'markdown_generation',
+  'docx_generation',
+  'xlsx_generation',
+  'pdf_generation',
+  'pptx_generation',
+  'zip_generation',
+  'code_file_generation',
+  'file_generation',
+] as const;
+
+/**
+ * Groups each `MEDIA_GEN_CAPS` tag into its deliverable-artifact MODALITY
+ * (LOTE AT PR4, 2026-09-07 — composite multi-artifact detection). Mirrors
+ * `detectMediaGenerationModalities`'s grouping in orchestration-engine.ts
+ * (IMAGE_GEN_CAPS/VIDEO_GEN_CAPS/AUDIO_GEN_CAPS/FILE_GEN_FORMAT_CAPS) —
+ * duplicated here, NOT imported, because `orchestration-engine.ts` imports
+ * `TriagingService` FROM this file (see the constructor's
+ * `new TriagingService(...)` call), so the reverse import would be
+ * circular. Keep both groupings in sync if a new generation capability tag
+ * is ever added to either file.
+ */
+const MEDIA_GEN_MODALITY_OF: Record<
+  (typeof MEDIA_GEN_CAPS)[number],
+  'image' | 'video' | 'audio' | 'file'
+> = {
+  image_generation: 'image',
+  video_generation: 'video',
+  audio_generation: 'audio',
+  text_to_speech: 'audio',
+  csv_generation: 'file',
+  json_generation: 'file',
+  markdown_generation: 'file',
+  docx_generation: 'file',
+  xlsx_generation: 'file',
+  pdf_generation: 'file',
+  pptx_generation: 'file',
+  zip_generation: 'file',
+  code_file_generation: 'file',
+  file_generation: 'file',
+};
+
+/**
+ * Broad media-intent safety net for the HEURISTIC-FALLBACK path ONLY
+ * (LOTE AS finding #4, 2026-09-06). `capability-inference.ts`'s regexes are
+ * precision-tuned for the PRIMARY path, where a false positive there hijacks
+ * an ordinary chat turn into an unwanted media-generation stage. Here the
+ * calculus inverts: this only runs after a real triage failure (LLM
+ * timeout/429, unparseable output, or no triage-capable model resolved), so
+ * a false NEGATIVE means silently answering an obvious "generate a video"
+ * request with plain chat — no artifact, no visible error, nothing for the
+ * user to act on. A false POSITIVE here just mislabels the fallback (still
+ * tagged via `TriageDecision.reason`/`.source`, so it is observable and
+ * recoverable), which is far cheaper than the false-negative case. This is
+ * deliberately looser than the primary-path regexes: a verb and a noun need
+ * only both appear in the message, not within a bounded window of each other.
+ */
+const HEURISTIC_MEDIA_VERB_RE =
+  /\b(?:generate|create|make|produce|write|build|draw|render|compose|design|gere|gerar|crie|criar|fa[cç]a|fazer|monte|montar|produza|produzir|escreva|escrever|desenhe|desenhar|componha|compor)\b/iu;
+const HEURISTIC_MEDIA_NOUN_MAP: ReadonlyArray<readonly [RegExp, (typeof MEDIA_GEN_CAPS)[number]]> = [
+  [/\b(?:video|v[ií]deo|clip|movie|animation|anima[cç][aã]o|filme)\b/iu, 'video_generation'],
+  [/\b(?:image|imagem|picture|photo|foto|illustration|drawing|desenho|ilustra[cç][aã]o)\b/iu, 'image_generation'],
+  [
+    /\b(?:audio|[aá]udio|music|m[uú]sica|song|sound|voice|voz|speech|narration|narra[cç][aã]o|soundtrack|trilha\s+sonora|podcast)\b/iu,
+    'audio_generation',
+  ],
+  [/\b(?:document|documento|report|relat[oó]rio|pdf|docx?|spreadsheet|planilha)\b/iu, 'file_generation'],
+];
+
+/**
+ * Exported for direct unit testing (same pattern as
+ * `detectMediaGenerationModality` in orchestration-engine.ts). Pure — no
+ * side effects. Requires a verb AND a matching noun; a bare noun ("what is a
+ * video codec") never matches.
+ */
+export function detectHeuristicMediaIntent(text: string): (typeof MEDIA_GEN_CAPS)[number] | undefined {
+  if (!HEURISTIC_MEDIA_VERB_RE.test(text)) return undefined;
+  for (const [nounRe, cap] of HEURISTIC_MEDIA_NOUN_MAP) {
+    if (nounRe.test(text)) return cap;
+  }
+  return undefined;
+}
+
 export class TriagingService {
   private readonly log = logger.child({ component: 'triage-service' });
 
@@ -223,6 +384,33 @@ export class TriagingService {
     private readonly providerRegistry: ProviderRegistry,
     private readonly config: TriagingConfig
   ) {}
+
+  /**
+   * Public wrapper around the triage model/adapter resolution machinery
+   * (`selectTriageModel` + `selectTriageAdapter`), reused by long-context
+   * compaction (`context-compaction-service.ts` via
+   * `orchestration-engine.ts`) to get a fast/cheap model+adapter for
+   * summarizing older conversation turns — the same "cheap classifier"
+   * resolution triage already does, just for a different downstream use.
+   * Never throws; a null return means the caller should fall back to a
+   * non-LLM strategy (compaction's own heuristic truncation).
+   */
+  async resolveCheapModel(
+    request: ChatRequest,
+    context: OrchestrationContext,
+    triageStrategy?: TriageStrategy
+  ): Promise<{ model: { id: string; name: string }; adapter: ProviderAdapter } | null> {
+    try {
+      const model = await this.selectTriageModel(request, context, triageStrategy || 'speed');
+      if (!model) return null;
+      const adapter = await this.selectTriageAdapter(model);
+      if (!adapter) return null;
+      return { model, adapter };
+    } catch (error) {
+      this.log.debug({ error }, 'resolveCheapModel failed');
+      return null;
+    }
+  }
 
   async triage(
     request: ChatRequest,
@@ -1126,14 +1314,16 @@ export class TriagingService {
   }
 
   /**
-   * Estimate context size for triage model selection
+   * Estimate context size (in tokens) for triage model selection.
+   *
+   * This used to be an independently-broken copy that returned a raw
+   * CHARACTER count and called it a token estimate (never divided by 4,
+   * unlike every other copy in the codebase) — see
+   * context-size-estimator.ts's doc comment for the full audit. Delegates to
+   * the shared estimator, which also counts `request.tools`.
    */
   private estimateContextSize(request: ChatRequest): number {
-    return request.messages.reduce((size, message) => {
-      const content =
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-      return size + content.length;
-    }, 0);
+    return estimateContextSizeShared(request);
   }
 
   /**
@@ -1348,6 +1538,7 @@ export class TriagingService {
       confidence: payload.confidence,
       reason: payload.reason,
       estimatedTokens: payload.estimated_tokens,
+      source: 'llm',
     };
 
     if (payload.execution_plan) {
@@ -1428,6 +1619,26 @@ export class TriagingService {
       });
     }
 
+    // Observability-only (LOTE AS finding #2/#3, 2026-09-06): the system
+    // prompt tells the triage LLM to ALWAYS set `generation_prompt` for a
+    // generation stage. This never rejects the parse (that would discard an
+    // otherwise-correct decision over one missing string — see
+    // `deriveGenerationPromptFallback` in orchestration-engine.ts for the
+    // actual fallback chain) — it only counts how often the LLM violates its
+    // own rule so the prompt can be tuned with real data.
+    if (
+      !raw.generation_prompt?.trim() &&
+      raw.required_capabilities.some((c) => (MEDIA_GEN_CAPS as readonly string[]).includes(c))
+    ) {
+      incrementPromptMetric(PROMPT_METRIC_NAMES.TRIAGE_GENERATION_PROMPT_MISSING, {
+        capabilities: raw.required_capabilities.join(','),
+      });
+      this.log.warn(
+        { stageName: raw.name, requiredCapabilities: raw.required_capabilities },
+        'Triage LLM omitted generation_prompt for a generation stage despite the "ALWAYS set generation_prompt" system-prompt rule — falling back to task_context/accumulated context/original user message.'
+      );
+    }
+
     return {
       name: raw.name,
       strategy,
@@ -1438,6 +1649,10 @@ export class TriagingService {
       promptSlots: raw.prompt_slots,
       augmentation: raw.augmentation,
       generationPrompt: raw.generation_prompt,
+      duration: raw.duration,
+      resolution: raw.resolution,
+      aspectRatio: raw.aspect_ratio,
+      audioRequested: raw.audio_requested,
     };
   }
 
@@ -1542,24 +1757,57 @@ export class TriagingService {
     // dedicated-plan mechanism as media generation — the engine's
     // detectMediaGenerationModality() already treats them as generation
     // stages, so heuristic fallback only needs to detect + include the tag.
-    const MEDIA_GEN_CAPS = [
-      'image_generation',
-      'video_generation',
-      'audio_generation',
-      'text_to_speech',
-      'csv_generation',
-      'json_generation',
-      'markdown_generation',
-      'docx_generation',
-      'xlsx_generation',
-      'pdf_generation',
-      'pptx_generation',
-      'zip_generation',
-      'code_file_generation',
-      'file_generation',
-    ] as const;
+    //
+    // LOTE AS finding #4 (2026-09-06): the PRIMARY signal is still
+    // `context.capabilityInference`, populated unconditionally in
+    // `buildContext()` BEFORE triage ever runs, so it's always available
+    // here. But its regexes are precision-tuned for the primary path (a
+    // false positive there hijacks an ordinary chat turn), so real phrasings
+    // still slip through as false negatives on the primary signal. When that
+    // happens, fall back to the looser `detectHeuristicMediaIntent` net —
+    // see its doc comment for why the precision/recall tradeoff inverts here.
     const inferredCaps = context.capabilityInference?.requiredCapabilities ?? [];
-    const mediaCap = MEDIA_GEN_CAPS.find((c) => (inferredCaps as readonly string[]).includes(c));
+    // LOTE AT PR4 (2026-09-07) — composite multi-artifact detection: collect
+    // EVERY matched media-generation capability, not just the first. The old
+    // `.find()` alone silently collapsed a request needing BOTH
+    // image_generation AND video_generation down to whichever modality
+    // happens to sort first in MEDIA_GEN_CAPS (image) — `inferredCaps` comes
+    // from `capability-inference.ts`'s `Set<RequiredCapability>`, which
+    // independently tests image/video/audio/file regexes against the SAME
+    // text and can genuinely hold 2+ of them at once. Grouping by MODALITY
+    // (not raw capability tag) via `MEDIA_GEN_MODALITY_OF` is what lets a
+    // request matching both `audio_generation` and `text_to_speech` (same
+    // modality) still resolve to exactly ONE audio stage, not two redundant
+    // ones — and `Map` preserves insertion order, so stage order stays
+    // deterministic (image > video > audio > file, same precedence the old
+    // single-value `.find()` used).
+    const inferredMediaCapsAll = MEDIA_GEN_CAPS.filter((c) =>
+      (inferredCaps as readonly string[]).includes(c)
+    );
+    const inferredModalityCaps = new Map<
+      'image' | 'video' | 'audio' | 'file',
+      (typeof MEDIA_GEN_CAPS)[number]
+    >();
+    for (const cap of inferredMediaCapsAll) {
+      const modality = MEDIA_GEN_MODALITY_OF[cap];
+      if (!inferredModalityCaps.has(modality)) inferredModalityCaps.set(modality, cap);
+    }
+    const isCompositeMedia = inferredModalityCaps.size >= 2;
+    // Preserves the exact prior single-value precedence (first match in
+    // MEDIA_GEN_CAPS array order) for every NON-composite caller below.
+    const inferredMediaCap = inferredMediaCapsAll[0] as (typeof MEDIA_GEN_CAPS)[number] | undefined;
+    const broadMediaCap = inferredMediaCap ? undefined : detectHeuristicMediaIntent(content);
+    const mediaCap = inferredMediaCap ?? broadMediaCap;
+
+    incrementPromptMetric(PROMPT_METRIC_NAMES.TRIAGE_HEURISTIC_FALLBACK, {
+      mediaDetected: String(Boolean(mediaCap) || isCompositeMedia),
+      composite: isCompositeMedia,
+    });
+    if (broadMediaCap) {
+      incrementPromptMetric(PROMPT_METRIC_NAMES.TRIAGE_HEURISTIC_MEDIA_SAFETY_NET, {
+        capability: broadMediaCap,
+      });
+    }
 
     const executionPlan: TriageExecutionPlan = {
       maxTokens: request.max_tokens ?? (complexity === 'high' ? 16384 : 4096),
@@ -1578,36 +1826,54 @@ export class TriagingService {
       // running 2-3x ("realtime feedback loop exhausted iterations"). Bound refinement rounds by
       // complexity so simple requests run exactly once (0 rounds), medium 1, high 2.
       maxDeliberationRounds: complexity === 'high' ? 2 : complexity === 'medium' ? 1 : 0,
-      stages: mediaCap
-        ? [
-            {
-              // Dedicated media-generation stage (see MEDIA_GEN_CAPS note
-              // above) — single-purpose per the triage prompt's own rule, with
-              // the raw user content as the self-contained generation prompt.
-              name: `${mediaCap.replace('_generation', '').replace('text_to_speech', 'audio')}_generation`,
-              strategy: 'single',
-              modelRoles: [],
-              requiredCapabilities: [mediaCap],
-              maxTokens: 1024,
-              generationPrompt: content.slice(0, 2000),
-            },
-          ]
-        : [
-            {
-              name: 'main',
-              strategy: recommendedStrategy ?? 'single',
-              modelRoles: [
-                {
-                  role: 'primary' as ModelRole,
-                  count: 1,
-                  preferredCapabilities: [],
-                  qualityTarget: heuristicQualityTarget,
-                },
-              ],
-              requiredCapabilities: [],
-              maxTokens: request.max_tokens ?? (complexity === 'high' ? 16384 : 4096),
-            },
-          ],
+      stages: isCompositeMedia
+        ? // Composite plan (LOTE AT PR4): one dedicated, independent stage per
+          // DISTINCT modality detected — same self-contained-generationPrompt
+          // shape as the single-modality stage below, just one per modality.
+          // `OrchestrationEngine.isCompositeMediaPlan()` + `compositeMediaModalities`
+          // below is what routes this through the parallel composite pipeline
+          // instead of the sequential multi-stage loop.
+          Array.from(inferredModalityCaps.entries()).map(([modality, cap]) => ({
+            name: `${modality}_generation`,
+            strategy: 'single' as const,
+            modelRoles: [],
+            requiredCapabilities: [cap],
+            maxTokens: 1024,
+            generationPrompt: content.slice(0, 2000),
+          }))
+        : mediaCap
+          ? [
+              {
+                // Dedicated media-generation stage (see MEDIA_GEN_CAPS note
+                // above) — single-purpose per the triage prompt's own rule, with
+                // the raw user content as the self-contained generation prompt.
+                name: `${mediaCap.replace('_generation', '').replace('text_to_speech', 'audio')}_generation`,
+                strategy: 'single',
+                modelRoles: [],
+                requiredCapabilities: [mediaCap],
+                maxTokens: 1024,
+                generationPrompt: content.slice(0, 2000),
+              },
+            ]
+          : [
+              {
+                name: 'main',
+                strategy: recommendedStrategy ?? 'single',
+                modelRoles: [
+                  {
+                    role: 'primary' as ModelRole,
+                    count: 1,
+                    preferredCapabilities: [],
+                    qualityTarget: heuristicQualityTarget,
+                  },
+                ],
+                requiredCapabilities: [],
+                maxTokens: request.max_tokens ?? (complexity === 'high' ? 16384 : 4096),
+              },
+            ],
+      ...(isCompositeMedia
+        ? { compositeMediaModalities: Array.from(inferredModalityCaps.keys()) }
+        : {}),
     };
 
     const decision: TriageDecision = {
@@ -1618,12 +1884,23 @@ export class TriagingService {
       requiresTools,
       // Media-generation detection is high-precision regex (IMAGE_GEN_DIRECT
       // etc.) — confidence 0.6 so the engine's MIN_TRIAGE_CONFIDENCE gate
-      // (0.4) does not discard the media plan; generic heuristic routing
-      // stays low-confidence (0.3) as before.
-      confidence: mediaCap ? 0.6 : 0.3,
-      reason: mediaCap
-        ? `Heuristic triage fallback (media generation detected: ${mediaCap})`
-        : 'Heuristic triage fallback',
+      // (0.4) does not discard the media plan; the broad safety-net match is
+      // slightly lower (0.5) to reflect its deliberately looser precision;
+      // generic heuristic routing stays low-confidence (0.3) as before.
+      // Composite (2+ modalities) reuses the same high-precision-regex 0.6
+      // confidence as a single modality — same source signal, just not
+      // collapsed to the first match.
+      confidence: isCompositeMedia ? 0.6 : broadMediaCap ? 0.5 : mediaCap ? 0.6 : 0.3,
+      reason: isCompositeMedia
+        ? `Heuristic triage fallback (composite media generation detected: ${Array.from(inferredModalityCaps.keys()).join('+')})`
+        : broadMediaCap
+          ? `Heuristic media-intent fallback (broad safety net: ${broadMediaCap})`
+          : mediaCap
+            ? `Heuristic triage fallback (media generation detected: ${mediaCap})`
+            : 'Heuristic triage fallback',
+      // Explicit marker so downstream code/observability never has to parse
+      // `reason` text to tell a heuristic decision from a confident LLM one.
+      source: 'heuristic',
       // Heuristic triage makes no LLM call — zero billable cost.
       costUsd: 0,
       executionPlan,

@@ -43,7 +43,25 @@ export type InferredTaskType =
 /** Complexity buckets. */
 export type ComplexityLevel = 'simple' | 'moderate' | 'complex' | 'expert';
 
-/** Capability flags that may be required to serve a request well. */
+/**
+ * Capability flags that may be required to serve a request well.
+ *
+ * Overlap with `ModelCapability` (api/src/types/index.ts) — read before
+ * adding a member (LOTE AO, 2026-09-05):
+ *   - The ten `*_generation` file members below USED to exist only here,
+ *     while `TRIAGE_SYSTEM_PROMPT` required the triage LLM to emit them
+ *     "from the capability catalog provided" — a catalog rendered from
+ *     `MODEL_CAPABILITIES`, which did not contain them. They are now
+ *     first-class `ModelCapability` values (and `ONTOLOGY_SEED` slugs), so
+ *     the two lists agree; the guard is
+ *     `core/capabilities/__tests__/triage-prompt-capability-consistency.test.ts`.
+ *   - The remaining locally-defined members (`groundedness`,
+ *     `safety_critical`, `code_execution`, `math_reasoning`) are INFERENCE
+ *     signals, not catalog tags: nothing declares them on a model, so they
+ *     stay here. `math_reasoning` and `multilingual` do resolve in the
+ *     runtime `capabilityOntology` (as `math` / `multilingual`), which has
+ *     ontology-only ids for exactly this class of routing concept.
+ */
 export type RequiredCapability =
   | 'tool_use'
   | 'long_context'
@@ -532,17 +550,129 @@ const CODE_FILE_GEN_KEYWORDS = new RegExp(
     `\\b(?:baixar|download)\\b.{0,15}\\bcomo\\s+(?:um\\s+)?(?:arquivo|script)\\s*${CODE_FILE_NOUN}`,
   'iu'
 );
+// Standalone (non-adjacency-bound) test for "does the text mention an
+// unambiguous programming language name anywhere" — reused below to gate
+// EXPLICIT_FILE_DOWNLOAD_INTENT_RE so that signal alone can never fire
+// without an independent language mention somewhere in the message.
+//
+// Deliberately NOT built from CODE_FILE_NOUN/CODE_LANGUAGE_NAMES above:
+// that shared fragment has no TRAILING boundary on its language-name
+// branch (only a leading `\b`), which every existing caller gets away with
+// because they additionally require CODE_FILE_NOUN to sit immediately next
+// to "file"/"script" or "arquivo"/"script" — real text essentially never
+// has an unrelated word starting with a short language alias directly
+// adjacent to one of those nouns. This new gate is checked ANYWHERE in the
+// message with no such adjacency constraint, which exposed the missing
+// boundary as a real bug on execution: the single-letter aliases "c" and
+// "r" (C/R) matched as a bare PREFIX of any word starting with those
+// letters — "Crie" (create), "com" (with), "relatório" (report) all
+// "matched" a programming language mention, which would have made this
+// gate fire on nearly any Portuguese sentence. Also skips the extension
+// branch entirely (".py", ".c", ...) for the same reason: it has the
+// identical missing-trailing-boundary defect, and its literal-dot
+// requirement is otherwise satisfied by ordinary domain names — ".com"
+// matches the bare "c" extension alternative. Fixed here by using a
+// curated list of FULL, unambiguous language names only (no bare
+// single/double-letter aliases, no "go" — a common English word on its
+// own), each anchored with a real trailing boundary via a negative
+// lookahead (`(?![\w])`, not `\b` — `\b` never asserts after a
+// symbol-ending token like "c++"/"c#" when followed by whitespace, since
+// both sides would be non-word characters).
+const UNAMBIGUOUS_LANGUAGE_NAMES =
+  'python|javascript|typescript|kotlin|swift|golang|rust|c\\+\\+|csharp|c#|ruby|php|' +
+  'shell|bash|powershell|yaml|perl|lua|scala|haskell|elixir|erlang|clojure|dart|graphql|' +
+  'java|html|css|sql|xml';
+const CODE_LANGUAGE_MENTION_RE = new RegExp(`\\b(?:${UNAMBIGUOUS_LANGUAGE_NAMES})(?![\\w])`, 'iu');
+// Production gap fix (2026-09-08): CODE_FILE_GEN_KEYWORDS above requires the
+// language token and the download-intent phrase to sit within a short
+// (~20-25 char) window of each other. Real phrasing routinely separates them
+// with an intervening clause describing what the code DOES — confirmed
+// production miss: "Escreva um script Python que calcula Fibonacci e gere o
+// arquivo para download" never matched anything, because ~40 chars of
+// "que calcula Fibonacci e gere" sit between "Python" and "para download".
+// This is the same strong download-intent vocabulary the adjacency-bound
+// patterns above already require (downloadable / baixável / para baixar /
+// "arquivo|script ... para download") — just NOT anchored to the language
+// token's position — combined at the call site with CODE_LANGUAGE_MENTION_RE
+// so it can only fire when the message ALSO independently mentions a
+// recognized language somewhere (never on a plain "generate a downloadable
+// file" with no code context — that stays FILE_GEN_GENERIC_KEYWORDS's
+// territory). Deliberately does NOT include a bare "download...a file"
+// alternative (the exact bare-verb pattern the comment above already
+// documents as false-positiving on "how do I download a python script from
+// github"-style troubleshooting questions).
+const EXPLICIT_FILE_DOWNLOAD_INTENT_RE =
+  /\b(?:arquivo|script)\b.{0,20}\b(?:baixável|baixavel|para\s+(?:baixar|download))\b|\bdownloadable\b|\b(?:file|script)\b.{0,20}\bto\s+download\b/iu;
 // Generic "a file" fallback — deliberately narrower (indefinite article
 // required) than the format-specific patterns above to limit false
 // positives on unrelated uses of the word "file". pt-BR mirrors the same
-// "downloadable"-equivalent strength requirement (baixável/para baixar),
-// not a bare "arquivo" mention.
+// "downloadable"-equivalent strength requirement (baixável/para baixar/para
+// download — the last an anglicism confirmed in production alongside the
+// definite article "o arquivo", not only the indefinite "um arquivo" the
+// pattern originally required), not a bare "arquivo" mention.
 const FILE_GEN_GENERIC_KEYWORDS = new RegExp(
   `\\b(?:generate|create|make|produce|export|download)\\s+.{0,15}\\ba\\s+(?:downloadable\\s+)?file\\b` +
     `|` +
-    `\\b(?:gere|crie|monte|produza|exporte)\\s+.{0,15}\\bum\\s+arquivo\\s+(?:baixável|para\\s+baixar)\\b`,
+    `\\b(?:gere|crie|monte|produza|exporte)\\s+.{0,15}\\b(?:um|o|a)\\s+arquivo\\s+(?:baixável|baixavel|para\\s+(?:baixar|download))\\b`,
   'i'
 );
+
+// A precise "please actually RUN this code and give me the real output"
+// detector — deliberately NOT the same signal as CODING_KEYWORDS/
+// CODING_PHRASES above (those fire on the vast majority of ordinary coding
+// questions — "debug my python function", "what does this SQL do" — for
+// MODEL-SELECTION purposes, where the broad match is harmless because it
+// resolves to the well-populated `code_generation` catalog tag). This one is
+// used ONLY to decide whether to inject an honesty directive telling the
+// model it does NOT have a live, connected sandbox — so it stays narrow on
+// purpose, mirroring the generation-verb + target-noun window shape used by
+// IMAGE_GEN_KEYWORDS/VIDEO_GEN_KEYWORDS/etc. above, EN + pt-BR.
+//
+// Real production incident (2026-09): a chat request — "Execute este codigo
+// Python em sandbox e me mostre o resultado real: print(sum(range(1, 101)))"
+// — got a single-letter "y" as its entire response. No code-execution
+// pipeline is wired into the plain chat path (confirmed: `CodeSandbox` only
+// exposes `testFunction(lang, code, functionName, tests)` — a HumanEval-style
+// harness requiring a named function, used by the internal benchmark suite
+// and the standalone `/v1/code/execute` REST route — nothing offers a
+// callable "run this arbitrary snippet and return stdout" tool to a chat
+// model). With no real tool to call, a model that was primed to believe it
+// has one (see `execution-system-prompt.ts`'s capability-awareness section,
+// which lists `tool_use`/`function_calling` whenever the request merely
+// contains an execute-shaped verb) has nothing honest to do — the fix is NOT
+// to fake sandboxing, but to tell the model plainly that it must reason the
+// answer out itself and say so, never emit a bare fragment.
+const CODE_EXECUTION_VERB_RE =
+  /\b(execute|executar|execu[çc][ãa]o|run|rode|rodar|compile\s*(?:and|e)\s*run|compilar\s+e\s+rodar)\b/iu;
+// Verb + target-noun in a SHORT bounded window (12 chars — tighter than the
+// 20-30 char window IMAGE_GEN_KEYWORDS/VIDEO_GEN_KEYWORDS above use):
+// "run"/"execute"/etc. are common enough standalone words ("run the
+// onboarding program next quarter") that a wide gap reintroduces false
+// positives a media-generation verb (rarely used outside its generation
+// sense) doesn't have to worry about. Every real execution-intent phrasing
+// this function targets puts the noun immediately after the verb ("execute
+// this code", "rode esse código") — confirmed by the reproduced incident
+// text and its natural paraphrases in the test suite.
+const CODE_EXECUTION_VERB_NOUN_RE = new RegExp(
+  CODE_EXECUTION_VERB_RE.source +
+    String.raw`\s*.{0,12}?\b(?:this|that|the|esse|essa|este|esta|o|a)?\s*` +
+    String.raw`(?:code|c[óo]digo|script|sandbox|snippet|program|programa)\b`,
+  'iu'
+);
+
+/**
+ * True when `text` shows genuine "run this and show me the real result"
+ * intent, as opposed to an ordinary coding question. Used by
+ * `execution-system-prompt.ts` to inject an honesty directive — NOT fed into
+ * `requiredCapabilities`/model selection (see the doc comment above for why
+ * that stays on the broader, already-safe `code_generation` signal instead).
+ */
+export function detectCodeExecutionIntent(text: string): boolean {
+  if (CODE_EXECUTION_VERB_NOUN_RE.test(text)) return true;
+  // Bare execute-verb + a fenced code block with no explicit target noun
+  // nearby — e.g. "Execute:\n```python\nprint(1)\n```".
+  return CODE_EXECUTION_VERB_RE.test(text) && CODE_BLOCK_RE.test(text);
+}
 
 // ---------------------------------------------------------------------------
 // Core inference
@@ -700,7 +830,11 @@ export function inferCapabilities(
     capabilities.add('json_generation');
   } else if (MARKDOWN_GEN_KEYWORDS.test(allUserText)) {
     capabilities.add('markdown_generation');
-  } else if (CODE_FILE_GEN_KEYWORDS.test(allUserText)) {
+  } else if (
+    CODE_FILE_GEN_KEYWORDS.test(allUserText) ||
+    (CODE_LANGUAGE_MENTION_RE.test(allUserText) &&
+      EXPLICIT_FILE_DOWNLOAD_INTENT_RE.test(allUserText))
+  ) {
     capabilities.add('code_file_generation');
   } else if (FILE_GEN_GENERIC_KEYWORDS.test(allUserText)) {
     capabilities.add('file_generation');

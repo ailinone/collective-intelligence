@@ -79,6 +79,24 @@ describe('V0Adapter — getModels (no bulk /models)', () => {
       globalThis.fetch = original;
     }
   });
+
+  // 2026-09-09 capability-mismatch fix: v0's documented POST /chats schema
+  // (https://v0.app/docs/api/platform/reference/chats/create) has no
+  // tools/tool_choice/functions field on any model — attachedSkillIds/
+  // skills (pre-registered skills.sh/memory/project skills, max 3) and
+  // mcpServerIds (pre-registered MCP servers v0 may consult autonomously)
+  // are not a substitute for caller-supplied JSON-schema function-calling,
+  // and chatCompletion/buildV0Message never read request.tools/tool_choice
+  // (see the "tools/tool_choice (no wire equivalent)" describe block
+  // below). No pinned model may claim `tool_use`.
+  it('never declares tool_use on any pinned model — v0 has no tools/tool_choice wire equivalent', async () => {
+    const adapter = makeAdapter();
+    const models = await adapter.getModels();
+    expect(models.length).toBeGreaterThan(0);
+    for (const model of models) {
+      expect(model.capabilities).not.toContain('tool_use');
+    }
+  });
 });
 
 describe('V0Adapter — chatCompletion request shape', () => {
@@ -262,6 +280,139 @@ describe('V0Adapter — chatCompletion response mapping', () => {
           messages: [{ role: 'user', content: 'hi' }],
         })
       ).rejects.toThrow(/unexpected latestVersion.status 'pending'/);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('V0Adapter — tools/tool_choice (no wire equivalent on this surface)', () => {
+  // v0's documented POST /chats body has no OpenAI-style `tools`/`tool_choice`
+  // field (only `attachedSkillIds`/`mcpServerIds`, which are not a mapping
+  // target for arbitrary caller-supplied function schemas). These tests
+  // guard the concrete, testable contract: neither field ever leaks into the
+  // outgoing body, for both chatCompletion and chatCompletionStream (which
+  // delegates to chatCompletion), regardless of what tool_choice value is
+  // requested.
+  const TOOLS = [
+    {
+      type: 'function' as const,
+      function: {
+        name: 'get_weather',
+        description: 'Get current weather',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  ];
+
+  it('chatCompletion never forwards tools or tool_choice to POST /chats (tool_choice: auto)', async () => {
+    const restore = stubFetch({
+      id: 'chat-tools-auto',
+      messages: [{ role: 'assistant', content: 'ok' }],
+      latestVersion: { status: 'completed', files: [] },
+    });
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'v0-auto',
+        messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        tools: TOOLS,
+        tool_choice: 'auto',
+      });
+      const body = JSON.parse(String(calls[0].init.body));
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+      expect(Object.keys(body).sort()).toEqual(['message', 'modelConfiguration', 'responseMode']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('chatCompletion never forwards tools or tool_choice to POST /chats (tool_choice: none)', async () => {
+    const restore = stubFetch({
+      id: 'chat-tools-none',
+      messages: [{ role: 'assistant', content: 'ok' }],
+      latestVersion: { status: 'completed', files: [] },
+    });
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'v0-auto',
+        messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        tools: TOOLS,
+        tool_choice: 'none',
+      });
+      const body = JSON.parse(String(calls[0].init.body));
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('chatCompletion never forwards tools or a forced {type:function} tool_choice to POST /chats', async () => {
+    const restore = stubFetch({
+      id: 'chat-tools-forced',
+      messages: [{ role: 'assistant', content: 'ok' }],
+      latestVersion: { status: 'completed', files: [] },
+    });
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'v0-auto',
+        messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        tools: TOOLS,
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+      });
+      const body = JSON.parse(String(calls[0].init.body));
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('chatCompletionStream (delegates to chatCompletion) also never forwards tools or tool_choice', async () => {
+    const restore = stubFetch({
+      id: 'chat-tools-stream',
+      messages: [{ role: 'assistant', content: 'ok' }],
+      latestVersion: { status: 'completed', files: [] },
+    });
+    try {
+      const adapter = makeAdapter();
+      const chunks: unknown[] = [];
+      for await (const chunk of adapter.chatCompletionStream({
+        model: 'v0-auto',
+        messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        tools: TOOLS,
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+      })) {
+        chunks.push(chunk);
+      }
+      expect(chunks).toHaveLength(1);
+      const body = JSON.parse(String(calls[0].init.body));
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not throw when tools/tool_choice are present — the request still completes normally', async () => {
+    const restore = stubFetch({
+      id: 'chat-tools-noop',
+      messages: [{ role: 'assistant', content: 'Paris is sunny.' }],
+      latestVersion: { status: 'completed', files: [] },
+    });
+    try {
+      const adapter = makeAdapter();
+      const res = await adapter.chatCompletion({
+        model: 'v0-auto',
+        messages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        tools: TOOLS,
+        tool_choice: 'required' as never, // not part of the internal union, but must not crash
+      });
+      expect(res.choices[0].message?.content).toBe('Paris is sunny.');
     } finally {
       restore();
     }

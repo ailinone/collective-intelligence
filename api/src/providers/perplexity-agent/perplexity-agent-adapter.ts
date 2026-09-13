@@ -50,6 +50,57 @@
  * with a JSON-string `arguments` and a `call_id`. This adapter converts
  * both directions to/from the OpenAI shapes the rest of ci speaks.
  *
+ * Streaming tool-call deltas (2026-09-08 fix): prior to this fix, a
+ * streaming request with `tools` delivered every tool call WHOLE, only in
+ * the terminal `response.completed` event — identical to what a
+ * non-streaming call returns, just wrapped in a chunk envelope. Verified
+ * against https://docs.perplexity.ai/api-reference/agent-post and
+ * https://docs.perplexity.ai/guides/streaming (fetched 2026-09-08): this
+ * surface documents `response.output_item.added` (a `function_call` output
+ * item STARTS) and `response.output_item.done` (it COMPLETES), each
+ * carrying the `item` object, but — unlike OpenAI's own Responses API,
+ * which this surface otherwise mirrors — there is no documented
+ * `response.function_call_arguments.delta` event or any other mechanism to
+ * fragment a call's `arguments` string across multiple events. Given that,
+ * this adapter now streams a tool call's `id`/`name` announcement as soon
+ * as `response.output_item.added` fires (arguments: '' — Perplexity's own
+ * `added` payload isn't documented to carry a complete `arguments` string
+ * yet), and its complete `arguments` in one fragment as soon as
+ * `response.output_item.done` fires — both strictly earlier than waiting
+ * for `response.completed`, which is the only real incrementality this API
+ * supports for tool calls. This is not a fabricated partial-JSON delta: a
+ * client doing the standard `arguments += delta` reconstruction still ends
+ * up with the exact right string, since there is exactly one non-empty
+ * fragment.
+ *
+ * `tool_choice` (2026-09-08 fix): the full `ResponsesRequest` schema at
+ * https://docs.perplexity.ai/api-reference/agent-post enumerates every
+ * accepted top-level field — input, background, instructions,
+ * language_preference, max_output_tokens, max_steps, model, models, preset,
+ * profile, previous_response_id, reasoning, response_format, store, stream,
+ * tools, skills, temperature, top_p — and there is NO `tool_choice` field.
+ * This surface has no native way to force/forbid tool use, unlike Chat
+ * Completions. Previously this adapter ignored `request.tool_choice`
+ * entirely, so a caller asking for `'none'` (stop calling tools, answer now)
+ * still got the full `tools` array forwarded and the model could keep
+ * calling them — a real behavioral gap for any agentic loop that relies on
+ * `tool_choice: 'none'` to force a final answer. Two of the three internal
+ * `tool_choice` values (see `types/index.ts`) have a faithful client-side
+ * equivalent even without wire support and are now honored in
+ * `buildAgentPayload`:
+ *   - `'none'`   → omit `tools` from the payload outright (a model with zero
+ *                  tools available cannot call one — functionally identical
+ *                  to the OpenAI semantics of `tool_choice: 'none'`).
+ *   - forced `{type:'function',function:{name}}` → narrow the outgoing
+ *                  `tools` array to just that one tool, so if the model does
+ *                  call a tool it can only be the requested one. This is a
+ *                  best-effort emulation (the model can still choose to
+ *                  answer without calling it — there is no way to make the
+ *                  call mandatory on this surface), logged as such so a
+ *                  caller relying on a hard-forced call can see why it
+ *                  didn't happen.
+ *   - `'auto'` / undefined → unchanged, forwards `tools` as-is.
+ *
  * Docs: https://docs.perplexity.ai/docs/agent-api/models
  */
 
@@ -99,6 +150,8 @@ interface PerplexityAgentStreamEvent {
   type?: string;
   delta?: string;
   response?: PerplexityAgentResponse;
+  /** Present on `response.output_item.added` / `response.output_item.done`. */
+  item?: PerplexityAgentOutputItem;
 }
 
 export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
@@ -141,6 +194,14 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
     let streamId = 'perplexity-agent-stream';
     let created = Math.floor(Date.now() / 1000);
     let sawTerminal = false;
+
+    // Streamed tool calls (see the class doc comment's "Streaming tool-call
+    // deltas" section): keyed by the item's `call_id` (falling back to `id`)
+    // so `response.output_item.added` and the matching `.done` for the same
+    // call agree on the same dense, zero-based `ToolCall.index` an
+    // OpenAI-compatible client keys concurrent tool-call accumulation on.
+    const toolCallIndexByKey = new Map<string, number>();
+    let nextToolCallIndex = 0;
 
     try {
       while (true) {
@@ -195,6 +256,83 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
             continue;
           }
 
+          if (event.type === 'response.output_item.added' && event.item?.type === 'function_call') {
+            const item = event.item;
+            const name = item.name;
+            const key = item.call_id || item.id;
+            if (typeof name === 'string' && key) {
+              const toolCallIndex = nextToolCallIndex++;
+              toolCallIndexByKey.set(key, toolCallIndex);
+              yield {
+                id: streamId,
+                object: 'chat.completion.chunk',
+                created,
+                model: normalizedModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: 'assistant',
+                      tool_calls: [
+                        {
+                          id: key,
+                          type: 'function',
+                          function: { name, arguments: '' },
+                          index: toolCallIndex,
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              };
+            }
+            continue;
+          }
+
+          if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+            const item = event.item;
+            const name = item.name;
+            const key = item.call_id || item.id;
+            if (typeof name === 'string' && key) {
+              // Falls back to registering here (rather than dropping the
+              // call) if `added` was missed/reordered — defensive, since the
+              // documented ordering (`added` before `done`) isn't a
+              // guarantee this parser needs to hard-depend on to be correct.
+              const toolCallIndex = toolCallIndexByKey.get(key) ?? nextToolCallIndex++;
+              toolCallIndexByKey.set(key, toolCallIndex);
+              yield {
+                id: streamId,
+                object: 'chat.completion.chunk',
+                created,
+                model: normalizedModel,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          id: key,
+                          type: 'function',
+                          // Complete arguments in one fragment — see the
+                          // class doc comment for why Perplexity's Agent API
+                          // has no finer-grained argument delta to forward.
+                          function: {
+                            name,
+                            arguments: typeof item.arguments === 'string' ? item.arguments : '{}',
+                          },
+                          index: toolCallIndex,
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              };
+            }
+            continue;
+          }
+
           if (event.type === 'response.completed' && event.response) {
             // NOTE: no `data: [DONE]` follows — this IS the terminal event.
             sawTerminal = true;
@@ -204,14 +342,11 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
               object: 'chat.completion.chunk',
               choices: final.choices.map((choice): ChatChoice => ({
                 index: choice.index,
-                // Terminal chunk carries no repeated text (deltas already
-                // streamed it) — just the finish_reason, plus tool_calls
-                // when the model invoked a tool.
-                delta: {
-                  role: 'assistant',
-                  content: '',
-                  ...(choice.message?.tool_calls ? { tool_calls: choice.message.tool_calls } : {}),
-                },
+                // Terminal chunk carries no repeated text or tool_calls —
+                // both already streamed incrementally above (text via
+                // response.output_text.delta, tool calls via
+                // response.output_item.added/.done) — just the finish_reason.
+                delta: { role: 'assistant', content: '' },
                 finish_reason: choice.finish_reason,
               })),
             };
@@ -238,8 +373,49 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
       })),
       max_output_tokens: request.max_tokens ?? 1024,
       ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
-      ...(request.tools?.length ? { tools: request.tools.map(toFlatResponsesTool) } : {}),
+      ...this.buildToolsField(request),
     };
+  }
+
+  /**
+   * Map `request.tool_choice` onto the ResponsesRequest `tools` field — the
+   * only tool-related field this API accepts (no `tool_choice` exists on
+   * this surface; see the class doc comment). Returns `{}` when there is
+   * nothing to send.
+   */
+  private buildToolsField(request: ChatRequest): { tools?: Record<string, unknown>[] } {
+    const tools = request.tools;
+    if (!tools?.length) {
+      return {};
+    }
+
+    const choice = request.tool_choice;
+
+    if (choice === 'none') {
+      // No wire-level tool_choice to set — the equivalent effect is sending
+      // no tools at all, so the model has nothing to call.
+      return {};
+    }
+
+    if (choice && typeof choice === 'object' && choice.type === 'function') {
+      const forcedName = choice.function.name;
+      const narrowed = tools.filter((tool) => tool.function.name === forcedName);
+      if (narrowed.length === 0) {
+        this.providerLog.warn(
+          { forcedName },
+          'perplexity-agent: tool_choice named a function not present in tools[] — forwarding the full tool list since there is nothing to narrow to'
+        );
+        return { tools: tools.map(toFlatResponsesTool) };
+      }
+      this.providerLog.warn(
+        { forcedName },
+        "perplexity-agent: ResponsesRequest has no tool_choice field, so a forced function call can't be guaranteed — narrowing tools[] to only the requested function as a best-effort emulation"
+      );
+      return { tools: narrowed.map(toFlatResponsesTool) };
+    }
+
+    // 'auto' or undefined — default behavior, forward every declared tool.
+    return { tools: tools.map(toFlatResponsesTool) };
   }
 
   private extractText(content: string | MessageContent[]): string {
@@ -273,6 +449,7 @@ export class PerplexityAgentAdapter extends OpenAICompatibleHubAdapter {
           name: item.name as string,
           arguments: typeof item.arguments === 'string' ? item.arguments : '{}',
         },
+        index,
       }));
 
     const finishReason: ChatChoice['finish_reason'] =

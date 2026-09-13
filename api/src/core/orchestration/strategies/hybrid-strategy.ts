@@ -26,6 +26,7 @@ import type {
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { assembleExecutors, resolvePreferredExecutor } from './preferred-model-helper';
+import { rankByCalibratedQuality } from './quality-ranking';
 
 /**
  * Type guard for TextContent
@@ -347,11 +348,31 @@ export class HybridStrategy extends BaseStrategy {
       );
     }
 
-    const executors = assembleExecutors(
-      preference,
-      2,
-      (a, b) => b.performance.quality - a.performance.quality
-    );
+    // Rank the executor candidates on a scale where a measurement and an
+    // unmeasured discovery prior are actually comparable. The previous
+    // comparator subtracted one raw catalog quality figure from the other
+    // and so could not tell the two apart: with the whole pool carrying
+    // the discovery constant every difference was 0 and the "quality sort"
+    // silently degraded to catalog order, while in a mixed pool the
+    // optimistic prior outranked models that had actually been measured.
+    // See quality-ranking.ts for the full rule.
+    const ranking = rankByCalibratedQuality(preference.fallbackPool);
+
+    if (!ranking.informative) {
+      // Nothing in the pool carries a measurement, so this pick is
+      // deterministic but is NOT a quality judgement. Say so rather than
+      // let the strategy log imply the executors were earned on merit.
+      this.log.debug(
+        {
+          requestId: context.requestId,
+          candidates: preference.fallbackPool.length,
+          priorCount: ranking.priorCount,
+        },
+        'Hybrid strategy: no candidate carries a measured quality — executor order is deterministic, not merit-ranked'
+      );
+    }
+
+    const executors = assembleExecutors(preference, 2, ranking.comparator);
 
     if (executors.length === 0) {
       return [];

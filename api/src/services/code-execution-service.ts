@@ -111,8 +111,10 @@ export class CodeExecutionService {
         );
       }
 
-      // Try to find models with code_interpreter capability for advanced execution
-      const models = await this.modelRepo.searchModels({
+      // Try to find models with code_interpreter capability for advanced execution.
+      // Complete enumeration: searchModels would report only the 100 most
+      // recently discovered rows, which made this count meaningless.
+      const models = await this.modelRepo.searchModelsComplete({
         capabilities: ['code_interpreter'],
         status: 'active',
       });

@@ -508,26 +508,41 @@ async function seedDefaultTenant(): Promise<void> {
     }
 
     for (const quota of quotaDefinitions) {
-      await tx.usageQuota.upsert({
+      // `organizationId_period_periodStart` stopped being a Prisma-declared
+      // compound unique key when `usage_quotas` gained a nullable `userId`
+      // column for per-user scope (cross-repo quota-scoping hardening,
+      // Phase 3, PR #582) — see the `UsageQuota` doc comment in
+      // schema.prisma. These are org-wide seed rows (`userId: null`), so
+      // find-then-write against that explicit filter instead of `.upsert()`.
+      const existingQuota = await tx.usageQuota.findFirst({
         where: {
-          organizationId_period_periodStart: {
-            organizationId: TEST_TENANT_ORGANIZATION_ID,
-            period: quota.period,
-            periodStart: quota.periodStart,
-          },
-        },
-        update: {
-          periodEnd: quota.periodEnd,
-          requestLimit: quota.requestLimit,
-        },
-        create: {
           organizationId: TEST_TENANT_ORGANIZATION_ID,
+          userId: null,
           period: quota.period,
           periodStart: quota.periodStart,
-          periodEnd: quota.periodEnd,
-          requestLimit: quota.requestLimit,
         },
       });
+
+      if (existingQuota) {
+        await tx.usageQuota.update({
+          where: { id: existingQuota.id },
+          data: {
+            periodEnd: quota.periodEnd,
+            requestLimit: quota.requestLimit,
+          },
+        });
+      } else {
+        await tx.usageQuota.create({
+          data: {
+            organizationId: TEST_TENANT_ORGANIZATION_ID,
+            userId: null,
+            period: quota.period,
+            periodStart: quota.periodStart,
+            periodEnd: quota.periodEnd,
+            requestLimit: quota.requestLimit,
+          },
+        });
+      }
     }
   });
 }

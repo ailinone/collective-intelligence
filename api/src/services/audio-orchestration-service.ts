@@ -85,10 +85,30 @@ export interface STTOptions {
   responseFormat?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt';
   temperature?: number;
   timestampGranularities?: ('word' | 'segment')[];
+  /**
+   * Request NATIVE speaker diarization. This is a HARD constraint, not a
+   * preference: when set, only candidates whose adapter declares
+   * `getDiarizationSupport().native === true` are considered, and the call
+   * fails closed if none exist. Transcribing with a non-diarizing provider
+   * would return an unlabelled transcript that a caller could not distinguish
+   * from a diarized one — the exact failure this flag exists to prevent.
+   */
+  diarize?: boolean;
+  /** Speaker-count hint. Forwarded only to providers that accept one. */
+  numSpeakers?: number;
   strategy?: string;
   allowFallback?: boolean;
   userContext: OrchestrationContext;
   requestId: string;
+}
+
+/** One contiguous speaker turn, as reported by the provider's own diarizer. */
+export interface SpeakerTurn {
+  speaker: string;
+  start: number;
+  end: number;
+  text: string;
+  confidence?: number;
 }
 
 export interface STTResult {
@@ -109,6 +129,16 @@ export interface STTResult {
   }>;
   srt?: string;
   vtt?: string;
+  /**
+   * Speaker turns from the provider's NATIVE diarizer. Present only when
+   * `STTOptions.diarize` was requested AND the upstream actually returned
+   * labels. An empty array therefore means "diarization ran and found no
+   * labelled turns", while `undefined` means "diarization was not requested".
+   * Neither is ever synthesised locally.
+   */
+  speakers?: SpeakerTurn[];
+  /** True when `speakers` came back non-empty from the provider. */
+  diarized?: boolean;
   modelUsed: string;
   provider: string;
   durationMs: number;
@@ -490,6 +520,8 @@ export class AudioOrchestrationService {
       responseFormat = 'json',
       temperature = 0,
       timestampGranularities,
+      diarize = false,
+      numSpeakers,
       strategy,
       allowFallback = true,
       userContext,
@@ -506,18 +538,40 @@ export class AudioOrchestrationService {
         format: responseFormat,
         strategy: strategyUsed,
         allowFallback,
+        diarize,
       },
       'STT orchestration started'
     );
 
-    const candidates = await this.selectSTTCandidateModels(
+    const allCandidates = await this.selectSTTCandidateModels(
       model,
       language,
       userContext,
       strategyUsed
     );
 
+    // Diarization is a HARD capability gate, not a ranking preference: a
+    // provider without a native diarizer returns a perfectly ordinary
+    // transcript, which the caller would have no way to tell apart from a
+    // diarized one. Fail closed instead.
+    const candidates = diarize
+      ? this.filterModelsByNativeDiarization(allCandidates)
+      : allCandidates;
+
     if (candidates.length === 0) {
+      if (diarize) {
+        const capable = this.listNativeDiarizationProviders();
+        throw new ValidationError(
+          capable.length > 0
+            ? `No configured model offers native speaker diarization for this request. Providers whose adapter declares native diarization: ${capable.join(', ')}. Ensure one of them is configured with a credential and has an active speech_to_text model.`
+            : 'No configured provider offers native speaker diarization. Diarization is not simulated — see docs/adr/ADR-024 and the provider gap register.',
+          {
+            capability: 'diarization',
+            sttCandidatesConsidered: allCandidates.length,
+            nativeDiarizationProviders: capable,
+          }
+        );
+      }
       throw new ValidationError(
         'No STT models available. Ensure at least one provider with speech_to_text capability is configured.',
         { capability: 'speech_to_text' }
@@ -544,7 +598,20 @@ export class AudioOrchestrationService {
           adapter.speechToText(selectedModel, {
             audio: audioBuffer,
             language,
-            options: { prompt, responseFormat, temperature, timestampGranularities },
+            options: {
+              prompt,
+              responseFormat,
+              temperature,
+              timestampGranularities,
+              ...(diarize ? { diarize: true } : {}),
+              // Only forwarded to providers that documented a speaker-count
+              // parameter; adapters that did not declare the hint ignore it.
+              ...(diarize &&
+              numSpeakers !== undefined &&
+              adapter.getDiarizationSupport().acceptsSpeakerCountHint === true
+                ? { numSpeakers }
+                : {}),
+            },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(
@@ -615,6 +682,27 @@ export class AudioOrchestrationService {
         ? (rawWithSegments.words as Array<{ word: string; start: number; end: number }>)
         : undefined;
 
+    // Speaker turns are read back from the adapter's normalised `raw.speakers`
+    // — they are never derived here. If the provider returned none, the field
+    // stays an empty array so the caller can tell "asked and got nothing" from
+    // "never asked" (undefined).
+    const rawWithSpeakers =
+      sttResponse.raw && typeof sttResponse.raw === 'object' && 'speakers' in sttResponse.raw
+        ? (sttResponse.raw as { speakers?: unknown })
+        : null;
+    const speakers = diarize
+      ? Array.isArray(rawWithSpeakers?.speakers)
+        ? (rawWithSpeakers.speakers as SpeakerTurn[])
+        : []
+      : undefined;
+
+    if (diarize && speakers && speakers.length === 0) {
+      log.warn(
+        { requestId, model: selectedModel.name, provider: selectedModel.provider },
+        'Diarization was requested and the provider ran it, but returned no speaker turns'
+      );
+    }
+
     return {
       text: sttResponse.text,
       language: rawWithSegments?.language,
@@ -623,6 +711,8 @@ export class AudioOrchestrationService {
       segments: segmentsArray as STTResult['segments'],
       srt,
       vtt,
+      speakers,
+      diarized: diarize ? (speakers?.length ?? 0) > 0 : undefined,
       modelUsed: selectedModel.name,
       provider: selectedModel.provider,
       durationMs: result.durationMs,
@@ -630,6 +720,37 @@ export class AudioOrchestrationService {
       fallbackUsed: result.fallbackUsed,
       attempts: result.attempts,
     };
+  }
+
+  /**
+   * Keep only candidates whose resolved adapter declares NATIVE diarization.
+   * The declaration lives on the adapter (`getDiarizationSupport()`), never in
+   * a provider-name list here — a new diarizing provider becomes eligible by
+   * overriding that method, with no change to this service.
+   */
+  private filterModelsByNativeDiarization(models: Model[]): Model[] {
+    const registry = this.getRegistry();
+    return models.filter((model) => {
+      const adapter = registry.resolveAdapterForModel(model).adapter;
+      return adapter?.getDiarizationSupport().native === true;
+    });
+  }
+
+  /**
+   * Registered providers whose adapter declares native diarization. Used to
+   * make the fail-closed error actionable instead of a dead end.
+   */
+  private listNativeDiarizationProviders(): string[] {
+    try {
+      const registry = this.getRegistry();
+      return registry
+        .getAll()
+        .filter((adapter) => adapter.getDiarizationSupport().native === true)
+        .map((adapter) => adapter.getName())
+        .sort();
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -817,26 +938,23 @@ export class AudioOrchestrationService {
     }
 
     if (explicitModel) {
-      // Search TTS-capable models with separate queries (OR semantics via Promise.all)
-      const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({
-          capabilities: ['text_to_speech' as ModelCapability],
-          limit: 500,
-        }),
-        this.modelRepo.searchModels({ capabilities: ['tts' as ModelCapability], limit: 200 }),
-        this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
-      ]);
-      const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find(
-        (entry) => entry.name === explicitModel || entry.id === explicitModel
-      );
-      if (!model || !this.hasTTSCapability(model)) {
+      // Direct id/name lookup across the WHOLE catalog. This used to be three
+      // `searchModels` scans (limit 500 / 200 / 10) followed by an in-memory
+      // `.find(name === … || id === …)`: an explicit reference outside those
+      // arbitrary recency windows resolved to nothing and 400'd as "not found",
+      // and the `tags:` query never contributed since the `.find` only matched
+      // id/name anyway. `findModelsByIdOrName` resolves in SQL and returns
+      // EVERY provider row for the id (the same id ships under N providers), so
+      // fallback can cross providers of the same model.
+      const rows = await this.modelRepo.findModelsByIdOrName(explicitModel);
+      const capable = rows.filter((entry) => this.hasTTSCapability(entry));
+      if (capable.length === 0) {
         throw new ValidationError(`Model ${explicitModel} not found or does not support TTS`, {
           modelId: explicitModel,
           capability: 'text_to_speech',
         });
       }
-      const runnable = this.filterModelsByAdapterMethod([model], 'textToSpeech');
+      const runnable = this.filterModelsByAdapterMethod(capable, 'textToSpeech');
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational textToSpeech adapter`,
@@ -850,16 +968,23 @@ export class AudioOrchestrationService {
       return runnable;
     }
 
+    // searchModelsComplete everywhere: `searchModels` applies a silent
+    // `limit || 100` on top of `ORDER BY created_at DESC`, so each of these
+    // pools was really "the 100 most recently discovered rows" — the same
+    // defect measured on the video pool (97 of 494 models, audit 2026-07-17).
+    // The candidate pool must reach the ENTIRE catalog; how deep the fallback
+    // actually goes is governed by the wall-clock deadline downstream, never by
+    // what is allowed in.
     const [ttsModelsPrimary, ttsModelsSecondary, ttsModelsFallback] = await Promise.all([
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['text_to_speech' as ModelCapability],
         status: 'active',
       }),
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['tts' as ModelCapability],
         status: 'active',
       }),
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['audio_generation' as ModelCapability],
         status: 'active',
       }),
@@ -940,25 +1065,18 @@ export class AudioOrchestrationService {
     }
 
     if (explicitModel) {
-      const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({
-          capabilities: ['speech_to_text' as ModelCapability],
-          limit: 500,
-        }),
-        this.modelRepo.searchModels({ capabilities: ['listen' as ModelCapability], limit: 200 }),
-        this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
-      ]);
-      const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find(
-        (entry) => entry.name === explicitModel || entry.id === explicitModel
-      );
-      if (!model || !this.hasSTTCapability(model)) {
+      // See selectTTSCandidateModels: whole-catalog id/name resolution instead
+      // of scanning arbitrary recency windows, and every provider row for the
+      // id so fallback can cross providers.
+      const rows = await this.modelRepo.findModelsByIdOrName(explicitModel);
+      const capable = rows.filter((entry) => this.hasSTTCapability(entry));
+      if (capable.length === 0) {
         throw new ValidationError(`Model ${explicitModel} not found or does not support STT`, {
           modelId: explicitModel,
           capability: 'speech_to_text',
         });
       }
-      const runnable = this.filterModelsByAdapterMethod([model], 'speechToText');
+      const runnable = this.filterModelsByAdapterMethod(capable, 'speechToText');
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational speechToText adapter`,
@@ -972,16 +1090,18 @@ export class AudioOrchestrationService {
       return runnable;
     }
 
+    // searchModelsComplete — see selectTTSCandidateModels for why the plain
+    // searchModels window is unacceptable for a candidate pool.
     const [sttPrimary, sttSecondary, sttTertiary] = await Promise.all([
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['speech_to_text' as ModelCapability],
         status: 'active',
       }),
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['transcription' as ModelCapability],
         status: 'active',
       }),
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['audio_input' as ModelCapability],
         status: 'active',
       }),
@@ -1039,25 +1159,18 @@ export class AudioOrchestrationService {
       | 'dynamic'
   ): Promise<Model[]> {
     if (explicitModel) {
-      const [primary, secondary, byTag] = await Promise.all([
-        this.modelRepo.searchModels({
-          capabilities: ['speech_to_text' as ModelCapability],
-          limit: 500,
-        }),
-        this.modelRepo.searchModels({ capabilities: ['listen' as ModelCapability], limit: 200 }),
-        this.modelRepo.searchModels({ tags: [explicitModel], limit: 10 }),
-      ]);
-      const allModels = [...primary, ...secondary, ...byTag];
-      const model = allModels.find(
-        (entry) => entry.name === explicitModel || entry.id === explicitModel
-      );
-      if (!model || !this.hasSTTCapability(model)) {
+      // See selectTTSCandidateModels: whole-catalog id/name resolution instead
+      // of scanning arbitrary recency windows, and every provider row for the
+      // id so fallback can cross providers.
+      const rows = await this.modelRepo.findModelsByIdOrName(explicitModel);
+      const capable = rows.filter((entry) => this.hasSTTCapability(entry));
+      if (capable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} not found or does not support translation`,
           { modelId: explicitModel, capability: 'audio_translation' }
         );
       }
-      const runnable = this.filterModelsByAdapterMethod([model], 'speechToText');
+      const runnable = this.filterModelsByAdapterMethod(capable, 'speechToText');
       if (runnable.length === 0) {
         throw new ValidationError(
           `Model ${explicitModel} does not expose an operational speechToText adapter`,
@@ -1071,12 +1184,14 @@ export class AudioOrchestrationService {
       return runnable;
     }
 
+    // searchModelsComplete — see selectTTSCandidateModels for why the plain
+    // searchModels window is unacceptable for a candidate pool.
     const [translationPrimary, translationFallback] = await Promise.all([
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['transcription' as ModelCapability],
         status: 'active',
       }),
-      this.modelRepo.searchModels({
+      this.modelRepo.searchModelsComplete({
         capabilities: ['speech_to_text' as ModelCapability],
         status: 'active',
       }),

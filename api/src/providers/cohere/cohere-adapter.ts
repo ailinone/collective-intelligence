@@ -18,6 +18,7 @@ import type {
   ChatResponse,
   EmbeddingRequest,
   EmbeddingResponse,
+  MessageContent,
   Model,
   Provider,
   Usage,
@@ -32,31 +33,49 @@ import type {
 } from '@/types/model-client';
 import { logger } from '@/utils/logger';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 import { TextDecoder } from 'node:util';
 
 const log = logger.child({ provider: 'cohere-adapter' });
 
-interface CohereChatMessage {
-  role: 'SYSTEM' | 'USER' | 'CHATBOT';
-  message: string;
+/** Chat API v2 message shape — `docs.cohere.com/v2/reference/chat`. */
+interface CohereV2Message {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
 }
 
-interface CohereStreamEvent {
-  event: string;
-  text?: string;
-  delta?: string;
-  generation_id?: string;
-  is_finished?: boolean;
-  response?: {
-    id?: string;
-    text?: string;
+/** Chat API v2 usage shape, including the `cached_tokens` field v1 never had. */
+interface CohereV2Usage {
+  billed_units?: { input_tokens?: number; output_tokens?: number };
+  tokens?: { input_tokens?: number; output_tokens?: number };
+  cached_tokens?: number;
+}
+
+interface CohereV2ChatResponse {
+  id?: string;
+  message?: { role?: string; content?: Array<{ type?: string; text?: string }> };
+  finish_reason?: string;
+  usage?: CohereV2Usage;
+}
+
+/**
+ * Chat API v2 SSE event, `POST /v2/chat` with `stream: true`
+ * (`docs.cohere.com/v2/docs/streaming`, verified live 2026-09-09). Every
+ * event is one `data: {...}` line self-describing its own `type` — no
+ * separate `event:` SSE field to track, matching the loop structure this
+ * file already used for v1.
+ */
+interface CohereV2StreamEvent {
+  type?: string;
+  /** Present on `message-start`. */
+  id?: string;
+  delta?: {
+    /** Present on `content-delta`. */
+    message?: { content?: { text?: string } };
+    /** Present on `message-end`. */
     finish_reason?: string;
-    meta?: {
-      tokens?: {
-        input_tokens?: number;
-        output_tokens?: number;
-      };
-    };
+    /** Present on `message-end`. */
+    usage?: CohereV2Usage;
   };
 }
 
@@ -72,6 +91,30 @@ interface CohereStreamEvent {
  * - Command Light: Fast and economical
  * - Excellent embeddings API
  * - Enterprise support and compliance
+ *
+ * ### Chat API v2 migration (ADR-025 follow-up, 2026-09-09)
+ *
+ * Chat completions (`chatCompletion` / `chatCompletionStream`) now target
+ * Cohere's Chat API **v2** (`POST /v2/chat`), not the legacy v1 `/chat`
+ * endpoint this class used before. This is a real, verified gap-closure, not
+ * a style change: v1's response has no cache-related field at all, while v2
+ * documents `usage.cached_tokens` — "the number of prompt tokens that hit
+ * the inference cache" (docs.cohere.com/v2/reference/chat, verified live
+ * 2026-09-09) — with no request-side field to set (automatic, server-side).
+ * There was no way to close this gap without moving off v1.
+ *
+ * v2 also simplifies the wire shape: a single `messages` array (role
+ * `system`/`user`/`assistant`/`tool`) replaces v1's split
+ * `message` + `chat_history`, and the assistant's text lives at
+ * `message.content[].text` instead of a flat `text` field. `finish_reason`
+ * is read from the real documented enum (`COMPLETE`, `STOP_SEQUENCE`,
+ * `MAX_TOKENS`, `TOOL_CALL`, `ERROR`, `TIMEOUT`) rather than the previous
+ * unconditional `'stop'`.
+ *
+ * Embeddings (`generateEmbeddings`) and the API-key health check are
+ * DELIBERATELY left on v1 (`${baseURL}/embed`, `${baseURL}/check-api-key`) —
+ * out of scope for this fix, and v1 has no known deprecation date for those
+ * two endpoints specifically.
  */
 export class CohereAdapter extends ProviderAdapter {
   private readonly baseURL: string;
@@ -81,6 +124,20 @@ export class CohereAdapter extends ProviderAdapter {
     super('cohere', 'Cohere', config);
     this.apiKey = config.apiKey;
     this.baseURL = config.baseUrl || 'https://api.cohere.ai/v1';
+  }
+
+  /**
+   * Chat API v2 lives under `/v2` while everything else in this adapter
+   * (embeddings, health) stays on the `/v1` root already configured via
+   * `baseURL`. Swap a trailing `/v1` for `/v2` when present (the default
+   * configuration); otherwise assume the configured root carries no version
+   * segment and append `/v2` (covers an operator-supplied `baseUrl` pointed
+   * at a bare host or a compatible proxy).
+   */
+  private get chatV2BaseURL(): string {
+    return /\/v1\/?$/.test(this.baseURL)
+      ? this.baseURL.replace(/\/v1\/?$/, '/v2')
+      : `${this.baseURL.replace(/\/+$/, '')}/v2`;
   }
 
   async getModels(): Promise<Model[]> {
@@ -117,7 +174,7 @@ export class CohereAdapter extends ProviderAdapter {
   }
 
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
-    const messages = this.toCohereMessages(request);
+    const messages = this.toCohereV2Messages(request);
 
     // Get default model dynamically from available models (no hardcoding)
     let modelId = request.model;
@@ -140,7 +197,7 @@ export class CohereAdapter extends ProviderAdapter {
     // Route through the resilience stack (bulkhead → breaker → timeout) so a
     // Cohere outage fast-fails and is isolated from other providers.
     return this.executeThroughBulkhead(async () => {
-      const response = await fetch(`${this.baseURL}/chat`, {
+      const response = await fetch(`${this.chatV2BaseURL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,8 +206,7 @@ export class CohereAdapter extends ProviderAdapter {
         signal: AbortSignal.timeout(this.config.timeout ?? 60000),
         body: JSON.stringify({
           model: modelId,
-          message: messages[messages.length - 1]?.message ?? '',
-          chat_history: messages.slice(0, -1),
+          messages,
           temperature: request.temperature,
           max_tokens: request.max_tokens,
           stream: false,
@@ -162,21 +218,14 @@ export class CohereAdapter extends ProviderAdapter {
         throw new Error(`Cohere API error: ${JSON.stringify(error)}`);
       }
 
-      const cohereResponse = (await response.json()) as {
-        generation_id?: string;
-        text: string;
-        meta?: {
-          tokens?: {
-            input_tokens?: number;
-            output_tokens?: number;
-          };
-        };
-        [key: string]: unknown;
-      };
-      const usage = this.toUsage(cohereResponse.meta?.tokens);
+      const cohereResponse = (await response.json()) as CohereV2ChatResponse;
+      const text = (cohereResponse.message?.content ?? [])
+        .filter((block) => block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join('');
 
       return {
-        id: cohereResponse.generation_id || `cohere-${Date.now()}`,
+        id: cohereResponse.id || `cohere-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
         model: modelId,
@@ -185,19 +234,19 @@ export class CohereAdapter extends ProviderAdapter {
             index: 0,
             message: {
               role: 'assistant',
-              content: cohereResponse.text,
+              content: text,
             },
-            finish_reason: 'stop',
+            finish_reason: this.mapFinishReason(cohereResponse.finish_reason),
             logprobs: null,
           },
         ],
-        usage,
+        usage: this.toUsageV2(cohereResponse.usage),
       };
     }, 'chat completion');
   }
 
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
-    const messages = this.toCohereMessages(request);
+    const messages = this.toCohereV2Messages(request);
 
     // Get default model dynamically from available models (no hardcoding)
     let modelId = request.model;
@@ -219,7 +268,7 @@ export class CohereAdapter extends ProviderAdapter {
     // Only connection establishment runs through the resilience stack; the SSE
     // read loop below stays outside the bulkhead slot.
     const response = await this.executeThroughBulkhead(async () => {
-      const res = await fetch(`${this.baseURL}/chat`, {
+      const res = await fetch(`${this.chatV2BaseURL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -228,8 +277,7 @@ export class CohereAdapter extends ProviderAdapter {
         signal: AbortSignal.timeout(this.config.timeout ?? 60000),
         body: JSON.stringify({
           model: modelId,
-          message: messages[messages.length - 1]?.message ?? '',
-          chat_history: messages.slice(0, -1),
+          messages,
           temperature: request.temperature,
           max_tokens: request.max_tokens,
           stream: true,
@@ -253,10 +301,7 @@ export class CohereAdapter extends ProviderAdapter {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let generationId = `cohere-${Date.now()}`;
-    let aggregatedText = '';
-    let finalUsage: Usage | undefined;
-    let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = null;
+    let messageId = `cohere-${Date.now()}`;
 
     let streamDone = false;
     while (!streamDone) {
@@ -287,31 +332,30 @@ export class CohereAdapter extends ProviderAdapter {
         }
 
         const payload = line.slice(5).trim();
-        if (!payload) {
+        if (!payload || payload === '[DONE]') {
           continue;
         }
 
-        let event: CohereStreamEvent;
+        let event: CohereV2StreamEvent;
         try {
-          event = JSON.parse(payload) as CohereStreamEvent;
+          event = JSON.parse(payload) as CohereV2StreamEvent;
         } catch (error) {
           // Skip malformed chunks but continue streaming
           continue;
         }
 
-        if (event.generation_id) {
-          generationId = event.generation_id;
+        if (event.type === 'message-start' && typeof event.id === 'string') {
+          messageId = event.id;
         }
 
-        if (event.event === 'text-generation' || event.event === 'text-generation-delta') {
-          const chunkText = event.text ?? event.delta ?? '';
+        if (event.type === 'content-delta') {
+          const chunkText = event.delta?.message?.content?.text ?? '';
           if (!chunkText) {
             continue;
           }
-          aggregatedText += chunkText;
 
           yield {
-            id: generationId,
+            id: messageId,
             object: 'chat.completion.chunk',
             created: Math.floor(Date.now() / 1000),
             model: modelId,
@@ -329,33 +373,18 @@ export class CohereAdapter extends ProviderAdapter {
           };
         }
 
-        if (event.event === 'stream-end' || event.is_finished) {
-          const responseMeta = event.response;
-          if (responseMeta?.meta?.tokens) {
-            finalUsage = this.toUsage(responseMeta.meta.tokens);
-          }
-
-          if (responseMeta?.finish_reason) {
-            finishReason =
-              responseMeta.finish_reason === 'COMPLETE'
-                ? 'stop'
-                : responseMeta.finish_reason === 'MAX_TOKENS'
-                  ? 'length'
-                  : null;
-          }
+        if (event.type === 'message-end') {
+          const finishReason = this.mapFinishReason(event.delta?.finish_reason);
+          const finalUsage = this.toUsageV2(event.delta?.usage);
 
           yield {
-            id: responseMeta?.id ?? generationId,
+            id: messageId,
             object: 'chat.completion.chunk',
             created: Math.floor(Date.now() / 1000),
             model: modelId,
             choices: [
               {
                 index: 0,
-                message: {
-                  role: 'assistant',
-                  content: responseMeta?.text ?? aggregatedText,
-                },
                 delta: {},
                 finish_reason: finishReason,
                 logprobs: null,
@@ -458,26 +487,95 @@ export class CohereAdapter extends ProviderAdapter {
     return modelName;
   }
 
-  private toCohereMessages(request: ChatRequest): CohereChatMessage[] {
+  private toCohereV2Messages(request: ChatRequest): CohereV2Message[] {
     return request.messages.map((message) => ({
-      role: message.role === 'system' ? 'SYSTEM' : message.role === 'user' ? 'USER' : 'CHATBOT',
-      message:
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+      // v2's role enum has no 'function' — Cohere's own 'tool' role is the
+      // closest equivalent (a tool-result message), same mapping OpenAI's
+      // ecosystem generally uses when normalizing away 'function'.
+      role: message.role === 'function' ? 'tool' : message.role,
+      content: this.extractTextContent(message.content),
     }));
   }
 
-  private toUsage(tokens?: { input_tokens?: number; output_tokens?: number }): Usage | undefined {
-    if (!tokens) {
+  /**
+   * v2's `content` field accepts a plain string OR OpenAI-style content
+   * blocks. This adapter forwards plain text only — matching the prior v1
+   * behavior's scope (image/multimodal content was never wired here either;
+   * v1 fell back to `JSON.stringify`, which is not a real content format
+   * Cohere accepts, so this is a genuine (if narrow) correctness fix, not
+   * just a v2 port).
+   */
+  private extractTextContent(content: string | MessageContent[]): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+    return content
+      .map((part) => (part.type === 'text' ? part.text : ''))
+      .filter((text) => text.length > 0)
+      .join('\n');
+  }
+
+  /**
+   * v2's finish_reason enum (`COMPLETE`, `STOP_SEQUENCE`, `MAX_TOKENS`,
+   * `TOOL_CALL`, `ERROR`, `TIMEOUT` — docs.cohere.com/v2/reference/chat,
+   * verified live 2026-09-09) mapped onto ci's shared finish-reason union.
+   * `ERROR`/`TIMEOUT`/anything undocumented fall back to `'stop'` rather
+   * than `null`, preserving this adapter's prior (v1) behavior of always
+   * reporting a definite reason when the vendor returned one at all.
+   */
+  private mapFinishReason(reason?: string): 'stop' | 'length' | 'tool_calls' | null {
+    if (!reason) return null;
+    if (reason === 'MAX_TOKENS') return 'length';
+    if (reason === 'TOOL_CALL') return 'tool_calls';
+    return 'stop';
+  }
+
+  /**
+   * Cohere v2 usage → ci's `Usage` shape, plus prompt-cache observability
+   * (ADR-025 follow-up, 2026-09-09). `tokens.input_tokens` (the vendor's
+   * "Total input tokens consumed") is preferred over `billed_units
+   * .input_tokens` for the prompt-token count used both here and to derive
+   * the cache miss count, since `billed_units` is already
+   * post-cache-discount billing and would otherwise understate real prompt
+   * size. Falls back to `billed_units` only when `tokens` is absent.
+   */
+  private toUsageV2(usage?: CohereV2Usage): Usage | undefined {
+    if (!usage) {
       return undefined;
     }
 
-    const promptTokens = tokens.input_tokens ?? 0;
-    const completionTokens = tokens.output_tokens ?? 0;
+    const promptTokens = usage.tokens?.input_tokens ?? usage.billed_units?.input_tokens ?? 0;
+    const completionTokens = usage.tokens?.output_tokens ?? usage.billed_units?.output_tokens ?? 0;
+    this.recordCacheUsage(usage, promptTokens);
+
     return {
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
     };
+  }
+
+  /**
+   * Surface Cohere's own reported cache-hit tokens into ci's provider-cache
+   * observability metric. Cohere's Chat API v2 documents `usage
+   * .cached_tokens` as "the number of prompt tokens that hit the inference
+   * cache" (docs.cohere.com/v2/reference/chat, verified live 2026-09-09) —
+   * fully automatic, no request-side field to set, and the ONLY place this
+   * is exposed at all (v1 has no equivalent field, which is why this
+   * adapter had to move to v2 to close this gap). Cohere only reports the
+   * hit count directly, so the miss count is derived as
+   * `promptTokens - cached_tokens`, same pattern as every other
+   * hit-only-reporting provider in this follow-up.
+   */
+  private recordCacheUsage(usage: CohereV2Usage, promptTokens: number): void {
+    if (typeof usage.cached_tokens !== 'number') {
+      return;
+    }
+    recordProviderPromptCacheUsage({
+      provider: 'cohere',
+      hitTokens: usage.cached_tokens,
+      missTokens: Math.max(0, promptTokens - usage.cached_tokens),
+    });
   }
 
   /**

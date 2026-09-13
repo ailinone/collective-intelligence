@@ -11,138 +11,223 @@
  * 01C.1B-P — Shared role-specific pool builder tests.
  *
  * Pins:
- *   - judge pool uses minContextWindow=16000 + sortBy quality
- *   - synthesizer pool uses minContextWindow=32000 + sortBy quality
- *   - participant + fallback use the shared 256-cap pool
- *   - failure of role-specific query falls back silently (no throw)
+ *   - every pool is derived from the FULL catalog (no 100/256/512 recency
+ *     window): 150 eligible rows yield 150 shared candidates
+ *   - judge pool = active chat rows with ctx >= 16k, synthesizer = ctx >= 32k
+ *   - non-active statuses and non-chat rows never enter a pool, even though
+ *     the catalog cache carries them
+ *   - ordering is deterministic regardless of catalog array order
  *   - role candidate stats include sourceUniverseCount per role
+ *   - a catalog read failure is fatal (hard precondition of the planner)
  */
-import { describe, it, expect, vi } from 'vitest';
-import { buildConsensusRoleSpecificCandidatePools } from '../role-specific-candidate-pool-builder';
-import type { ModelRepositoryLike } from '../role-specific-candidate-pool-builder';
+import { describe, it, expect } from 'vitest';
+import {
+  buildConsensusRoleSpecificCandidatePools,
+  JUDGE_MIN_CONTEXT_WINDOW,
+  SYNTHESIZER_MIN_CONTEXT_WINDOW,
+} from '../role-specific-candidate-pool-builder';
+import type { CandidateCatalogSource } from '../role-specific-candidate-pool-builder';
+import type { Model } from '@/types';
 import { makeModel } from './role-resolver.fixtures';
 
-function makeRepo(): ModelRepositoryLike & { calls: Array<unknown> } {
-  const calls: unknown[] = [];
-  return {
-    calls,
-    async searchModels(criteria) {
-      calls.push(criteria);
-      const minCtx = criteria.minContextWindow ?? 0;
-      // Return synthetic models matching the criteria so we can assert
-      // pool composition.
-      const out = [];
-      for (let i = 0; i < (criteria.limit ?? 64); i++) {
-        out.push(
-          makeModel({
-            id: `m-${minCtx}-${i}`,
-            provider: `prov-${i % 5}`,
-            contextWindow: minCtx >= 32_000 ? 64_000 : minCtx >= 16_000 ? 16_000 : 8_000,
-          })
-        );
-      }
-      return out;
-    },
-  };
+const CATALOG_SIZE = 150;
+const CONTEXT_WINDOWS = [8_000, 16_000, 32_000, 128_000] as const;
+
+function makeCatalog(rows: readonly Model[]): CandidateCatalogSource {
+  return { listCatalogModels: async () => rows };
 }
 
+/** 150 active chat rows spread across 5 providers and 4 context sizes,
+ *  with a quality gradient so quality-first ordering is observable. */
+function eligibleRows(): Model[] {
+  return Array.from({ length: CATALOG_SIZE }, (_, i) =>
+    makeModel({
+      id: `m-${String(i).padStart(3, '0')}`,
+      provider: `prov-${i % 5}`,
+      contextWindow: CONTEXT_WINDOWS[i % CONTEXT_WINDOWS.length],
+      performance: {
+        latencyMs: 1000,
+        throughput: 100,
+        quality: (i % 10) / 10,
+        reliability: 0.9,
+      },
+    })
+  );
+}
+
+/** Deterministic Fisher-Yates with a fixed LCG seed. */
+function shuffled<T>(rows: readonly T[], seed = 42): T[] {
+  const out = [...rows];
+  let state = seed;
+  const next = () => {
+    state = (state * 1_664_525 + 1_013_904_223) % 4_294_967_296;
+    return state / 4_294_967_296;
+  };
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+const ids = (pool: readonly Model[] | undefined) => (pool ?? []).map((m) => m.id);
+
 describe('buildConsensusRoleSpecificCandidatePools', () => {
-  it('issues three distinct queries: shared (256), judge (≥16k/512), synthesizer (≥32k/256)', async () => {
-    const repo = makeRepo();
-    const pools = await buildConsensusRoleSpecificCandidatePools({ repo });
-    expect(repo.calls).toHaveLength(3);
-    // shared pool — no minContextWindow
-    expect(repo.calls[0]).toMatchObject({
-      status: 'active',
-      capabilities: ['chat'],
-      limit: 256,
-    });
-    expect((repo.calls[0] as Record<string, unknown>).minContextWindow).toBeUndefined();
-    // judge pool — ≥16k, sortBy quality, limit 512
-    expect(repo.calls[1]).toMatchObject({
-      status: 'active',
-      capabilities: ['chat'],
-      minContextWindow: 16000,
-      sortBy: 'quality',
-      sortOrder: 'desc',
-      limit: 512,
-    });
-    // synthesizer pool — ≥32k, sortBy quality, limit 256
-    expect(repo.calls[2]).toMatchObject({
-      status: 'active',
-      capabilities: ['chat'],
-      minContextWindow: 32000,
-      sortBy: 'quality',
-      sortOrder: 'desc',
-      limit: 256,
-    });
-    expect(pools.sharedPool).toHaveLength(256);
-    expect(pools.judgePool).toHaveLength(512);
-    expect(pools.synthesizerPool).toHaveLength(256);
+  it('derives every pool from the full catalog: 150 eligible rows yield 150 shared candidates', async () => {
+    const rows = eligibleRows();
+    const pools = await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog(rows) });
+
+    expect(pools.sharedPool).toHaveLength(CATALOG_SIZE);
+    expect(pools.sharedPool.length).toBeGreaterThan(100);
     expect(pools.participantPool).toBeUndefined();
     expect(pools.fallbackPool).toBeUndefined();
+
+    const judgeEligible = rows.filter((m) => m.contextWindow >= JUDGE_MIN_CONTEXT_WINDOW);
+    const synthEligible = rows.filter((m) => m.contextWindow >= SYNTHESIZER_MIN_CONTEXT_WINDOW);
+    expect(pools.judgePool).toHaveLength(judgeEligible.length);
+    expect(pools.synthesizerPool).toHaveLength(synthEligible.length);
+    expect(new Set(ids(pools.judgePool))).toEqual(new Set(ids(judgeEligible)));
+    expect(new Set(ids(pools.synthesizerPool))).toEqual(new Set(ids(synthEligible)));
+  });
+
+  it('keeps only status=active rows with the chat capability, even though the catalog carries the rest', async () => {
+    const rows: Model[] = [
+      makeModel({ id: 'active-chat', provider: 'p' }),
+      makeModel({ id: 'deprecated-chat', provider: 'p', status: 'deprecated' }),
+      makeModel({ id: 'maintenance-chat', provider: 'p', status: 'maintenance' }),
+      makeModel({ id: 'disabled-chat', provider: 'p', status: 'disabled' }),
+      makeModel({ id: 'preview-chat', provider: 'p', status: 'preview' }),
+      makeModel({ id: 'legacy-chat', provider: 'p', status: 'legacy' }),
+      makeModel({ id: 'active-embedding', provider: 'p', capabilities: ['embeddings'] }),
+      makeModel({ id: 'active-no-caps', provider: 'p', capabilities: [] }),
+    ];
+    const pools = await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog(rows) });
+
+    expect(ids(pools.sharedPool)).toEqual(['active-chat']);
+    expect(ids(pools.judgePool)).toEqual(['active-chat']);
+    expect(ids(pools.synthesizerPool)).toEqual(['active-chat']);
+  });
+
+  it('orders pools deterministically regardless of catalog array order', async () => {
+    const rows = eligibleRows();
+    const a = await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog(rows) });
+    const b = await buildConsensusRoleSpecificCandidatePools({
+      catalog: makeCatalog(shuffled(rows)),
+    });
+    const c = await buildConsensusRoleSpecificCandidatePools({
+      catalog: makeCatalog(shuffled(rows, 7)),
+    });
+
+    expect(ids(b.sharedPool)).toEqual(ids(a.sharedPool));
+    expect(ids(c.sharedPool)).toEqual(ids(a.sharedPool));
+    expect(ids(b.judgePool)).toEqual(ids(a.judgePool));
+    expect(ids(c.judgePool)).toEqual(ids(a.judgePool));
+    expect(ids(b.synthesizerPool)).toEqual(ids(a.synthesizerPool));
+    expect(ids(c.synthesizerPool)).toEqual(ids(a.synthesizerPool));
+  });
+
+  it('sorts shared by (provider, id) and judge/synthesizer by quality desc then (provider, id)', async () => {
+    const rows = eligibleRows();
+    const pools = await buildConsensusRoleSpecificCandidatePools({
+      catalog: makeCatalog(shuffled(rows)),
+    });
+
+    // Plain code-unit comparison, the same the builder uses (no locale).
+    const cmp = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+    const byProviderThenId = (x: Model, y: Model) => cmp(x.provider, y.provider) || cmp(x.id, y.id);
+    expect(ids(pools.sharedPool)).toEqual(ids([...rows].sort(byProviderThenId)));
+
+    for (const pool of [pools.judgePool!, pools.synthesizerPool!]) {
+      for (let i = 1; i < pool.length; i++) {
+        const prev = pool[i - 1];
+        const cur = pool[i];
+        const qPrev = prev.performance.quality;
+        const qCur = cur.performance.quality;
+        expect(qPrev).toBeGreaterThanOrEqual(qCur);
+        if (qPrev === qCur) {
+          expect(byProviderThenId(prev, cur)).toBeLessThan(0);
+        }
+      }
+    }
   });
 
   it('emits roleCandidateStats with sourceUniverseCount per role', async () => {
-    const repo = makeRepo();
-    const pools = await buildConsensusRoleSpecificCandidatePools({ repo });
-    expect(pools.roleCandidateStats.judge.sourceUniverseCount).toBe(512);
-    expect(pools.roleCandidateStats.judge.source).toBe('role_specific_pool');
-    expect(pools.roleCandidateStats.judge.minContextWindow).toBe(16000);
-    expect(pools.roleCandidateStats.synthesizer.source).toBe('role_specific_pool');
-    expect(pools.roleCandidateStats.synthesizer.minContextWindow).toBe(32000);
-    expect(pools.roleCandidateStats.participant.source).toBe('shared_pool');
-    expect(pools.roleCandidateStats.fallback.source).toBe('shared_pool');
-  });
-
-  it('falls back to shared pool when judge query fails', async () => {
-    let callIdx = 0;
-    const repo: ModelRepositoryLike = {
-      async searchModels(criteria) {
-        callIdx++;
-        if (callIdx === 2) {
-          // The judge query is the 2nd call — fail it
-          throw new Error('simulated DB timeout');
-        }
-        return [makeModel({ id: `m-${callIdx}`, provider: 'p' })];
-      },
-    };
-    const pools = await buildConsensusRoleSpecificCandidatePools({ repo });
-    expect(pools.judgePool).toBeUndefined();
-    expect(pools.roleCandidateStats.judge.source).toBe('shared_pool');
-  });
-
-  it('forwards maxCostPer1kJudge into stats', async () => {
-    const repo = makeRepo();
+    const rows = eligibleRows();
     const pools = await buildConsensusRoleSpecificCandidatePools({
-      repo,
+      catalog: makeCatalog(rows),
       maxCostPer1kJudge: 0.05,
     });
-    expect(pools.roleCandidateStats.judge.maxCostPer1k).toBe(0.05);
-  });
 
-  it('respects custom pool limits', async () => {
-    const repo = makeRepo();
-    await buildConsensusRoleSpecificCandidatePools({
-      repo,
-      sharedPoolLimit: 64,
-      judgePoolLimit: 128,
-      synthesizerPoolLimit: 32,
+    expect(pools.roleCandidateStats.participant).toEqual({
+      sourceUniverseCount: CATALOG_SIZE,
+      source: 'shared_pool',
     });
-    expect((repo.calls[0] as Record<string, unknown>).limit).toBe(64);
-    expect((repo.calls[1] as Record<string, unknown>).limit).toBe(128);
-    expect((repo.calls[2] as Record<string, unknown>).limit).toBe(32);
+    expect(pools.roleCandidateStats.fallback).toEqual({
+      sourceUniverseCount: CATALOG_SIZE,
+      source: 'shared_pool',
+    });
+    expect(pools.roleCandidateStats.judge).toEqual({
+      sourceUniverseCount: pools.judgePool!.length,
+      source: 'role_specific_pool',
+      minContextWindow: JUDGE_MIN_CONTEXT_WINDOW,
+      maxCostPer1k: 0.05,
+    });
+    expect(pools.roleCandidateStats.synthesizer).toEqual({
+      sourceUniverseCount: pools.synthesizerPool!.length,
+      source: 'role_specific_pool',
+      minContextWindow: SYNTHESIZER_MIN_CONTEXT_WINDOW,
+    });
   });
 
-  it('never throws even when ALL queries fail', async () => {
-    const repo: ModelRepositoryLike = {
-      async searchModels() {
+  it('returns empty pools (not a throw) when the catalog has no eligible rows', async () => {
+    const pools = await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog([]) });
+    expect(pools.sharedPool).toEqual([]);
+    expect(pools.judgePool).toEqual([]);
+    expect(pools.synthesizerPool).toEqual([]);
+    expect(pools.roleCandidateStats.participant.sourceUniverseCount).toBe(0);
+  });
+
+  it('propagates a catalog read failure (the catalog is a hard precondition of the planner)', async () => {
+    const catalog: CandidateCatalogSource = {
+      async listCatalogModels() {
         throw new Error('catalog completely down');
       },
     };
-    // Should throw — sharedPool query is not caught (it's a hard
-    // precondition for the rest of the planner). This documents the
-    // contract: shared pool failure is fatal; role-specific failures are not.
-    await expect(buildConsensusRoleSpecificCandidatePools({ repo })).rejects.toThrow();
+    await expect(buildConsensusRoleSpecificCandidatePools({ catalog })).rejects.toThrow(
+      'catalog completely down'
+    );
+  });
+
+  it('does not mutate the catalog rows or the catalog array it was given', async () => {
+    const rows = eligibleRows();
+    const snapshot = JSON.stringify(rows);
+    const order = ids(rows);
+    await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog(rows) });
+    expect(JSON.stringify(rows)).toBe(snapshot);
+    expect(ids(rows)).toEqual(order);
+  });
+
+  it('builds pools over a 110k-row catalog with ~50% eligible rows in bounded time', async () => {
+    const total = 110_000;
+    const rows: Model[] = Array.from({ length: total }, (_, i) =>
+      makeModel({
+        id: `bench-${i}`,
+        provider: `prov-${i % 40}`,
+        capabilities: i % 2 === 0 ? ['chat', 'text_generation'] : ['embeddings'],
+        contextWindow: CONTEXT_WINDOWS[i % CONTEXT_WINDOWS.length],
+        performance: { latencyMs: 1, throughput: 1, quality: (i % 100) / 100, reliability: 1 },
+      })
+    );
+    const started = performance.now();
+    const pools = await buildConsensusRoleSpecificCandidatePools({ catalog: makeCatalog(rows) });
+    const elapsedMs = performance.now() - started;
+
+    expect(pools.sharedPool).toHaveLength(total / 2);
+    // Loose bound: the point is to catch an accidental O(n^2) regression,
+    // not to pin CI hardware timing.
+    expect(elapsedMs).toBeLessThan(5_000);
+    console.info(
+      `[pool-builder bench] ${total} rows -> ${pools.sharedPool.length} shared in ${elapsedMs.toFixed(0)}ms`
+    );
   });
 });

@@ -8,7 +8,7 @@
 // Source: https://github.com/ailinone/collective-intelligence
 
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const executeToolMock = vi.fn();
 
@@ -19,9 +19,15 @@ vi.mock('@/services/jina-tools-service', () => ({
 }));
 
 // Bypass JWT auth so the route handler under test is reachable without a token.
+// requirePlatformAdmin is included alongside requireRole because tools-routes.ts
+// (SECURITY, platform-admin-vs-tenant-admin, 2026-09-08) now gates this surface
+// with requirePlatformAdmin() instead of requireRole('admin','owner') — without
+// it here, registerToolsRoutes() throws at boot ("no requirePlatformAdmin export
+// is defined on the mock") since this mock replaces the whole module.
 vi.mock('@/middleware/auth-middleware', () => ({
   authenticate: vi.fn().mockResolvedValue(undefined),
   requireRole: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
+  requirePlatformAdmin: vi.fn().mockReturnValue(vi.fn().mockResolvedValue(undefined)),
   optionalAuth: vi.fn().mockResolvedValue(undefined),
   requireOrganization: vi.fn(),
 }));
@@ -29,15 +35,26 @@ vi.mock('@/middleware/auth-middleware', () => ({
 describe('Jina tool routes', () => {
   let server: FastifyInstance;
 
-  beforeEach(async () => {
-    executeToolMock.mockReset();
+  // Route registration is built once for the whole suite, not per test.
+  // tools-routes.ts registers the ENTIRE tools surface (~4800 lines / many
+  // routes), which is slow enough that re-registering it in a beforeEach
+  // intermittently exceeded the 10s hookTimeout under full-suite parallel
+  // load (GAP-AP-7) even though it consistently completes in well under a
+  // second in isolation. The routes are stateless (no per-test server state
+  // is asserted anywhere in this file); only the mock needs resetting
+  // between tests, which stays in beforeEach.
+  beforeAll(async () => {
     server = Fastify();
     const { registerToolsRoutes } = await import('@/routes/tools/tools-routes');
     await registerToolsRoutes(server);
     await server.ready();
   });
 
-  afterEach(async () => {
+  beforeEach(() => {
+    executeToolMock.mockReset();
+  });
+
+  afterAll(async () => {
     await server.close();
   });
 

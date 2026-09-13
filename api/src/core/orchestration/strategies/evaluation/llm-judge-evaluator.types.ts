@@ -12,6 +12,7 @@
  * factory, future real client) can import the contracts without pulling
  * in the implementation.
  */
+import type { ReasoningEffort } from '@/types';
 
 export interface LLMJudgeEvaluatorConfig {
   /** Master switch. When false, the evaluator returns `unavailable`
@@ -64,6 +65,14 @@ export interface LLMJudgeInput {
   readonly role?: 'voter' | 'synthesis';
   readonly maxCostUsd: number;
   readonly timeoutMs: number;
+  /** LOTE AZ (2026-09) — the original request's resolved reasoning-effort
+   *  signal, forwarded from `EvaluatorInput.originalRequestReasoning` so the
+   *  concrete client (`ProviderLLMJudgeClient`) can carry it onto the judge's
+   *  own `ChatRequest` instead of silently dropping it. */
+  readonly originalRequestReasoning?: {
+    readonly effort?: ReasoningEffort;
+    readonly thinkingBudget?: number;
+  };
 }
 
 /**

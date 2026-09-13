@@ -116,7 +116,13 @@ export class ModerationsOrchestrationService {
     // Pre-rank by moderation-specific signal (language coverage, category
     // count, cost, latency). The primitive's tier ordering is order-stable,
     // so this preference becomes the within-tier tiebreaker.
-    const moderationModels = await this.modelRepo.searchModels({
+    // searchModelsComplete: `searchModels` caps at `limit || 100` with
+    // `ORDER BY created_at DESC`, which silently reduced the moderation pool to
+    // the 100 most recently discovered rows — and it is also the pool an
+    // explicit `model` is matched against, so any older moderation model was
+    // unreachable by name. Pool breadth is free here; `maxCandidates` below
+    // still bounds how many are actually invoked.
+    const moderationModels = await this.modelRepo.searchModelsComplete({
       capabilities: ['moderation' as ModelCapability, 'safety' as ModelCapability],
       status: 'active',
     });

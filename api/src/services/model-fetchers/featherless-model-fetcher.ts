@@ -41,10 +41,6 @@ const FEATHERLESS_USER_AGENT = 'ailin-ci-discovery/1.0 (+https://ailin.one)';
 const PER_PAGE = 1000;
 const DEFAULT_CONTEXT_WINDOW = 8192;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
-// Hard stop even if the API's own total_pages is somehow wrong/missing —
-// 43,591 models / 1000 per page is ~44; 100 pages (100k models) is a
-// generous ceiling that still bounds worst-case request count.
-const MAX_PAGES = 100;
 
 interface FeatherlessPricing {
   input?: number;
@@ -74,15 +70,37 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
   protected providerName = 'featherless-ai';
   private readonly apiKey: string;
   private readonly requestTimeoutMs: number;
+  private readonly maxPages: number;
   private readonly log = logger.child({ component: 'featherless-ai-fetcher' });
 
   constructor(
     apiKey: string,
-    requestTimeoutMs = Number(process.env.FEATHERLESS_DISCOVERY_TIMEOUT_MS || '15000')
+    requestTimeoutMs = Number(process.env.FEATHERLESS_DISCOVERY_TIMEOUT_MS || '15000'),
+    // Hard stop even if the API's own total_pages is somehow wrong/missing.
+    // Confirmed live against production (read-only COUNT(*) against the database,
+    // 2026-09-08): provider_id='featherless-ai' currently holds 22,150 rows.
+    // The ceiling used to default to 100 pages (100k models) — an arbitrary
+    // round-number stop with no documented safety margin (unlike, say, a
+    // number derived from an observed catalog size + buffer), and already
+    // BELOW the 150k-200k platform-wide scale target this file's own
+    // discovery output feeds into. Same failure shape as the HF Hub fetcher's
+    // fixed 60k cap and the Bytez fetcher's fixed 100k cap: a fixed ceiling
+    // silently truncates the tail once the real catalog outgrows it, and
+    // pagination-based discovery here would keep re-walking the same first N
+    // pages forever, never reaching whatever sits past the cutoff. Raised to
+    // 500 pages (500k models) — the same safety-valve order of magnitude
+    // already used for HF_HUB_DISCOVERY_MAX_MODELS/BYTEZ_DISCOVERY_MAX_MODELS
+    // — at zero runtime cost: the loop below still exits as soon as the API's
+    // own `total_pages` is exhausted, so a real ~22k-row catalog still stops
+    // after ~23 requests. Still env-overridable so raising it further never
+    // requires a code change, and a warn-level log below makes it loud if a
+    // run ever actually reaches it.
+    maxPages = Number(process.env.FEATHERLESS_DISCOVERY_MAX_PAGES || '500')
   ) {
     super();
     this.apiKey = apiKey;
     this.requestTimeoutMs = requestTimeoutMs;
+    this.maxPages = maxPages;
   }
 
   async getModels(): Promise<ProviderModel[]> {
@@ -98,7 +116,7 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
     let totalPages = 1;
     let pagesFetched = 0;
 
-    for (let page = 1; page <= totalPages && page <= MAX_PAGES; page++) {
+    for (let page = 1; page <= totalPages && page <= this.maxPages; page++) {
       const url = `https://api.featherless.ai/v1/models?page=${page}&per_page=${PER_PAGE}`;
       let body: FeatherlessModelsPage;
       try {
@@ -150,15 +168,33 @@ export class FeatherlessModelFetcher extends BaseProviderModelFetcher {
       .filter((m) => typeof m.id === 'string' && m.id.length > 0)
       .map((m) => this.transform(m));
 
-    this.log.info(
-      {
-        pagesFetched,
-        totalPages: Math.min(totalPages, MAX_PAGES),
-        received: all.length,
-        emitted: out.length,
-      },
-      'Featherless AI discovery completed'
-    );
+    // capped: the API's own total_pages (re-read from the last successful
+    // response) reports more pages than we were willing to walk — the tail
+    // beyond maxPages was never fetched at all, not just left untransformed.
+    const capped = totalPages > this.maxPages;
+    const summary = {
+      pagesFetched,
+      totalPages: Math.min(totalPages, this.maxPages),
+      received: all.length,
+      emitted: out.length,
+      capped,
+    };
+    // Landmine guard (mirrors the HF Hub fetcher fix, 2026-09-08): `capped:
+    // true` means featherless-ai's real catalog now exceeds this discovery's
+    // page ceiling and everything past it is silently unreachable by this
+    // run (and every future run, since pagination always restarts at page
+    // 1). Loud warn instead of routine info so a future truncation is
+    // visible rather than repeating the exact bug shape the HF Hub fetcher's
+    // 60k cap and the Bytez fetcher's 100k cap were fixed for.
+    if (capped) {
+      this.log.warn(
+        summary,
+        'Featherless AI discovery hit maxPages — the catalog now exceeds the safety ceiling ' +
+          'and pages beyond it were never fetched; raise FEATHERLESS_DISCOVERY_MAX_PAGES'
+      );
+    } else {
+      this.log.info(summary, 'Featherless AI discovery completed');
+    }
     return out;
   }
 

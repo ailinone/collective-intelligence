@@ -307,6 +307,46 @@ async function bootstrap(): Promise<void> {
       logger.warn('RBAC synchronization skipped on boot (RBAC_SYNC_ON_BOOT=false)');
     }
 
+    // ── Capability ontology bootstrap (ADR-022/HCRA) ────────────────────────
+    // `capability_ontology` is the FK target every capability assertion
+    // (discovery, structural derivation, the runtime function-calling probe)
+    // writes against — ON DELETE RESTRICT, one INSERT per batch. Before this,
+    // the only writers were `hcra-reseed-ontology.ts` / `hcra-sprint1-
+    // bootstrap.ts`, invoked manually via `npx tsx` and never wired into any
+    // migration, deploy step, or boot path — so a real production deployment
+    // ran for months with an EMPTY ontology table, which silently dropped
+    // every capability assertion discovery ever tried to write, leaving
+    // `models.capability_uris` empty for 100% of the catalog (SOTA audit,
+    // 2026-09-07). `seedCapabilityOntology` is a plain idempotent
+    // `INSERT ... ON CONFLICT DO UPDATE` (see capability/ontology/seed.ts) —
+    // safe to run on every boot, cheap (~90 rows), and the one place a fresh
+    // deploy is GUARANTEED to reach without an operator remembering a manual
+    // step. Runs synchronously, before discovery/materialise start touching
+    // the assertion tables, but non-fatal on failure: a transient DB hiccup
+    // here must not take down the whole API — every capability-reading path
+    // already degrades gracefully when the HCRA columns are empty (falls
+    // back to the legacy `capabilities` projection).
+    if (process.env.CAPABILITY_ONTOLOGY_SYNC_ON_BOOT !== 'false') {
+      try {
+        const { seedCapabilityOntology } = await import('./capability/ontology/seed.js');
+        const { prisma: prismaClient } = await import('./database/client.js');
+        const { upserted, edges } = await seedCapabilityOntology(prismaClient);
+        logger.info(
+          { upserted, edges },
+          '✅ Capability ontology seeded (ADR-022/HCRA — capability_ontology upsert)'
+        );
+      } catch (error: unknown) {
+        logger.error(
+          { error: serializeError(error) },
+          '❌ Capability ontology seed failed — model_capability_assertions writes will keep ' +
+            'hitting the FK and capability_uris will stay empty until this succeeds. ' +
+            'API continues to start in degraded capability-routing mode.'
+        );
+      }
+    } else {
+      logger.warn('Capability ontology boot sync skipped (CAPABILITY_ONTOLOGY_SYNC_ON_BOOT=false)');
+    }
+
     markSecretAuditPersistenceReady();
     logger.info('Secret audit persistence enabled');
 
@@ -483,9 +523,8 @@ async function bootstrap(): Promise<void> {
     // QUARANTINE_REVALIDATION_INTERVAL_MS=0.
     try {
       if (Number(process.env.QUARANTINE_REVALIDATION_INTERVAL_MS) !== 0) {
-        const { startQuarantineRevalidation } = await import(
-          '@/core/operability/quarantine-revalidation-worker.js'
-        );
+        const { startQuarantineRevalidation } =
+          await import('@/core/operability/quarantine-revalidation-worker.js');
         startQuarantineRevalidation();
         logger.info('✅ Quarantine revalidation worker started');
       }
@@ -649,6 +688,18 @@ async function bootstrap(): Promise<void> {
     logger.info('Registering tools in Tool Registry...');
     const { registerToolsInRegistry } = await import('./services/chat-request-processor.js');
     registerToolsInRegistry();
+
+    // Register the sandboxed computer_use tools (ADR-024). No-op unless
+    // AGENTIC_COMPUTER_USE_ENABLED=true.
+    try {
+      const { registerComputerUseTools } = await import('./core/sandbox/computer-use-tools.js');
+      registerComputerUseTools();
+    } catch (err) {
+      logger.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        'computer_use tool registration failed (non-fatal)'
+      );
+    }
 
     // Initialize MCP connections (registers MCP tools in Tool Registry)
     try {
@@ -890,6 +941,17 @@ async function bootstrap(): Promise<void> {
       logger.info('✅ HTTP metrics middleware registered');
     }
 
+    // Inbound admission control (Track 1 §2.1, CAPACITY-SCALING-PLAN-10K-USERS.md).
+    // SHADOW MODE by default (ADMISSION_CONTROL_ENFORCE=false) — logs and
+    // exposes metrics for resource pressure (@fastify/under-pressure) and
+    // raw in-flight concurrency on expensive routes, never rejects a request
+    // until that env var is explicitly flipped once real traffic data
+    // justifies it. Registered before route registration so its hooks apply
+    // fleet-wide to every route added below. See
+    // src/middleware/admission-control.ts for the full design rationale.
+    const { registerAdmissionControl } = await import('./middleware/admission-control.js');
+    await registerAdmissionControl(server);
+
     // ==========================================
     // Middleware Integration (v5.0)
     // ==========================================
@@ -910,6 +972,20 @@ async function bootstrap(): Promise<void> {
     logger.info(
       '✅ API key authentication middleware registered (enterprise-grade with real user lookup)'
     );
+
+    // API Key Rate Limiting (P2 Security Fix - T7 Replay Attack) — per-key
+    // sliding window, tiered by organization (see TIER_RATE_LIMITS in
+    // api-key-rate-limit-middleware.ts). MUST be registered AFTER
+    // apiKeyAuthMiddleware above: it reads `request.apiKey`, which that hook
+    // populates. This used to be registered inside createServer() (server.ts),
+    // which runs entirely before this bootstrap function adds ANY of its own
+    // preHandlers — so it always ran before apiKeyAuthMiddleware and silently
+    // no-op'd on every request (`request.apiKey` was always undefined). Fixed
+    // by moving the registration here. See the comment left in server.ts at
+    // the old call site.
+    const { enforceApiKeyRateLimit } = await import('./middleware/api-key-rate-limit-middleware.js');
+    server.addHook('preHandler', enforceApiKeyRateLimit);
+    logger.info('✅ API key rate limiting enabled (per-key sliding window, after auth)');
 
     // Token Bucket Rate Limiting (after auth)
     const { createTokenBucketMiddleware } =
@@ -960,6 +1036,8 @@ async function bootstrap(): Promise<void> {
     const { registerCapabilitySearchRoutes } =
       await import('@/routes/capabilities/capabilities-search-routes.js');
     const { registerEmbeddingsRoutes } = await import('@/routes/embeddings/embeddings-routes.js');
+    // LOTE AP: rerank (cross-encoder) + retrieval (two-stage over pgvector).
+    const { registerRerankRoutes } = await import('@/routes/rerank/rerank-routes.js');
     const { registerAudioRoutes } = await import('@/routes/audio/audio-routes.js');
     const { registerVideosRoutes } = await import('@/routes/videos/videos-routes.js');
     const { registerImagesRoutes } = await import('@/routes/images/images-routes.js');
@@ -1067,6 +1145,7 @@ async function bootstrap(): Promise<void> {
     await server.register(hcraSearchRoutes); // ADR-022: HCRA ontology search + operational /v1/hcra/health
     await registerCapabilitySearchRoutes(server); // Caminho-C Stage 4: /v1/capabilities/{ontology,models}/search via CapabilitySearchService singleton
     await registerEmbeddingsRoutes(server, providerRegistry);
+    await registerRerankRoutes(server); // Rerank API (cross-encoder) + Retrieval API (two-stage)
     await registerAudioRoutes(server); // Audio API (TTS, STT, Translation)
     await registerVideosRoutes(server); // Videos API (Generation)
     await registerImagesRoutes(server); // Images API (Generation, Edit, Variations)
@@ -1312,7 +1391,10 @@ async function bootstrap(): Promise<void> {
       const { startTtftProbePoller } = await import('./jobs/ttft-probe-job.js');
       startTtftProbePoller();
     } catch (err) {
-      logger.warn({ err }, 'Failed to start TTFT probe poller — rung-1 selection stays cost-ordered until real traffic seeds the tracker');
+      logger.warn(
+        { err },
+        'Failed to start TTFT probe poller — rung-1 selection stays cost-ordered until real traffic seeds the tracker'
+      );
     }
 
     // R7 (2026-05-11): Post-listen deferred heavy init. The Fastify server is

@@ -258,9 +258,11 @@ type AdapterMethodName =
   | 'imageEdit'
   | 'imageVariation'
   | 'videoGenerate'
+  | 'generateMusic'
   | 'generateEmbeddings'
   | 'vision'
-  | 'webSearch';
+  | 'webSearch'
+  | 'rerank';
 
 // Methods that are implemented in ProviderAdapter base class with functional fallback behavior.
 const BASE_FALLBACK_METHODS: ReadonlySet<AdapterMethodName> = new Set(['vision']);
@@ -307,6 +309,8 @@ function capabilityRequiredMethod(capability: ModelCapability): AdapterMethodNam
     case 'video_to_video':
     case 'image_to_video':
       return 'videoGenerate';
+    case 'music_generation':
+      return 'generateMusic';
     case 'embeddings':
     case 'embedding':
       return 'generateEmbeddings';
@@ -320,6 +324,13 @@ function capabilityRequiredMethod(capability: ModelCapability): AdapterMethodNam
     case 'deep_search':
     case 'deep_research':
       return 'webSearch';
+    // `reranking` is a real adapter method (LOTE AP). `retrieval` is NOT
+    // mapped here on purpose: the catalog tags reranker models with both, but
+    // retrieval at the API surface is served by the pgvector vector-store
+    // path, which is not an adapter method at all — mapping it to `rerank`
+    // would make every retrieval request demand a reranker provider.
+    case 'reranking':
+      return 'rerank';
     default:
       return null;
   }

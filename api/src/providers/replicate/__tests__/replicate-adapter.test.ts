@@ -161,6 +161,148 @@ describe('ReplicateAdapter — chatCompletion (owner/name model form)', () => {
   });
 });
 
+describe('ReplicateAdapter — tool-calling capability gap (catalog correction 2026-09-09)', () => {
+  // `chatCompletion`/`chatCompletionStream` build the Replicate prediction
+  // `input` from ONLY {prompt, max_tokens, temperature, top_p} via
+  // messagesToPrompt() — there is no code path that maps ChatRequest.tools /
+  // tool_choice into a prediction input, for any Replicate model. Live
+  // Replicate schema fetches for anthropic/claude-3.5-sonnet (page removed
+  // from Replicate entirely — the catalog now pins the still-live
+  // anthropic/claude-4-sonnet instead, same schema family; see
+  // providers.catalog.ts comment), meta/meta-llama-3-70b-instruct, and
+  // openai/gpt-4o-mini (2026-09-09) confirmed none of their
+  // `openapi_schema.input` properties include a `tools`/`tool_choice`
+  // field, so the catalog's `pinnedFallback` entries for those three
+  // models no longer claim `function_calling`/`tool_use`.
+  //
+  // These tests pin the current, honest behavior: a `tools` array passed on
+  // the request is silently dropped rather than forwarded. If someone later
+  // adds real per-model-family tool passthrough, these tests should be
+  // updated alongside re-adding the capability tags in providers.catalog.ts
+  // — until then, this guards against a request silently losing its tools
+  // with no error and no signal to the caller.
+  const requestTools = [
+    {
+      type: 'function' as const,
+      function: {
+        name: 'get_weather',
+        description: 'Get the current weather for a location',
+        parameters: {
+          type: 'object',
+          properties: { location: { type: 'string' } },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+
+  it('chatCompletion does not forward request.tools into the Replicate prediction input', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    const restore = stubFetch((url) => {
+      if (url.includes('/models/openai/gpt-4o-mini/predictions')) {
+        return {
+          body: {
+            id: 'pred_tools',
+            status: 'succeeded',
+            created_at: '2026-09-09T00:00:00Z',
+            input: {},
+            output: 'no tools here',
+            urls: { get: '' },
+          },
+        };
+      }
+      return { ok: false, status: 404, body: {} };
+    });
+    try {
+      const adapter = new ReplicateAdapter({
+        name: 'replicate',
+        enabled: true,
+        apiKey: 'r8_test',
+        baseUrl: 'https://api.replicate.com/v1',
+      });
+      await adapter.chatCompletion({
+        model: 'openai/gpt-4o-mini',
+        messages: [{ role: 'user', content: "what's the weather in Lisbon?" }],
+        tools: requestTools,
+        tool_choice: 'auto',
+      });
+      expect(calls).toHaveLength(1);
+      capturedBody = JSON.parse(calls[0].init.body as string) as Record<string, unknown>;
+      const input = capturedBody.input as Record<string, unknown>;
+      expect(input).not.toHaveProperty('tools');
+      expect(input).not.toHaveProperty('tool_choice');
+      expect(input).not.toHaveProperty('functions');
+      expect(Object.keys(input).sort()).toEqual(['max_tokens', 'prompt']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('chatCompletionStream does not forward request.tools into the Replicate prediction input', async () => {
+    // chatCompletionStream submits async (sync: false), gets back a
+    // prediction with no `urls.stream`, and falls back to polling
+    // GET /predictions/{id} — stub both endpoints.
+    const restore = stubFetch((url) => {
+      if (url.includes('/models/meta/meta-llama-3-70b-instruct/predictions')) {
+        return {
+          body: {
+            id: 'pred_tools_stream',
+            status: 'starting',
+            created_at: '2026-09-09T00:00:00Z',
+            input: {},
+            output: null,
+            urls: { get: 'https://api.replicate.com/v1/predictions/pred_tools_stream' },
+          },
+        };
+      }
+      if (url.includes('/predictions/pred_tools_stream')) {
+        return {
+          body: {
+            id: 'pred_tools_stream',
+            status: 'succeeded',
+            created_at: '2026-09-09T00:00:00Z',
+            input: {},
+            output: 'no tools here either',
+            urls: { get: 'https://api.replicate.com/v1/predictions/pred_tools_stream' },
+          },
+        };
+      }
+      return { ok: false, status: 404, body: {} };
+    });
+    try {
+      const adapter = new ReplicateAdapter({
+        name: 'replicate',
+        enabled: true,
+        apiKey: 'r8_test',
+        baseUrl: 'https://api.replicate.com/v1',
+      });
+      const gen = adapter.chatCompletionStream({
+        model: 'meta/meta-llama-3-70b-instruct',
+        messages: [{ role: 'user', content: "what's the weather in Lisbon?" }],
+        tools: requestTools,
+        tool_choice: 'auto',
+      });
+      // Drain the generator to trigger the prediction submission.
+      for await (const _chunk of gen) {
+        // no-op
+      }
+      // First call is the prediction submission; the rest are polling GETs.
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      const submission = calls.find((c) =>
+        c.url.includes('/models/meta/meta-llama-3-70b-instruct/predictions')
+      );
+      expect(submission).toBeDefined();
+      const capturedBody = JSON.parse(submission!.init.body as string) as Record<string, unknown>;
+      const input = capturedBody.input as Record<string, unknown>;
+      expect(input).not.toHaveProperty('tools');
+      expect(input).not.toHaveProperty('tool_choice');
+      expect(input).not.toHaveProperty('functions');
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe('ReplicateAdapter — identity', () => {
   it('getApiKey round-trip', () => {
     const adapter = new ReplicateAdapter({

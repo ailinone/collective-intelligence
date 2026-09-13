@@ -28,6 +28,8 @@ import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
 import type {
   AudioTTSRequest,
   AudioTTSResponse,
+  MusicGenRequest,
+  MusicGenResponse,
   ModerationResponse,
   ImageEditResponse,
   ImageVariationResponse,
@@ -38,6 +40,31 @@ const log = logger.child({ provider: 'elevenlabs' });
 
 // Default voice ID — Rachel (clear female voice, good for general use)
 const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
+
+// ElevenLabs' documented Music model ids are `music_v1`/`music_v2` (default
+// v2, per docs.elevenlabs.io as confirmed live 2026-09-06). Matched by
+// prefix — not a fixed id list — so a future `music_v3` etc. is picked up
+// without a code change IF the vendor ever adds it to `/v1/models`.
+const MUSIC_MODEL_ID_PATTERN = /^music/i;
+const DEFAULT_MUSIC_MODEL_ID = 'music_v2';
+
+/**
+ * Pinned fallback for ElevenLabs Music (LOTE AX, 2026-09-06).
+ *
+ * Live-verified 2026-09-06 against `GET /v1/models` with a real
+ * `<prefix>-elevenlabs-key`: the response lists only TTS/STS models
+ * (eleven_v3, eleven_multilingual_v2, eleven_turbo_v2_5, ...) — `music_v1`
+ * and `music_v2` are ABSENT from that listing even though `POST /v1/music`
+ * accepts both ids and is separately documented at docs.elevenlabs.io. This
+ * mirrors the `pinnedFallback` pattern the catalog uses elsewhere for a
+ * vendor whose discovery surface doesn't cover a whole capability (reason
+ * `no-list-endpoint` in `provider-catalog.types.ts`) — ElevenLabs itself is
+ * a bespoke non-catalog adapter, so the equivalent fallback lives here
+ * instead. These two ids are the vendor's OWN documented model_ids, not a
+ * list this adapter invented; MUSIC_MODEL_ID_PATTERN is still what tags a
+ * model `music_generation` if the vendor ever starts listing them.
+ */
+const PINNED_MUSIC_MODEL_IDS: readonly string[] = ['music_v1', 'music_v2'];
 
 export class ElevenLabsAdapter extends ProviderAdapter {
   private baseUrl: string;
@@ -127,6 +154,79 @@ export class ElevenLabsAdapter extends ProviderAdapter {
     }
   }
 
+  // ── Music Generation ──────────────────
+  //
+  // ElevenLabs Music: `POST /v1/music` — synchronous (not job/polling-based;
+  // the completed audio file comes back in the response body), same
+  // `xi-api-key` auth as TTS. Body: `prompt` XOR `composition_plan`, plus
+  // `model_id`, `music_length_ms` (3000-600000), `force_instrumental`,
+  // `seed`; format via the `output_format` query param — confirmed live
+  // against docs.elevenlabs.io 2026-09-06. Gated to paid subscribers upstream
+  // (a 402/403 surfaces as an ordinary thrown error here, same as any other
+  // credential/plan-tier gate in this catalog).
+  async generateMusic(model: Model, request: MusicGenRequest): Promise<MusicGenResponse> {
+    const start = Date.now();
+    const modelId = model.name || model.id || DEFAULT_MUSIC_MODEL_ID;
+
+    try {
+      if (!request.prompt && !request.compositionPlan) {
+        throw new Error(
+          'ElevenLabs Music: either prompt or compositionPlan is required'
+        );
+      }
+
+      const outputFormat = (request.options?.outputFormat as string) || 'mp3_44100_128';
+
+      const payload: Record<string, unknown> = { model_id: modelId };
+      if (request.compositionPlan) {
+        payload.composition_plan = request.compositionPlan;
+      } else {
+        payload.prompt = request.prompt;
+      }
+      if (request.musicLengthMs !== undefined) payload.music_length_ms = request.musicLengthMs;
+      if (request.forceInstrumental !== undefined) {
+        payload.force_instrumental = request.forceInstrumental;
+      }
+      if (request.seed !== undefined) payload.seed = request.seed;
+
+      const response = await this.executeThroughBulkhead(async () => {
+        const res = await fetch(`${this.baseUrl}/music?output_format=${outputFormat}`, {
+          method: 'POST',
+          headers: {
+            ...this.authHeaders(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`ElevenLabs Music generation failed: ${res.status} ${errorText}`);
+        }
+        return res;
+      }, 'music-generation');
+
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+      const latency = Date.now() - start;
+
+      log.info(
+        { model: modelId, latency, bytes: audioBuffer.length },
+        'Music generation completed'
+      );
+
+      return {
+        audio: audioBuffer,
+        format: 'mp3',
+        raw: { size: audioBuffer.length, latency },
+      };
+    } catch (error) {
+      const latency = Date.now() - start;
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      log.error({ model: modelId, latency, error: msg }, 'Music generation failed');
+      throw error;
+    }
+  }
+
   /**
    * Map common voice names to ElevenLabs voice IDs.
    * If the input looks like a voice ID (long alphanumeric), use as-is.
@@ -207,19 +307,51 @@ export class ElevenLabsAdapter extends ProviderAdapter {
 
       if (!Array.isArray(data) || data.length === 0) return [];
 
-      return data
-        .filter((m) => m.can_do_text_to_speech !== false)
-        .map((m) => ({
+      // Music models (`music_v1`/`music_v2`) are a SEPARATE capability from
+      // TTS — no spoken-text input, minutes-long output — so they are kept
+      // even when the vendor reports `can_do_text_to_speech: false` for them,
+      // and tagged `music_generation` instead of `text_to_speech`.
+      const discovered = data
+        .filter(
+          (m) => m.can_do_text_to_speech !== false || MUSIC_MODEL_ID_PATTERN.test(m.model_id)
+        )
+        .map((m) => {
+          const isMusic = MUSIC_MODEL_ID_PATTERN.test(m.model_id);
+          return {
+            ...base,
+            id: `elevenlabs/${m.model_id}`,
+            name: m.model_id,
+            displayName: `ElevenLabs ${m.name || m.model_id}${isMusic ? ' (Music)' : ''}`,
+            capabilities: (isMusic
+              ? ['music_generation']
+              : ['text_to_speech', 'streaming']) as import('@/types').ModelCapability[],
+            metadata: {
+              languages: m.languages?.map((l) => l.language_id),
+              description: m.description,
+            },
+          };
+        });
+
+      // Append the pinned Music models `/v1/models` doesn't list — see
+      // PINNED_MUSIC_MODEL_IDS. Skips any id the live response already
+      // surfaced (defensive against the vendor closing this listing gap).
+      const discoveredIds = new Set(discovered.map((m) => m.name));
+      const pinnedMusic = PINNED_MUSIC_MODEL_IDS.filter((id) => !discoveredIds.has(id)).map(
+        (id) => ({
           ...base,
-          id: `elevenlabs/${m.model_id}`,
-          name: m.model_id,
-          displayName: `ElevenLabs ${m.name || m.model_id}`,
-          capabilities: ['text_to_speech', 'streaming'] as import('@/types').ModelCapability[],
+          id: `elevenlabs/${id}`,
+          name: id,
+          displayName: `ElevenLabs ${id} (Music)`,
+          capabilities: ['music_generation'] as import('@/types').ModelCapability[],
           metadata: {
-            languages: m.languages?.map((l) => l.language_id),
-            description: m.description,
+            pinnedFallback: true,
+            pinnedFallbackReason: 'no-list-endpoint',
+            description: 'Music generation model — not listed by GET /v1/models (verified 2026-09-06).',
           },
-        }));
+        })
+      );
+
+      return [...discovered, ...pinnedMusic];
     } catch (err) {
       log.warn(
         { error: err instanceof Error ? err.message : String(err) },

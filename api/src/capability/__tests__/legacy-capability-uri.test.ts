@@ -29,7 +29,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ModelCapability } from '@/types';
+import { MODEL_CAPABILITIES, type ModelCapability } from '@/types';
 import {
   CAPABILITY_URI_PREFIX,
   legacyArrayToUriArray,
@@ -40,78 +40,14 @@ import {
 } from '../legacy-capability-uri';
 import { ONTOLOGY_SEED } from '../ontology/seed';
 
-// Mirror of the ModelCapability union — kept in sync manually because the
-// type system can't enumerate a string-literal union at runtime. If this
-// list drifts from types/index.ts, the assertion in test 2 below catches
-// it (the legacy set will be incomplete vs the actual union).
-const ALL_LEGACY_CAPABILITIES: readonly ModelCapability[] = [
-  'chat',
-  'code_generation',
-  'code_completion',
-  'coding',
-  'code_review',
-  'debugging',
-  'refactoring',
-  'documentation',
-  'testing',
-  'analysis',
-  'qa',
-  'vision',
-  'multimodal',
-  'function_calling',
-  'tool_use',
-  'streaming',
-  'json_mode',
-  'embeddings',
-  'embedding',
-  'reasoning',
-  'thinking_mode',
-  'text_generation',
-  'web_search',
-  'deep_research',
-  'file_search',
-  'image_generation',
-  'image_editing',
-  'video_generation',
-  'video_editing',
-  'video_understanding',
-  'image_captioning',
-  'visual_question_answering',
-  'audio_generation',
-  'speech_to_text',
-  'text_to_speech',
-  'tts',
-  'listen',
-  'transcription',
-  'audio_input',
-  'audio_output',
-  'audio_to_audio',
-  'image_to_video',
-  'video_to_video',
-  'video_to_text',
-  'video_transcription',
-  'realtime_audio',
-  'computer_use',
-  'mcp',
-  'deep_search',
-  'completions',
-  'code_interpreter',
-  'diarization',
-  'agents',
-  'realtime',
-  'audio',
-  'deep_compute',
-  'research',
-  'health',
-  'pdf_understanding',
-  'translation',
-  'reranking',
-  'retrieval',
-  'code_edit',
-  'moderation',
-  'safety',
-  'long_context',
-];
+// LOTE AO (2026-09-05): this used to be a HAND-MAINTAINED mirror of the
+// `ModelCapability` union, and it had silently drifted — `image_upscale` and
+// `image_denoise` were added to the union on 2026-06-11 and never added
+// here, so the "ontology agreement" guard below could not see that they were
+// missing from ONTOLOGY_SEED. A stale mirror makes the drift guard guard
+// nothing. `MODEL_CAPABILITIES` is the runtime projection of the union and
+// is exported for exactly this purpose, so the mirror is now derived.
+const ALL_LEGACY_CAPABILITIES: readonly ModelCapability[] = MODEL_CAPABILITIES;
 const LEGACY_SET = new Set(ALL_LEGACY_CAPABILITIES);
 
 describe('legacy-capability-uri', () => {

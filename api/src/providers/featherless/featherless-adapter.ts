@@ -25,7 +25,7 @@
  *      per-provider SLO tracking (Featherless has particularly volatile
  *      latency; conflating it with other hubs would corrupt the histograms).
  *   2. **GCP secret binding** — the factory auto-loads `FEATHERLESS_AI_API_KEY`
- *      from Secret Manager (`ailin-featherless-key`). Without a dedicated
+ *      from Secret Manager (`<prefix>-featherless-key`). Without a dedicated
  *      class the registration plumbing has nowhere to hang.
  *   3. **Future headroom** — Featherless has shipped experimental features
  *      (speculative decoding toggles, session caching hints) that will need

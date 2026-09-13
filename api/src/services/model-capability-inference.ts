@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
+import { inferCapabilitiesFromModelId } from '@/services/model-fetchers/model-capability-patterns';
 import type { ModelCapability } from '@/types';
 import { isModelCapability } from '@/types';
 
@@ -371,6 +372,59 @@ export function inferSupportedEndpoints(
   return Object.keys(compatibility) as ModelOperationEndpoint[];
 }
 
+/**
+ * Vendor-family name signal — the WEAKEST chat evidence available.
+ *
+ * It says "this id looks like it comes from a house that mostly ships chat
+ * models". It says nothing about the specific SKU, so it is only consulted
+ * after modality evidence and dedicated-specialisation classification have both
+ * come back inconclusive — see the chat-eligibility block in
+ * `inferModelCapabilities`.
+ */
+const VENDOR_FAMILY_CHAT_NAME_PATTERN =
+  /\b(gpt|chatgpt|chat|claude|gemini|llama|qwen|mistral|deepseek|grok|assistant)\b/;
+
+/**
+ * What the model's DECLARED output modalities say about text emission.
+ *
+ * - `text-capable`   — outputs were declared and include text.
+ * - `text-incapable` — outputs were declared and do NOT include text, so the
+ *                      model physically cannot answer a chat turn.
+ * - `unknown`        — no output modality was declared; no evidence either way.
+ */
+type ChatModalityVerdict = 'text-capable' | 'text-incapable' | 'unknown';
+
+export interface DedicatedSpecialization {
+  /** Capability set the dedicated (non-chat) role implies. */
+  capabilities: ModelCapability[];
+  /** Logical endpoint the role routes to (e.g. `audio_speech`). */
+  endpoint: string;
+  /** Role label, e.g. `tts`, `stt`, `embedding`, `image`, `video`. */
+  modelType: string;
+}
+
+/**
+ * Classifies a model id into a DEDICATED, non-chat role (tts, stt, embedding,
+ * reranker, moderation, image, video) using the shared ordered pattern table,
+ * whose non-chat categories are matched BEFORE the broad chat category.
+ *
+ * Returns `undefined` when the id yields no verdict, or a chat verdict — a chat
+ * verdict from a name table is not evidence, it is the same weak family signal
+ * as `VENDOR_FAMILY_CHAT_NAME_PATTERN` and must not short-circuit anything.
+ */
+export function classifyDedicatedSpecialization(
+  modelId: string | undefined
+): DedicatedSpecialization | undefined {
+  if (!modelId) return undefined;
+  const inferred = inferCapabilitiesFromModelId(modelId);
+  if (!inferred || inferred.modelType === 'chat') return undefined;
+  return {
+    capabilities: [...inferred.capabilities],
+    endpoint: inferred.endpoint,
+    modelType: inferred.modelType,
+  };
+}
+
 export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCapability[] {
   const capabilities = new Set<ModelCapability>();
   const modelId = input.modelId || '';
@@ -485,9 +539,49 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
     capabilities.add('pdf_understanding');
   }
 
+  // ── Chat-incapability evidence (computed early, same precedence order as
+  //    the "Chat eligibility" block further down) ─────────────────────────
+  // Aggregator-hub `/models` responses frequently ship ONE blanket
+  // `supported_parameters` list (tools, tool_choice, response_format,
+  // max_tokens, ...) copied across every model in their catalog regardless
+  // of what the underlying endpoint actually accepts — confirmed live for
+  // llmgateway, whose text-embedding-3-small/gemini-embedding-001/etc. rows
+  // (embeddings-only endpoints) all carry the exact same chat-shaped
+  // supported_parameters as its chat models. Trusting that list at face
+  // value below would fabricate function_calling/tool_use/json_mode/
+  // streaming/web_search/etc. on endpoints that cannot serve a chat turn at
+  // all. Compute the same non-chat verdict used later for the "chat
+  // eligibility" decision, and gate the parameter-derived additions on it.
+  const modalityVerdict: ChatModalityVerdict =
+    modalities.output.length > 0 ? (hasOutputText ? 'text-capable' : 'text-incapable') : 'unknown';
+
+  const isEmbeddingModel =
+    capabilities.has('embedding') ||
+    capabilities.has('embeddings') ||
+    /\b(embed|embedding)\b/.test(combinedText);
+
+  const specialization =
+    modalityVerdict === 'unknown' ? classifyDedicatedSpecialization(modelId) : undefined;
+
+  // True for any endpoint we have real evidence cannot serve a chat/agentic
+  // turn: a dedicated non-chat role (embedding/rerank/moderation/tts/stt/
+  // image/video, by id pattern or declared capability/keyword), or output
+  // modalities that were declared and exclude text outright.
+  const exclusiveNonChat =
+    isEmbeddingModel || modalityVerdict === 'text-incapable' || specialization !== undefined;
+
   // Parameter-based inference
   const supportedParameters = readSupportedParameters(metadata).map(normalizeToken);
   for (const parameter of supportedParameters) {
+    // Every branch below infers a chat/agentic-surface capability
+    // (tool calling, structured output, web/file search, computer use,
+    // code execution, MCP, realtime, token streaming) from a generic
+    // parameter name. None of those operations exist on a dedicated
+    // non-chat endpoint, so skip the whole inference for rows we already
+    // have real evidence cannot chat — see comment above.
+    if (exclusiveNonChat) {
+      continue;
+    }
     if (
       parameter === 'tools' ||
       parameter === 'tool_choice' ||
@@ -510,6 +604,20 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
       parameter === 'thinking'
     ) {
       addCapabilities(capabilities, ['reasoning', 'thinking_mode']);
+    }
+    // `reasoning_effort` (OpenAI o1/o3/gpt-5, xAI grok, Groq's oai-compat
+    // reasoning family — see providers.catalog.ts's per-provider "quirks"
+    // notes and utils/reasoning-effort.ts's cross-provider resolver) is a
+    // DISTINCT, stronger signal than bare `reasoning`/`thinking`: it is the
+    // provider-exposed dial for HOW MUCH compute/thinking budget to spend,
+    // not just whether chain-of-thought exists. That is exactly what the
+    // ontology's `deep_compute` entry describes ("heavy compute mode for
+    // complex reasoning, provider-defined") — closing a real gap: a SOTA
+    // audit (2026-09-07) found zero production models ever assigned
+    // `deep_compute` because no extraction path — provider-declared,
+    // modality, name-regex, or prior parameter rule — targeted it.
+    if (parameter === 'reasoning_effort') {
+      capabilities.add('deep_compute');
     }
     if (parameter === 'web_search' || parameter === 'grounding' || parameter === 'search') {
       capabilities.add('web_search');
@@ -537,22 +645,42 @@ export function inferModelCapabilities(input: CapabilityInferenceInput): ModelCa
   // Text/identifier-based fallback inference
   addKeywordCapabilities(capabilities, combinedText);
 
-  const isEmbeddingModel =
-    capabilities.has('embedding') ||
-    capabilities.has('embeddings') ||
-    /\b(embed|embedding)\b/.test(combinedText);
   if (isEmbeddingModel) {
     addCapabilities(capabilities, ['embedding', 'embeddings']);
   }
 
-  const likelyChatModel =
-    hasOutputText ||
-    /\b(gpt|chatgpt|chat|claude|gemini|llama|qwen|mistral|deepseek|grok|assistant)\b/.test(
-      combinedText
-    );
-  const exclusiveNonChat =
-    isEmbeddingModel ||
-    (!hasOutputText && (hasOutputImage || hasOutputVideo || hasOutputAudio) && !hasInputText);
+  // ── Chat eligibility ──────────────────────────────────────────────────────
+  // Precedence, strongest evidence first (see `modalityVerdict`/
+  // `isEmbeddingModel`/`specialization`/`exclusiveNonChat`, computed earlier
+  // above the parameter-based inference loop so that loop can use the same
+  // verdict):
+  //
+  //   1. DECLARED OUTPUT MODALITIES — the only direct statement of what the
+  //      model can emit. Outputs declared without `text` means the model cannot
+  //      produce a chat answer, whatever its name looks like.
+  //   2. DEDICATED-SPECIALISATION CLASSIFIER over the id — consulted only when
+  //      no output modality was declared. Its table matches tts/stt/embedding/
+  //      rerank/moderation/image/video BEFORE the broad chat category.
+  //   3. VENDOR-FAMILY NAME REGEX — last resort, and it can only ADD chat when
+  //      neither of the two stronger signals ruled the model out.
+  //
+  // This order is the fix for a measured production defect: the family regex
+  // used to run unconditionally and win, so `gemini-2.5-flash-preview-tts`
+  // matched /gemini/ and `Qwen/Qwen3-ASR-0.6B` matched /qwen/, both were
+  // persisted as ['chat','text_generation','streaming'], and both were then
+  // selected to answer plain arithmetic prompts. The tts/asr classifier that
+  // would have caught them only ran where the family regex found nothing, so on
+  // exactly these rows it was dead code.
+  //
+  // Provider DECLARATIONS still win over all of it: capabilities seeded from
+  // `seedCapabilities`/`metadata.capabilities` were added at the top of this
+  // function and are never removed here — this block only decides whether the
+  // heuristics may ADD chat.
+  if (specialization) {
+    addCapabilities(capabilities, specialization.capabilities);
+  }
+
+  const likelyChatModel = hasOutputText || VENDOR_FAMILY_CHAT_NAME_PATTERN.test(combinedText);
 
   if (likelyChatModel && !exclusiveNonChat) {
     addCapabilities(capabilities, ['chat', 'text_generation']);

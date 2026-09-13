@@ -22,7 +22,12 @@
  * adaptive stopping instead of fixed passes, plateau detection to avoid waste.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import {
+  BaseStrategy,
+  type StrategyMetadata,
+  safeResponseContent,
+  mergeArtifacts,
+} from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -241,8 +246,7 @@ export class CritiqueRepairStrategy extends BaseStrategy {
 
     if (!genExec.success) throw new Error('Initial generation failed');
 
-    const initialContent = genExec.response?.choices?.[0]?.message?.content;
-    let currentContent: string = typeof initialContent === 'string' ? initialContent : '';
+    let currentContent: string = safeResponseContent(genExec.response);
     let currentResponse = genExec.response;
     // Non-regressive floor (2026-07): the tracked best is SEEDED with the
     // primary generation and only displaced by a repair that STRICTLY beats it
@@ -413,8 +417,8 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       executions.push(repairExec);
 
       if (repairExec.success) {
-        const repaired = repairExec.response?.choices?.[0]?.message?.content;
-        if (typeof repaired === 'string' && repaired.trim()) {
+        const repaired = safeResponseContent(repairExec.response);
+        if (repaired.trim()) {
           // NON-REGRESSIVE REPAIR GATE (2026-07). The old code committed ANY
           // non-empty repair, which let a blind overwrite replace correct code
           // with a lower-quality — or wrong-signature — repair (HumanEval:
@@ -519,6 +523,22 @@ export class CritiqueRepairStrategy extends BaseStrategy {
       totalCost: executions.reduce((s, e) => s + e.cost, 0),
       totalDuration: Date.now() - startTime,
       qualityScore: bestScore,
+      // Media/document artifacts (PR3b): `bestResponse` is picked post-hoc
+      // by comparing critique re-scores ACROSS iterations (see the
+      // non-regressive gate above) — a tool call producing an artifact
+      // could just as easily land on a rejected repair or an intermediate
+      // critique pass as on the committed `bestResponse`. mergeArtifacts()
+      // is called over the FULL `executions` list (generator + every
+      // critique/repair/re-score iteration), not just the execution behind
+      // `bestResponse`, for the same reason `reasoning_traces` below
+      // already aggregates across all of them. Top-level `toolArtifacts`
+      // (matching tier 3a's consensus/competitive/debate-strategy.ts
+      // convention) rather than the pre-existing `OrchestrationResult.
+      // artifacts` — that field is `AilinArtifact[]` from the unrelated
+      // multi-stage triage-plan pathway, a different shape than
+      // `mergeArtifacts()`'s `ArtifactRef[]`. See the field's doc comment
+      // in types/index.ts.
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'critique-repair',
         iterations: scoreHistory.length,
@@ -576,23 +596,33 @@ export class CritiqueRepairStrategy extends BaseStrategy {
 
     // Parse critique. JSON.parse returns `unknown` — narrow each accessed
     // field, fall back to defaults if shape doesn't match.
+    //
+    // Behavior note (PR3b): safeResponseContent() always returns a string
+    // (never undefined), so the old `typeof critiqueContent === 'string'`
+    // guard is now always true and has been dropped. This is a no-op for the
+    // normal case; the one edge case that changes is when the response has NO
+    // `choices[0].message` at all — the old code returned '' from the optional
+    // chain and *skipped* JSON.parse entirely (no throw, no log). Now
+    // `JSON.parse('')` is attempted, throws, and is caught by the block below
+    // (same log.debug + same default `critique` fallback as any other
+    // malformed-JSON case). The resulting `critique` value is identical
+    // either way — the only observable difference is one extra debug-level
+    // log line in this already-degenerate scenario.
     let critique: CritiqueResult = { qualityScore: 0.5, issues: [] };
     try {
-      const critiqueContent = exec.response?.choices?.[0]?.message?.content;
-      if (typeof critiqueContent === 'string') {
-        const parsed: unknown = JSON.parse(critiqueContent);
-        if (typeof parsed === 'object' && parsed !== null) {
-          const obj = parsed as { quality_score?: unknown; issues?: unknown };
-          const qualityScore = typeof obj.quality_score === 'number' ? obj.quality_score : 0.5;
-          const rawIssues = Array.isArray(obj.issues) ? obj.issues : [];
-          const issues = rawIssues.filter(
-            (issue): issue is CritiqueResult['issues'][number] =>
-              typeof issue === 'object' &&
-              issue !== null &&
-              typeof (issue as { severity?: unknown }).severity === 'string'
-          );
-          critique = { qualityScore, issues };
-        }
+      const critiqueContent = safeResponseContent(exec.response);
+      const parsed: unknown = JSON.parse(critiqueContent);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const obj = parsed as { quality_score?: unknown; issues?: unknown };
+        const qualityScore = typeof obj.quality_score === 'number' ? obj.quality_score : 0.5;
+        const rawIssues = Array.isArray(obj.issues) ? obj.issues : [];
+        const issues = rawIssues.filter(
+          (issue): issue is CritiqueResult['issues'][number] =>
+            typeof issue === 'object' &&
+            issue !== null &&
+            typeof (issue as { severity?: unknown }).severity === 'string'
+        );
+        critique = { qualityScore, issues };
       }
     } catch {
       log.debug({ phase: 'critique-parse' }, 'Failed to parse critique JSON, using defaults');

@@ -16,9 +16,10 @@
  * `/v1/audio/transcriptions` — AND adds a **`/v1/rerank`** endpoint for
  * cross-encoder reranker models (bge-reranker, Cohere-style rerank).
  *
- * Rerank isn't part of the OpenAI spec, so this adapter exposes it as a
- * direct method on the class. Callers that depend on rerank check
- * `instanceof XinferenceAdapter` (or call the method via duck-type). The
+ * Rerank isn't part of the OpenAI spec. Since LOTE AP the base
+ * `ProviderAdapter` carries a portable `rerank(model, request)` contract, so
+ * this adapter overrides it and callers no longer narrow to
+ * `XinferenceAdapter`; `rerankNative()` keeps the vendor wire shape. The
  * surface is intentionally Cohere-compatible:
  *
  *   POST /v1/rerank
@@ -40,6 +41,8 @@ import {
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
 import { narrowAs } from '@/utils/type-guards';
 import { logger } from '@/utils/logger';
+import type { Model } from '@/types';
+import type { RerankRequest, RerankResponse } from '@/types/model-client';
 
 export type XinferenceAdapterConfig = OpenAICompatibleHubAdapterConfig;
 
@@ -87,7 +90,7 @@ export class XinferenceAdapter extends OpenAICompatibleHubAdapter {
    * result rather than hitting the wire, because an empty request is a
    * caller programming mistake and the local failure is clearer.
    */
-  async rerank(request: XinferenceRerankRequest): Promise<XinferenceRerankResponse> {
+  async rerankNative(request: XinferenceRerankRequest): Promise<XinferenceRerankResponse> {
     if (!request.model || !request.model.trim()) {
       throw new Error('xinference.rerank: model is required');
     }
@@ -137,6 +140,34 @@ export class XinferenceAdapter extends OpenAICompatibleHubAdapter {
       }
       return json;
     }, 'rerank');
+  }
+
+  /**
+   * Shared `ProviderAdapter.rerank` contract (LOTE AP). Flattens Xinference's
+   * Cohere-shaped `results[].document.text` object into the portable bare
+   * string and guarantees descending order (the runtime documents it but the
+   * contract promises it).
+   */
+  async rerank(model: Model, request: RerankRequest): Promise<RerankResponse> {
+    const native = await this.rerankNative({
+      model: model.name || model.id,
+      query: request.query,
+      documents: [...request.documents],
+      ...(typeof request.topN === 'number' ? { top_n: request.topN } : {}),
+      ...(typeof request.returnDocuments === 'boolean'
+        ? { return_documents: request.returnDocuments }
+        : {}),
+    });
+
+    const results = native.results
+      .map((entry) => ({
+        index: entry.index,
+        relevanceScore: entry.relevance_score,
+        ...(entry.document?.text !== undefined ? { document: entry.document.text } : {}),
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    return { results, raw: native };
   }
 
   /** Expose the hub's base URL for the rerank endpoint. */

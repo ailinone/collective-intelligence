@@ -31,7 +31,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -65,7 +65,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -110,7 +115,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -153,7 +163,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -189,7 +204,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (_req: FastifyRequest, reply: FastifyReply) => {
@@ -210,7 +230,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -249,7 +274,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -327,7 +357,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -372,7 +407,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -406,7 +446,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (_req: FastifyRequest, reply: FastifyReply) => {
@@ -433,7 +478,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -466,7 +516,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -501,7 +556,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
@@ -533,7 +593,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (request, reply) => {
@@ -577,7 +642,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (_req: FastifyRequest, reply: FastifyReply) => {
@@ -609,7 +679,12 @@ export async function registerExperimentAdminRoutes(server: FastifyInstance): Pr
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
-        requireRole('admin', 'owner'),
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): Experiment/
+        // ExperimentExecution have no organizationId column at all — this is
+        // a single platform-wide table, budget-spending job queue, and R&D
+        // dataset. requireRole('admin','owner') alone is per-org and any
+        // tenant's own self-promoted admin could trigger/read/corrupt it.
+        requirePlatformAdmin(),
       ],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {

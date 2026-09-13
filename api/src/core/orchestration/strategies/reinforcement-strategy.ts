@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import type { ChatRequest, OrchestrationContext, OrchestrationResult, Model } from '@/types';
 import { narrowAs } from '@/utils/type-guards';
@@ -87,6 +87,7 @@ export class ReinforcementStrategy extends BaseStrategy {
       totalCost: execution.cost,
       totalDuration: Date.now() - startTime,
       qualityScore: 0.84,
+      toolArtifacts: mergeArtifacts([execution]),
       metadata: {
         selectedModel: selectedModel.id,
         selectionMethod: 'quality-weighted',

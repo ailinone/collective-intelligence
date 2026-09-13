@@ -105,6 +105,8 @@ tags:
     description: Queue operations.
   - name: Realtime
     description: Realtime operations.
+  - name: Rerank
+    description: Rerank operations.
   - name: Responses
     description: Responses operations.
   - name: Search
@@ -2973,6 +2975,107 @@ paths:
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+  /v1/capabilities/media-plan/execute:
+    post:
+      tags:
+        - Capabilities
+      summary: Execute the agentic media-composition planner
+      description: "LOTE AT (Part 2, gated behind MEDIA_PLANNER_ENABLED, default off): agentic media-composition planner. A cheap heuristic (no LLM call) decides whether a request is multi-capability or attribute-constrained enough to warrant the bounded planner loop; most requests are refused with `media_planner_not_applicable` rather than executed here — see `/v1/capabilities/{capability}/execute` for the normal single-capability path."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Provide either `messages` (chat-shaped array) or `prompt`
+                (plain string); at least one is required, otherwise the request is
+                rejected with 422.
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - role
+                      - content
+                    properties:
+                      role:
+                        type: string
+                        enum:
+                          - system
+                          - user
+                          - assistant
+                          - function
+                          - tool
+                      content:
+                        type: string
+                  description: Chat-shaped conversation. Takes precedence over
+                    `prompt` when both are present.
+                prompt:
+                  type: string
+                  description: Convenience alternative to `messages` — wrapped as a
+                    single user message when `messages` is absent.
+                model:
+                  type: string
+                  description: Model id, or "auto" (default). Forwarded to the
+                    underlying capability dispatch.
+        required: true
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Media plan executed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+          headers:
+            X-Request-Id:
+              description: Unique request identifier for end-to-end tracing.
+              schema:
+                type: string
+            X-Correlation-Id:
+              description: Correlation identifier propagated across internal services.
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      operationId: postCapabilitiesMediaPlanExecute
+      x-collective-intelligence:
+        contributionType: signal-producer
+        artifactsProduced:
+          - traces
+        artifactsConsumed:
+          - policies
+          - org_settings
+          - quotas
+          - request_context
+        aggregationOrSynthesis: Combines request intent, policy constraints, and tenant
+          context to produce deterministic outputs within the CI Fabric.
+        feedbackLoops: Feeds telemetry, evaluation signals, and human feedback into
+          quality gates and policy refinement cycles.
+        provenanceAndAttribution: Associates user, organization, model, and tool
+          provenance with requestId/correlationId for end-to-end attribution.
+        governanceAndPrivacyBoundaries: Applies tenant isolation, retention controls,
+          redaction rules, and auditable policy enforcement boundaries.
+        failureModesAndCiImpact: Potential CI impact includes stale memory, missing
+          attribution links, policy mismatches, and reduced synthesis quality.
   /v1/embeddings:
     post:
       tags:
@@ -3210,6 +3313,311 @@ paths:
           $ref: "#/components/responses/InternalServerError"
       summary: Create or execute embeddings create
       operationId: postEmbeddingsCreate
+      x-collective-intelligence:
+        contributionType: signal-producer
+        artifactsProduced:
+          - traces
+        artifactsConsumed:
+          - policies
+          - org_settings
+          - quotas
+          - request_context
+        aggregationOrSynthesis: Combines request intent, policy constraints, and tenant
+          context to produce deterministic outputs within the CI Fabric.
+        feedbackLoops: Feeds telemetry, evaluation signals, and human feedback into
+          quality gates and policy refinement cycles.
+        provenanceAndAttribution: Associates user, organization, model, and tool
+          provenance with requestId/correlationId for end-to-end attribution.
+        governanceAndPrivacyBoundaries: Applies tenant isolation, retention controls,
+          redaction rules, and auditable policy enforcement boundaries.
+        failureModesAndCiImpact: Potential CI impact includes stale memory, missing
+          attribution links, policy mismatches, and reduced synthesis quality.
+  /v1/rerank:
+    post:
+      tags:
+        - Rerank
+      summary: Rerank documents against a query
+      description: "Cross-encoder reranking: rescores candidate documents against a query and returns them ordered by relevance, with indices referring to the original request order. Model selection is dynamic across every catalog model carrying the `reranking` capability; pass `model` to pin one."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+                - documents
+              properties:
+                query:
+                  type: string
+                  minLength: 1
+                documents:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: string
+                model:
+                  type: string
+                  description: Reranker model id, or "auto" (default).
+                top_n:
+                  type: integer
+                  minimum: 1
+                top_k:
+                  type: integer
+                  minimum: 1
+                  description: Alias of top_n (Voyage spelling).
+                return_documents:
+                  type: boolean
+                  default: false
+                strategy:
+                  type: string
+                allow_fallback:
+                  type: boolean
+                  default: true
+        required: true
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Documents reranked
+          content:
+            application/json:
+              schema:
+                description: Documents reranked
+                type: object
+                required:
+                  - object
+                  - model
+                  - results
+                additionalProperties: true
+                properties:
+                  object:
+                    type: string
+                  model:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - index
+                        - relevance_score
+                      additionalProperties: true
+                      properties:
+                        index:
+                          type: integer
+                        relevance_score:
+                          type: number
+                        document:
+                          type: string
+                          nullable: true
+                  usage:
+                    type: object
+                    additionalProperties: true
+                    properties:
+                      total_tokens:
+                        type: integer
+                  _ailin:
+                    type: object
+                    additionalProperties: true
+          headers:
+            X-Request-Id:
+              description: Unique request identifier for end-to-end tracing.
+              schema:
+                type: string
+            X-Correlation-Id:
+              description: Correlation identifier propagated across internal services.
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          description: Every reranker candidate failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      type:
+                        type: string
+                      code:
+                        type: string
+                      attempts:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+          headers:
+            Retry-After:
+              description: Retry delay in seconds or HTTP-date before sending a new request.
+              schema:
+                type: string
+                example: "60"
+      operationId: postRerank
+      x-collective-intelligence:
+        contributionType: signal-producer
+        artifactsProduced:
+          - traces
+        artifactsConsumed:
+          - policies
+          - org_settings
+          - quotas
+          - request_context
+        aggregationOrSynthesis: Combines request intent, policy constraints, and tenant
+          context to produce deterministic outputs within the CI Fabric.
+        feedbackLoops: Feeds telemetry, evaluation signals, and human feedback into
+          quality gates and policy refinement cycles.
+        provenanceAndAttribution: Associates user, organization, model, and tool
+          provenance with requestId/correlationId for end-to-end attribution.
+        governanceAndPrivacyBoundaries: Applies tenant isolation, retention controls,
+          redaction rules, and auditable policy enforcement boundaries.
+        failureModesAndCiImpact: Potential CI impact includes stale memory, missing
+          attribution links, policy mismatches, and reduced synthesis quality.
+  /v1/retrieval:
+    post:
+      tags:
+        - Rerank
+      summary: Two-stage retrieval over ingested vector stores
+      description: "Runs a pgvector kNN over the named vector stores (stage 1) and optionally a cross-encoder rerank over the recalled chunks (stage 2). Stores must already contain ingested files — create them via POST /v1/vector_stores. Reranking is fail-soft: a reranker outage degrades to vector order and is reported in `rerank.reason` rather than failing the request."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+                - vector_store_ids
+              properties:
+                query:
+                  type: string
+                  minLength: 1
+                vector_store_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: string
+                top_k:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                max_chunks:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                score_threshold:
+                  type: number
+                file_ids:
+                  type: array
+                  items:
+                    type: string
+                rerank:
+                  type: boolean
+                  default: false
+                rerank_model:
+                  type: string
+        required: true
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Chunks retrieved
+          content:
+            application/json:
+              schema:
+                description: Chunks retrieved
+                type: object
+                additionalProperties: true
+                properties:
+                  object:
+                    type: string
+                  query:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  rerank:
+                    type: object
+                    additionalProperties: true
+                  _ailin:
+                    type: object
+                    additionalProperties: true
+          headers:
+            X-Request-Id:
+              description: Unique request identifier for end-to-end tracing.
+              schema:
+                type: string
+            X-Correlation-Id:
+              description: Correlation identifier propagated across internal services.
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          description: Every reranker candidate failed (retrieval still degrades to vector order rather than failing; this applies to the retrieval call itself being unable to proceed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      type:
+                        type: string
+                      code:
+                        type: string
+                      attempts:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+          headers:
+            Retry-After:
+              description: Retry delay in seconds or HTTP-date before sending a new request.
+              schema:
+                type: string
+                example: "60"
+      operationId: postRetrieval
       x-collective-intelligence:
         contributionType: signal-producer
         artifactsProduced:

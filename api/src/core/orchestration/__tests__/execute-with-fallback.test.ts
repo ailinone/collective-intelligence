@@ -399,6 +399,150 @@ describe('executeWithFallback', () => {
 });
 
 /**
+ * Bug 2 (found live 2026-09-08, empiriolabs/wan-3-0): a single slow-failing
+ * candidate could consume the search's ENTIRE `deadlineMs` budget by itself
+ * — a 300000ms per-candidate poll ran to completion under a 30000ms search
+ * deadline, and the between-candidate check (which only fires AFTER a
+ * candidate returns) then correctly refused to try any of the other 143
+ * queued candidates, but only after the damage was already done. The fix:
+ * `execute` now receives a third `ctx.deadlineAt` argument a per-candidate
+ * operation that internally waits/polls can bound itself by, and the
+ * sequential loop divides the remaining search time fairly across however
+ * many candidates are still queued rather than handing each one the full
+ * remaining budget.
+ */
+describe('executeWithFallback — Bug 2: per-candidate deadline (ctx.deadlineAt)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('passes ctx.deadlineAt derived from deadlineMs to execute', async () => {
+    const a = fakeModel({ id: 'a', name: 'a', provider: 'openai' });
+    const registry = fakeRegistry({ openai: fakeAdapter('openai') });
+    const before = Date.now();
+    const execute = vi.fn(async (_model: Model, _adapter, ctx: { deadlineAt: number }) => {
+      expect(ctx.deadlineAt).toBeGreaterThanOrEqual(before + 30000 - 50);
+      expect(ctx.deadlineAt).toBeLessThanOrEqual(before + 30000 + 2000);
+      return 'ok';
+    });
+
+    await executeWithFallback<string>({
+      capability: 'embeddings',
+      registry,
+      catalog: [a],
+      execute,
+      deadlineMs: 30000,
+    });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('ctx.deadlineAt is Infinity when deadlineMs is omitted', async () => {
+    const a = fakeModel({ id: 'a', name: 'a', provider: 'openai' });
+    const registry = fakeRegistry({ openai: fakeAdapter('openai') });
+    let seenDeadline: number | undefined;
+    const execute = vi.fn(async (_model: Model, _adapter, ctx: { deadlineAt: number }) => {
+      seenDeadline = ctx.deadlineAt;
+      return 'ok';
+    });
+
+    await executeWithFallback<string>({
+      capability: 'embeddings',
+      registry,
+      catalog: [a],
+      execute,
+    });
+
+    expect(seenDeadline).toBe(Infinity);
+  });
+
+  it('divides the remaining budget across remaining candidates — the LAST one gets the full remainder, not a fraction', async () => {
+    const a = fakeModel({ id: 'a', name: 'a', provider: 'openai' });
+    const b = fakeModel({ id: 'b', name: 'b', provider: 'voyage' });
+    const registry = fakeRegistry({ openai: fakeAdapter('openai'), voyage: fakeAdapter('voyage') });
+    const deadlines: number[] = [];
+    const execute = vi.fn(async (model: Model, _adapter, ctx: { deadlineAt: number }) => {
+      deadlines.push(ctx.deadlineAt);
+      if (model.id === 'a') throw new Error('boom');
+      return `ok:${model.id}`;
+    });
+
+    const before = Date.now();
+    await executeWithFallback<string>({
+      capability: 'embeddings',
+      registry,
+      catalog: [a, b],
+      execute,
+      deadlineMs: 20000,
+    });
+
+    // a: 2 candidates remaining (itself + b) → roughly half the budget.
+    expect(deadlines[0]).toBeGreaterThan(before + 9000);
+    expect(deadlines[0]).toBeLessThan(before + 11000);
+    // b: only 1 candidate remaining → the FULL remaining budget, not a
+    // further fraction — bit-identical to the pre-fix behavior once the
+    // pool is down to a single candidate.
+    expect(deadlines[1]).toBeGreaterThan(before + 19000);
+  });
+
+  it('a hanging candidate is cut off in time for the search to still try the next candidate within the overall deadline (regression, live-proven 2026-09-08 on empiriolabs/wan-3-0)', async () => {
+    vi.useFakeTimers();
+    const a = fakeModel({ id: 'a', name: 'a', provider: 'empiriolabs-fixture' });
+    const b = fakeModel({ id: 'b', name: 'b', provider: 'fast-fixture' });
+    const registry = fakeRegistry({
+      'empiriolabs-fixture': fakeAdapter('empiriolabs-fixture'),
+      'fast-fixture': fakeAdapter('fast-fixture'),
+    });
+
+    // Mirrors the REAL fixed pollVideoTask/submitAndPollGenerationTask
+    // contract post-fix: bound the internal wait to
+    // `min(ownPollBudgetMs, ctx.deadlineAt - now)` instead of blindly
+    // waiting the full fixed budget (300000ms, matching the production
+    // incident's HUB_VIDEO_POLL_TIMEOUT_MS default) regardless of how much
+    // search time is actually left.
+    const OWN_POLL_BUDGET_MS = 300_000;
+    const execute = vi.fn(
+      (model: Model, _adapter: unknown, ctx: { deadlineAt: number }) =>
+        new Promise<string>((resolve, reject) => {
+          if (model.id === 'b') {
+            resolve(`ok:${model.id}`);
+            return;
+          }
+          const waitMs = Math.min(OWN_POLL_BUDGET_MS, Math.max(0, ctx.deadlineAt - Date.now()));
+          setTimeout(
+            () =>
+              reject(new Error(`${model.id} video task still "processing" after ${waitMs}ms`)),
+            waitMs
+          );
+        })
+    );
+
+    const resultPromise = executeWithFallback<string>({
+      capability: 'embeddings',
+      registry,
+      catalog: [a, b],
+      execute,
+      // Matches the production incident's logged search deadline exactly.
+      deadlineMs: 30000,
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    // Both candidates were tried — the hanging one did NOT consume the
+    // whole budget and starve the other, unlike the pre-fix production
+    // incident (143 candidates never attempted).
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(result.response).toBe('ok:b');
+    expect(result.attempts[0]).toMatchObject({
+      provider: 'empiriolabs-fixture',
+      status: 'failed',
+    });
+    expect(result.attempts[1]).toMatchObject({ provider: 'fast-fixture', status: 'success' });
+  });
+});
+
+/**
  * parallelDegree dial — racing top-N cuts cold-start latency for audio.
  * The pins:
  *   1. parallelDegree=N races first N candidates with Promise.any semantics

@@ -14,18 +14,35 @@
  * - What the platform is and what it can do
  * - The model's role in the current strategy
  * - Available capabilities (tools, image gen, web search, etc.)
+ * - What the BROADER system can do beyond this turn (system-capability-manifest.ts),
+ *   on non-latency-sensitive requests
  * - How to leverage the system's collective intelligence
  *
- * This is injected into the request messages BEFORE execution, only when
- * the user hasn't already provided a system message. The triage LLM may
- * also provide a task-specific system prompt for multi-stage plans — when
- * that exists, it takes precedence.
+ * This is injected into the request messages BEFORE execution, as an
+ * ADDITIONAL system message even when the caller (an OpenAI-compatible
+ * agentic client such as Cursor/Zed/Cline/Claude Code, or the platform's
+ * own triage pipeline) already supplied its own system message.
  *
- * Design: The prompt is concise (<500 tokens) to avoid wasting context window.
- * It adapts based on the detected task type and required capabilities.
+ * 2026-09-08 fix: this used to return `null` — dropping identity,
+ * guardrails, AND the capability manifest ENTIRELY — whenever
+ * `request.messages` already contained any system message. That is the
+ * common case for agentic-IDE traffic, which reverted those requests to
+ * exactly the hallucination/false-denial failure modes this module exists
+ * to prevent. Both call sites in orchestration-engine.ts already prepend
+ * this as a SEPARATE leading system message (never merge it into the
+ * caller's own one), and `system-message-normalizer.ts`'s
+ * `normalizeSystemMessages()` runs downstream in every strategy's execution
+ * path to collapse any number of system messages — in order — into the one
+ * every provider adapter reads consistently. So a second (or third) system
+ * message here is safe by construction, not a special case to route around.
+ *
+ * Design: The prompt is concise (<500 tokens on a typical single-stage request)
+ * to avoid wasting context window. It adapts based on the detected task type,
+ * required capabilities, and (for the system-capability-manifest section)
+ * whether the request looks latency-sensitive.
  */
 
-import type { ChatRequest, OrchestrationContext, ModelCapability } from '@/types';
+import type { ChatRequest, ChatMessage, OrchestrationContext, ModelCapability } from '@/types';
 import {
   renderSlotAugmentation,
   hashSlotValues,
@@ -37,22 +54,59 @@ import {
   BEHAVIORAL_GUARDRAILS_DIRECTIVE,
   BEHAVIORAL_GUARDRAILS_ECHO,
 } from './prompts/behavioral-guardrails';
+import { CODE_EXECUTION_HONESTY_DIRECTIVE } from './prompts/code-execution-honesty';
+import {
+  shouldIncludeSystemCapabilityManifest,
+  buildSystemCapabilityManifest,
+} from './prompts/system-capability-manifest';
+import { detectCodeExecutionIntent } from './capability-inference';
 import { logger } from '@/utils/logger';
+
+/**
+ * Extracts the last user turn's plain text, for the code-execution-intent
+ * check below. Mirrors `extractLastUserTurnTextForMediaGate` in
+ * chat-routes.ts (text-only, last-turn-only — multimodal parts like
+ * `image_url` must not pollute a plain regex check), duplicated locally
+ * rather than imported to avoid a route-layer dependency from this
+ * lower-level orchestration module.
+ */
+function extractLastUserTurnText(messages: ChatMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== 'user') continue;
+    if (typeof message.content === 'string') return message.content;
+    if (!Array.isArray(message.content)) return '';
+    return message.content
+      .filter(
+        (part): part is { type: 'text'; text: string } =>
+          !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text'
+      )
+      .map((part) => part.text)
+      .join('\n');
+  }
+  return '';
+}
 
 const log = logger.child({ component: 'execution-system-prompt' });
 
 /**
  * Build an execution system prompt based on context.
- * Returns null if a system message already exists in the request.
+ *
+ * Always returns a grounded string — identity, behavioral guardrails, and
+ * (when the request looks non-latency-sensitive) the system-capability
+ * manifest are never conditional on whether the request already carries a
+ * system message. See the module doc comment's 2026-09-08 note for why: the
+ * caller injects this as an ADDITIONAL leading system message and relies on
+ * `normalizeSystemMessages()` to merge it with any pre-existing one
+ * downstream, so there is no case where returning null is the correct way
+ * to "preserve" a caller-supplied system message — it only starves the
+ * model of grounding it needs regardless of who else's content shares the
+ * system role.
  */
 export function buildExecutionSystemPrompt(
   request: ChatRequest,
   context: OrchestrationContext
 ): string | null {
-  // Don't override existing system messages
-  const hasSystemMessage = request.messages.some((m) => m.role === 'system');
-  if (hasSystemMessage) return null;
-
   const taskType = context.taskType || 'general';
   const capabilities = context.requiredCapabilities ?? [];
 
@@ -91,10 +145,32 @@ export function buildExecutionSystemPrompt(
     sections.push(capabilityDescriptions);
   }
 
+  // System capability manifest — what the BROADER platform can do beyond
+  // this exact turn (specialist media pipelines, collective strategies,
+  // real tool categories), plus an explicit non-capability (no live code
+  // execution). Scoped away from latency-sensitive/ping-shaped requests —
+  // see system-capability-manifest.ts's doc comment for the full rationale.
+  if (shouldIncludeSystemCapabilityManifest(request, context)) {
+    sections.push(buildSystemCapabilityManifest());
+  }
+
   // Task-specific guidance
   const taskGuidance = buildTaskGuidance(taskType);
   if (taskGuidance) {
     sections.push(taskGuidance);
+  }
+
+  // Code-execution honesty (2026-09 incident fix): the capability-awareness
+  // section above can list `tool_use`/`function_calling` purely because the
+  // request text contains an execute-shaped verb — with no real
+  // code-execution tool actually attached to this request (see
+  // code-execution-honesty.ts's doc comment for the full incident). When the
+  // user's own last turn shows genuine "run this and show me the real
+  // result" intent, make the gap explicit so the model reasons out the
+  // correct answer instead of attempting a fake tool call or emitting a bare
+  // fragment.
+  if (detectCodeExecutionIntent(extractLastUserTurnText(request.messages))) {
+    sections.push(CODE_EXECUTION_HONESTY_DIRECTIVE);
   }
 
   // R11: strategy-awareness framing uses the authoritative collective flag set

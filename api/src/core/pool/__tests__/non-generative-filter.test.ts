@@ -70,6 +70,51 @@ describe('isNonGenerativeModel', () => {
     ).toBe(false);
   });
 
+  // 2026-08-26: the same class recurred with a different model family, and this
+  // time it was measured. Probing production with "17 x 23" returned wrong answers
+  // 29% of the time, and the models being selected for a plain TEXT chat request
+  // included a speech-recognition model and a text-to-speech model.
+  //
+  // Capability data cannot be trusted to exclude them. `inferModelCapabilities`
+  // decides chat eligibility from a FAMILY-NAME regex over the id, so
+  // `gemini-2.5-flash-preview-tts` matches /\bgemini\b/ and `Qwen/Qwen3-ASR-0.6B`
+  // matches /\bqwen\b/ — both are persisted with ['chat','text_generation',
+  // 'streaming']. The classifier that would have said "tts"/"asr" only runs when
+  // the family regex yields nothing, so on these rows it never runs at all, and
+  // `metadata.endpoint` is derived from those same capabilities (circular).
+  //
+  // The pre-existing `text-to-speech` / `speech-to-text` spellings do not match
+  // the `-tts` / `-ASR-` forms vendors actually ship.
+  describe('speech models mis-tagged as chat (observed in production)', () => {
+    it.each([['gemini-2.5-flash-preview-tts'], ['Qwen/Qwen3-ASR-0.6B'], ['tts-1-hd']])(
+      'excludes %s even when tagged chat/text_generation',
+      (id) => {
+        expect(isNonGenerativeModel(m(id, ['chat', 'text_generation', 'streaming']))).toBe(true);
+      }
+    );
+
+    it.each([
+      ['Qwen/Qwen3-VL-2B-Instruct'],
+      ['meta-llama/Llama-3.2-1B-Instruct'],
+      ['Qwen/Qwen2.5-Coder-7B-Instruct'],
+      ['anthropic/claude-opus-4-5'],
+      ['deepseek-v3.2-exp'],
+      ['openai/gpt-oss-120b'],
+      ['mistralai/Mistral-7B-Instruct'],
+    ])('keeps %s — a small or specialised model is still a chat model', (id) => {
+      // These were also observed being selected, and some of them answered
+      // wrongly — but that is a RANKING problem, not a modality one. Excluding
+      // them here would shrink the legitimate pool to fix the wrong bug.
+      expect(isNonGenerativeModel(m(id, ['chat', 'text_generation']))).toBe(false);
+    });
+
+    it('matches the tts/asr tokens only at boundaries', () => {
+      // A bare /tts/ or /asr/ would hit unrelated ids.
+      expect(isNonGenerativeModel(m('acme/pattsy-7b', ['chat']))).toBe(false);
+      expect(isNonGenerativeModel(m('org/disaster-recovery-model', ['chat']))).toBe(false);
+    });
+  });
+
   it('does not false-positive on names that merely contain "research"/"search" substrings', () => {
     expect(isNonGenerativeModel(m('some/research-assistant-70b', ['chat']))).toBe(false);
   });

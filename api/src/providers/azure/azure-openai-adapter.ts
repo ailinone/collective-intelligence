@@ -67,6 +67,7 @@ import {
   OpenAICompatibleHubAdapter,
   type OpenAICompatibleHubAdapterConfig,
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
+import { deriveSessionKey } from '@/services/session-affinity-service';
 import type { ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse } from '@/types';
 
 /**
@@ -231,6 +232,31 @@ export class AzureOpenAIAdapter extends OpenAICompatibleHubAdapter {
     request: ChatRequest
   ): AsyncGenerator<ChatResponse, void, unknown> {
     yield* super.chatCompletionStream({ ...request, model: this.deployment });
+  }
+
+  /**
+   * Prompt caching (ADR-025 follow-up, 2026-09): Azure OpenAI documents the
+   * SAME `prompt_cache_key` request field and contract as OpenAI itself
+   * (learn.microsoft.com/.../ai-foundry/openai/how-to/prompt-caching,
+   * verified live 2026-09-09 — "reuse the same key for requests that share
+   * long, common prompt prefixes"). Prompt caching is enabled by default for
+   * supported models regardless of this field; the key only improves cache
+   * routing for related requests, so it is unconditionally safe to send.
+   * Reuses the SAME derivation session affinity uses
+   * (session-affinity-service.ts) so it stays stable turn-to-turn
+   * independent of whether session affinity itself is enabled — the same
+   * approach `openai-adapter.ts` and `mistral-adapter.ts` already take for
+   * their fields of the same name.
+   *
+   * Because `AzureOpenAIAdapter` extends the generic hub (not
+   * `openai-adapter.ts`), it does not inherit that adapter's own
+   * `prompt_cache_key` wiring — this override is what closes that gap.
+   */
+  protected override getExtraChatPayloadFields(
+    _resolvedModel: string,
+    request: ChatRequest
+  ): Record<string, unknown> {
+    return { prompt_cache_key: deriveSessionKey(request) };
   }
 
   override async generateEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {

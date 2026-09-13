@@ -63,7 +63,68 @@ import {
   OpenAICompatibleHubAdapter,
   type OpenAICompatibleHubAdapterConfig,
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
-import type { ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse } from '@/types';
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  EmbeddingRequest,
+  EmbeddingResponse,
+  MessageContent,
+} from '@/types';
+import { narrowAs } from '@/utils/type-guards';
+
+/**
+ * Detects a Databricks pay-per-token serving endpoint that fronts an
+ * Anthropic Claude model. Databricks' own Foundation Model API supported-
+ * models listing names these endpoints `databricks-claude-<family>` (e.g.
+ * `databricks-claude-sonnet-4-5`, `databricks-claude-opus-4-1` — confirmed
+ * live against `docs.databricks.com/.../foundation-model-apis/supported-models`,
+ * 2026-09-09). A custom-named serving endpoint that also wraps a Claude
+ * model (workspace admins choose arbitrary endpoint names) is not detected
+ * by this heuristic — same class of limitation as Bedrock's
+ * `isBedrockClaudeModel()`, which this mirrors.
+ */
+export function isDatabricksClaudeEndpoint(endpoint: string): boolean {
+  return /claude/i.test(endpoint);
+}
+
+/**
+ * Prompt caching (ADR-025 follow-up, 2026-09): Databricks documents
+ * `cache_control: { type: 'ephemeral' }` on a message content block —
+ * Anthropic's own mechanism, verified live 2026-09-09 (Databricks community
+ * + REST API reference; supported for Databricks-hosted Claude models,
+ * covering "text content messages ... in the messages.content array").
+ *
+ * Scoped deliberately narrow, mirroring the same "single checkpoint" choice
+ * ADR-025 made for Bedrock: only the system message (the caller's stable,
+ * repeated instructions — the highest-value target for caching) is marked,
+ * and only when its content is a plain string. Tool definitions and
+ * structured/array system content are explicitly OUT of scope here — the
+ * exact shape Databricks expects for `cache_control` on those is unverified
+ * for this OpenAI-compatible-shaped endpoint, and sending a malformed extra
+ * field is a worse failure mode than caching nothing. No minimum-size gate
+ * (same as `anthropic-adapter.ts`'s own system-prompt breakpoint) — Claude
+ * silently skips caching below its minimum rather than erroring.
+ *
+ * A no-op (returns the input array unchanged) when there is no system
+ * message or its content is not a plain string.
+ */
+export function applyDatabricksClaudeCacheControl(messages: ChatMessage[]): ChatMessage[] {
+  const systemIndex = messages.findIndex((m) => m.role === 'system');
+  if (systemIndex === -1) return messages;
+  const systemMessage = messages[systemIndex];
+  if (typeof systemMessage.content !== 'string' || systemMessage.content.length === 0) {
+    return messages;
+  }
+
+  const cacheableContent = narrowAs<MessageContent[]>([
+    { type: 'text', text: systemMessage.content, cache_control: { type: 'ephemeral' } },
+  ]);
+
+  const updated = [...messages];
+  updated[systemIndex] = { ...systemMessage, content: cacheableContent };
+  return updated;
+}
 
 export interface DatabricksAdapterConfig extends OpenAICompatibleHubAdapterConfig {
   /**
@@ -170,15 +231,25 @@ export class DatabricksAdapter extends OpenAICompatibleHubAdapter {
    * Databricks accepts the `model` field and will 400 if it doesn't match
    * the serving endpoint's bound model. We overwrite to the endpoint name —
    * this is what Databricks expects AND keeps log-grep honest.
+   *
+   * When the endpoint fronts a Claude model (ADR-025 follow-up, 2026-09),
+   * also mark the system message for `cache_control` — see
+   * {@link applyDatabricksClaudeCacheControl}.
    */
   override async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
-    return super.chatCompletion({ ...request, model: this.endpoint });
+    const messages = isDatabricksClaudeEndpoint(this.endpoint)
+      ? applyDatabricksClaudeCacheControl(request.messages)
+      : request.messages;
+    return super.chatCompletion({ ...request, model: this.endpoint, messages });
   }
 
   override async *chatCompletionStream(
     request: ChatRequest
   ): AsyncGenerator<ChatResponse, void, unknown> {
-    yield* super.chatCompletionStream({ ...request, model: this.endpoint });
+    const messages = isDatabricksClaudeEndpoint(this.endpoint)
+      ? applyDatabricksClaudeCacheControl(request.messages)
+      : request.messages;
+    yield* super.chatCompletionStream({ ...request, model: this.endpoint, messages });
   }
 
   override async generateEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {

@@ -66,7 +66,7 @@ describe('XinferenceAdapter — rerank wire', () => {
     });
     try {
       const adapter = makeAdapter();
-      const res = await adapter.rerank({
+      const res = await adapter.rerankNative({
         model: 'bge-reranker-v2-m3',
         query: 'what is vitamin C?',
         documents: ['unrelated doc', 'vitamin C is ascorbic acid'],
@@ -95,7 +95,7 @@ describe('XinferenceAdapter — rerank wire', () => {
     }) as unknown as typeof fetch;
     try {
       const adapter = makeAdapter();
-      const res = await adapter.rerank({ model: 'm', query: 'q', documents: [] });
+      const res = await adapter.rerankNative({ model: 'm', query: 'q', documents: [] });
       expect(res.results).toEqual([]);
       expect(sentinel.count).toBe(0);
     } finally {
@@ -105,14 +105,14 @@ describe('XinferenceAdapter — rerank wire', () => {
 
   it('rejects missing model', async () => {
     const adapter = makeAdapter();
-    await expect(adapter.rerank({ model: '', query: 'q', documents: ['a'] })).rejects.toThrow(
+    await expect(adapter.rerankNative({ model: '', query: 'q', documents: ['a'] })).rejects.toThrow(
       /model is required/
     );
   });
 
   it('rejects missing query', async () => {
     const adapter = makeAdapter();
-    await expect(adapter.rerank({ model: 'm', query: '', documents: ['a'] })).rejects.toThrow(
+    await expect(adapter.rerankNative({ model: 'm', query: '', documents: ['a'] })).rejects.toThrow(
       /query is required/
     );
   });
@@ -120,7 +120,7 @@ describe('XinferenceAdapter — rerank wire', () => {
   it('rejects non-array documents', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.rerank({ model: 'm', query: 'q', documents: 'not-an-array' as unknown as string[] })
+      adapter.rerankNative({ model: 'm', query: 'q', documents: 'not-an-array' as unknown as string[] })
     ).rejects.toThrow(/documents must be an array/);
   });
 
@@ -128,7 +128,7 @@ describe('XinferenceAdapter — rerank wire', () => {
     const restore = stubFetch({ ok: false, status: 500, body: { error: 'model not loaded' } });
     try {
       const adapter = makeAdapter();
-      await expect(adapter.rerank({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
+      await expect(adapter.rerankNative({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
         /500.*model not loaded/
       );
     } finally {
@@ -140,7 +140,7 @@ describe('XinferenceAdapter — rerank wire', () => {
     const restore = stubFetch({ body: { not_results: [] } });
     try {
       const adapter = makeAdapter();
-      await expect(adapter.rerank({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
+      await expect(adapter.rerankNative({ model: 'm', query: 'q', documents: ['a'] })).rejects.toThrow(
         /results.*array/
       );
     } finally {

@@ -22,6 +22,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 
+// HERMETICITY: the probe's L2 cache is the GLOBAL Redis client (db 1) with a
+// 7-day TTL, and it writes real verdicts for the fake provider/model ids used
+// below. If any Redis happens to answer on REDIS_HOST:REDIS_PORT (a developer
+// box with an unrelated redis on 6379 is enough), the FIRST run seeds
+// `fc-probe:probe-test:*` and every later run reads the cached verdict, never
+// calls the adapter, and fails `expect(a.calls).toBe(1)` — a failure that has
+// nothing to do with the probe logic under test. Stub the client module so
+// the L2 cache is always an empty, write-only sink; the memory cache, budget
+// guard and in-flight dedup (what these cases actually pin) are untouched.
+vi.mock('@/cache/redis-client', () => ({
+  getGlobalRedisClient: () => ({
+    get: async () => null,
+    set: async () => 'OK',
+  }),
+  disconnectRedis: async () => {},
+}));
+
 const {
   getFunctionCallingVerdict,
   resetFunctionCallingProbeForTesting,

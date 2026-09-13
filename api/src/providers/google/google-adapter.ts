@@ -13,7 +13,11 @@
  */
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { ProviderAdapter, type HealthCheckResult } from '../base/provider-adapter';
+import {
+  ProviderAdapter,
+  type HealthCheckResult,
+  type RealtimeTransportSupport,
+} from '../base/provider-adapter';
 import { MODERATION_ANALYZER_SYSTEM_PROMPT } from '../base/moderation-prompt';
 import type {
   ChatRequest,
@@ -24,6 +28,8 @@ import type {
   ProviderConfig,
   Provider,
   Model,
+  Tool,
+  ToolCall,
 } from '@/types';
 import type {
   AudioTTSRequest,
@@ -45,6 +51,9 @@ import { logger } from '@/utils/logger';
 import { getModelsByProvider } from '@/services/model-catalog-service';
 import { getErrorMessage } from '@/utils/type-guards';
 import { classifyGoogleCredentialShape } from '@/core/operability/provider-failure-classification';
+import { resolveReasoningEffort } from '@/utils/reasoning-effort';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
+import { randomUUID } from 'crypto';
 
 /**
  * Google Gemini Adapter
@@ -57,6 +66,20 @@ export class GoogleAdapter extends ProviderAdapter {
   // the OpenAI adapter for the original reference implementation.
   private clientPool: GoogleGenerativeAI[];
   private providerLog = logger.child({ provider: 'google' });
+
+  /**
+   * The Gemini Live API is a WebSocket to `BidiGenerateContent` on
+   * generativelanguage.googleapis.com: a `setup` message opens the session,
+   * then `realtimeInput` carries audio up and `serverContent` carries audio
+   * and text down. The bridge implementation is
+   * `providers/google/google-live-client.ts`.
+   */
+  override getRealtimeTransport(): RealtimeTransportSupport {
+    return {
+      kind: 'google-live-ws',
+      evidenceUrl: 'https://ai.google.dev/gemini-api/docs/live',
+    };
+  }
 
   constructor(config: ProviderConfig) {
     super('google', 'Google AI (Gemini)', config);
@@ -321,6 +344,71 @@ export class GoogleAdapter extends ProviderAdapter {
   }
 
   /**
+   * Check if a model natively supports Gemini's `thinkingConfig` knob.
+   *
+   * Gemini 2.5 is the first generation with a documented `thinkingBudget`
+   * contract (Pro, Flash, and Flash-Lite); 1.x and non-thinking 2.0 models
+   * reject the field outright. Matched the same way `isRealtimeModel()`
+   * above matches model families: a substring allowlist against the
+   * normalized model name, so `gemini-2.5-flash-lite` and dated aliases
+   * (e.g. `gemini-2.5-pro-002`) match via their `gemini-2.5-*` prefix.
+   */
+  private isThinkingCapableModel(model: string): boolean {
+    const normalized = model.toLowerCase();
+    const thinkingModelPrefixes = ['gemini-2.5-pro', 'gemini-2.5-flash'];
+
+    return thinkingModelPrefixes.some((prefix) => normalized.includes(prefix));
+  }
+
+  /**
+   * Real per-model `thinkingBudget` token range (Google AI "Thinking" guide
+   * and the 2.5 Pro / Flash / Flash-Lite model cards). The Gemini API
+   * rejects an out-of-range value with a 400 instead of clamping it
+   * server-side, so the resolved budget is clamped here before being sent:
+   *   - 2.5 Pro: thinking cannot be fully disabled — the documented range is
+   *     128-32768 (no 0).
+   *   - 2.5 Flash / Flash-Lite: 0-24576, where 0 explicitly disables
+   *     thinking.
+   * (Gemini also documents `-1` as a sentinel for "dynamic thinking" on
+   * both families, but that is a distinct opt-in this adapter does not
+   * synthesize on its own — it only forwards the resolved, concrete
+   * per-tier budget from `resolveReasoningEffort()`.)
+   */
+  private getThinkingBudgetRange(model: string): { min: number; max: number } {
+    const normalized = model.toLowerCase();
+    if (normalized.includes('gemini-2.5-pro')) return { min: 128, max: 32768 };
+    return { min: 0, max: 24576 }; // gemini-2.5-flash / gemini-2.5-flash-lite
+  }
+
+  /**
+   * Build the `generationConfig.thinkingConfig` block for a Gemini request,
+   * or `undefined` when the model doesn't support it or nothing on the
+   * request asked for reasoning. Goes through the foundation's
+   * `resolveReasoningEffort()` (LOTE AZ, `@/utils/reasoning-effort`) rather
+   * than reading `thinking_budget`/`reasoning_effort` ad hoc, so this stays
+   * reconciled with every other consumer of those fields.
+   *
+   * `includeThoughts` defaults to `false`: nothing downstream of this
+   * adapter (response conversion, streaming chunk parsing) understands a
+   * Gemini `thought` part, so surfacing thought summaries would currently
+   * just leak raw thinking text into the answer content unlabeled.
+   */
+  private buildThinkingConfig(
+    request: ChatRequest,
+    modelName: string
+  ): { thinkingBudget: number; includeThoughts: boolean } | undefined {
+    if (!this.isThinkingCapableModel(modelName)) return undefined;
+
+    const { thinkingBudget } = resolveReasoningEffort(request);
+    if (thinkingBudget === undefined) return undefined;
+
+    const { min, max } = this.getThinkingBudgetRange(modelName);
+    const clampedBudget = Math.min(Math.max(thinkingBudget, min), max);
+
+    return { thinkingBudget: clampedBudget, includeThoughts: false };
+  }
+
+  /**
    * Chat completion (non-streaming)
    */
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
@@ -376,6 +464,9 @@ export class GoogleAdapter extends ProviderAdapter {
       }));
 
       // Create request object with proper typing
+      const thinkingConfig = this.buildThinkingConfig(request, modelName);
+      const hasTools = Boolean(request.tools && request.tools.length > 0);
+      const toolConfig = hasTools ? this.convertToolChoiceToGemini(request.tool_choice) : undefined;
       const generateRequest = {
         contents: geminiContents,
         generationConfig: {
@@ -387,6 +478,7 @@ export class GoogleAdapter extends ProviderAdapter {
               ? request.stop
               : [request.stop]
             : undefined,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
         safetySettings: [
           {
@@ -406,6 +498,12 @@ export class GoogleAdapter extends ProviderAdapter {
             threshold: HarmBlockThreshold.BLOCK_NONE,
           },
         ],
+        ...(hasTools
+          ? {
+              tools: this.convertToolsToGemini(request.tools!),
+              ...(toolConfig ? { toolConfig } : {}),
+            }
+          : {}),
       };
 
       // Type assertion needed due to SDK type mismatch - the structure is correct
@@ -502,12 +600,16 @@ export class GoogleAdapter extends ProviderAdapter {
       }));
 
       // Create request object with proper typing
+      const thinkingConfig = this.buildThinkingConfig(request, modelName);
+      const hasTools = Boolean(request.tools && request.tools.length > 0);
+      const toolConfig = hasTools ? this.convertToolChoiceToGemini(request.tool_choice) : undefined;
       const generateRequest = {
         contents: geminiContents,
         generationConfig: {
           temperature: request.temperature,
           topP: request.top_p,
           maxOutputTokens: request.max_tokens || 2048,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
         safetySettings: [
           {
@@ -527,6 +629,15 @@ export class GoogleAdapter extends ProviderAdapter {
             threshold: HarmBlockThreshold.BLOCK_NONE,
           },
         ],
+        // Previously omitted entirely for streaming (finding #2 of the
+        // streaming-tool-calling audit) — function calling was unreachable
+        // on this path regardless of what the model supported.
+        ...(hasTools
+          ? {
+              tools: this.convertToolsToGemini(request.tools!),
+              ...(toolConfig ? { toolConfig } : {}),
+            }
+          : {}),
       };
 
       // Type assertion needed due to SDK type mismatch - the structure is correct
@@ -543,6 +654,16 @@ export class GoogleAdapter extends ProviderAdapter {
       );
 
       let firstChunk = true;
+      // Gemini's own `finishReason` has no distinct value for "the model
+      // called a function" — it reports STOP either way. Track whether any
+      // chunk carried a function-call part so the terminal chunk's
+      // `finish_reason` can be corrected to 'tool_calls', matching the
+      // OpenAI-compatible contract every client expects.
+      let sawFunctionCall = false;
+      // Gemini doesn't provide a stable per-call index of its own; each
+      // function-call part encountered across the whole stream gets the
+      // next sequential index.
+      let nextToolCallIndex = 0;
 
       for await (const chunk of result.stream) {
         if (firstChunk) {
@@ -551,7 +672,16 @@ export class GoogleAdapter extends ProviderAdapter {
           firstChunk = false;
         }
 
-        yield this.convertStreamChunk(chunk, modelName);
+        const converted = this.convertStreamChunk(chunk, modelName, nextToolCallIndex);
+        const toolCalls = converted.choices[0]?.delta?.tool_calls;
+        if (toolCalls && toolCalls.length > 0) {
+          sawFunctionCall = true;
+          nextToolCallIndex += toolCalls.length;
+        }
+        if (sawFunctionCall && converted.choices[0] && converted.choices[0].finish_reason !== null) {
+          converted.choices[0].finish_reason = 'tool_calls';
+        }
+        yield converted;
       }
 
       const totalDuration = Date.now() - startTime;
@@ -685,6 +815,98 @@ export class GoogleAdapter extends ProviderAdapter {
   }
 
   /**
+   * Convert our OpenAI-style `tools` (function definitions) to Gemini's
+   * `tools: [{ functionDeclarations: [...] }]` shape. Gemini groups every
+   * function declaration under a single tool entry rather than one entry
+   * per function.
+   *
+   * Shared by both the non-streaming and streaming request builders — prior
+   * to this fix, NEITHER path forwarded `tools` to Gemini at all, so
+   * function calling was completely unreachable for this provider
+   * regardless of streaming.
+   */
+  private convertToolsToGemini(
+    tools: Tool[]
+  ): Array<{
+    functionDeclarations: Array<{ name: string; description?: string; parameters?: unknown }>;
+  }> {
+    const functionDeclarations = tools
+      .filter((tool) => tool.type === 'function' && tool.function)
+      .map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+      }));
+
+    return functionDeclarations.length > 0 ? [{ functionDeclarations }] : [];
+  }
+
+  /**
+   * Map the canonical OpenAI-shaped `tool_choice` onto Gemini's native
+   * `toolConfig.functionCallingConfig` shape — verbatim per
+   * https://ai.google.dev/api/generate-content#FunctionCallingConfig:
+   * `mode` is `AUTO` (model decides, the default), `ANY` (must call a
+   * function), or `NONE` (must not call a function); `allowedFunctionNames`
+   * narrows `ANY` to a specific subset of the declared functions.
+   *
+   * OpenAI's `'required'` maps to `ANY`, not `AUTO` — "must call some tool"
+   * and "may call a tool" are different constraints, and collapsing them
+   * would silently downgrade a caller's explicit request exactly like the
+   * bug this fix addresses. `ChatRequest['tool_choice']` doesn't carry a
+   * `'required'` literal in its type today, but a real OpenAI-compatible
+   * caller can still send the string at runtime, so it's handled
+   * defensively here rather than only through the type.
+   *
+   * Only called when `tools` is non-empty (see both request builders below)
+   * — a `toolConfig` with no declared functions has nothing to constrain.
+   */
+  private convertToolChoiceToGemini(
+    toolChoice: ChatRequest['tool_choice'] | 'required'
+  ): { functionCallingConfig: { mode: 'AUTO' | 'ANY' | 'NONE'; allowedFunctionNames?: string[] } } | undefined {
+    if (toolChoice === undefined) return undefined;
+    if (toolChoice === 'auto') return { functionCallingConfig: { mode: 'AUTO' } };
+    if (toolChoice === 'none') return { functionCallingConfig: { mode: 'NONE' } };
+    if (toolChoice === 'required') return { functionCallingConfig: { mode: 'ANY' } };
+    if (typeof toolChoice === 'object' && toolChoice.type === 'function') {
+      return {
+        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [toolChoice.function.name] },
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * Extract `functionCall` parts from a Gemini content-parts array and
+   * convert them to OpenAI-compatible `ToolCall`s. Gemini never assigns an
+   * id to a function call, so one is synthesized here (stable for the
+   * lifetime of this single response/chunk, which is all a caller needs to
+   * correlate a call with its eventual `tool` role result).
+   */
+  private extractGoogleFunctionCalls(
+    parts: Array<{ functionCall?: { name?: unknown; args?: unknown } }> | undefined,
+    startIndex: number
+  ): ToolCall[] {
+    if (!Array.isArray(parts)) return [];
+
+    const toolCalls: ToolCall[] = [];
+    let index = startIndex;
+    for (const part of parts) {
+      const functionCall = part?.functionCall;
+      if (!functionCall || typeof functionCall.name !== 'string') continue;
+      toolCalls.push({
+        id: `call_${randomUUID()}`,
+        type: 'function',
+        function: {
+          name: functionCall.name,
+          arguments: JSON.stringify(functionCall.args ?? {}),
+        },
+        index: index++,
+      });
+    }
+    return toolCalls;
+  }
+
+  /**
    * Convert messages to Gemini format
    */
   private convertMessages(messages: ChatMessage[]): {
@@ -800,8 +1022,45 @@ export class GoogleAdapter extends ProviderAdapter {
             promptTokenCount?: number;
             candidatesTokenCount?: number;
             totalTokenCount?: number;
+            cachedContentTokenCount?: number;
           })
         : undefined;
+
+    // Prompt caching (ADR-025 follow-up, 2026-09): Gemini's implicit context
+    // caching is enabled by default (no request-side field to set) for
+    // Gemini 2.5+ models — confirmed live against
+    // ai.google.dev/gemini-api/docs/caching 2026-09-08. The SDK's own
+    // `UsageMetadata.cachedContentTokenCount` (verified in
+    // @google/generative-ai's type definitions) reports how many of this
+    // response's prompt tokens were served from cache; Gemini only reports
+    // the hit count directly, so the miss count is derived the same way the
+    // xAI/Moonshot adapters do (`promptTokenCount - cachedContentTokenCount`).
+    // Streaming responses are NOT covered here — `convertStreamChunk` below
+    // does not surface `usageMetadata` at all today, a pre-existing gap
+    // unrelated to caching (Gemini's own streaming usage reporting was never
+    // wired up for any field, not just this one).
+    if (usageMetadata && typeof usageMetadata.cachedContentTokenCount === 'number') {
+      recordProviderPromptCacheUsage({
+        provider: 'google',
+        hitTokens: usageMetadata.cachedContentTokenCount,
+        missTokens:
+          typeof usageMetadata.promptTokenCount === 'number'
+            ? Math.max(0, usageMetadata.promptTokenCount - usageMetadata.cachedContentTokenCount)
+            : undefined,
+      });
+    }
+
+    // Gemini's `finishReason` has no distinct value for "the model called a
+    // function" (it reports STOP either way), so a non-empty tool_calls
+    // array overrides the mapped finish_reason to 'tool_calls' — mirroring
+    // how every other adapter reports a tool-calling turn.
+    const candidateParts =
+      candidate && typeof candidate === 'object'
+        ? ((candidate as { content?: { parts?: unknown } }).content?.parts as
+            | Array<{ text?: string; functionCall?: { name?: unknown; args?: unknown } }>
+            | undefined)
+        : undefined;
+    const toolCalls = this.extractGoogleFunctionCalls(candidateParts, 0);
 
     return {
       id: `chatcmpl-${Date.now()}`,
@@ -814,8 +1073,13 @@ export class GoogleAdapter extends ProviderAdapter {
           message: {
             role: 'assistant',
             content,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
           },
-          finish_reason: finishReason ? this.mapFinishReason(finishReason) : null,
+          finish_reason: toolCalls.length > 0
+            ? 'tool_calls'
+            : finishReason
+              ? this.mapFinishReason(finishReason)
+              : null,
           logprobs: null,
         },
       ],
@@ -891,24 +1155,50 @@ export class GoogleAdapter extends ProviderAdapter {
 
   /**
    * Convert streaming chunk to our format
+   *
+   * @param toolCallStartIndex the next OpenAI-style tool-call `index` to
+   * assign if this chunk carries function-call parts (see the accumulator
+   * in `chatCompletionStream` — Gemini doesn't provide a stable index of
+   * its own).
    */
   private convertStreamChunk(
     chunk:
       | { text?: () => string }
-      | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> },
-    requestedModel: string
+      | {
+          candidates?: Array<{
+            content?: {
+              parts?: Array<{ text?: string; functionCall?: { name?: unknown; args?: unknown } }>;
+            };
+            finishReason?: string;
+          }>;
+        },
+    requestedModel: string,
+    toolCallStartIndex = 0
   ): ChatResponse {
     // Handle different chunk formats
     let content = '';
-    if ('text' in chunk && typeof chunk.text === 'function') {
+    let parts:
+      | Array<{ text?: string; functionCall?: { name?: unknown; args?: unknown } }>
+      | undefined;
+    let finishReason: string | undefined;
+
+    if ('candidates' in chunk && Array.isArray(chunk.candidates) && chunk.candidates[0]) {
+      parts = chunk.candidates[0].content?.parts;
+      finishReason = chunk.candidates[0].finishReason;
+      if (parts) {
+        content = parts.map((p) => p.text || '').join('');
+      }
+    } else if ('text' in chunk && typeof chunk.text === 'function') {
       content = chunk.text();
-    } else if (
-      'candidates' in chunk &&
-      Array.isArray(chunk.candidates) &&
-      chunk.candidates[0]?.content?.parts
-    ) {
-      content = chunk.candidates[0].content.parts.map((p) => p.text || '').join('');
     }
+
+    // Gemini returns a function call's arguments complete within one part —
+    // unlike Anthropic there is no incremental JSON-fragment streaming to
+    // reassemble, so a single delta chunk carries the whole `arguments`
+    // string.
+    const toolCalls = this.extractGoogleFunctionCalls(parts, toolCallStartIndex);
+
+    const delta: Partial<ChatMessage> = toolCalls.length > 0 ? { tool_calls: toolCalls } : { content };
 
     return {
       id: `chatcmpl-${Date.now()}`,
@@ -918,10 +1208,8 @@ export class GoogleAdapter extends ProviderAdapter {
       choices: [
         {
           index: 0,
-          delta: {
-            content,
-          },
-          finish_reason: null,
+          delta,
+          finish_reason: finishReason ? this.mapFinishReason(finishReason) : null,
           logprobs: null,
         },
       ],
@@ -1669,6 +1957,15 @@ export class GoogleAdapter extends ProviderAdapter {
         parameters.lastFrame = endImageInline;
       }
       if (typeof request.duration === 'number' && Number.isFinite(request.duration)) {
+        // LOTE AS (2026-09-06) research pass: a blanket [1,120]s window
+        // applied to every Veo variant alike. This is a DELIBERATE
+        // documented fallback, not an oversight — the LOTE AS per-provider
+        // research pass (byteplus/zai/venice/runwayml/siliconflow) did not
+        // cover Google/Veo, and no real per-model Veo duration cap was found
+        // in that research. Per the project's no-fabrication rule, this stays
+        // a generic clamp until a future pass finds real per-variant caps in
+        // Google's own docs — inventing per-model numbers here would be
+        // worse than an honest generic ceiling.
         parameters.durationSeconds = Math.max(1, Math.min(120, Math.floor(request.duration)));
       }
       if ('n' in options && typeof options.n === 'number' && Number.isFinite(options.n)) {

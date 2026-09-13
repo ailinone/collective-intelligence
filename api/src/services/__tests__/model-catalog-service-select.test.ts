@@ -39,7 +39,14 @@ import path from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CATALOG_SERVICE_PATH = path.resolve(__dirname, '..', 'model-catalog-service.ts');
+// CATALOG_HOT_PATH_SELECT/mapPrismaModel were extracted out of
+// model-catalog-service.ts into their own module (2026-09, SAB
+// candidate-index work — see catalog-hot-path.ts's own module doc) so a
+// worker_threads worker could import them without pulling in
+// `@/database/client`'s eagerly-constructed shared PrismaClient pool.
+// model-catalog-service.ts re-exports both for backward compatibility; this
+// invariant test now reads the source file where they actually live.
+const CATALOG_SERVICE_PATH = path.resolve(__dirname, '..', 'catalog-hot-path.ts');
 
 function loadSource(): string {
   return readFileSync(CATALOG_SERVICE_PATH, 'utf8');
@@ -50,7 +57,7 @@ function loadSource(): string {
  * literal. Stops at the first `}` that closes the literal at depth 1.
  */
 function extractSelectKeys(source: string): Set<string> {
-  const marker = 'const CATALOG_HOT_PATH_SELECT = {';
+  const marker = 'export const CATALOG_HOT_PATH_SELECT = {';
   const start = source.indexOf(marker);
   if (start === -1) {
     throw new Error('CATALOG_HOT_PATH_SELECT literal not found in source');
@@ -103,7 +110,7 @@ function extractSelectKeys(source: string): Set<string> {
  * field names without the `record.` prefix.
  */
 function extractMapPrismaModelReads(source: string): Set<string> {
-  const fnMarker = 'function mapPrismaModel(record: CatalogHotPathRecord): Model {';
+  const fnMarker = 'export function mapPrismaModel(record: CatalogHotPathRecord): Model {';
   const start = source.indexOf(fnMarker);
   if (start === -1) {
     throw new Error('mapPrismaModel definition not found');

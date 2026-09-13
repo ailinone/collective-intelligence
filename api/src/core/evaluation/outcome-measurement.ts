@@ -23,6 +23,7 @@
 
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
+import { guardCost, filterValidCosts } from '@/core/cost/cost-integrity-guard';
 
 const log = logger.child({ component: 'outcome-measurement' });
 
@@ -52,6 +53,25 @@ export interface ExecutionOutcomeInput {
  */
 export async function recordOutcome(input: ExecutionOutcomeInput): Promise<void> {
   try {
+    // Cost integrity guard: this is the ONLY write path into execution_outcomes
+    // (verified — no other INSERT/create/upsert targets this table), and this
+    // table is what drift-detection.ts, learning-validation.ts and
+    // performance-snapshots.ts all run `AVG(cost_usd)`-style queries over. A
+    // negative/NaN/Infinite `input.costUsd` slipping in here is exactly the
+    // upstream data corruption that produced the 2026-02-20 incident
+    // (`avgCostPerRequest: -2786 USD`, eval-baseline-metrics.json). Guard it
+    // at the write boundary so it never reaches the column in the first
+    // place. `cost_usd` is a NOT NULL Decimal(10,6) DEFAULT 0 column, so a
+    // rejected value (guard returns `cost: null`) is coalesced to 0 for
+    // storage — the guard's own warn-and-null/strict-throw policy still
+    // fires (structured log + Prometheus counter, or a thrown
+    // CostIntegrityError in eval/dev) before that coalescing happens.
+    const guardedCostUsd =
+      guardCost(input.costUsd, {
+        callSite: 'outcome-measurement.recordOutcome',
+        strategy: input.strategy,
+      }).cost ?? 0;
+
     await prisma.$executeRaw`
       INSERT INTO execution_outcomes (
         decision_trace_id, strategy, started_at, finished_at, latency_ms,
@@ -64,7 +84,7 @@ export async function recordOutcome(input: ExecutionOutcomeInput): Promise<void>
         ${input.startedAt},
         ${input.finishedAt},
         ${input.latencyMs},
-        ${input.costUsd},
+        ${guardedCostUsd},
         ${input.totalTokens},
         ${input.success},
         ${input.failureReason ?? null},
@@ -173,7 +193,7 @@ export async function getAggregatedMetrics(params: {
         sample_size: bigint;
         avg_quality: number | null;
         avg_latency_ms: number | null;
-        avg_cost_usd: number | null;
+        cost_usd_samples: number[] | null;
         success_rate: number | null;
         quality_p10: number | null;
         quality_p90: number | null;
@@ -184,7 +204,7 @@ export async function getAggregatedMetrics(params: {
         COUNT(*) as sample_size,
         AVG(quality_score) as avg_quality,
         AVG(latency_ms) as avg_latency_ms,
-        AVG(cost_usd) as avg_cost_usd,
+        ARRAY_AGG(cost_usd::float8) as cost_usd_samples,
         AVG(CASE WHEN success THEN 1.0 ELSE 0.0 END) as success_rate,
         PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY quality_score) as quality_p10,
         PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY quality_score) as quality_p90,
@@ -198,11 +218,27 @@ export async function getAggregatedMetrics(params: {
     const row = rows[0];
     if (!row || Number(row.sample_size) === 0) return null;
 
+    // Cost integrity guard (defense-in-depth, read side): recordOutcome()
+    // now rejects bad costs before they're written, but this aggregate must
+    // not trust SQL AVG(cost_usd) blindly — pre-existing corrupted rows
+    // (e.g. the 2026-02-20 incident's -58.04-per-execution debate rows,
+    // if any survive in the table) or a future write path that bypasses the
+    // guard would otherwise still average straight into an
+    // `avgCostPerRequest`-style negative figure. filterValidCosts() drops
+    // anything negative/NaN/Infinite/non-numeric and the average is
+    // recomputed only over what remains.
+    const { valid: validCosts } = filterValidCosts(row.cost_usd_samples ?? [], {
+      callSite: 'outcome-measurement.getAggregatedMetrics',
+      strategy: params.strategy,
+    });
+    const avgCostUsd =
+      validCosts.length > 0 ? validCosts.reduce((sum, c) => sum + c, 0) / validCosts.length : 0;
+
     return {
       sampleSize: Number(row.sample_size),
       avgQuality: row.avg_quality ?? 0,
       avgLatencyMs: Math.round(row.avg_latency_ms ?? 0),
-      avgCostUsd: row.avg_cost_usd ?? 0,
+      avgCostUsd,
       successRate: row.success_rate ?? 0,
       qualityP10: row.quality_p10 ?? 0,
       qualityP90: row.quality_p90 ?? 0,

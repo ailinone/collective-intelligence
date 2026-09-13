@@ -129,7 +129,7 @@ describe('VoyageAdapter — rerank', () => {
     });
     try {
       const adapter = makeAdapter();
-      const res = await adapter.rerank({
+      const res = await adapter.rerankNative({
         query: 'what is rust',
         documents: ['rust is a systems language', 'go is simpler'],
         model: 'rerank-fixture',
@@ -151,10 +151,10 @@ describe('VoyageAdapter — rerank', () => {
   it('rejects empty query and empty documents before hitting the wire', async () => {
     const adapter = makeAdapter();
     await expect(
-      adapter.rerank({ query: '', documents: ['a'], model: 'rerank-fixture' })
+      adapter.rerankNative({ query: '', documents: ['a'], model: 'rerank-fixture' })
     ).rejects.toThrow(/query.*non-empty/i);
     await expect(
-      adapter.rerank({ query: 'q', documents: [], model: 'rerank-fixture' })
+      adapter.rerankNative({ query: 'q', documents: [], model: 'rerank-fixture' })
     ).rejects.toThrow(/documents.*non-empty/i);
   });
 });

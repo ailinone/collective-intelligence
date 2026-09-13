@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import { resolvePreferredExecutor, withPreferredFirst } from './preferred-model-helper';
 import type {
@@ -18,6 +18,7 @@ import type {
   ModelExecution,
   Model,
   ModelRole,
+  ArtifactRef,
 } from '@/types';
 
 interface InternalExecution {
@@ -34,6 +35,10 @@ interface InternalExecution {
   cost: number;
   success: boolean;
   error?: string;
+  /** Tool-call artifacts surfaced by this execution, mirrored from the
+   *  underlying `ModelExecution.artifacts` so they survive into
+   *  `allExecutions` and reach `mergeArtifacts()`. */
+  artifacts?: ArtifactRef[];
 }
 
 /**
@@ -162,6 +167,7 @@ export class MassiveParallelStrategy extends BaseStrategy {
       cost: exec.cost,
       durationMs: exec.duration,
       success: exec.success,
+      artifacts: exec.artifacts,
     }));
 
     // 5. MERGE the parallel responses into one superior answer (2026-06-30):
@@ -194,6 +200,7 @@ export class MassiveParallelStrategy extends BaseStrategy {
       totalCost,
       totalDuration: Math.max(1, duration),
       qualityScore: bestExecution.score,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         modelsExecuted: executions.length,
         successfulExecutions: executions.filter((e) => e.success).length,
@@ -334,6 +341,7 @@ export class MassiveParallelStrategy extends BaseStrategy {
           // engine surfaced as "[DEGRADED] All execution attempts failed."
           success: exec.success && this.hasUsableAssistantResponse(response),
           error: exec.error,
+          artifacts: exec.artifacts,
         };
       } catch (error: unknown) {
         const execEnd = Date.now();

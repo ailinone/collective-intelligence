@@ -17,7 +17,12 @@
  * N-1 models propose, 1 model critiques, synthesizer incorporates valid criticisms.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import {
+  BaseStrategy,
+  type StrategyMetadata,
+  safeResponseContent,
+  mergeArtifacts,
+} from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS, ADAPTIVE_DEPTH_DIRECTIVE } from '../prompts/sota-system-prompts';
 import type {
@@ -161,8 +166,7 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
         const { hashSlotValues } = await import('../prompts/prompt-slots');
         exec.promptSlotHash = hashSlotValues(promptSlots);
       }
-      const rawContent = exec.response?.choices?.[0]?.message?.content;
-      return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
+      return { model, content: safeResponseContent(exec.response), exec };
     });
 
     const proposalResults = await Promise.allSettled(proposalPromises);
@@ -214,8 +218,7 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
         'critic'
       );
       executions.push(critiqueExec);
-      const rawCritique = critiqueExec.response?.choices?.[0]?.message?.content;
-      critique = typeof rawCritique === 'string' ? rawCritique : '';
+      critique = safeResponseContent(critiqueExec.response);
     }
 
     this.emitObserverEvent(context, {
@@ -251,6 +254,20 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
+      // Media/document artifacts (PR3b): the synthesizer's own call rarely
+      // invokes tools, but any proposer (or the critic) could have — a tool
+      // call producing an artifact is independent of which model's TEXT the
+      // synthesizer ultimately weaves into `finalResponse`. mergeArtifacts()
+      // is called over the FULL `executions` list (every proposer + the
+      // critic + the synthesizer), for the same reason `reasoning_traces`
+      // below already aggregates across all of them. Top-level
+      // `toolArtifacts` (matching tier 3a's consensus/competitive/
+      // debate-strategy.ts convention) rather than the pre-existing
+      // `OrchestrationResult.artifacts` — that field is `AilinArtifact[]`
+      // from the unrelated multi-stage triage-plan pathway, a different
+      // shape than `mergeArtifacts()`'s `ArtifactRef[]`. See the field's
+      // doc comment in types/index.ts.
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'devil-advocate-consensus',
         proposers: proposers.length,
@@ -278,6 +295,16 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
     return true;
   }
 
+  /**
+   * PR3b scope note: this generator yields raw `ChatResponse` chunks directly —
+   * there is no `OrchestrationResult`/`metadata` object here to attach
+   * `mergeArtifacts()` output to (unlike `executeCore()` above). That final
+   * SSE-chunk `ailin_metadata` assembly lives in orchestration-engine.ts,
+   * out of scope for this change. The safeResponseContent() text-extraction
+   * fix below still applies (pure behavior-preserving substitution), but
+   * tool-call artifacts produced during a streamed run are not surfaced by
+   * this strategy today.
+   */
   async *executeStream(
     request: ChatRequest,
     context: OrchestrationContext
@@ -319,14 +346,13 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
         const exec = reasoningEnabled
           ? await this.executeModelWithReasoning(adapter, model, proposalReq, 'proposer')
           : await this.executeModel(adapter, model, proposalReq, 'proposer');
-        const rawContent = exec.response?.choices?.[0]?.message?.content;
-        return { model, content: typeof rawContent === 'string' ? rawContent : '', exec };
+        return { model, content: safeResponseContent(exec.response), exec };
       })
     );
     for (const r of proposalResults) {
       if (r.status === 'fulfilled') {
         executions.push(r.value.exec);
-        const c = typeof r.value.content === 'string' ? r.value.content.trim() : '';
+        const c = r.value.content.trim();
         if (c) proposals.push({ name: r.value.model.displayName || r.value.model.id, content: c });
       }
     }
@@ -371,8 +397,7 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
         'critic'
       );
       executions.push(critiqueExec);
-      const rawCritique = critiqueExec.response?.choices?.[0]?.message?.content;
-      critique = typeof rawCritique === 'string' ? rawCritique : '';
+      critique = safeResponseContent(critiqueExec.response);
     } catch {
       /* critique failure is non-fatal */
     }
@@ -447,7 +472,15 @@ export class DevilAdvocateConsensusStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: 0,
-      metadata: { strategy: 'devil-advocate-consensus', error: 'all-failed' },
+      // Even when every proposer's TEXT came back empty (the condition that
+      // routes here), a proposer's execution could still carry a tool-call
+      // artifact — mergeArtifacts() over `executions` picks that up rather
+      // than silently dropping it alongside the discarded empty text.
+      toolArtifacts: mergeArtifacts(executions),
+      metadata: {
+        strategy: 'devil-advocate-consensus',
+        error: 'all-failed',
+      },
     };
   }
 }

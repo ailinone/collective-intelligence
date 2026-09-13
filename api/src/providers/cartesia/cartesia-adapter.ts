@@ -15,7 +15,39 @@
  * TTS REST: POST /tts/bytes
  * TTS WebSocket: wss://api.cartesia.ai/tts/websocket (streaming)
  *
- * NO HARDCODED MODELS — model/voice selection by capabilities.
+ * ### Model discovery — no `/models` endpoint exists (verified 2026-09-12)
+ *
+ * `getModels()` used to call `GET {baseUrl}/models`, which Cartesia has
+ * never exposed (confirmed live in production as an HTTP 404 — see the
+ * 2026-09-10 discovery-audit comment this replaced). Cartesia's REST API
+ * reference (https://docs.cartesia.ai/api-reference/tts/bytes, fetched
+ * 2026-09-12) documents no model-listing route at all — the only listing
+ * resource is `GET /voices` (confirmed live 200, and mirrored by the
+ * `cartesia-js` SDK's `resources/voices.ts` `list()` method), and a VOICE
+ * (a persona with a UUID and a display name like "Skylar - Friendly
+ * Guide") is a different resource type from a TTS MODEL (`sonic-3`,
+ * `sonic-3.5`, ...) — `/voices` cannot substitute as model discovery.
+ * The `cartesia-js` SDK's current `main` branch (checked 2026-09-12 via
+ * the GitHub API file tree) has no `models` resource file either — only
+ * `access-token`, `agents`, `datasets`, `fine-tunes`,
+ * `pronunciation-dicts`, `stt`, `tts`, `voice-changer`, `voices`. Model
+ * ids are a plain request parameter on `POST /tts/bytes`
+ * (`TTSModel = 'sonic-3.5' | 'sonic-3' | ... | (string & {})` in the SDK's
+ * `resources/tts.ts`), not a queryable resource.
+ *
+ * `getModels()` therefore returns the operator-curated `CARTESIA_MODELS`
+ * list below — no network call — mirroring the `pinnedFallback.models`
+ * entry for `cartesia` in `providers.catalog.ts` (same
+ * `reason: 'no-list-endpoint'` pattern as `topaz`/`v0`). See that catalog
+ * entry's comment for the model-lifecycle sourcing
+ * (https://docs.cartesia.ai/build-with-cartesia/tts-models/api-changes,
+ * fetched 2026-09-12): `sonic-3`, `sonic-3.5`, and `sonic-3.6` are the
+ * current stable families; bare `sonic` was already sunsetted (June 1,
+ * 2026) and `sonic-2`/`sonic-turbo` sunset October 20, 2026, so none of
+ * the three are used here as the id, still less as a silent fallback.
+ *
+ * NO HARDCODED MODELS beyond this curated, source-cited fallback — no
+ * network-discovered model list exists to prefer over it.
  */
 
 import {
@@ -23,7 +55,13 @@ import {
   type ProviderConfig,
   type HealthCheckResult,
 } from '@/providers/base/provider-adapter';
-import type { Provider, Model, ChatResponse, EmbeddingResponse } from '@/types';
+import type {
+  Provider,
+  Model,
+  ModelCapability,
+  ChatResponse,
+  EmbeddingResponse,
+} from '@/types';
 import type {
   AudioTTSRequest,
   AudioTTSResponse,
@@ -38,6 +76,32 @@ const log = logger.child({ provider: 'cartesia' });
 
 // Cartesia API version
 const CARTESIA_VERSION = '2025-04-16';
+
+/**
+ * Operator-curated TTS model inventory — mirrors `pinnedFallback.models`
+ * for `cartesia` in `providers.catalog.ts` (same three ids, same
+ * source/date). See that entry's comment for the full sourcing citation.
+ * Kept as a same-file constant (like `V0_MODELS` in v0-adapter.ts and
+ * `ENHANCE_MODELS` in topaz-adapter.ts) so `getModels()` never has to
+ * reach across modules — and never has to hit the wire.
+ */
+const CARTESIA_MODELS: ReadonlyArray<{ id: string; capabilities: ModelCapability[] }> = [
+  { id: 'sonic-3', capabilities: ['text_to_speech', 'streaming'] },
+  { id: 'sonic-3.5', capabilities: ['text_to_speech', 'streaming'] },
+  { id: 'sonic-3.6', capabilities: ['text_to_speech', 'streaming'] },
+] as const;
+
+/**
+ * Fallback `model_id` used only when a caller passes neither `model.name`
+ * nor `model.id`. Was `'sonic'` (the bare, unversioned id) — per
+ * Cartesia's own model-lifecycle docs
+ * (https://docs.cartesia.ai/build-with-cartesia/tts-models/api-changes,
+ * fetched 2026-09-12) that id was SUNSETTED June 1, 2026 and now returns a
+ * `model_sunsetted` error on every call, so it was a guaranteed-broken
+ * silent default. `sonic-3` is the oldest family still documented as
+ * "Stable" (not deprecating) as of the same fetch.
+ */
+const DEFAULT_MODEL_ID = 'sonic-3';
 
 export class CartesiaAdapter extends ProviderAdapter {
   private baseUrl: string;
@@ -58,7 +122,7 @@ export class CartesiaAdapter extends ProviderAdapter {
 
   async textToSpeech(model: Model, request: AudioTTSRequest): Promise<AudioTTSResponse> {
     const start = Date.now();
-    const modelId = model.name || model.id || 'sonic';
+    const modelId = model.name || model.id || DEFAULT_MODEL_ID;
 
     try {
       // Resolve voice: if UUID use directly, if name map to UUID, fallback to default
@@ -157,7 +221,7 @@ export class CartesiaAdapter extends ProviderAdapter {
     onAudioChunk: (chunk: Buffer) => void,
     voice?: string
   ): Promise<void> {
-    const modelId = model.name || model.id || 'sonic';
+    const modelId = model.name || model.id || DEFAULT_MODEL_ID;
     const voiceId = voice || 'a0e99841-438c-4a64-b679-ae501e7d6091';
 
     return new Promise((resolve, reject) => {
@@ -229,8 +293,13 @@ export class CartesiaAdapter extends ProviderAdapter {
     };
   }
 
+  /**
+   * Cartesia has no bulk `/models` route (see the class doc comment) —
+   * returns the pinned `CARTESIA_MODELS` list, mirroring
+   * `pinnedFallback.models` for `cartesia` in `providers.catalog.ts`. No
+   * network call, so this never fails and never returns empty.
+   */
   async getModels(): Promise<Model[]> {
-    // Dynamically discover models from Cartesia API — zero hardcoded models
     const perf: import('@/types').ModelPerformance = {
       latencyMs: 90,
       throughput: 0,
@@ -248,44 +317,13 @@ export class CartesiaAdapter extends ProviderAdapter {
       performance: perf,
     };
 
-    try {
-      // Fetch available models from Cartesia API
-      const response = await fetch(`${this.baseUrl}/models`, {
-        headers: this.authHeaders(),
-      });
-
-      if (!response.ok) {
-        log.warn({ status: response.status }, 'Cartesia models API failed, returning empty');
-        return [];
-      }
-
-      const data = (await response.json()) as Array<{
-        id: string;
-        name?: string;
-        description?: string;
-        languages?: string[];
-      }>;
-
-      if (!Array.isArray(data) || data.length === 0) {
-        log.warn('Cartesia returned no models');
-        return [];
-      }
-
-      return data.map((m) => ({
-        ...base,
-        id: `cartesia/${m.id}`,
-        name: m.id,
-        displayName: `Cartesia ${m.name || m.id} (TTS)`,
-        capabilities: ['text_to_speech', 'streaming'] as import('@/types').ModelCapability[],
-        metadata: { languages: m.languages, description: m.description },
-      }));
-    } catch (err) {
-      log.warn(
-        { error: err instanceof Error ? err.message : String(err) },
-        'Cartesia model discovery failed'
-      );
-      return [];
-    }
+    return CARTESIA_MODELS.map((m) => ({
+      ...base,
+      id: `cartesia/${m.id}`,
+      name: m.id,
+      displayName: `Cartesia ${m.id} (TTS)`,
+      capabilities: m.capabilities,
+    }));
   }
 
   async healthCheck(): Promise<HealthCheckResult> {

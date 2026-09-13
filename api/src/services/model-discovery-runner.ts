@@ -7,13 +7,54 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
+/**
+ * Model discovery runner — the per-process entrypoint that fires the ~95
+ * provider fetchers via central-model-discovery-service.discoverAllModels().
+ *
+ * Fleet-dedup fix (2026-09): startModelDiscoveryRunner() used to register a
+ * plain per-process `setInterval` (default hourly, MODEL_DISCOVERY_INTERVAL_MINUTES)
+ * that called discoverAllModels() independently in EVERY process. Since
+ * index.ts calls this unconditionally at boot, the production topology (2
+ * `ci_api` replicas + `ci_worker`) ran the full discovery sweep — real HTTP
+ * calls against every provider's live API, not just a local DB query — three
+ * times over, once per process, every single hour. This is the same
+ * per-replica-multiplication bug class the REL-01 fix already closed for
+ * every other scheduled job (see index.ts's BullMQ-cron comment) and that
+ * cache-refresh-ahead.ts's own "catalog-cache-refresh" job closed for the
+ * catalog hot-path query (docs/CAPACITY-SCALING-PLAN-10K-USERS.md, Track 1
+ * §2.3) — reused here rather than reinvented.
+ *
+ * The RECURRING sweep now runs exactly once fleet-wide via the
+ * "model-discovery-hourly" BullMQ repeatable job (jobs/register-scheduled-jobs.ts),
+ * whose Redis lock elects one process per tick — any `ci_api` replica or
+ * `ci_worker` may win, never a hardcoded "worker only" rule. That job's
+ * handler calls runScheduledModelDiscovery() below.
+ *
+ * Deliberately UNCHANGED: the one-time at-boot discovery (`runOnStart`) still
+ * fires independently in every process, same as before this fix. That is
+ * intentional, not an oversight — it is what lets each replica come up with a
+ * non-empty catalog immediately after a fresh deploy/restart without waiting
+ * on the next fleet-wide BullMQ tick, and a handful of redundant discovery
+ * runs at deploy time (which is already staggered across replicas, not
+ * simultaneous) is a fundamentally different cost profile than an
+ * indefinitely-repeating per-process hourly sweep. The 30s self-healing retry
+ * for failed sources is the same kind of one-shot, per-process concern and is
+ * also unchanged.
+ *
+ * MODEL_DISCOVERY_INTERVAL_MINUTES is superseded for the recurring sweep by
+ * the BullMQ job's own cron pattern (default hourly, override via
+ * MODEL_DISCOVERY_CRON — see register-scheduled-jobs.ts). It is deliberately
+ * left unread here rather than repurposed, since production never overrides
+ * it away from the code's prior 60-minute default (verified against
+ * docker-compose.production.yml) — nothing observable changes for the
+ * standard deployment.
+ */
 import { logger } from '@/utils/logger';
 import { serializeError } from '@/utils/type-guards';
 import { getCentralModelDiscoveryService } from '@/services/central-model-discovery-service';
 
 type DiscoveryTrigger = 'startup' | 'interval' | 'manual';
 
-let schedulerHandle: NodeJS.Timeout | null = null;
 let discoveryInFlight = false;
 
 /**
@@ -73,7 +114,22 @@ async function runDiscovery(trigger: DiscoveryTrigger): Promise<void> {
 }
 
 /**
- * Starts the recurring model discovery scheduler (hourly by default).
+ * Fleet-deduped recurring discovery tick, driven by the "model-discovery-hourly"
+ * BullMQ repeatable job (register-scheduled-jobs.ts). BullMQ's Redis-locked
+ * repeatable-job semantics guarantee exactly one process across the whole
+ * fleet (any `ci_api` replica or `ci_worker`) executes this per tick — see
+ * this module's top-of-file comment for the bug this replaces.
+ */
+export async function runScheduledModelDiscovery(): Promise<void> {
+  await runDiscovery('interval');
+}
+
+/**
+ * Starts model discovery for THIS process: the one-time at-boot run (and its
+ * 30s self-healing retry), both deliberately per-process — see the top-of-file
+ * comment. The recurring hourly sweep is fleet-deduped elsewhere (BullMQ job,
+ * see runScheduledModelDiscovery above) and is intentionally NOT scheduled
+ * from here any more.
  */
 export async function startModelDiscoveryRunner(): Promise<void> {
   if (process.env.MODEL_DISCOVERY_AUTO_SYNC === 'false') {
@@ -81,7 +137,6 @@ export async function startModelDiscoveryRunner(): Promise<void> {
     return;
   }
 
-  const intervalMinutes = Number(process.env.MODEL_DISCOVERY_INTERVAL_MINUTES || '60');
   const runOnStart = process.env.MODEL_DISCOVERY_RUN_ON_START !== 'false';
 
   if (runOnStart) {
@@ -127,26 +182,22 @@ export async function startModelDiscoveryRunner(): Promise<void> {
     }, retryDelayMs);
   }
 
-  if (intervalMinutes > 0) {
-    const intervalMs = intervalMinutes * 60 * 1000;
-    schedulerHandle = setInterval(() => {
-      runDiscovery('interval').catch((error) => {
-        logger.error({ error: serializeError(error) }, 'Scheduled model discovery run failed');
-      });
-    }, intervalMs);
-
-    logger.info({ intervalMinutes }, 'Dynamic model discovery scheduler initialized');
-  } else {
-    logger.warn('Model discovery scheduler disabled (intervalMinutes <= 0)');
-  }
+  // No per-process setInterval here any more — the recurring hourly sweep is
+  // registered exactly once fleet-wide as the "model-discovery-hourly" BullMQ
+  // job (register-scheduled-jobs.ts). See this module's top-of-file comment.
+  logger.info(
+    'Dynamic model discovery: at-boot run handled per-process; recurring sweep is fleet-deduped via the "model-discovery-hourly" BullMQ job'
+  );
 }
 
+/**
+ * No-op retained for API compatibility: there is no longer a per-process
+ * timer to stop (the recurring sweep moved to the "model-discovery-hourly"
+ * BullMQ job, torn down via jobs/register-scheduled-jobs.ts's
+ * shutdownScheduledTasks()). Safe to call from any existing shutdown path.
+ */
 export function stopModelDiscoveryRunner(): void {
-  if (schedulerHandle) {
-    clearInterval(schedulerHandle);
-    schedulerHandle = null;
-    logger.info('Dynamic model discovery scheduler stopped');
-  }
+  // Intentionally empty — see doc comment above.
 }
 
 export async function triggerManualModelDiscovery(): Promise<void> {

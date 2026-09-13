@@ -47,6 +47,19 @@ export const PROMPT_METRIC_NAMES = {
   TRIAGE_DRIFT_DETECTED: 'ailin_triage_drift_detected_total',
   JUDGE_NORMALIZATIONS: 'ailin_judge_normalizations_total',
   JUDGE_NORMALIZATION_FAILURES: 'ailin_judge_normalization_failures_total',
+  /** Every heuristic (non-LLM) triage decision, labelled by whether a media
+   *  intent was detected — lets operators alert on fallback-rate spikes. */
+  TRIAGE_HEURISTIC_FALLBACK: 'ailin_triage_heuristic_fallback_total',
+  /** Only the subset of heuristic fallbacks where the BROAD safety-net regex
+   *  (not the primary capability-inference path) is what caught the media
+   *  intent — signals capability-inference.ts's precision-tuned regexes are
+   *  missing real phrasings and may need widening. */
+  TRIAGE_HEURISTIC_MEDIA_SAFETY_NET: 'ailin_triage_heuristic_media_safety_net_total',
+  /** A media/file-generation stage from a REAL (LLM) triage response omitted
+   *  `generation_prompt` despite the system prompt's "ALWAYS set
+   *  generation_prompt" rule. Purely observational — the fallback chain still
+   *  produces a usable prompt; this counts how often the rule is violated. */
+  TRIAGE_GENERATION_PROMPT_MISSING: 'ailin_triage_generation_prompt_missing_total',
 } as const;
 
 export type PromptMetricName = (typeof PROMPT_METRIC_NAMES)[keyof typeof PROMPT_METRIC_NAMES];

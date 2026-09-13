@@ -175,6 +175,7 @@
  */
 
 import { logger } from '@/utils/logger';
+import { resolveReasoningEffort } from '@/utils/reasoning-effort';
 import {
   ProviderAdapter,
   type HealthCheckResult,
@@ -191,6 +192,7 @@ import type {
   Provider,
 } from '@/types';
 import { narrowAs } from '@/utils/type-guards';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 import type {
   AudioSTTRequest,
   AudioSTTResponse,
@@ -277,6 +279,14 @@ function videoPollConfig(): { timeoutMs: number; initialMs: number; maxMs: numbe
  * they are accepted here and left for the API to reject on the wrong model,
  * because silently downgrading a caller's explicit effort request would be
  * the same class of bug as coercing `xhigh` image detail away.
+ *
+ * This is a strict SUPERSET of the cross-provider canonical
+ * `ReasoningEffort` enum (`low|medium|high`, `@/utils/reasoning-effort`) —
+ * every canonical value is also a valid ModelArk value, so a canonical
+ * `request.reasoning_effort` can always be forwarded verbatim with zero
+ * translation. `metadata.reasoning_effort` remains the escape hatch for the
+ * four BytePlus-only tiers (`none`/`minimal`/`xhigh`/`max`) the canonical
+ * enum has no equivalent for; see {@link buildChatBody}'s precedence.
  */
 const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
@@ -804,9 +814,14 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
    *    entirely — see {@link stopUnsupported}.
    *  - `reasoning_effort` is pinned to `minimal` on the two models whose
    *    documented default would otherwise hard-error against
-   *    `thinking: disabled` (see {@link reasoningEffortForDisabledThinking}),
-   *    and otherwise forwarded from `metadata.reasoning_effort` when
-   *    thinking is enabled and the value is in the documented enum.
+   *    `thinking: disabled` (see {@link reasoningEffortForDisabledThinking}).
+   *    Otherwise, with thinking enabled, `metadata.reasoning_effort` (the
+   *    BytePlus-only fine-grained tiers) wins when set and valid; else the
+   *    canonical cross-provider `resolveReasoningEffort()` (LOTE AZ,
+   *    `@/utils/reasoning-effort`) result is forwarded — so a caller using
+   *    the same `reasoning_effort` field every other provider adapter reads
+   *    (previously silently dropped here, see `metadata`-only history) now
+   *    actually reaches ModelArk too.
    *  - `service_tier` is forwarded from `metadata.service_tier` when the
    *    caller set a documented value.
    *  - `n` does not exist on this API at all; ci's ChatRequest has no such
@@ -837,13 +852,20 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
     // disable is the doc's own stated remedy. Scoped to exactly those
     // families rather than sent unconditionally, because `reasoning_effort`
     // is not documented as universally accepted.
+    const resolvedReasoning = resolveReasoningEffort(request);
     if (!reasoning) {
       const effort = this.reasoningEffortForDisabledThinking(model);
       if (effort) body.reasoning_effort = effort;
     } else if (REASONING_EFFORTS.has(String(request.metadata?.reasoning_effort))) {
-      // Documented closed enum; only meaningful with thinking enabled (with
-      // it disabled the API accepts nothing but 'minimal', handled above).
+      // BytePlus-only fine-grained tier (none/minimal/xhigh/max), explicitly
+      // requested via the provider-specific escape hatch — wins over the
+      // canonical field below, since it is the MORE specific request.
       body.reasoning_effort = request.metadata?.reasoning_effort;
+    } else if (resolvedReasoning.effort) {
+      // Canonical cross-provider field (`low|medium|high`, LOTE AZ). Every
+      // canonical value is also a valid ModelArk value (see REASONING_EFFORTS
+      // doc comment), so this forwards verbatim with no translation needed.
+      body.reasoning_effort = resolvedReasoning.effort;
     }
 
     if (stream) {
@@ -853,9 +875,12 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
     }
     if (reasoning) {
       // See the doc comment: max_completion_tokens is the only cap that
-      // covers CoT, and it cannot be sent alongside max_tokens.
+      // covers CoT, and it cannot be sent alongside max_tokens. Uses the
+      // RESOLVED budget (not the raw `thinking_budget` field) so a caller
+      // that only set `reasoning_effort` (no explicit numeric budget) still
+      // gets a real CoT allowance instead of `answerBudget + 0`.
       const answerBudget = typeof request.max_tokens === 'number' ? request.max_tokens : 4096;
-      const budget = answerBudget + (request.thinking_budget ?? 0);
+      const budget = answerBudget + (resolvedReasoning.thinkingBudget ?? 0);
       body.max_completion_tokens = Math.max(1, Math.min(65_536, Math.round(budget)));
     } else if (typeof request.max_tokens === 'number') {
       body.max_tokens = request.max_tokens;
@@ -922,9 +947,17 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
     return this.toolDiscriminatorFlipped ? CHAT_TOOL_CHOICE_TYPE_ALT : CHAT_TOOL_CHOICE_TYPE;
   }
 
-  /** Reasoning is opt-in here (upstream default is ON — see buildChatBody). */
+  /**
+   * Reasoning is opt-in here (upstream default is ON — see buildChatBody).
+   * Goes through the canonical `resolveReasoningEffort()` (LOTE AZ,
+   * `@/utils/reasoning-effort`) rather than reading `request.thinking_budget`
+   * directly, so a caller that only set `reasoning_effort` (no explicit
+   * numeric budget) or bare `ailin_constraints.enable_reasoning` also opts in
+   * — previously only an explicit positive `thinking_budget` did, silently
+   * leaving `reasoning_effort`-only requests with thinking disabled.
+   */
   private wantsReasoning(request: ChatRequest): boolean {
-    return typeof request.thinking_budget === 'number' && request.thinking_budget > 0;
+    return resolveReasoningEffort(request).thinkingBudget !== undefined;
   }
 
   /**
@@ -1091,8 +1124,43 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
         completion_tokens: payload.usage.completion_tokens ?? 0,
         total_tokens: payload.usage.total_tokens ?? 0,
       };
+      this.recordCacheUsage(payload.usage);
     }
     return response;
+  }
+
+  /**
+   * Surface ModelArk's own reported cache-hit tokens into ci's
+   * provider-cache observability metric (ADR-025 follow-up, 2026-09).
+   *
+   * ModelArk's Context Cache (both its "Session Cache" and "Prefix Cache"
+   * modes) reports `usage.prompt_tokens_details.cached_tokens` — confirmed
+   * live 2026-09-09 against ModelArk/Volcengine Ark's Context Caching docs,
+   * the same field this file's own `ArkChatCompletion.usage` type already
+   * models. This is deliberately observability-ONLY: activating either
+   * cache mode requires FIRST calling a separate context-creation endpoint
+   * to obtain a `context_id` and threading it through every subsequent
+   * request — genuine session/TTL state this stateless per-request adapter
+   * does not hold today, and the exact request contract for that flow could
+   * not be confirmed against the (JS-rendered) docs in this pass. Wiring
+   * cache_control/cache-id activation is left as a follow-up (see the
+   * `features.cache` field this file's own {@link ArkModelRecord} already
+   * parses but does not act on); reading back tokens ModelArk cached on its
+   * own — which requires zero new request shape — is not.
+   */
+  private recordCacheUsage(usage: ArkChatCompletion['usage']): void {
+    if (!usage) return;
+    const details = usage.prompt_tokens_details;
+    const cachedTokens = details?.cached_tokens;
+    if (typeof cachedTokens !== 'number') return;
+    const promptTokens = usage.prompt_tokens;
+
+    recordProviderPromptCacheUsage({
+      provider: 'byteplus',
+      hitTokens: cachedTokens,
+      missTokens:
+        typeof promptTokens === 'number' ? Math.max(0, promptTokens - cachedTokens) : undefined,
+    });
   }
 
   private toCiMessage(source: ArkChatMessage | undefined): ChatMessage {
@@ -1656,10 +1724,20 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
    */
   async videoGenerate(model: Model, request: VideoGenRequest): Promise<VideoGenResponse> {
     const modelId = this.normalizeModelName(model.name || model.id);
+    // Bug 2 fix (2026-09-08): same architectural gap as the hub adapter's
+    // pollVideoTask (see its doc) — this route's own poll budget defaults to
+    // 600_000ms (BYTEPLUS_VIDEO_POLL_TIMEOUT_MS), independent of however
+    // much time the cross-provider fallback search has left. Forward the
+    // orchestration's overall deadline so a slow-failing task can be cut off
+    // in time to let the search try other candidates.
+    const rawDeadline = request.options?.orchestrationDeadlineAt;
+    const orchestrationDeadlineAt =
+      typeof rawDeadline === 'number' && Number.isFinite(rawDeadline) ? rawDeadline : undefined;
     const task = await this.submitAndPollGenerationTask(
       modelId,
       this.buildVideoBody(modelId, request),
-      'video generation'
+      'video generation',
+      orchestrationDeadlineAt
     );
     const taskId = String(task.id ?? '');
 
@@ -1694,7 +1772,8 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
   private async submitAndPollGenerationTask(
     modelId: string,
     body: Record<string, unknown>,
-    context: string
+    context: string,
+    orchestrationDeadlineAt?: number
   ): Promise<ArkVideoTask> {
     const submission = await this.request<{ id?: string }>('/contents/generations/tasks', {
       method: 'POST',
@@ -1707,14 +1786,23 @@ export class BytePlusModelArkAdapter extends ProviderAdapter {
     this.blog.info({ taskId, model: modelId, context }, 'byteplus: generation task submitted');
 
     const poll = videoPollConfig();
-    const deadline = Date.now() + poll.timeoutMs;
+    const ownDeadline = Date.now() + poll.timeoutMs;
+    // Bug 2 fix (2026-09-08) — see videoGenerate's doc: bound this task's own
+    // poll budget by the cross-provider fallback search's overall deadline
+    // when the caller supplied one, so a slow-failing candidate can't run
+    // past it and starve the rest of the candidate pool.
+    const cutShortByOrchestration =
+      typeof orchestrationDeadlineAt === 'number' && orchestrationDeadlineAt < ownDeadline;
+    const deadline = cutShortByOrchestration ? orchestrationDeadlineAt : ownDeadline;
     let interval = poll.initialMs;
 
     for (;;) {
       if (Date.now() >= deadline) {
+        const budgetNote = cutShortByOrchestration
+          ? `cut short by the overall fallback search deadline (own poll budget is ${poll.timeoutMs}ms)`
+          : `${poll.timeoutMs}ms poll budget (4K/1080p jobs queue at concurrency 1 — raise BYTEPLUS_VIDEO_POLL_TIMEOUT_MS if this recurs)`;
         throw new Error(
-          `byteplus: ${context} task ${taskId} did not reach a terminal status within ${poll.timeoutMs}ms ` +
-            '(4K/1080p jobs queue at concurrency 1 — raise BYTEPLUS_VIDEO_POLL_TIMEOUT_MS if this recurs)'
+          `byteplus: ${context} task ${taskId} did not reach a terminal status, ${budgetNote}`
         );
       }
       await this.sleep(interval);

@@ -133,6 +133,131 @@ function extractUpstreamStatusCode(error: unknown): number | undefined {
   return undefined;
 }
 
+// --- Shared request/response payload shapes -------------------------------
+// Hoisted to module scope (previously declared inline inside `chatCompletion`)
+// so `chatCompletionStream` can build and retry the same payload shape for
+// real upstream streaming instead of re-declaring an equivalent set of types.
+
+type OpenRouterMessageContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+    >;
+
+type OpenRouterToolCall = Array<{
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}>;
+
+interface OpenRouterMessage {
+  role: string;
+  content: OpenRouterMessageContent;
+  tool_calls?: OpenRouterToolCall;
+  tool_call_id?: string;
+}
+
+interface OpenRouterPayload {
+  model?: string;
+  messages: OpenRouterMessage[];
+  stream?: boolean;
+  stream_options?: { include_usage: boolean };
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  tools?: Array<Record<string, unknown>>;
+  tool_choice?: string | { type: string; function: { name: string } };
+  response_format?: { type: string };
+  plugins?: Array<{ id: string; [key: string]: unknown }>;
+}
+
+/** Shape of one parsed `data: {...}` SSE event from OpenRouter's streaming endpoint. */
+interface OpenRouterStreamChunk {
+  id?: string;
+  model?: string;
+  choices?: Array<{
+    index?: number;
+    delta?: {
+      role?: string;
+      content?: string;
+      tool_calls?: Array<{
+        index?: number;
+        id?: string;
+        type?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string | null;
+  }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}
+
+function toOpenRouterPayloadRecord(candidate: OpenRouterPayload): Record<string, unknown> {
+  return {
+    model: candidate.model,
+    messages: candidate.messages,
+    ...(candidate.stream !== undefined && { stream: candidate.stream }),
+    ...(candidate.stream_options !== undefined && { stream_options: candidate.stream_options }),
+    ...(candidate.temperature !== undefined && { temperature: candidate.temperature }),
+    ...(candidate.max_tokens !== undefined && { max_tokens: candidate.max_tokens }),
+    ...(candidate.top_p !== undefined && { top_p: candidate.top_p }),
+    ...(candidate.frequency_penalty !== undefined && {
+      frequency_penalty: candidate.frequency_penalty,
+    }),
+    ...(candidate.presence_penalty !== undefined && {
+      presence_penalty: candidate.presence_penalty,
+    }),
+    ...(candidate.tools !== undefined && { tools: candidate.tools }),
+    ...(candidate.tool_choice !== undefined && { tool_choice: candidate.tool_choice }),
+    ...(candidate.response_format !== undefined && {
+      response_format: candidate.response_format,
+    }),
+    ...(candidate.plugins !== undefined && { plugins: candidate.plugins }),
+  };
+}
+
+function extractUnsupportedOpenRouterParameter(errorText: string): string | undefined {
+  const quotedMatch = errorText.match(/Unsupported parameter:\s*'([^']+)'/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1].toLowerCase();
+  }
+
+  const genericMatch = errorText.match(
+    /parameter[:\s]*["'`]?([a-z0-9_]+)["'`]?.{0,30}not supported/i
+  );
+  return genericMatch?.[1]?.toLowerCase();
+}
+
+function removeUnsupportedOpenRouterParameter(
+  candidate: OpenRouterPayload,
+  parameterName: string
+): boolean {
+  const normalized = parameterName.replace(/-/g, '_');
+  const mapToPayloadKey: Record<string, keyof OpenRouterPayload> = {
+    temperature: 'temperature',
+    max_tokens: 'max_tokens',
+    top_p: 'top_p',
+    frequency_penalty: 'frequency_penalty',
+    presence_penalty: 'presence_penalty',
+    tools: 'tools',
+    tool_choice: 'tool_choice',
+    response_format: 'response_format',
+    plugins: 'plugins',
+  };
+  const key = mapToPayloadKey[normalized];
+  if (!key || candidate[key] === undefined) {
+    return false;
+  }
+  delete candidate[key];
+  return true;
+}
+
 export class OpenRouterAdapter extends ProviderAdapter {
   private providerLog = logger.child({ provider: 'openrouter' });
 
@@ -424,215 +549,127 @@ export class OpenRouterAdapter extends ProviderAdapter {
   }
 
   /**
+   * Build the OpenRouter request payload shared by the non-streaming and
+   * streaming chat-completion paths. `stream` is intentionally left unset
+   * here — each caller sets it (and, for streaming, `stream_options`)
+   * explicitly so this method has exactly one job: message/tool/plugin
+   * conversion.
+   */
+  private buildOpenRouterPayload(request: ChatRequest): OpenRouterPayload {
+    // Convert our internal format to OpenRouter format
+    const openRouterMessages = this.convertMessagesToOpenRouter(request.messages);
+
+    // Convert ChatCompletionMessageParam[] to OpenRouter format with type safety
+    const openRouterMessagesFormatted: OpenRouterMessage[] = openRouterMessages.map(
+      (msg): OpenRouterMessage => {
+        // Type-safe content conversion
+        let contentValue: OpenRouterMessageContent = '';
+        if (typeof msg.content === 'string') {
+          contentValue = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          contentValue = msg.content.map((item) => {
+            if (item && typeof item === 'object' && 'type' in item) {
+              if (
+                item.type === 'text' &&
+                'text' in item &&
+                typeof (item as { text: unknown }).text === 'string'
+              ) {
+                return { type: 'text' as const, text: (item as { text: string }).text };
+              } else if (
+                item.type === 'image_url' &&
+                'image_url' in item &&
+                typeof (item as { image_url: unknown }).image_url === 'object' &&
+                item.image_url !== null
+              ) {
+                const imgUrl = item.image_url as {
+                  url: string;
+                  detail?: 'low' | 'high' | 'auto';
+                };
+                return {
+                  type: 'image_url' as const,
+                  image_url: {
+                    url: imgUrl.url,
+                    detail: imgUrl.detail,
+                  },
+                };
+              }
+            }
+            return { type: 'text' as const, text: String(item || '') };
+          });
+        } else {
+          contentValue = String(msg.content || '');
+        }
+
+        const base: OpenRouterMessage = {
+          role: msg.role,
+          content: contentValue,
+        };
+
+        // Type-safe tool_calls conversion
+        if ('tool_calls' in msg && msg.tool_calls !== undefined && Array.isArray(msg.tool_calls)) {
+          base.tool_calls = msg.tool_calls as OpenRouterToolCall;
+        }
+
+        // Type-safe tool_call_id
+        if (
+          'tool_call_id' in msg &&
+          msg.tool_call_id !== undefined &&
+          typeof msg.tool_call_id === 'string'
+        ) {
+          base.tool_call_id = msg.tool_call_id;
+        }
+
+        return base;
+      }
+    );
+
+    const payload: OpenRouterPayload = {
+      model: request.model,
+      messages: openRouterMessagesFormatted,
+      temperature: request.temperature,
+      max_tokens: request.max_tokens,
+      top_p: request.top_p,
+      frequency_penalty: request.frequency_penalty,
+      presence_penalty: request.presence_penalty,
+    };
+
+    // Add optional parameters based on model capabilities
+    if (request.tools && request.tools.length > 0) {
+      // Convert Tool[] to Array<Record<string, unknown>>
+      payload.tools = request.tools.map((tool) => ({
+        type: tool.type,
+        function: tool.function,
+      }));
+      payload.tool_choice = request.tool_choice || 'auto';
+    }
+
+    if (request.response_format) {
+      payload.response_format = request.response_format;
+    }
+
+    // Add web search plugin if requested
+    if (request.webSearch) {
+      payload.plugins = [{ id: 'web' }];
+      if (request.webSearchOptions) {
+        payload.plugins[0] = {
+          ...payload.plugins[0],
+          ...request.webSearchOptions,
+        };
+      }
+    }
+
+    return payload;
+  }
+
+  /**
    * Chat completion implementation
    */
   async chatCompletion(request: ChatRequest): Promise<ChatResponse> {
     const startTime = Date.now();
 
     try {
-      // Convert our internal format to OpenRouter format
-      const openRouterMessages = this.convertMessagesToOpenRouter(request.messages);
-
-      // Type-safe message content
-      type OpenRouterMessageContent =
-        | string
-        | Array<
-            | { type: 'text'; text: string }
-            | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
-          >;
-
-      // Type-safe tool calls
-      type OpenRouterToolCall = Array<{
-        id: string;
-        type: 'function';
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-
-      interface OpenRouterMessage {
-        role: string;
-        content: OpenRouterMessageContent;
-        tool_calls?: OpenRouterToolCall;
-        tool_call_id?: string;
-      }
-
-      interface OpenRouterPayload {
-        model?: string;
-        messages: OpenRouterMessage[];
-        stream?: boolean;
-        temperature?: number;
-        max_tokens?: number;
-        top_p?: number;
-        frequency_penalty?: number;
-        presence_penalty?: number;
-        tools?: Array<Record<string, unknown>>;
-        tool_choice?: string | { type: string; function: { name: string } };
-        response_format?: { type: string };
-        plugins?: Array<{ id: string; [key: string]: unknown }>;
-      }
-
-      // Convert ChatCompletionMessageParam[] to OpenRouter format with type safety
-      const openRouterMessagesFormatted: OpenRouterMessage[] = openRouterMessages.map(
-        (msg): OpenRouterMessage => {
-          // Type-safe content conversion
-          let contentValue: OpenRouterMessageContent = '';
-          if (typeof msg.content === 'string') {
-            contentValue = msg.content;
-          } else if (Array.isArray(msg.content)) {
-            contentValue = msg.content.map((item) => {
-              if (item && typeof item === 'object' && 'type' in item) {
-                if (
-                  item.type === 'text' &&
-                  'text' in item &&
-                  typeof (item as { text: unknown }).text === 'string'
-                ) {
-                  return { type: 'text' as const, text: (item as { text: string }).text };
-                } else if (
-                  item.type === 'image_url' &&
-                  'image_url' in item &&
-                  typeof (item as { image_url: unknown }).image_url === 'object' &&
-                  item.image_url !== null
-                ) {
-                  const imgUrl = item.image_url as {
-                    url: string;
-                    detail?: 'low' | 'high' | 'auto';
-                  };
-                  return {
-                    type: 'image_url' as const,
-                    image_url: {
-                      url: imgUrl.url,
-                      detail: imgUrl.detail,
-                    },
-                  };
-                }
-              }
-              return { type: 'text' as const, text: String(item || '') };
-            });
-          } else {
-            contentValue = String(msg.content || '');
-          }
-
-          const base: OpenRouterMessage = {
-            role: msg.role,
-            content: contentValue,
-          };
-
-          // Type-safe tool_calls conversion
-          if (
-            'tool_calls' in msg &&
-            msg.tool_calls !== undefined &&
-            Array.isArray(msg.tool_calls)
-          ) {
-            base.tool_calls = msg.tool_calls as OpenRouterToolCall;
-          }
-
-          // Type-safe tool_call_id
-          if (
-            'tool_call_id' in msg &&
-            msg.tool_call_id !== undefined &&
-            typeof msg.tool_call_id === 'string'
-          ) {
-            base.tool_call_id = msg.tool_call_id;
-          }
-
-          return base;
-        }
-      );
-
-      const payload: OpenRouterPayload = {
-        model: request.model,
-        messages: openRouterMessagesFormatted,
-        stream: request.stream || false,
-        temperature: request.temperature,
-        max_tokens: request.max_tokens,
-        top_p: request.top_p,
-        frequency_penalty: request.frequency_penalty,
-        presence_penalty: request.presence_penalty,
-      };
-
-      // Add optional parameters based on model capabilities
-      if (request.tools && request.tools.length > 0) {
-        // Convert Tool[] to Array<Record<string, unknown>>
-        payload.tools = request.tools.map((tool) => ({
-          type: tool.type,
-          function: tool.function,
-        }));
-        payload.tool_choice = request.tool_choice || 'auto';
-      }
-
-      if (request.response_format) {
-        payload.response_format = request.response_format;
-      }
-
-      // Add web search plugin if requested
-      if (request.webSearch) {
-        payload.plugins = [{ id: 'web' }];
-        if (request.webSearchOptions) {
-          payload.plugins[0] = {
-            ...payload.plugins[0],
-            ...request.webSearchOptions,
-          };
-        }
-      }
-
-      const toPayloadRecord = (candidate: OpenRouterPayload): Record<string, unknown> => ({
-        model: candidate.model,
-        messages: candidate.messages,
-        ...(candidate.stream !== undefined && { stream: candidate.stream }),
-        ...(candidate.temperature !== undefined && { temperature: candidate.temperature }),
-        ...(candidate.max_tokens !== undefined && { max_tokens: candidate.max_tokens }),
-        ...(candidate.top_p !== undefined && { top_p: candidate.top_p }),
-        ...(candidate.frequency_penalty !== undefined && {
-          frequency_penalty: candidate.frequency_penalty,
-        }),
-        ...(candidate.presence_penalty !== undefined && {
-          presence_penalty: candidate.presence_penalty,
-        }),
-        ...(candidate.tools !== undefined && { tools: candidate.tools }),
-        ...(candidate.tool_choice !== undefined && { tool_choice: candidate.tool_choice }),
-        ...(candidate.response_format !== undefined && {
-          response_format: candidate.response_format,
-        }),
-        ...(candidate.plugins !== undefined && { plugins: candidate.plugins }),
-      });
-
-      const extractUnsupportedParameter = (errorText: string): string | undefined => {
-        const quotedMatch = errorText.match(/Unsupported parameter:\s*'([^']+)'/i);
-        if (quotedMatch?.[1]) {
-          return quotedMatch[1].toLowerCase();
-        }
-
-        const genericMatch = errorText.match(
-          /parameter[:\s]*["'`]?([a-z0-9_]+)["'`]?.{0,30}not supported/i
-        );
-        return genericMatch?.[1]?.toLowerCase();
-      };
-
-      const removeUnsupportedParameter = (
-        candidate: OpenRouterPayload,
-        parameterName: string
-      ): boolean => {
-        const normalized = parameterName.replace(/-/g, '_');
-        const mapToPayloadKey: Record<string, keyof OpenRouterPayload> = {
-          temperature: 'temperature',
-          max_tokens: 'max_tokens',
-          top_p: 'top_p',
-          frequency_penalty: 'frequency_penalty',
-          presence_penalty: 'presence_penalty',
-          tools: 'tools',
-          tool_choice: 'tool_choice',
-          response_format: 'response_format',
-          plugins: 'plugins',
-        };
-        const key = mapToPayloadKey[normalized];
-        if (!key || candidate[key] === undefined) {
-          return false;
-        }
-        delete candidate[key];
-        return true;
-      };
+      const payload = this.buildOpenRouterPayload(request);
+      payload.stream = request.stream || false;
 
       // Route the network operation (param-stripping retry loop + parse)
       // through the resilience stack (bulkhead → breaker → timeout) so an
@@ -642,7 +679,11 @@ export class OpenRouterAdapter extends ProviderAdapter {
         let errorData = '';
 
         for (let attempt = 1; attempt <= 3; attempt += 1) {
-          response = await this.makeRequest('/chat/completions', 'POST', toPayloadRecord(payload));
+          response = await this.makeRequest(
+            '/chat/completions',
+            'POST',
+            toOpenRouterPayloadRecord(payload)
+          );
           if (response.ok) {
             break;
           }
@@ -652,8 +693,11 @@ export class OpenRouterAdapter extends ProviderAdapter {
             break;
           }
 
-          const unsupportedParameter = extractUnsupportedParameter(errorData);
-          if (!unsupportedParameter || !removeUnsupportedParameter(payload, unsupportedParameter)) {
+          const unsupportedParameter = extractUnsupportedOpenRouterParameter(errorData);
+          if (
+            !unsupportedParameter ||
+            !removeUnsupportedOpenRouterParameter(payload, unsupportedParameter)
+          ) {
             break;
           }
 
@@ -1084,108 +1128,248 @@ export class OpenRouterAdapter extends ProviderAdapter {
   }
 
   /**
-   * Chat completion streaming for OpenRouter
-   * Implements streaming by converting non-streaming response into chunks
+   * Split a raw SSE byte stream into individual `data:` event payloads.
+   *
+   * Previously `chatCompletionStream` never read a real stream at all — it
+   * called the non-streaming `chatCompletion()` and faked chunked delivery
+   * with `setTimeout`, so time-to-first-byte equalled full generation
+   * latency. This proxies OpenRouter's actual upstream SSE response
+   * chunk-by-chunk as it arrives.
+   *
+   * OpenRouter also emits SSE comment lines (`: OPENROUTER PROCESSING`, etc.)
+   * as keep-alives while a request is queued upstream; those are skipped
+   * here like any other non-`data:` line rather than surfaced as content.
+   */
+  private async *iterateOpenRouterSseEvents(
+    body: ReadableStream<Uint8Array>
+  ): AsyncGenerator<string, void, unknown> {
+    const reader = body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        // SSE events are separated by a blank line.
+        while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+
+          for (const line of rawEvent.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue; // skip keep-alive comments/blank lines
+            const data = trimmed.slice('data:'.length).trim();
+            if (data) yield data;
+          }
+        }
+      }
+      // Flush a final event that arrived without a trailing blank line.
+      const trailing = buffer.trim();
+      if (trailing.startsWith('data:')) {
+        const data = trailing.slice('data:'.length).trim();
+        if (data) yield data;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Convert one parsed OpenRouter streaming chunk (OpenAI-shaped) to our
+   * format, reassembling multi-fragment tool-call arguments the same way
+   * the OpenAI adapter does: `toolCallState` remembers each in-progress
+   * call's `id`/`name` (announced once, on the first fragment) so every
+   * continuation fragment — which carries only `{index, function:
+   * {arguments}}` — can still be tagged with the right identity.
+   */
+  private convertOpenRouterStreamChunk(
+    chunk: OpenRouterStreamChunk,
+    requestedModel: string,
+    toolCallState: Map<number, { id: string; name: string }>
+  ): ChatResponse {
+    const choices: ChatChoice[] = (chunk.choices || []).map((choice, position) => {
+      const delta: Partial<ChatMessage> = {};
+
+      const role = choice.delta?.role;
+      if (role === 'user' || role === 'assistant' || role === 'system') {
+        delta.role = role;
+      }
+      if (typeof choice.delta?.content === 'string') {
+        delta.content = choice.delta.content;
+      }
+
+      if (Array.isArray(choice.delta?.tool_calls) && choice.delta.tool_calls.length > 0) {
+        const validToolCalls: ToolCall[] = [];
+        for (const [tcPosition, tc] of choice.delta.tool_calls.entries()) {
+          if (!tc || typeof tc !== 'object') continue;
+
+          const index = typeof tc.index === 'number' ? tc.index : tcPosition;
+          const rawId = typeof tc.id === 'string' ? tc.id : undefined;
+          const rawName = typeof tc.function?.name === 'string' ? tc.function.name : undefined;
+          const rawArgs =
+            typeof tc.function?.arguments === 'string' ? tc.function.arguments : undefined;
+
+          let tracked = toolCallState.get(index);
+          if (rawId !== undefined || rawName !== undefined) {
+            tracked = { id: rawId ?? tracked?.id ?? '', name: rawName ?? tracked?.name ?? '' };
+            toolCallState.set(index, tracked);
+          }
+
+          if (!tracked && rawArgs === undefined) continue;
+
+          validToolCalls.push({
+            id: tracked?.id ?? rawId ?? '',
+            type: 'function',
+            // Forward the raw fragment (not an accumulated total) so a
+            // caller doing the standard `arguments += delta` reconstruction
+            // gets the right result.
+            function: { name: tracked?.name ?? rawName ?? '', arguments: rawArgs ?? '' },
+            index,
+          });
+        }
+        if (validToolCalls.length > 0) {
+          delta.tool_calls = validToolCalls;
+        }
+      }
+
+      const finishReason: ChatChoice['finish_reason'] =
+        choice.finish_reason === 'stop' ||
+        choice.finish_reason === 'length' ||
+        choice.finish_reason === 'tool_calls' ||
+        choice.finish_reason === 'content_filter'
+          ? choice.finish_reason
+          : null;
+
+      return {
+        index: typeof choice.index === 'number' ? choice.index : position,
+        delta,
+        finish_reason: finishReason,
+        logprobs: null,
+      };
+    });
+
+    return {
+      id: chunk.id || `chatcmpl-${Date.now()}`,
+      object: 'chat.completion.chunk',
+      created: Math.floor(Date.now() / 1000),
+      model: chunk.model || requestedModel,
+      choices,
+      ...(chunk.usage
+        ? {
+            usage: {
+              prompt_tokens: chunk.usage.prompt_tokens || 0,
+              completion_tokens: chunk.usage.completion_tokens || 0,
+              total_tokens: chunk.usage.total_tokens || 0,
+            },
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Chat completion streaming for OpenRouter.
+   *
+   * Proxies OpenRouter's real upstream SSE stream chunk-by-chunk (see
+   * `iterateOpenRouterSseEvents`) instead of buffering a full non-streaming
+   * response and faking chunked delivery — time-to-first-byte now reflects
+   * the upstream's actual latency to its first token, not the full
+   * generation time.
    */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const startTime = Date.now();
 
     try {
-      // Get non-streaming response
-      const fullResponse = await this.chatCompletion(request);
+      const payload = this.buildOpenRouterPayload(request);
+      payload.stream = true;
+      // Ask OpenRouter to include a final usage-only chunk, mirroring what
+      // the non-streaming path already reports — without this the stream
+      // ends with no usage data at all.
+      payload.stream_options = { include_usage: true };
 
-      // Extract text content from message (can be string or MessageContent[])
-      const messageContent = fullResponse.choices[0]?.message?.content;
-      let contentText = '';
-      if (typeof messageContent === 'string') {
-        contentText = messageContent;
-      } else if (Array.isArray(messageContent)) {
-        contentText = messageContent
-          .map((item) => {
-            if (
-              typeof item === 'object' &&
-              item !== null &&
-              'text' in item &&
-              typeof item.text === 'string'
-            ) {
-              return item.text;
-            }
-            return '';
-          })
-          .join('');
+      // Same param-stripping retry loop as the non-streaming path: only the
+      // connection-establishment call goes through the resilience stack
+      // (bulkhead → breaker → timeout); the stream read loop below stays
+      // outside the bulkhead slot so streaming semantics are preserved.
+      const response = await this.executeThroughBulkhead(async () => {
+        let attemptResponse: Response | null = null;
+        let errorData = '';
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          attemptResponse = await this.makeRequest(
+            '/chat/completions',
+            'POST',
+            toOpenRouterPayloadRecord(payload)
+          );
+          if (attemptResponse.ok) {
+            break;
+          }
+
+          errorData = await attemptResponse.text();
+          if (attemptResponse.status !== 400) {
+            break;
+          }
+
+          const unsupportedParameter = extractUnsupportedOpenRouterParameter(errorData);
+          if (
+            !unsupportedParameter ||
+            !removeUnsupportedOpenRouterParameter(payload, unsupportedParameter)
+          ) {
+            break;
+          }
+
+          this.providerLog.warn(
+            { model: payload.model, unsupportedParameter, attempt },
+            'Retrying OpenRouter streaming request without unsupported parameter'
+          );
+        }
+
+        if (!attemptResponse || !attemptResponse.ok) {
+          throw Object.assign(
+            new Error(`OpenRouter API error: ${attemptResponse?.status ?? 0} - ${errorData}`),
+            { statusCode: attemptResponse?.status ?? 0 }
+          );
+        }
+
+        return attemptResponse;
+      }, 'chat completion stream');
+
+      if (!response.body) {
+        throw new Error('OpenRouter streaming response had no body');
       }
 
-      // Split content into chunks for streaming simulation
-      const chunkSize = 20; // Characters per chunk
-      const chunks: string[] = [];
+      let firstChunk = true;
+      let chunkCount = 0;
+      const toolCallState = new Map<number, { id: string; name: string }>();
+      const requestedModel = request.model || '';
 
-      for (let i = 0; i < contentText.length; i += chunkSize) {
-        chunks.push(contentText.slice(i, i + chunkSize));
+      for await (const eventData of this.iterateOpenRouterSseEvents(response.body)) {
+        if (eventData === '[DONE]') break;
+
+        let parsed: OpenRouterStreamChunk;
+        try {
+          parsed = JSON.parse(eventData) as OpenRouterStreamChunk;
+        } catch (parseError) {
+          this.providerLog.warn(
+            { error: parseError, eventData },
+            'Skipping malformed OpenRouter SSE event'
+          );
+          continue;
+        }
+
+        if (firstChunk) {
+          this.providerLog.debug({ duration: Date.now() - startTime }, 'First chunk received');
+          firstChunk = false;
+        }
+        chunkCount++;
+
+        yield this.convertOpenRouterStreamChunk(parsed, requestedModel, toolCallState);
       }
-
-      const finishReason = fullResponse.choices[0]?.finish_reason || 'stop';
-      const toolCalls = fullResponse.choices[0]?.message?.tool_calls;
-
-      // Yield content chunks progressively. The final frame is emitted
-      // separately below so that it always happens — a tool-call response has
-      // EMPTY content, which made `chunks` empty, which made this loop body
-      // never run, which made the whole generator yield nothing at all. The
-      // client saw an empty stream and no tool call.
-      for (let i = 0; i < chunks.length; i++) {
-        yield {
-          id: fullResponse.id,
-          object: 'chat.completion.chunk',
-          created: fullResponse.created,
-          model: fullResponse.model,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                role: 'assistant',
-                content: chunks[i],
-              },
-              finish_reason: null,
-              logprobs: null,
-            },
-          ],
-        };
-
-        // Small delay to simulate streaming
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-
-      // Terminal frame: carries finish_reason, usage, and — critically — the
-      // tool calls. Without them a tool-calling response streamed through this
-      // adapter announced `finish_reason: 'tool_calls'` while never delivering
-      // a single tool call, so every OpenAI-spec consumer had nothing to
-      // execute and silently fell back to prose.
-      yield {
-        id: fullResponse.id,
-        object: 'chat.completion.chunk',
-        created: fullResponse.created,
-        model: fullResponse.model,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              role: 'assistant',
-              content: '',
-              ...(Array.isArray(toolCalls) && toolCalls.length > 0
-                ? { tool_calls: toolCalls }
-                : {}),
-            },
-            finish_reason: finishReason,
-            logprobs: null,
-          },
-        ],
-        usage: fullResponse.usage,
-      };
 
       const totalDuration = Date.now() - startTime;
-      this.providerLog.debug(
-        { duration: totalDuration, chunks: chunks.length },
-        'Streaming completed'
-      );
+      this.providerLog.debug({ duration: totalDuration, chunks: chunkCount }, 'Streaming completed');
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
       this.providerLog.error(

@@ -23,8 +23,20 @@
  * These tests assert the observable behavior: no fetcher is constructed
  * (`getFetcher()` returns undefined) and `listModels()` still resolves
  * correctly from `pinnedFallback` without ever touching the fetcher. A
- * sibling non-pinned entry proves the fetcher is still built when it's
- * actually needed — this is a skip, not a removal.
+ * sibling `discovery+execution` entry proves the fetcher is still built when
+ * it's actually needed — this is a skip, not a removal.
+ *
+ * 2026-09-04 (LOTE AK): the skip gate is now `integrationMode` alone, not
+ * "execution-only AND a populated pinnedFallback". The old gate silently
+ * excluded rows declaring `discoveryStatus: 'unavailable-upstream'` —
+ * execution-only rows that ship ZERO inventory on purpose because the vendor
+ * publishes no machine-readable listing. Those rows were handed a fetcher
+ * aimed at a `/models` path that provably does not exist, so every boot
+ * probed a known-dead endpoint, and `listModels()` then threw
+ * "listModels called before initialize", reporting a deliberate zero-inventory
+ * row as a wiring bug. `execution-only` already MEANS "no listing endpoint",
+ * and central-model-discovery-service has always keyed off the mode alone —
+ * the two paths now agree.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -93,18 +105,25 @@ describe('CatalogProviderPlugin — fetcher construction for pinnedFallback rows
     ]);
   });
 
-  it('still builds the discovery fetcher when the row is NOT fully covered by pinnedFallback', async () => {
+  it('skips the fetcher and reports zero inventory for execution-only rows declaring discoveryStatus=unavailable-upstream', async () => {
     const factory: AdapterFactory = () => stubAdapter();
     registerAdapterFactory('StubCustomAuthAdapter', factory);
 
-    // Same dedicated-adapter + custom-authScheme shape, but no pinnedFallback
-    // — listModels() must fall back to the fetcher, so it has to exist.
-    const entry = dedicatedEntry({ pinnedFallback: undefined });
+    // The `discoveryStatus: 'unavailable-upstream'` contract (SOTA §16): the
+    // vendor exposes NO machine-readable listing, so the row ships ZERO
+    // inventory rather than a fabricated one. There is nothing for a
+    // discovery fetcher to probe, and the honest answer from listModels() is
+    // an empty list — never an invented model and never a throw.
+    const entry = dedicatedEntry({
+      pinnedFallback: undefined,
+      discoveryStatus: 'unavailable-upstream',
+    });
     const plugin = createCatalogProviderPlugin(entry);
 
     await plugin.initialize({ apiKey: 'stub-key', baseURL: entry.baseUrl });
 
-    expect(plugin.getFetcher()).toBeDefined();
+    expect(plugin.getFetcher()).toBeUndefined();
+    await expect(plugin.listModels()).resolves.toEqual([]);
   });
 
   it('still builds the discovery fetcher for discovery+execution rows even with a dedicated adapter', async () => {

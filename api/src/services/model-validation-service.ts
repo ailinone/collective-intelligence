@@ -17,6 +17,7 @@
 import { logger } from '@/utils/logger';
 import { getErrorMessage } from '@/utils/type-guards';
 import { getModelRepository } from './model-repository';
+import { getAllCatalogModels } from './model-catalog-service';
 import type { Model, ModelCapability } from '@/types';
 import { createUniversalClient } from '@/client/provider-registry';
 import type { ModelRecord } from '@/types/model-client';
@@ -30,6 +31,9 @@ import {
   calculateFrontendScore,
   calculateDataScienceScore,
 } from '@/scoring/code-role-scoring';
+
+/** Cap de trabalho por ciclo de validação geral (não limita o universo). */
+const VALIDATION_CYCLE_MAX_MODELS = 1000;
 
 export interface ValidationTest {
   capability: ModelCapability;
@@ -242,19 +246,20 @@ export class ModelValidationService {
     // Primeiro processa a fila de validações agendadas
     await this.processValidationQueue();
 
-    // Busca todos os modelos ativos para validação geral
-    const models = await this.repository.searchModels({
-      status: 'active',
-      limit: 1000, // Valida os primeiros 1000 modelos
-    });
+    // Universo = catálogo ativo inteiro (searchModels com limit devolvia só os
+    // 1000 mais recentes). O cap por ciclo é aplicado DEPOIS da priorização,
+    // para limitar quanto trabalho um ciclo faz, não o que ele consegue ver.
+    const models = (await getAllCatalogModels()).filter((m) => m.status === 'active');
 
     this.log.info(
       { modelCount: models.length, queueSize: this.validationQueue.length },
       'Found models for validation'
     );
 
-    // Prioriza modelos por ordem de validação necessária
-    const prioritizedModels = this.prioritizeModelsForValidation(models);
+    const prioritizedModels = this.prioritizeModelsForValidation(models).slice(
+      0,
+      VALIDATION_CYCLE_MAX_MODELS
+    );
 
     // Executa validações em lotes para não sobrecarregar
     const batchSize = 10;
@@ -917,16 +922,23 @@ Responda no formato "Resultado: X".
         dataScienceScore = s?.score ?? undefined;
       }
 
-      await this.repository.updateModelPerformance(modelId, {
-        latencyMs: averageResponseTime,
-        quality: qualityScore,
-        reliability: reliabilityScore,
-        codeScore: codeScore ?? undefined,
-        codeTier: codeTier ?? undefined,
-        codeBackendScore: backendScore,
-        codeFrontendScore: frontendScore,
-        codeDataScienceScore: dataScienceScore,
-      });
+      await this.repository.updateModelPerformance(
+        modelId,
+        {
+          latencyMs: averageResponseTime,
+          quality: qualityScore,
+          reliability: reliabilityScore,
+          codeScore: codeScore ?? undefined,
+          codeTier: codeTier ?? undefined,
+          codeBackendScore: backendScore,
+          codeFrontendScore: frontendScore,
+          codeDataScienceScore: dataScienceScore,
+        },
+        // How many real observations this aggregate stands on. Recorded so the
+        // row can say how much evidence backs it, and so the discovery prior
+        // can be calibrated against genuinely-measured models only.
+        stats.results.length
+      );
 
       // Log estatísticas
       this.log.debug(

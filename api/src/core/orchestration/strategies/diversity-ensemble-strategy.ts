@@ -19,7 +19,7 @@
  * Parallel execution + weighted synthesis by the highest-quality model.
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { narrowAs } from '@/utils/type-guards';
 import { resolvePreferredExecutor, withPreferredFirst } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
@@ -214,6 +214,7 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: executions.reduce((s, e) => s + (e.cost ?? 0), 0),
+      toolArtifacts: mergeArtifacts(executions),
       metadata: {
         strategy: 'diversity-ensemble',
         diversityScore: uniqueProviders.length / diverse.length,
@@ -403,6 +404,7 @@ export class DiversityEnsembleStrategy extends BaseStrategy {
       modelsUsed: executions,
       totalDuration: Date.now() - startTime,
       totalCost: 0,
+      toolArtifacts: mergeArtifacts(executions),
       metadata: { strategy: 'diversity-ensemble', error: 'all-failed' },
     };
   }

@@ -273,10 +273,28 @@ export async function authRoutesClean(server: FastifyInstance): Promise<void> {
         // in `user_roles`. A JWT claim must never assert a role the database
         // does not back — the previous hardcoded `['admin']` was claim forgery
         // independent of any DB state.
-        const grantedRoles =
-          result.roles && result.roles.length > 0
-            ? result.roles
-            : await getUserRoles(result.userId, result.organizationId);
+        // The fallback read is guarded: the handler deliberately tolerates a
+        // failed baseline grant (fail OPEN on the account, CLOSED on
+        // privilege), but `getUserRoles` re-attempts that very grant when it
+        // finds no rows and rethrows on failure. Unguarded, that turned a
+        // successful, already-persisted registration into a 500 with no token -
+        // and re-registering returns 409 forever, so the account was
+        // unrecoverable.
+        let grantedRoles: string[] = Array.isArray(result.roles) ? result.roles : [];
+        if (grantedRoles.length === 0) {
+          try {
+            grantedRoles = await getUserRoles(result.userId, result.organizationId);
+          } catch (rolesError: unknown) {
+            server.log.error(
+              {
+                error: rolesError instanceof Error ? rolesError.message : String(rolesError),
+                userId: result.userId,
+                organizationId: result.organizationId,
+              },
+              'Could not read grants after registration; issuing token with no roles'
+            );
+          }
+        }
 
         // body.email is validated above and guaranteed to be a string
         const tokens = await authService.generateTokens({

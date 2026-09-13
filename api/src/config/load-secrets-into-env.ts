@@ -66,7 +66,7 @@ const CRITICAL_SECRETS: CriticalSecret[] = [
   // Prometheus token above. Wired via CRITICAL_SECRETS (not PROVIDER_SECRETS)
   // because this is a general app credential, not a provider API key. No GCP
   // secret exists yet as of this commit — an operator must create one
-  // (`ailin-sentry-dsn`) with a real DSN from Sentry's project settings
+  // (`<prefix>-sentry-dsn`) with a real DSN from Sentry's project settings
   // before this ever resolves to a non-empty value.
   { envVar: 'SENTRY_DSN', secretKey: 'sentry-dsn', required: false },
 ];
@@ -74,7 +74,7 @@ const CRITICAL_SECRETS: CriticalSecret[] = [
 /**
  * Provider API keys (loaded from GCP if not in env)
  * CRITICAL: GCP provider automatically adds prefix 'ailin-' to secret keys
- * So 'openai-key' becomes 'ailin-openai-key' in GCP Secret Manager
+ * So 'openai-key' becomes '<prefix>-openai-key' in GCP Secret Manager
  * These keys match the actual secret names in GCP (without the prefix, provider adds it)
  */
 interface ProviderSecretBinding {
@@ -158,7 +158,7 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'OCI_PRIVATE_KEY', secretKeys: ['oci-private-key'] },
   { envVar: 'OCI_REGION', secretKeys: ['oci-region'] },
   // 2026-04-22: New GCP secrets (5 providers). The GCP provider auto-prefixes
-  // 'ailin-', so 'wandb-key' maps to ailin-wandb-key in Secret Manager.
+  // 'ailin-', so 'wandb-key' maps to <prefix>-wandb-key in Secret Manager.
   // Voyage lists both 'voyageai-key' (current upstream name) and 'voyage-key'
   // (conventional fallback) because the canonical spelling is still unstable.
   { envVar: 'WANDB_API_KEY', secretKeys: ['wandb-key', 'wandb-api-key'] },
@@ -219,7 +219,7 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'WRITER_API_KEY', secretKeys: ['writer-key', 'writer-api-key'] },
   { envVar: 'UPSTAGE_API_KEY', secretKeys: ['upstage-key', 'upstage-api-key'] },
   // Reka's canonical upstream name is "reka" but the key is stored in GCP
-  // as `ailin-rekaai-key` (matching the catalog providerId, not the upstream
+  // as `<prefix>-rekaai-key` (matching the catalog providerId, not the upstream
   // name). `reka-key` is kept as a fallback in case the secret is ever
   // renamed to match upstream naming later.
   { envVar: 'REKA_API_KEY', secretKeys: ['rekaai-key', 'reka-key', 'reka-api-key'] },
@@ -411,8 +411,8 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // ⚠ THE LEADING HYPHEN IN `-byteplus-key` IS NOT A TYPO — DO NOT "FIX" IT.
   // GcpSecretsProvider.resolveSecretId concatenates the prefix naively as
   // `${prefix}-${key}` with prefix='ailin' and no normalisation, so:
-  //     'ailin' + '-' + '-byteplus-key' === 'ailin--byteplus-key'
-  //     'ailin' + '-' + 'byteplus-key'  === 'ailin-byteplus-key'
+  //     '<prefix>' + '-' + '-byteplus-key' === '<prefix>--byteplus-key'
+  //     '<prefix>' + '-' + 'byteplus-key'  === '<prefix>-byteplus-key'
   // Re-verified 2026-08-02 against the GCP project: `gcloud secrets
   // list --filter="name~byteplus"` returns BOTH names, and each has exactly
   // one ENABLED version. So either candidate resolves today; the
@@ -470,9 +470,13 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   { envVar: 'RECRAFT_API_KEY', secretKeys: ['recraft-key', 'recraft-api-key'] },
   { envVar: 'RUNWAYML_API_KEY', secretKeys: ['runwayml-key', 'runwayml-api-key', 'runway-key'] },
   { envVar: 'TOPAZ_API_KEY', secretKeys: ['topaz-key', 'topaz-api-key', 'topaz-labs-key'] },
+  // LOTE AU (2026-09-08) — aivideoapi.com (third-party Runway aggregator,
+  // NOT the same credential/host as runwayml above). GCP secret confirmed
+  // live via `gcloud secrets list`: `<prefix>-aivideoapi-key`.
+  { envVar: 'AIVIDEOAPI_API_KEY', secretKeys: ['aivideoapi-key', 'aivideoapi-api-key'] },
   // ── LOTE O (2026-07-10) — Apertis + Inception Labs onboarding ─────────
   // Operator pre-provisioned both GCP secrets ahead of the catalog rows
-  // (ailin-apertis-key, ailin-inception-key). secretKeys match exactly —
+  // (<prefix>-apertis-key, <prefix>-inception-key). secretKeys match exactly —
   // the GCP provider auto-prepends the `ailin-` prefix (see file header).
   { envVar: 'APERTIS_API_KEY', secretKeys: ['apertis-key', 'apertis-api-key'] },
   { envVar: 'INCEPTION_API_KEY', secretKeys: ['inception-key', 'inception-api-key'] },
@@ -491,21 +495,211 @@ export const PROVIDER_SECRETS: readonly ProviderSecretBinding[] = [
   // No GCP secret provisioned yet — inert until an operator sets AILIN_API_KEY
   // for a self-hosted deployment. secretKeys follow the same naming
   // convention as the rest of this file in case one is provisioned later.
-  { envVar: 'AILIN_API_KEY', secretKeys: ['ailin-key', 'ailin-api-key', 'gateway-key'] },
+  { envVar: 'AILIN_API_KEY', secretKeys: ['<prefix>-key', '<prefix>-api-key', 'gateway-key'] },
   // ── LOTE U (2026-07-29) — Sakana AI (Fugu), chat-capable ────────────────
   // 'sakana-ai-key' listed first: it's the actual GCP secret name
-  // (`ailin-sakana-ai-key`, prefix auto-added) confirmed live this lot.
+  // (`<prefix>-sakana-ai-key`, prefix auto-added) confirmed live this lot.
   { envVar: 'SAKANA_AI_API_KEY', secretKeys: ['sakana-ai-key', 'sakana-key'] },
   // ── LOTE V (2026-08-01) — Maritaca AI (Sabiá), chat-capable ─────────────
   // 'maritaca-key' listed first: it's the actual GCP secret name
-  // (`ailin-maritaca-key`, prefix auto-added) confirmed live this lot.
+  // (`<prefix>-maritaca-key`, prefix auto-added) confirmed live this lot.
   { envVar: 'MARITACA_AI_API_KEY', secretKeys: ['maritaca-key', 'maritaca-ai-key'] },
   // ── LOTE AB (2026-08-10) — DigitalOcean Serverless Inference, chat-capable ──
   // 'digitalocean-key' listed first: it's the actual GCP secret name
-  // (`ailin-digitalocean-key`, prefix auto-added) confirmed live this lot —
+  // (`<prefix>-digitalocean-key`, prefix auto-added) confirmed live this lot —
   // GcpSecretsProvider.resolveSecretId concatenates 'ailin' + '-' +
   // 'digitalocean-key', no double-hyphen gotcha (unlike byteplus above).
   { envVar: 'DIGITALOCEAN_API_KEY', secretKeys: ['digitalocean-key', 'digitalocean-api-key'] },
+  // ── LOTE AC (2026-08-21) — Wafer serverless, chat-capable ───────────
+  // 'waferai-key' listed first: it's the actual GCP secret name
+  // (`<prefix>-waferai-key`, prefix auto-added) provisioned for this lot —
+  // same resolveSecretId concatenation as digitalocean above.
+  { envVar: 'WAFER_API_KEY', secretKeys: ['waferai-key', 'wafer-key', 'wafer-api-key'] },
+  // LOTE AD (2026-08-21) - Vivgrid, chat-capable
+  { envVar: 'VIVGRID_API_KEY', secretKeys: ['vivgrid-key', 'vivgrid-api-key'] },
+  // LOTE AE (2026-08-21) - UnoRouter, chat-capable
+  { envVar: 'UNOROUTER_API_KEY', secretKeys: ['unorouter-key', 'unorouter-api-key'] },
+  // LOTE AF (2026-08-21) - Umans Code, chat-capable
+  { envVar: 'UMANS_API_KEY', secretKeys: ['umans-key', 'umans-api-key'] },
+  // LOTE AG (2026-08-21) - TrustedRouter, chat-capable
+  { envVar: 'TRUSTEDROUTER_API_KEY', secretKeys: ['trustedrouter-key', 'trustedrouter-api-key'] },
+  // ── LOTE AH (2026-09-03) — 25 catalog-only onboardings (docs-verified,
+  // no GCP secrets provisioned yet; entries here are the wiring contract
+  // for when credentials arrive — secretKeys follow the `ailin-<id>-key`
+  // resolveSecretId convention).
+  { envVar: 'BASETEN_API_KEY', secretKeys: ['baseten-key', 'baseten-api-key'] },
+  { envVar: 'KILO_GATEWAY_API_KEY', secretKeys: ['kilo-gateway-key', 'kilo-api-key'] },
+  // 2026-09-08: LOTE AK (2026-09-04) absorbed the duplicate `meta` catalog
+  // row into `llama` (aliases: llama-api/meta/meta-ai — see
+  // providers.catalog.ts providerId 'llama'), so this single row now serves
+  // BOTH names. The operator provisioned the credential under
+  // `<prefix>-meta-key` (confirmed live via `gcloud secrets describe/versions
+  // list` — ENABLED version), NOT `<prefix>-llama-key` (which does not exist in
+  // GCP as of this commit). 'meta-key' is listed first because it is the
+  // only candidate confirmed to actually resolve today; 'llama-key' /
+  // 'meta-api-key' remain as fallbacks in case the secret is ever
+  // provisioned or renamed under those names instead.
+  {
+    envVar: 'LLAMA_API_KEY',
+    secretKeys: ['meta-key', 'llama-key', 'llama-api-key', 'meta-api-key'],
+  },
+  { envVar: 'LONGCAT_API_KEY', secretKeys: ['longcat-key', 'longcat-api-key'] },
+  { envVar: 'IFLOW_API_KEY', secretKeys: ['iflow-key', 'iflow-api-key'] },
+  { envVar: 'MODELSCOPE_API_KEY', secretKeys: ['modelscope-key', 'modelscope-api-key'] },
+  // LOTE AU (2026-09-08): the GCP secret actually provisioned by the
+  // operator is `<prefix>-nearai-key` (no hyphen between "near" and "ai"),
+  // confirmed live via `gcloud secrets list` — exactly one ENABLED version.
+  // The original 'near-ai-key'/'near-ai-api-key' candidates (hyphenated,
+  // matching the catalog providerId 'near-ai') never matched because
+  // resolveSecretId is a naive `${prefix}-${key}` concatenation with no
+  // hyphen normalization — '<prefix>-near-ai-key' !== '<prefix>-nearai-key'.
+  // 'nearai-key' is listed first as the only confirmed-live candidate; the
+  // hyphenated spellings are kept as fallbacks in case the secret is ever
+  // renamed to match the providerId convention.
+  { envVar: 'NEAR_AI_API_KEY', secretKeys: ['nearai-key', 'near-ai-key', 'near-ai-api-key'] },
+  { envVar: 'OLLAMA_CLOUD_API_KEY', secretKeys: ['ollama-cloud-key', 'ollama-cloud-api-key'] },
+  { envVar: 'REGOLO_API_KEY', secretKeys: ['regolo-key', 'regolo-api-key'] },
+  { envVar: 'SARVAM_API_KEY', secretKeys: ['sarvam-key', 'sarvam-api-key'] },
+  { envVar: 'STACKIT_API_KEY', secretKeys: ['stackit-key', 'stackit-api-key'] },
+  { envVar: 'TINFOIL_API_KEY', secretKeys: ['tinfoil-key', 'tinfoil-api-key'] },
+  { envVar: 'VULTR_API_KEY', secretKeys: ['vultr-key', 'vultr-api-key'] },
+  { envVar: 'OVHCLOUD_API_KEY', secretKeys: ['ovhcloud-key', 'ovhcloud-api-key'] },
+  { envVar: 'CRUSOE_API_KEY', secretKeys: ['crusoe-key', 'crusoe-api-key'] },
+  { envVar: 'HETZNER_API_KEY', secretKeys: ['hetzner-key', 'hetzner-api-key'] },
+  { envVar: 'IO_INTELLIGENCE_API_KEY', secretKeys: ['io-intelligence-key', 'io-intelligence-api-key'] },
+  { envVar: 'LILAC_API_KEY', secretKeys: ['lilac-key', 'lilac-api-key'] },
+  { envVar: 'KIMI_CODING_API_KEY', secretKeys: ['kimi-coding-key', 'kimi-coding-api-key'] },
+  { envVar: 'ALIBABA_CN_API_KEY', secretKeys: ['alibaba-cn-key', 'alibaba-cn-api-key'] },
+  { envVar: 'MOONSHOT_CN_API_KEY', secretKeys: ['moonshot-cn-key', 'moonshot-cn-api-key'] },
+  { envVar: 'SILICONFLOW_CN_API_KEY', secretKeys: ['siliconflow-cn-key', 'siliconflow-cn-api-key'] },
+  { envVar: 'STEPFUN_CN_API_KEY', secretKeys: ['stepfun-cn-key', 'stepfun-cn-api-key'] },
+  { envVar: 'MINIMAX_CN_API_KEY', secretKeys: ['minimax-cn-key', 'minimax-cn-api-key'] },
+  { envVar: 'XIAOMI_TOKEN_PLAN_API_KEY', secretKeys: ['xiaomi-token-plan-key', 'xiaomi-token-plan-api-key'] },
+  // ── LOTE AI (2026-09-03) — 92 hosted docs-onboarded providers (roster
+  // convergence batch 2). No GCP secrets provisioned yet; entries here are
+  // the wiring contract for when credentials arrive (secretKeys follow the
+  // kebab '<id>-key' / '<id>-api-key' resolveSecretId convention). The three
+  // self-hosted localhost rows (atomic-chat, lynkr, privatemode) are
+  // intentionally absent — apiKeyOptional local runtimes, same as ollama.
+  // ── LOTE AJ (2026-09-03) — reopened/research batch (12 hosted rows)
+  { envVar: 'CLOUDFLARE_AI_GATEWAY_API_KEY', secretKeys: ['cloudflare-ai-gateway-key', 'cloudflare-ai-gateway-api-key'] },
+  { envVar: 'MERGE_API_KEY', secretKeys: ['merge-key', 'merge-api-key'] },
+  { envVar: 'INFOMANIAK_API_KEY', secretKeys: ['infomaniak-key', 'infomaniak-api-key'] },
+  { envVar: 'TINKER_API_KEY', secretKeys: ['tinker-key', 'tinker-api-key'] },
+  { envVar: 'MINIMAX_TOKEN_PLAN_API_KEY', secretKeys: ['minimax-token-plan-key', 'minimax-token-plan-api-key'] },
+  { envVar: 'MINIMAX_TOKEN_PLAN_CN_API_KEY', secretKeys: ['minimax-token-plan-cn-key', 'minimax-token-plan-cn-api-key'] },
+  { envVar: 'LLMGATEWAY_API_KEY', secretKeys: ['llmgateway-key', 'llmgateway-api-key'] },
+  { envVar: 'MODAL_API_KEY', secretKeys: ['modal-key', 'modal-api-key'] },
+  { envVar: 'AURIKO_API_KEY', secretKeys: ['auriko-key', 'auriko-api-key'] },
+  { envVar: 'SALADCLOUD_API_KEY', secretKeys: ['saladcloud-key', 'saladcloud-api-key'] },
+  { envVar: 'EBCLOUD_API_KEY', secretKeys: ['ebcloud-key', 'ebcloud-api-key'] },
+  // LOTE AL (2026-09-05): reopened false-NPI rows (ambient, amd, anyapi, bailing).
+  { envVar: 'AMBIENT_API_KEY', secretKeys: ['ambient-key', 'ambient-api-key'] },
+  { envVar: 'AMD_API_KEY', secretKeys: ['amd-key', 'amd-api-key'] },
+  { envVar: 'ANYAPI_API_KEY', secretKeys: ['anyapi-key', 'anyapi-api-key'] },
+  { envVar: 'BAILING_API_KEY', secretKeys: ['bailing-key', 'bailing-api-key'] },
+  { envVar: 'ABACUS_API_KEY', secretKeys: ['abacus-key', 'abacus-api-key'] },
+  { envVar: 'ABLITERATION_API_KEY', secretKeys: ['abliteration-key', 'abliteration-api-key'] },
+  { envVar: 'ABOVEDEV_API_KEY', secretKeys: ['abovedev-key', 'abovedev-api-key'] },
+  { envVar: 'AGENTROUTER_API_KEY', secretKeys: ['agentrouter-key', 'agentrouter-api-key'] },
+  { envVar: 'AGNES_API_KEY', secretKeys: ['agnes-key', 'agnes-api-key'] },
+  { envVar: 'AI_ROUTER_API_KEY', secretKeys: ['ai-router-key', 'ai-router-api-key'] },
+  { envVar: 'AIAND_API_KEY', secretKeys: ['aiand-key', 'aiand-api-key'] },
+  { envVar: 'AIXY_API_KEY', secretKeys: ['aixy-key', 'aixy-api-key'] },
+  { envVar: 'AKI_API_KEY', secretKeys: ['aki-key', 'aki-api-key'] },
+  { envVar: 'BERGET_API_KEY', secretKeys: ['berget-key', 'berget-api-key'] },
+  { envVar: 'BLUECLAW_API_KEY', secretKeys: ['blueclaw-key', 'blueclaw-api-key'] },
+  { envVar: 'BOTHUB_API_KEY', secretKeys: ['bothub-key', 'bothub-api-key'] },
+  { envVar: 'CHARM_HYPER_API_KEY', secretKeys: ['charm-hyper-key', 'charm-hyper-api-key'] },
+  { envVar: 'CLAUDIN_API_KEY', secretKeys: ['claudin-key', 'claudin-api-key'] },
+  { envVar: 'SHERLOCK_API_KEY', secretKeys: ['sherlock-key', 'sherlock-api-key'] },
+  { envVar: 'CORALBRICKS_API_KEY', secretKeys: ['coralbricks-key', 'coralbricks-api-key'] },
+  { envVar: 'CORTECS_API_KEY', secretKeys: ['cortecs-key', 'cortecs-api-key'] },
+  { envVar: 'CROFAI_API_KEY', secretKeys: ['crofai-key', 'crofai-api-key'] },
+  { envVar: 'CROSSMODEL_API_KEY', secretKeys: ['crossmodel-key', 'crossmodel-api-key'] },
+  { envVar: 'DRUN_API_KEY', secretKeys: ['drun-key', 'drun-api-key'] },
+  { envVar: 'DAOXE_API_KEY', secretKeys: ['daoxe-key', 'daoxe-api-key'] },
+  { envVar: 'DINFERENCE_API_KEY', secretKeys: ['dinference-key', 'dinference-api-key'] },
+  { envVar: 'ECHO_API_KEY', secretKeys: ['echo-key', 'echo-api-key'] },
+  { envVar: 'EVROC_API_KEY', secretKeys: ['evroc-key', 'evroc-api-key'] },
+  { envVar: 'FREEMODEL_API_KEY', secretKeys: ['freemodel-key', 'freemodel-api-key'] },
+  { envVar: 'FROGBOT_API_KEY', secretKeys: ['frogbot-key', 'frogbot-api-key'] },
+  { envVar: 'GREENPT_API_KEY', secretKeys: ['greenpt-key', 'greenpt-api-key'] },
+  { envVar: 'HPCAI_API_KEY', secretKeys: ['hpcai-key', 'hpcai-api-key'] },
+  { envVar: 'IMPOSSIBL_API_KEY', secretKeys: ['impossibl-key', 'impossibl-api-key'] },
+  { envVar: 'INCEPTRON_API_KEY', secretKeys: ['inceptron-key', 'inceptron-api-key'] },
+  { envVar: 'INFERENCE_NET_API_KEY', secretKeys: ['inference-net-key', 'inference-net-api-key'] },
+  { envVar: 'INFERX_API_KEY', secretKeys: ['inferx-key', 'inferx-api-key'] },
+  { envVar: 'ITERACOMPUTE_API_KEY', secretKeys: ['iteracompute-key', 'iteracompute-api-key'] },
+  { envVar: 'JALAPENO_API_KEY', secretKeys: ['jalapeno-key', 'jalapeno-api-key'] },
+  { envVar: 'JIEKO_API_KEY', secretKeys: ['jieko-key', 'jieko-api-key'] },
+  { envVar: 'KENARI_API_KEY', secretKeys: ['kenari-key', 'kenari-api-key'] },
+  { envVar: 'KLOK_API_KEY', secretKeys: ['klok-key', 'klok-api-key'] },
+  { envVar: 'KOSMIK_API_KEY', secretKeys: ['kosmik-key', 'kosmik-api-key'] },
+  { envVar: 'LLMTECH_API_KEY', secretKeys: ['llmtech-key', 'llmtech-api-key'] },
+  { envVar: 'LLMTR_API_KEY', secretKeys: ['llmtr-key', 'llmtr-api-key'] },
+  { envVar: 'LUCIDQUERY_API_KEY', secretKeys: ['lucidquery-key', 'lucidquery-api-key'] },
+  { envVar: 'MEGANOVA_API_KEY', secretKeys: ['meganova-key', 'meganova-api-key'] },
+  { envVar: 'MIXLAYER_API_KEY', secretKeys: ['mixlayer-key', 'mixlayer-api-key'] },
+  { envVar: 'MOARK_API_KEY', secretKeys: ['moark-key', 'moark-api-key'] },
+  { envVar: 'MODELORACLE_API_KEY', secretKeys: ['modeloracle-key', 'modeloracle-api-key'] },
+  { envVar: 'MODELIS_API_KEY', secretKeys: ['modelis-key', 'modelis-api-key'] },
+  { envVar: 'NEOSMITH_API_KEY', secretKeys: ['neosmith-key', 'neosmith-api-key'] },
+  { envVar: 'NEURALWATT_API_KEY', secretKeys: ['neuralwatt-key', 'neuralwatt-api-key'] },
+  { envVar: 'NOVA_API_KEY', secretKeys: ['nova-key', 'nova-api-key'] },
+  { envVar: 'OFOX_API_KEY', secretKeys: ['ofox-key', 'ofox-api-key'] },
+  { envVar: 'OPENREASON_API_KEY', secretKeys: ['openreason-key', 'openreason-api-key'] },
+  { envVar: 'OPPER_API_KEY', secretKeys: ['opper-key', 'opper-api-key'] },
+  { envVar: 'ORCAROUTER_API_KEY', secretKeys: ['orcarouter-key', 'orcarouter-api-key'] },
+  { envVar: 'PENDRA_API_KEY', secretKeys: ['pendra-key', 'pendra-api-key'] },
+  { envVar: 'PIONEER_API_KEY', secretKeys: ['pioneer-key', 'pioneer-api-key'] },
+  { envVar: 'POOLSIDE_API_KEY', secretKeys: ['poolside-key', 'poolside-api-key'] },
+  { envVar: 'QIHANG_API_KEY', secretKeys: ['qihang-key', 'qihang-api-key'] },
+  { envVar: 'QINIU_API_KEY', secretKeys: ['qiniu-key', 'qiniu-api-key'] },
+  { envVar: 'ROUTINGRUN_API_KEY', secretKeys: ['routingrun-key', 'routingrun-api-key'] },
+  { envVar: 'RUNINFRA_API_KEY', secretKeys: ['runinfra-key', 'runinfra-api-key'] },
+  // LOTE AU (2026-09-08): 'scx-key'/'scx-api-key' were the guessed
+  // provider-slug convention from LOTE AI's roster onboarding, but the GCP
+  // secret actually provisioned by the operator is `<prefix>-sxcai-key` (a
+  // transposed spelling of scx.ai, confirmed live via `gcloud secrets list`
+  // — exactly one ENABLED version). Since resolveSecretId is a naive
+  // `${prefix}-${key}` concatenation with no normalization, neither of the
+  // original candidates ever matched the real secret name. 'sxcai-key' is
+  // listed first because it is the ONLY candidate confirmed to exist; the
+  // scx-prefixed spellings are kept as fallbacks in case the secret is ever
+  // renamed to match the catalog providerId ('scx') convention.
+  { envVar: 'SCX_API_KEY', secretKeys: ['sxcai-key', 'scx-key', 'scx-api-key'] },
+  { envVar: 'SENSENOVA_API_KEY', secretKeys: ['sensenova-key', 'sensenova-api-key'] },
+  { envVar: 'STANDARDCOMPUTE_API_KEY', secretKeys: ['standardcompute-key', 'standardcompute-api-key'] },
+  { envVar: 'SUBCONSCIOUS_API_KEY', secretKeys: ['subconscious-key', 'subconscious-api-key'] },
+  { envVar: 'SUBMODEL_API_KEY', secretKeys: ['submodel-key', 'submodel-api-key'] },
+  { envVar: 'TENSORX_API_KEY', secretKeys: ['tensorx-key', 'tensorx-api-key'] },
+  { envVar: 'THEGRID_API_KEY', secretKeys: ['thegrid-key', 'thegrid-api-key'] },
+  { envVar: 'TOKENGO_API_KEY', secretKeys: ['tokengo-key', 'tokengo-api-key'] },
+  { envVar: 'TOKENROUTER_API_KEY', secretKeys: ['tokenrouter-key', 'tokenrouter-api-key'] },
+  { envVar: 'VANCINE_API_KEY', secretKeys: ['vancine-key', 'vancine-api-key'] },
+  { envVar: 'XPERSONA_API_KEY', secretKeys: ['xpersona-key', 'xpersona-api-key'] },
+  { envVar: 'ZELDOC_API_KEY', secretKeys: ['zeldoc-key', 'zeldoc-api-key'] },
+  { envVar: 'ZENIFRA_API_KEY', secretKeys: ['zenifra-key', 'zenifra-api-key'] },
+  { envVar: 'ZENMUX_API_KEY', secretKeys: ['zenmux-key', 'zenmux-api-key'] },
+  { envVar: 'CLARIFAI_API_KEY', secretKeys: ['clarifai-key', 'clarifai-api-key'] },
+  { envVar: 'OPENCODE_ZEN_API_KEY', secretKeys: ['opencode-zen-key', 'opencode-zen-api-key'] },
+  { envVar: 'OPENCODE_GO_API_KEY', secretKeys: ['opencode-go-key', 'opencode-go-api-key'] },
+  { envVar: 'KUAE_API_KEY', secretKeys: ['kuae-key', 'kuae-api-key'] },
+  { envVar: 'SCNET_API_KEY', secretKeys: ['scnet-key', 'scnet-api-key'] },
+  { envVar: 'CLINEPASS_API_KEY', secretKeys: ['clinepass-key', 'clinepass-api-key'] },
+  { envVar: 'TENCENT_CODING_API_KEY', secretKeys: ['tencent-coding-key', 'tencent-coding-api-key'] },
+  { envVar: 'TENCENT_PLAN_API_KEY', secretKeys: ['tencent-plan-key', 'tencent-plan-api-key'] },
+  { envVar: 'TENCENT_TOKENHUB_API_KEY', secretKeys: ['tencent-tokenhub-key', 'tencent-tokenhub-api-key'] },
+  { envVar: 'ALIBABA_CODING_API_KEY', secretKeys: ['alibaba-coding-key', 'alibaba-coding-api-key'] },
+  { envVar: 'ALIBABA_CODING_CN_API_KEY', secretKeys: ['alibaba-coding-cn-key', 'alibaba-coding-cn-api-key'] },
+  { envVar: 'ALIBABA_TOKEN_PLAN_API_KEY', secretKeys: ['alibaba-token-plan-key', 'alibaba-token-plan-api-key'] },
+  { envVar: 'ALIBABA_TOKEN_PLAN_CN_API_KEY', secretKeys: ['alibaba-token-plan-cn-key', 'alibaba-token-plan-cn-api-key'] },
+  { envVar: 'ZAI_CODING_API_KEY', secretKeys: ['zai-coding-key', 'zai-coding-api-key'] },
+  { envVar: 'ZAI_CODING_CN_API_KEY', secretKeys: ['zai-coding-cn-key', 'zai-coding-cn-api-key'] },
+  { envVar: 'VOLCANO_CODING_API_KEY', secretKeys: ['volcano-coding-key', 'volcano-coding-api-key'] },
+  { envVar: 'STEPFUN_STEP_PLAN_API_KEY', secretKeys: ['stepfun-step-plan-key', 'stepfun-step-plan-api-key'] },
+  { envVar: 'STEPFUN_STEP_PLAN_CN_API_KEY', secretKeys: ['stepfun-step-plan-cn-key', 'stepfun-step-plan-cn-api-key'] },
 ] as const;
 
 // ─── Provider Key Status Tracking ──────────────────────────────────────────
@@ -681,6 +875,7 @@ const ENV_VAR_TO_PROVIDER: Record<string, string> = {
   RECRAFT_API_KEY: 'recraft',
   RUNWAYML_API_KEY: 'runwayml',
   TOPAZ_API_KEY: 'topaz',
+  AIVIDEOAPI_API_KEY: 'aivideoapi',
   // ── LOTE O (2026-07-10) ────────────────────────────────────────────────
   APERTIS_API_KEY: 'apertis',
   INCEPTION_API_KEY: 'inception',
@@ -698,8 +893,150 @@ const ENV_VAR_TO_PROVIDER: Record<string, string> = {
   SAKANA_AI_API_KEY: 'sakana-ai',
   // ── LOTE V (2026-08-01) ────────────────────────────────────────────────
   MARITACA_AI_API_KEY: 'maritaca-ai',
-  // ── LOTE AB (2026-08-10) ───────────────────────────────────────────────
+  // ── LOTE AB (2026-08-10) ───────────────────────────────────────────
   DIGITALOCEAN_API_KEY: 'digitalocean',
+  // ── LOTE AC (2026-08-21) ───────────────────────────────────────────
+  WAFER_API_KEY: 'wafer',
+  // LOTE AD-AG (2026-08-21)
+  VIVGRID_API_KEY: 'vivgrid',
+  UNOROUTER_API_KEY: 'unorouter',
+  UMANS_API_KEY: 'umans',
+  TRUSTEDROUTER_API_KEY: 'trustedrouter',
+  // ── LOTE AH (2026-09-03) — 25 docs-onboarded providers ──────────────
+  BASETEN_API_KEY: 'baseten',
+  KILO_GATEWAY_API_KEY: 'kilo-gateway',
+  LLAMA_API_KEY: 'llama',
+  LONGCAT_API_KEY: 'longcat',
+  IFLOW_API_KEY: 'iflow',
+  MODELSCOPE_API_KEY: 'modelscope',
+  NEAR_AI_API_KEY: 'near-ai',
+  OLLAMA_CLOUD_API_KEY: 'ollama-cloud',
+  REGOLO_API_KEY: 'regolo',
+  SARVAM_API_KEY: 'sarvam',
+  STACKIT_API_KEY: 'stackit',
+  TINFOIL_API_KEY: 'tinfoil',
+  VULTR_API_KEY: 'vultr',
+  OVHCLOUD_API_KEY: 'ovhcloud',
+  CRUSOE_API_KEY: 'crusoe',
+  HETZNER_API_KEY: 'hetzner',
+  IO_INTELLIGENCE_API_KEY: 'io-intelligence',
+  LILAC_API_KEY: 'lilac',
+  KIMI_CODING_API_KEY: 'kimi-coding',
+  ALIBABA_CN_API_KEY: 'alibaba-cn',
+  MOONSHOT_CN_API_KEY: 'moonshot-cn',
+  SILICONFLOW_CN_API_KEY: 'siliconflow-cn',
+  STEPFUN_CN_API_KEY: 'stepfun-cn',
+  MINIMAX_CN_API_KEY: 'minimax-cn',
+  XIAOMI_TOKEN_PLAN_API_KEY: 'xiaomi-token-plan',
+  // ── LOTE AI (2026-09-03) — 92 hosted docs-onboarded providers ─────────
+  // ── LOTE AJ (2026-09-03) — reopened/research batch
+  CLOUDFLARE_AI_GATEWAY_API_KEY: 'cloudflare-ai-gateway',
+  MERGE_API_KEY: 'merge',
+  INFOMANIAK_API_KEY: 'infomaniak',
+  TINKER_API_KEY: 'tinker',
+  MINIMAX_TOKEN_PLAN_API_KEY: 'minimax-token-plan',
+  MINIMAX_TOKEN_PLAN_CN_API_KEY: 'minimax-token-plan-cn',
+  LLMGATEWAY_API_KEY: 'llmgateway',
+  MODAL_API_KEY: 'modal',
+  AURIKO_API_KEY: 'auriko',
+  SALADCLOUD_API_KEY: 'saladcloud',
+  EBCLOUD_API_KEY: 'ebcloud',
+  AMBIENT_API_KEY: 'ambient',
+  AMD_API_KEY: 'amd',
+  ANYAPI_API_KEY: 'anyapi',
+  BAILING_API_KEY: 'bailing',
+  ABACUS_API_KEY: 'abacus',
+  ABLITERATION_API_KEY: 'abliteration',
+  ABOVEDEV_API_KEY: 'abovedev',
+  AGENTROUTER_API_KEY: 'agentrouter',
+  AGNES_API_KEY: 'agnes',
+  AI_ROUTER_API_KEY: 'ai-router',
+  AIAND_API_KEY: 'aiand',
+  AIXY_API_KEY: 'aixy',
+  AKI_API_KEY: 'aki',
+  BERGET_API_KEY: 'berget',
+  BLUECLAW_API_KEY: 'blueclaw',
+  BOTHUB_API_KEY: 'bothub',
+  CHARM_HYPER_API_KEY: 'charm-hyper',
+  CLAUDIN_API_KEY: 'claudin',
+  SHERLOCK_API_KEY: 'sherlock',
+  CORALBRICKS_API_KEY: 'coralbricks',
+  CORTECS_API_KEY: 'cortecs',
+  CROFAI_API_KEY: 'crofai',
+  CROSSMODEL_API_KEY: 'crossmodel',
+  DRUN_API_KEY: 'drun',
+  DAOXE_API_KEY: 'daoxe',
+  DINFERENCE_API_KEY: 'dinference',
+  ECHO_API_KEY: 'echo',
+  EVROC_API_KEY: 'evroc',
+  FREEMODEL_API_KEY: 'freemodel',
+  FROGBOT_API_KEY: 'frogbot',
+  GREENPT_API_KEY: 'greenpt',
+  HPCAI_API_KEY: 'hpcai',
+  IMPOSSIBL_API_KEY: 'impossibl',
+  INCEPTRON_API_KEY: 'inceptron',
+  INFERENCE_NET_API_KEY: 'inference-net',
+  INFERX_API_KEY: 'inferx',
+  ITERACOMPUTE_API_KEY: 'iteracompute',
+  JALAPENO_API_KEY: 'jalapeno',
+  JIEKO_API_KEY: 'jieko',
+  KENARI_API_KEY: 'kenari',
+  KLOK_API_KEY: 'klok',
+  KOSMIK_API_KEY: 'kosmik',
+  LLMTECH_API_KEY: 'llmtech',
+  LLMTR_API_KEY: 'llmtr',
+  LUCIDQUERY_API_KEY: 'lucidquery',
+  MEGANOVA_API_KEY: 'meganova',
+  MIXLAYER_API_KEY: 'mixlayer',
+  MOARK_API_KEY: 'moark',
+  MODELORACLE_API_KEY: 'modeloracle',
+  MODELIS_API_KEY: 'modelis',
+  NEOSMITH_API_KEY: 'neosmith',
+  NEURALWATT_API_KEY: 'neuralwatt',
+  NOVA_API_KEY: 'nova',
+  OFOX_API_KEY: 'ofox',
+  OPENREASON_API_KEY: 'openreason',
+  OPPER_API_KEY: 'opper',
+  ORCAROUTER_API_KEY: 'orcarouter',
+  PENDRA_API_KEY: 'pendra',
+  PIONEER_API_KEY: 'pioneer',
+  POOLSIDE_API_KEY: 'poolside',
+  QIHANG_API_KEY: 'qihang',
+  QINIU_API_KEY: 'qiniu',
+  ROUTINGRUN_API_KEY: 'routingrun',
+  RUNINFRA_API_KEY: 'runinfra',
+  SCX_API_KEY: 'scx',
+  SENSENOVA_API_KEY: 'sensenova',
+  STANDARDCOMPUTE_API_KEY: 'standardcompute',
+  SUBCONSCIOUS_API_KEY: 'subconscious',
+  SUBMODEL_API_KEY: 'submodel',
+  TENSORX_API_KEY: 'tensorx',
+  THEGRID_API_KEY: 'thegrid',
+  TOKENGO_API_KEY: 'tokengo',
+  TOKENROUTER_API_KEY: 'tokenrouter',
+  VANCINE_API_KEY: 'vancine',
+  XPERSONA_API_KEY: 'xpersona',
+  ZELDOC_API_KEY: 'zeldoc',
+  ZENIFRA_API_KEY: 'zenifra',
+  ZENMUX_API_KEY: 'zenmux',
+  CLARIFAI_API_KEY: 'clarifai',
+  OPENCODE_ZEN_API_KEY: 'opencode-zen',
+  OPENCODE_GO_API_KEY: 'opencode-go',
+  KUAE_API_KEY: 'kuae',
+  SCNET_API_KEY: 'scnet',
+  CLINEPASS_API_KEY: 'clinepass',
+  TENCENT_CODING_API_KEY: 'tencent-coding',
+  TENCENT_PLAN_API_KEY: 'tencent-plan',
+  TENCENT_TOKENHUB_API_KEY: 'tencent-tokenhub',
+  ALIBABA_CODING_API_KEY: 'alibaba-coding',
+  ALIBABA_CODING_CN_API_KEY: 'alibaba-coding-cn',
+  ALIBABA_TOKEN_PLAN_API_KEY: 'alibaba-token-plan',
+  ALIBABA_TOKEN_PLAN_CN_API_KEY: 'alibaba-token-plan-cn',
+  ZAI_CODING_API_KEY: 'zai-coding',
+  ZAI_CODING_CN_API_KEY: 'zai-coding-cn',
+  VOLCANO_CODING_API_KEY: 'volcano-coding',
+  STEPFUN_STEP_PLAN_API_KEY: 'stepfun-step-plan',
+  STEPFUN_STEP_PLAN_CN_API_KEY: 'stepfun-step-plan-cn',
 };
 
 /**
@@ -874,6 +1211,148 @@ const LLM_PROVIDER_ENV_VARS = [
   'MARITACA_AI_API_KEY',
   // ── LOTE AB (2026-08-10) — DigitalOcean Serverless Inference, chat-capable ──
   'DIGITALOCEAN_API_KEY',
+  // ── LOTE AC (2026-08-21) — Wafer serverless, chat-capable ──────────────
+  'WAFER_API_KEY',
+  // LOTE AD-AG (2026-08-21) - Vivgrid / UnoRouter / Umans / TrustedRouter
+  'VIVGRID_API_KEY',
+  'UNOROUTER_API_KEY',
+  'UMANS_API_KEY',
+  'TRUSTEDROUTER_API_KEY',
+  // ── LOTE AH (2026-09-03) — 25 docs-onboarded, chat-capable providers ──
+  'BASETEN_API_KEY',
+  'KILO_GATEWAY_API_KEY',
+  'LLAMA_API_KEY',
+  'LONGCAT_API_KEY',
+  'IFLOW_API_KEY',
+  'MODELSCOPE_API_KEY',
+  'NEAR_AI_API_KEY',
+  'OLLAMA_CLOUD_API_KEY',
+  'REGOLO_API_KEY',
+  'SARVAM_API_KEY',
+  'STACKIT_API_KEY',
+  'TINFOIL_API_KEY',
+  'VULTR_API_KEY',
+  'OVHCLOUD_API_KEY',
+  'CRUSOE_API_KEY',
+  'HETZNER_API_KEY',
+  'IO_INTELLIGENCE_API_KEY',
+  'LILAC_API_KEY',
+  'KIMI_CODING_API_KEY',
+  'ALIBABA_CN_API_KEY',
+  'MOONSHOT_CN_API_KEY',
+  'SILICONFLOW_CN_API_KEY',
+  'STEPFUN_CN_API_KEY',
+  'MINIMAX_CN_API_KEY',
+  'XIAOMI_TOKEN_PLAN_API_KEY',
+  // ── LOTE AI (2026-09-03) — 92 hosted docs-onboarded, chat-capable providers
+  // ── LOTE AJ (2026-09-03) — reopened/research batch
+  'CLOUDFLARE_AI_GATEWAY_API_KEY',
+  'MERGE_API_KEY',
+  'INFOMANIAK_API_KEY',
+  'TINKER_API_KEY',
+  'MINIMAX_TOKEN_PLAN_API_KEY',
+  'MINIMAX_TOKEN_PLAN_CN_API_KEY',
+  'LLMGATEWAY_API_KEY',
+  'MODAL_API_KEY',
+  'AURIKO_API_KEY',
+  'SALADCLOUD_API_KEY',
+  'EBCLOUD_API_KEY',
+  'AMBIENT_API_KEY',
+  'AMD_API_KEY',
+  'ANYAPI_API_KEY',
+  'BAILING_API_KEY',
+  'ABACUS_API_KEY',
+  'ABLITERATION_API_KEY',
+  'ABOVEDEV_API_KEY',
+  'AGENTROUTER_API_KEY',
+  'AGNES_API_KEY',
+  'AI_ROUTER_API_KEY',
+  'AIAND_API_KEY',
+  'AIXY_API_KEY',
+  'AKI_API_KEY',
+  'BERGET_API_KEY',
+  'BLUECLAW_API_KEY',
+  'BOTHUB_API_KEY',
+  'CHARM_HYPER_API_KEY',
+  'CLAUDIN_API_KEY',
+  'SHERLOCK_API_KEY',
+  'CORALBRICKS_API_KEY',
+  'CORTECS_API_KEY',
+  'CROFAI_API_KEY',
+  'CROSSMODEL_API_KEY',
+  'DRUN_API_KEY',
+  'DAOXE_API_KEY',
+  'DINFERENCE_API_KEY',
+  'ECHO_API_KEY',
+  'EVROC_API_KEY',
+  'FREEMODEL_API_KEY',
+  'FROGBOT_API_KEY',
+  'GREENPT_API_KEY',
+  'HPCAI_API_KEY',
+  'IMPOSSIBL_API_KEY',
+  'INCEPTRON_API_KEY',
+  'INFERENCE_NET_API_KEY',
+  'INFERX_API_KEY',
+  'ITERACOMPUTE_API_KEY',
+  'JALAPENO_API_KEY',
+  'JIEKO_API_KEY',
+  'KENARI_API_KEY',
+  'KLOK_API_KEY',
+  'KOSMIK_API_KEY',
+  'LLMTECH_API_KEY',
+  'LLMTR_API_KEY',
+  'LUCIDQUERY_API_KEY',
+  'MEGANOVA_API_KEY',
+  'MIXLAYER_API_KEY',
+  'MOARK_API_KEY',
+  'MODELORACLE_API_KEY',
+  'MODELIS_API_KEY',
+  'NEOSMITH_API_KEY',
+  'NEURALWATT_API_KEY',
+  'NOVA_API_KEY',
+  'OFOX_API_KEY',
+  'OPENREASON_API_KEY',
+  'OPPER_API_KEY',
+  'ORCAROUTER_API_KEY',
+  'PENDRA_API_KEY',
+  'PIONEER_API_KEY',
+  'POOLSIDE_API_KEY',
+  'QIHANG_API_KEY',
+  'QINIU_API_KEY',
+  'ROUTINGRUN_API_KEY',
+  'RUNINFRA_API_KEY',
+  'SCX_API_KEY',
+  'SENSENOVA_API_KEY',
+  'STANDARDCOMPUTE_API_KEY',
+  'SUBCONSCIOUS_API_KEY',
+  'SUBMODEL_API_KEY',
+  'TENSORX_API_KEY',
+  'THEGRID_API_KEY',
+  'TOKENGO_API_KEY',
+  'TOKENROUTER_API_KEY',
+  'VANCINE_API_KEY',
+  'XPERSONA_API_KEY',
+  'ZELDOC_API_KEY',
+  'ZENIFRA_API_KEY',
+  'ZENMUX_API_KEY',
+  'CLARIFAI_API_KEY',
+  'OPENCODE_ZEN_API_KEY',
+  'OPENCODE_GO_API_KEY',
+  'KUAE_API_KEY',
+  'SCNET_API_KEY',
+  'CLINEPASS_API_KEY',
+  'TENCENT_CODING_API_KEY',
+  'TENCENT_PLAN_API_KEY',
+  'TENCENT_TOKENHUB_API_KEY',
+  'ALIBABA_CODING_API_KEY',
+  'ALIBABA_CODING_CN_API_KEY',
+  'ALIBABA_TOKEN_PLAN_API_KEY',
+  'ALIBABA_TOKEN_PLAN_CN_API_KEY',
+  'ZAI_CODING_API_KEY',
+  'ZAI_CODING_CN_API_KEY',
+  'VOLCANO_CODING_API_KEY',
+  'STEPFUN_STEP_PLAN_API_KEY',
+  'STEPFUN_STEP_PLAN_CN_API_KEY',
 ] as const;
 
 /**
@@ -1100,7 +1579,7 @@ export async function loadSecretsIntoEnv(): Promise<void> {
       }
 
       // GCP provider automatically adds prefix 'ailin-' to secretKey
-      // So 'openai-key' becomes 'ailin-openai-key' in GCP Secret Manager
+      // So 'openai-key' becomes '<prefix>-openai-key' in GCP Secret Manager
       const value = loadedSecretValue;
       if (value) {
         // Sanitize control characters and invisible Unicode.
@@ -1374,6 +1853,20 @@ export async function loadSecretsIntoEnv(): Promise<void> {
   };
   log.info({ audioProviders }, 'Audio provider env vars after secrets loading');
 
+  // 2026-09-10 discovery audit: a provider secret that is mapped in
+  // PROVIDER_SECRETS but ends up neither GCP-loaded nor env-loaded was
+  // previously only visible via the (pull-based) admin `getSecretsLoadSummary()`
+  // endpoint — nothing was pushed into the boot log itself unless the value
+  // looked like a leftover mock key. Real per-candidate GCP errors already
+  // surface their own `.warn()` above (see `loadSecret()` in
+  // secrets-loader.ts), but that per-candidate signal is easy to miss in a
+  // ~300-secret boot log. Folding the final "not loaded" list into this one
+  // summary line gives every boot a single, greppable, permanent record of
+  // exactly which mapped provider secrets came up empty — so a gap like
+  // ANYSCALE_API_KEY silently never reaching process.env can be confirmed or
+  // ruled out from logs alone, without re-running a live GCP probe.
+  const notLoadedProviderSecrets = getSecretsLoadSummary().notLoaded;
+
   log.info(
     {
       loaded,
@@ -1384,6 +1877,8 @@ export async function loadSecretsIntoEnv(): Promise<void> {
       overwrittenFromGcp,
       gcpAuthoritative,
       total: CRITICAL_SECRETS.length + PROVIDER_SECRETS.length,
+      notLoadedProviderSecretsCount: notLoadedProviderSecrets.length,
+      notLoadedProviderSecrets,
     },
     '✅ Secrets loading complete'
   );

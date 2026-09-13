@@ -10,7 +10,7 @@
 /**
  * Isolated vitest config for Strategy-by-Strategy Validation 01 (Consensus).
  *
- * Purpose: run ONLY the 8 consensus-strategy validation tests, with no
+ * Purpose: run the consensus/plan-fingerprint validation suites with no
  * DB / global setup / network mocks. The global setup file mocks the
  * response aggregator and ensemble-shadow modules so the strategy code
  * exercises its real pipeline (scoring, outlier filter, fallback) but
@@ -18,6 +18,15 @@
  *
  * Run from `api/`:
  *   pnpm exec vitest run --config vitest.consensus-validation.config.ts
+ *
+ * IMPORTANT (CI coverage, 2026-09-05): the workflow step that runs this
+ * config used to pass the positional filter `consensus-strategy.`, which
+ * narrowed a 140-file include list down to the 17 `consensus-strategy.*`
+ * files. Every other entry below — added workstream by workstream over
+ * months — was declared here but NEVER executed by any pipeline. The
+ * filter is gone; this config's include list is now the single source of
+ * truth for what the "Consensus strategy validation" step runs, so adding
+ * a file here really does add it to CI.
  */
 import { defineConfig } from 'vitest/config';
 import path from 'path';
@@ -41,6 +50,10 @@ export default defineConfig({
       'src/core/orchestration/strategies/__tests__/consensus-plan-parity-hybrid.test.ts',
       'src/core/orchestration/strategies/__tests__/consensus-synthesizer-enforcement.test.ts',
       'src/core/orchestration/strategies/__tests__/consensus-pool-summary.test.ts',
+      // Answer-phase regression for sensitivity-consensus: it imports the strategy,
+      // which pulls in @/config, so it needs this config's env setup rather than the
+      // bare unit one.
+      'src/core/orchestration/strategies/__tests__/sensitivity-consensus-answer-phase.test.ts',
       'src/core/operability/__tests__/provider-credit-audit-non-billable.test.ts',
       'src/core/operability/__tests__/provider-probe-adapters.test.ts',
       'src/core/operability/__tests__/reconciled-operability-snapshot.test.ts',
@@ -178,16 +191,44 @@ export default defineConfig({
       'src/core/orchestration/__tests__/c3-scope-design-provider-routes.test.ts',
       'src/core/orchestration/__tests__/c3-scope-design-task-rubric.test.ts',
       'src/core/orchestration/__tests__/c3-scope-design-budget-provenance.test.ts',
+      // Strategy regressions that import the strategy directly, which pulls in
+      // @/config — so they need this config's env setup rather than the bare
+      // unit one.
+      'src/core/orchestration/strategies/__tests__/quality-multipass-final-pass.test.ts',
+      'src/core/orchestration/strategies/__tests__/collaborative-refinement-turn.test.ts',
       // 01C.1B-J0 §15: rejection gate is already covered by the pre-existing
       // chat-request-processor-real-branch-plan-gate.test.ts (which is in
       // the include list above). Per spec "extend existing, don't duplicate"
       // we DO NOT add a parallel test file (a previous attempt caused
       // vi.doMock cross-contamination in singleFork mode).
     ],
-    exclude: ['**/node_modules/**', '**/dist/**'],
-    setupFiles: [
-      './src/core/orchestration/strategies/__tests__/consensus-validation.setup.ts',
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      // The three chat-request-processor plan-gate suites are listed in the
+      // include patterns above because they belong to the 01C.1B-R/P/P2
+      // workstreams, but they build a REAL consensus plan against the model
+      // catalog and therefore need the Testcontainers Postgres this bare
+      // config does not provide (chat-request-processor-dryrun-fail-closed
+      // fails outright without it). They are owned by the dedicated
+      // "Plan-gate tests" workflow step, which runs them under
+      // vitest.config.ts. Excluded here so this config stays DB-free.
+      'src/services/__tests__/chat-request-processor-dryrun-fail-closed.test.ts',
+      'src/services/__tests__/chat-request-processor-plan-parity.test.ts',
+      'src/services/__tests__/chat-request-processor-real-branch-plan-gate.test.ts',
+      // DB-backed integration tests must never run here: this config is
+      // deliberately DB-free (no globalSetup, no Testcontainers), and its
+      // include globs (e.g. model-selection/__tests__/*.test.ts) also match
+      // the *.integration.test.ts suffix. PR #577 added
+      // role-specific-candidate-pool-builder.integration.test.ts under that
+      // glob and the suite failed with "Can't reach database server at
+      // 127.0.0.1:5433" because loadTestEnvDefaults() points DATABASE_URL at
+      // a dev Postgres nothing provisions in this step. They are owned by the
+      // "Integration tests (real DB + tenant isolation)" step via
+      // vitest.integration.config.ts (same exclusion vitest.ci.config.ts uses).
+      'src/**/*.integration.test.ts',
     ],
+    setupFiles: ['./src/core/orchestration/strategies/__tests__/consensus-validation.setup.ts'],
     globals: false,
     isolate: true,
     clearMocks: true,

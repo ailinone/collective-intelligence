@@ -105,7 +105,14 @@ LABEL org.opencontainers.image.version=$APP_VERSION \
       org.opencontainers.image.revision=$GIT_COMMIT_SHA \
       org.opencontainers.image.created=$BUILD_TIMESTAMP
 
-RUN apk add --no-cache python3 py3-pip py3-setuptools openssl \
+# `ffmpeg` (which also provides `ffprobe`) backs the video-input capability
+# family — `video_understanding` / `video_to_text` / `video_transcription`
+# demux the uploaded container before anything reaches an STT or vision model
+# (see src/services/media/ffmpeg-media-toolkit.ts). It is invoked as a separate
+# process with an explicit argv, never linked into the application.
+# Without it those three capabilities fail closed with a
+# `capability_dependency_unavailable` naming ffmpeg; nothing else regresses.
+RUN apk add --no-cache python3 py3-pip py3-setuptools openssl ffmpeg \
     && ln -sf python3 /usr/bin/python \
     && npm install -g pnpm@9
 

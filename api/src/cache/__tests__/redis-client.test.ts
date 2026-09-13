@@ -26,7 +26,13 @@
  *     store) resolve against `REDIS_QUEUE_*`, independently of the general
  *     `getRedisClient()`/`getGlobalRedisClient()` connection, so an operator
  *     can point the money path at a physically separate, non-evicting Redis
- *     without any code change.
+ *     without any code change;
+ *   - REDIS_QUEUE_SENTINEL_NAME (the Sentinel "master group" name) can also be
+ *     set independently of the general REDIS_SENTINEL_NAME, or left unset to
+ *     fall back to it — this is the plumbing docker-compose.redis-sentinel.yml
+ *     (the money-path Sentinel HA overlay, docs/hardening/RESTORE_DRILL.md)
+ *     relies on to monitor its own `ci-queue-master` group independently of
+ *     whatever the general/cache Redis's own Sentinel setup (if any) uses.
  *
  * ioredis is mocked with a bare recorder — this only proves the CONSTRUCTOR
  * OPTIONS are correct, not real Sentinel/Cluster wire behavior.
@@ -91,6 +97,7 @@ describe('redis-client', () => {
     delete process.env.REDIS_QUEUE_PORT;
     delete process.env.REDIS_QUEUE_SENTINEL_ENABLED;
     delete process.env.REDIS_QUEUE_SENTINELS;
+    delete process.env.REDIS_QUEUE_SENTINEL_NAME;
   });
 
   afterEach(() => {
@@ -186,5 +193,37 @@ describe('redis-client', () => {
 
     expect(constructedOptions[0]!.sentinels).toBeUndefined(); // general client: plain host/port
     expect(constructedOptions[1]!.sentinels).toEqual([{ host: 'q-sentinel-1', port: 26379 }]);
+  });
+
+  it('REDIS_QUEUE_SENTINEL_NAME overrides the master group name independently of REDIS_SENTINEL_NAME (Sentinel HA topology, docker-compose.redis-sentinel.yml)', async () => {
+    process.env.REDIS_SENTINEL_ENABLED = 'true';
+    process.env.REDIS_SENTINELS = 'sentinel-1:26379';
+    process.env.REDIS_SENTINEL_NAME = 'general-master';
+    process.env.REDIS_QUEUE_SENTINEL_ENABLED = 'true';
+    process.env.REDIS_QUEUE_SENTINELS = 'sentinel-1:26379,sentinel-2:26379,sentinel-3:26379';
+    process.env.REDIS_QUEUE_SENTINEL_NAME = 'ci-queue-master';
+
+    const { getRedisClient, getQueueRedisClient } = await import('../redis-client');
+    getRedisClient();
+    getQueueRedisClient();
+
+    expect(constructedOptions[0]!.name).toBe('general-master');
+    expect(constructedOptions[1]!.name).toBe('ci-queue-master');
+    expect(constructedOptions[1]!.sentinels).toEqual([
+      { host: 'sentinel-1', port: 26379 },
+      { host: 'sentinel-2', port: 26379 },
+      { host: 'sentinel-3', port: 26379 },
+    ]);
+  });
+
+  it('falls back the queue Sentinel master name to REDIS_SENTINEL_NAME when REDIS_QUEUE_SENTINEL_NAME is unset', async () => {
+    process.env.REDIS_SENTINEL_NAME = 'shared-master-name';
+    process.env.REDIS_QUEUE_SENTINEL_ENABLED = 'true';
+    process.env.REDIS_QUEUE_SENTINELS = 'q-sentinel-1:26379';
+
+    const { getQueueRedisClient } = await import('../redis-client');
+    getQueueRedisClient();
+
+    expect(constructedOptions[0]!.name).toBe('shared-master-name');
   });
 });

@@ -110,6 +110,10 @@ export async function registerFilesRoutes(server: FastifyInstance): Promise<void
 
   // POST /v1/files
   server.post('/v1/files', {
+    // Skip body schema validation for multipart/form-data endpoints.
+    // Fastify's JSON schema validator runs BEFORE the multipart parser and rejects
+    // raw form-data bytes as invalid JSON objects. Validation is done in the handler.
+    validatorCompiler: () => () => true,
     schema: {
       tags: ['Files'],
       summary: 'Upload file',

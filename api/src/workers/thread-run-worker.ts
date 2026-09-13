@@ -34,6 +34,7 @@ import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { logger } from '@/utils/logger';
 import { nanoid } from 'nanoid';
+import { normalizeOutboundResponse } from '@/utils/outbound-content-normalizer';
 
 /**
  * Process a single thread run job
@@ -199,6 +200,7 @@ async function processThreadRun(
 
     // 6. Execute via OrchestrationEngine
     const result = await orchestrationEngine.execute(chatRequest, organizationId, userId);
+    result.finalResponse = normalizeOutboundResponse(result.finalResponse);
 
     // 7. Extract response content
     const responseContent = result.finalResponse.choices[0]?.message?.content || '';

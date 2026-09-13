@@ -54,9 +54,25 @@ const DISQUALIFYING_CAPABILITIES = new Set<string>([
  * decoding-method demo repos, pure speech/audio models, forced-retrieval
  * search endpoints, image/video-generation models, and computer-use/agentic
  * build models.
+ *
+ * The `tts` and `asr` tokens are load-bearing, not belt-and-braces. Capability
+ * data cannot be trusted to exclude these: `inferModelCapabilities` decides chat
+ * eligibility from a FAMILY-NAME regex over the model id, so
+ * `gemini-2.5-flash-preview-tts` matches /\bgemini\b/ and
+ * `Qwen/Qwen3-ASR-0.6B` matches /\bqwen\b/, and both are persisted with
+ * `['chat','text_generation','streaming']`. The classifier that would have said
+ * "tts"/"asr" only runs when the family regex yields NOTHING, so on these rows it
+ * is dead code. `metadata.endpoint` is derived from the same capabilities and is
+ * therefore circular, not independent evidence.
+ *
+ * Both models were observed in production answering a plain arithmetic chat
+ * question. The existing `text-to-speech` and `speech-to-text` spellings do not
+ * match the `-tts` / `-ASR-` forms vendors actually ship.
+ *
+ * Matching is token-bounded on purpose: a bare /tts/ would hit unrelated ids.
  */
 const NON_GENERATIVE_ID_PATTERN =
-  /(?:^|[/_-])(?:text-)?embeddings?(?:[/_-]|$)|rerank(?:er)?|colbert|voyage-|contrastive-search|group-beam-search|diverse-beam|(?:^|[/_-])beam-search|greedy-search|transformers-community\/|\bvoxtral\b|\bwhisper\b|text-to-speech|speech-to-text|search-(?:api|preview)|(?:^|[/_-])(?:multilingual-)?e5(?:[/_-]|$)|(?:^|[/_-])(?:bge|gte|labse|minilm|sentence-transformers?)(?:[/_-]|$)|\bimagine-(?:image|video)\b|\bcomputer-use\b|\bgrok-build\b/i;
+  /(?:^|[/_-])(?:text-)?embeddings?(?:[/_-]|$)|rerank(?:er)?|colbert|voyage-|contrastive-search|group-beam-search|diverse-beam|(?:^|[/_-])beam-search|greedy-search|transformers-community\/|\bvoxtral\b|\bwhisper\b|text-to-speech|speech-to-text|(?:^|[/_-])tts(?:[/_-]|$)|(?:^|[/_-])asr(?:[/_-]|$)|search-(?:api|preview)|(?:^|[/_-])(?:multilingual-)?e5(?:[/_-]|$)|(?:^|[/_-])(?:bge|gte|labse|minilm|sentence-transformers?)(?:[/_-]|$)|\bimagine-(?:image|video)\b|\bcomputer-use\b|\bgrok-build\b/i;
 
 /**
  * Returns true when `model` is fundamentally non-generative for text reasoning

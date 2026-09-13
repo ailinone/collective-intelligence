@@ -23,11 +23,11 @@ import type { FastifyInstance } from 'fastify';
 import { ApiKeyRotationService } from '@/services/api-key-rotation';
 import { prisma } from '@/database/client';
 import { logger } from '@/utils/logger';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requireRole, isPlatformAdminRequest } from '@/middleware/auth-middleware';
+import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { requirePermission } from '@/middleware/require-permission-middleware';
-import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 
 // ============================================
 // Types
@@ -74,6 +74,13 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): a tenant
+        // admin/owner may legitimately manage its OWN organization's keys
+        // (self-service credential rotation is real product functionality,
+        // not a bug) — the real gap was the handler never checking the
+        // TARGET key belongs to the caller's org. Fixed here via an explicit
+        // ownership check (isPlatformAdminRequest bypass for genuine
+        // platform operators), not by removing tenant self-service.
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -152,6 +159,23 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
             ? user.userId
             : undefined;
 
+        // SECURITY: a tenant admin may only rotate a key that belongs to
+        // their OWN organization; a genuine platform admin may target any.
+        // 404 (not 403) so the response doesn't confirm another org's key exists.
+        if (!isPlatformAdminRequest(request)) {
+          const target = await prisma.apiKey.findUnique({
+            where: { id: keyId },
+            select: { organizationId: true },
+          });
+          if (!target || target.organizationId !== extendedRequest.organizationId) {
+            return reply.status(404).send({
+              success: false,
+              error: 'API_KEY_NOT_FOUND',
+              message: 'API key not found',
+            });
+          }
+        }
+
         const result = await ApiKeyRotationService.rotateApiKey({
           keyId,
           gracePeriodDays,
@@ -209,6 +233,13 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): a tenant
+        // admin/owner may legitimately manage its OWN organization's keys
+        // (self-service credential rotation is real product functionality,
+        // not a bug) — the real gap was the handler never checking the
+        // TARGET key belongs to the caller's org. Fixed here via an explicit
+        // ownership check (isPlatformAdminRequest bypass for genuine
+        // platform operators), not by removing tenant self-service.
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -279,14 +310,26 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
       try {
         const query = request.query as { status?: string; organizationId?: string };
         const { status, organizationId } = query;
+        const extendedRequest = request as ExtendedFastifyRequest;
 
         const where: {
           status?: string;
           organizationId?: string;
         } = {};
         if (status && typeof status === 'string') where.status = status;
-        if (organizationId && typeof organizationId === 'string')
-          where.organizationId = organizationId;
+
+        // SECURITY: a tenant admin only ever sees their OWN organization's
+        // keys — the caller-supplied `organizationId` filter is honored only
+        // for a genuine platform admin (who may narrow to any org, or omit
+        // it to see all). Without this, any tenant admin could enumerate
+        // every organization's API-key inventory by supplying (or omitting)
+        // this query param.
+        if (isPlatformAdminRequest(request)) {
+          if (organizationId && typeof organizationId === 'string')
+            where.organizationId = organizationId;
+        } else {
+          where.organizationId = extendedRequest.organizationId;
+        }
 
         const keys = await prisma.apiKey.findMany({
           where,
@@ -354,6 +397,13 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): a tenant
+        // admin/owner may legitimately manage its OWN organization's keys
+        // (self-service credential rotation is real product functionality,
+        // not a bug) — the real gap was the handler never checking the
+        // TARGET key belongs to the caller's org. Fixed here via an explicit
+        // ownership check (isPlatformAdminRequest bypass for genuine
+        // platform operators), not by removing tenant self-service.
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -407,6 +457,23 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
     async (request, reply) => {
       try {
         const { keyId, rotationIntervalDays = 90, gracePeriodDays = 7 } = request.body;
+        const extendedRequest = request as ExtendedFastifyRequest;
+
+        // SECURITY: same ownership rule as POST /rotate/:keyId above — a
+        // tenant admin may only reconfigure a key belonging to their own org.
+        if (!isPlatformAdminRequest(request)) {
+          const target = await prisma.apiKey.findUnique({
+            where: { id: keyId },
+            select: { organizationId: true },
+          });
+          if (!target || target.organizationId !== extendedRequest.organizationId) {
+            return reply.status(404).send({
+              success: false,
+              error: 'API_KEY_NOT_FOUND',
+              message: 'API key not found',
+            });
+          }
+        }
 
         const apiKey = await prisma.apiKey.update({
           where: { id: keyId },
@@ -466,6 +533,13 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
         authenticate,
         rejectAnonymousGuestKeyPreHandler,
         rejectChatFreeTierKeyPreHandler,
+        // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): a tenant
+        // admin/owner may legitimately manage its OWN organization's keys
+        // (self-service credential rotation is real product functionality,
+        // not a bug) — the real gap was the handler never checking the
+        // TARGET key belongs to the caller's org. Fixed here via an explicit
+        // ownership check (isPlatformAdminRequest bypass for genuine
+        // platform operators), not by removing tenant self-service.
         requireRole('admin', 'owner'),
         requirePermission('apikeys:manage'),
       ],
@@ -499,11 +573,22 @@ export async function registerApiKeyRotationRoutes(server: FastifyInstance): Pro
       try {
         const query = request.query as RotationLogsQuery;
         const { apiKeyId, limit = 50, offset = 0 } = query;
+        const extendedRequest = request as ExtendedFastifyRequest;
 
         const where: {
           apiKeyId?: string;
+          apiKey?: { organizationId: string };
         } = {};
         if (apiKeyId && typeof apiKeyId === 'string') where.apiKeyId = apiKeyId;
+
+        // SECURITY: rotation logs reference a key, not an org directly — a
+        // tenant admin is scoped to logs for keys belonging to their OWN
+        // organization (via the apiKey relation) unless they are a genuine
+        // platform admin. Without this, any tenant admin could read other
+        // tenants' API-key names/prefixes and rotation history.
+        if (!isPlatformAdminRequest(request)) {
+          where.apiKey = { organizationId: extendedRequest.organizationId as string };
+        }
 
         const [logs, total] = await Promise.all([
           prisma.apiKeyRotationLog.findMany({

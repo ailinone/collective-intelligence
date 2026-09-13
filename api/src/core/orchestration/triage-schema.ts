@@ -126,6 +126,20 @@ export const TriageStageSchema = z
       .string()
       .transform((s) => s.slice(0, 2000))
       .optional(),
+    /**
+     * Structured video-generation attributes (additive, 2026-09-06 —
+     * "LOTE AS" finding #3). Populated only for stages whose
+     * `required_capabilities` includes `video_generation`; the triage LLM
+     * extracts these from the user's free-text request instead of leaving
+     * duration/resolution/aspect-ratio/audio intent buried in
+     * `generation_prompt` prose where nothing downstream can act on it.
+     * `.strip()` on this object means an omitted or malformed value here
+     * never fails the parse — it just falls through as `undefined`.
+     */
+    duration: z.number().positive().max(3600).optional(),
+    resolution: z.string().max(50).optional(),
+    aspect_ratio: z.string().max(20).optional(),
+    audio_requested: z.boolean().optional(),
   })
   .strip();
 

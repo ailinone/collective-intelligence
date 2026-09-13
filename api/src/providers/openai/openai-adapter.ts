@@ -22,6 +22,7 @@ import {
   type ProviderConfig,
   type HealthCheckResult,
   type BalanceCheckResult,
+  type RealtimeTransportSupport,
 } from '../base/provider-adapter';
 import { OpenAIRealtimeClient, RealtimeSessionConfig } from './realtime-client';
 import type {
@@ -55,8 +56,11 @@ import type {
   ModerationResponse,
 } from '@/types/model-client';
 import { logger } from '@/utils/logger';
+import { narrowAs } from '@/utils/type-guards';
 import { buildAilinFallbackPrompt } from '@/core/orchestration/prompts/fallback-prompt';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { deriveSessionKey } from '@/services/session-affinity-service';
+import { resolveReasoningEffort } from '@/utils/reasoning-effort';
 
 /**
  * Name-pattern fallback for OpenAI models that require `max_completion_tokens`
@@ -108,6 +112,21 @@ export class OpenAIAdapter extends ProviderAdapter {
   private clientPool: OpenAI[];
   private realtimeClient: OpenAIRealtimeClient | null = null;
   private providerLog = logger.child({ provider: 'openai' });
+
+  /**
+   * OpenAI exposes the Realtime API as a WebSocket to `/v1/realtime` carrying
+   * JSON client/server events. The bridge implementation is
+   * `providers/openai/realtime-client.ts`, which authenticates either with an
+   * ephemeral `client_secret` or, when that endpoint is absent (OpenAI-
+   * compatible upstreams), with a direct `Authorization: Bearer` header plus
+   * `?model=`.
+   */
+  override getRealtimeTransport(): RealtimeTransportSupport {
+    return {
+      kind: 'openai-realtime-ws',
+      evidenceUrl: 'https://platform.openai.com/docs/guides/realtime',
+    };
+  }
 
   constructor(config: ProviderConfig) {
     super('openai', 'OpenAI', config);
@@ -419,6 +438,17 @@ export class OpenAIAdapter extends ProviderAdapter {
             },
           ];
         }
+
+        // Forward the canonical reasoning-effort signal (LOTE AZ resolver) as
+        // the Responses API's native `reasoning.effort` for models that
+        // accept it. Only set when the caller actually expressed an effort —
+        // an unset `reasoning` block lets OpenAI apply its own model default.
+        if (await this.isReasoningEffortModel(normalizedModel)) {
+          const { effort } = resolveReasoningEffort(request);
+          if (effort) {
+            responsesParams.reasoning = { effort };
+          }
+        }
         params = responsesParams as RequestParams;
       } else if (endpoint === 'chat_completions' || endpoint === 'chat_completions_special') {
         // Standard chat completions
@@ -454,6 +484,16 @@ export class OpenAIAdapter extends ProviderAdapter {
           frequency_penalty: request.frequency_penalty,
           presence_penalty: request.presence_penalty,
           stop: request.stop,
+          // Prompt caching (LOTE AW, 2026-09): OpenAI's prefix cache is
+          // automatic, but explicitly setting `prompt_cache_key` to a
+          // per-conversation key is OpenAI's own documented recommendation
+          // for incrementally-growing session history — it keeps this
+          // conversation's cache lineage distinct from a differently-keyed
+          // conversation that happens to share a prefix. Uses the SAME
+          // derivation session affinity uses (session-affinity-service.ts),
+          // so it stays stable turn-to-turn independent of whether session
+          // affinity itself is enabled.
+          prompt_cache_key: deriveSessionKey(request),
         };
 
         // Add max tokens based on model capabilities - use max_completion_tokens for advanced models
@@ -461,6 +501,17 @@ export class OpenAIAdapter extends ProviderAdapter {
           chatParams.max_completion_tokens = request.max_tokens || 1000;
         } else {
           chatParams.max_tokens = request.max_tokens || 1000;
+        }
+
+        // Forward the canonical reasoning-effort signal (LOTE AZ resolver) as
+        // Chat Completions' native `reasoning_effort` for o-series/GPT-5.x
+        // models. Only set when the caller actually expressed an effort —
+        // an unset field lets OpenAI apply its own model default.
+        if (await this.isReasoningEffortModel(normalizedModel)) {
+          const { effort } = resolveReasoningEffort(request);
+          if (effort) {
+            chatParams.reasoning_effort = effort;
+          }
         }
         params = chatParams;
       } else if (endpoint === 'chat_completions_audio') {
@@ -595,18 +646,37 @@ export class OpenAIAdapter extends ProviderAdapter {
         response_format: request.response_format as
           { type: 'json_object' } | { type: 'text' } | undefined,
         stream: true as const,
+        // Prompt caching (LOTE AW, 2026-09) — see the non-streaming
+        // chatCompletion()'s identical field for the rationale.
+        prompt_cache_key: deriveSessionKey(request),
       };
 
-      // Use max_completion_tokens for newer models, max_tokens for legacy
-      // Optimize max_tokens for better performance - cap at reasonable limits
-      const optimizedMaxTokens = Math.min(request.max_tokens || 2000, 4000); // Cap at 4000 for performance
+      // Use max_completion_tokens for newer models, max_tokens for legacy.
+      // Match the non-streaming path (chatCompletion, above): honor the
+      // caller's real requested max_tokens with the same 1000-token default
+      // when unset. Streaming must NOT impose a lower ceiling than
+      // non-streaming just because streaming was requested — a hardcoded
+      // 4000-token cap here previously silently truncated any streaming
+      // request that asked for more.
+      const requestedMaxTokens = request.max_tokens || 1000;
       const usesMaxCompletion = await this.usesMaxCompletionTokens(normalizedModel);
       const paramsWithMaxTokens = {
         ...baseParams,
         ...(usesMaxCompletion
-          ? { max_completion_tokens: optimizedMaxTokens }
-          : { max_tokens: optimizedMaxTokens }),
+          ? { max_completion_tokens: requestedMaxTokens }
+          : { max_tokens: requestedMaxTokens }),
       };
+
+      // Forward the canonical reasoning-effort signal (LOTE AZ resolver) as
+      // Chat Completions' native `reasoning_effort` for o-series/GPT-5.x
+      // models — same detection helper as the non-streaming chatCompletion()
+      // path above. Only set when the caller actually expressed an effort.
+      if (await this.isReasoningEffortModel(normalizedModel)) {
+        const { effort } = resolveReasoningEffort(request);
+        if (effort) {
+          (paramsWithMaxTokens as Record<string, unknown>).reasoning_effort = effort;
+        }
+      }
 
       // Performance optimizations for faster responses
       if (!request.temperature || request.temperature === 0) {
@@ -629,6 +699,16 @@ export class OpenAIAdapter extends ProviderAdapter {
 
       let firstChunk = true;
 
+      // Real OpenAI streaming only sends `id` + `function.name` on the FIRST
+      // delta chunk of a given tool call; every continuation chunk carries
+      // only `{index, function: {arguments: <fragment>}}`. This map tracks
+      // the id/name already seen per `index` so continuation fragments can
+      // be correctly tagged instead of dropped. It is a plain local variable
+      // scoped to this single generator invocation (one per request) — it
+      // is never stored on `this`, so concurrent requests never share or
+      // leak state through it.
+      const toolCallState = new Map<number, { id: string; name: string }>();
+
       for await (const chunk of response) {
         if (firstChunk) {
           const duration = Date.now() - startTime;
@@ -636,7 +716,7 @@ export class OpenAIAdapter extends ProviderAdapter {
           firstChunk = false;
         }
 
-        yield this.convertStreamChunk(chunk, modelToUse);
+        yield this.convertStreamChunk(chunk, modelToUse, toolCallState);
       }
 
       const totalDuration = Date.now() - startTime;
@@ -1320,6 +1400,18 @@ export class OpenAIAdapter extends ProviderAdapter {
     ) {
       validated.max_completion_tokens = params.max_completion_tokens;
     }
+    // Canonical reasoning-effort forwarding (LOTE AZ): this whitelist is the
+    // ONLY thing standing between chatCompletion()'s `chatParams.reasoning_effort`
+    // (set above, from `resolveReasoningEffort`) and the actual OpenAI wire
+    // request — without this branch the field is silently dropped here and
+    // never reaches the API despite being set correctly upstream.
+    if (
+      params.reasoning_effort === 'low' ||
+      params.reasoning_effort === 'medium' ||
+      params.reasoning_effort === 'high'
+    ) {
+      validated.reasoning_effort = params.reasoning_effort;
+    }
 
     return validated;
   }
@@ -1340,7 +1432,7 @@ export class OpenAIAdapter extends ProviderAdapter {
     };
 
     // Add optional fields only if they are valid
-    // Note: ResponseCreateParams only supports temperature, top_p, max_output_tokens, and tools
+    // Note: ResponseCreateParams only supports temperature, top_p, max_output_tokens, tools, and reasoning
     if (params.temperature !== undefined && typeof params.temperature === 'number') {
       validated.temperature = params.temperature;
     }
@@ -1352,6 +1444,17 @@ export class OpenAIAdapter extends ProviderAdapter {
     }
     if (params.tools !== undefined && params.tools !== null && Array.isArray(params.tools)) {
       validated.tools = params.tools;
+    }
+    // Canonical reasoning-effort forwarding (LOTE AZ): same rationale as the
+    // `reasoning_effort` branch in toChatCompletionParams() above — without
+    // this, the `responsesParams.reasoning` set in chatCompletion()'s
+    // Responses-API branch is silently dropped here before the request ever
+    // reaches OpenAI.
+    if (params.reasoning !== undefined && params.reasoning !== null && typeof params.reasoning === 'object') {
+      const effort = (params.reasoning as { effort?: unknown }).effort;
+      if (effort === 'low' || effort === 'medium' || effort === 'high') {
+        validated.reasoning = { effort };
+      }
     }
 
     return validated;
@@ -2040,6 +2143,36 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   /**
+   * Determine if a model accepts OpenAI's native reasoning-effort control —
+   * `reasoning_effort` on Chat Completions, `reasoning.effort` on the
+   * Responses API. Deliberately reuses the SAME signals
+   * `usesMaxCompletionTokens()` (above) already uses to identify
+   * o-series/GPT-5.x reasoning models — capability inference
+   * ('reasoning'/'thinking_mode'), the 'chat_completions_special'/'responses'
+   * endpoint routing, and the o-series/GPT-5.x name-pattern fallback for
+   * models discovery didn't stamp with rich metadata — rather than
+   * re-deriving a second, independent detection heuristic. Every one of
+   * these models is, by construction, also a `max_completion_tokens` model.
+   */
+  private async isReasoningEffortModel(modelId: string): Promise<boolean> {
+    const modelObj = await this.getModelObject(modelId);
+
+    if (modelObj) {
+      const reasoningCapabilities: ModelCapability[] = ['reasoning', 'thinking_mode'];
+      if (reasoningCapabilities.some((cap) => modelObj.capabilities.includes(cap))) {
+        return true;
+      }
+    }
+
+    const endpoint = await this.getModelEndpoint(modelId, modelObj ?? undefined);
+    if (endpoint === 'chat_completions_special' || endpoint === 'responses') {
+      return true;
+    }
+
+    return openaiModelUsesMaxCompletionTokensByName(modelId);
+  }
+
+  /**
    * Determine if model requires structured content
    * Uses metadata and capabilities dynamically
    */
@@ -2246,8 +2379,21 @@ export class OpenAIAdapter extends ProviderAdapter {
 
   /**
    * Convert streaming chunk to our format
+   *
+   * @param toolCallState Per-stream accumulator (see the call site in
+   * `chatCompletionStream`) tracking the `id`/`function.name` already seen
+   * for each in-progress tool call `index`. Real OpenAI streaming sends
+   * those only on the first delta chunk of a tool call; every continuation
+   * chunk carries just `{index, function: {arguments: <fragment>}}`. Without
+   * this, continuation-only fragments have no `id`/`name` to satisfy the
+   * (non-optional) `ToolCall` shape and were previously dropped outright,
+   * silently truncating/corrupting multi-fragment tool-call arguments.
    */
-  private convertStreamChunk(chunk: ChatCompletionChunk, requestedModel: string): ChatResponse {
+  private convertStreamChunk(
+    chunk: ChatCompletionChunk,
+    requestedModel: string,
+    toolCallState?: Map<number, { id: string; name: string }>
+  ): ChatResponse {
     return {
       id: chunk.id,
       object: 'chat.completion.chunk',
@@ -2262,48 +2408,57 @@ export class OpenAIAdapter extends ProviderAdapter {
         // Handle tool calls with type safety
         let toolCalls: ToolCall[] | undefined = undefined;
         if (choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls)) {
-          const validToolCalls: Array<{
-            id: string;
-            function: { name: string; arguments: string };
-          }> = [];
-          for (const tc of choice.delta.tool_calls) {
-            if (
-              typeof tc === 'object' &&
-              tc !== null &&
-              'id' in tc &&
-              typeof tc.id === 'string' &&
+          const validToolCalls: ToolCall[] = [];
+          for (const [position, tc] of choice.delta.tool_calls.entries()) {
+            if (typeof tc !== 'object' || tc === null) continue;
+
+            // The real wire-protocol `index` is what correlates fragments
+            // of the SAME tool call across chunks — array position is only
+            // a fallback for a malformed/legacy payload that omits it.
+            const rawIndex = (tc as { index?: unknown }).index;
+            const index = typeof rawIndex === 'number' ? rawIndex : position;
+
+            const rawId = 'id' in tc && typeof tc.id === 'string' ? tc.id : undefined;
+            const func =
               'function' in tc &&
-              typeof (tc as { function: unknown }).function === 'object' &&
-              (tc as { function: unknown }).function !== null
-            ) {
-              // Type guard for function property
-              const tcObj = tc as { function: { name?: unknown; arguments?: unknown } };
-              const func = tcObj.function;
-              if (
-                'name' in func &&
-                typeof func.name === 'string' &&
-                'arguments' in func &&
-                typeof func.arguments === 'string'
-              ) {
-                validToolCalls.push({
-                  id: tc.id,
-                  function: {
-                    name: func.name,
-                    arguments: func.arguments,
-                  },
-                });
-              }
+              typeof (tc as { function?: unknown }).function === 'object' &&
+              (tc as { function?: unknown }).function !== null
+                ? (tc as { function: { name?: unknown; arguments?: unknown } }).function
+                : undefined;
+            const rawName = func && typeof func.name === 'string' ? func.name : undefined;
+            const rawArgs = func && typeof func.arguments === 'string' ? func.arguments : undefined;
+
+            // First chunk of a tool call carries id and/or name — remember
+            // it so later continuation chunks (which omit both) can still
+            // be tagged with the right identity.
+            let tracked = toolCallState?.get(index);
+            if (rawId !== undefined || rawName !== undefined) {
+              tracked = {
+                id: rawId ?? tracked?.id ?? '',
+                name: rawName ?? tracked?.name ?? '',
+              };
+              toolCallState?.set(index, tracked);
             }
+
+            // Nothing usable at all (no tracked identity yet, no fragment) —
+            // this is the only case worth dropping.
+            if (!tracked && rawArgs === undefined) continue;
+
+            validToolCalls.push({
+              id: tracked?.id ?? rawId ?? '',
+              type: 'function',
+              function: {
+                name: tracked?.name ?? rawName ?? '',
+                // Forward the fragment as-is (NOT the accumulated total) so
+                // a caller doing the standard OpenAI-client-style
+                // `arguments += delta` reconstruction gets the right result.
+                arguments: rawArgs ?? '',
+              },
+              index,
+            });
           }
           if (validToolCalls.length > 0) {
-            toolCalls = validToolCalls.map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: {
-                name: tc.function.name,
-                arguments: tc.function.arguments,
-              },
-            }));
+            toolCalls = validToolCalls;
           }
         }
 
@@ -2853,6 +3008,136 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   /**
+   * Optional image parameters each model has rejected at runtime, learned from
+   * the vendor's own `400 Unknown parameter: 'x'` response.
+   *
+   * Static so the knowledge is shared across pooled-account adapter instances
+   * and survives re-registration within the process.
+   */
+  private static readonly unsupportedImageParams = new Map<string, Set<string>>();
+
+  /**
+   * Parameters this adapter is willing to drop and retry without. Deliberately
+   * limited to the optional, presentational ones — dropping `prompt` or `model`
+   * would silently change what the caller asked for.
+   */
+  private static readonly DROPPABLE_IMAGE_PARAMS = new Set([
+    'response_format',
+    'style',
+    'quality',
+    'size',
+    'n',
+  ]);
+
+  /**
+   * Issue an images.generate call, retrying once without a parameter the model
+   * reports as unknown/unsupported.
+   *
+   * OpenAI names the offending field in the message (`Unknown parameter:
+   * 'response_format'`), so the field to drop is read from the error rather
+   * than from a hardcoded per-model table.
+   */
+  private async createImageWithParamFallback(
+    modelName: string,
+    buildParams: (omit: ReadonlySet<string>) => Record<string, unknown>
+  ): Promise<{ data?: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> }> {
+    const known = OpenAIAdapter.unsupportedImageParams.get(modelName) ?? new Set<string>();
+    const client = this.getRequestClient();
+    type ImagesGenerate = (p: Record<string, unknown>) => Promise<{
+      data?: Array<{ b64_json?: string; url?: string; revised_prompt?: string }>;
+    }>;
+    // The SDK's generate() is typed against a fixed literal-union param shape,
+    // but the whole point here is to decide the field set at runtime.
+    const generate = narrowAs<ImagesGenerate>(client.images.generate.bind(client.images));
+
+    // A model can reject several parameters in turn (gpt-image-1 rejects
+    // `response_format`, then `style`), and OpenAI only ever names the first
+    // offender. Peel them off one at a time rather than making the caller
+    // absorb one failed request per unsupported field. Bounded by the size of
+    // the droppable set, so this always terminates.
+    const omit = new Set(known);
+    for (let attempt = 0; attempt <= OpenAIAdapter.DROPPABLE_IMAGE_PARAMS.size; attempt++) {
+      const sent = buildParams(omit);
+      try {
+        return await generate(sent);
+      } catch (error: unknown) {
+        const offender = this.learnUnsupportedImageParam(modelName, error, sent);
+        // Not a parameter problem, or nothing left to drop → surface it.
+        if (!offender || omit.has(offender)) throw error;
+        omit.add(offender);
+      }
+    }
+    // Unreachable in practice: the loop either returns or throws above.
+    throw new Error(`OpenAI image generation for ${modelName} exhausted parameter fallbacks`);
+  }
+
+  /**
+   * If the error blames a droppable image parameter, remember it for this model
+   * and return it. Otherwise return null so the original error propagates.
+   *
+   * Two distinct vendor wordings are handled:
+   *  - `Unknown parameter: 'response_format'` — names the FIELD directly.
+   *  - `Invalid value: 'standard'. Supported values are: 'low', 'medium', …`
+   *    — names only the VALUE, so the field is recovered by matching that
+   *    value against what we actually sent (gpt-image-* take low/medium/high
+   *    for `quality`, while dall-e-* take standard/hd).
+   */
+  private learnUnsupportedImageParam(
+    modelName: string,
+    error: unknown,
+    sentParams: Record<string, unknown>
+  ): string | null {
+    const status = (error as { status?: number } | null)?.status;
+    if (status !== 400) return null;
+
+    const raw = error as { message?: unknown; error?: { message?: unknown } } | null;
+    const message = (
+      (typeof raw?.message === 'string' && raw.message) ||
+      (typeof raw?.error?.message === 'string' && raw.error.message) ||
+      ''
+    ).toLowerCase();
+
+    const namesField =
+      message.includes('unknown parameter') ||
+      message.includes('unsupported parameter') ||
+      message.includes('not supported');
+    const namesValue = message.includes('invalid value');
+    if (!namesField && !namesValue) return null;
+
+    let offender: string | undefined;
+    if (namesField) {
+      // Match the QUOTED field name, never a bare substring: the droppable set
+      // contains `n`, and a substring test would match the "n" inside almost
+      // any sentence (including "unknown parameter: 'prompt'").
+      const named = message.match(/parameter:?\s*'([^']+)'/)?.[1];
+      if (named && OpenAIAdapter.DROPPABLE_IMAGE_PARAMS.has(named)) {
+        offender = named;
+      }
+    }
+    if (!offender && namesValue) {
+      // Recover the field from the rejected value we sent.
+      const quoted = message.match(/invalid value:\s*'([^']*)'/)?.[1];
+      if (quoted !== undefined) {
+        offender = [...OpenAIAdapter.DROPPABLE_IMAGE_PARAMS].find(
+          (p) => String(sentParams[p] ?? '').toLowerCase() === quoted
+        );
+      }
+    }
+    if (!offender) return null;
+
+    const existing = OpenAIAdapter.unsupportedImageParams.get(modelName);
+    if (existing) existing.add(offender);
+    else OpenAIAdapter.unsupportedImageParams.set(modelName, new Set([offender]));
+
+    this.providerLog.warn(
+      { model: modelName, parameter: offender },
+      'OpenAI image model rejected a parameter; dropping it and retrying. ' +
+        'Subsequent requests for this model will omit it.'
+    );
+    return offender;
+  }
+
+  /**
    * Image Generation - REAL IMPLEMENTATION
    * Generates images using OpenAI Images API
    * Supports any OpenAI model with image_generation capability
@@ -2866,17 +3151,34 @@ export class OpenAIAdapter extends ProviderAdapter {
         'Starting image generation request'
       );
 
-      // Call OpenAI Image Generation API
-      const response = await this.getRequestClient().images.generate({
-        model: model.name,
-        prompt: request.prompt,
-        n: request.options?.n as number | undefined,
-        size: request.size as
-          '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792' | undefined,
-        quality: request.options?.quality as 'standard' | 'hd' | undefined,
-        response_format: request.options?.responseFormat as 'url' | 'b64_json' | undefined,
-        style: request.options?.style as 'vivid' | 'natural' | undefined,
-      });
+      // Call OpenAI Image Generation API.
+      //
+      // Model families disagree about which optional parameters exist: the
+      // `gpt-image-*` family always returns base64 and rejects
+      // `response_format` outright with `400 Unknown parameter:
+      // 'response_format'`, while `dall-e-*` requires it to get b64. The chat
+      // route supplies a schema default, so the field is present on virtually
+      // every request. Rather than carry a hardcoded model list, drop whichever
+      // parameter the vendor names as unknown and remember it for that model.
+      const buildImageParams = (omit: ReadonlySet<string>) => {
+        const params: Record<string, unknown> = {
+          model: model.name,
+          prompt: request.prompt,
+        };
+        const optional: Record<string, unknown> = {
+          n: request.options?.n,
+          size: request.size,
+          quality: request.options?.quality,
+          response_format: request.options?.responseFormat,
+          style: request.options?.style,
+        };
+        for (const [key, value] of Object.entries(optional)) {
+          if (value !== undefined && !omit.has(key)) params[key] = value;
+        }
+        return params;
+      };
+
+      const response = await this.createImageWithParamFallback(model.name, buildImageParams);
 
       const latency = Date.now() - startTime;
 

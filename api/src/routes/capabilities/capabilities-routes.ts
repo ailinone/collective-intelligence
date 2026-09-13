@@ -14,15 +14,33 @@ import { requireTenantContext } from '@/api/middleware/tenant-isolation-middlewa
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
-import type { ChatMessage, ModelCapability } from '@/types';
-import { createOrchestrationContext } from '@/utils/orchestration-context';
+import type { ChatMessage, ChatRequest, ModelCapability } from '@/types';
+import { createOrchestrationContext, extractSemanticQueryFromMessages } from '@/utils/orchestration-context';
+import { config } from '@/config';
+import { MediaPlannerStrategy } from '@/core/orchestration/strategies/media-planner-strategy';
+import { MediaConsensusStrategy } from '@/core/orchestration/strategies/media-consensus-strategy';
+import { resolveMediaPlanRouting } from '@/core/orchestration/strategies/media-planner-gate';
 import { AudioOrchestrationService } from '@/services/audio-orchestration-service';
+import { MusicOrchestrationService } from '@/services/music-orchestration-service';
 import { ImagesOrchestrationService } from '@/services/images-orchestration-service';
 import { VideoOrchestrationService } from '@/services/video-orchestration-service';
+import {
+  VideoAnalysisUnavailableError,
+  VideoUnderstandingService,
+  type VideoAnalysisMode,
+} from '@/services/video-understanding-service';
 import { SearchOrchestrationService } from '@/services/search-orchestration-service';
 import { ModerationsOrchestrationService } from '@/services/moderations-orchestration-service';
 import { CodeExecutionService } from '@/services/code-execution-service';
 import { getCapabilityExecutionService } from '@/services/capability-execution-service';
+import { getRerankOrchestrationService } from '@/services/rerank-orchestration-service';
+import { getRetrievalOrchestrationService } from '@/services/retrieval-orchestration-service';
+import {
+  getVisionOrchestrationService,
+  type VisionOrchestrationService,
+  type VisionTask,
+} from '@/services/vision-orchestration-service';
+import { PDFService } from '@/services/pdf-service';
 import {
   getCapabilityExecutionPlan,
   getModelCapabilitiesForCapability,
@@ -39,10 +57,22 @@ import {
 } from '@/providers/provider-operability';
 import { isModelCapability } from '@/types';
 import { executeRouteWithRetry } from '@/utils/route-retry';
+import { toolRegistry } from '@/core/tools/tool-registry';
+import type { ToolExecutionContext } from '@/services/advanced-tool-execution-service';
+import {
+  isComputerUseEnabled,
+  isAgentsEnabled,
+  isMcpClientEnabled,
+} from '@/core/sandbox/sandbox-policy';
 
 const log = logger.child({ module: 'capabilities-routes' });
 
-type CapabilityRequestBody = Record<string, unknown>;
+// Exported for MediaPlannerStrategy (LOTE AT, Part 2): its capability
+// dispatcher is typed against these so a real `executeCapabilityByPlan`
+// call (bound to a live FastifyRequest at the route layer, see the
+// `/v1/capabilities/media-plan/execute` route below) can be injected
+// without loosening these to `unknown`/`any` at the strategy boundary.
+export type CapabilityRequestBody = Record<string, unknown>;
 
 interface CapabilityExecutionHints {
   sandboxPreference?: string[];
@@ -53,14 +83,14 @@ interface CapabilityExecutionHints {
   allowFallback?: boolean;
 }
 
-interface CapabilityExecutionEnvelope {
+export interface CapabilityExecutionEnvelope {
   input?: unknown;
   messages?: ChatMessage[];
   options?: Record<string, unknown>;
   execution?: CapabilityExecutionHints;
 }
 
-interface CapabilityModeResult {
+export interface CapabilityModeResult {
   data: unknown;
   resolvedProvider?: string;
   resolvedModel?: string;
@@ -98,6 +128,21 @@ const SEARCH_CAPABILITIES = new Set<ModelCapability>([
   'research',
 ]);
 
+/**
+ * Capabilities the sandbox-workflow mode may serve.
+ *
+ * `computer_use`, `agents` and `mcp` were members until LOTE AP. That made
+ * `POST /v1/capabilities/computer_use/execute` run whatever `code` field the
+ * caller supplied through `CodeExecutionService` — a capability meaning
+ * "control a GUI" executing arbitrary code, on `LocalProcessSandbox`
+ * (child_process.spawn on the API host) whenever no isolated backend is
+ * configured. They stay OUT of this set permanently: as of LOTE AV they have
+ * their own real executor, `executeAgenticSandboxMode` (mode
+ * `'agentic_sandbox'`, built on the isolated Docker sandbox in
+ * `core/sandbox/container-sandbox.ts`), which is deliberately a different
+ * dispatch branch from this one and never touches `CodeExecutionService`. See
+ * the canonical `docs/adr/ADR-024-agentic-capability-execution.md`.
+ */
 const CODE_CAPABILITIES = new Set<ModelCapability>([
   'code_generation',
   'code_completion',
@@ -107,6 +152,15 @@ const CODE_CAPABILITIES = new Set<ModelCapability>([
   'refactoring',
   'testing',
   'code_interpreter',
+]);
+
+/**
+ * Capabilities served by `executeAgenticSandboxMode` (ADR-024, LOTE AV).
+ * Each is individually gated by its own default-off flag
+ * (`sandbox-policy.ts`); the dispatch branch and the isolated Docker sandbox
+ * are shared, but a flag being off makes only THAT capability unavailable.
+ */
+const AGENTIC_SANDBOX_CAPABILITIES = new Set<ModelCapability>([
   'computer_use',
   'agents',
   'mcp',
@@ -118,6 +172,20 @@ const AUDIO_TRANSCRIPTION_CAPABILITIES = new Set<ModelCapability>([
   'audio_input',
   'listen',
   'diarization',
+]);
+
+/**
+ * The video-INPUT family. These used to live in
+ * `AUDIO_TRANSCRIPTION_CAPABILITIES`, which meant a caller uploading an mp4
+ * had its container bytes handed to an STT provider as if they were an audio
+ * stream — no demux, no frame ever reaching a vision model, and
+ * `video_understanding` matching no branch at all. They now route to
+ * `VideoUnderstandingService`, which demuxes the audio track into the real
+ * `speech_to_text` pipeline and samples frames into the real `vision`
+ * pipeline. See `services/video-understanding-service.ts`.
+ */
+const VIDEO_INPUT_CAPABILITIES = new Set<ModelCapability>([
+  'video_understanding',
   'video_to_text',
   'video_transcription',
 ]);
@@ -134,6 +202,26 @@ const REALTIME_STREAM_ONLY = new Set<ModelCapability>([
   'realtime_audio',
   'audio_to_audio',
 ]);
+
+/**
+ * LOTE AP. All three declared `executionPath: ['native_adapter', ...]` in the
+ * capability registry but had no branch here, so every request threw
+ * `No native adapter executor available` before falling through to chat
+ * orchestration. They now execute through the real `adapter.vision()` path.
+ */
+const VISION_CAPABILITIES = new Set<ModelCapability>([
+  'vision',
+  'multimodal',
+  'image_captioning',
+  'visual_question_answering',
+]);
+
+/**
+ * LOTE AP. Fidelity-only image operations. Kept apart from `image_editing`
+ * because a generative editor asked to upscale returns a different picture —
+ * see `ImagesOrchestrationService.enhanceImage`.
+ */
+const IMAGE_ENHANCEMENT_CAPABILITIES = new Set<ModelCapability>(['image_upscale', 'image_denoise']);
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
@@ -418,6 +506,172 @@ function getProxyTarget(capability: ModelCapability): string | null {
   return null;
 }
 
+interface RuntimeDependencyReport {
+  /** Dependency name, matching the id used in the capability plan. */
+  readonly dependency: string;
+  readonly satisfied: boolean;
+  /** Why, in a form an operator can act on. */
+  readonly detail?: string;
+}
+
+/**
+ * Non-model prerequisites for a capability, resolved live.
+ *
+ * Two capability families need something the model catalog cannot express:
+ *   - the video-input family needs the ffmpeg toolchain ON THE HOST;
+ *   - `diarization` needs at least one CONFIGURED adapter that declares a
+ *     native diarizer (`getDiarizationSupport().native`).
+ * Reporting these turns "operational: false" into an actionable answer.
+ */
+async function resolveRuntimeDependencies(
+  capability: ModelCapability,
+  videoUnderstanding: VideoUnderstandingService
+): Promise<RuntimeDependencyReport[]> {
+  const reports: RuntimeDependencyReport[] = [];
+
+  if (VIDEO_INPUT_CAPABILITIES.has(capability)) {
+    const readiness = await videoUnderstanding.getReadiness();
+    reports.push({
+      dependency: 'ffmpeg_media_toolkit',
+      satisfied: readiness.available,
+      detail: readiness.reason,
+    });
+  }
+
+  if (AGENTIC_SANDBOX_CAPABILITIES.has(capability)) {
+    const flagName =
+      capability === 'computer_use'
+        ? 'AGENTIC_COMPUTER_USE_ENABLED'
+        : capability === 'mcp'
+          ? 'MCP_CLIENT_ENABLED'
+          : 'AGENTIC_AGENTS_ENABLED';
+    const enabled =
+      capability === 'computer_use'
+        ? isComputerUseEnabled()
+        : capability === 'mcp'
+          ? isMcpClientEnabled()
+          : isAgentsEnabled();
+    reports.push({
+      dependency: 'agentic_sandbox_runtime',
+      satisfied: enabled,
+      detail: enabled
+        ? `${capability} runs inside the isolated Docker sandbox (ADR-024).`
+        : `${capability} is implemented but disabled by default (ADR-024). Set ${flagName}=true to enable it.`,
+    });
+  }
+
+  if (capability === 'diarization') {
+    let providers: string[] = [];
+    try {
+      providers = getProviderRegistry()
+        .getAll()
+        .filter((adapter) => adapter.getDiarizationSupport().native === true)
+        .map((adapter) => adapter.getName())
+        .sort();
+    } catch {
+      providers = [];
+    }
+    reports.push({
+      dependency: 'native_diarization_provider',
+      satisfied: providers.length > 0,
+      detail:
+        providers.length > 0
+          ? `Providers declaring native diarization: ${providers.join(', ')}`
+          : 'No configured provider adapter declares native speaker diarization. Diarization is never simulated — see ADR-024 and the provider gap register.',
+    });
+  }
+
+  return reports;
+}
+
+/**
+ * Resolve the image payload of a vision-family request.
+ *
+ * Three input forms are accepted because three are in real use: a base64 or
+ * data-URL string (`image_base64`), an http(s) URL (`image_url`), and the
+ * generic `image` field which may be either. URLs are passed through as
+ * strings rather than fetched here — `ProviderAdapter.vision()` hands them
+ * straight to the provider, which avoids this process becoming an
+ * unauthenticated URL fetcher (SSRF surface) on the caller's behalf.
+ */
+function resolveVisionImage(body: CapabilityRequestBody): Buffer | string {
+  const url = asString(body.image_url);
+  if (url) return url;
+
+  const generic = asString(body.image);
+  if (generic) {
+    if (generic.startsWith('http://') || generic.startsWith('https://')) return generic;
+    return decodeBase64Payload(generic, 'image');
+  }
+
+  return decodeBase64Payload(body.image_base64, 'image_base64');
+}
+
+/** Map a vision-family capability id onto the service's task framing. */
+function resolveVisionTask(capability: ModelCapability): VisionTask {
+  if (capability === 'image_captioning') return 'image_captioning';
+  if (capability === 'visual_question_answering') return 'visual_question_answering';
+  return 'vision';
+}
+
+async function executeVisionCapability(
+  capability: ModelCapability,
+  body: CapabilityRequestBody,
+  envelope: CapabilityExecutionEnvelope,
+  context: {
+    vision: VisionOrchestrationService;
+    strategy?: string;
+    allowFallback: boolean;
+    userContext: ReturnType<typeof getUserContext>;
+    requestId: string;
+  }
+): Promise<CapabilityModeResult> {
+  const image = resolveVisionImage(body);
+  const task = resolveVisionTask(capability);
+
+  // VQA takes its question from `question` first — an SDK modelling VQA has a
+  // question field, not a prompt field — then the generic prompt fields.
+  const prompt =
+    task === 'visual_question_answering'
+      ? (asString(body.question) ?? asString(body.prompt) ?? asString(body.query) ?? asString(envelope.input))
+      : (asString(body.prompt) ?? asString(body.query) ?? asString(envelope.input));
+
+  const detailRaw = asString(body.detail);
+  const detail =
+    detailRaw === 'low' || detailRaw === 'high' || detailRaw === 'auto' ? detailRaw : undefined;
+
+  const result = await context.vision.analyzeImage({
+    task,
+    image,
+    ...(prompt ? { prompt } : {}),
+    ...(asString(body.model) ? { model: asString(body.model) } : {}),
+    ...(detail ? { detail } : {}),
+    ...(asNumber(body.max_tokens) !== undefined ? { maxTokens: asNumber(body.max_tokens) } : {}),
+    ...(asNumber(body.temperature) !== undefined
+      ? { temperature: asNumber(body.temperature) }
+      : {}),
+    ...(context.strategy ? { strategy: context.strategy } : {}),
+    allowFallback: context.allowFallback,
+    userContext: context.userContext,
+    requestId: context.requestId,
+  });
+
+  return {
+    // The envelope names the task-specific field so a captioning client is not
+    // forced to read a generic `content` key, while `content` stays present
+    // for callers that treat the whole family uniformly.
+    data: {
+      content: result.content,
+      ...(task === 'image_captioning' ? { caption: result.content } : {}),
+      ...(task === 'visual_question_answering' ? { answer: result.content } : {}),
+      task: result.task,
+    },
+    resolvedProvider: result.provider,
+    resolvedModel: result.modelUsed,
+    executionPath: 'native_adapter',
+  };
+}
+
 async function executeNativeAdapterMode(
   capability: ModelCapability,
   body: CapabilityRequestBody,
@@ -426,10 +680,13 @@ async function executeNativeAdapterMode(
   requestId: string,
   services: {
     audio: AudioOrchestrationService;
+    music: MusicOrchestrationService;
     image: ImagesOrchestrationService;
     video: VideoOrchestrationService;
+    videoUnderstanding: VideoUnderstandingService;
     search: SearchOrchestrationService;
     moderation: ModerationsOrchestrationService;
+    vision: VisionOrchestrationService;
   }
 ): Promise<CapabilityModeResult> {
   const userContext = getUserContext(request);
@@ -507,6 +764,12 @@ async function executeNativeAdapterMode(
       ? responseFormatRaw
       : 'json';
 
+    // The `diarization` capability IS the request for speaker labels; every
+    // other id in this set may opt in explicitly. `diarize` is a hard gate
+    // downstream — a provider without a native diarizer is not silently
+    // substituted (see AudioOrchestrationService.transcribeAudio).
+    const diarize = capability === 'diarization' || asBoolean(requestBody.diarize, false);
+
     const transcription = await services.audio.transcribeAudio({
       audioBuffer,
       filename,
@@ -518,6 +781,8 @@ async function executeNativeAdapterMode(
       timestampGranularities: asStringArray(requestBody.timestamp_granularities).filter(
         (item): item is 'word' | 'segment' => item === 'word' || item === 'segment'
       ),
+      diarize,
+      numSpeakers: asNumber(requestBody.num_speakers),
       strategy,
       allowFallback,
       userContext: executionUserContext,
@@ -533,9 +798,85 @@ async function executeNativeAdapterMode(
         segments: transcription.segments,
         srt: transcription.srt,
         vtt: transcription.vtt,
+        speakers: transcription.speakers,
+        diarized: transcription.diarized,
       },
       resolvedProvider: transcription.provider,
       resolvedModel: transcription.modelUsed,
+      executionPath: 'native_adapter',
+    };
+  }
+
+  if (VIDEO_INPUT_CAPABILITIES.has(capability)) {
+    const videoBuffer = decodeBase64Payload(
+      requestBody.video_base64 ?? requestBody.video,
+      'video_base64'
+    );
+    const filename = asString(requestBody.filename) ?? 'video.mp4';
+    // `video_understanding` fuses both signals; the two transcription ids
+    // answer with the audio track and only sample frames when explicitly asked.
+    const mode: VideoAnalysisMode =
+      capability === 'video_understanding' ? 'understanding' : 'transcript';
+    const responseFormatRaw = asString(requestBody.response_format) ?? 'verbose_json';
+    const responseFormat = TRANSCRIPTION_FORMATS.has(responseFormatRaw)
+      ? responseFormatRaw
+      : 'verbose_json';
+    const frameSamplingMode = asString(requestBody.frame_sampling_mode);
+
+    const analysis = await services.videoUnderstanding
+      .analyzeVideo({
+        videoBuffer,
+        filename,
+        mode,
+        prompt: asString(requestBody.prompt) ?? asString(requestBody.question),
+        language: asString(requestBody.language),
+        responseFormat: responseFormat as 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt',
+        model: asString(requestBody.model),
+        frameSampling: {
+          mode: frameSamplingMode === 'scene' ? 'scene' : 'interval',
+          intervalSec: asNumber(requestBody.frame_interval_seconds),
+          maxFrames: asNumber(requestBody.max_frames),
+        },
+        includeVisualContext: asBoolean(requestBody.include_visual_context, false),
+        strategy,
+        allowFallback,
+        userContext: executionUserContext,
+        requestId,
+      })
+      .catch((error: unknown) => {
+        // A missing ffmpeg toolchain (or an unparseable container) is an unmet
+        // DEPENDENCY, not an execution failure — say which one, so the caller
+        // does not retry into the orchestration fallback for nothing.
+        if (error instanceof VideoAnalysisUnavailableError) {
+          throw buildCapabilityError(capability, error.message, {
+            executionMode: 'native_adapter',
+            dependency: error.dependency,
+            detail: error.detail,
+          });
+        }
+        throw error;
+      });
+
+    return {
+      data: {
+        mode: analysis.mode,
+        media: analysis.media,
+        text: analysis.transcript?.text ?? '',
+        language: analysis.transcript?.language,
+        duration: analysis.transcript?.durationSec,
+        segments: analysis.transcript?.segments,
+        words: analysis.transcript?.words,
+        srt: analysis.transcript?.srt,
+        vtt: analysis.transcript?.vtt,
+        frames: analysis.frames,
+        summary: analysis.summary,
+        warnings: analysis.warnings,
+      },
+      // The transcript's provider/model is the most specific attribution
+      // available for the transcription ids; the fusion model is for
+      // `video_understanding`. Neither is fabricated when absent.
+      resolvedProvider: analysis.summaryProvider ?? analysis.transcript?.provider,
+      resolvedModel: analysis.summaryModelUsed ?? analysis.transcript?.modelUsed,
       executionPath: 'native_adapter',
     };
   }
@@ -546,6 +887,48 @@ async function executeNativeAdapterMode(
       'audio_to_audio requires realtime websocket session and cannot execute via HTTP JSON',
       { requiredEndpoint: '/v1/realtime' }
     );
+  }
+
+  if (capability === 'music_generation') {
+    const prompt = asString(requestBody.prompt) ?? asString(envelope.input);
+    const compositionPlan =
+      requestBody.composition_plan &&
+      typeof requestBody.composition_plan === 'object' &&
+      !Array.isArray(requestBody.composition_plan)
+        ? (requestBody.composition_plan as Record<string, unknown>)
+        : undefined;
+    if (!prompt && !compositionPlan) {
+      throw buildCapabilityError(
+        capability,
+        'prompt or composition_plan is required for music generation'
+      );
+    }
+
+    const result = await services.music.generateMusic({
+      prompt,
+      compositionPlan,
+      model: asString(requestBody.model),
+      musicLengthMs: asNumber(requestBody.music_length_ms),
+      forceInstrumental:
+        requestBody.force_instrumental !== undefined
+          ? asBoolean(requestBody.force_instrumental, false)
+          : undefined,
+      seed: asNumber(requestBody.seed),
+      strategy,
+      allowFallback,
+      userContext: executionUserContext,
+      requestId,
+    });
+
+    return {
+      data: {
+        audio_base64: result.audioBuffer.toString('base64'),
+        format: result.format,
+      },
+      resolvedProvider: result.provider,
+      resolvedModel: result.modelUsed,
+      executionPath: 'native_adapter',
+    };
   }
 
   if (capability === 'image_generation') {
@@ -658,6 +1041,16 @@ async function executeNativeAdapterMode(
       duration: asNumber(requestBody.duration),
       aspectRatio: asString(requestBody.aspect_ratio),
       size: asString(requestBody.size),
+      resolution: asString(requestBody.resolution),
+      generateAudio:
+        typeof requestBody.generate_audio === 'boolean'
+          ? requestBody.generate_audio
+          : typeof requestBody.generateAudio === 'boolean'
+            ? requestBody.generateAudio
+            : undefined,
+      soundtrackAudioBase64:
+        asString(requestBody.soundtrack_audio_base64) ??
+        asString(requestBody.soundtrackAudioBase64),
       n: asNumber(requestBody.n),
       responseFormat: asString(requestBody.response_format) === 'b64_json' ? 'b64_json' : 'url',
       strategy,
@@ -668,6 +1061,109 @@ async function executeNativeAdapterMode(
 
     return {
       data: { created: Math.floor(Date.now() / 1000), data: result.videos },
+      resolvedProvider: result.provider,
+      resolvedModel: result.modelUsed,
+      executionPath: 'native_adapter',
+    };
+  }
+
+  if (capability === 'reranking') {
+    // `documents` may arrive at the top level, inside the envelope's `input`
+    // (`{input: {query, documents}}`) or as the envelope input itself.
+    const documentsRaw = Array.isArray(requestBody.documents)
+      ? requestBody.documents
+      : Array.isArray(envelope.input)
+        ? envelope.input
+        : [];
+    const documents = documentsRaw.filter((item): item is string => typeof item === 'string');
+    const query = asString(requestBody.query) ?? asString(requestBody.prompt);
+    if (!query) {
+      throw buildCapabilityError(capability, 'query is required for reranking', {}, 'invalid_request', 400);
+    }
+    if (documents.length === 0) {
+      throw buildCapabilityError(
+        capability,
+        'documents must be a non-empty array of strings for reranking',
+        {},
+        'invalid_request',
+        400
+      );
+    }
+
+    const result = await getRerankOrchestrationService().rerank({
+      query,
+      documents,
+      ...(asString(requestBody.model) ? { model: asString(requestBody.model) } : {}),
+      ...(() => {
+        const topN = asNumber(requestBody.top_n) ?? asNumber(requestBody.top_k);
+        return topN !== undefined ? { topN } : {};
+      })(),
+      returnDocuments: asBoolean(requestBody.return_documents, false),
+      ...(strategy ? { strategy } : {}),
+      allowFallback,
+      userContext: executionUserContext,
+      requestId,
+    });
+
+    return {
+      data: {
+        object: 'list',
+        results: result.results.map((item) => ({
+          index: item.index,
+          relevance_score: item.relevanceScore,
+          ...(item.document !== undefined ? { document: item.document } : {}),
+        })),
+        ...(typeof result.totalTokens === 'number'
+          ? { usage: { total_tokens: result.totalTokens } }
+          : {}),
+      },
+      resolvedProvider: result.provider,
+      resolvedModel: result.modelUsed,
+      executionPath: 'native_adapter',
+    };
+  }
+
+  if (VISION_CAPABILITIES.has(capability)) {
+    return executeVisionCapability(capability, requestBody, envelope, {
+      vision: services.vision,
+      strategy,
+      allowFallback,
+      userContext: executionUserContext,
+      requestId,
+    });
+  }
+
+  if (IMAGE_ENHANCEMENT_CAPABILITIES.has(capability)) {
+    const imageBuffer = decodeBase64Payload(
+      requestBody.image_base64 ?? requestBody.image,
+      'image_base64'
+    );
+    const responseFormatRaw = asString(requestBody.response_format) ?? 'b64_json';
+    const responseFormat = responseFormatRaw === 'url' ? 'url' : 'b64_json';
+
+    const result = await services.image.enhanceImage({
+      image: imageBuffer,
+      capability,
+      model: asString(requestBody.model),
+      ...(asNumber(requestBody.upscale_factor) !== undefined
+        ? { upscaleFactor: asNumber(requestBody.upscale_factor) }
+        : {}),
+      ...(asNumber(requestBody.noise_reduction) !== undefined
+        ? { noiseReduction: asNumber(requestBody.noise_reduction) }
+        : {}),
+      ...(asNumber(requestBody.sharpen) !== undefined
+        ? { sharpen: asNumber(requestBody.sharpen) }
+        : {}),
+      ...(asString(requestBody.prompt) ? { prompt: asString(requestBody.prompt) } : {}),
+      responseFormat,
+      ...(strategy ? { strategy } : {}),
+      allowFallback,
+      userContext: executionUserContext,
+      requestId,
+    });
+
+    return {
+      data: { created: Math.floor(Date.now() / 1000), data: result.images },
       resolvedProvider: result.provider,
       resolvedModel: result.modelUsed,
       executionPath: 'native_adapter',
@@ -705,6 +1201,7 @@ async function executeToolPipelineMode(
   requestId: string,
   services: {
     search: SearchOrchestrationService;
+    pdf: PDFService;
   }
 ): Promise<CapabilityModeResult> {
   const userContext = getUserContext(request);
@@ -742,6 +1239,127 @@ async function executeToolPipelineMode(
       },
       resolvedProvider: result.providerUsed,
       resolvedModel: result.modelUsed,
+      executionPath: 'tool_pipeline',
+    };
+  }
+
+  // The two branches below accept the ENVELOPE form as well as the flat one
+  // (`{input: {...}}` / `{options: {...}}`), because a capability like
+  // retrieval carries structured arguments — `vector_store_ids` — that
+  // callers naturally nest under `input`. The search branch above predates
+  // the envelope and is left reading `body` directly so its behaviour is
+  // untouched.
+  const envelopeBody: CapabilityRequestBody = {
+    ...(envelope.input && typeof envelope.input === 'object' && !Array.isArray(envelope.input)
+      ? (envelope.input as CapabilityRequestBody)
+      : {}),
+    ...(envelope.options && typeof envelope.options === 'object'
+      ? (envelope.options as CapabilityRequestBody)
+      : {}),
+    ...body,
+  };
+
+  if (capability === 'retrieval') {
+    const query = asString(envelopeBody.query) ?? deriveTextInput(body, envelope);
+    const storeIds = asStringArray(
+      envelopeBody.vector_store_ids ?? envelopeBody.vectorStoreIds
+    );
+
+    const result = await getRetrievalOrchestrationService().retrieve({
+      query,
+      vectorStoreIds: storeIds,
+      ...(asNumber(envelopeBody.top_k) !== undefined
+        ? { topK: asNumber(envelopeBody.top_k) }
+        : {}),
+      ...(asNumber(envelopeBody.max_chunks) !== undefined
+        ? { maxChunks: asNumber(envelopeBody.max_chunks) }
+        : {}),
+      ...(asNumber(envelopeBody.score_threshold) !== undefined
+        ? { scoreThreshold: asNumber(envelopeBody.score_threshold) }
+        : {}),
+      ...(asStringArray(envelopeBody.file_ids).length > 0
+        ? { fileIds: asStringArray(envelopeBody.file_ids) }
+        : {}),
+      rerank: asBoolean(envelopeBody.rerank, false),
+      ...(asString(envelopeBody.rerank_model)
+        ? { rerankModel: asString(envelopeBody.rerank_model) }
+        : {}),
+      userContext,
+      requestId,
+    });
+
+    return {
+      data: {
+        object: 'retrieval.results',
+        query,
+        data: result.chunks.map((chunk) => ({
+          vector_store_id: chunk.vectorStoreId,
+          file_id: chunk.fileId,
+          chunk_index: chunk.chunkIndex,
+          content: [{ type: 'text', text: chunk.content }],
+          score: chunk.score,
+          vector_score: chunk.vectorScore,
+          ...(chunk.rerankScore !== undefined ? { rerank_score: chunk.rerankScore } : {}),
+          metadata: chunk.metadata,
+        })),
+        rerank: result.rerank,
+        retrieved_count: result.retrievedCount,
+        failed_store_ids: result.failedStoreIds,
+      },
+      // Retrieval resolves a reranker only when stage 2 actually ran; the
+      // vector stage is local infrastructure, not a provider, so reporting a
+      // provider for a stage-1-only result would be a lie.
+      ...(result.rerank.applied
+        ? { resolvedProvider: result.rerank.provider, resolvedModel: result.rerank.model }
+        : {}),
+      executionPath: 'tool_pipeline',
+    };
+  }
+
+  if (capability === 'pdf_understanding') {
+    // The capability surface takes the document inline (base64) — the
+    // multipart form belongs to POST /v1/pdf/analyze. `file`/`pdf`/`document`
+    // are all accepted because the ontology's aliases (`pdf`, `ocr`,
+    // `document_understanding`) set three different caller expectations.
+    const pdfBuffer = decodeBase64Payload(
+      envelopeBody.pdf_base64 ??
+        envelopeBody.file ??
+        envelopeBody.pdf ??
+        envelopeBody.document ??
+        envelope.input,
+      'pdf_base64'
+    );
+
+    const result = await services.pdf.analyzePDF({
+      pdfBuffer,
+      filename: asString(envelopeBody.filename) ?? 'document.pdf',
+      ...(asString(envelopeBody.prompt) ?? asString(envelopeBody.query)
+        ? { prompt: asString(envelopeBody.prompt) ?? asString(envelopeBody.query) }
+        : {}),
+      ...(asString(envelopeBody.model) ? { model: asString(envelopeBody.model) } : {}),
+      ...(asNumber(envelopeBody.max_pages) !== undefined
+        ? { maxPages: asNumber(envelopeBody.max_pages) }
+        : {}),
+      ...(typeof envelopeBody.force_ocr === 'boolean'
+        ? { forceOcr: envelopeBody.force_ocr }
+        : {}),
+      userContext,
+      requestId,
+    });
+
+    return {
+      data: {
+        text: result.text,
+        ...(result.summary !== undefined ? { summary: result.summary } : {}),
+        ...(result.extractedData !== undefined ? { extracted_data: result.extractedData } : {}),
+        metadata: result.metadata,
+        extraction: result.extraction,
+      },
+      // Both are null when extraction alone answered the request (a digital
+      // PDF with no analysis prompt never reaches a provider) — reporting a
+      // model for that would misattribute work nobody did.
+      ...(result.provider ? { resolvedProvider: result.provider } : {}),
+      ...(result.modelUsed ? { resolvedModel: result.modelUsed } : {}),
       executionPath: 'tool_pipeline',
     };
   }
@@ -805,6 +1423,132 @@ async function executeSandboxWorkflowMode(
     resolvedProvider: result.provider,
     resolvedModel: result.modelUsed,
     executionPath: 'sandbox_workflow',
+  };
+}
+
+/**
+ * `computer_use` / `agents` / `mcp` via the isolated Docker sandbox
+ * (ADR-024, LOTE AV). Deliberately separate from `executeSandboxWorkflowMode`
+ * above — that mode is `CodeExecutionService` (E2B/Daytona/LocalProcessSandbox)
+ * for `CODE_CAPABILITIES` and is untouched by this function.
+ *
+ * Each capability is gated by its OWN flag (`sandbox-policy.ts`): with the
+ * flag off, the tool this mode looks up is never registered (computer_use),
+ * the MCP client never connected (mcp), or `runBoundedAgent` reports
+ * `stopReason: 'disabled'` (agents) — all three surface as the same
+ * `capability_dependency_unavailable` error the caller already sees today
+ * with the flag off, which is the byte-for-byte-identical-when-disabled
+ * contract this change must not break.
+ */
+async function executeAgenticSandboxMode(
+  capability: ModelCapability,
+  body: CapabilityRequestBody,
+  envelope: CapabilityExecutionEnvelope,
+  request: FastifyRequest,
+  requestId: string
+): Promise<CapabilityModeResult> {
+  const userContext = getUserContext(request);
+  const toolCtx: ToolExecutionContext = {
+    workingDirectory: process.cwd(),
+    log,
+    organizationId: userContext.organizationId,
+    userId: userContext.userId,
+  };
+
+  if (capability === 'computer_use') {
+    // Body shape: { operation?: 'shell'|'write_file'|'read_file'|'list_files'
+    // (default 'shell'), command?, args?, path?, content? } — mirrors the
+    // four `computer_*` tool schemas in computer-use-tools.ts 1:1.
+    const operation = asString(body.operation) ?? 'shell';
+    const toolNameByOperation: Record<string, string> = {
+      shell: 'computer_shell',
+      write_file: 'computer_write_file',
+      read_file: 'computer_read_file',
+      list_files: 'computer_list_files',
+    };
+    const toolName = toolNameByOperation[operation];
+    if (!toolName) {
+      throw buildCapabilityError(capability, `Unknown computer_use operation: ${operation}`);
+    }
+    if (!toolRegistry.has(toolName)) {
+      throw buildCapabilityError(
+        capability,
+        'computer_use is disabled (set AGENTIC_COMPUTER_USE_ENABLED=true to enable)',
+        { flag: 'AGENTIC_COMPUTER_USE_ENABLED' }
+      );
+    }
+    const toolResult = await toolRegistry.executeForStrategy(toolName, body, requestId, toolCtx);
+    if (!toolResult.success) {
+      throw buildCapabilityError(capability, toolResult.error ?? 'computer_use execution failed', {
+        toolName,
+        ...toolResult.metadata,
+      });
+    }
+    return { data: toolResult, executionPath: 'agentic_sandbox' };
+  }
+
+  if (capability === 'mcp') {
+    // Body shape: { tool: string, arguments?: object } — `tool` is an
+    // already-registered `mcp_<server>_<tool>` name from toolRegistry.
+    const toolName = asString(body.tool);
+    if (!toolName || !toolRegistry.has(toolName)) {
+      throw buildCapabilityError(
+        capability,
+        toolName
+          ? `Unknown or unregistered MCP tool: ${toolName}`
+          : 'mcp is disabled or no server is configured (set MCP_CLIENT_ENABLED=true and configure a server)',
+        { availableTools: toolRegistry.listNames().filter((name) => name.startsWith('mcp_')) }
+      );
+    }
+    const args =
+      body.arguments && typeof body.arguments === 'object'
+        ? (body.arguments as Record<string, unknown>)
+        : {};
+    const toolResult = await toolRegistry.executeForStrategy(toolName, args, requestId, toolCtx);
+    if (!toolResult.success) {
+      throw buildCapabilityError(capability, toolResult.error ?? 'mcp tool execution failed', {
+        toolName,
+      });
+    }
+    return { data: toolResult, executionPath: 'agentic_sandbox' };
+  }
+
+  // capability === 'agents'
+  const { runBoundedAgent } = await import('@/core/agents/agent-loop');
+  const { createDynamicAgentInvoker } = await import('@/core/agents/agent-model-invoker');
+  const messages = deriveMessages(body, envelope, capability).map((m) => ({
+    role: m.role as 'system' | 'user' | 'assistant' | 'tool',
+    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+  }));
+  const requestedTools = asStringArray(body.allowed_tools).filter((name) => toolRegistry.has(name));
+  const allowedTools =
+    requestedTools.length > 0
+      ? requestedTools
+      : toolRegistry.listStrategyTools().filter((t) => t.category === 'code').map((t) => t.name);
+  const run = await runBoundedAgent({
+    messages,
+    invoke: createDynamicAgentInvoker(requestId, userContext),
+    allowedTools,
+    context: toolCtx,
+  });
+  if (run.stopReason === 'disabled') {
+    throw buildCapabilityError(
+      capability,
+      'agents is disabled (set AGENTIC_AGENTS_ENABLED=true to enable)',
+      { flag: 'AGENTIC_AGENTS_ENABLED' }
+    );
+  }
+  if (run.stopReason === 'error') {
+    throw buildCapabilityError(capability, run.error ?? 'agent run failed', { runId: run.runId });
+  }
+  return {
+    data: {
+      content: run.finalContent,
+      stopReason: run.stopReason,
+      steps: run.steps,
+      runId: run.runId,
+    },
+    executionPath: 'agentic_sandbox',
   };
 }
 
@@ -896,7 +1640,12 @@ async function executeProxyMode(
   };
 }
 
-async function executeCapabilityByPlan(
+// Exported (unmodified body) for MediaPlannerStrategy's non-generation
+// action dispatch (LOTE AT, Part 2) — see the `/v1/capabilities/media-plan/
+// execute` route below, which is the only caller outside this file's own
+// dispatch handler and binds `envelope`/`request`/`requestId`/`services` via
+// closure exactly as that handler already does.
+export async function executeCapabilityByPlan(
   plan: CapabilityExecutionPlan,
   body: CapabilityRequestBody,
   envelope: CapabilityExecutionEnvelope,
@@ -904,11 +1653,15 @@ async function executeCapabilityByPlan(
   requestId: string,
   services: {
     audio: AudioOrchestrationService;
+    music: MusicOrchestrationService;
     image: ImagesOrchestrationService;
     video: VideoOrchestrationService;
+    videoUnderstanding: VideoUnderstandingService;
     search: SearchOrchestrationService;
     moderation: ModerationsOrchestrationService;
     code: CodeExecutionService;
+    vision: VisionOrchestrationService;
+    pdf: PDFService;
   }
 ): Promise<{ result: CapabilityModeResult; fallbackUsed: boolean }> {
   const attempts: Array<{ mode: CapabilityExecutionMode; reason: string }> = [];
@@ -922,14 +1675,18 @@ async function executeCapabilityByPlan(
       } else if (mode === 'native_adapter') {
         modeResult = await executeNativeAdapterMode(plan.id, body, envelope, request, requestId, {
           audio: services.audio,
+          music: services.music,
           image: services.image,
           video: services.video,
+          videoUnderstanding: services.videoUnderstanding,
           search: services.search,
           moderation: services.moderation,
+          vision: services.vision,
         });
       } else if (mode === 'tool_pipeline') {
         modeResult = await executeToolPipelineMode(plan.id, body, envelope, request, requestId, {
           search: services.search,
+          pdf: services.pdf,
         });
       } else if (mode === 'sandbox_workflow') {
         modeResult = await executeSandboxWorkflowMode(
@@ -940,6 +1697,8 @@ async function executeCapabilityByPlan(
           requestId,
           services.code
         );
+      } else if (mode === 'agentic_sandbox') {
+        modeResult = await executeAgenticSandboxMode(plan.id, body, envelope, request, requestId);
       } else {
         modeResult = await executeOrchestrationMode(plan.id, body, envelope, request);
       }
@@ -974,11 +1733,16 @@ async function executeCapabilityByPlan(
 
 export async function registerCapabilitiesRoutes(server: FastifyInstance): Promise<void> {
   const audioService = new AudioOrchestrationService();
+  const musicService = new MusicOrchestrationService();
   const imageService = new ImagesOrchestrationService();
   const videoService = new VideoOrchestrationService();
+  const videoUnderstandingService = new VideoUnderstandingService();
   const searchService = new SearchOrchestrationService();
   const moderationService = new ModerationsOrchestrationService();
   const codeExecutionService = new CodeExecutionService();
+  // LOTE AP: vision family (vision / captioning / VQA) and PDF understanding.
+  const visionService = getVisionOrchestrationService();
+  const pdfService = new PDFService();
 
   server.post<{ Params: { capability: string }; Body: CapabilityRequestBody }>(
     '/v1/capabilities/:capability/execute',
@@ -1036,11 +1800,21 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
           } satisfies CapabilityExecutionPlan);
 
         if (!dynamicPlan.supportsExecute) {
+          // As of ADR-024/LOTE AV, `computer_use`/`agents`/`mcp` all declare
+          // `supportsExecute: true` (they have a real executor,
+          // `executeAgenticSandboxMode`, gated per-capability by their own
+          // default-off flag) and so never reach this branch. What remains
+          // here is capabilities that are stream-only BY DESIGN — a
+          // bidirectional audio session is a WebSocket, not a POST — and have
+          // a working endpoint to point at instead.
           throw buildCapabilityError(
             dynamicPlan.id,
             `Capability ${dynamicPlan.id} does not support execute mode`,
             {
               support: { execute: dynamicPlan.supportsExecute, stream: dynamicPlan.supportsStream },
+              ...(REALTIME_STREAM_ONLY.has(dynamicPlan.id)
+                ? { requiredEndpoint: '/v1/realtime' }
+                : {}),
             }
           );
         }
@@ -1049,11 +1823,15 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
           () =>
             executeCapabilityByPlan(dynamicPlan, body, envelope, request, requestId, {
               audio: audioService,
+              music: musicService,
               image: imageService,
               video: videoService,
+              videoUnderstanding: videoUnderstandingService,
               search: searchService,
               moderation: moderationService,
               code: codeExecutionService,
+              vision: visionService,
+              pdf: pdfService,
             }),
           {
             operationName: `POST /v1/capabilities/${dynamicPlan.id}/execute`,
@@ -1325,7 +2103,20 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
 
       const executeSupported = definition?.supportsExecute ?? true;
       const streamSupported = definition?.supportsStream ?? false;
-      const operational = executeSupported ? runnableCount > 0 : streamSupported;
+
+      // Model inventory is only PART of the truth for the capabilities whose
+      // execution also needs a host binary or a specific provider feature. A
+      // report of "N runnable models" while ffmpeg is absent, or while no
+      // adapter declares a native diarizer, would be a health check that
+      // cannot fail for the reason the capability actually fails.
+      const runtimeDependencies = await resolveRuntimeDependencies(
+        (definition?.id ?? capability) as ModelCapability,
+        videoUnderstandingService
+      );
+      const runtimeBlocked = runtimeDependencies.some((entry) => entry.satisfied === false);
+
+      const operational =
+        !runtimeBlocked && (executeSupported ? runnableCount > 0 : streamSupported);
 
       return reply.send({
         capability,
@@ -1334,6 +2125,7 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         maturity: definition?.maturity ?? 'stable',
         executionPath: definition?.executionPath ?? ['orchestration'],
         requiredCapabilities: requiredCaps,
+        runtimeDependencies,
         support: {
           execute: executeSupported,
           stream: streamSupported,
@@ -1382,6 +2174,108 @@ export async function registerCapabilitiesRoutes(server: FastifyInstance): Promi
         object: 'list',
         data: capabilities,
       });
+    }
+  );
+
+  // LOTE AT (Part 2) — MediaPlannerStrategy entry point. The ENTIRE pathway
+  // is behind `config.mediaPlanner.enabled` (MEDIA_PLANNER_ENABLED, default
+  // false) checked at the earliest possible point via
+  // `resolveMediaPlanRouting` — with the flag off, this handler always
+  // responds `media_planner_not_applicable` without running the heuristic
+  // text-scan or touching `MediaPlannerStrategy` at all, so this new route
+  // existing changes nothing about the routes above it.
+  server.post<{ Body: { messages?: ChatMessage[]; prompt?: string; model?: string } }>(
+    '/v1/capabilities/media-plan/execute',
+    {
+      schema: {
+        tags: ['Capabilities'],
+        description:
+          'LOTE AT (Part 2, gated behind MEDIA_PLANNER_ENABLED, default off): agentic media-composition planner. A cheap heuristic (no LLM call) decides whether a request is multi-capability or attribute-constrained enough to warrant the bounded planner loop; most requests are refused with media_planner_not_applicable rather than executed here — see the direct `/v1/capabilities/:capability/execute` route for the normal single-capability path.',
+      },
+      preHandler: [
+        authenticateRequest,
+        rejectAnonymousGuestKeyPreHandler,
+        rejectChatFreeTierKeyPreHandler,
+        requireTenantContext(),
+      ],
+    },
+    async (request, reply) => {
+      const requestId = request.id;
+      const body = request.body || {};
+      const messages: ChatMessage[] =
+        body.messages && body.messages.length > 0
+          ? body.messages
+          : body.prompt
+            ? [{ role: 'user', content: body.prompt }]
+            : [];
+
+      if (messages.length === 0) {
+        return reply.code(422).send({
+          error: {
+            code: 'invalid_request',
+            type: 'capability_error',
+            message: '"messages" (chat-shaped array) or "prompt" (string) is required',
+          },
+        });
+      }
+
+      const chatRequest: ChatRequest = { model: body.model ?? 'auto', messages };
+      const models = await getAllCatalogModels();
+      const orchestrationContext = createOrchestrationContext(request, {
+        models,
+        semanticQuery: extractSemanticQueryFromMessages(messages),
+      });
+
+      const gate = resolveMediaPlanRouting(chatRequest, orchestrationContext, config.mediaPlanner.enabled);
+      if (!gate.route) {
+        return reply.code(422).send({
+          error: {
+            code: 'media_planner_not_applicable',
+            type: 'capability_error',
+            message: config.mediaPlanner.enabled
+              ? `Request does not meet the media-planner routing heuristic: ${gate.reason}`
+              : 'MEDIA_PLANNER_ENABLED is false',
+            details: { reason: gate.reason, detectedCapabilities: gate.detectedCapabilities },
+          },
+        });
+      }
+
+      const envelope = parseEnvelope(body as CapabilityRequestBody);
+      const strategy = new MediaPlannerStrategy({
+        capabilityDispatcher: (plan, capabilityBody) =>
+          executeCapabilityByPlan(plan, capabilityBody, envelope, request, requestId, {
+            audio: audioService,
+            music: musicService,
+            image: imageService,
+            video: videoService,
+            videoUnderstanding: videoUnderstandingService,
+            search: searchService,
+            moderation: moderationService,
+            code: codeExecutionService,
+            vision: visionService,
+            pdf: pdfService,
+          }),
+        // `mediaConsensusExecutor`: LOTE AT Part 1 (media-consensus-strategy)
+        // merged 2026-09-06 (PR #443), so `generate` actions now really
+        // generate N candidates via the same video/image services this
+        // route already constructs above, instead of degrading to an
+        // `unmetConstraints` entry. Critics are intentionally NOT wired yet
+        // (empty array) — MediaJudgeEvaluator needs a real judge-model
+        // client injected, which is a separate piece of work; with zero
+        // critics, reconcileCriticResults() degrades to
+        // scoringMode:'unavailable'/verdict:'uncertain' and
+        // pickBestCandidate() deterministically picks the first
+        // gate-passing candidate (see media-consensus-strategy.ts's own
+        // documented degrade path) — a real generation path, just without
+        // critic-based ranking yet.
+        mediaConsensusExecutor: new MediaConsensusStrategy({
+          videoService,
+          imagesService: imageService,
+        }),
+      });
+
+      const result = await strategy.execute(chatRequest, orchestrationContext);
+      return reply.send(result);
     }
   );
 

@@ -184,14 +184,18 @@ export class MistralModelFetcher extends BaseProviderModelFetcher {
     // JSON mode support
     capabilities.push('json_mode');
 
-    // Large models have enhanced reasoning
+    // Large models have enhanced reasoning. NOTE: `code_generation` (this
+    // model writes/understands code well), NOT `code_interpreter` (a REAL,
+    // provider-declared server-side sandbox/execution tool — Mistral
+    // declares no such parameter; see alibaba-model-fetcher.ts's identical
+    // fix for the full incident writeup, 2026-09).
     if (modelId.includes('large') || modelId.includes('codestral')) {
-      capabilities.push('reasoning', 'code_interpreter');
+      capabilities.push('reasoning', 'code_generation');
     }
 
     // Codestral models are specialized for coding
     if (modelId.includes('codestral')) {
-      capabilities.push('code_interpreter', 'text_generation');
+      capabilities.push('code_generation', 'text_generation');
     }
 
     return Array.from(new Set(capabilities));

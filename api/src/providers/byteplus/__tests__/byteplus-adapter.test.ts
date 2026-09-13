@@ -434,6 +434,70 @@ describe('BytePlusModelArkAdapter — chatCompletion request shape', () => {
     }
   });
 
+  it('enables thinking AND forwards the canonical top-level reasoning_effort, with no explicit thinking_budget', async () => {
+    // Regression test: previously `wantsReasoning()` only checked the raw
+    // `thinking_budget` field, so a caller using the SAME canonical
+    // `reasoning_effort` field every other provider adapter reads (OpenAI,
+    // xAI, Anthropic, Google — see @/utils/reasoning-effort) got `thinking:
+    // {type: 'disabled'}` and no `reasoning_effort` forwarded at all: the
+    // request was silently a complete no-op on BytePlus models.
+    const restore = stubJson(chatFixture());
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'seed-2-0-lite-260228',
+        messages: [{ role: 'user', content: 'Hi' }],
+        reasoning_effort: 'high',
+      });
+      expect(calls[0].body.thinking).toEqual({ type: 'enabled' });
+      expect(calls[0].body.reasoning_effort).toBe('high');
+      // The resolved per-tier budget (16384 for 'high') feeds into the
+      // combined answer+CoT cap, not just the (absent) raw thinking_budget.
+      expect(calls[0].body.max_completion_tokens).toBe(4096 + 16384);
+    } finally {
+      restore();
+    }
+  });
+
+  it('lets the BytePlus-only metadata.reasoning_effort tier win over the canonical field when both are set', async () => {
+    const restore = stubJson(chatFixture());
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'seed-2-0-lite-260228',
+        messages: [{ role: 'user', content: 'Hi' }],
+        reasoning_effort: 'high',
+        metadata: { reasoning_effort: 'xhigh' },
+      });
+      // metadata's finer-grained, provider-specific tier is the MORE
+      // specific request — it wins, matching thinking_budget's precedence
+      // over reasoning_effort elsewhere in the resolver.
+      expect(calls[0].body.reasoning_effort).toBe('xhigh');
+    } finally {
+      restore();
+    }
+  });
+
+  it('enables thinking with the medium default when only ailin_constraints.enable_reasoning is set', async () => {
+    const restore = stubJson(chatFixture());
+    try {
+      const adapter = makeAdapter();
+      await adapter.chatCompletion({
+        model: 'seed-2-0-lite-260228',
+        messages: [{ role: 'user', content: 'Hi' }],
+        ailin_constraints: { enable_reasoning: true },
+      });
+      expect(calls[0].body.thinking).toEqual({ type: 'enabled' });
+      // resolveReasoningEffort's Rule 3 grades a bare boolean opt-in as
+      // 'medium' (the same tier base-strategy.ts's native-thinking path and
+      // every other provider adapter fall back to for this exact signal).
+      expect(calls[0].body.reasoning_effort).toBe('medium');
+      expect(calls[0].body.max_completion_tokens).toBe(4096 + 4096);
+    } finally {
+      restore();
+    }
+  });
+
   it('omits top_p entirely when unset, so ModelArk’s own 0.7 default is not silently re-anchored', async () => {
     const restore = stubJson(chatFixture());
     try {
@@ -1932,6 +1996,77 @@ describe('BytePlusModelArkAdapter — videoGenerate', () => {
         { id: 'cgt-1', url: 'https://x/o.mp4' },
         { id: 'cgt-1:last_frame', url: 'https://x/last.png' },
       ]);
+    } finally {
+      restore();
+    }
+  });
+});
+
+// ─── Bug 2 fix (2026-09-08): orchestrationDeadlineAt bounds the poll loop ──
+//
+// Found live on empiriolabs/wan-3-0 (a different adapter, same architectural
+// gap): a per-candidate poll budget independent of the cross-provider
+// fallback search's OVERALL deadline let a single hanging candidate consume
+// 10x the search's declared budget, starving every other candidate in the
+// pool. BytePlus's own default poll budget is 600000ms — even larger than
+// empiriolabs' 300000ms — so it carries the exact same risk.
+// `options.orchestrationDeadlineAt` (threaded from video-orchestration-
+// service.ts's `execute` hook) now bounds `submitAndPollGenerationTask` by
+// whichever of the two deadlines is sooner.
+describe('BytePlusModelArkAdapter — videoGenerate honors orchestrationDeadlineAt (Bug 2 fix)', () => {
+  const pollEnv = {
+    BYTEPLUS_VIDEO_POLL_INTERVAL_MS: process.env.BYTEPLUS_VIDEO_POLL_INTERVAL_MS,
+    BYTEPLUS_VIDEO_POLL_MAX_INTERVAL_MS: process.env.BYTEPLUS_VIDEO_POLL_MAX_INTERVAL_MS,
+  };
+  beforeEach(() => {
+    process.env.BYTEPLUS_VIDEO_POLL_INTERVAL_MS = '1';
+    process.env.BYTEPLUS_VIDEO_POLL_MAX_INTERVAL_MS = '2';
+    // BYTEPLUS_VIDEO_POLL_TIMEOUT_MS deliberately left UNSET (600000ms
+    // default) so these tests prove the ORCHESTRATION deadline — not the
+    // adapter's own budget — is what cuts a hanging task short.
+  });
+  afterEach(() => {
+    for (const [k, v] of Object.entries(pollEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it('cuts a hanging task short at options.orchestrationDeadlineAt instead of running its own ~600000ms budget', async () => {
+    const restore = stubSequence([
+      { body: { id: 'cgt-hang' } },
+      // Every subsequent poll comes back non-terminal ("running") —
+      // stubSequence repeats the last entry — a permanently hanging task.
+      { body: { id: 'cgt-hang', status: 'running' } },
+    ]);
+    try {
+      const start = Date.now();
+      await expect(
+        makeAdapter().videoGenerate(model('dreamina-seedance-2-0-260128'), {
+          prompt: 'x',
+          options: { orchestrationDeadlineAt: Date.now() + 50 },
+        })
+      ).rejects.toThrow(/cut short by the overall fallback search deadline/);
+      // Cut off close to the 50ms orchestration deadline, nowhere near the
+      // ~600000ms own poll budget.
+      expect(Date.now() - start).toBeLessThan(5000);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not shorten the poll loop when orchestrationDeadlineAt is far in the future — the normal success path is unaffected', async () => {
+    const restore = stubSequence([
+      { body: { id: 'cgt-ok' } },
+      { body: { id: 'cgt-ok', status: 'running' } },
+      { body: { id: 'cgt-ok', status: 'succeeded', content: { video_url: 'https://x/ok.mp4' } } },
+    ]);
+    try {
+      const res = await makeAdapter().videoGenerate(model('dreamina-seedance-2-0-260128'), {
+        prompt: 'x',
+        options: { orchestrationDeadlineAt: Date.now() + 3_600_000 },
+      });
+      expect(res.video).toEqual([{ id: 'cgt-ok', url: 'https://x/ok.mp4' }]);
     } finally {
       restore();
     }

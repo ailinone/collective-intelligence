@@ -15,6 +15,7 @@
  */
 
 import { mirrorLanguageFromSample } from '../prompts/language-directive';
+import { sanitizeForPromptContext } from '@/core/coordination/collective-prompt-safety';
 
 export const OBSERVER_PROMPTS = {
   /**
@@ -52,7 +53,7 @@ Rules:
     userSample?: string,
     brief?: boolean
   ) => {
-    const parts: string[] = [`Event type: ${event.type}`];
+    const parts: string[] = [`Event type: ${sanitizeForPromptContext(event.type, 80)}`];
 
     if (event.models?.length) {
       parts.push(`Participants: ${event.models.length} analysts`);
@@ -61,10 +62,14 @@ Rules:
       parts.push(`Round: ${event.round}/${event.totalRounds}`);
     }
     if (event.summary) {
-      parts.push(`Details: ${event.summary}`);
+      // F-05: summaries can carry model/user-derived text — sanitize so they
+      // cannot inject narrator instructions.
+      parts.push(`Details: ${sanitizeForPromptContext(event.summary)}`);
     }
     if (event.reasoning) {
-      parts.push(`Participant reasoning excerpt: ${event.reasoning.substring(0, 500)}`);
+      parts.push(
+        `Participant reasoning excerpt: ${sanitizeForPromptContext(event.reasoning.substring(0, 500))}`
+      );
     }
 
     const eventText = parts.join('\n');

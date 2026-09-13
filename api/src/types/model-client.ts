@@ -89,6 +89,19 @@ export interface VideoGenRequest {
   duration?: number;
   aspectRatio?: string;
   size?: string;
+  /**
+   * Open bag for adapter-specific fields with no dedicated typed slot above.
+   * LOTE AS (2026-09-06): `video-orchestration-service.ts#generateVideo`
+   * mirrors duration/aspectRatio/size/audio/video into this bag too (using
+   * each adapter's own key convention, e.g. RunwayML's `ratio` vs the
+   * canonical `aspectRatio`), because some adapters (RunwayML, BytePlus,
+   * Google Veo) read their inputs from HERE, not from the typed fields above
+   * — a bag that only carried orchestration bookkeeping ({n, response_format,
+   * video}) left those reads permanently dead. New provider-specific fields
+   * with no generic equivalent (BytePlus's `resolution`/`generate_audio`,
+   * Google's `resolution`/`generateAudio`) live here rather than growing this
+   * interface further.
+   */
   options?: Record<string, unknown>;
 }
 
@@ -112,6 +125,39 @@ export interface AudioTTSRequest {
 }
 
 export interface AudioTTSResponse {
+  audio: Buffer;
+  format: string;
+  raw: unknown;
+}
+
+/**
+ * Music generation (LOTE AX, 2026-09-06) — distinct from `AudioTTSRequest`:
+ * no spoken text, an optional structured composition plan instead of a bare
+ * prompt, and a duration measured in minutes rather than a sentence. Modeled
+ * on ElevenLabs Music (`POST /v1/music`), the first (and, as of this LOTE,
+ * only) provider wired to this contract — the shape is intentionally the
+ * vendor-neutral subset every documented music API would need (prompt OR a
+ * structured plan, length, seed, instrumental-only flag), not an ElevenLabs
+ * passthrough.
+ */
+export interface MusicGenRequest {
+  /** Free-text description of the desired composition. Mutually exclusive
+   *  with `compositionPlan` in practice — a provider that requires one MUST
+   *  reject a request supplying neither. */
+  prompt?: string;
+  /** Structured, section-by-section composition plan. Vendor-shaped; passed
+   *  through opaquely by adapters that support it. */
+  compositionPlan?: Record<string, unknown>;
+  /** Desired output length in milliseconds. */
+  musicLengthMs?: number;
+  /** Force instrumental-only output (no generated vocals). */
+  forceInstrumental?: boolean;
+  /** Deterministic generation seed, when the vendor supports one. */
+  seed?: number;
+  options?: Record<string, unknown>;
+}
+
+export interface MusicGenResponse {
   audio: Buffer;
   format: string;
   raw: unknown;
@@ -161,6 +207,46 @@ export interface ModerationResponse {
     'harassment/threatening': number;
     violence: number;
   };
+  raw: unknown;
+}
+
+/**
+ * Cross-encoder DOCUMENT reranking (LOTE AP, 2026-09-05).
+ *
+ * Not to be confused with the RRF "semantic rerank" in
+ * `core/selection/dynamic-model-selector.ts`, which reorders candidate
+ * *models* inside the router. This contract reorders candidate *documents*
+ * against a query — the classic retrieval second stage.
+ *
+ * The wire shapes diverge per vendor (Voyage: `top_k` + `data[].document`
+ * as a bare string; Cohere-compatible: `top_n` + `results[].document.text`),
+ * so adapters normalize INTO this shape rather than the router learning each
+ * vendor's dialect.
+ */
+export interface RerankRequest {
+  query: string;
+  documents: readonly string[];
+  /** Truncate the ranked output to the N most relevant documents. */
+  topN?: number;
+  /** Echo the document text back on each result (costs response bytes). */
+  returnDocuments?: boolean;
+  options?: Record<string, unknown>;
+}
+
+export interface RerankResultItem {
+  /** Index into the ORIGINAL `documents` array — never a re-numbered rank. */
+  index: number;
+  /** Provider-reported relevance. Scales differ per vendor; order is what's portable. */
+  relevanceScore: number;
+  /** Present only when `returnDocuments` was requested and the vendor echoes it. */
+  document?: string;
+}
+
+export interface RerankResponse {
+  /** Sorted by descending `relevanceScore`. */
+  results: RerankResultItem[];
+  /** Tokens billed by the provider, when reported. */
+  totalTokens?: number;
   raw: unknown;
 }
 

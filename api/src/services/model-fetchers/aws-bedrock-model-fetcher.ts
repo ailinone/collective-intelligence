@@ -15,7 +15,31 @@
 
 import { BaseProviderModelFetcher, type ProviderModel } from './provider-model-fetcher';
 import type { ModelCapability } from '@/types';
+import { inferModelCapabilities } from '@/services/model-capability-inference';
 import { logger } from '@/utils/logger';
+
+/**
+ * What we know about a Bedrock model's specs from `ListFoundationModels`:
+ * nothing. The response carries modelId/modelName/providerName/modalities/
+ * inferenceTypesSupported and no context window, no max output, no pricing.
+ *
+ * This used to be filled by an `estimateModelSpecs()` keyword table that
+ * invented values (`includes('opus')` ⇒ $15/$75 per 1M and a 200k window),
+ * whose own comment records that it had ALREADY mispriced commodity
+ * open-weights models by 25-125×. Inventing a number and storing it in
+ * `models.input_cost_per_1k` is indistinguishable downstream from a real one,
+ * and the cost/selection layers read that column — so an estimate here is a
+ * silent correctness bug, not a convenience.
+ *
+ * Zero is the honest encoding of "the provider did not report this": it is
+ * exactly what `bulkUpsertModels` already substitutes for a missing `pricing`
+ * block, and the dedicated pricing fetchers are what fill the real values in.
+ */
+const UNKNOWN_SPECS = Object.freeze({
+  contextWindow: 0,
+  maxOutputTokens: 0,
+  pricing: Object.freeze({ inputCostPer1M: 0, outputCostPer1M: 0, currency: 'USD' }),
+});
 
 /**
  * AWS Bedrock Model Fetcher
@@ -131,15 +155,31 @@ export class AWSBedrockModelFetcher extends BaseProviderModelFetcher {
           : undefined;
 
       // Log auth/permission errors with global cooldown to avoid spam during discovery cycles
-      // Use global cooldown so multiple fetcher instances don't spam logs
+      // Use global cooldown so multiple fetcher instances don't spam logs.
+      //
+      // These were previously logged at `.debug()`, which is silent in
+      // production (LOG_LEVEL=info): every discovery cycle recorded
+      // `modelsDiscovered: 0` for aws-bedrock-hub with zero trace of *why*,
+      // unlike every other hub fetcher (OpenAICompatibleHubModelFetcher),
+      // which logs its failures at `.warn()`. The cooldown above already
+      // exists to prevent spam, so promoting to `.warn()` restores real
+      // operability without reintroducing log volume — and each branch now
+      // includes the actual error name/message instead of only a category
+      // hint, so an operator doesn't have to guess.
       const now = Date.now();
       if (now - globalAwsBedrockLastAuthErrorTime > AWS_BEDROCK_AUTH_ERROR_COOLDOWN_MS) {
         if (errorName === 'CredentialsProviderError' || errorMessage.includes('credentials')) {
-          this.log.debug('AWS Bedrock authentication failed - check credentials');
+          this.log.warn(
+            { errorName, error: errorMessage },
+            'AWS Bedrock authentication failed - check credentials'
+          );
         } else if (errorName === 'AccessDeniedException') {
-          this.log.debug('AWS Bedrock access denied - check IAM permissions');
+          this.log.warn(
+            { errorName, error: errorMessage },
+            'AWS Bedrock access denied - check IAM permissions'
+          );
         } else {
-          this.log.debug({ error: errorMessage }, 'Failed to fetch models from AWS Bedrock');
+          this.log.warn({ errorName, error: errorMessage }, 'Failed to fetch models from AWS Bedrock');
         }
         globalAwsBedrockLastAuthErrorTime = now;
       }
@@ -158,8 +198,7 @@ export class AWSBedrockModelFetcher extends BaseProviderModelFetcher {
     inferenceTypesSupported?: string[];
   }): ProviderModel {
     const modelId = bedrockModel.modelId || 'unknown';
-    const capabilities = this.extractCapabilitiesFromBedrock(modelId);
-    const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(modelId);
+    const capabilities = this.resolveCapabilities(bedrockModel, modelId);
 
     const metadata = {
       endpoint: this.determineEndpoint({ capabilities, metadata: {} } as ProviderModel),
@@ -178,17 +217,53 @@ export class AWSBedrockModelFetcher extends BaseProviderModelFetcher {
       id: modelId,
       name: modelId,
       displayName: bedrockModel.modelName || this.formatDisplayName(modelId),
-      contextWindow,
-      maxOutputTokens,
+      // ListFoundationModels returns NEITHER a context window NOR pricing. See
+      // `UNKNOWN_SPECS` — zeros mean "not reported", and the pipeline's own
+      // defaults / the pricing fetchers fill them in from real sources.
+      ...UNKNOWN_SPECS,
       capabilities,
-      pricing,
       metadata,
     };
   }
 
+  /**
+   * Capabilities from what the API actually reports, falling back to the id.
+   *
+   * `ListFoundationModels` returns real `inputModalities` / `outputModalities`
+   * arrays per model. Those were previously stashed in metadata and ignored,
+   * while capabilities were guessed from substrings of the model id
+   * (`includes('claude') && /\d+\.\d+/` ⇒ vision, `includes('command')` ⇒
+   * function_calling). Declared modalities are strictly better evidence, and
+   * routing them through the shared inference engine keeps the modality rules
+   * in one place instead of a Bedrock-specific copy.
+   *
+   * The id-based extraction is retained ONLY as a fallback for entries whose
+   * modality arrays are absent, and for the tool/JSON capabilities that no
+   * Bedrock field expresses.
+   */
+  private resolveCapabilities(
+    bedrockModel: { inputModalities?: string[]; outputModalities?: string[] },
+    modelId: string
+  ): ModelCapability[] {
+    const hasDeclaredModalities =
+      (bedrockModel.inputModalities?.length ?? 0) > 0 ||
+      (bedrockModel.outputModalities?.length ?? 0) > 0;
+
+    if (!hasDeclaredModalities) {
+      return this.extractCapabilitiesFromBedrock(modelId);
+    }
+
+    return inferModelCapabilities({
+      modelId,
+      metadata: {
+        inputModalities: bedrockModel.inputModalities,
+        outputModalities: bedrockModel.outputModalities,
+      },
+    });
+  }
+
   private async createProviderModel(modelId: string): Promise<ProviderModel> {
     const capabilities = this.extractCapabilitiesFromBedrock(modelId);
-    const { contextWindow, maxOutputTokens, pricing } = this.estimateModelSpecs(modelId);
 
     const metadata = {
       endpoint: this.determineEndpoint({ capabilities, metadata: {} } as ProviderModel),
@@ -203,10 +278,8 @@ export class AWSBedrockModelFetcher extends BaseProviderModelFetcher {
       id: modelId,
       name: modelId,
       displayName: this.formatDisplayName(modelId),
-      contextWindow,
-      maxOutputTokens,
+      ...UNKNOWN_SPECS,
       capabilities,
-      pricing,
       metadata,
     };
   }
@@ -390,84 +463,5 @@ export class AWSBedrockModelFetcher extends BaseProviderModelFetcher {
       .split(' ')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-  }
-
-  /**
-   * Estimate model specifications using generic tier/keyword inference, not hardcoded model names
-   */
-  private estimateModelSpecs(modelId: string): {
-    contextWindow: number;
-    maxOutputTokens: number;
-    pricing: { inputCostPer1M: number; outputCostPer1M: number; currency?: string };
-  } {
-    const normalized = modelId.toLowerCase();
-
-    // Use generic tier/keyword patterns.
-    // Pricing values are USD per 1M tokens, written directly in the field's unit.
-    // Parameter count is deliberately NOT a flagship-pricing signal: large
-    // open-weights models on Bedrock are commodity-priced (gpt-oss-120b is
-    // $0.15/$0.60, llama-405b is $2.40/$2.40 per 1M) — pricing them like a
-    // proprietary flagship ($15/$75) once inflated them 25-125×.
-    const isFlagship = normalized.includes('premier') || normalized.includes('opus');
-    const isLargeOpenWeights = normalized.match(/\d+[0-9]{2,3}b/); // 100B+ params (405b, 120b, 175b, ...)
-    const isPremium =
-      normalized.includes('sonnet') ||
-      normalized.includes('ultra') ||
-      normalized.includes('70b') ||
-      normalized.includes('65b');
-    const isFast =
-      normalized.includes('lite') ||
-      normalized.includes('haiku') ||
-      normalized.includes('8b') ||
-      normalized.includes('7b');
-    const isStandard = normalized.includes('express') || normalized.includes('standard');
-
-    // Estimate based on generic patterns
-    if (isFlagship) {
-      return {
-        contextWindow: 200_000,
-        maxOutputTokens: 8_192,
-        pricing: { inputCostPer1M: 15.0, outputCostPer1M: 75.0, currency: 'USD' },
-      };
-    }
-
-    if (isLargeOpenWeights) {
-      return {
-        contextWindow: 128_000,
-        maxOutputTokens: 4_096,
-        pricing: { inputCostPer1M: 1.0, outputCostPer1M: 3.0, currency: 'USD' },
-      };
-    }
-
-    if (isPremium) {
-      return {
-        contextWindow: 200_000,
-        maxOutputTokens: 4_096,
-        pricing: { inputCostPer1M: 3.0, outputCostPer1M: 15.0, currency: 'USD' },
-      };
-    }
-
-    if (isFast) {
-      return {
-        contextWindow: 128_000,
-        maxOutputTokens: 4_096,
-        pricing: { inputCostPer1M: 0.25, outputCostPer1M: 1.25, currency: 'USD' },
-      };
-    }
-
-    if (isStandard) {
-      return {
-        contextWindow: 128_000,
-        maxOutputTokens: 3_072,
-        pricing: { inputCostPer1M: 0.8, outputCostPer1M: 2.4, currency: 'USD' },
-      };
-    }
-
-    // Default specs - conservative estimates that work for any model
-    return {
-      contextWindow: 128_000,
-      maxOutputTokens: 4_096,
-      pricing: { inputCostPer1M: 1.0, outputCostPer1M: 2.0, currency: 'USD' },
-    };
   }
 }

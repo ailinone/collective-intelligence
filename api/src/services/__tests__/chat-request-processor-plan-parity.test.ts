@@ -49,68 +49,65 @@ const ORIG_ENV = { ...process.env };
 beforeEach(() => {
   PROVIDER_CALL_SENTINEL.mockClear();
   globalThis.fetch = PROVIDER_CALL_SENTINEL as unknown as typeof globalThis.fetch;
-  // Mock the model repository so the dry-run gate has a usable pool.
-  vi.doMock('@/services/model-repository', () => ({
-    getModelRepository: () => ({
-      searchModels: async (criteria: { limit?: number }) => {
-        const judgeEligibleStub = {
-          id: 'fixture-judge',
-          provider: 'fixture-prov-judge',
-          providerId: 'fixture-prov-judge',
-          name: 'fixture-judge',
-          capabilities: [
-            'chat',
-            'text_generation',
-            'json_mode',
-            'function_calling',
-            'instruction_following',
-          ],
-          contextWindow: 64_000,
-          maxOutputTokens: 4096,
-          inputCostPer1k: 0.0001,
-          outputCostPer1k: 0.0003,
-          performance: { latencyMs: 500, throughput: 100, quality: 0.9, reliability: 0.95 },
-          status: 'active',
-          balanceStatus: 'has-credits',
-        };
-        const synthEligibleStub = {
-          id: 'fixture-synth',
-          provider: 'fixture-prov-synth',
-          providerId: 'fixture-prov-synth',
-          name: 'fixture-synth',
-          capabilities: ['chat', 'text_generation', 'instruction_following', 'reasoning'],
-          contextWindow: 128_000,
-          maxOutputTokens: 4096,
-          inputCostPer1k: 0.001,
-          outputCostPer1k: 0.003,
-          performance: { latencyMs: 1500, throughput: 100, quality: 0.92, reliability: 0.95 },
-          status: 'active',
-          balanceStatus: 'has-credits',
-        };
-        const participantStub = (id: string, providerId: string) => ({
-          id,
-          provider: providerId,
-          providerId,
-          name: id,
-          capabilities: ['chat', 'text_generation'],
-          contextWindow: 8000,
-          maxOutputTokens: 4096,
-          inputCostPer1k: 0.0005,
-          outputCostPer1k: 0.0015,
-          performance: { latencyMs: 800, throughput: 80, quality: 0.85, reliability: 0.92 },
-          status: 'active',
-          balanceStatus: 'has-credits',
-        });
-        const out = [
-          participantStub('p-a', 'prov-a'),
-          participantStub('p-b', 'prov-b'),
-          participantStub('p-c', 'prov-c'),
-          judgeEligibleStub,
-          synthEligibleStub,
-        ];
-        return out.slice(0, criteria.limit ?? out.length);
-      },
-    }),
+  // Mock the catalog cache so the dry-run gate has a usable pool.
+  vi.doMock('@/services/model-catalog-service', () => ({
+    getAllCatalogModels: async () => {
+      const judgeEligibleStub = {
+        id: 'fixture-judge',
+        provider: 'fixture-prov-judge',
+        providerId: 'fixture-prov-judge',
+        name: 'fixture-judge',
+        capabilities: [
+          'chat',
+          'text_generation',
+          'json_mode',
+          'function_calling',
+          'instruction_following',
+        ],
+        contextWindow: 64_000,
+        maxOutputTokens: 4096,
+        inputCostPer1k: 0.0001,
+        outputCostPer1k: 0.0003,
+        performance: { latencyMs: 500, throughput: 100, quality: 0.9, reliability: 0.95 },
+        status: 'active',
+        balanceStatus: 'has-credits',
+      };
+      const synthEligibleStub = {
+        id: 'fixture-synth',
+        provider: 'fixture-prov-synth',
+        providerId: 'fixture-prov-synth',
+        name: 'fixture-synth',
+        capabilities: ['chat', 'text_generation', 'instruction_following', 'reasoning'],
+        contextWindow: 128_000,
+        maxOutputTokens: 4096,
+        inputCostPer1k: 0.001,
+        outputCostPer1k: 0.003,
+        performance: { latencyMs: 1500, throughput: 100, quality: 0.92, reliability: 0.95 },
+        status: 'active',
+        balanceStatus: 'has-credits',
+      };
+      const participantStub = (id: string, providerId: string) => ({
+        id,
+        provider: providerId,
+        providerId,
+        name: id,
+        capabilities: ['chat', 'text_generation'],
+        contextWindow: 8000,
+        maxOutputTokens: 4096,
+        inputCostPer1k: 0.0005,
+        outputCostPer1k: 0.0015,
+        performance: { latencyMs: 800, throughput: 80, quality: 0.85, reliability: 0.92 },
+        status: 'active',
+        balanceStatus: 'has-credits',
+      });
+      return [
+        participantStub('p-a', 'prov-a'),
+        participantStub('p-b', 'prov-b'),
+        participantStub('p-c', 'prov-c'),
+        judgeEligibleStub,
+        synthEligibleStub,
+      ];
+    },
   }));
 });
 
@@ -120,7 +117,7 @@ afterEach(() => {
     if (!(k in ORIG_ENV)) delete process.env[k];
   }
   Object.assign(process.env, ORIG_ENV);
-  vi.doUnmock('@/services/model-repository');
+  vi.doUnmock('@/services/model-catalog-service');
 });
 
 const baseChatRequest: ChatRequest = {

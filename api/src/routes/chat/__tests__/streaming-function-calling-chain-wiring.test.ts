@@ -26,6 +26,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { classifyEmptyToolsFallbackChain } from '../chat-routes';
 
 const ROUTES_PATH = join(__dirname, '..', 'chat-routes.ts');
 const ENGINE_PATH = join(
@@ -40,6 +41,20 @@ const ENGINE_PATH = join(
 
 const routesSource = readFileSync(ROUTES_PATH, 'utf8');
 const engineSource = readFileSync(ENGINE_PATH, 'utf8');
+
+describe('classifyEmptyToolsFallbackChain (pure predicate, 2026-09-08 fail-closed fix)', () => {
+  it('is "unsatisfiable" when at least one candidate was explicitly rejected for lacking function_calling', () => {
+    expect(classifyEmptyToolsFallbackChain(1, 5)).toBe('unsatisfiable');
+  });
+
+  it('is "unsatisfiable" when there were no fallback candidates to examine at all', () => {
+    expect(classifyEmptyToolsFallbackChain(0, 0)).toBe('unsatisfiable');
+  });
+
+  it('is "exhausted" when every fallback existed and declared function_calling but all were dead', () => {
+    expect(classifyEmptyToolsFallbackChain(0, 5)).toBe('exhausted');
+  });
+});
 
 describe('function-calling routing wiring contract (streaming fast path)', () => {
   it('derives toolsRequired from the request tools via the shared guard', () => {
@@ -68,18 +83,29 @@ describe('function-calling routing wiring contract (streaming fast path)', () =>
     );
   });
 
-  it('never empties the fallback chain — primary is the last-resort safety net', () => {
-    expect(routesSource).toMatch(
-      /falling back to primary as last resort/
-    );
+  it('FAILS CLOSED instead of silently demoting to the already-rejected primary (2026-09-08 fix)', () => {
+    // The old escape hatch silently re-pushed `plan.model` — the SAME
+    // primary this code had just proven, moments earlier, to explicitly
+    // lack function_calling — with only a `warn` log. That text must be
+    // gone: a tools request with zero live FC-capable candidates must now
+    // throw a classified error instead of degrading silently.
+    expect(routesSource).not.toMatch(/falling back to primary as last resort/);
+    expect(routesSource).toMatch(/classifyEmptyToolsFallbackChain\(/);
+    expect(routesSource).toMatch(/throw new NoFallbackCandidateError\('function_calling'\)/);
+    expect(routesSource).toMatch(/throw new FallbackExhaustedError\('function_calling'/);
   });
 
   it('dead-candidate skip still protects the primary slot (primaryPushed guard)', () => {
     // When the primary was demoted, the dead-skip must still be allowed to
     // reject the first fallback without instantly emptying the chain (the
     // post-loop safety net covers the all-rejected case).
+    // NOTE: the guard is prettier-wrapped over four lines in chat-routes.ts,
+    // so the pattern must tolerate whitespace between `if (` and the inner
+    // `(`. Without the `\s*` this asserted a single-line shape that the file
+    // has not had since it was reformatted — never caught because no CI step
+    // ran src/routes/**/__tests__ before 2026-09-05.
     expect(routesSource).toMatch(
-      /if\s*\(\(primaryPushed\s*\|\|\s*candidates\.length\s*>\s*0\)\s*&&\s*isDeadCandidate\(/
+      /if\s*\(\s*\(primaryPushed\s*\|\|\s*candidates\.length\s*>\s*0\)\s*&&\s*isDeadCandidate\(/
     );
   });
 });
@@ -103,7 +129,9 @@ describe('streaming chain liveness wiring contract (2026-08-21, request k0QPvOU6
     // before each attempt and skip (without burning the attempt) providers
     // that turned dead since the chain was built.
     expect(routesSource).toMatch(
-      /if\s*\(index\s*>\s*0\s*&&\s*isDeadCandidate\(candidate\.adapter\.getName\(\)/
+      // Same prettier-wrap tolerance as the guard assertion above: the `if (`
+      // and its first condition sit on separate lines in chat-routes.ts.
+      /if\s*\(\s*index\s*>\s*0\s*&&\s*isDeadCandidate\(candidate\.adapter\.getName\(\)/
     );
     expect(routesSource).toMatch(/Candidate provider died mid-chain/);
   });

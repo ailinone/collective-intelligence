@@ -234,14 +234,16 @@ describe('R12 — TriageResponseSchema strict validation', () => {
 });
 
 describe('R1 + R11 — buildExecutionSystemPrompt precedence and collective flag', () => {
-  it('returns null when a system message already exists (preserves user/triage prompt)', () => {
+  it('STILL grounds the model when a system message already exists (2026-09-08 fix: this used to return null and drop identity/guardrails/manifest entirely — see execution-system-prompt-hassystemmessage.test.ts)', () => {
     const req = makeRequest({
       messages: [
         { role: 'system', content: 'user-provided system' },
         { role: 'user', content: 'hi' },
       ] as ChatRequest['messages'],
     });
-    expect(buildExecutionSystemPrompt(req, makeContext())).toBeNull();
+    const out = buildExecutionSystemPrompt(req, makeContext());
+    expect(out).not.toBeNull();
+    expect(out).toContain('Ailin¹');
   });
 
   it('emits collective framing iff context.isCollectiveStrategy is true (R11)', () => {

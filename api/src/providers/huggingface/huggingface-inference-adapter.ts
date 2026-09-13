@@ -44,6 +44,7 @@ import {
   type OpenAICompatibleHubAdapterConfig,
 } from '../openai-compatible-hub/openai-compatible-hub-adapter';
 import type { ChatRequest, ChatResponse } from '@/types';
+import { isReasoningEffort } from '@/utils/reasoning-effort';
 import { logger } from '@/utils/logger';
 
 export type HuggingFaceInferenceAdapterConfig = OpenAICompatibleHubAdapterConfig;
@@ -145,5 +146,27 @@ export class HuggingFaceInferenceAdapter extends OpenAICompatibleHubAdapter {
       }
     }
     return super.normalizeModelName(modelId);
+  }
+
+  /**
+   * Forwards our public `reasoning_effort` (`'low'|'medium'|'high'`) to HF's
+   * OWN documented `reasoning_effort` chat-completion parameter (chat-
+   * completion.md: "Constrains effort on reasoning... Common values: none,
+   * minimal, low, medium, high, xhigh"; responses-api.md: "Pass
+   * reasoning={'effort': ...} to trade off latency and depth"). Without this
+   * override, the shared base class only ever sends `thinking_budget` (an
+   * internal numeric knob HF's contract does not document or recognize) — the
+   * one control HF's own reasoning-model guides (DeepSeek-R1, Qwen3-Thinking,
+   * gpt-oss) call out as the way to trade off latency and depth never reached
+   * the wire. Mirrors the established `getExtraChatPayloadFields` pattern
+   * already used by the Groq adapter for the same field.
+   */
+  protected override getExtraChatPayloadFields(
+    _resolvedModel: string,
+    request: ChatRequest
+  ): Record<string, unknown> {
+    return isReasoningEffort(request.reasoning_effort)
+      ? { reasoning_effort: request.reasoning_effort }
+      : {};
   }
 }

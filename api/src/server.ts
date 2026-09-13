@@ -580,11 +580,18 @@ export async function createServer(): Promise<FastifyInstance> {
   server.addHook('preHandler', validateNonce);
   logger.info('âœ… Nonce validation enabled (replay attack protection)');
 
-  // API Key Rate Limiting (P2 Security Fix - T7 Replay Attack)
-  // Enforces rate limits per API key based on organization tier
-  const { enforceApiKeyRateLimit } = await import('./middleware/api-key-rate-limit-middleware.js');
-  server.addHook('preHandler', enforceApiKeyRateLimit);
-  logger.info('âœ… API key rate limiting enabled (per-key sliding window)');
+  // NOTE: API key rate limiting (enforceApiKeyRateLimit) is intentionally NOT
+  // registered here. It reads `request.apiKey`, which is populated by
+  // `apiKeyAuthMiddleware` — registered in index.ts's bootstrap, AFTER this
+  // function returns. Every preHandler added inside createServer() runs
+  // before every preHandler added by the caller once this function returns,
+  // so registering it here made it a permanent no-op in production (it always
+  // hit the `if (!extendedRequest.apiKey?.id) return;` early-return at the
+  // top of enforceApiKeyRateLimit — see that function's own "Should be called
+  // AFTER api-key-auth-middleware" doc comment). It is registered in index.ts
+  // instead, right after apiKeyAuthMiddleware, matching where
+  // tokenBucketMiddleware is already correctly registered for the same
+  // reason. Do NOT move it back here.
 
   // ==========================================
   // Health Check Routes

@@ -62,10 +62,22 @@ export type AssertionSource =
   | 'name-regex'
   | 'llm-extracted'
   | 'operator-override'
-  | 'hierarchy-inherited';
+  | 'hierarchy-inherited'
+  | 'runtime-probe';
 
 export const SOURCE_WEIGHT: Readonly<Record<AssertionSource, number>> = Object.freeze({
   'operator-override': 1.0, // Human review — by definition trusted
+  // GAP-A13 (2026-09-05). Above provider-declared because it is an OBSERVATION,
+  // not a claim: the provider accepted a real request carrying a real tool
+  // definition. Below operator-override because the probe infers a verdict from
+  // an error-string taxonomy and can be fooled by an unfamiliar error shape
+  // (it returns `null`/inconclusive in that case, but the taxonomy is still a
+  // heuristic). This is the promotion path GAP-A13 asked for: an empirically
+  // confirmed capability clears INCLUSION_THRESHOLD on its own and therefore
+  // enters `capability_uris`, which is what the selector's fail-closed hard
+  // filter reads — without the unreliable catalog `tools` flag ever being
+  // trusted.
+  'runtime-probe': 0.98,
   'provider-declared': 0.95, // Provider says so — gold but can be stale
   'helicone-oracle': 0.85, // Cross-checked but indirect
   'modality-derived': 0.75, // Strong but inferred from architecture fields
@@ -377,6 +389,18 @@ async function writeProjection(
     return;
   }
 
+  // `f.uri` is the FULL canonical URI as stored in `model_capability_assertions.
+  // capability_uri` (e.g. `http://ailin.dev/cap/v1/analysis`) — never the bare
+  // legacy slug. `models.capability_uris` is written verbatim in that form, so
+  // every reader (the selector's fail-closed hard-capability filter via
+  // `legacyArrayToUriArray`, CapabilitySearchService's `@> $n::text[]`) and
+  // every ad-hoc verification query MUST compare against the full URI
+  // (`legacyToUri('analysis')`), not the bare slug — `'analysis' = ANY(capability_uris)`
+  // will read as empty even when the projection is fully populated and
+  // healthy (2026-09-07 audit: confirmed via `fuseAssertions`/`writeProjection`
+  // regression tests that a real `modality-derived` assertion always clears
+  // INCLUSION_THRESHOLD and is written here — the bare-slug check was the
+  // false signal, not a fusion defect).
   const uris = kept.map((f) => f.uri);
   const confObj: Record<string, number> = {};
   const sourcesObj: Record<string, AssertionSource[]> = {};

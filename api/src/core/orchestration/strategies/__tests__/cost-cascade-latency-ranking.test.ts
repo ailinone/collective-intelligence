@@ -60,11 +60,23 @@ describe('CostCascadeStrategy latency-aware ranking', () => {
   beforeEach(() => {
     resetTtftTrackerForTesting();
     process.env.COLLECTIVE_LATENCY_COST_TIE_USD = '0.0001';
+    // buildCascadeCandidates() memoizes the built ladder in a module-level
+    // 3s TTL cache (cost-cascade-strategy.ts, P0.8 2026-08-18) keyed ONLY on
+    // (contextSize bucket, pinned model) — NOT on the model list. Every case
+    // here uses the same key, so on a fast machine case N>1 silently receives
+    // case 1's ladder. Disable the cache (0 = off) so each case builds its own.
+    process.env.CASCADE_LADDER_CACHE_TTL_MS = '0';
+    // Same class of module-level memo one layer down: BaseStrategy's eligible
+    // pool cache (5s TTL) is keyed on quality/cost/caps only, so it also
+    // survives a change of context.models between cases.
+    process.env.ELIGIBLE_POOL_CACHE_TTL_MS = '0';
   });
 
   afterEach(() => {
     delete process.env.COLLECTIVE_LATENCY_COST_TIE_USD;
     delete process.env.COLLECTIVE_FIRST_RUNG_TTFB_MS;
+    delete process.env.CASCADE_LADDER_CACHE_TTL_MS;
+    delete process.env.ELIGIBLE_POOL_CACHE_TTL_MS;
   });
 
   it('re-orders a cost-tied pair by tracked TTFT (fastest first)', () => {

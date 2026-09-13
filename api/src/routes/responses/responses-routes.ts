@@ -55,6 +55,7 @@ import type { ChatResponse } from '@/types';
 import { prisma } from '@/database/client';
 import { Prisma } from '@/generated/prisma/index.js';
 import { resolveAilinVirtualModelAlias } from '@/services/ailin-virtual-model-service';
+import { checkExplicitModelExists, unknownModelErrorBody } from '@/services/explicit-model-guard';
 import {
   STRATEGY_INPUT_VALUES,
   canonicalizeStrategyInput,
@@ -62,6 +63,7 @@ import {
   mapExecutionToCanonical,
   resolveExecutionStrategy,
 } from '@/core/orchestration/strategy-contract';
+import { normalizeOutboundResponse } from '@/utils/outbound-content-normalizer';
 
 const log = logger.child({ module: 'responses-routes' });
 
@@ -599,6 +601,7 @@ class ResponsesService {
 
     const engine = getOrchestrationEngine();
     const result = await engine.execute(chatRequest, context.organizationId, context.userId);
+    result.finalResponse = normalizeOutboundResponse(result.finalResponse);
 
     // Step 5: Convert response to Responses API format
     const output = this.convertToOutputItems(result.finalResponse, responseId);
@@ -1583,6 +1586,26 @@ export async function registerResponsesRoutes(server: FastifyInstance): Promise<
           responsesRequest,
           !!responsesRequest.stream
         );
+
+        // ── Explicit model must exist ────────────────────────────────────
+        // Same contract as /v1/chat/completions: a client-pinned id that
+        // exists in NO provider is rejected instead of being silently
+        // answered by a substituted model. `auto`, `ailin-*` aliases and an
+        // absent model never reach this branch, a pinned-but-currently-
+        // unusable model still degrades to automatic selection downstream,
+        // and an unreachable catalog fails OPEN. See explicit-model-guard.ts.
+        //
+        // Placed on the shared shape so streaming and non-streaming behave
+        // identically, and before any SSE header is written so the 404 keeps
+        // a proper JSON body.
+        const explicitModelCheck = await checkExplicitModelExists(gateChatShape);
+        if (!explicitModelCheck.exists && explicitModelCheck.requestedModel) {
+          log.info(
+            { requestId, requestedModel: explicitModelCheck.requestedModel },
+            'Rejecting responses request: pinned model does not exist in any provider'
+          );
+          return reply.status(404).send(unknownModelErrorBody(explicitModelCheck.requestedModel));
+        }
 
         // Admission gate. This route runs the same orchestration engine as
         // /v1/chat/completions and resolves the same ailin-* aliases, but had

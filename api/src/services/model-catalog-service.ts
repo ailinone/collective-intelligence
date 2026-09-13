@@ -15,6 +15,21 @@ import { getErrorMessage, isError } from '@/utils/type-guards';
 import { modelCacheService } from '@/services/model-cache-service';
 import { computeModelUid } from '@/database/model-uid';
 import { toInputJson } from '@/utils/json';
+import { createHash } from 'node:crypto';
+import { getRedisClient } from '@/cache/redis-client';
+import {
+  CATALOG_HOT_PATH_SELECT,
+  CATALOG_REDIS_KEY,
+  CATALOG_REDIS_META_KEY,
+  mapPrismaModel,
+  parseCatalogSnapshotMeta,
+  type CatalogSnapshotMeta,
+} from '@/services/catalog-hot-path';
+// Re-exported for backward compatibility — nothing outside this module
+// imported these before the extraction (verified via repo-wide grep), but
+// keeping them accessible here avoids a silent breaking change for any
+// future caller that expects them at this path.
+export { CATALOG_HOT_PATH_SELECT, CATALOG_REDIS_KEY, mapPrismaModel };
 
 export type ProviderCatalogEntry = {
   name: string;
@@ -48,95 +63,6 @@ const log = logger.child({ component: 'model-catalog-service' });
 
 function decimal(value: number): PrismaNamespace.Decimal {
   return new PrismaNamespace.Decimal(value);
-}
-
-// ── Phase 6 Fix 2: catalog hot-path field allowlist ──────────────────
-// The catalog cache loads ALL non-disabled rows (~64k) every 60s. Without
-// a select clause, Prisma loaded every column including heavy JSONB
-// (capabilitySources, capabilityConfidence) and the capabilityUris array
-// — ~100MB wire payload that mapPrismaModel never reads. Production runs
-// observed 13.9s for this query while EXPLAIN ANALYZE projected 7.9ms,
-// confirming wire-size + JSON-parse as the bottleneck (not the index).
-//
-// CATALOG_HOT_PATH_SELECT enforces a closed allowlist: any field added to
-// mapPrismaModel below MUST also be added here, and vice versa. The
-// invariant test in __tests__/model-catalog-service-select.test.ts asserts
-// this by checking that every read in mapPrismaModel has a matching key.
-//
-// Why allowlist (select:) instead of omit:? The codebase has a history of
-// adding heavy JSONB/array columns to Model (capabilityUris 2026-04-20,
-// lifecycleStatus 2026-04-24, capabilityConfidence 2026-04-22). An omit:
-// list would silently re-regress every time a heavy column is added.
-// select: forces every schema migration to confront the catalog cost.
-const CATALOG_HOT_PATH_SELECT = {
-  id: true,
-  providerId: true,
-  name: true,
-  displayName: true,
-  contextWindow: true,
-  maxOutputTokens: true,
-  inputCostPer1k: true,
-  outputCostPer1k: true,
-  capabilities: true,
-  performance: true,
-  status: true,
-  metadata: true,
-  lastSyncedAt: true,
-  provider: { select: { name: true } },
-} as const satisfies Prisma.ModelSelect;
-
-type CatalogHotPathRecord = Prisma.ModelGetPayload<{ select: typeof CATALOG_HOT_PATH_SELECT }>;
-
-function mapPrismaModel(record: CatalogHotPathRecord): Model {
-  // Handle Prisma Json field - can be array, object with 'set' property, or other formats
-  let capabilities: string[] = [];
-  if (Array.isArray(record.capabilities)) {
-    capabilities = record.capabilities as string[];
-  } else if (record.capabilities && typeof record.capabilities === 'object') {
-    const capabilitiesObj = record.capabilities as Record<string, unknown>;
-    if (Array.isArray(capabilitiesObj.set)) {
-      capabilities = capabilitiesObj.set as string[];
-    }
-  }
-
-  const rawPerformance = (record.performance as Record<string, unknown> | null) ?? {};
-  const performance = {
-    latencyMs: Number(rawPerformance.latencyMs ?? 0),
-    throughput: Number(rawPerformance.throughput ?? 0),
-    quality: Number(rawPerformance.quality ?? 0),
-    reliability: Number(rawPerformance.reliability ?? 0),
-  } satisfies Model['performance'];
-
-  // SOTA dynamic-discovery (2026-04-27): merge the Prisma row's `lastSyncedAt`
-  // into the model metadata so downstream consumers (notably /v1/models) can
-  // surface `discoveryTimestamp` without a Model-interface schema change.
-  // The fetcher-supplied `discoverySource` is already persisted inside
-  // metadata at write time (central-model-discovery-service.ts).
-  const baseMetadata =
-    record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
-      ? (record.metadata as Record<string, unknown>)
-      : undefined;
-
-  const metadataWithSyncStamp: Record<string, unknown> | undefined =
-    record.lastSyncedAt instanceof Date
-      ? { ...(baseMetadata ?? {}), lastSyncedAt: record.lastSyncedAt.toISOString() }
-      : baseMetadata;
-
-  return {
-    id: record.id,
-    providerId: record.providerId,
-    provider: record.provider.name,
-    name: record.name,
-    displayName: record.displayName,
-    contextWindow: record.contextWindow,
-    maxOutputTokens: record.maxOutputTokens,
-    inputCostPer1k: Number(record.inputCostPer1k),
-    outputCostPer1k: Number(record.outputCostPer1k),
-    capabilities: capabilities as Model['capabilities'],
-    performance,
-    status: (record.status as Model['status']) ?? 'active',
-    metadata: metadataWithSyncStamp,
-  };
 }
 
 export async function syncModelCatalog(catalog: ProviderCatalogEntry[]): Promise<void> {
@@ -284,6 +210,14 @@ export async function syncModelCatalog(catalog: ProviderCatalogEntry[]): Promise
 // AND warm and the heavy load never lands on a request. Env-overridable.
 const CATALOG_CACHE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS) || 6 * 60_000;
 let catalogCache: { expiresAt: number; models: Model[] } | null = null;
+// Fingerprint of the snapshot content currently held in catalogCache (null
+// when unknown: never populated, invalidated, or hydrated from a producer
+// that did not publish CATALOG_REDIS_META_KEY). Compared against the meta
+// key in hydrateCatalogCacheFromRedis to skip the >100 MB GET + JSON.parse
+// when the fleet-wide snapshot has not changed since this process last
+// installed it. Set by the rebuild path too, so the elected process does not
+// re-parse the snapshot it just published itself.
+let installedFingerprint: string | null = null;
 // Per-provider list cache (Camada 5 follow-up): getModelsByProvider is hit on the
 // execution hot path (adapter.getModels()) and for a huge provider like
 // `huggingface` the findMany returns ~60k rows (~1.2s observed). Cache the mapped
@@ -294,12 +228,318 @@ const byProviderCache = new Map<string, { expiresAt: number; models: Model[] }>(
 // each fire the same heavy findMany (thundering-herd — observed at deploy/restart
 // when the catalog query ran 3-5× concurrently). These hold the in-flight promise
 // so concurrent misses await ONE query instead of all racing the DB.
+// Two separate trackers, not one shared one: `catalogInFlight` covers the
+// cold-path resolver below (which may resolve via a cheap Redis hydrate,
+// never touching Postgres), while `catalogRefreshInFlight` covers ONLY the
+// real Postgres rebuild (see rebuildCatalogCacheFromPostgres). Sharing a
+// single tracker between them would let a fleet-wide refresh tick silently
+// no-op onto an in-flight Redis-only hydrate on the same process and skip
+// its one job: actually refreshing Postgres and republishing to Redis.
 let catalogInFlight: Promise<Model[]> | null = null;
+let catalogRefreshInFlight: Promise<Model[]> | null = null;
 const byProviderInFlight = new Map<string, Promise<Model[]>>();
+
+// ── Fleet-wide catalog snapshot (capacity-scaling plan, Track 1 §2.3) ──────
+// Capacity investigation (docs/CAPACITY-SCALING-PLAN-10K-USERS.md) found this
+// full-catalog query (all non-disabled models — 111k+ rows and growing, no
+// static cap) firing independently, undeduplicated, from a 4-minute timer
+// in EVERY `ci_api` replica AND `ci_worker` (services/cache-refresh-ahead.ts,
+// called unconditionally at boot from index.ts and workers/queue-runner.ts) —
+// the same per-replica-multiplication bug class the REL-01 fix already
+// closed for every other scheduled job (jobs/register-scheduled-jobs.ts).
+//
+// Fix reuses that exact mechanism: `catalog-cache-refresh` is registered as
+// a BullMQ repeatable job (register-scheduled-jobs.ts), which guarantees via
+// a Redis lock that exactly ONE process fleet-wide — whichever of the 2
+// `ci_api` replicas or `ci_worker` wins that tick's claim, not a hardcoded
+// "worker only" rule — actually runs `refreshCatalogCacheAhead()` below and
+// publishes the result here. Every replica's own cold path
+// (`getAllCatalogModels()`) and per-process keep-warm timer
+// (cache-refresh-ahead.ts) hydrate from this key FIRST, falling back to a
+// direct Postgres rebuild only when Redis has nothing published yet (fresh
+// environment boot, or the elected process hasn't ticked yet) or is
+// unavailable — the same fail-open-to-degraded idiom already used by
+// core/resilience/distributed-bulkhead.ts and
+// middleware/api-key-rate-limit-middleware.ts. This NEVER risks serving an
+// empty catalog: the Postgres path is always the fallback, never removed.
+//
+// Deliberately on the evictable `redis-cache` instance (getRedisClient() →
+// config.redis → REDIS_HOST=redis-cache in production), matching
+// model-cache-service.ts's existing choice for the same reason: this is a
+// rebuildable derived cache, not durable state, so it has no business on the
+// `noeviction` queue Redis that also holds billing idempotency state.
+//
+// CATALOG_REDIS_KEY itself now lives in `@/services/catalog-hot-path`
+// (imported + re-exported above) — extracted alongside CATALOG_HOT_PATH_SELECT
+// so the SAB candidate-index worker can read the exact same key without
+// importing this module's heavier dependency graph.
+// Generous relative to CATALOG_CACHE_TTL_MS so a slightly-late elected tick
+// (GC pause, transient DB slowness) doesn't expire the shared snapshot out
+// from under replicas relying on it between BullMQ ticks.
+const CATALOG_REDIS_TTL_MS = Number(process.env.CATALOG_REDIS_TTL_MS) || CATALOG_CACHE_TTL_MS * 3;
+
+// ── In-memory catalog indices (SELECTION_USE_FULL_CACHE_INDEX follow-up) ───
+// Flag-gated candidate-retrieval work in dynamic-model-selector.ts wants to
+// filter/rank directly against the full cached catalog instead of issuing a
+// bounded SQL query (curatedTake/aggregatedTake ~400 rows each today, capped
+// regardless of how large the catalog grows). These indices are the
+// in-memory structures that make that filtering cheap: O(1) capability/
+// provider membership lookups instead of an O(catalog) scan per request.
+//
+// Built from the SAME `Model[]` snapshot at the SAME two points catalogCache
+// itself is ever assigned (rebuildCatalogCacheFromPostgres's direct rebuild,
+// and hydrateCatalogCacheFromRedis's fleet-wide-snapshot pull) via the
+// `setCatalogCache` helper below — there is no third path that mutates
+// catalogCache, so the indices can never be stale relative to the catalog
+// they were derived from. Rebuilt wholesale on every refresh (no incremental
+// update) — simplest-correct, and cheap enough to do every ~4min (see
+// buildCatalogIndices' own perf note) that incremental maintenance isn't
+// worth the complexity/bug surface yet.
+export interface CatalogIndices {
+  /** Legacy capability string (Model.capabilities entries) -> set of catalog
+   *  model `id`s that declare it. NOT keyed by the canonical `capability_uris`
+   *  HCRA projection — CATALOG_HOT_PATH_SELECT deliberately excludes that
+   *  column (wire-size optimization, see the Phase 6 Fix 2 comment above), so
+   *  this index (and any consumer of it) only ever sees the legacy
+   *  projection, same as every other catalog-cache consumer today. */
+  byCapability: Map<string, Set<string>>;
+  /** Provider name (Model.provider) -> ordered list of catalog model `id`s
+   *  under that provider, in catalog-scan order. */
+  byProvider: Map<string, string[]>;
+  /** Catalog model `id` -> Model, for O(1) lookup after index intersection
+   *  (avoids re-scanning the full array to hydrate matched ids). */
+  byId: Map<string, Model>;
+  /** When these indices were built (Date.now()) — same wall-clock cadence as
+   *  catalogCache.expiresAt, exposed for observability/debugging. */
+  builtAt: number;
+}
+
+let catalogIndices: CatalogIndices | null = null;
+
+/**
+ * O(catalog) single pass, no I/O. Measured locally (see
+ * api/src/services/__tests__/catalog-indices.test.ts's perf case) at
+ * comfortably sub-100ms for a synthetic 111k-row catalog — negligible next to
+ * the ~1.2-1.9s the underlying full-catalog Postgres query itself already
+ * costs when it actually runs (see cache-refresh-ahead.ts's doc), and it only
+ * runs on that SAME cadence (once per refresh), never per-request.
+ *
+ * PERF NOTE (2026-09-08, see dynamic-model-selector.ts's
+ * getFullCacheFairCandidateModels for the full writeup): a precomputed
+ * curated/aggregated-bucket classification Set (built here, once per
+ * refresh, checked via O(1) Set.has(model.id) in the per-request consumer
+ * instead of re-parsing `model.metadata` there) was implemented and profiled
+ * end to end — it made the consumer's request-time loop SLOWER (~26ms ->
+ * ~60ms average on the real-catalog-scale benchmark), not faster. Two
+ * ~40-110k-entry Sets don't stay CPU-cache-resident, so each lookup is a
+ * cache-unfriendly random-access hash probe, while reading `model.metadata`
+ * directly is cache-friendly (the consumer is already touching that same
+ * Model object for other fields in the same loop iteration). Reverted;
+ * documented here so it isn't re-attempted without a real before/after
+ * measurement.
+ */
+function buildCatalogIndices(models: Model[]): CatalogIndices {
+  const byCapability = new Map<string, Set<string>>();
+  const byProvider = new Map<string, string[]>();
+  const byId = new Map<string, Model>();
+  for (const model of models) {
+    byId.set(model.id, model);
+
+    const providerList = byProvider.get(model.provider);
+    if (providerList) {
+      providerList.push(model.id);
+    } else {
+      byProvider.set(model.provider, [model.id]);
+    }
+
+    const caps = Array.isArray(model.capabilities) ? model.capabilities : [];
+    for (const cap of caps) {
+      let set = byCapability.get(cap);
+      if (!set) {
+        set = new Set();
+        byCapability.set(cap, set);
+      }
+      set.add(model.id);
+    }
+  }
+  return { byCapability, byProvider, byId, builtAt: Date.now() };
+}
+
+/**
+ * The ONLY function that assigns `catalogCache` — replaces the two direct
+ * `catalogCache = {...}` assignments that used to live in
+ * rebuildCatalogCacheFromPostgres and hydrateCatalogCacheFromRedis, so the
+ * indices are structurally guaranteed to be rebuilt at exactly the same
+ * moments the catalog itself changes, never separately and never stale.
+ */
+function setCatalogCache(models: Model[], fingerprint: string | null): void {
+  catalogCache = { expiresAt: Date.now() + CATALOG_CACHE_TTL_MS, models };
+  catalogIndices = buildCatalogIndices(models);
+  installedFingerprint = fingerprint;
+}
+
+/**
+ * Content fingerprint of the catalog this process currently serves, or null
+ * when unknown. Consumers that only need to re-run work when the catalog
+ * actually changed (cache-refresh-ahead.ts's selection prewarm gate) compare
+ * successive values instead of re-running on every tick.
+ */
+export function getCatalogFingerprint(): string | null {
+  return installedFingerprint;
+}
+
+/**
+ * Produces the exact bytes published to Redis plus a content fingerprint.
+ *
+ * The JSON is assembled from per-row strings so it stays byte-identical to
+ * `JSON.stringify(models)` (consumers keep seeing the scan order) while the
+ * fingerprint hashes a SORTED copy of those rows: the producer query has no
+ * ORDER BY, so two consecutive rebuilds of an unchanged table can come back
+ * in different scan orders, and an order-sensitive hash would then differ on
+ * every tick and readers would never get to skip. Sorting `models` itself
+ * instead would change the first-match order provider-registry's
+ * findModelByName and the byProvider index observe, which is out of scope.
+ *
+ * sha256 is used as a collision-resistant fingerprint, not for security.
+ */
+function serializeCatalogSnapshot(models: Model[]): { json: string; meta: CatalogSnapshotMeta } {
+  const rows = models.map((model) => JSON.stringify(model));
+  const json = `[${rows.join(',')}]`;
+  const hash = createHash('sha256');
+  for (const row of [...rows].sort()) {
+    hash.update(row);
+    hash.update('\n');
+  }
+  return {
+    json,
+    meta: { fingerprint: hash.digest('hex'), rowCount: models.length, generatedAt: Date.now() },
+  };
+}
+
+/**
+ * Read-only accessor for the in-memory catalog indices (SELECTION_USE_FULL_CACHE_INDEX
+ * consumer: dynamic-model-selector.ts's getFullCacheFairCandidateModels). Returns
+ * null when the catalog cache has never been populated in this process (fresh
+ * boot, before the first getAllCatalogModels()/hydrate call) — callers must
+ * treat null as "indices not ready yet", the same fail-open posture every
+ * other consumer of this module already takes toward a cold cache, NOT as
+ * "catalog is empty".
+ */
+export function getCatalogIndices(): CatalogIndices | null {
+  return catalogIndices;
+}
+
+async function publishCatalogSnapshotToRedis(snapshot: {
+  json: string;
+  meta: CatalogSnapshotMeta;
+}): Promise<void> {
+  try {
+    const redis = getRedisClient();
+    // Snapshot first, meta second, as two plain SETs (no MULTI: the fake
+    // clients in this module's tests only expose get/set/del). A reader that
+    // fetches meta and then the snapshot can therefore never pair a NEW
+    // fingerprint with an OLD snapshot; the reverse pairing (old meta, new
+    // snapshot) only costs one redundant parse on the next tick.
+    await redis.set(CATALOG_REDIS_KEY, snapshot.json, 'PX', CATALOG_REDIS_TTL_MS);
+    await redis.set(
+      CATALOG_REDIS_META_KEY,
+      JSON.stringify(snapshot.meta),
+      'PX',
+      CATALOG_REDIS_TTL_MS
+    );
+  } catch (error) {
+    log.warn(
+      { error },
+      'Catalog cache: failed to publish fleet-wide Redis snapshot (other replicas fall back to their own direct Postgres rebuild)'
+    );
+  }
+}
+
+/**
+ * Redis-only read: hydrates the LOCAL in-process cache from the fleet-wide
+ * snapshot if one exists. Returns null (never throws) when Redis has nothing
+ * published yet, the payload is malformed/empty, or Redis is unreachable —
+ * callers treat null as "fall back to a direct Postgres rebuild", so this
+ * can never be the cause of an empty catalog being served.
+ *
+ * Reads CATALOG_REDIS_META_KEY first. When its fingerprint matches what this
+ * process already holds, the snapshot GET + JSON.parse (>100 MB string,
+ * ~500 MB of transient heap, measured 2026-09-10) is skipped and the local
+ * TTL is simply extended: the elected producer republishes every 4 minutes
+ * regardless of change, and until now every process in the fleet re-parsed
+ * that identical payload on every tick. Returning the existing models (not
+ * null) on that path matters: resolveColdCatalog treats null as "rebuild
+ * from Postgres". A missing or malformed meta (producer still on the
+ * previous version) degrades to the old parse-every-time behavior.
+ */
+async function hydrateCatalogCacheFromRedis(): Promise<Model[] | null> {
+  try {
+    const redis = getRedisClient();
+    const meta = parseCatalogSnapshotMeta(await redis.get(CATALOG_REDIS_META_KEY));
+    if (
+      meta &&
+      catalogCache &&
+      catalogCache.models.length > 0 &&
+      installedFingerprint !== null &&
+      installedFingerprint === meta.fingerprint
+    ) {
+      catalogCache.expiresAt = Date.now() + CATALOG_CACHE_TTL_MS;
+      log.debug(
+        { fingerprint: meta.fingerprint, rowCount: meta.rowCount },
+        'Catalog cache: fleet-wide snapshot unchanged, parse skipped'
+      );
+      return catalogCache.models;
+    }
+    const raw = await redis.get(CATALOG_REDIS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const models = parsed as Model[];
+    // A rowCount mismatch means meta and snapshot were read across a
+    // republish; record "unknown" so the next tick re-parses instead of
+    // trusting a fingerprint that may describe a different payload.
+    const fingerprint = meta && meta.rowCount === models.length ? meta.fingerprint : null;
+    setCatalogCache(models, fingerprint);
+    log.debug(
+      { fingerprint, rowCount: models.length },
+      'Catalog cache: hydrated from fleet-wide snapshot'
+    );
+    return models;
+  } catch (error) {
+    log.debug(
+      { error },
+      'Catalog cache: Redis hydrate failed or empty — falling back to direct Postgres rebuild'
+    );
+    return null;
+  }
+}
+
+async function deleteCatalogRedisSnapshot(): Promise<void> {
+  try {
+    const redis = getRedisClient();
+    await redis.del(CATALOG_REDIS_KEY);
+    await redis.del(CATALOG_REDIS_META_KEY);
+  } catch (error) {
+    log.debug(
+      { error },
+      'Catalog cache: failed to clear fleet-wide Redis snapshot on invalidate (non-fatal — next read falls back to Postgres anyway)'
+    );
+  }
+}
 
 export function invalidateCatalogCache(): void {
   catalogCache = null;
+  catalogIndices = null;
+  installedFingerprint = null;
   byProviderCache.clear();
+  // Best-effort, fire-and-forget: a caller that explicitly invalidated to
+  // force a fresh reload (e.g. index.ts's post-discovery-rebuild re-warm)
+  // wants THIS replica's next getAllCatalogModels() call to see genuinely
+  // fresh data, not immediately re-hydrate the stale pre-invalidation
+  // snapshot still sitting in Redis. If this delete itself fails (Redis
+  // down), the subsequent getAllCatalogModels() falls through to Postgres
+  // anyway, so correctness never depends on it succeeding.
+  void deleteCatalogRedisSnapshot();
 }
 
 export async function getAllCatalogModels(): Promise<Model[]> {
@@ -325,50 +565,94 @@ export async function getAllCatalogModels(): Promise<Model[]> {
   if (catalogCache && catalogCache.expiresAt > now) {
     return catalogCache.models;
   }
-  // Single-flight: dedup concurrent cold-cache misses onto ONE query.
+  // Single-flight: dedup concurrent cold-cache misses onto ONE resolution.
   if (catalogInFlight) {
     return catalogInFlight;
   }
-  catalogInFlight = rebuildCatalogCache();
-  return catalogInFlight;
+  const promise = resolveColdCatalog().finally(() => {
+    if (catalogInFlight === promise) catalogInFlight = null;
+  });
+  catalogInFlight = promise;
+  return promise;
 }
 
 /**
- * Shared builder for the catalog cache: runs the full enumeration query and
- * swaps the cache atomically on completion. Used by the cold-miss path above
- * and by `refreshCatalogCacheAhead()` below.
+ * Cold-path resolver used only by getAllCatalogModels(): try the fleet-wide
+ * Redis snapshot first (cheap, published by whichever process the BullMQ
+ * "catalog-cache-refresh" job elected this tick — see
+ * jobs/register-scheduled-jobs.ts), falling back to a direct Postgres
+ * rebuild ONLY when Redis has nothing yet or is unavailable. Guarantees a
+ * correct, non-empty catalog on first boot of a fresh environment (nothing
+ * published yet) exactly as before this change (a bare Postgres rebuild),
+ * just cheaper on every replica that isn't the one doing that rebuild.
  */
-async function rebuildCatalogCache(): Promise<Model[]> {
-  try {
-    const records = await prisma.model.findMany({
-      where: { status: { not: 'disabled' } },
-      select: CATALOG_HOT_PATH_SELECT,
-    });
-    const mapped = records.map((record) => mapPrismaModel(record));
-    catalogCache = { expiresAt: Date.now() + CATALOG_CACHE_TTL_MS, models: mapped };
-    return mapped;
-  } finally {
-    catalogInFlight = null;
-  }
+async function resolveColdCatalog(): Promise<Model[]> {
+  const fromRedis = await hydrateCatalogCacheFromRedis();
+  if (fromRedis) return fromRedis;
+  return rebuildCatalogCacheFromPostgres();
 }
 
 /**
- * Stale-while-revalidate refresh for the catalog cache (keep-warm): rebuilds
- * in the background and swaps atomically on completion, so the current
- * (possibly stale) cache keeps serving reads the whole time and NO request
- * ever pays the cold rebuild (~1-2s query + map over the full catalog).
- * Called on a timer (see services/cache-refresh-ahead.ts) at an interval
- * shorter than CATALOG_CACHE_TTL_MS, which means the TTL expiry path in
- * getAllCatalogModels() effectively never fires while the refresher runs.
- * No-ops onto the in-flight promise if a rebuild is already running.
+ * The ONLY function in this module that queries Postgres for the full
+ * catalog. Runs the full enumeration query (see the INTENTIONAL FULL
+ * ENUMERATION comment above — no `take:` cap, ever), swaps the local cache
+ * atomically, and best-effort publishes the mapped result to Redis so other
+ * replicas can hydrate from it instead of repeating this query themselves.
+ */
+async function rebuildCatalogCacheFromPostgres(): Promise<Model[]> {
+  const records = await prisma.model.findMany({
+    where: { status: { not: 'disabled' } },
+    select: CATALOG_HOT_PATH_SELECT,
+  });
+  const mapped = records.map((record) => mapPrismaModel(record));
+  const snapshot = serializeCatalogSnapshot(mapped);
+  setCatalogCache(mapped, snapshot.meta.fingerprint);
+  await publishCatalogSnapshotToRedis(snapshot);
+  return mapped;
+}
+
+/**
+ * Fleet-wide single-writer refresh (keep-warm): ALWAYS runs the real
+ * Postgres rebuild and republishes to Redis — never resolves via Redis
+ * itself, since its entire purpose IS to be the thing that keeps the Redis
+ * snapshot fresh. Invoked exactly once per tick, fleet-wide, by the elected
+ * process for the BullMQ "catalog-cache-refresh" repeatable job
+ * (jobs/register-scheduled-jobs.ts) — BullMQ's Redis lock is what guarantees
+ * single execution across every `ci_api` replica and `ci_worker`, the same
+ * mechanism REL-01 already established for every other scheduled job in
+ * this codebase. No-ops onto an in-flight call to itself (not onto
+ * getAllCatalogModels()'s cold path — see the catalogInFlight vs
+ * catalogRefreshInFlight comment above) if a refresh is already running in
+ * this same process.
  */
 export async function refreshCatalogCacheAhead(): Promise<void> {
-  if (catalogInFlight) {
-    await catalogInFlight;
+  if (catalogRefreshInFlight) {
+    await catalogRefreshInFlight;
     return;
   }
-  catalogInFlight = rebuildCatalogCache();
-  await catalogInFlight;
+  const promise = rebuildCatalogCacheFromPostgres().finally(() => {
+    if (catalogRefreshInFlight === promise) catalogRefreshInFlight = null;
+  });
+  catalogRefreshInFlight = promise;
+  await promise;
+}
+
+/**
+ * Per-process keep-warm step (see services/cache-refresh-ahead.ts's
+ * per-replica timer). Unlike refreshCatalogCacheAhead() above, this NEVER
+ * touches Postgres — it only pulls the latest fleet-wide Redis snapshot into
+ * THIS replica's in-process cache ahead of its local TTL expiry, so no
+ * request on this replica ever pays even a cold Redis round-trip. A no-op
+ * (not an error) when Redis has nothing published yet or is unreachable: the
+ * existing local cache, if any, keeps serving until its own TTL lapses, at
+ * which point getAllCatalogModels()'s cold path (resolveColdCatalog) takes
+ * over and falls back to a direct, correct, non-empty Postgres rebuild on
+ * this same replica. When the published snapshot's fingerprint matches what
+ * this process already holds, the pull is a single small meta GET and the
+ * local TTL is extended (see hydrateCatalogCacheFromRedis).
+ */
+export async function hydrateCatalogCacheAhead(): Promise<void> {
+  await hydrateCatalogCacheFromRedis();
 }
 
 /**
@@ -764,6 +1048,7 @@ export const modelCatalogService = {
   syncModelCatalog,
   listModels: listCatalogModels,
   listModelsByProvider: listCatalogModelsByProvider,
+  getCatalogIndices,
   getModel: getCatalogModel,
   getAllCatalogModels,
   getModelsByProvider,

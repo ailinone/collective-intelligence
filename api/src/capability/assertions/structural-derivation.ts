@@ -132,6 +132,35 @@ const RULES: readonly StructuralRule[] = [
     confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
   },
 
+  // --- Analysis from reasoning strength ---
+  // `analysis` is hard-required by 9+ task-type→capability mappings
+  // (code-review, debugging, refactoring, decision-making, architecture,
+  // document-understanding, qa, testing — see dynamic-model-selector.ts's
+  // getRequiredCapabilitiesForTask and triage-service.ts's
+  // determineTriageCapabilities) but no extraction pipeline — provider
+  // declaration, modality, parameter, or name-regex — has ever assigned it
+  // to a real model (SOTA audit, 2026-09-07). Combined with the selector's
+  // fail-closed hard-capability filter (2026-09-03), that phantom tag
+  // deterministically zeroed the candidate pool for every request that hit
+  // one of those task types — most visibly the TRIAGE model selection
+  // itself, which unconditionally requires `analysis`.
+  //
+  // There is no vendor field to declare "does analysis" — the ontology's own
+  // description ("analyses inputs and produces structured findings") is
+  // exactly what reasoning/extended-thinking capability already measures.
+  // Deriving it from `reasoning` (or the Anthropic-style `thinking_mode`
+  // variant) is a real, semantic signal already backed by provider-declared
+  // or parameter-derived evidence — not a fabricated tag — and keeps the
+  // rule dynamic: any model that later earns `reasoning` earns `analysis`
+  // automatically, no per-model hardcoding.
+  {
+    target: 'analysis',
+    requiresAny: [['reasoning'], ['thinking_mode']],
+    rationale:
+      'A model with demonstrated reasoning capability (extended chain-of-thought or a dedicated thinking-budget mode) has the substrate "analysis" tasks actually require: multi-step reasoning over structured findings. No provider declares "analysis" as a first-class field, so this closes the only route real models can earn the tag.',
+    confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
+  },
+
   // --- QA from chat + reasoning ---
   // chat alone would produce too much recall (every chat model supports QA in
   // principle). Requiring reasoning scopes the claim to models trained/tuned
@@ -154,6 +183,73 @@ const RULES: readonly StructuralRule[] = [
     rationale:
       'Legacy alias — text_to_speech and tts denote the same capability. Consolidate in ontology later; derive here to close the coverage gap.',
     confidence: 0.9,
+  },
+
+  // --- Code-task compositions (documentation / testing / refactoring) ---
+  // Companion fix to `analysis`/`qa` above (SOTA audit, 2026-09-07): a direct
+  // SQL audit of 111,665 production models found these three ontology
+  // capabilities (`documentation`, `testing`, `refactoring` —
+  // ontology/seed.ts) at ZERO real assignments, with no provider-declared,
+  // modality, parameter, or name-regex path that has ever produced them
+  // either. Unlike `analysis`/`qa`, none of these is YET a live hard-required
+  // filter in `dynamic-model-selector.ts` or `triage-service.ts` — but
+  // `getRequiredCapabilitiesForTask()` in dynamic-model-selector.ts already
+  // encodes what substrate each of these TASKS needs
+  // (documentation → text_generation+reasoning+code_generation, testing →
+  // text_generation+code_interpreter+analysis, refactoring →
+  // text_generation+reasoning+code_generation), so the CAPABILITY rules below
+  // reuse that same, already-battle-tested substrate rather than inventing a
+  // new one — just tightened to the ≥2-orthogonal-signal bar the rest of this
+  // file uses, so a bare `text_generation` (which every chat model has)
+  // cannot trivially satisfy them.
+  {
+    target: 'documentation',
+    requiresAll: ['text_generation', 'code_generation'],
+    rationale:
+      'Documentation (docstrings, READMEs, technical writing about code) is text_generation grounded in code understanding (code_generation) — the same pairing dynamic-model-selector.ts\'s own documentation task-map already assumes. No provider declares "writes documentation" as a field, so this closes the only route real models can earn the tag.',
+    confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
+  },
+  {
+    target: 'testing',
+    requiresAll: ['code_generation', 'code_interpreter'],
+    rationale:
+      'Generating and validating tests (unit/integration/property-based) requires writing code (code_generation) and executing it to confirm behavior (code_interpreter) — the generate-then-verify loop testing actually is, and a tighter substrate than the coding umbrella alone since not every coding-capable model can execute what it writes.',
+    confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
+  },
+  {
+    target: 'refactoring',
+    requiresAll: ['code_generation', 'reasoning'],
+    rationale:
+      'Restructuring code "without changing behavior" is a semantics-preservation claim: it needs the ability to produce code (code_generation) plus multi-step reasoning to verify the restructuring preserves behavior (reasoning) — matching dynamic-model-selector.ts\'s own refactoring task-map (text_generation+reasoning+code_generation).',
+    confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
+  },
+
+  // --- Translation from chat + reasoning ---
+  // Real, LIVE production gap (not merely latent like the triage ones above):
+  // `ailin-alias-resolver.ts`'s `ailin-translation` / `ailin-translation-fast`
+  // / `ailin-translation-quality` aliases set
+  // `ailin_constraints.requiredCapabilities: ['translation']`, which
+  // `dynamic-model-selector.ts` enforces as a HARD, fail-closed filter
+  // (2026-09-03). With zero models ever assigned `translation`, every request
+  // using one of those three aliases deterministically empties the candidate
+  // pool — the exact same failure shape as the `analysis` incident this
+  // session already fixed, just on a different alias surface instead of
+  // triage.
+  //
+  // Same scoping logic as `qa` above: bare `chat` (or `text_generation`)
+  // would inflate recall to "every chat model", since the alias's own
+  // description ("LLM fallback") is literally true of any capable chat model.
+  // Requiring `reasoning` alongside `chat` scopes the claim to models with
+  // demonstrated multi-step reasoning — the substrate nuanced translation
+  // (idiom, register, cross-lingual structure preservation) actually draws
+  // on, not just next-token fluency. No provider declares a `multilingual`
+  // capability field in this ontology to derive from instead.
+  {
+    target: 'translation',
+    requiresAll: ['chat', 'reasoning'],
+    rationale:
+      'Reasoning-capable chat models have the substrate nuanced translation actually requires (structure/idiom preservation across languages), scoping the claim below "every chat model" the same way the `qa` rule scopes QA below plain chat. Closes a live fail-closed gap: ailin-alias-resolver.ts\'s translation aliases hard-require this capability today and zero production models can satisfy it.',
+    confidence: DERIVED_CONFIDENCE_CONSERVATIVE,
   },
 ];
 

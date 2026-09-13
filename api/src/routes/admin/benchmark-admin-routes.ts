@@ -40,7 +40,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { logger } from '@/utils/logger';
@@ -102,11 +102,16 @@ export function storeBenchmarkRun(run: BenchmarkRun): void {
  * Register benchmark admin routes.
  */
 export async function registerBenchmarkAdminRoutes(server: FastifyInstance): Promise<void> {
+  // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): every handler here
+  // reads/mutates process-wide singletons (bandit state, quality-target
+  // cache, Pareto champion/challenger, knowledge graph) and POST /run incurs
+  // real cross-platform spend — requireRole('admin','owner') alone is per-org
+  // and any tenant's own self-promoted admin satisfies it.
   const adminPreHandler = [
     authenticate,
     rejectAnonymousGuestKeyPreHandler,
     rejectChatFreeTierKeyPreHandler,
-    requireRole('admin', 'owner'),
+    requirePlatformAdmin(),
   ];
 
   // ═══════════════════════════════════════════════════════════════════════════

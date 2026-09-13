@@ -35,6 +35,40 @@ import { normalizeJudgeOutput } from '@/core/quality/judge-schema';
 const log = logger.child({ component: 'quality-scorer' });
 
 /**
+ * Task families whose answers are inherently elaborative, so a length-based
+ * completeness signal is defensible for them. Every other task type — notably
+ * 'qa', 'factual-qa' and 'general', which is where a bare numeric or one-line
+ * answer is the CORRECT shape — is scored on demand-relative completeness
+ * instead. See `QualityScorer.elaborationDemanded`.
+ */
+const ELABORATION_TASK_TYPES: ReadonlySet<string> = new Set([
+  'code-generation',
+  'code-review',
+  'debugging',
+  'refactoring',
+  'documentation',
+  'testing',
+  'analysis',
+  'reasoning',
+  'decision-making',
+  'architecture',
+  'creative',
+  'document-understanding',
+]);
+
+/**
+ * Below this length a response has nothing to navigate, so the absence of
+ * headings/lists is not a clarity defect (`scoreClarity`).
+ */
+const STRUCTURE_NEEDED_CHARS = 300;
+
+/** A response at or below this length is short enough to read as a direct answer. */
+const DIRECT_ANSWER_MAX_CHARS = 200;
+
+/** Openings that signal hedging/preamble rather than a direct answer. */
+const HEDGED_OPENING = /^(i\b|as an|well,|hmm|let me|sure[,!.]|of course|certainly)/i;
+
+/**
  * Quality dimensions
  */
 export interface QualityDimensions {
@@ -109,9 +143,9 @@ export class QualityScorer {
 
     // Calculate each dimension
     const correctness = this.scoreCorrectness(content, _context, execution);
-    const completeness = this.scoreCompleteness(content, _context);
+    const completeness = this.scoreCompleteness(content, _context, execution);
     const clarity = this.scoreClarity(content);
-    const efficiency = this.scoreEfficiency(execution, _context);
+    const efficiency = this.scoreEfficiency(execution, _context, content);
     const relevance = this.scoreRelevance(content, _context);
 
     // Calculate weighted overall score
@@ -735,16 +769,67 @@ Respond ONLY with valid JSON, no other text.`;
   }
 
   /**
-   * Score completeness (addresses all requirements)
+   * Does this request actually ask for an elaborated answer?
+   *
+   * Completeness is only meaningful RELATIVE TO DEMAND. Before this existed,
+   * `scoreCompleteness` applied an unconditional -0.2 to any response under 100
+   * characters, so "391" — a complete answer to "17 x 23, reply with only the
+   * final number" — was scored as if it had omitted something. See the class
+   * doc on `scoreCompleteness` for the production consequence.
+   *
+   * Signals, in priority order (all pre-existing; nothing new is inferred here):
+   *   1. `capabilityInference.contextNeeds` — the request-specific verdict from
+   *      the heuristic inference layer. An explicit 'short' beats the coarse
+   *      task-type default; 'long'/'very_long' demand depth.
+   *   2. `taskType` — task families that are inherently elaborative. Keeping the
+   *      code/analysis families here is deliberate: it preserves the ORIGINAL
+   *      length behaviour exactly where it was defensible, so this change cannot
+   *      regress code-task scoring.
    */
-  private scoreCompleteness(content: string, _context: OrchestrationContext): number {
+  private elaborationDemanded(context: OrchestrationContext): boolean {
+    const need = context.capabilityInference?.contextNeeds;
+    if (need === 'short') return false;
+    if (need === 'long' || need === 'very_long') return true;
+    return ELABORATION_TASK_TYPES.has(context.taskType);
+  }
+
+  /**
+   * Score completeness (addresses all requirements)
+   *
+   * Completeness is measured against what the request DEMANDED, not against a
+   * character count. The previous implementation deducted 0.2 from every
+   * response under 100 chars and added 0.2 to every response over 500,
+   * unconditionally — so terseness was a defect even when terseness was exactly
+   * what was asked for, and padding was a virtue even when it was padding.
+   *
+   * Two signals of genuine incompleteness survive and are applied in every case:
+   * an EMPTY response, and a TRUNCATED one (`finish_reason === 'length'` — the
+   * model was cut off mid-answer). Those are evidence that something is missing.
+   * Brevity, on its own, is not.
+   */
+  private scoreCompleteness(
+    content: string,
+    _context: OrchestrationContext,
+    execution?: ModelExecution
+  ): number {
+    // An empty response is unambiguously incomplete, whatever the task asked for.
+    if (content.trim().length === 0) return 0;
+
     let score = 0.5; // Base score
 
-    // Length-based scoring
-    if (content.length > 500) {
-      score += 0.2;
-    } else if (content.length < 100) {
-      score -= 0.2;
+    if (this.elaborationDemanded(_context)) {
+      // Length-based scoring — retained UNCHANGED, but only where the request
+      // genuinely asked for depth, which is the only case it was ever valid for.
+      if (content.length > 500) {
+        score += 0.2;
+      } else if (content.length < 100) {
+        score -= 0.2;
+      }
+    } else {
+      // Nothing asked for elaboration and nothing is missing: the answer is
+      // complete as delivered. Mirrors the +0.2 the elaborated branch grants a
+      // long answer, so brevity is no longer structurally penalised.
+      score += 0.35;
     }
 
     // Check for examples
@@ -787,6 +872,13 @@ Respond ONLY with valid JSON, no other text.`;
       }
     }
 
+    // Truncation is the one unambiguous piece of evidence that the answer is
+    // unfinished, and it was previously ignored entirely: a response cut off by
+    // the token limit scored the same as one the model chose to end.
+    if (execution?.response?.choices?.[0]?.finish_reason === 'length') {
+      score -= 0.3;
+    }
+
     return Math.max(0, Math.min(1, score));
   }
 
@@ -820,13 +912,21 @@ Respond ONLY with valid JSON, no other text.`;
 
   /**
    * Score clarity (readability, structure)
+   *
+   * Clarity asks whether a reader can extract the answer easily. Markdown
+   * structure only helps once there is enough content to navigate; below that,
+   * a bare answer is MORE readable than a headed, bulleted one. The previous
+   * implementation awarded structure credit unconditionally, so a one-line
+   * answer could never clear 0.5 on this axis no matter how clear it was.
    */
   private scoreClarity(content: string): number {
     let score = 0.5; // Base score
 
-    // Check for structure (headings, lists)
+    // Check for structure (headings, lists). Content too short to need
+    // navigating earns the same credit: absence of structure is only a defect
+    // when structure would have helped.
     const hasStructure = /^#{1,6}\s|^[-*]\s/m.test(content);
-    score += hasStructure ? 0.2 : 0;
+    score += hasStructure || content.length < STRUCTURE_NEEDED_CHARS ? 0.2 : 0;
 
     // Check for formatting
     const hasFormatting = /```|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*/g.test(content);
@@ -839,8 +939,11 @@ Respond ONLY with valid JSON, no other text.`;
       score -= 0.15; // Too long
     } else if (avgLength > 100 && avgLength <= 200) {
       score -= 0.05; // Somewhat long
-    } else if (avgLength >= 30 && avgLength <= 100) {
-      score += 0.1; // Good length
+    } else {
+      // Any sentence length at or below 100 chars reads easily. The old lower
+      // bound of 30 withheld this credit from very short answers, penalising
+      // them a second time for the same brevity.
+      score += 0.1;
     }
 
     // Check for clear paragraphs
@@ -863,28 +966,35 @@ Respond ONLY with valid JSON, no other text.`;
    */
   private scoreEfficiency(
     execution: ModelExecution | undefined,
-    context: OrchestrationContext
+    context: OrchestrationContext,
+    content = ''
   ): number {
     if (!execution) {
       return 0.5; // Neutral if no execution data
     }
 
+    // Speed and cheapness are only virtues if something was actually delivered.
+    // Previously a model that returned an EMPTY body in 200ms for $0 scored a
+    // perfect 1.0 on this axis — the cheapest way to look efficient was to
+    // answer nothing at all. Penalties below still apply unconditionally.
+    const delivered = execution.success && content.trim().length > 0;
+
     let score = 0.5; // Base score
 
     // Latency score
     if (execution.durationMs < 1000) {
-      score += 0.25; // Very fast
+      score += delivered ? 0.25 : 0; // Very fast
     } else if (execution.durationMs < 3000) {
-      score += 0.15; // Fast
+      score += delivered ? 0.15 : 0; // Fast
     } else if (execution.durationMs > 10000) {
       score -= 0.15; // Slow
     }
 
     // Cost efficiency
     if (execution.cost < 0.001) {
-      score += 0.25; // Very cheap
+      score += delivered ? 0.25 : 0; // Very cheap
     } else if (execution.cost < 0.005) {
-      score += 0.15; // Cheap
+      score += delivered ? 0.15 : 0; // Cheap
     } else if (execution.cost > 0.02) {
       score -= 0.1; // Expensive
     }
@@ -897,7 +1007,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (execution.response.usage) {
       const totalTokens = execution.response.usage.total_tokens || 0;
       if (totalTokens < 1000) {
-        score += 0.1; // Concise
+        score += delivered ? 0.1 : 0; // Concise
       } else if (totalTokens > 10000) {
         score -= 0.1; // Verbose
       }
@@ -940,8 +1050,15 @@ Respond ONLY with valid JSON, no other text.`;
       score -= 0.1; // Not relevant
     }
 
-    // Check for direct answer (starts with answer)
-    const startsWithAnswer = /^(yes|no|here|the answer|solution|to solve)/i.test(content.trim());
+    // Check for direct answer. The old test credited only English PREAMBLES
+    // ("Here is...", "The answer is..."), so a response that simply IS the
+    // answer — the most direct form there is — earned nothing, and neither did
+    // any non-English answer on a gateway that serves Portuguese prompts. A
+    // short response that does not open with a hedge is treated as direct.
+    const trimmed = content.trim();
+    const startsWithAnswer =
+      /^(yes|no|here|the answer|solution|to solve)/i.test(trimmed) ||
+      (trimmed.length <= DIRECT_ANSWER_MAX_CHARS && !HEDGED_OPENING.test(trimmed));
     score += startsWithAnswer ? 0.1 : 0;
 
     // Penalize if response is off-topic

@@ -17,7 +17,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logger } from '@/utils/logger';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { rejectAnonymousGuestKeyPreHandler } from '@/services/anonymous-quota-gate';
 import { rejectChatFreeTierKeyPreHandler } from '@/services/free-tier-quota-gate';
 import { createRouteRateLimit } from '@/api/middleware/route-rate-limit';
@@ -337,7 +337,13 @@ export async function registerToolsRoutes(rootServer: FastifyInstance): Promise<
     // their roles being configured correctly.
     server.addHook('preHandler', rejectAnonymousGuestKeyPreHandler);
     server.addHook('preHandler', rejectChatFreeTierKeyPreHandler);
-    server.addHook('preHandler', requireRole('admin', 'owner'));
+    // SECURITY (platform-admin-vs-tenant-admin, 2026-09-08): every executor
+    // below runs shell/git commands and filesystem mutations against ONE
+    // shared, platform-wide working tree (getToolsBaseDir() is a single
+    // process-wide env var, never scoped by request.organizationId) — an
+    // RCE-adjacent surface. requireRole('admin','owner') alone is per-org and
+    // any tenant's own self-promoted admin would reach it.
+    server.addHook('preHandler', requirePlatformAdmin());
     // SECURITY (js/missing-rate-limiting): these handlers execute shell
     // commands / filesystem + git operations — expensive, authorization-gated
     // operations that must not be callable at unbounded rate. Route-scoped
@@ -4834,6 +4840,6 @@ export async function registerToolsRoutes(rootServer: FastifyInstance): Promise<
         })
     );
 
-    log.info('✅ Tools API routes registered (40+ endpoints, admin/owner-gated)');
+    log.info('✅ Tools API routes registered (40+ endpoints, platform-admin-gated)');
   });
 }

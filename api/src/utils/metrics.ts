@@ -374,7 +374,7 @@ export const dbConnectionPoolSize = getOrCreateMetric(
     new promClient.Gauge({
       name: 'ailin_dev_db_connection_pool_size',
       help: 'Current database connection pool size',
-      labelNames: ['state'], // active, idle
+      labelNames: ['pool', 'state'], // pool: prisma|capability; state: total|idle|waiting
     })
 );
 

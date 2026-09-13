@@ -29,6 +29,26 @@ export interface CapabilityValidationResult {
   lastValidated: Date;
   confidence: number; // 0-1
   issues?: string[];
+  /**
+   * LOTE AM (2026-09-05) — root-cause fix for a confirmed wiring bug: whether
+   * this result came from an ACTUAL provider round-trip (`performValidation`)
+   * or was a pass-through of the catalog's declared capabilities because
+   * `TEST_USE_REAL_API_KEYS` was not set (true for 100% of production
+   * traffic — that flag only turns on in the test suite).
+   *
+   * Before this field existed, the skip path returned
+   * `validationStatus: 'valid', confidence: 0.9` — indistinguishable from a
+   * real pass — so every dashboard/consumer of this result silently treated
+   * "we never asked the provider" as "we asked and it confirmed". This flag
+   * makes that distinction observable WITHOUT changing `validationStatus`
+   * (selection logic branches on `validationStatus !== 'valid'` to decide
+   * whether to persist a correction; flipping that for the skip path would
+   * make every one of the ~25 validated candidates on every request look
+   * like a detected mismatch, firing a DB write + warn log per candidate per
+   * request — the exact log-flood/write-storm this skip path exists to
+   * avoid). See `getValidationStats()` for an aggregate view.
+   */
+  verified: boolean;
 }
 
 export interface ValidationTestResult {
@@ -62,13 +82,24 @@ export class ModelCapabilityValidator {
 
     // Skip runtime API validation when using mock keys (test environment).
     // Real API calls would fail with 401/500 and flood logs with expected errors.
+    //
+    // LOTE AM (2026-09-05): this branch is taken for 100% of PRODUCTION
+    // traffic too — `TEST_USE_REAL_API_KEYS` is a test-suite-only flag, never
+    // set in prod — so "skip validation" was previously mislabeled as
+    // `validationStatus: 'valid', confidence: 0.9`, i.e. it read exactly like
+    // a real provider round-trip had confirmed the declared capabilities.
+    // `confidence: 0` + `verified: false` makes the true epistemic state
+    // (declared-but-never-tested) visible to any caller/dashboard without
+    // changing `validationStatus` — see the `verified` field's doc comment
+    // for why that field, specifically, must not flip here.
     if (process.env.TEST_USE_REAL_API_KEYS !== 'true') {
       const skipResult: CapabilityValidationResult = {
         modelId: model.id,
         capabilities: model.capabilities,
         validationStatus: 'valid',
         lastValidated: new Date(),
-        confidence: 0.9,
+        confidence: 0,
+        verified: false,
       };
       this.validationCache.set(cacheKey, skipResult);
       return skipResult;
@@ -150,6 +181,7 @@ export class ModelCapabilityValidator {
       lastValidated: new Date(),
       confidence,
       issues: issues.length > 0 ? issues : undefined,
+      verified: true,
     };
 
     const duration = Date.now() - startTime;
@@ -434,6 +466,14 @@ export class ModelCapabilityValidator {
 
   /**
    * Get validation statistics across all models
+   *
+   * LOTE AM (2026-09-05): added `verifiedModels`/`unverifiedModels` so a
+   * caller can tell "we actually round-tripped the provider" apart from
+   * "we skipped and trusted the catalog" — see `verified` on
+   * `CapabilityValidationResult`. In production, where
+   * `TEST_USE_REAL_API_KEYS` is never set, `unverifiedModels` will equal
+   * `totalModelsValidated` for every cache entry; that is the honest signal
+   * this fix exists to surface, not a regression.
    */
   getValidationStats(): {
     totalModelsValidated: number;
@@ -441,6 +481,8 @@ export class ModelCapabilityValidator {
     invalidModels: number;
     unknownModels: number;
     averageConfidence: number;
+    verifiedModels: number;
+    unverifiedModels: number;
   } {
     const results = Array.from(this.validationCache.values());
 
@@ -448,6 +490,8 @@ export class ModelCapabilityValidator {
     const validModels = results.filter((r) => r.validationStatus === 'valid').length;
     const invalidModels = results.filter((r) => r.validationStatus === 'invalid').length;
     const unknownModels = results.filter((r) => r.validationStatus === 'unknown').length;
+    const verifiedModels = results.filter((r) => r.verified).length;
+    const unverifiedModels = totalModelsValidated - verifiedModels;
     const averageConfidence =
       results.reduce((sum, r) => sum + r.confidence, 0) / totalModelsValidated;
 
@@ -457,6 +501,8 @@ export class ModelCapabilityValidator {
       invalidModels,
       unknownModels,
       averageConfidence: isNaN(averageConfidence) ? 0 : averageConfidence,
+      verifiedModels,
+      unverifiedModels,
     };
   }
 }

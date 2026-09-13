@@ -22,7 +22,7 @@
  *      bytez` instead of the generic hub scope. Critical for per-provider SLO
  *      tracking in the SOTA benchmarking pipeline.
  *   2. **GCP secret binding** — the factory auto-loads `BYTEZ_API_KEY` from
- *      Secret Manager (`ailin-bytez-key`) via `load-secrets-into-env.ts`.
+ *      Secret Manager (`<prefix>-bytez-key`) via `load-secrets-into-env.ts`.
  *      Without a dedicated class the registration plumbing has nowhere to
  *      hang.
  *   3. **Future headroom** — Bytez occasionally ships experimental modalities

@@ -37,12 +37,15 @@ import type {
   ImageVariationResponse,
   ModerationRequest,
   ModerationResponse,
+  RerankRequest,
+  RerankResponse,
   VideoGenRequest,
   VideoGenResponse,
   VisionRequest,
   VisionResponse,
 } from '@/types/model-client';
 import { getModelsByProvider } from '@/services/model-catalog-service';
+import { recordProviderPromptCacheUsage } from '@/observability/ci-metrics';
 
 interface OpenAICompatibleHubMetadata {
   authHeaderName?: string;
@@ -53,6 +56,16 @@ interface OpenAICompatibleHubMetadata {
   chatCompletionsPath?: string;
   embeddingsPath?: string;
   moderationsPath?: string;
+  /**
+   * Cross-encoder rerank path (LOTE AP). Unlike every other path here this
+   * one has NO default: rerank is not in the OpenAI spec, so a hub that never
+   * declared it must fail closed rather than blind-POST `/rerank` and burn a
+   * candidate slot on a 404. The catalog plugin only populates this when the
+   * entry declares `supports.rerank`, which is a docs-verified operator
+   * assertion — exactly the assertion apertis had to RETRACT on 2026-07-16
+   * when its `/v1/rerank` answered 404.
+   */
+  rerankPath?: string;
   videosPath?: string;
   /**
    * Poll path template for async-queue video providers (`{taskId}` replaced
@@ -100,6 +113,30 @@ type HubRequestError = Error & {
  */
 const VIDEO_TERMINAL_SUCCESS_STATUSES = new Set(['succeeded', 'success', 'completed', 'complete']);
 const VIDEO_TERMINAL_FAILURE_STATUSES = new Set(['failed', 'error', 'cancelled', 'canceled']);
+
+/**
+ * Per-provider vendor field name for the video-generation audio toggle
+ * (LOTE AX pt.1). Both vendors document native audio-in-video generation but
+ * disagree on the request field name, so this is a declarative map rather
+ * than a shared field — the same shape as `getProviderBalanceEndpoint`'s
+ * per-provider URL table below.
+ *
+ * - zai (CogVideoX): `with_audio` boolean, default `false` — "Whether to
+ *   generate AI sound effects" (docs.z.ai/api-reference/video/generate-video,
+ *   confirmed live 2026-09-06).
+ * - venice (Seedance-backed): `audio` boolean, default `true` — "For models
+ *   which support audio generation and configuration" (Venice's public
+ *   OpenAPI spec, `QueueVideoRequest.audio`, confirmed live 2026-09-06).
+ *
+ * Both read the SAME input key BytePlus's dedicated adapter already reads
+ * (`options.generate_audio`, see byteplus-adapter.ts) so a caller does not
+ * need to know which vendor field name applies — only providers listed here
+ * are touched; every other hub-routed provider's request body is unaffected.
+ */
+const VIDEO_AUDIO_FIELD_NAMES: Record<string, string> = {
+  zai: 'with_audio',
+  venice: 'audio',
+};
 
 const DEFAULT_MODERATION_CATEGORY_KEYS = [
   'sexual',
@@ -528,6 +565,61 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     return {};
   }
 
+  /**
+   * Surface a hub-routed provider's own reported cache-hit tokens into ci's
+   * provider-cache observability metric (ADR-025 follow-up, 2026-09).
+   *
+   * Two real, independently-verified wire shapes are tolerated:
+   *
+   * 1. A flat `cached_tokens` field — Moonshot/Kimi's automatic context
+   *    caching (platform.kimi.ai/docs/api/chat, verified live 2026-09-08).
+   * 2. A nested `prompt_tokens_details.cached_tokens` field — the shape
+   *    OpenAI itself uses, and shared verbatim by every hub-routed provider
+   *    whose OWN docs were checked for this follow-up: Groq
+   *    (console.groq.com/docs/prompt-caching — GPT-OSS models, fully
+   *    automatic, no request field), Azure OpenAI
+   *    (learn.microsoft.com/.../prompt-caching — automatic by default, same
+   *    `prompt_cache_key` request field as OpenAI), Cerebras
+   *    (inference-docs.cerebras.ai/capabilities/prompt-caching — automatic
+   *    for every model, `prompt_cache_key` is an optional routing hint), and
+   *    SambaNova (sambanova.ai/blog/prompt-caching-on-sambacloud — automatic
+   *    "Automatic Prefix Caching", MiniMax-M2.7). All four confirmed live
+   *    2026-09-09.
+   *
+   * Kept generic (not gated on `this.providerName`) since both shapes are
+   * real OpenAI-compatible-ecosystem conventions — any other hub-routed
+   * provider that reports either gets the same honest observability for
+   * free, labeled by its own `providerName`. A no-op when neither field is
+   * present, which is the common case for hubs that don't cache or don't
+   * report it. When BOTH shapes are present on the same payload (should not
+   * happen in practice) the flat field wins, matching the order Moonshot's
+   * own convention was verified in first.
+   */
+  private recordHubCacheUsage(usage: unknown): void {
+    if (!usage || typeof usage !== 'object') return;
+    const usageObj = usage as Record<string, unknown>;
+    const promptTokens =
+      typeof usageObj.prompt_tokens === 'number' ? usageObj.prompt_tokens : undefined;
+
+    const flatCachedTokens =
+      typeof usageObj.cached_tokens === 'number' ? usageObj.cached_tokens : undefined;
+    const details = usageObj.prompt_tokens_details;
+    const nestedCachedTokens =
+      details && typeof details === 'object'
+        ? (details as Record<string, unknown>).cached_tokens
+        : undefined;
+    const cachedTokens =
+      flatCachedTokens ?? (typeof nestedCachedTokens === 'number' ? nestedCachedTokens : undefined);
+    if (cachedTokens === undefined) return;
+
+    recordProviderPromptCacheUsage({
+      provider: this.providerName,
+      hitTokens: cachedTokens,
+      missTokens:
+        typeof promptTokens === 'number' ? Math.max(0, promptTokens - cachedTokens) : undefined,
+    });
+  }
+
   async chatCompletion(
     request: ChatRequest,
     options?: { signal?: AbortSignal }
@@ -557,7 +649,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
           ...this.getExtraChatPayloadFields(normalizedModel, request),
         },
       });
-      return (await response.json()) as ChatResponse;
+      const parsed = (await response.json()) as ChatResponse;
+      this.recordHubCacheUsage(parsed.usage);
+      return parsed;
     }
 
     const candidates = await this.getChatCapableModelsSorted();
@@ -618,7 +712,9 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
           modelId: candidate,
           expiresAt: Date.now() + this.DEFAULT_MODEL_CACHE_TTL_MS,
         };
-        return (await response.json()) as ChatResponse;
+        const parsed = (await response.json()) as ChatResponse;
+        this.recordHubCacheUsage(parsed.usage);
+        return parsed;
       } catch (error) {
         lastError = error;
         if (this.shouldFallbackToNextModel(error)) {
@@ -674,6 +770,16 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
 
+    // Real OpenAI-compatible streaming only sends `id` + `function.name` on
+    // the FIRST delta chunk of a given tool call; continuation chunks carry
+    // only `{index, function: {arguments: <fragment>}}`. This map tracks
+    // the id/name already seen per `index` so continuation fragments can be
+    // correctly tagged instead of dropped by `convertStreamChunk`. It is a
+    // plain local variable scoped to this single generator invocation (one
+    // per request) — never stored on `this`, so concurrent requests never
+    // share or leak state through it.
+    const toolCallState = new Map<number, { id: string; name: string }>();
+
     try {
       while (true) {
         const readResult = await reader.read();
@@ -702,7 +808,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
 
           try {
             const payload = JSON.parse(line.slice(6)) as Record<string, unknown>;
-            yield this.convertStreamChunk(payload, normalizedModel);
+            yield this.convertStreamChunk(payload, normalizedModel, toolCallState);
           } catch {
             continue;
           }
@@ -1453,6 +1559,111 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     };
   }
 
+  /**
+   * Cohere-compatible cross-encoder rerank (LOTE AP).
+   *
+   * Every hub provider that offers rerank at all offers it in the Cohere
+   * dialect (`{model, query, documents, top_n}` →
+   * `{results:[{index, relevance_score, document}]}`), which is why one hub
+   * implementation covers the whole catalog rather than N adapters. Two
+   * response dialects are tolerated because both are observed in the wild:
+   * Cohere's `results[].document` as `{text}` and Voyage-style `data[]` with
+   * `document` as a bare string.
+   *
+   * Fails closed when the catalog declared no rerank path — see
+   * `rerankPath`'s note. `isAdapterMethodOverridden` reports this override as
+   * present for EVERY hub provider, so the closed door here is the only thing
+   * keeping a non-rerank hub out of the rerank pool; the catalog capability
+   * filter upstream is the other.
+   */
+  async rerank(model: Model, request: RerankRequest): Promise<RerankResponse> {
+    const path = this.metadata.rerankPath;
+    if (!path) {
+      throw new Error(
+        `${this.name}: rerank not available — the catalog entry declares no rerank endpoint for this provider.`
+      );
+    }
+    if (!request.query || request.query.trim().length === 0) {
+      throw new Error(`${this.name}: rerank query must be non-empty`);
+    }
+    if (!Array.isArray(request.documents) || request.documents.length === 0) {
+      throw new Error(`${this.name}: rerank documents must be a non-empty array`);
+    }
+
+    const payload: Record<string, unknown> = {
+      model: await this.normalizeModelName(model.name || model.id),
+      query: request.query,
+      documents: request.documents.slice(),
+    };
+    if (typeof request.topN === 'number') payload.top_n = request.topN;
+    if (typeof request.returnDocuments === 'boolean') {
+      payload.return_documents = request.returnDocuments;
+    }
+
+    const response = await this.sendJsonRequestWithRetry({
+      path,
+      operation: 'rerank',
+      payload,
+    });
+
+    const raw = (await response.json()) as {
+      results?: Array<{
+        index?: number;
+        relevance_score?: number;
+        score?: number;
+        document?: string | { text?: string };
+      }>;
+      data?: Array<{
+        index?: number;
+        relevance_score?: number;
+        document?: string | { text?: string };
+      }>;
+      usage?: { total_tokens?: number };
+    };
+
+    const entries = Array.isArray(raw.results) ? raw.results : raw.data;
+    if (!Array.isArray(entries)) {
+      throw new Error(
+        `${this.name}: rerank response carried neither a \`results\` nor a \`data\` array`
+      );
+    }
+
+    const results = entries
+      .map((entry, position) => {
+        const documentText =
+          typeof entry.document === 'string'
+            ? entry.document
+            : typeof entry.document?.text === 'string'
+              ? entry.document.text
+              : undefined;
+        // Some hubs omit `index` and rely on positional order. Falling back to
+        // the position keeps indices addressable instead of collapsing every
+        // result onto 0.
+        const index = typeof entry.index === 'number' ? entry.index : position;
+        const scoreField =
+          typeof entry.relevance_score === 'number'
+            ? entry.relevance_score
+            : typeof (entry as { score?: number }).score === 'number'
+              ? (entry as { score: number }).score
+              : Number.NaN;
+        return {
+          index,
+          relevanceScore: scoreField,
+          ...(documentText !== undefined ? { document: documentText } : {}),
+        };
+      })
+      .filter((entry) => Number.isFinite(entry.relevanceScore))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    return {
+      results,
+      ...(typeof raw.usage?.total_tokens === 'number'
+        ? { totalTokens: raw.usage.total_tokens }
+        : {}),
+      raw,
+    };
+  }
+
   async moderate(_model: Model, request: ModerationRequest): Promise<ModerationResponse> {
     const path = this.metadata.moderationsPath || '/moderations';
 
@@ -1543,6 +1754,15 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       payload.video = options.video;
     }
 
+    // Native audio-in-video generation (LOTE AX pt.1): additive and
+    // provider-specific — only zai/venice are in VIDEO_AUDIO_FIELD_NAMES, so
+    // every other hub-routed provider's payload is untouched even when a
+    // caller sets `generate_audio`.
+    const audioFieldName = VIDEO_AUDIO_FIELD_NAMES[this.providerName.toLowerCase()];
+    if (audioFieldName && typeof options.generate_audio === 'boolean') {
+      payload[audioFieldName] = options.generate_audio;
+    }
+
     // Together-style providers require everything except `model` nested under
     // a `payload` map — the flat shape is rejected with "validation failed for
     // field 'payload': expected required" (live probe 2026-07-17).
@@ -1589,7 +1809,20 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
         VIDEO_TERMINAL_FAILURE_STATUSES.has(submitStatus));
 
     if (taskId && !submitIsTerminal) {
-      const finalPayload = await this.pollVideoTask(path, taskId);
+      // Bug 2 fix (2026-09-08): bound this candidate's poll loop by the
+      // orchestration's OVERALL fallback-search deadline, not just this
+      // adapter's own fixed poll budget — see pollVideoTask's doc and
+      // execute-with-fallback.ts's `deadlineMs`. Without this, a single
+      // slow-failing provider silently burns the entire search budget before
+      // the between-candidate deadline check ever runs, starving every other
+      // candidate in the pool (live-proven 2026-09-08: a 300000ms poll ran to
+      // completion under a 30000ms search deadline).
+      const orchestrationDeadlineAt =
+        typeof options.orchestrationDeadlineAt === 'number' &&
+        Number.isFinite(options.orchestrationDeadlineAt)
+          ? options.orchestrationDeadlineAt
+          : undefined;
+      const finalPayload = await this.pollVideoTask(path, taskId, orchestrationDeadlineAt);
       const polledVideos = this.extractVideoItems(finalPayload);
       if (polledVideos.length === 0) {
         const status = this.extractVideoStatus(finalPayload);
@@ -1621,8 +1854,10 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
   /**
    * Pull `{id?, url?, b64_json?}` video items out of the known response
    * shapes: OAI `data[]`, async-queue `data.generations[]`/`generations[]`,
-   * and FastRouter's `fastrouter_assets.urls[]`. Explicit locations only —
-   * no deep scanning, so unrelated URL-shaped fields can't leak in.
+   * FastRouter's `fastrouter_assets.urls[]`, and EmpirioLabs' unified job
+   * shape `result.data[].url` (confirmed 2026-09-08 against its own docs —
+   * see the `videoPoll` catalog comment). Explicit locations only — no deep
+   * scanning, so unrelated URL-shaped fields can't leak in.
    *
    * `includeIdOnly` keeps items that carry only an `id` (async job handles) —
    * used on the no-poll sync return so handles survive to the orchestration
@@ -1664,6 +1899,11 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       data && typeof data === 'object' && !Array.isArray(data)
         ? (data as Record<string, unknown>)
         : undefined;
+    const result = rawPayload.result;
+    const resultObj =
+      result && typeof result === 'object' && !Array.isArray(result)
+        ? (result as Record<string, unknown>)
+        : undefined;
     const assets =
       rawPayload.fastrouter_assets && typeof rawPayload.fastrouter_assets === 'object'
         ? (rawPayload.fastrouter_assets as Record<string, unknown>)
@@ -1678,6 +1918,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       ...collect(data),
       ...collect(dataObj?.generations),
       ...collect(rawPayload.generations),
+      ...collect(resultObj?.data),
       ...assetUrls,
     ];
   }
@@ -1745,10 +1986,28 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
    * (401/403) exit immediately — they cannot self-heal within the budget. The
    * global deadline is the single time-based failure exit; the last poll
    * error is carried into its message.
+   *
+   * `orchestrationDeadlineAt` (Bug 2 fix, 2026-09-08): an optional absolute
+   * wall-clock deadline (epoch ms) for the WHOLE cross-provider fallback
+   * search this candidate is running inside of (see execute-with-fallback.ts
+   * `deadlineMs` and video-orchestration-service.ts's `execute` hook, which
+   * forwards it as `options.orchestrationDeadlineAt`). This adapter's own
+   * `timeoutMs` budget exists to protect a SINGLE provider call and is
+   * provider-tuned (e.g. 300s here); it has no idea how many other
+   * candidates are waiting or how much of the outer search budget is left.
+   * Before this fix, a single slow-failing candidate could run its full own
+   * budget regardless of the outer deadline, and executeWithFallback only
+   * checks that deadline BETWEEN candidates — so by the time control
+   * returned there, the whole search budget (and then some) was already
+   * gone, and every other candidate in the pool was starved. Bounding the
+   * poll loop by `min(ownDeadline, orchestrationDeadlineAt)` lets a
+   * slow-failing candidate be cut off in time for the search to still try
+   * the rest of the pool.
    */
   private async pollVideoTask(
     submitPath: string,
-    taskId: string
+    taskId: string,
+    orchestrationDeadlineAt?: number
   ): Promise<Record<string, unknown>> {
     const template = this.metadata.videoPollPath || `${submitPath}/{taskId}`;
     const pollPath = template.replace('{taskId}', encodeURIComponent(taskId));
@@ -1758,7 +2017,13 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     const timeoutMs = Math.max(10_000, Number.isFinite(rawTimeoutMs) ? rawTimeoutMs : 300_000);
     const rawIntervalMs = Number(process.env.HUB_VIDEO_POLL_INTERVAL_MS);
     const intervalMs = Math.max(500, Number.isFinite(rawIntervalMs) ? rawIntervalMs : 3_000);
-    const deadline = Date.now() + timeoutMs;
+    const pollStartedAt = Date.now();
+    const ownDeadline = pollStartedAt + timeoutMs;
+    const cutShortByOrchestration =
+      typeof orchestrationDeadlineAt === 'number' &&
+      Number.isFinite(orchestrationDeadlineAt) &&
+      orchestrationDeadlineAt < ownDeadline;
+    const deadline = cutShortByOrchestration ? orchestrationDeadlineAt : ownDeadline;
     const terminal = new Set([
       ...VIDEO_TERMINAL_SUCCESS_STATUSES,
       ...VIDEO_TERMINAL_FAILURE_STATUSES,
@@ -1809,8 +2074,12 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
 
       if (Date.now() + intervalMs > deadline) {
         const status = this.extractVideoStatus(lastPayload) ?? '';
+        const elapsedMs = Date.now() - pollStartedAt;
+        const budgetNote = cutShortByOrchestration
+          ? `cut short by the overall fallback search deadline (own poll budget is ${timeoutMs}ms)`
+          : `${timeoutMs}ms poll budget`;
         throw new Error(
-          `${this.getName()} video task ${taskId} still "${status || 'unknown'}" after ${timeoutMs}ms poll budget${lastError ? ` (last poll error: ${lastError})` : ''}`
+          `${this.getName()} video task ${taskId} still "${status || 'unknown'}" after ${elapsedMs}ms, ${budgetNote}${lastError ? ` (last poll error: ${lastError})` : ''}`
         );
       }
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -2314,7 +2583,11 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
     }
   }
 
-  private convertStreamChunk(chunk: Record<string, unknown>, requestedModel: string): ChatResponse {
+  private convertStreamChunk(
+    chunk: Record<string, unknown>,
+    requestedModel: string,
+    toolCallState?: Map<number, { id: string; name: string }>
+  ): ChatResponse {
     const choicesRaw = Array.isArray(chunk.choices) ? chunk.choices : [];
 
     const choices: ChatChoice[] = choicesRaw.map((choiceRaw, index) => {
@@ -2342,7 +2615,7 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       let toolCalls: ToolCall[] | undefined;
       if (Array.isArray(deltaRaw.tool_calls)) {
         const parsed = deltaRaw.tool_calls
-          .map((toolCallRaw) => {
+          .map((toolCallRaw, position): ToolCall | null => {
             if (!toolCallRaw || typeof toolCallRaw !== 'object') {
               return null;
             }
@@ -2352,22 +2625,48 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
                 ? (toolCall.function as Record<string, unknown>)
                 : undefined;
 
-            if (
-              typeof toolCall.id !== 'string' ||
-              toolCall.type !== 'function' ||
-              !fn ||
-              typeof fn.name !== 'string'
-            ) {
+            // The real wire-protocol `index` correlates fragments of the
+            // SAME tool call across chunks — array position is only a
+            // fallback for a payload that omits it.
+            const toolCallIndex =
+              typeof toolCall.index === 'number' ? toolCall.index : position;
+
+            const rawId = typeof toolCall.id === 'string' ? toolCall.id : undefined;
+            const rawName = fn && typeof fn.name === 'string' ? fn.name : undefined;
+            const rawArgs = fn && typeof fn.arguments === 'string' ? fn.arguments : undefined;
+
+            // Real streaming only sends `id` + `function.name` on the FIRST
+            // delta chunk of a tool call; continuation chunks carry only
+            // `{index, function: {arguments: <fragment>}}`. Track the
+            // identity established on the first chunk per `index` so later
+            // continuation-only fragments (which previously failed the
+            // strict id+name+arguments guard and were silently dropped) are
+            // still forwarded, correctly tagged.
+            let tracked = toolCallState?.get(toolCallIndex);
+            if (rawId !== undefined || rawName !== undefined) {
+              tracked = {
+                id: rawId ?? tracked?.id ?? '',
+                name: rawName ?? tracked?.name ?? '',
+              };
+              toolCallState?.set(toolCallIndex, tracked);
+            }
+
+            // Nothing usable at all (no tracked identity yet, no fragment).
+            if (!tracked && rawArgs === undefined) {
               return null;
             }
 
             return {
-              id: toolCall.id,
+              id: tracked?.id ?? rawId ?? '',
               type: 'function' as const,
               function: {
-                name: fn.name,
-                arguments: typeof fn.arguments === 'string' ? fn.arguments : '{}',
+                name: tracked?.name ?? rawName ?? '',
+                // Forward the fragment as-is (NOT an accumulated total) so
+                // a caller doing the standard OpenAI-client-style
+                // `arguments += delta` reconstruction gets the right result.
+                arguments: rawArgs ?? '',
               },
+              index: toolCallIndex,
             };
           })
           .filter((item): item is ToolCall => Boolean(item));
@@ -2402,6 +2701,10 @@ export class OpenAICompatibleHubAdapter extends ProviderAdapter {
       chunk.usage && typeof chunk.usage === 'object'
         ? (chunk.usage as Record<string, unknown>)
         : undefined;
+
+    if (usageRaw) {
+      this.recordHubCacheUsage(usageRaw);
+    }
 
     const promptTokens =
       typeof usageRaw?.prompt_tokens === 'number' ? usageRaw.prompt_tokens : undefined;

@@ -68,11 +68,17 @@ interface AggregatedBucket {
  * Error Learning System
  * Uses errors/blocks/successes to continuously improve orchestration
  */
+function healthScoresTtlMs(): number {
+  return Number(process.env.PROVIDER_HEALTH_SCORES_TTL_MS) || 30_000;
+}
+
 class ErrorLearningSystem {
   private log = logger.child({ component: 'error-learning' });
   private errorBuffer: ErrorEvent[] = [];
   private BUFFER_SIZE = 100;
   private FLUSH_INTERVAL = 60000; // Flush every minute
+  private healthScoresCache: { value: ProviderHealthScore[]; expiresAt: number } | null = null;
+  private healthScoresInflight: Promise<ProviderHealthScore[]> | null = null;
 
   constructor() {
     // Start periodic flush
@@ -312,9 +318,44 @@ class ErrorLearningSystem {
   }
 
   /**
-   * Get provider health scores based on error history
+   * Get provider health scores based on error history.
+   *
+   * Cached per process for a short TTL and coalesced across concurrent callers:
+   * getRecommendations() runs on EVERY model=auto selection, and the underlying
+   * query is a 7-day aggregate over request_logs. Re-running it per request adds
+   * nothing (the window moves by milliseconds) while costing a heavy scan on a
+   * memory-constrained Postgres. A failed query caches [] for the same TTL so a
+   * struggling database is not hammered by retries (fail-open, same as before).
    */
   async getProviderHealthScores(): Promise<ProviderHealthScore[]> {
+    const now = Date.now();
+    if (this.healthScoresCache && this.healthScoresCache.expiresAt > now) {
+      // Shallow copy: getRecommendations() sorts in place.
+      return this.healthScoresCache.value.slice();
+    }
+    if (this.healthScoresInflight) {
+      return this.healthScoresInflight.then((value) => value.slice());
+    }
+
+    const inflight = this.computeProviderHealthScores()
+      .then((value) => {
+        this.healthScoresCache = { value, expiresAt: Date.now() + healthScoresTtlMs() };
+        return value.slice();
+      })
+      .finally(() => {
+        this.healthScoresInflight = null;
+      });
+    this.healthScoresInflight = inflight;
+    return inflight;
+  }
+
+  /** Test-only: drop the cached scores and any in-flight computation. */
+  __resetHealthScoresCacheForTests(): void {
+    this.healthScoresCache = null;
+    this.healthScoresInflight = null;
+  }
+
+  private async computeProviderHealthScores(): Promise<ProviderHealthScore[]> {
     try {
       const since = new Date(Date.now() - 7 * 86400000);
 
@@ -499,3 +540,8 @@ class ErrorLearningSystem {
 
 // Export singleton instance
 export const errorLearningSystem = new ErrorLearningSystem();
+
+/** Test-only: reset the singleton's per-process caches between tests. */
+export function __resetErrorLearningCachesForTests(): void {
+  errorLearningSystem.__resetHealthScoresCacheForTests();
+}

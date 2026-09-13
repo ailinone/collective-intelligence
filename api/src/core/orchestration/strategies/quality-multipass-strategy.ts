@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { ADAPTIVE_DEPTH_DIRECTIVE } from '../prompts/sota-system-prompts';
 import {
   JUDGE_OUTPUT_CONTRACT_INSTRUCTIONS,
@@ -198,7 +198,18 @@ export class QualityMultiPassStrategy extends BaseStrategy {
         passes.length,
         context
       );
-      if (polishExecution.success) {
+      // Acceptance is CONJUNCTIVE. `success` is transport-level only: a
+      // tool-call handback and an empty body both report success, and the polish
+      // pass could previously only ever be accepted, never rejected — there was
+      // no content check at all.
+      const polishContent = safeResponseContent(polishExecution.response);
+      const polishAcceptable =
+        polishExecution.success &&
+        polishContent.trim().length > 0 &&
+        !(polishExecution.response?.choices?.[0]?.message?.tool_calls?.length ?? 0) &&
+        !this.looksLikeRefinementPreamble(polishContent);
+
+      if (polishAcceptable) {
         bestExecution = polishExecution;
         passes.push({
           passNumber: passes.length + 1,
@@ -206,6 +217,15 @@ export class QualityMultiPassStrategy extends BaseStrategy {
           qualityScore: bestQualityScore,
           issues: [],
         });
+      } else if (polishExecution.success) {
+        this.log.warn(
+          {
+            hasToolCalls:
+              (polishExecution.response?.choices?.[0]?.message?.tool_calls?.length ?? 0) > 0,
+            emptyContent: polishContent.trim().length === 0,
+          },
+          'quality-multipass: rejected the final pass; keeping the validated answer'
+        );
       }
     }
 
@@ -229,6 +249,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
         cost: pass.generation.cost,
         durationMs: pass.generation.durationMs,
         success: pass.generation.success,
+        artifacts: pass.generation.artifacts,
       });
 
       // Add validation execution if exists
@@ -242,6 +263,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
           cost: pass.validation.cost,
           durationMs: pass.validation.durationMs,
           success: pass.validation.success,
+          artifacts: pass.validation.artifacts,
         });
       }
 
@@ -255,6 +277,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
       totalCost,
       totalDuration: duration,
       qualityScore: bestQualityScore,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         totalPasses: passes.length,
         qualityImprovement:
@@ -335,9 +358,7 @@ export class QualityMultiPassStrategy extends BaseStrategy {
       // budget allows before giving up on this pass.
       while (!generation.success && rotationBudget > 0) {
         rotationBudget--;
-        const alternate = models.find(
-          (m) => m.id !== primaryModel.id && !triedModelIds.has(m.id)
-        );
+        const alternate = models.find((m) => m.id !== primaryModel.id && !triedModelIds.has(m.id));
         if (!alternate) break;
         this.log.warn(
           { pass, failed: primaryModel.id, next: alternate.id, error: generation.error },
@@ -446,21 +467,70 @@ export class QualityMultiPassStrategy extends BaseStrategy {
   private buildFinalSynthesisRequest(
     request: ChatRequest,
     bestExecution: ModelExecution,
-    passCount: number
+    // Kept for call-site compatibility but no longer interpolated: telling the
+    // model how many refinement iterations preceded it is precisely what made it
+    // answer the instruction instead of the question.
+    _passCount: number
   ): ChatRequest {
     const contentStr = safeResponseContent(bestExecution.response);
 
+    // `tools` and `tool_choice` are stripped deliberately.
+    //
+    // This spread used to carry them onto the final pass, and `generateResponse`
+    // routes a tools-bearing request through executeModelWithTools. For a
+    // CLIENT-owned tool that helper correctly hands the call back to the caller:
+    // finish_reason 'tool_calls', EMPTY content, and success === true. The
+    // acceptance check below saw a successful execution and swapped it in,
+    // replacing a validated text answer with an empty tool-call response.
+    //
+    // That is the same mechanism that silently broke the PIS/COFINS agent. The
+    // final pass is a text refinement, never a tool turn.
+    const { tools: _tools, tool_choice: _toolChoice, ...toolFreeRequest } = request;
+
     return {
-      ...request,
+      ...toolFreeRequest,
       messages: [
         ...request.messages,
         { role: 'assistant' as const, content: contentStr },
         {
           role: 'user' as const,
-          content: `Based on ${passCount} refinement iterations, produce the final polished version. Incorporate all improvements made during refinement. Be complete, precise, and professional.\n${ADAPTIVE_DEPTH_DIRECTIVE}`,
+          // The previous instruction ("produce the final polished version,
+          // incorporate all improvements") made the last thing the model believed
+          // the user asked a request ABOUT the artifact, so a chat-tuned model
+          // answered it conversationally — and the highest-probability opening is
+          // an acknowledgment plus a restatement of that task. Production
+          // returned our own instruction vocabulary echoed back: "Certainly.
+          // Here's the final polished version, incorporating…".
+          content: `Improve the draft above where you can — correctness first, then completeness and clarity — and output the improved ANSWER ITSELF.
+
+Output contract:
+- Reply as if answering the original request directly, for the first time.
+- Do NOT mention a draft, a revision, refinement passes, or that any improvement process occurred.
+- Do NOT open with an acknowledgment or an announcement of what you are about to provide. The first characters of your reply must be the first characters of the answer.
+- No closing notes about what you changed.
+- Reply in the same language as the original request.
+${ADAPTIVE_DEPTH_DIRECTIVE}`,
         },
       ],
     };
+  }
+
+  /**
+   * Whether a final-pass output is meta-commentary about the refinement rather
+   * than an answer.
+   *
+   * Used only to REJECT a swap, never to rewrite content — so a false positive
+   * costs the refinement and keeps the already-validated answer, which is the
+   * safe direction. The prompt above is the primary fix; this exists because a
+   * prompt-only fix is a probability, not a guarantee.
+   */
+  private looksLikeRefinementPreamble(content: string): boolean {
+    const head = content.trimStart().slice(0, 160).toLowerCase();
+    return (
+      /^(certainly|sure|of course|absolutely)[,.!]/.test(head) ||
+      /^(here|below)('s| is| are)? (the )?(final|polished|revised|improved|updated)/.test(head) ||
+      /^(i('ve| have) (now )?(polished|revised|refined|improved|updated))/.test(head)
+    );
   }
 
   /**

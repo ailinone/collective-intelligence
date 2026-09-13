@@ -13,7 +13,7 @@
  * Simplest and fastest strategy, baseline for comparison
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import type {
   ChatRequest,
   OrchestrationContext,
@@ -27,6 +27,8 @@ import type {
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getUserSpecifiedModelFlag, getTaskType } from '@/types/chat-request-extended.js';
+import { estimateContextSize as estimateContextSizeShared } from '../context-size-estimator';
+import { ContextWindowExceededError } from '@/utils/custom-errors';
 
 /**
  * Single Model Strategy
@@ -235,6 +237,16 @@ export class SingleModelStrategy extends BaseStrategy {
 
     if (!execution) {
       const lastError = attempts[attempts.length - 1]?.error || 'No suitable model available';
+      // Defense-in-depth for the case our estimateContextSize() heuristic
+      // undercounted and the pinned-model preflight in selectBestModel()
+      // let a genuinely-too-big request through: the provider's own real
+      // tokenizer rejected it. Surface that as the same well-classified
+      // 400 the preflight produces, not a generic unclassified 500 — see
+      // ContextWindowExceededError's doc comment.
+      const { classifyProviderError } = await import('@/core/operability');
+      if (classifyProviderError(new Error(lastError)).errorClass === 'context_exceeded') {
+        throw new ContextWindowExceededError(`Model execution failed: ${lastError}`);
+      }
       throw new Error(`Model execution failed: ${lastError}`);
     }
 
@@ -249,6 +261,7 @@ export class SingleModelStrategy extends BaseStrategy {
       totalCost,
       totalDuration,
       qualityScore: this.calculateQualityScore(execution),
+      toolArtifacts: mergeArtifacts(attempts),
       metadata: {
         strategyId: metadata.id,
         modelCount: attempts.length,
@@ -412,6 +425,48 @@ export class SingleModelStrategy extends BaseStrategy {
       );
 
       if (requestedModel) {
+        // Context-window preflight (2026-09 audit): a pinned model "must
+        // always win outright" (see orchestration-engine.ts's
+        // preferredModelFromRequest doc comment) — that contract means a
+        // request too big for the pin may NOT be silently truncated, nor
+        // silently handed to a different model than the caller explicitly
+        // asked for. The only honest outcome is a clean, well-classified
+        // failure here, BEFORE any adapter/provider call, mirroring the
+        // fail-closed pattern the 'auto' path already applies via
+        // dynamic-model-selector.ts's `context_window >= contextSize` SQL
+        // filter (auto routing never even offers an unfittable model as a
+        // candidate; a hard pin has no such filter upstream, which is
+        // exactly the gap this closes) and the session-affinity pin
+        // re-validation just above in orchestration-engine.ts
+        // (`pinnedModel.contextWindow > 0 && contextSize < pinnedModel.
+        // contextWindow`). `contextWindow > 0` guards the same way: an
+        // unknown/missing catalog value can't be used to fail a request
+        // closed on an unknowable fact.
+        const pinnedContextSize = this.estimateContextSize(request);
+        if (
+          requestedModel.contextWindow > 0 &&
+          pinnedContextSize > requestedModel.contextWindow
+        ) {
+          this.log.warn(
+            {
+              model: requestedModel.name,
+              modelId: requestedModel.id,
+              contextSize: pinnedContextSize,
+              contextWindow: requestedModel.contextWindow,
+              reason: 'Pinned model does not fit request context',
+            },
+            'User-specified model rejected — failing closed (never silently truncating or substituting a pinned model)'
+          );
+          throw new ContextWindowExceededError(
+            `The request (~${pinnedContextSize} estimated tokens) exceeds the pinned model's context window (${requestedModel.id}: ${requestedModel.contextWindow} tokens). Reduce the request (shorter history, fewer/smaller tool results) or pin a model with a larger context window.`,
+            {
+              modelId: requestedModel.id,
+              contextSize: pinnedContextSize,
+              contextWindow: requestedModel.contextWindow,
+            }
+          );
+        }
+
         // Use injected adapter getter
         const adapter = this.getAdapterForModel
           ? await this.getAdapterForModel(requestedModel, context)
@@ -778,14 +833,14 @@ export class SingleModelStrategy extends BaseStrategy {
   }
 
   /**
-   * Estimate context size in tokens for DynamicModelSelector
+   * Estimate context size in tokens for DynamicModelSelector.
+   * Delegates to the shared estimator (context-size-estimator.ts) — see its
+   * doc comment for why this used to be a broken, drifted private copy
+   * (never counted `request.tools`, mis-serialized structured content via
+   * `.toString()`).
    */
   private estimateContextSize(request: ChatRequest): number {
-    const totalChars =
-      request.messages?.reduce((sum, msg) => sum + (msg.content?.toString() || '').length, 0) || 0;
-
-    // Rough estimation: ~4 chars per token
-    return Math.ceil(totalChars / 4);
+    return estimateContextSizeShared(request);
   }
 
   /**

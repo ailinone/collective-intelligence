@@ -183,6 +183,11 @@ const SELF_HOSTED_PROVIDERS = new Set([
   'lm-studio',
   'xinference',
   'triton',
+  // Self-hosted localhost runtimes added with the 2026-08 catalog closure
+  // (providers.catalog.ts "95 rows" block); same shape as ollama/lm-studio.
+  'atomic-chat',
+  'lynkr',
+  'privatemode',
   // Specialty self-hosted (intentionally NOT in catalog — their shapes
   // don't fit the catalog's integrationClass enum today). Documented
   // permanent exception; see provider-registry.ts "5 specialty non-OAI"

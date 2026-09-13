@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  classifyDedicatedSpecialization,
   extractModelModalities,
   inferEndpointCompatibility,
   inferModelCapabilities,
@@ -189,5 +190,177 @@ describe('model-capability-inference', () => {
     expect(normalizeOperationEndpoint('stt')).toBe('audio_transcriptions');
     expect(normalizeOperationEndpoint('tts')).toBe('audio_speech');
     expect(normalizeOperationEndpoint('not_a_real_endpoint')).toBeUndefined();
+  });
+
+  // ── Production bug (LOTE BA, 2026-09): aggregator-hub metadata fabricating
+  //    chat-shaped capabilities on dedicated non-chat endpoints ────────────
+  // Confirmed live: llmgateway declares the EXACT SAME `supported_parameters`
+  // (temperature, max_tokens, top_p, frequency_penalty, presence_penalty,
+  // response_format, tools, tool_choice) for text-embedding-3-small,
+  // text-embedding-3-large, gemini-embedding-001, text-embedding-ada-002,
+  // etc. — a blanket schema copied across its whole catalog, not a real
+  // description of what an embeddings-only endpoint accepts. Trusting it
+  // persisted `['streaming','json_mode','function_calling','tool_use',
+  // 'embedding','embeddings']` for a pure embeddings model.
+  describe('dedicated non-chat endpoints ignore aggregator-hub supported_parameters (LOTE BA)', () => {
+    const AGGREGATOR_SUPPORTED_PARAMETERS = [
+      'temperature',
+      'max_tokens',
+      'top_p',
+      'frequency_penalty',
+      'presence_penalty',
+      'response_format',
+      'tools',
+      'tool_choice',
+    ];
+
+    it('llmgateway/text-embedding-3-small does not get chat-shaped capabilities', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'text-embedding-3-small',
+        metadata: { supported_parameters: AGGREGATOR_SUPPORTED_PARAMETERS },
+      });
+
+      expect(capabilities).toContain('embedding');
+      expect(capabilities).toContain('embeddings');
+      for (const bogus of [
+        'streaming',
+        'json_mode',
+        'function_calling',
+        'tool_use',
+        'chat',
+        'text_generation',
+      ]) {
+        expect(capabilities, bogus).not.toContain(bogus);
+      }
+    });
+
+    it.each([
+      'text-embedding-3-large',
+      'text-embedding-ada-002',
+      'gemini-embedding-001',
+      'voyage-3-large',
+    ])('%s ignores the same blanket supported_parameters list', (modelId) => {
+      const capabilities = inferModelCapabilities({
+        modelId,
+        metadata: { supported_parameters: AGGREGATOR_SUPPORTED_PARAMETERS },
+      });
+
+      expect(capabilities).toContain('embedding');
+      for (const bogus of ['function_calling', 'tool_use', 'streaming', 'json_mode']) {
+        expect(capabilities, `${modelId}/${bogus}`).not.toContain(bogus);
+      }
+    });
+
+    it('a reranker id also ignores the blanket supported_parameters list', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'rerank-english-v3.0',
+        metadata: { supported_parameters: AGGREGATOR_SUPPORTED_PARAMETERS },
+      });
+
+      expect(capabilities).toContain('reranking');
+      for (const bogus of ['function_calling', 'tool_use', 'streaming', 'json_mode']) {
+        expect(capabilities, bogus).not.toContain(bogus);
+      }
+    });
+
+    it('a moderation classifier id also ignores the blanket supported_parameters list', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'omni-moderation-latest',
+        metadata: { supported_parameters: AGGREGATOR_SUPPORTED_PARAMETERS },
+      });
+
+      expect(capabilities).toContain('moderation');
+      for (const bogus of ['function_calling', 'tool_use', 'streaming', 'json_mode']) {
+        expect(capabilities, bogus).not.toContain(bogus);
+      }
+    });
+
+    it('a model with declared text output KEEPS supported_parameters inference (regression guard)', () => {
+      // Real chat models must not lose function_calling/streaming just
+      // because the guard exists — declared text output is strong evidence
+      // the endpoint really is chat-shaped.
+      const capabilities = inferModelCapabilities({
+        modelId: 'openai/gpt-4o',
+        metadata: {
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: AGGREGATOR_SUPPORTED_PARAMETERS,
+        },
+      });
+
+      expect(capabilities).toContain('function_calling');
+      expect(capabilities).toContain('tool_use');
+      expect(capabilities).toContain('streaming');
+      expect(capabilities).toContain('json_mode');
+    });
+  });
+
+  // ── Production bug (LOTE BA, 2026-09): gpt-image family missing
+  //    image_generation ───────────────────────────────────────────────────
+  // Confirmed live on vercel-ai-gateway/poe/fastrouter/routeway: no
+  // architecture/capabilities metadata is declared for these hub rows, so
+  // `inferModelCapabilities` fell all the way through to the vendor-family
+  // `gpt` regex and tagged them chat instead of consulting the (fixed)
+  // dedicated-specialisation classifier.
+  describe('gpt-image family is classified as image, not chat (LOTE BA)', () => {
+    it.each(['gpt-image-1', 'gpt-image-1.5', 'gpt-image-2', 'openai/gpt-image-1-mini'])(
+      '%s → image_generation, no chat capabilities, with no declared metadata',
+      (modelId) => {
+        const capabilities = inferModelCapabilities({ modelId });
+
+        expect(capabilities).toContain('image_generation');
+        expect(capabilities).not.toContain('chat');
+        expect(capabilities).not.toContain('text_generation');
+        expect(capabilities).not.toContain('streaming');
+      }
+    );
+
+    it('classifyDedicatedSpecialization recognises gpt-image-1 as image, not chat', () => {
+      expect(classifyDedicatedSpecialization('gpt-image-1')?.modelType).toBe('image');
+      expect(classifyDedicatedSpecialization('openai/gpt-image-1.5')?.modelType).toBe('image');
+    });
+  });
+
+  // ── `reasoning_effort` supported_parameters entry → `deep_compute`
+  //    (SOTA audit, 2026-09-07: `deep_compute` had zero real assignments in
+  //    production across every extraction path). `reasoning_effort` is the
+  //    real, cross-provider supported_parameters token for a configurable
+  //    compute-budget dial (OpenAI o1/o3, xAI grok, Groq's oai-compat
+  //    reasoning family — see providers.catalog.ts), distinct from the plain
+  //    `reasoning`/`thinking` presence flag already handled above.
+  describe('reasoning_effort parameter infers deep_compute (SOTA audit, 2026-09-07)', () => {
+    it('adds deep_compute when supported_parameters lists reasoning_effort', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'openai/o3',
+        metadata: {
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: ['reasoning_effort', 'tools'],
+        },
+      });
+
+      expect(capabilities).toContain('deep_compute');
+      expect(capabilities).toContain('reasoning');
+      expect(capabilities).toContain('thinking_mode');
+    });
+
+    it('does not add deep_compute without a reasoning_effort parameter', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'openai/gpt-4o',
+        metadata: {
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: ['tools', 'response_format'],
+        },
+      });
+
+      expect(capabilities).not.toContain('deep_compute');
+    });
+
+    it('does not add deep_compute on a dedicated non-chat endpoint even if the blanket aggregator list includes reasoning_effort', () => {
+      const capabilities = inferModelCapabilities({
+        modelId: 'text-embedding-3-small',
+        metadata: { supported_parameters: ['reasoning_effort', 'tools'] },
+      });
+
+      expect(capabilities).not.toContain('deep_compute');
+    });
   });
 });

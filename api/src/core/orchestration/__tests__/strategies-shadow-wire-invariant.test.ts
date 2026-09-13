@@ -179,7 +179,15 @@ describe('strategies shadow-wire architectural invariant', () => {
       // can't drift one side.
       const TS_TUPLES = EXPECTED.map((e) => `${e.strategyId}/${e.decisionType}`).sort();
       // The Python enum from coord_serving.py + ensemble-coordinator-types.ts.
-      // sensitivity-consensus is reserved but no strategy uses it yet.
+      // Some entries are RESERVED on the wire but currently unused by any TS
+      // strategy: parallel-race was unregistered by audit DEAD-1 (2026-06-11)
+      // and dropped from EXPECTED above, while coord_serving.py still accepts
+      // ("parallel-race", "race-candidates"). So the invariant is CONTAINMENT,
+      // not equality: TS may use fewer tuples than the wire allows, but must
+      // never invent one the Python side would reject with 422.
+      //
+      // (Before 2026-09-05 this asserted strict equality and had been failing
+      // since DEAD-1 — it went unnoticed because no CI step ever ran this file.)
       const ALLOWED_TUPLES = [
         'consensus/synthesis-coordinator',
         'debate/moderator-selection',
@@ -187,7 +195,11 @@ describe('strategies shadow-wire architectural invariant', () => {
         'parallel-race/race-candidates',
         'tri-role-collective/role-for-turn',
       ];
-      expect(TS_TUPLES).toEqual(ALLOWED_TUPLES);
+      for (const tuple of TS_TUPLES) {
+        expect(ALLOWED_TUPLES, `${tuple} is not a wire-contract tuple`).toContain(tuple);
+      }
+      // At least the four registered strategies must still be wired.
+      expect(TS_TUPLES.length).toBeGreaterThanOrEqual(4);
     });
   });
 });

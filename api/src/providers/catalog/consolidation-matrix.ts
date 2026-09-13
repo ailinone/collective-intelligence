@@ -55,7 +55,20 @@
  *                        (NOT an integration bug)
  *   upstream-suspended — auth accepted but vendor reports credit/quota
  *                        exhausted
- *   defunct-unreachable — credential invalid this session (stale/rotated)
+ *   defunct-unreachable — credential invalid this session (stale/rotated),
+ *                        OR the vendor's entire host/route is proven
+ *                        unreachable with NO vendor-identifiable signal at
+ *                        all (no branded shutdown notice, no DNS record for
+ *                        the docs domain, an identical generic response for
+ *                        real key/garbage key/no key alike — see
+ *                        `inflection`, 2026-09-10). Distinguish from
+ *                        upstream-suspended: that bucket is for a vendor
+ *                        that is still demonstrably alive and responding
+ *                        with SOME identifiable, on-brand signal (a real
+ *                        HTML shutdown page, an explicit balance/quota
+ *                        error) confirming a deliberate, known vendor-side
+ *                        state — see the anyscale writeup below for why
+ *                        that case is upstream-suspended, not this bucket.
  *   catalog-only-inventory — catalog row with integrationMode: 'catalog-only'
  *                        (intentionally non-executing metadata inventory)
  *   switch-only-legitimate — provider-registry.ts switch case that is NOT
@@ -116,13 +129,13 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //                    `api.moonshot.ai/v1` (confirmed: DEFAULT_BASE_URL
   //                    in moonshot-adapter.ts). This final pass probed
   //                    `api.moonshot.ai/v1/models` with the same GCP
-  //                    secret `ailin-moonshot-key` → HTTP 200, 14 models.
+  //                    secret `<prefix>-moonshot-key` → HTTP 200, 14 models.
   //                    The integration was never broken; the previous
   //                    verdict was a probe-target bug. Classification
   //                    restored.
   //
   //   + aws-bedrock  → was 'credentials-missing'. GCP has
-  //                    `ailin-aws-bearer-token` (AWS added Bearer-token
+  //                    `<prefix>-aws-bearer-token` (AWS added Bearer-token
   //                    auth for read endpoints in 2025, alongside SigV4).
   //                    Probe `GET bedrock.us-east-1.amazonaws.com/foundation-models`
   //                    with Bearer → HTTP 200, 163KB body. This proves
@@ -170,7 +183,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'friendli',
     'gemini-openai', // 2026-04-23 final pass — vertex-key added to GEMINI_API_KEY fallback chain → generativelanguage.googleapis.com 200, 50 Gemini models (prior state: 403 suspended google-key)
     // heliconeai REMOVED this pass — demoted to credentials-missing.
-    // Both ailin-heliconeai-key AND ailin-heliconeai-api-key (the two known
+    // Both <prefix>-heliconeai-key AND <prefix>-heliconeai-api-key (the two known
     // GCP secret names for Helicone's AI gateway) are the literal 12-byte
     // string "PLACEHOLDER". The /models 200 from earlier probes was on a
     // public no-auth endpoint (Helicone's models registry is browsable);
@@ -202,11 +215,14 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'cohere',
     'jina',
     'openrouter',
-    'cartesia', // specialty audio, switch-only — /voices → 200, 751 voices
+    'cartesia', // specialty audio — /voices → 200, 751 voices (probe
+    //            predates the 2026-09-12 migration off the switch case
+    //            onto a catalog row; the live-validation evidence itself
+    //            is unaffected by which registration path serves it)
     'deepgram', // specialty audio, switch-only — /v1/models → 200 (auth: Token not Bearer)
-    'elevenlabs', // specialty audio, switch-only — /v1/voices → 200 (not /v1/models)
+    'elevenlabs', // specialty audio, switch-only — /v1/voices → 200 (not /v1/models). LOTE AX (2026-09-06): the same key's music_generation surface (POST /v1/music) is CODE_COMPLETE_LIVE_BLOCKED — live-probed with the real <prefix>-elevenlabs-key, request reached the vendor and was correctly parsed (proving the adapter's wire contract), but the account is on the free tier: HTTP 402 {"code":"paid_plan_required","message":"Music API is not available for free users."}. Billing gate, not a code defect — same pattern as runwayml's video_generation (see video-orchestration-service.ts). Also live-confirmed: GET /v1/models does NOT list music_v1/music_v2 at all (TTS/STS models only) — the adapter pins both ids as a documented no-list-endpoint fallback.
     'aws-bedrock', // 2026-04-23 final pass — Bearer-token auth on /foundation-models → 200, 163KB (AWS added Bearer support for read endpoints in 2025)
-    'vertex-ai', // 2026-04-23 phase-final — ailin-vertex-key (distinct from suspended google-api-key) → generativelanguage.googleapis.com/v1beta/models 200, 50 Gemini models. The prior "ADC scope-limited" diagnosis was wrong — the GCP secret itself is a usable API key.
+    'vertex-ai', // 2026-04-23 phase-final — <prefix>-vertex-key (distinct from suspended google-api-key) → generativelanguage.googleapis.com/v1beta/models 200, 50 Gemini models. The prior "ADC scope-limited" diagnosis was wrong — the GCP secret itself is a usable API key.
     // ── Sublote D1 (2026-04-24) promotions — 10 providers, real chat proofs ──
     // Operator provisioned 17 secrets in GCP; each promoted provider below
     // was verified with GET /v1/models (200) AND POST /v1/chat/completions
@@ -222,7 +238,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'fireworks-ai', // accounts/fireworks/models/glm-5p1 chat 200 (447B) — first-pick llama-v3p1-8b was 404 (model-id deprecated), re-probed with real id from /models
     'sambanova', // Meta-Llama-3.3-70B-Instruct chat 200 (910B) — first-pick 3.1 was 410 Gone (deprecated), re-probed with 3.3
     'infermatic', // Qwen-Qwen3-30B-A3B chat 200 (476B) — LiteLLM Virtual Key with sk- prefix confirmed; key has model-scoped ACL (pinned in catalog note)
-    'heliconeai', // gpt-4o-mini chat 200 (1003B) — new ailin-heliconeai-api-key (sk-hel… 43B) replaces legacy ailin-heliconeai-key (literal PLACEHOLDER). Gateway routes to OpenAI with real completion.
+    'heliconeai', // gpt-4o-mini chat 200 (1003B) — new <prefix>-heliconeai-api-key (<redacted-key-prefix>… 43B) replaces legacy <prefix>-heliconeai-key (literal PLACEHOLDER). Gateway routes to OpenAI with real completion.
     // LOTE O (2026-07-11) — apertis, inception. Promoted same-day from
     // `no-live-validation` (catalog landed 2026-07-10 with no probe; gcloud
     // ADC needed interactive reauth). Operator completed `gcloud auth login
@@ -245,7 +261,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'inception',
     // LOTE P (2026-07-11) — empiriolabs. Held back in LOTE O pending
     // validation (unfamiliar model lineup in docs); operator's real
-    // ailin-empiriolabs-key probed live same day as the apertis/inception
+    // <prefix>-empiriolabs-key probed live same day as the apertis/inception
     // promotion: GET /v1/models 200 (134+ real models — Kling, DeepSeek,
     // Zhipu, Qwen, confirmed genuine, not fabricated), POST
     // /v1/chat/completions 200 with deepseek-v4-flash ("pong", cost_usd
@@ -287,7 +303,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // POST /v1/chat/completions 429'd usage_limit_reached. The operator
     // activated pay-as-you-go billing on the account later the same day
     // and re-ran a full end-to-end verification directly against the live
-    // API with the same GCP secret (ailin-sakana-ai-key): chat (fugu, plain
+    // API with the same GCP secret (<prefix>-sakana-ai-key): chat (fugu, plain
     // text), streaming (SSE chunks terminating in [DONE], content
     // assembled correctly), tool calls (correct function + arguments
     // extracted for a weather-lookup prompt), JSON mode
@@ -304,7 +320,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // Inference). New catalog row, went straight to live-validation — no
     // upstream-suspended stopover, unlike sakana-ai/maritaca-ai/byteplus
     // above. Full end-to-end verification with the real GCP secret
-    // `ailin-digitalocean-key`: GET /v1/models 200 (74 real models); POST
+    // `<prefix>-digitalocean-key`: GET /v1/models 200 (74 real models); POST
     // /v1/chat/completions 200 with real content ("pong", real usage
     // tokens); stream:true produced real SSE chat.completion.chunk events;
     // a weather-lookup tools prompt correctly returned finish_reason:
@@ -398,7 +414,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // runners) cannot reach LOCAL_LLAMA_URL, a dedicated external host
     // (<ollama-host-ip>, "ailin-ollama") that is not exposed to the public
     // internet — only reachable from the production API host itself. Live-
-    // verified directly from production (ailin-admin@<production-host> SSH
+    // verified directly from production (<ssh-user>@<production-host> SSH
     // session) rather than from the probe environment: native systemd
     // ollama.service, active 2+ days, port 11434 listening. GET
     // http://<ollama-host-ip>:11434/v1/models 200 (3 models: qwen2.5:7b/3b/1.5b);
@@ -418,24 +434,24 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // GCP secret existed. Direct Secret Manager inspection confirmed real,
     // non-PLACEHOLDER keys already provisioned for all four; the catalog
     // classification simply never caught up after provisioning:
-    //   minimax — ailin-minimax-key (126B) real. GET /v1/models 200 (8
+    //   minimax — <prefix>-minimax-key (126B) real. GET /v1/models 200 (8
     //     models: MiniMax-M3, M2.7/-highspeed, M2.5/-highspeed,
     //     M2.1/-highspeed, M2). POST /v1/chat/completions with MiniMax-M3
     //     200, finish_reason 'stop' (M-series emits a <think> preamble by
     //     default — a low max_tokens first attempt truncated mid-think with
     //     finish_reason 'length', which is just under-provisioned headroom,
     //     not a fault). No baseUrl/authScheme change — both already correct.
-    //   nscale — ailin-nscale-key (~1207B JWT bearer) real, not malformed.
+    //   nscale — <prefix>-nscale-key (~1207B JWT bearer) real, not malformed.
     //     GET /v1/models 200 (23 models incl. Kimi-K2.5, gpt-oss-120b/20b,
     //     several Qwen3 variants, Llama-4-Scout, FLUX.1-schnell). POST
     //     /v1/chat/completions with Qwen/Qwen3-4B-Instruct-2507 200, real
     //     content + usage from a live vLLM backend. baseUrl/authScheme
     //     unchanged (both already correct).
-    //   recraft — ailin-recraft-key real. POST /images/generations (style
+    //   recraft — <prefix>-recraft-key real. POST /images/generations (style
     //     digital_illustration) 200 with a real image_id + url; the url
     //     was fetched directly and confirmed a genuine ~3.1MB image/png
     //     body. baseUrl/authScheme/integrationClass unchanged.
-    //   zai — ailin-zai-key (49B) real. POST /chat/completions against the
+    //   zai — <prefix>-zai-key (49B) real. POST /chat/completions against the
     //     EXISTING open.bigmodel.cn baseUrl 200 for glm-4.5, glm-4.5-flash,
     //     glm-4-plus (real completions, one with reasoning_content).
     //     Deprecated ids glm-4/glm-4-flash/glm-4-air/glm-3-turbo 400 error
@@ -453,7 +469,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'recraft',
     'zai',
     // LOTE Y (2026-08-01) — xiaomi-mimo, WRONG-DOMAIN FIX. Real key
-    // ailin-xiaomi-mimo-key (51B, prefix "sk-s7i…") confirmed non-
+    // <prefix>-xiaomi-mimo-key (51B, prefix "<redacted-key-prefix>…") confirmed non-
     // PLACEHOLDER, but the catalog's baseUrl (platform.xiaomimimo.com) is
     // the console/marketing SPA, not the API: GET /v1/models there returns
     // HTTP 200 with Content-Type text/html (the React app shell, identical
@@ -485,7 +501,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // baseUrl/discovery-shape correction, not to full operational status.
     //
     // LOTE Z (2026-08-02) — v0 (Vercel), WRONG-SHAPE FIX. Real key
-    // ailin-v0-key (88B, format v1:<segment>:<segment>) already confirmed
+    // <prefix>-v0-key (88B, format v1:<segment>:<segment>) already confirmed
     // working in LOTE Y (2026-08-01) for raw generation, but the catalog's
     // oai-compat-pure integrationClass targeted a /v1/chat/completions
     // surface that doesn't exist for this vendor (404 identical for a
@@ -523,7 +539,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //    directly. Promotion requires ADC with roles/aiplatform.user.
   'no-live-validation': [
     // Empty post phase-final: vertex-ai was promoted to live-validation
-    // (ailin-vertex-key 200 on generativelanguage.googleapis.com/v1beta/models).
+    // (<prefix>-vertex-key 200 on generativelanguage.googleapis.com/v1beta/models).
     // The prior rationale "ADC scope-limit requires roles/aiplatform.user"
     // was a misdiagnosis — the GCP secret is a usable API key, not an SA.
     //
@@ -554,8 +570,236 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // confirmed to return a richer native shape the generic fetcher only
     // partly understands. See the catalog entry's own notes for the
     // discovery-shape follow-up. Promote once a real key is provisioned
-    // and a live probe confirms chat/completions.
+    //    and a live probe confirms chat/completions.
     'ailin',
+    //
+    // LOTE AC (2026-08-21): wafer (Wafer Serverless, pass.wafer.ai/v1).
+    // Landed here for the same reason as LOTE O/Q/R before their
+    // promotions: gcloud ADC requires interactive reauth in this session,
+    // so the provisioned secret `<prefix>-waferai-key` could not be fetched
+    // and NO live probe (discovery or execution) was run. Discovery shape
+    // is docs-confirmed OpenAI-standard `{object:"list",data:[...]}` with
+    // per-card `max_model_len` + a `wafer` vendor blob (capabilities
+    // booleans, cents-per-million pricing) that the generic hub fetcher
+    // reads since this lot. Promote to `live-validation` once the operator
+    // re-authenticates and a real probe confirms GET /v1/models + POST
+    // /v1/chat/completions — same promotion path as apertis/concentrate/
+    // fastrouter.
+    'wafer',
+    //
+    // LOTE AD-AE/AF/AG (2026-08-21): vivgrid, unorouter, umans,
+    // trustedrouter. Same blocker as wafer above — gcloud ADC requires
+    // interactive reauth this session, so none of the four provisioned
+    // secrets (<prefix>-vivgrid-key, <prefix>-unorouter-key, <prefix>-umans-key,
+    // <prefix>-trustedrouter-key) could be fetched and NO authenticated
+    // probe ran. What WAS established, unauthenticated:
+    //   - umans: GET api.code.umans.ai/v1/models -> 200 (7 models,
+    //     standard OpenAI shape with context_length + USD/1M pricing).
+    //   - trustedrouter: GET api.trustedrouter.com/v1/models -> 200
+    //     (559 models, exact OpenRouter shape incl. per-token pricing
+    //     strings) — discovery fully proven for both.
+    //   - unorouter: GET /v1/models -> 401 while a bogus path 404s —
+    //     endpoint existence proven, shape needs the key.
+    //   - vivgrid: global 401 gate (bogus paths also 401) — /models
+    //     existence UNPROVEN; pinnedFallback is the inventory of record.
+    //     UPDATE (LOTE AR, 2026-09-06): a later authenticated probe with
+    //     the real <prefix>-vivgrid-key resolved this — GET /v1/models -> 200
+    //     real OpenAI-shaped list vs 405 control (see GAP-AK-6 and
+    //     DISCOVERY_COMPLIANCE_REGISTRY['compliant-dynamic-discovery']).
+    //     Discovery is now proven; this row stays in `no-live-validation`
+    //     here because chat/completions EXECUTION still has not been
+    //     probed end-to-end this session — promote to `live-validation`
+    //     once that specific call is confirmed.
+    // Promote each to live-validation once the operator re-authenticates
+    // and a real chat/completions probe confirms execution.
+    'vivgrid',
+    'unorouter',
+    'umans',
+    'trustedrouter',
+    //
+    // LOTE AH (2026-09-03): 25 docs-onboarded providers — baseten,
+    // kilo-gateway, llama, longcat, iflow, modelscope, near-ai,
+    // ollama-cloud, regolo, sarvam, stackit, tinfoil, vultr, ovhcloud,
+    // crusoe, hetzner, io-intelligence, lilac, kimi-coding, alibaba-cn,
+    // moonshot-cn, siliconflow-cn, stepfun-cn, minimax-cn,
+    // xiaomi-token-plan. Catalog + secrets wiring landed this session
+    // from first-party documentation only; NO live probe ran (session
+    // tooling blocked + no credentials provisioned for any of them).
+    // BaseUrls verified against current docs where reachable via the
+    // docs-fetch pass (baseten inference.baseten.co/v1 with /v1/models
+    // Bearer-gated; kilo api.kilo.ai/api/gateway OpenAI-shaped). The four
+    // *-cn rows are China-region deployment profiles of already-live
+    // families (alibaba/moonshot/siliconflow/stepfun/minimax) with
+    // distinct hosts + credentials; xiaomi-token-plan covers the 3
+    // regional token-plan hosts via XIAOMI_TOKEN_PLAN_BASE_URL override.
+    // Promote each to `live-validation` once a key is provisioned and a
+    // real GET /models + POST /chat/completions probe confirms.
+    'baseten',
+    'kilo-gateway',
+    'llama',
+    'longcat',
+    'iflow',
+    'modelscope',
+    'near-ai',
+    'ollama-cloud',
+    'regolo',
+    'sarvam',
+    'stackit',
+    'tinfoil',
+    'vultr',
+    'ovhcloud',
+    'crusoe',
+    'hetzner',
+    'io-intelligence',
+    'lilac',
+    'kimi-coding',
+    'alibaba-cn',
+    'moonshot-cn',
+    'siliconflow-cn',
+    'stepfun-cn',
+    'minimax-cn',
+    'xiaomi-token-plan',
+    //
+    // LOTE AI (2026-09-03): 95 docs-onboarded rows — the full roster-
+    // convergence batch 2 (92 hosted OAI-compat platforms, gateways and
+    // plan/region profiles of live families, plus 3 self-hosted localhost
+    // runtimes mirroring the ollama row shape). Catalog + secrets wiring
+    // landed this session from the operator roster + first-party docs;
+    // NO live probe ran (no credentials provisioned for any of them, and
+    // self-hosted rows have no reachable local runtime from CI). Promote
+    // each hosted row to 'live-validation' once a key is provisioned and
+    // a real GET /models + POST /chat/completions probe confirms; the
+    // self-hosted rows promote only when an operator exposes a live local
+    // LOTE AJ (2026-09-03): 12 reopened-NPI / research-verdict rows —
+    // docs-onboarded this session, no live probe (no credentials).
+    'cloudflare-ai-gateway',
+    'merge',
+    'infomaniak',
+    'tinker',
+    'minimax-token-plan',
+    'minimax-token-plan-cn',
+    'llmgateway',
+    'modal',
+    'auriko',
+    'saladcloud',
+    'ebcloud',
+    // LOTE AL (2026-09-05): reopened false-NPI rows, round 2.
+    'ambient',
+    'amd',
+    'anyapi',
+    'bailing',
+    // 'meta' REMOVED 2026-09-04 (LOTE AK): duplicate of the 'llama' row
+    // (same displayName/providerFamily) whose baseUrl was the vendor's docs
+    // host — llama.developer.meta.com 302s every path to
+    // ai.developer.meta.com. Aliases folded into 'llama', which is already
+    // in this bucket above and whose api.llama.com base is probe-confirmed.
+    // runtime.
+    'abacus',
+    'abliteration',
+    'abovedev',
+    'agentrouter',
+    'agnes',
+    'ai-router',
+    'aiand',
+    'aixy',
+    'aki',
+    'berget',
+    'blueclaw',
+    'bothub',
+    'charm-hyper',
+    'claudin',
+    'sherlock',
+    'coralbricks',
+    'cortecs',
+    'crofai',
+    'crossmodel',
+    'drun',
+    'daoxe',
+    'dinference',
+    'echo',
+    'evroc',
+    'freemodel',
+    'frogbot',
+    'greenpt',
+    'hpcai',
+    'impossibl',
+    'inceptron',
+    'inference-net',
+    'inferx',
+    'iteracompute',
+    'jalapeno',
+    'jieko',
+    'kenari',
+    'klok',
+    'kosmik',
+    'llmtech',
+    'llmtr',
+    'lucidquery',
+    'meganova',
+    'mixlayer',
+    'moark',
+    'modeloracle',
+    'modelis',
+    'neosmith',
+    'neuralwatt',
+    'nova',
+    'ofox',
+    'openreason',
+    'opper',
+    'orcarouter',
+    'pendra',
+    'pioneer',
+    'poolside',
+    'qihang',
+    'qiniu',
+    'routingrun',
+    'runinfra',
+    'scx',
+    'sensenova',
+    'standardcompute',
+    'subconscious',
+    'submodel',
+    'tensorx',
+    'thegrid',
+    'tokengo',
+    'tokenrouter',
+    'vancine',
+    'xpersona',
+    'zeldoc',
+    'zenifra',
+    'zenmux',
+    'clarifai',
+    'opencode-zen',
+    'opencode-go',
+    'kuae',
+    'scnet',
+    'clinepass',
+    'tencent-coding',
+    'tencent-plan',
+    'tencent-tokenhub',
+    'alibaba-coding',
+    'alibaba-coding-cn',
+    'alibaba-token-plan',
+    'alibaba-token-plan-cn',
+    'zai-coding',
+    'zai-coding-cn',
+    'volcano-coding',
+    'stepfun-step-plan',
+    'stepfun-step-plan-cn',
+    'atomic-chat',
+    'lynkr',
+    'privatemode',
+    //
+    // LOTE AU (2026-09-08): aivideoapi (third-party Runway aggregator,
+    // api.aivideoapi.com — NOT the same vendor/credential as `runwayml`).
+    // Catalog + AivideoapiAdapter + secrets wiring landed this session;
+    // GCP secret `<prefix>-aivideoapi-key` confirmed live via `gcloud secrets
+    // list`, so this is not `credentials-missing`. No live probe ran
+    // against the real endpoint this session — the row is contract-
+    // verified only, against the vendor's own OpenAPI spec (see the
+    // catalog entry's `notes` field). Promote to `live-validation` once a
+    // real submit+poll round trip is confirmed with the provisioned key.
+    'aivideoapi',
   ],
 
   // ── 6 partial ────────────────────────────────────────────────────────
@@ -636,7 +880,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //            <PROVIDER>_API_KEY to unlock live-validation.
   //
   //      + qianfan (Baidu ERNIE promotion)
-  //          → auth-incomplete. GCP holds ailin-baidu-{key,secret,base-url}
+  //          → auth-incomplete. GCP holds <prefix>-baidu-{key,secret,base-url}
   //            (legacy v1 AK+SK OAuth material) but those secrets are the
   //            12-byte string "PLACEHOLDER" AND the canonical v2 runtime
   //            path uses a DIFFERENT key format (bce-v3/... bearer). A
@@ -669,9 +913,9 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //      · qianfan — v2 endpoint https://qianfan.baidubce.com/v2 ALIVE;
   //        401 invalid_iam_token on invalid bearer (BCE-shape error:
   //        {error:{code,message,type},id:'as-...'}). Base URL + authScheme
-  //        confirmed. GCP legacy v1 secrets ailin-baidu-{key,secret,
+  //        confirmed. GCP legacy v1 secrets <prefix>-baidu-{key,secret,
   //        base-url} re-read this session: all three still literal
-  //        "PLACEHOLDER". No ailin-qianfan-* or ailin-baidu-qianfan-*
+  //        "PLACEHOLDER". No <prefix>-qianfan-* or <prefix>-baidu-qianfan-*
   //        secret exists. Stays credentials-missing / auth-incomplete.
   //      · venice — /api/v1/models returns HTTP 200 PUBLICLY (no auth
   //        header required; with an INVALID Bearer it also returns 200,
@@ -684,7 +928,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //        when an invalid Bearer is sent. Asymmetric auth: one canonical
   //        surface is live-proven, one is gated. PROMOTED credentials-
   //        missing → partial (see `partial` bucket above for rationale).
-  //        No ailin-venice-* secret under any alias in GCP.
+  //        No <prefix>-venice-* secret under any alias in GCP.
   //      · siliconflow — api.siliconflow.cn/v1 ALIVE; 401 with body as
   //        a bare JSON string "Invalid token" (justifies integrationClass
   //        'oai-compat-quirks' — non-object error body). PRC-only endpoint
@@ -695,7 +939,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //        return identical OAI-compat error shape {"error":{"message":
   //        "Incorrect API key provided","type":"invalid_api_key"}} on
   //        invalid bearer. .com preserved as baseUrl (.ai remains an
-  //        acceptable alt via notes). No ailin-stepfun-* secret. Stays
+  //        acceptable alt via notes). No <prefix>-stepfun-* secret. Stays
   //        credentials-missing / secret-absent.
   //
   //    Net matrix delta from Sublote A: ONE bucket move (venice →
@@ -735,7 +979,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     //         vendor's canonical prefix. See CREDENTIALS_MISSING_SUBCLASS).
     //    1 EXPECTED but NOT provisioned: gmi (operator's 2026-04-24
     //         announcement listed gmi, but GCP Secret Manager re-scan
-    //         found no ailin-gmi-* or ailin-gmicloud-* under any alias —
+    //         found no <prefix>-gmi-* or <prefix>-gmicloud-* under any alias —
     //         vault state disagrees with operator claim. gmi stays
     //         secret-absent until the actual secret lands.)
     // Net bucket delta: 54 → 40 (−14). No new adds.
@@ -777,9 +1021,9 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     'scaleway',
     'volcano',
     'watsonx',
-    // LOTE M 2026-04-23 survivors post-D1 (3 remain of original 7)
+    // LOTE M 2026-04-23 survivors post-D1 (2 remain of original 7 as of
+    // 2026-09-10 — inflection moved to defunct-unreachable, see below)
     'gmi', // D1 2026-04-24 — operator claimed provisioned but GCP scan 2026-04-24 found NO matching secret; vault state disagrees. Stays secret-absent until secret actually lands.
-    'inflection',
     'relace',
     // 1 auth-incomplete carried from LOTE M close: qianfan has legacy v1
     // baidu-{key,secret} secrets in GCP but all are "PLACEHOLDER"; the v2
@@ -860,7 +1104,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //    writeup.
   //
   //    2026-04-23 final pass: +palabraai. The ClientId/ClientSecret header
-  //    pair (GCP secrets ailin-palabraai-id + ailin-palabraai-key) was
+  //    pair (GCP secrets <prefix>-palabraai-id + <prefix>-palabraai-key) was
   //    accepted by api.palabra.ai/session-storage/session; the server
   //    rejected the action with an explicit "Insufficient balance"
   //    (error_code 100050, documented in their public error code table).
@@ -876,9 +1120,24 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //          Platform"). Probe of api.endpoints.anyscale.com returns the
   //          HTML shutdown notice. Auth cannot be tested because the
   //          endpoint itself is gone. Classified upstream-suspended
-  //          because the vendor has permanently ceased serving public
-  //          credentials; defunct-unreachable is reserved for credential-
-  //          state rotations, not service-level shutdowns.
+  //          because the vendor is still demonstrably alive and serving
+  //          an explicit, on-brand notice confirming a deliberate, known
+  //          vendor-side decision — not merely "unreachable".
+  //
+  //          2026-09-10 update: this carve-out previously read
+  //          "defunct-unreachable is reserved for credential-state
+  //          rotations, not service-level shutdowns," which would have
+  //          wrongly excluded a DIFFERENT service-level-shutdown shape
+  //          later found in inflection (see the defunct-unreachable bucket
+  //          above). Refined distinction: what puts a permanent shutdown
+  //          in upstream-suspended (like anyscale) rather than
+  //          defunct-unreachable is a positive, identifiable vendor-side
+  //          signal (a real branded page, an explicit balance/quota error)
+  //          proving the vendor is alive and the state is deliberate.
+  //          inflection has no such signal — a generic nginx 404 identical
+  //          across every path/method/auth combination, plus DNS failure
+  //          on the docs domain — so it is defunct-unreachable, not
+  //          upstream-suspended.
   //
   //      (b) Credit-exhausted 402 — arcee/chutes/hyperbolic: each provider
   //          accepted the provisioned API key (parsed Authorization,
@@ -893,7 +1152,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   'upstream-suspended': [
     'ai302', // 401 on /v1/models — prior session recorded "Insufficient account balance"; endpoint alive, tier-gated
     'palabraai', // switch — /session-storage/session POST returned 403 "Insufficient balance" (code 100050). Auth accepted.
-    'anyscale', // D1 2026-04-24 — endpoint returns HTML shutdown notice "Effective August 1, 2024 Anyscale Endpoints API is available exclusively through the fully Hosted Anyscale Platform. Multi-tenant access to LLM models has been removed." ailin-anyscale-api-key provisioned (236B, aph0_C…) but cannot be exercised.
+    'anyscale', // D1 2026-04-24 — endpoint returns HTML shutdown notice "Effective August 1, 2024 Anyscale Endpoints API is available exclusively through the fully Hosted Anyscale Platform. Multi-tenant access to LLM models has been removed." <prefix>-anyscale-api-key provisioned (236B, <redacted-key-prefix>…) but cannot be exercised.
     'hyperbolic', // D1 2026-04-24 — /v1/chat returned 402 {"detail":"Insufficient funds, please see https://docs.hyperbolic.xyz/docs/hyperbolic-pricing"}. Auth accepted.
     // LOTE V (2026-08-01) — maritaca-ai. AUTHENTICATED GET /v1/models 200
     // (real 6-model array); an invalid key gets a distinct 401
@@ -915,14 +1174,14 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // the actual blocker in every case is a zero/insufficient account
     // balance, the identical shape already documented above for
     // arcee/chutes/hyperbolic/ai302/palabraai:
-    //   bfl — ailin-bfl-key (36B) real. baseUrl (api.bfl.ai/v1), authScheme
+    //   bfl — <prefix>-bfl-key (36B) real. baseUrl (api.bfl.ai/v1), authScheme
     //     (x-key header, not Bearer), and integrationClass (image-only) all
     //     confirmed correct against BFL's live docs. POST /v1/flux-pro-1.1
     //     AND /v1/flux-dev both 402 {"detail":"Insufficient credits"}.
     //     Contrast-tested: empty key → 403 "Not authenticated"; malformed
     //     key → 422 "Invalid API key format". Only the real key reaches the
     //     billing check, proving auth is genuinely accepted.
-    //   runwayml — ailin-runwayml-key (132B) real. baseUrl
+    //   runwayml — <prefix>-runwayml-key (132B) real. baseUrl
     //     (api.dev.runwayml.com — confirmed correct production host per
     //     Runway's own SDK/docs, "dev" is part of the real hostname, not a
     //     sandbox leftover) unchanged. GET /v1/organization (with the
@@ -932,13 +1191,13 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     //     "creditBalance":0. POST /v1/text_to_video 400 "You do not have
     //     enough credits to run this task." Auth/config fully correct;
     //     blocked purely on billing.
-    //   synthetic — ailin-synthetic-key (36B) real. GET /v1/models 200 (10
+    //   synthetic — <prefix>-synthetic-key (36B) real. GET /v1/models 200 (10
     //     models); POST /v1/chat/completions across 4 different real model
     //     ids all 402 {"error":"Insufficient credits and no active
     //     subscription. $0.00 is required..."}. Negative control with a
     //     bogus key → 401 "Invalid API Key" (not 402), proving the real key
     //     is accepted by auth and the block is purely at the billing layer.
-    //   vercel-ai-gateway — ailin-vercel-ai-gateway-key (60B) real. GET
+    //   vercel-ai-gateway — <prefix>-vercel-ai-gateway-key (60B) real. GET
     //     /v1/models 200 (312 models, correctly namespaced). POST
     //     /v1/chat/completions 402 insufficient_funds ("A positive credit
     //     balance is required for all requests, including BYOK...") for
@@ -946,7 +1205,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     //     wide, not model/provider-specific. Per Vercel's own error text,
     //     BYOK does not bypass this; the linked Vercel team account itself
     //     needs a positive balance.
-    //   xiaomi-mimo — ailin-xiaomi-mimo-key (51B) real. See the WRONG-
+    //   xiaomi-mimo — <prefix>-xiaomi-mimo-key (51B) real. See the WRONG-
     //     DOMAIN-FIX writeup in the 'live-validation' bucket comment above
     //     for the baseUrl correction (platform.xiaomimimo.com →
     //     api.xiaomimimo.com). On the corrected host: GET /v1/models 200
@@ -977,7 +1236,7 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
     // gate is entitlement rather than billing.
     //
     // What genuinely succeeded live, THROUGH THE ADAPTER CODE, with the
-    // real GCP key (ailin--byteplus-key — double hyphen is the real
+    // real GCP key (<prefix>--byteplus-key — double hyphen is the real
     // provisioned name):
     //   - healthCheck(): GET https://ark.ap-southeast.bytepluses.com/ping
     //     → 200 {"message":"pong"}, healthy. NOT anonymous: the same GET
@@ -1021,16 +1280,36 @@ export const CONSOLIDATION_MATRIX: Record<ConsolidationBucket, readonly string[]
   //    previous "defunct" verdict came from probing api.moonshot.cn, but
   //    the canonical adapter uses api.moonshot.ai/v1 (verified in
   //    moonshot-adapter.ts::DEFAULT_BASE_URL). Re-probe against .ai → 200,
-  //    14 models. Bucket now empty.
-  'defunct-unreachable': [],
+  //    14 models. Bucket now empty until 2026-09-10 below.
+  //
+  // 2026-09-10 — +inflection, moved out of credentials-missing/secret-absent.
+  // PR #555 (fix/inflection-real-discovery) live-re-probed the ENTIRE
+  // api.inflection.ai host with a real INFLECTION_API_KEY (found in
+  // api/.gcp-secrets.env — the secret IS provisioned, so `secret-absent`
+  // was already factually wrong, independent of this move's real reason):
+  // every path/method/auth combination — GET and POST; 8 candidate
+  // discovery paths; the catalog's own confirmed /v1/chat/completions; the
+  // legacy /external/api/inference shape; a same-host nonsense control
+  // path; real key, garbage key, and no key at all — returned an
+  // IDENTICAL generic nginx 404. developers.inflection.ai (docsUrl) fails
+  // DNS resolution outright. A live, current `CN=inflection.ai` TLS cert
+  // plus normal same-session responses from api.openai.com/api.github.com
+  // rule out a network/environment artifact. This is not a credentials
+  // problem (no key would unblock it) so `secret-absent` was the wrong
+  // subclass regardless of the local key's existence — `defunct-unreachable`
+  // is the honest bucket: the vendor's public API surface appears to be
+  // gone. Revisit when Inflection AI restores a reachable host.
+  'defunct-unreachable': ['inflection'],
 
   // ── 3 catalog-only inventory (intentional non-execution) ─────────────
   'catalog-only-inventory': ['sap', 'snowflake', 'topaz'],
 
   // ── 0 additional switch-only-legitimate ──────────────────────────────
   //    NOTE: first-party natives (openai, anthropic, …) and specialty
-  //    audio (deepgram, cartesia, elevenlabs, palabraai) are switch-only
-  //    BY LEGITIMATE design, but their current operational state is what
+  //    audio (deepgram, elevenlabs, palabraai) are switch-only BY
+  //    LEGITIMATE design (cartesia moved to a catalog row 2026-09-12 —
+  //    see the pinnedFallback-by-design note above), but their current
+  //    operational state is what
   //    determines their bucket. An openai that answered 200 this session
   //    is 'live-validation', not 'switch-only-legitimate'. This bucket
   //    exists for switch cases that have no other operational evidence
@@ -1118,22 +1397,28 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
     'nebius',
     'scaleway',
     'volcano',
-    // LOTE M 2026-04-23 survivors (3 of original 7 — infermatic promoted
-    // to live by D1; siliconflow/stepfun moved to auth-incomplete by D1)
-    'gmi', // operator announced 2026-04-24 provisioning but GCP scan found no ailin-gmi-* or ailin-gmicloud-* under any alias — vault state disagrees with announcement.
-    'inflection',
+    // LOTE M 2026-04-23 survivors (2 of original 7 as of 2026-09-10 —
+    // infermatic promoted to live by D1; siliconflow/stepfun moved to
+    // auth-incomplete by D1; inflection moved OUT to
+    // CONSOLIDATION_MATRIX['defunct-unreachable'] 2026-09-10 — see that
+    // bucket for the full evidence trail. inflection's absence here is
+    // deliberate: unlike gmi, a real-looking INFLECTION_API_KEY DOES exist
+    // locally in api/.gcp-secrets.env, but the entire vendor host is
+    // proven unreachable regardless of credential, so `secret-absent` was
+    // never the right subclass — the root cause isn't a missing secret.)
+    'gmi', // operator announced 2026-04-24 provisioning but GCP scan found no <prefix>-gmi-* or <prefix>-gmicloud-* under any alias — vault state disagrees with announcement.
     'relace',
   ],
   // Secret exists but value === literal "PLACEHOLDER" (1)
   //   pre-D1 count = 2 (heliconeai + azure-openai)
   //   D1 2026-04-24 refinement = −1 (heliconeai → live-validation:
-  //     operator provisioned ailin-heliconeai-api-key (sk-hel… 43B, real
+  //     operator provisioned <prefix>-heliconeai-api-key (<redacted-key-prefix>… 43B, real
   //     Helicone Proxy Virtual Key) which SUPERSEDES the legacy
-  //     ailin-heliconeai-key (11B literal "PLACEHOLDER" that caused the
+  //     <prefix>-heliconeai-key (11B literal "PLACEHOLDER" that caused the
   //     prior mis-classification). Gateway routes to OpenAI with a real
   //     HTTP 200 completion body.)
   placeholder: [
-    'azure-openai', // ailin-azure-openai-api-key + -endpoint + -deployment all "PLACEHOLDER"
+    'azure-openai', // <prefix>-azure-openai-api-key + -endpoint + -deployment all "PLACEHOLDER"
   ],
   // Local runtime expected; no reachable endpoint from probe environment (12)
   // local-llama REMOVED 2026-07-31 — promoted to live-validation, see below.
@@ -1156,16 +1441,16 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
   //
   // aws-sagemaker: requires classic SigV4 secret access key (40-char base64),
   //   but GCP only holds ABSK-prefixed Bedrock API bearer tokens. The
-  //   ailin-aws-key-id (AKIA... classic access key id) has no matching
-  //   ailin-aws-secret-access-key pair in the vault.
+  //   <prefix>-aws-key-id (AKIA... classic access key id) has no matching
+  //   <prefix>-aws-secret-access-key pair in the vault.
   //
   // qianfan (LOTE M 2026-04-23): Baidu Qianfan exposes two auth paths:
   //   v1 legacy — AK+SK → OAuth access_token → query-param (backed by
-  //     GCP secrets ailin-baidu-{key,secret,base-url}, BUT all three are
+  //     GCP secrets <prefix>-baidu-{key,secret,base-url}, BUT all three are
   //     literal "PLACEHOLDER" strings at HEAD so they cannot drive
   //     the v1 OAuth flow either).
   //   v2 canonical — bce-v3/... bearer key against qianfan.baidubce.com/v2
-  //     (no ailin-qianfan-* secret exists in GCP; a new QIANFAN_API_KEY
+  //     (no <prefix>-qianfan-* secret exists in GCP; a new QIANFAN_API_KEY
   //     must be provisioned in the bce-v3 format — this is distinct
   //     from the legacy baidu-key even if both are eventually populated).
   //   Both paths are currently un-executable: v1 has placeholder secrets,
@@ -1174,8 +1459,8 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
   //   that this repo does not ship, OR (b) a new QIANFAN_API_KEY for the
   //   v2 OAI-compat catalog row that this lot added.
   //
-  // togetherai (Sublote D1 2026-04-24): ailin-togetherai-api-key exists
-  //   in GCP (25B, prefix "key_CY…") but POST /v1/chat/completions returns
+  // togetherai (Sublote D1 2026-04-24): <prefix>-togetherai-api-key exists
+  //   in GCP (25B, prefix "<redacted-key-prefix>…") but POST /v1/chat/completions returns
   //   HTTP 401 {"error":{"message":"Invalid API key provided. You can find
   //   your API key at https://api.together.ai/settings/api-keys."...}}.
   //   The "key_" prefix is non-canonical for Together AI (whose keys are
@@ -1184,14 +1469,14 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
   //   dashboard. Auth-incomplete because the VAULT component exists but
   //   the credential's current state prevents upstream validation.
   //
-  // siliconflow (Sublote D1 2026-04-24): ailin-siliconflow-api-key exists
-  //   (51B, prefix "sk-hhc…") but POST /v1/chat/completions returns HTTP
+  // siliconflow (Sublote D1 2026-04-24): <prefix>-siliconflow-api-key exists
+  //   (51B, prefix "<redacted-key-prefix>…") but POST /v1/chat/completions returns HTTP
   //   401 with body as a bare JSON string "Api key is invalid" (15 bytes,
   //   oai-compat-quirks shape). The sk- prefix looks OpenAI-style rather
   //   than SiliconFlow's standard format; probable format mismatch or
   //   account-scope issue. Operator must re-issue.
   //
-  // stepfun (Sublote D1 2026-04-24): ailin-stepfun-api-key exists (65B)
+  // stepfun (Sublote D1 2026-04-24): <prefix>-stepfun-api-key exists (65B)
   //   but POST /v1/chat/completions returns HTTP 401 with OAI-shape body
   //   {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}}.
   //   Endpoint confirmed alive (verbatim OpenAI error shape). Operator
@@ -1223,8 +1508,8 @@ export const CREDENTIALS_MISSING_SUBCLASS: Record<string, readonly string[]> = {
   // matches the operator's actual project region). Multi-piece auth where
   // one required component (project-id) is absent — textbook
   // auth-incomplete, same shape as aws-sagemaker/qianfan below. Promotion
-  // requires the operator to provision ailin-watsonx-project-id (and
-  // ideally ailin-watsonx-url) before a live probe can even be attempted.
+  // requires the operator to provision <prefix>-watsonx-project-id (and
+  // ideally <prefix>-watsonx-url) before a live probe can even be attempted.
   'auth-incomplete': [
     'aws-sagemaker',
     'qianfan',
@@ -1467,6 +1752,16 @@ export type DiscoveryComplianceClass = (typeof DISCOVERY_COMPLIANCE_BUCKETS)[num
  * `compliant-dynamic-discovery` was a stale assumption from initial
  * catalog drafting. Surfaced by test J3 (catalog static-inventory must
  * map to a non-compliant bucket).
+ *
+ * LOTE AT (2026-09-09), GAP-AK-6 closure: `relace` promoted from
+ * `non-compliant-hardcoded-inventory` (was 2: inflection, relace) to
+ * `compliant-dynamic-discovery` (was 62; the "Distribution at HEAD" table
+ * above predates several later LOTEs' promotions and is not re-totaled per
+ * change — the bucket arrays themselves are the source of truth, checked
+ * structurally by discovery-compliance-registry.test.ts J1/J4/J5, not by
+ * this literal count). `non-compliant-hardcoded-inventory` now holds only
+ * `inflection`. See the catalog-entry comment on `relace` and its new
+ * `compliant-dynamic-discovery` entry above for the OpenAPI evidence.
  */
 export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, readonly string[]> = {
   // ── 62 — Real /models endpoint + registered fetcher ──────────────────
@@ -1475,6 +1770,58 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
   // response, and writes canonical Model rows to the DB. The /v1/models
   // response for these providers reflects runtime-materialised inventory.
   'compliant-dynamic-discovery': [
+    // ── LOTE AK (2026-09-04) — 4 promotions from hardcoded inventory ─────
+    // Each of these shipped a hand-curated model list while the vendor was
+    // in fact serving a real listing endpoint. Route existence was proven
+    // per provider by a DISCRIMINATED unauthenticated probe: `/v1/models`
+    // compared against a nonsense control path on the SAME host, so an
+    // auth-first middleware that 401s everything cannot be mistaken for a
+    // live route. pinnedFallback deleted from all four catalog rows.
+    'perplexity', // /v1/models 401 vs control 404 — route real, auth-gated.
+    //              Pinned list still named retired sonar-*-online SKUs.
+    'writer', // /v1/models 401 vs control 404; `{models:[…]}` body is already
+    //          covered by the hub parser's key sweep — the "parser pending"
+    //          blocker recorded since 2026-04 did not exist.
+    'atlascloud', // /v1/models 200 PUBLIC vs control 401; `{code,msg,data:[…]}`
+    //              wrapper reads through the parser's `data` key. Pinned ids
+    //              were stale against the live body.
+    'avian', // /v1/models 200 PUBLIC vs control 404; pure OAI body carrying
+    //         context_length/display_name the pinned list lacked.
+    // LOTE AL (2026-09-05): qianfan promoted — /v2/models 403 AccessDenied
+    // vs control 404 ResourceNotFound (route real, BCE-signed auth is the
+    // gate); official docs confirm a standard {data:[{id,context_length,
+    // ...}]} body, already covered by the hub parser. pinnedFallback
+    // deleted from the catalog row.
+    'qianfan',
+    // LOTE AR (2026-09-06): vivgrid promoted — an authenticated probe with
+    // the real <prefix>-vivgrid-key found GET /v1/models -> 200, a genuine
+    // OpenAI-shaped {object:"list",data:[{id,object,created,owned_by}]}
+    // body listing real model ids (BAAI/bge-m3, claude-haiku-4-5, claude-
+    // opus-4-6/4-7/4-8, ...), vs 405 on a same-host control path (both
+    // unauthenticated versions still 401, matching the prior blanket-
+    // middleware read). pinnedFallback deleted from the catalog row.
+    'vivgrid',
+    // LOTE AT (2026-09-09), GAP-AK-6 closure: relace promoted — the official
+    // OpenAPI spec (docs.relace.ai/api-reference/openapi.json) documents
+    // `GET /models` on models.relace.ai ("the catalog for open-weight
+    // models hosted by Relace"), Bearer-authed, returning a standard
+    // {data:[{id,context_length,pricing,...}]} body already covered by the
+    // hub parser. This is a DIFFERENT host than the row's previous baseUrl
+    // (instantapply.endpoint.relace.run, which does not appear in the
+    // current spec's servers list at all) — resolved by moving baseUrl to
+    // models.relace.ai/v1 and registering the discovery call as a dedicated
+    // `relace-native` source (see central-model-discovery-service.ts; same
+    // absolute-URL-override pattern as github-models-native, since
+    // paths.modelList can't express a host-root path different from
+    // baseUrl). pinnedFallback (relace-apply-3/relace-code-reranker/
+    // relace-embedding) deleted from the catalog row — the two reranker/
+    // embedding ids never appeared anywhere in the official spec (no
+    // /v1/embeddings path exists at all), so they were unverified, not
+    // merely undiscovered. Relace's specialty code-apply/rank/compact/search
+    // tool endpoints (fixed single-purpose contracts, not a family of
+    // interchangeable models) remain deliberately unmodeled by this row —
+    // see the catalog entry's own notes.
+    'relace',
     // Switch natives (8 — first-party APIs with /v1/models or equivalent)
     'openai',
     'anthropic',
@@ -1613,7 +1960,7 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'ailin',
     // LOTE U (2026-07-29) — sakana-ai. AUTHENTICATED GET /v1/models
     // confirmed live 2026-07-29 with a real key from GCP secret
-    // `ailin-sakana-ai-key`: HTTP 200, real OpenAI-list shape
+    // `<prefix>-sakana-ai-key`: HTTP 200, real OpenAI-list shape
     // (`{object:"list",data:[{id,object,created,owned_by}]}`), 5 real
     // models — the exact shape the generic OpenAICompatibleHubModelFetcher
     // expects, no dedicated fetcher needed. Note: chat/completions itself
@@ -1624,7 +1971,7 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'sakana-ai',
     // LOTE V (2026-08-01) — maritaca-ai. AUTHENTICATED GET /v1/models
     // confirmed live 2026-08-01 with a real key from GCP secret
-    // `ailin-maritaca-key`: HTTP 200, real OpenAI-list shape
+    // `<prefix>-maritaca-key`: HTTP 200, real OpenAI-list shape
     // (`{object:"list",data:[{id,object,created,owned_by,context_length,
     // top_provider}]}`), 6 real models — the exact shape the generic
     // OpenAICompatibleHubModelFetcher expects, no dedicated fetcher
@@ -1639,7 +1986,7 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     // LOTE AA (2026-08-02) — byteplus (BytePlus ModelArk). AUTHENTICATED
     // GET https://ark.ap-southeast.bytepluses.com/api/v3/models confirmed
     // live 2026-08-02 with the real key from GCP secret
-    // `ailin--byteplus-key`: HTTP 200, `{object, data:[…]}`, 52 real model
+    // `<prefix>--byteplus-key`: HTTP 200, `{object, data:[…]}`, 52 real model
     // records. Auth-gated (401 with no header and with a malformed key).
     //
     // This ENTRY EXISTS BECAUSE A LIVE PROBE OVERTURNED THE RESEARCH: the
@@ -1671,7 +2018,7 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'byteplus',
     // LOTE AB (2026-08-10) — digitalocean. AUTHENTICATED GET
     // https://inference.do-ai.run/v1/models confirmed live 2026-08-10 with
-    // the real key from GCP secret `ailin-digitalocean-key`: HTTP 200,
+    // the real key from GCP secret `<prefix>-digitalocean-key`: HTTP 200,
     // `{object:"list",data:[{id,object,created,owned_by,context_length,
     // max_output_tokens}]}`, 74 real models — the exact shape the generic
     // OpenAICompatibleHubModelFetcher expects, no dedicated fetcher needed.
@@ -1680,6 +2027,190 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     // 'live-validation' above) — this row skipped the upstream-suspended
     // stopover entirely.
     'digitalocean',
+    // LOTE AC (2026-08-21) — wafer. GET https://pass.wafer.ai/v1/models is
+    // the documented source of truth for the Serverless catalog
+    // (docs.wafer.ai/serverless/api-reference): standard OpenAI
+    // `{object:"list",data:[{id,object,created,owned_by,max_model_len,
+    // zdr_supported,wafer:{capabilities,pricing}}]}` shape — consumable by
+    // the generic OpenAICompatibleHubModelFetcher (which since this lot
+    // also reads the `wafer` vendor blob: cents→USD pricing,
+    // capability booleans, context length). Not live-probed yet (gcloud
+    // ADC expired — see CONSOLIDATION_MATRIX 'no-live-validation'), but
+    // this registry answers inventory-shape, not reachability.
+    'wafer',
+    // LOTE AF (2026-08-21) — umans. GET https://api.code.umans.ai/v1/models
+    // confirmed live UNAUTHENTICATED 2026-08-21: 200, standard
+    // `{object:"list",data:[{id,object,created,owned_by,context_length,
+    // pricing:{input,output}}]}` (7 models) — generic hub fetcher shape,
+    // no dedicated fetcher needed. Richer public /v1/models/info (keyed
+    // map with deprecation + base_model.provider + capabilities) noted
+    // for future enrichment.
+    'umans',
+    // LOTE AG (2026-08-21) — trustedrouter. GET
+    // https://api.trustedrouter.com/v1/models confirmed live
+    // UNAUTHENTICATED 2026-08-21: 200, 559 models in the EXACT OpenRouter
+    // shape (`data:[{id,name,context_length,architecture:{input_modalities,
+    // output_modalities},pricing:{prompt,completion per-token USD strings},
+    // top_provider}]`) — same shape the generic hub fetcher already
+    // consumes for openrouter.
+    'trustedrouter',
+    // LOTE AE (2026-08-21) — unorouter. Endpoint EXISTENCE proven by
+    // differential probe (GET /v1/models -> 401 anon while /v1/<bogus> ->
+    // 404, i.e. a per-route auth gate, 2026-08-21); response shape not
+    // yet observed (needs the key) but the platform is documented as
+    // OpenAI-SDK-compatible end-to-end, so the generic hub fetcher is the
+    // expected consumer. Re-verify the shape on first authenticated
+    // discovery run.
+    'unorouter',
+    // LOTE AH (2026-09-03) — 25 docs-onboarded providers. Each is wired to
+    // the generic OpenAICompatibleHubModelFetcher at the documented
+    // /models path on an OpenAI-compatible host (docs-confirmed shapes;
+    // baseten and kilo docs fetched directly this session, the rest from
+    // first-party API references). No authenticated probe ran this
+    // session — this registry answers inventory-shape (docs-declared),
+    // not reachability; re-verify each shape on first authenticated run.
+    'baseten',
+    'kilo-gateway',
+    'llama',
+    'longcat',
+    'iflow',
+    'modelscope',
+    'near-ai',
+    'ollama-cloud',
+    'regolo',
+    'sarvam',
+    'stackit',
+    'tinfoil',
+    'vultr',
+    'ovhcloud',
+    'crusoe',
+    'hetzner',
+    'io-intelligence',
+    'lilac',
+    'kimi-coding',
+    'alibaba-cn',
+    'moonshot-cn',
+    'siliconflow-cn',
+    'stepfun-cn',
+    'minimax-cn',
+    'xiaomi-token-plan',
+    // LOTE AI (2026-09-03) — 92 hosted docs-onboarded providers (roster
+    // convergence batch 2). Each is wired to the generic
+    // OpenAICompatibleHubModelFetcher at the documented /models path on an
+    // OpenAI-compatible host (per first-party docs / roster evidence).
+    // No authenticated probe ran this session — this registry answers
+    // inventory-shape (docs-declared), not reachability; re-verify each
+    // LOTE AJ (2026-09-03): docs-declared /models surface (merge and
+    // minimax-token-plan[-cn] verified against fetched first-party docs;
+    // infomaniak/llmgateway/ebcloud confidence MED/LOW — hosts partly
+    // unreachable this session; auriko/saladcloud docs fetched).
+    'merge',
+    'infomaniak',
+    'minimax-token-plan',
+    'minimax-token-plan-cn',
+    'llmgateway',
+    'auriko',
+    'saladcloud',
+    'ebcloud',
+    // LOTE AL (2026-09-05): reopened false-NPI rows, round 2 — same
+    // docs-declared /models shape, no authenticated probe this session.
+    'ambient',
+    'amd',
+    'anyapi',
+    'bailing',
+    // shape on first authenticated run.
+    'abacus',
+    'abliteration',
+    'abovedev',
+    'agentrouter',
+    'agnes',
+    'ai-router',
+    'aiand',
+    'aixy',
+    'aki',
+    'berget',
+    'blueclaw',
+    'bothub',
+    'charm-hyper',
+    'claudin',
+    'sherlock',
+    'coralbricks',
+    'cortecs',
+    'crofai',
+    'crossmodel',
+    'drun',
+    'daoxe',
+    'dinference',
+    'echo',
+    'evroc',
+    'freemodel',
+    'frogbot',
+    'greenpt',
+    'hpcai',
+    'impossibl',
+    'inceptron',
+    'inference-net',
+    'inferx',
+    'iteracompute',
+    'jalapeno',
+    'jieko',
+    'kenari',
+    'klok',
+    'kosmik',
+    'llmtech',
+    'llmtr',
+    'lucidquery',
+    'meganova',
+    'mixlayer',
+    'moark',
+    'modeloracle',
+    'modelis',
+    'neosmith',
+    'neuralwatt',
+    'nova',
+    'ofox',
+    'openreason',
+    'opper',
+    'orcarouter',
+    'pendra',
+    'pioneer',
+    'poolside',
+    'qihang',
+    'qiniu',
+    'routingrun',
+    'runinfra',
+    'scx',
+    'sensenova',
+    'standardcompute',
+    'subconscious',
+    'submodel',
+    'tensorx',
+    'thegrid',
+    'tokengo',
+    'tokenrouter',
+    'vancine',
+    'xpersona',
+    'zeldoc',
+    'zenifra',
+    'zenmux',
+    'clarifai',
+    'opencode-zen',
+    'opencode-go',
+    'kuae',
+    'scnet',
+    'clinepass',
+    'tencent-coding',
+    'tencent-plan',
+    'tencent-tokenhub',
+    'alibaba-coding',
+    'alibaba-coding-cn',
+    'alibaba-token-plan',
+    'alibaba-token-plan-cn',
+    'zai-coding',
+    'zai-coding-cn',
+    'volcano-coding',
+    'stepfun-step-plan',
+    'stepfun-step-plan-cn',
   ],
   // ── 3 — Deployment-bound discovery ───────────────────────────────────
   // Discovery via a deployment-listing API; runtime materialises only
@@ -1688,6 +2219,13 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'vertex-ai', // /publishers/{publisher}/models — deployment-scoped
     'aws-bedrock', // /foundation-models — Bearer or SigV4
     'aws-sagemaker', // /endpoints — operator-provisioned
+    // LOTE AN (2026-09-05, GAP-AK-6): promoted out of
+    // `non-compliant-runtime-not-materialized`. DatabricksModelFetcher now
+    // enumerates GET /api/2.0/serving-endpoints (workspace-scoped, Bearer
+    // DATABRICKS_TOKEN) and the row's 9-model pinnedFallback was removed —
+    // a serving endpoint is workspace-PRIVATE, so a shared pinned roster was
+    // both over- and under-claiming for any given workspace.
+    'databricks', // /api/2.0/serving-endpoints — workspace-provisioned
   ],
   // ── 0 — Reserved for future official machine-readable catalogs ───────
   'compliant-machine-readable-official-catalog': [
@@ -1714,14 +2252,44 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
   // /v1/models was reporting 22 model rows under "non-compliant" when
   // they were operator-curated by-design pins.
   'pinnedFallback-by-design': [
-    'perplexity', // pinnedFallback.reason: 'no-list-endpoint' — Sonar family,
-    //              Perplexity's docs explicitly state no /models endpoint.
+    // 'vivgrid' REMOVED 2026-09-06 (LOTE AR). The "global 401 gate, route
+    // existence can't be proven" verdict is obsolete: an authenticated
+    // probe with the real <prefix>-vivgrid-key found GET /v1/models -> 200, a
+    // genuine OpenAI-shaped model list, vs. 405 on a same-host control path.
+    // pinnedFallback dropped from the catalog row; promoted to
+    // compliant-dynamic-discovery, see below.
+    // 'perplexity' REMOVED 2026-09-04 (LOTE AK). The "docs explicitly state
+    // no /models endpoint" verdict is obsolete. Discriminated live probe:
+    // GET /v1/models → 401 invalid_api_key while GET /v1/<nonsense> → 404 on
+    // the same host, which proves the listing route exists and is merely
+    // auth-gated. pinnedFallback dropped (it still named the retired
+    // sonar-{small,medium,large}-online SKUs); promoted to
+    // compliant-dynamic-discovery.
     'recraft', // pinnedFallback.reason: 'no-list-endpoint' — image-only
     //           (recraftv3, recraftv2); execution-only integrationMode.
     'runwayml', // pinnedFallback.reason: 'no-list-endpoint' — video-only
-    //            (gen3*); execution-only integrationMode.
+    //            (gen3*); execution-only integrationMode. RECONFIRMED
+    //            2026-09-06 (LOTE AR) with a real, verified-valid
+    //            RUNWAYML_API_KEY: GET /v1/models -> 404 (generic Express
+    //            'Cannot GET /v1/models'), byte-for-byte analogous to a
+    //            same-host control path 404 — genuinely no route, not an
+    //            auth artifact. The SAME key against the adapter's own
+    //            known-real endpoint (GET /v1/organization) returns 200
+    //            with real JSON, so the key is valid and the 404s stand on
+    //            their own. This is now a proven terminal state, not merely
+    //            "no key available".
     'bfl', // pinnedFallback.reason: 'no-list-endpoint' — Black Forest Labs
     //       Flux image generation; no /models surface published.
+    'cartesia', // pinnedFallback.reason: 'no-list-endpoint' — speech-only
+    //           TTS (sonic-3, sonic-3.5, sonic-3.6); execution-only
+    //           integrationMode. ADDED 2026-09-12: migrated off the
+    //           legacy switch case (was 'not-applicable-non-model-
+    //           surface') once its /voices≠/models discovery-audit
+    //           finding got a proper catalog row instead of a fetcher
+    //           patch — see providers.catalog.ts's discovery-audit
+    //           comment on this row for the full sourcing citation
+    //           (docs.cartesia.ai + cartesia-js SDK file-tree, both
+    //           confirming no model-listing endpoint exists anywhere).
     'inworld', // pinnedFallback.reason: 'no-list-endpoint' — discovery
     //           endpoints both return 404 per catalog notes.
     'v0', // pinnedFallback.reason: 'no-list-endpoint' — api.v0.dev/v1/models
@@ -1736,30 +2304,56 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     //         image-enhance pipelines (standard/high-fidelity); moved here
     //         from not-applicable-non-model-surface when the runnable-gap
     //         pass gave it a curated pinned inventory (2026-06-11, J3).
+    //         RECONFIRMED 2026-09-06 (LOTE AR) with a real, verified-valid
+    //         TOPAZ_API_KEY: GET /image/v1/models -> 404 {"message":"Not
+    //         Found"}, identical JSON shape to a same-host control path.
+    //         The SAME key against the adapter's real endpoint (POST
+    //         /image/v1/enhance with an empty body) returns 400 "Request
+    //         must be multipart/form-data" — accepted as a real, key-gated
+    //         route just missing its payload — so the key is valid and the
+    //         /models 404 is genuine route absence. Proven terminal state,
+    //         not merely "no key available".
   ],
-  // ── 2 — pinnedFallback as interim crutch, parser pending ─────────────
+  // ── 1 — pinnedFallback as interim crutch, parser pending ─────────────
   // Real engineering debt — vendor DOES expose a discovery surface but
   // it's `pinnedFallback.reason === 'proprietary-schema'`: the parser
   // has not been written yet. Promotion path: write the parser, drop
   // the static array, move to `compliant-dynamic-discovery`. This
   // bucket should shrink over time.
+  //
+  // relace REMOVED 2026-09-09 (LOTE AT, GAP-AK-6 closure): the official
+  // OpenAPI spec confirms a real GET /models on models.relace.ai (see the
+  // `compliant-dynamic-discovery` entry above) — parser written, pin
+  // dropped, moved there.
   'non-compliant-hardcoded-inventory': [
     'inflection', // pinnedFallback.reason: 'proprietary-schema' — Sublote B
     //              confirmed 404 on candidate OAI paths; vendor's discovery
     //              surface, when available, is non-OAI shape.
-    'relace', // pinnedFallback.reason: 'proprietary-schema' — Sublote B
-    //          observed uniform 401 across 8 discovery paths; the catalog
-    //          carries pinnedFallback (relace-apply-3, relace-code-reranker,
-    //          relace-embedding) as the only inventory source until the
-    //          adapter+secret combination is wired.
   ],
   // ── 2 — No staticModels, no upstream surface, nothing to materialise ─
   // The provider is canonical (operator wants it tracked) but currently
   // has nothing to list in /v1/models. Promotion path: vendor publishes
   // a discovery API.
   'non-compliant-no-machine-readable-discovery': [
+    // LOTE AJ (2026-09-03): execution-only rows whose upstreams expose NO
+    // machine-readable model listing (cloudflare-ai-gateway gateway host,
+    // tinker SDK/CLI-only checkpoints, modal workspace-scoped endpoints,
+    // meta preview). No fabricated inventory — models enter only via
+    // operator-validated or execution-observed discovery.
+    'cloudflare-ai-gateway',
+    'tinker',
+    'modal',
+    // 'meta' REMOVED 2026-09-04 (LOTE AK) — the row was a duplicate of
+    // 'llama' pointed at the docs host; 'llama' has a probe-confirmed
+    // /compat/v1/models (401, i.e. real and auth-gated) and lives in
+    // compliant-dynamic-discovery.
     'sap', // SAP AI Core — workspace-local deployment IDs, no model-listing
     'snowflake', // Cortex — function-based API, no model-listing endpoint
+    // LOTE AU (2026-09-08): aivideoapi (third-party Runway aggregator) — no
+    // /models route documented anywhere across all 11 reference pages
+    // fetched this lot; `model` is a closed literal (gen2|gen3|gen4)
+    // validated by AivideoapiAdapter itself, not discovered.
+    'aivideoapi',
   ],
   // ── 9 — staticModels but real upstream surface exists ────────────────
   // These have `staticModels: [...]` in providers.catalog.ts AND a real
@@ -1772,18 +2366,29 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     // via BytezNativeModelFetcher; entry removed from this bucket.
     'voyage', // /v1/models exists upstream, fetcher not wired
     'azure-openai', // /openai/deployments exists, deployment-listing not wired
-    'databricks', // /api/2.0/serving-endpoints exists, fetcher not wired
-    'writer', // /models {models:[...]} non-OAI shape, parser pending
-    'atlascloud', // Sublote B: /v1/models 200 public (107 models), wrapper transform pending
-    'avian', // Sublote B: /v1/models 200 public (6 models), wiring pending
-    'qianfan', // /v2/models per BCE OAI-compat docs; secret + adapter pending
+    // LOTE AN (2026-09-05) — 'databricks' CLOSED and promoted to
+    // compliant-deployment-discovery: DatabricksModelFetcher wires
+    // GET /api/2.0/serving-endpoints; pinnedFallback removed from the row.
+    // LOTE AK (2026-09-04) — writer / atlascloud / avian CLOSED and promoted
+    // to compliant-dynamic-discovery. All three sat in this bucket since
+    // 2026-04 with the surface already documented as existing; the blocker
+    // was believed to be the parser. It is not: the hub fetcher's
+    // `extractRawModels` reads `data | models | results | items | entries`,
+    // which covers Writer's `{models:[…]}` and AtlasCloud's
+    // `{code,msg,data:[…]}` wrapper as well as Avian's pure OAI body.
+    // pinnedFallback removed from all three catalog rows.
+    // LOTE AL (2026-09-05) — qianfan CLOSED and promoted to
+    // compliant-dynamic-discovery. Official docs
+    // (cloud.baidu.com/doc/qianfan-api/s/Dmba8k71y) confirm GET /v2/models
+    // returns a standard {data:[{id,context_length,...}]} body — the
+    // "shape unverified" blocker above no longer holds. pinnedFallback
+    // removed from the catalog row.
   ],
   // ── 5 — Specialty surfaces, not LLM-model-shaped ─────────────────────
   // These providers are NOT non-compliant; they operate in a different
   // category entirely. Their public surface is voices/scenes/filters,
   // not a chat/completion ontology.
   'not-applicable-non-model-surface': [
-    'cartesia', // /voices, not /models — TTS specialty
     'deepgram', // /v1/models lists STT engines, not LLM ontology
     'elevenlabs', // /v1/voices, not /v1/models — TTS specialty
     'palabraai', // session-based real-time translation, no model ontology
@@ -1798,6 +2403,10 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     // runnable-gap pass gave it a curated pinnedFallback inventory
     // (reason: 'no-list-endpoint'), which is exactly that bucket's
     // semantics (J3).
+    // 'cartesia' moved to pinnedFallback-by-design (2026-09-12): same
+    // treatment as topaz — migrated off the switch case onto a catalog
+    // row with a curated pinnedFallback (reason: 'no-list-endpoint'; see
+    // providers.catalog.ts's discovery-audit comment on that row).
   ],
   // ── 14 — Self-hosted runtime-dependent ───────────────────────────────
   // Discovery is a function of operator runtime. NOT non-compliant —
@@ -1812,7 +2421,13 @@ export const DISCOVERY_COMPLIANCE_REGISTRY: Record<DiscoveryComplianceClass, rea
     'lm-studio',
     'xinference',
     'triton',
-    // Switch self-hosted (6)
+    // LOTE AI (2026-09-03) — three more opt-in localhost OAI-compat
+    // runtimes mirroring ollama/lm-studio semantics (authScheme none,
+    // apiKeyOptional, opt-in via *_URL env). Discovery is a function of
+    // the operator's local runtime by design.
+    'atomic-chat',
+    'lynkr',
+    'privatemode',    // Switch self-hosted (6)
     'self-hosted',
     'local-ocr',
     'local-docling',
@@ -1955,37 +2570,37 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
     claim: 'edenai credential is rotated server-side (defunct)',
     superseded_at: '2026-04-23',
     reason:
-      'The prior probe pass used secret ailin-edenai-api-key and got 401, concluding "rotated". This pass probed /v3/llm/models with ailin-edenai-key (alternate GCP secret in the same project) and got HTTP 200 with 330 models. edenai is live-validated; the defunct verdict was a secret-selection bug in the prior pass.',
+      'The prior probe pass used secret <prefix>-edenai-api-key and got 401, concluding "rotated". This pass probed /v3/llm/models with <prefix>-edenai-key (alternate GCP secret in the same project) and got HTTP 200 with 330 models. edenai is live-validated; the defunct verdict was a secret-selection bug in the prior pass.',
   },
   {
     claim: 'moonshot live-validated (from earlier session)',
     superseded_at: '2026-04-23',
     reason:
-      'Re-probe of api.moonshot.cn/v1/models with the same secret (ailin-moonshot-key) returned 401 this pass, where the previous session recorded 200. Whether the key was rotated or the public API tier changed is undetermined; moonshot is reclassified defunct-unreachable until next probe lot establishes the cause.',
+      'Re-probe of api.moonshot.cn/v1/models with the same secret (<prefix>-moonshot-key) returned 401 this pass, where the previous session recorded 200. Whether the key was rotated or the public API tier changed is undetermined; moonshot is reclassified defunct-unreachable until next probe lot establishes the cause.',
   },
   {
     claim: 'moonshot is defunct-unreachable (from the pre-final late-pass)',
     superseded_at: '2026-04-23',
     reason:
-      'The "defunct" verdict came from probing api.moonshot.cn (PRC-region host). The canonical MoonshotAdapter uses api.moonshot.ai/v1 (see DEFAULT_BASE_URL in moonshot-adapter.ts). This final pass re-probed the ACTUAL adapter target api.moonshot.ai/v1/models with the same GCP secret ailin-moonshot-key → HTTP 200, 14 models. The integration was never broken; the earlier 401 was a probe-target bug, not a credential rotation. moonshot is restored to live-validation.',
+      'The "defunct" verdict came from probing api.moonshot.cn (PRC-region host). The canonical MoonshotAdapter uses api.moonshot.ai/v1 (see DEFAULT_BASE_URL in moonshot-adapter.ts). This final pass re-probed the ACTUAL adapter target api.moonshot.ai/v1/models with the same GCP secret <prefix>-moonshot-key → HTTP 200, 14 models. The integration was never broken; the earlier 401 was a probe-target bug, not a credential rotation. moonshot is restored to live-validation.',
   },
   {
     claim: 'aws-bedrock is credentials-missing (requires SigV4, cannot probe)',
     superseded_at: '2026-04-23',
     reason:
-      'AWS added Bearer-token authentication for Bedrock read endpoints in 2025, alongside the existing SigV4 flow. GCP secret ailin-aws-bearer-token was probed against GET bedrock.us-east-1.amazonaws.com/foundation-models → HTTP 200, 163KB body, modelSummaries array populated. Credentials ARE available and the read path works without SigV4 signing. Invocation endpoints still use SigV4 via @aws-sdk/signature-v4, which is a separate surface; the bucket classification is based on reachable credential evidence, and that evidence now exists. aws-bedrock → live-validation.',
+      'AWS added Bearer-token authentication for Bedrock read endpoints in 2025, alongside the existing SigV4 flow. GCP secret <prefix>-aws-bearer-token was probed against GET bedrock.us-east-1.amazonaws.com/foundation-models → HTTP 200, 163KB body, modelSummaries array populated. Credentials ARE available and the read path works without SigV4 signing. Invocation endpoints still use SigV4 via @aws-sdk/signature-v4, which is a separate surface; the bucket classification is based on reachable credential evidence, and that evidence now exists. aws-bedrock → live-validation.',
   },
   {
     claim: 'palabraai is credentials-missing',
     superseded_at: '2026-04-23',
     reason:
-      'GCP secrets ailin-palabraai-id (ClientId) and ailin-palabraai-key (ClientSecret) exist. Probe of POST api.palabra.ai/session-storage/session with both headers returned HTTP 403 with body {"detail":"Insufficient balance","error_code":100050} — the Palabra public error-code table documents 100050 as post-authentication credit exhaustion. This is upstream-suspended (auth accepted, tier-gated), NOT credentials-missing.',
+      'GCP secrets <prefix>-palabraai-id (ClientId) and <prefix>-palabraai-key (ClientSecret) exist. Probe of POST api.palabra.ai/session-storage/session with both headers returned HTTP 403 with body {"detail":"Insufficient balance","error_code":100050} — the Palabra public error-code table documents 100050 as post-authentication credit exhaustion. This is upstream-suspended (auth accepted, tier-gated), NOT credentials-missing.',
   },
   {
     claim: 'complement lot (2026-04-23) — 21 brand names to integrate',
     superseded_at: '2026-04-23',
     reason:
-      'Mapping table produced for Arcee/AtlasCloud/Avian/BaiduQianfan/BFL/Chutes/GMICloud/Infermatic/Inflection/Liquid/Mancer/MiniMax/ModelRun/nCompass/Phala/Reka/Relace/SiliconFlow/StepFun/Upstage/Venice. Outcome: 5 already-canonical (bfl, chutes, minimax, rekaai, upstage); 1 orphan-with-material (baidu-qianfan — has BaiduModelFetcher + secret mapping ailin-baidu-{key,secret,base-url}, but all 3 secrets are literal "PLACEHOLDER" and the fetcher uses deprecated ERNIE OAuth2 shape; canonical promotion deferred to a dedicated lot that (a) adds baidu-qianfan catalog row with qianfan.baidubce.com/v2 OAI-compat base URL, (b) replaces the ERNIE OAuth2 fetcher with Bearer auth, (c) requires real secret provisioning); 15 absent (arcee, atlascloud, avian, gmicloud, infermatic, inflection, liquid, mancer, modelrun, ncompass, phala, relace, siliconflow, stepfun, venice — no material in-tree, no secrets provisioned). Per the directive exigência final ("Não quero provider adicionado só porque ganhou row no catálogo"), catalog row additions were NOT committed in this lot; they await operator secret provisioning to ensure each row ships with live-validation evidence. Proposed row shapes captured in the lot report (section 14 "Próximo lote objetivo").',
+      'Mapping table produced for Arcee/AtlasCloud/Avian/BaiduQianfan/BFL/Chutes/GMICloud/Infermatic/Inflection/Liquid/Mancer/MiniMax/ModelRun/nCompass/Phala/Reka/Relace/SiliconFlow/StepFun/Upstage/Venice. Outcome: 5 already-canonical (bfl, chutes, minimax, rekaai, upstage); 1 orphan-with-material (baidu-qianfan — has BaiduModelFetcher + secret mapping <prefix>-baidu-{key,secret,base-url}, but all 3 secrets are literal "PLACEHOLDER" and the fetcher uses deprecated ERNIE OAuth2 shape; canonical promotion deferred to a dedicated lot that (a) adds baidu-qianfan catalog row with qianfan.baidubce.com/v2 OAI-compat base URL, (b) replaces the ERNIE OAuth2 fetcher with Bearer auth, (c) requires real secret provisioning); 15 absent (arcee, atlascloud, avian, gmicloud, infermatic, inflection, liquid, mancer, modelrun, ncompass, phala, relace, siliconflow, stepfun, venice — no material in-tree, no secrets provisioned). Per the directive exigência final ("Não quero provider adicionado só porque ganhou row no catálogo"), catalog row additions were NOT committed in this lot; they await operator secret provisioning to ensure each row ships with live-validation evidence. Proposed row shapes captured in the lot report (section 14 "Próximo lote objetivo").',
   },
   {
     claim: 'LOTE M deferral — await operator secret provisioning before adding rows',
@@ -2015,7 +2630,7 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
     claim: 'venice is credentials-missing / secret-absent (from LOTE M close)',
     superseded_at: '2026-04-23',
     reason:
-      'Sublote A 2026-04-23 probed venice directly. /api/v1/models returned HTTP 200 PUBLICLY (no auth header required; even with an invalid Bearer the same 200 response body was returned — auth is IGNORED on /models), carrying 72 text models in OAI-conformant shape ({data:[{id,object,owned_by,...}]}). /api/v1/chat/completions returned HTTP 402 with a full x402 crypto-payment-protocol body (network eip155:8453 Base, USDC token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913) when no Bearer was sent, and HTTP 401 {"error":"Authentication failed"} when an invalid Bearer was sent. Discovery surface is live-proven against the canonical adapter target; execution surface is credential-gated. Under the Sublote A rule "se houver probe real bem-sucedida, não rebaixar", venice was promoted from credentials-missing → partial. GCP still has no ailin-venice-* secret under any alias, so live-validation of the chat surface remains blocked. This claim is documented here (rather than silently updating the earlier claim) to make the Sublote A bucket move visible to future auditors grepping for venice.',
+      'Sublote A 2026-04-23 probed venice directly. /api/v1/models returned HTTP 200 PUBLICLY (no auth header required; even with an invalid Bearer the same 200 response body was returned — auth is IGNORED on /models), carrying 72 text models in OAI-conformant shape ({data:[{id,object,owned_by,...}]}). /api/v1/chat/completions returned HTTP 402 with a full x402 crypto-payment-protocol body (network eip155:8453 Base, USDC token 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913) when no Bearer was sent, and HTTP 401 {"error":"Authentication failed"} when an invalid Bearer was sent. Discovery surface is live-proven against the canonical adapter target; execution surface is credential-gated. Under the Sublote A rule "se houver probe real bem-sucedida, não rebaixar", venice was promoted from credentials-missing → partial. GCP still has no <prefix>-venice-* secret under any alias, so live-validation of the chat surface remains blocked. This claim is documented here (rather than silently updating the earlier claim) to make the Sublote A bucket move visible to future auditors grepping for venice.',
   },
   {
     claim: 'Sublote A (2026-04-23) produced zero bucket moves',
@@ -2027,7 +2642,7 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
     claim: 'Sublote A second-pass verification found new promotion opportunities',
     superseded_at: '2026-04-23',
     reason:
-      'Sublote A re-run 2026-04-23 with deeper probes. (1) GCP Secret Manager re-scanned WITHOUT the ailin- prefix constraint across all 82 secrets — zero matches for qianfan/venice/siliconflow/stepfun under any alias (qianfan-*, baidu-qianfan-*, silicon-flow-*, step-*, venice-ai-*). Only ailin-baidu-{key,secret,base-url} exist, all three still literal "PLACEHOLDER" (11 bytes each). (2) Baidu v1 AK+SK OAuth token endpoint https://aip.baidubce.com/oauth/2.0/token probed with client_id=PLACEHOLDER&client_secret=PLACEHOLDER → HTTP 401 "invalid_client / unknown client id". This is STRONGER evidence than the previous "material is placeholder" framing: Baidu\'s OAuth provider does not even recognize the client_id — the string is unregistered upstream, not merely format-wrong. qianfan classification is unchanged but the auth-incomplete subclass is now supported by upstream server-side rejection, not just local placeholder heuristic. (3) Venice /api/v1/models re-probed WITH an invalid Bearer header → HTTP 200, identical 78617-byte body to the no-auth request. Confirms the Authorization header is actively IGNORED on discovery — venice discovery is truly unauthenticated public, not "optional auth accepted". (4) siliconflow and stepfun probed on common unauth paths /health, /ping, /, /v1/health, /v1/ping → all HTTP 404 on both .cn/.com (siliconflow) and .com/.ai (stepfun). No public discovery surface exists; discovery IS credential-gated. This forecloses the Venice-style "promote on public /models" path for these two — they will move only when real secrets are provisioned. Net bucket delta this second pass: ZERO (matrix state is already consistent post first-pass Sublote A). Evidence strengthening only. .env.production, .env.test, .env.example, .env.example.clean all scanned — zero mentions of baidu/qianfan/venice/siliconflow/stepfun/ernie/step aliases.',
+      'Sublote A re-run 2026-04-23 with deeper probes. (1) GCP Secret Manager re-scanned WITHOUT the ailin- prefix constraint across all 82 secrets — zero matches for qianfan/venice/siliconflow/stepfun under any alias (qianfan-*, baidu-qianfan-*, silicon-flow-*, step-*, venice-ai-*). Only <prefix>-baidu-{key,secret,base-url} exist, all three still literal "PLACEHOLDER" (11 bytes each). (2) Baidu v1 AK+SK OAuth token endpoint https://aip.baidubce.com/oauth/2.0/token probed with client_id=PLACEHOLDER&client_secret=PLACEHOLDER → HTTP 401 "invalid_client / unknown client id". This is STRONGER evidence than the previous "material is placeholder" framing: Baidu\'s OAuth provider does not even recognize the client_id — the string is unregistered upstream, not merely format-wrong. qianfan classification is unchanged but the auth-incomplete subclass is now supported by upstream server-side rejection, not just local placeholder heuristic. (3) Venice /api/v1/models re-probed WITH an invalid Bearer header → HTTP 200, identical 78617-byte body to the no-auth request. Confirms the Authorization header is actively IGNORED on discovery — venice discovery is truly unauthenticated public, not "optional auth accepted". (4) siliconflow and stepfun probed on common unauth paths /health, /ping, /, /v1/health, /v1/ping → all HTTP 404 on both .cn/.com (siliconflow) and .com/.ai (stepfun). No public discovery surface exists; discovery IS credential-gated. This forecloses the Venice-style "promote on public /models" path for these two — they will move only when real secrets are provisioned. Net bucket delta this second pass: ZERO (matrix state is already consistent post first-pass Sublote A). Evidence strengthening only. .env.production, .env.test, .env.example, .env.example.clean all scanned — zero mentions of baidu/qianfan/venice/siliconflow/stepfun/ernie/step aliases.',
   },
   {
     claim: 'LOTE M remainder (12 providers) is a uniform credentials-missing block',
@@ -2040,13 +2655,13 @@ export const NON_CANONICAL_HISTORICAL_CLAIMS = [
       'LOTE M remainder (6 providers in Sublote C1 scope) can be unblocked by provisioning alone',
     superseded_at: '2026-04-23',
     reason:
-      'Sublote C1 2026-04-23 attempted credential resolution + per-surface live probes for arcee/gmi/infermatic/siliconflow/stepfun/qianfan. (1) GCP Secret Manager exhaustively re-scanned: 82 secrets × 27 alias patterns (arcee, conductor, gmi, gmicloud, gmi-cloud, gmi-serving, gmiserv, infermatic, totalgpt, total-gpt, siliconflow, silicon-flow, siliconcloud, silicon-cloud, stepfun, step, step-ai, stepai, qianfan, baidu, ernie, baidu-qianfan, wenxin, wenxinworkshop, bce, ai21, api-ernie) — zero matches except the known 3 ailin-baidu-{key,secret,base-url}, all confirmed this session as literal "PLACEHOLDER" (11 bytes). Environment variables checked at runtime: zero set. .env/.env.production/.env.test on disk: zero mentions. (2) Per-surface live probes executed with invalid bearer against canonical adapter baseUrls. Key doc-vs-impl discoveries: (a) INFERMATIC — api.totalgpt.ai badauth response echoes \'LiteLLM Virtual Key expected. Received=INVALID_TEST_KEY_12345, expected to start with sk-\'. Confirmed: infermatic is a LiteLLM proxy in front of the vLLM backend, not direct vLLM. API keys must be sk-prefixed LiteLLM Virtual Keys (generated via LiteLLM Admin UI or /key/generate). Notes updated. (b) GMI — api.gmi-serving.com/v1/chat and /v1/embeddings return HTTP 404 "No matching target server found for model X" BEFORE auth validation (pre-auth routing layer). This means a 404 on gmi chat does NOT imply bad credentials — it implies the model ID is not registered. Notes updated. (c) QIANFAN v1 — aip.baidubce.com/oauth/2.0/token with client_id=PLACEHOLDER returned 401 invalid_client/unknown client id (confirms upstream does not recognize), but the v1 chat endpoint aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-4.0-8k with access_token=PLACEHOLDER returned HTTP 200 with body-encoded {error_code:3,"Unsupported openapi method"} — Baidu\'s API uses 200+error_code pattern, and the v1 endpoint IS reachable and would route a real token if provisioned. (d) SILICONFLOW — 6 surfaces (models.cn, models.com, chat, embed, rerank, audio) all uniform 401 bare-JSON-string "Invalid token" (15 bytes) — confirms integrationClass oai-compat-quirks across every surface. Both .cn and .com hosts equivalent. (e) STEPFUN — 5 surfaces (models.com, models.ai, chat, embed, audio/speech) all uniform 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} (75 bytes) — confirms integrationClass oai-compat-pure. Both .com and .ai hosts equivalent. (f) ARCEE — /api/v1/models and /api/v1/chat both 401 with Arcee-specific {"detail":"Missing or invalid Authorization header. Expected: Bearer <api_key>"} (80 bytes noauth) / {"detail":"Invalid or expired API key"} (39 bytes badauth). Root / returns 200 "OK" (health check, not discovery). Net bucket delta: ZERO. All 6 providers remain in same bucket as pre-Sublote-C1 because no credential became available during this session. However, Sublote C1 produced: (i) 2 catalog notes updates (infermatic LiteLLM proxy, gmi pre-auth routing), (ii) 1 new historical claim (this entry), (iii) definitive proof that unblocking all 6 is PURE credential-provisioning work (no adapter changes, no endpoint changes, no structural refactoring required). Probe evidence in /tmp/subc1/clean.out and /tmp/subc1/bodies/*.body.',
+      'Sublote C1 2026-04-23 attempted credential resolution + per-surface live probes for arcee/gmi/infermatic/siliconflow/stepfun/qianfan. (1) GCP Secret Manager exhaustively re-scanned: 82 secrets × 27 alias patterns (arcee, conductor, gmi, gmicloud, gmi-cloud, gmi-serving, gmiserv, infermatic, totalgpt, total-gpt, siliconflow, silicon-flow, siliconcloud, silicon-cloud, stepfun, step, step-ai, stepai, qianfan, baidu, ernie, baidu-qianfan, wenxin, wenxinworkshop, bce, ai21, api-ernie) — zero matches except the known 3 <prefix>-baidu-{key,secret,base-url}, all confirmed this session as literal "PLACEHOLDER" (11 bytes). Environment variables checked at runtime: zero set. .env/.env.production/.env.test on disk: zero mentions. (2) Per-surface live probes executed with invalid bearer against canonical adapter baseUrls. Key doc-vs-impl discoveries: (a) INFERMATIC — api.totalgpt.ai badauth response echoes \'LiteLLM Virtual Key expected. Received=INVALID_TEST_KEY_12345, expected to start with sk-\'. Confirmed: infermatic is a LiteLLM proxy in front of the vLLM backend, not direct vLLM. API keys must be sk-prefixed LiteLLM Virtual Keys (generated via LiteLLM Admin UI or /key/generate). Notes updated. (b) GMI — api.gmi-serving.com/v1/chat and /v1/embeddings return HTTP 404 "No matching target server found for model X" BEFORE auth validation (pre-auth routing layer). This means a 404 on gmi chat does NOT imply bad credentials — it implies the model ID is not registered. Notes updated. (c) QIANFAN v1 — aip.baidubce.com/oauth/2.0/token with client_id=PLACEHOLDER returned 401 invalid_client/unknown client id (confirms upstream does not recognize), but the v1 chat endpoint aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-4.0-8k with access_token=PLACEHOLDER returned HTTP 200 with body-encoded {error_code:3,"Unsupported openapi method"} — Baidu\'s API uses 200+error_code pattern, and the v1 endpoint IS reachable and would route a real token if provisioned. (d) SILICONFLOW — 6 surfaces (models.cn, models.com, chat, embed, rerank, audio) all uniform 401 bare-JSON-string "Invalid token" (15 bytes) — confirms integrationClass oai-compat-quirks across every surface. Both .cn and .com hosts equivalent. (e) STEPFUN — 5 surfaces (models.com, models.ai, chat, embed, audio/speech) all uniform 401 OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} (75 bytes) — confirms integrationClass oai-compat-pure. Both .com and .ai hosts equivalent. (f) ARCEE — /api/v1/models and /api/v1/chat both 401 with Arcee-specific {"detail":"Missing or invalid Authorization header. Expected: Bearer <api_key>"} (80 bytes noauth) / {"detail":"Invalid or expired API key"} (39 bytes badauth). Root / returns 200 "OK" (health check, not discovery). Net bucket delta: ZERO. All 6 providers remain in same bucket as pre-Sublote-C1 because no credential became available during this session. However, Sublote C1 produced: (i) 2 catalog notes updates (infermatic LiteLLM proxy, gmi pre-auth routing), (ii) 1 new historical claim (this entry), (iii) definitive proof that unblocking all 6 is PURE credential-provisioning work (no adapter changes, no endpoint changes, no structural refactoring required). Probe evidence in /tmp/subc1/clean.out and /tmp/subc1/bodies/*.body.',
   },
   {
     claim: 'LOTE M remainder mostly blocked by credential provisioning (pre-Sublote-D1)',
     superseded_at: '2026-04-24',
     reason:
-      'Sublote D1 2026-04-24 — operator provisioned 17 GCP secrets (ailin-{groq,togetherai,fireworks-ai,deepinfra,perplexity,huggingface,cloudflare-workers-ai,cloudflare-workers-ai-id,github-models,sambanova,hyperbolic,arcee,infermatic,siliconflow,stepfun,heliconeai-api,chutes,anyscale}-*-key(s)). Live probes (GET /v1/models + POST /v1/chat/completions with minimal body {"model":"X","messages":[{"role":"user","content":"hi"}],"max_tokens":5}) executed against canonical adapter baseUrls with the provisioned credentials. Result summary: (1) TEN promotions to live-validation (real HTTP 200 with completion body on /v1/chat): groq (llama-3.1-8b-instant 592B), deepinfra (Meta-Llama-3.1-8B-Instruct 455B), huggingface (Llama-3.1-8B-Instruct 668B via router.huggingface.co), cloudflare-workers-ai (@cf/meta/llama-3-8b-instruct 360B; /models 405 is expected per CF docs — their discovery uses /ai/models/search), github-models (openai/gpt-4o-mini 1252B; models at /catalog/models not /v1/models), perplexity (sonar 2992B; /models 404 by design), fireworks-ai (accounts/fireworks/models/glm-5p1 447B — re-probed after first-pick llama-v3p1-8b returned 404 deprecated), sambanova (Meta-Llama-3.3-70B-Instruct 910B — re-probed after first-pick 3.1 returned 410 Gone), infermatic (Qwen-Qwen3-30B-A3B 476B — confirmed LiteLLM Virtual Key with sk- prefix; key has a model-scoped ACL), heliconeai (gpt-4o-mini 1003B — new ailin-heliconeai-api-key sk-hel… 43B SUPERSEDES the legacy ailin-heliconeai-key "PLACEHOLDER" 11B that caused the prior mis-classification in CREDENTIALS_MISSING_SUBCLASS.placeholder). (2) FOUR promotions to upstream-suspended: anyscale (endpoint returns HTML shutdown notice "Effective August 1, 2024 Anyscale Endpoints API is available exclusively through the fully Hosted Anyscale Platform; Multi-tenant access to LLM models has been removed." — the key ailin-anyscale-api-key 236B exists but cannot be exercised), arcee (trinity-mini → 402 {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}), chutes (Qwen/Qwen3-32B-TEE → 402 {"detail":{"message":"Quota exceeded and account balance is $0.0, please pay with fiat or send tao..."}}), hyperbolic (→ 402 {"detail":"Insufficient funds"}). All four have valid credentials (auth-accepted) but gated execution — operationally identical to ai302/palabraai. (3) THREE stay in credentials-missing but move sub-class secret-absent → auth-incomplete: togetherai (key_CY… 25B; /v1/chat returns OpenAI-shape 401 "Invalid API key provided. You can find your API key at https://api.together.ai/settings/api-keys" — the "key_" prefix is non-canonical for Together AI, probable format mismatch), siliconflow (sk-hhc… 51B; /v1/chat returns bare JSON "Api key is invalid" 15B oai-compat-quirks shape — probable format mismatch, sk-prefix looks OpenAI-style rather than SiliconFlow native), stepfun (65B; /v1/chat returns OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} 75B — verbatim OpenAI error shape, operator must verify the key maps to their StepFun account). (4) ONE operator-claim-vs-vault mismatch: gmi — the operator announcement listed gmi among the 16 provisioned but GCP Secret Manager scan 2026-04-24 against all known aliases (ailin-gmi-*, ailin-gmicloud-*, ailin-gmi-cloud-*, ailin-gmi-serving-*, ailin-gmiserv-*) found ZERO matches. gmi stays secret-absent until the actual secret lands in the vault. Net matrix deltas: live-validation 37→47 (+10), credentials-missing 54→40 (−14), upstream-suspended 2→6 (+4). Sub-class deltas: secret-absent 36→20 (−16: 9 to live-validation [all 10 promotees except heliconeai which was in placeholder sub-class], 4 to upstream-suspended, 3 to auth-incomplete), placeholder 2→1 (heliconeai promoted — legacy secret superseded by new api-key form), auth-incomplete 2→5 (+togetherai,siliconflow,stepfun). All invariants I1–I6 hold post-D1: 103 canonical total unchanged, every providerId in exactly one bucket, sub-class partition of credentials-missing covers all 40 entries. Probe evidence: /tmp/subd1/probe.out + /tmp/subd1/reprobe.out + /tmp/subd1/bodies/*.{models,chat,rechat}.body (17 providers × 2–3 surfaces each = ~50 probe records).',
+      'Sublote D1 2026-04-24 — operator provisioned 17 GCP secrets (<prefix>-{provider}-*-key(s)). Live probes (GET /v1/models + POST /v1/chat/completions with minimal body {"model":"X","messages":[{"role":"user","content":"hi"}],"max_tokens":5}) executed against canonical adapter baseUrls with the provisioned credentials. Result summary: (1) TEN promotions to live-validation (real HTTP 200 with completion body on /v1/chat): groq (llama-3.1-8b-instant 592B), deepinfra (Meta-Llama-3.1-8B-Instruct 455B), huggingface (Llama-3.1-8B-Instruct 668B via router.huggingface.co), cloudflare-workers-ai (@cf/meta/llama-3-8b-instruct 360B; /models 405 is expected per CF docs — their discovery uses /ai/models/search), github-models (openai/gpt-4o-mini 1252B; models at /catalog/models not /v1/models), perplexity (sonar 2992B; /models 404 by design), fireworks-ai (accounts/fireworks/models/glm-5p1 447B — re-probed after first-pick llama-v3p1-8b returned 404 deprecated), sambanova (Meta-Llama-3.3-70B-Instruct 910B — re-probed after first-pick 3.1 returned 410 Gone), infermatic (Qwen-Qwen3-30B-A3B 476B — confirmed LiteLLM Virtual Key with sk- prefix; key has a model-scoped ACL), heliconeai (gpt-4o-mini 1003B — new <prefix>-heliconeai-api-key <redacted-key-prefix>… 43B SUPERSEDES the legacy <prefix>-heliconeai-key "PLACEHOLDER" 11B that caused the prior mis-classification in CREDENTIALS_MISSING_SUBCLASS.placeholder). (2) FOUR promotions to upstream-suspended: anyscale (endpoint returns HTML shutdown notice "Effective August 1, 2024 Anyscale Endpoints API is available exclusively through the fully Hosted Anyscale Platform; Multi-tenant access to LLM models has been removed." — the key <prefix>-anyscale-api-key 236B exists but cannot be exercised), arcee (trinity-mini → 402 {"detail":"Insufficient credits. Required: 0.000037, Available: 0.000000"}), chutes (Qwen/Qwen3-32B-TEE → 402 {"detail":{"message":"Quota exceeded and account balance is $0.0, please pay with fiat or send tao..."}}), hyperbolic (→ 402 {"detail":"Insufficient funds"}). All four have valid credentials (auth-accepted) but gated execution — operationally identical to ai302/palabraai. (3) THREE stay in credentials-missing but move sub-class secret-absent → auth-incomplete: togetherai (<redacted-key-prefix>… 25B; /v1/chat returns OpenAI-shape 401 "Invalid API key provided. You can find your API key at https://api.together.ai/settings/api-keys" — the "key_" prefix is non-canonical for Together AI, probable format mismatch), siliconflow (<redacted-key-prefix>… 51B; /v1/chat returns bare JSON "Api key is invalid" 15B oai-compat-quirks shape — probable format mismatch, sk-prefix looks OpenAI-style rather than SiliconFlow native), stepfun (65B; /v1/chat returns OAI-shape {"error":{"message":"Incorrect API key provided","type":"invalid_api_key"}} 75B — verbatim OpenAI error shape, operator must verify the key maps to their StepFun account). (4) ONE operator-claim-vs-vault mismatch: gmi — the operator announcement listed gmi among the 16 provisioned but GCP Secret Manager scan 2026-04-24 against all known aliases (<prefix>-gmi-*, <prefix>-gmicloud-*, <prefix>-gmi-cloud-*, <prefix>-gmi-serving-*, <prefix>-gmiserv-*) found ZERO matches. gmi stays secret-absent until the actual secret lands in the vault. Net matrix deltas: live-validation 37→47 (+10), credentials-missing 54→40 (−14), upstream-suspended 2→6 (+4). Sub-class deltas: secret-absent 36→20 (−16: 9 to live-validation [all 10 promotees except heliconeai which was in placeholder sub-class], 4 to upstream-suspended, 3 to auth-incomplete), placeholder 2→1 (heliconeai promoted — legacy secret superseded by new api-key form), auth-incomplete 2→5 (+togetherai,siliconflow,stepfun). All invariants I1–I6 hold post-D1: 103 canonical total unchanged, every providerId in exactly one bucket, sub-class partition of credentials-missing covers all 40 entries. Probe evidence: /tmp/subd1/probe.out + /tmp/subd1/reprobe.out + /tmp/subd1/bodies/*.{models,chat,rechat}.body (17 providers × 2–3 surfaces each = ~50 probe records).',
   },
 ] as const;
 

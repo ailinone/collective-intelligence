@@ -28,7 +28,7 @@
 #     Docker secret file at scrape time. The token value is NEVER written
 #     into this tracked file — see api/src/routes/metrics/metrics-route.ts
 #     `authorizeScrape()`, which fail-closes (403) these routes in production
-#     when PROMETHEUS_SCRAPE_TOKEN is unset. Token = the `ailin-prometheus-
+#     when PROMETHEUS_SCRAPE_TOKEN is unset. Token = the `<prefix>-prometheus-
 #     scrape-token` GCP Secret Manager secret, mirrored into the Docker
 #     Swarm secret `ci_prometheus_scrape_token` (see that secret's comment
 #     block in docker-compose.production.yml for the exact operator command).
@@ -40,7 +40,7 @@
 #     no protection on that specific target. It is scraped only over this
 #     stack's internal-only `default` Swarm overlay network (no published
 #     host port, no external `gateway-net` attachment) — the same trust
-#     boundary ci-db/ci-redis already rely on in this compose file.
+#     boundary the database/cache services already rely on in this compose file.
 global:
   scrape_interval: 30s
   evaluation_interval: 30s

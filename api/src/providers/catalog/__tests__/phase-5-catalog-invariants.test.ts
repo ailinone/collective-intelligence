@@ -220,13 +220,30 @@ describe('Phase 5 invariant: integration-mode-canonical', () => {
     expect(violators).toEqual([]);
   });
 
-  it('every `execution-only` row carries pinnedFallback.models (no orphan execution-only)', () => {
+  it('every `execution-only` row carries pinnedFallback.models or declares discovery unavailable-upstream (no orphan execution-only)', () => {
     // Belt-and-suspenders for Zod Rule 5: the schema refinement enforces
     // this at boot, but a top-level invariant test catches accidental
     // bypass (e.g. someone adds a row with `as any` casts).
+    // LOTE AJ (2026-09-03, SOTA §16): rows declaring
+    // discoveryStatus='unavailable-upstream' legitimately ship ZERO
+    // inventory — the upstream exposes no machine-readable model listing
+    // and fabricating /v1/models entries is forbidden.
     const violators: Array<{ providerId: string; reason: string }> = [];
     for (const entry of PROVIDER_CATALOG) {
       if (entry.integrationMode !== 'execution-only') continue;
+      if ((entry as { discoveryStatus?: string }).discoveryStatus === 'unavailable-upstream') {
+        // Must NOT also carry a pinned inventory — that would be a silent
+        // hardcoded list hiding behind the declaration.
+        const pinnedDeclar = (entry as { pinnedFallback?: { models?: readonly unknown[] } })
+          .pinnedFallback?.models;
+        if (Array.isArray(pinnedDeclar) && pinnedDeclar.length > 0) {
+          violators.push({
+            providerId: entry.providerId,
+            reason: 'discoveryStatus=unavailable-upstream but pinnedFallback.models present',
+          });
+        }
+        continue;
+      }
       const pinned = (entry as { pinnedFallback?: { models?: readonly string[] } }).pinnedFallback
         ?.models;
       const legacy = (entry as { staticModels?: readonly string[] }).staticModels;
@@ -236,7 +253,8 @@ describe('Phase 5 invariant: integration-mode-canonical', () => {
       if (!hasInventory) {
         violators.push({
           providerId: entry.providerId,
-          reason: 'execution-only without pinnedFallback.models or legacy staticModels',
+          reason:
+            'execution-only without pinnedFallback.models, legacy staticModels, or discoveryStatus=unavailable-upstream',
         });
       }
     }
@@ -279,6 +297,15 @@ describe('Phase 5 invariant: every-provider-reaches-discovery', () => {
     // Aggregator hubs with dedicated fetchers
     'huggingface',
     'bytez',
+    // 2026-09-10: triton was previously exempted only via
+    // RUNTIME_BOUND_CLASSES below (the sole `self-hosted-native` catalog
+    // row) — it now has an explicit `triton-native` aggregator source in
+    // addAggregatorSources() (KServe v2 `POST /v2/repository/index`, reusing
+    // TritonAdapter.getModels()), so it belongs in this set like any other
+    // hardcoded discovery source. Kept in RUNTIME_BOUND_CLASSES too since
+    // that remains a correct fallback for any future self-hosted-native row
+    // without a dedicated fetcher.
+    'triton',
   ]);
 
   /**

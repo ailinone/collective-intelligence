@@ -9,7 +9,7 @@
 
 import { FastifyInstance } from 'fastify';
 import { getModelAutoDiscovery } from '@/services/model-discovery-service';
-import { authenticate, requireRole } from '@/middleware/auth-middleware';
+import { authenticate, requirePlatformAdmin } from '@/middleware/auth-middleware';
 import { logger } from '@/utils/logger';
 
 /**
@@ -21,10 +21,12 @@ export async function discoveryRoutes(fastify: FastifyInstance): Promise<void> {
 
   // SECURITY (RBAC): these endpoints trigger expensive discovery across every
   // provider (POST /trigger, POST /scheduled) and expose discovery internals
-  // (GET /stats). The global api-key-auth middleware authenticates `/v1/...`
-  // requests but does NOT enforce role, so any authenticated tenant could fire
-  // them. Gate each route behind admin/owner role explicitly.
-  const adminPreHandler = [authenticate, requireRole('admin', 'owner')];
+  // (GET /stats) for the SINGLE platform-wide model catalog shared by every
+  // tenant — not anything scoped to the caller's own organization. Fixed
+  // 2026-09-08: requireRole('admin','owner') alone is a per-org check any
+  // tenant's own self-promoted admin already satisfies; these need a real
+  // platform operator, not tenant admin/owner.
+  const adminPreHandler = [authenticate, requirePlatformAdmin()];
 
   /**
    * Trigger manual model discovery

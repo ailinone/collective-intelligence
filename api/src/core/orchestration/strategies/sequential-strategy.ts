@@ -13,7 +13,7 @@
  * Optimizes quality by analyzing task first
  */
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor } from './preferred-model-helper';
 import { PoolBuilder } from '@/core/pool/pool-builder';
 import type {
@@ -30,6 +30,7 @@ import type {
 } from '@/types';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { getTaskType } from '@/types/chat-request-extended.js';
+import { estimateContextSize as estimateContextSizeShared } from '../context-size-estimator';
 
 /**
  * Sequential Strategy with Pre-Analysis
@@ -142,6 +143,7 @@ export class SequentialStrategy extends BaseStrategy {
         totalCost: analysisExecution.cost + directExecution.cost,
         totalDuration,
         qualityScore: this.calculateQualityScore(directExecution),
+        toolArtifacts: mergeArtifacts([analysisExecution, directExecution]),
         metadata: {
           strategyId: metadata.id,
           modelCount: 2,
@@ -220,6 +222,7 @@ export class SequentialStrategy extends BaseStrategy {
       totalCost: analysisExecution.cost + executionExecution.cost,
       totalDuration,
       qualityScore: this.calculateQualityScore(executionExecution),
+      toolArtifacts: mergeArtifacts([analysisExecution, executionExecution]),
       metadata: {
         strategyId: metadata.id,
         modelCount: 2,
@@ -662,9 +665,7 @@ export class SequentialStrategy extends BaseStrategy {
    * Estimate context size in tokens for DynamicModelSelector
    */
   private estimateContextSize(request: ChatRequest): number {
-    const totalChars =
-      request.messages?.reduce((sum, msg) => sum + (msg.content?.toString() || '').length, 0) || 0;
-    return Math.ceil(totalChars / 4);
+    return estimateContextSizeShared(request);
   }
 
   /**

@@ -211,8 +211,24 @@ export interface VideoGenInvokeOptions {
   duration?: number;
   aspectRatio?: string;
   size?: string;
+  /** LOTE AS (2026-09-06): structural resolution request (e.g. '4K') —
+   *  see VideoGenerationOptions.resolution for the full contract. */
+  resolution?: string;
+  /** LOTE AS (2026-09-06): request a native vendor-generated soundtrack —
+   *  see VideoGenerationOptions.generateAudio for the full contract. */
+  generateAudio?: boolean;
   n?: number;
   responseFormat?: 'url' | 'b64_json';
+  /**
+   * @deprecated Alias for `generateAudio` above — kept only so the
+   * triage-stage caller (`orchestration-engine.ts`'s `executeMediaGenerationStage`,
+   * which historically set THIS field, not `generateAudio`) keeps working.
+   * Fixed 2026-09-09: this field used to be silently dropped before reaching
+   * `VideoOrchestrationService` (see the fix note on the `generateAudio:`
+   * line in `createCapabilityInvoker`'s `generateVideo` implementation).
+   * Prefer `generateAudio` in new code; this is honored as a fallback only.
+   */
+  audioRequested?: boolean;
 }
 
 export interface VideoGenInvokeResult {
@@ -275,6 +291,14 @@ interface VideoGenerateServiceOptions {
   duration?: number;
   aspectRatio?: string;
   size?: string;
+  /** LOTE AS (2026-09-06) — see VideoGenerationOptions.resolution. */
+  resolution?: string;
+  /** LOTE AS (2026-09-06) — see VideoGenerationOptions.generateAudio.
+   *  `createCapabilityInvoker`'s `generateVideo` folds the legacy
+   *  `VideoGenInvokeOptions.audioRequested` alias into this field before
+   *  the call, so this is the ONLY audio-request channel the real service
+   *  ever sees (2026-09-09 fix — see that call site's comment). */
+  generateAudio?: boolean;
   n?: number;
   responseFormat?: 'url' | 'b64_json';
   userContext: OrchestrationContext;
@@ -460,6 +484,21 @@ export function createCapabilityInvoker(deps: {
         duration: options.duration,
         aspectRatio: options.aspectRatio,
         size: options.size,
+        resolution: options.resolution,
+        // Bug fix (2026-09-09): `generateAudio` (VideoGenerationOptions' real,
+        // consumed field — LOTE AS "fix dead options bag" commit) and
+        // `audioRequested` (this interface's OWN separate field, added by a
+        // LATER same-day commit that didn't know `generateAudio` already
+        // existed) are two names for the identical concept. `audioRequested`
+        // was forwarded under its own name below, which `VideoGenerationOptions`
+        // never declares — TypeScript's structural typing let it through
+        // silently, but `VideoOrchestrationService.generateVideo` never reads
+        // an `audioRequested` key, so every triage-stage `audio_requested: true`
+        // extraction was silently discarded before it could reach the
+        // catalog-attribute pre-filter or any adapter. `generateAudio` is now
+        // the canonical field end-to-end; `audioRequested` is honored as a
+        // fallback so no existing caller of either name regresses.
+        generateAudio: options.generateAudio ?? options.audioRequested,
         n: options.n,
         responseFormat: options.responseFormat,
         userContext: deps.context,

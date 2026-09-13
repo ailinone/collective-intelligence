@@ -50,8 +50,24 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
   }
 
   private async fetchModels(): Promise<ProviderModel[]> {
-    // Validate endpoint is not mock
-    if (!this.endpoint || this.endpoint.includes('mock')) {
+    // 2026-09-10 discovery audit: this second code path (component tag
+    // `azure-openai-fetcher`) constructs its own SDK client independently of
+    // the `azure-openai-hub` discovery source in central-model-discovery-
+    // service.ts, which already guards on missing credentials with `.info()`
+    // (expected/quiet — most deployments simply don't have Azure configured).
+    // This class had a guard too, but it conflated two different situations
+    // under one `.warn()`: (a) genuinely unconfigured (no endpoint/key at
+    // all) — normal and not warn-worthy, matching the hub's own `.info()`
+    // convention below — and (b) a present-but-mock/test value, which IS a
+    // real misconfiguration smell worth a `.warn()`. Splitting them avoids
+    // spamming `.warn()` on every boot for the common "Azure not configured"
+    // case while still failing loudly and cleanly (never letting the SDK
+    // throw its own "Invalid URL" for a missing baseURL) either way.
+    if (!this.endpoint) {
+      this.log.info('Azure OpenAI endpoint not configured - skipping model discovery');
+      return [];
+    }
+    if (this.endpoint.includes('mock')) {
       this.log.warn(
         { endpoint: this.endpoint },
         'Azure OpenAI endpoint appears to be mock - skipping model discovery'
@@ -59,8 +75,11 @@ export class AzureOpenAIModelFetcher extends BaseProviderModelFetcher {
       return [];
     }
 
-    // Validate API key is not mock
-    if (!this.apiKey || this.apiKey.includes('mock') || this.apiKey.includes('test-')) {
+    if (!this.apiKey) {
+      this.log.info('Azure OpenAI API key not configured - skipping model discovery');
+      return [];
+    }
+    if (this.apiKey.includes('mock') || this.apiKey.includes('test-')) {
       this.log.warn(
         { keyPresent: Boolean(this.apiKey) },
         'Azure OpenAI API key appears to be mock/test key - skipping model discovery'

@@ -60,6 +60,7 @@ import type {
   Provider,
   Model,
   ProviderConfig,
+  ToolCall,
 } from '@/types';
 import type {
   ImageEditRequest,
@@ -336,11 +337,23 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
    * chunk. A dedicated streaming pack is queued for a follow-up batch that
    * imports `InvokeEndpointWithResponseStreamCommand` and parses the event
    * payload stream.
+   *
+   * The underlying `chatCompletion()` call (via `parseEndpointResponse` /
+   * `extractOpenAIShape`) already surfaces a fully-formed `message.tool_calls`
+   * array for the `'openai'` schema — it MUST be forwarded here too, or a
+   * tool call silently vanishes the moment a caller streams instead of
+   * blocking. There is no incremental-fragment concern in this fallback: the
+   * whole response already arrived before this generator emits anything, so
+   * the complete `tool_calls` array is emitted as-is in the first chunk
+   * (array position already disambiguates each entry, same as any other
+   * complete, non-streaming `message.tool_calls`).
    */
   async *chatCompletionStream(request: ChatRequest): AsyncGenerator<ChatResponse, void, unknown> {
     const full = await this.chatCompletion(request);
-    const content = full.choices?.[0]?.message?.content ?? '';
+    const message = full.choices?.[0]?.message;
+    const content = message?.content ?? '';
     const contentText = typeof content === 'string' ? content : '';
+    const toolCalls = message?.tool_calls;
     const created = full.created;
     const id = full.id;
     const modelName = full.model;
@@ -352,7 +365,11 @@ export class AWSSageMakerAdapter extends ProviderAdapter {
       choices: [
         {
           index: 0,
-          delta: { role: 'assistant', content: contentText },
+          delta: {
+            role: 'assistant',
+            content: contentText,
+            ...(toolCalls && toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+          },
           finish_reason: null,
         },
       ],
@@ -631,7 +648,11 @@ export function parseEndpointResponse(
     choices: [
       {
         index: 0,
-        message: { role: 'assistant', content: extracted.text },
+        message: {
+          role: 'assistant',
+          content: extracted.text,
+          ...(extracted.tool_calls ? { tool_calls: extracted.tool_calls } : {}),
+        },
         finish_reason: extracted.finishReason,
       },
     ],
@@ -652,6 +673,22 @@ export function extractTextByScheme(
   finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null;
   promptTokens: number;
   completionTokens: number;
+  /**
+   * Only ever populated for the `'openai'` schema — a vLLM/TGI container
+   * exposing the OAI-shaped `/v1/chat/completions` response can echo a
+   * `message.tool_calls` array exactly like upstream OpenAI. The
+   * `'jumpstart'`/`'hf-tgi'` raw-text schemas have no structured field for
+   * this, so they never populate it.
+   *
+   * Named `tool_calls` (snake_case, matching the wire key it is lifted
+   * from and forwarded to verbatim) rather than a camelCase `toolCalls`
+   * — see `adapter-tool-call-contract.test.ts`'s source-sweep, which
+   * fails the build on any adapter file assigning a camelCase `toolCalls:`
+   * object key, however internal, precisely because that mistake (in
+   * `openrouter-adapter.ts`) once shipped a tool call that silently never
+   * reached the wire.
+   */
+  tool_calls?: ToolCall[];
 } {
   if (schema === 'openai') return extractOpenAIShape(parsed);
   // Both 'jumpstart' and 'hf-tgi' return a generated_text field (possibly in
@@ -664,13 +701,14 @@ function extractOpenAIShape(parsed: unknown): {
   finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null;
   promptTokens: number;
   completionTokens: number;
+  tool_calls?: ToolCall[];
 } {
   if (!parsed || typeof parsed !== 'object') {
     return { text: '', finishReason: null, promptTokens: 0, completionTokens: 0 };
   }
   const obj = parsed as {
     choices?: Array<{
-      message?: { content?: unknown };
+      message?: { content?: unknown; tool_calls?: unknown };
       finish_reason?: string;
     }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
@@ -693,7 +731,40 @@ function extractOpenAIShape(parsed: unknown): {
     finishReason: mapOpenAIFinishReason(choice?.finish_reason),
     promptTokens: obj.usage?.prompt_tokens ?? 0,
     completionTokens: obj.usage?.completion_tokens ?? 0,
+    tool_calls: extractOpenAIToolCalls(choice?.message?.tool_calls),
   };
+}
+
+/**
+ * Validate + normalize a container's `message.tool_calls` array (already
+ * complete — this is the non-streaming/fake-stream response path, not an
+ * incremental delta) into our internal `ToolCall` shape. A malformed or
+ * partial entry (missing `id`/`function.name`) is dropped rather than
+ * forwarded half-formed, since there is no later chunk that could complete
+ * it here.
+ */
+function extractOpenAIToolCalls(raw: unknown): ToolCall[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const calls: ToolCall[] = [];
+  for (const [position, entry] of raw.entries()) {
+    if (!entry || typeof entry !== 'object') continue;
+    const tc = entry as { id?: unknown; function?: unknown; index?: unknown };
+    const id = typeof tc.id === 'string' ? tc.id : undefined;
+    const fn =
+      tc.function && typeof tc.function === 'object'
+        ? (tc.function as { name?: unknown; arguments?: unknown })
+        : undefined;
+    const name = fn && typeof fn.name === 'string' ? fn.name : undefined;
+    if (!id || !name) continue;
+    const args = fn && typeof fn.arguments === 'string' ? fn.arguments : '{}';
+    calls.push({
+      id,
+      type: 'function',
+      function: { name, arguments: args },
+      index: typeof tc.index === 'number' ? tc.index : position,
+    });
+  }
+  return calls.length > 0 ? calls : undefined;
 }
 
 function extractGeneratedText(parsed: unknown): {

@@ -83,6 +83,29 @@ function isOperationalRoute(path: string): boolean {
   return false;
 }
 
+/**
+ * Floor on burst CAPACITY (not sustained rate) for every scope below. Chosen
+ * so a fresh free-tier org (TIER_CONFIGS.free.requestsPerMinute = 10) can
+ * still absorb a realistic agentic-coding-IDE burst — Cursor/Cline/Zed/Claude
+ * Code/Goose/Opencode-style tool-calling loops routinely fire 6-10 near-
+ * simultaneous round-trips (e.g. reading several files in parallel, or a
+ * rapid multi-step tool chain) well within a single second, which is nothing
+ * like a sustained-abuse pattern. It does NOT loosen the sustained rate: the
+ * refillRate below is `capacity / 60` floored at 1 token/sec, and for any
+ * capacity <= 60 (true for every scope at every tier configured today) that
+ * floor — not `capacity / 60` — is what actually governs steady-state
+ * throughput. Raising this only widens the burst ceiling.
+ *
+ * Deliberately still far tighter than paid tiers for the SAME reason this is
+ * a floor and not the default: it is a real anti-abuse boundary, not just a
+ * technical one. Pro's user-scope burst is 25 (round(100 / 4)); enterprise's
+ * is 250. This floor only ever binds when a tier's computed capacity would
+ * otherwise fall below it — currently just the free tier's 'user' scope
+ * (round(10 / 4) = 3) and, for 'api-key'/'organization', tiers below ~13
+ * req/min (none configured today) — so it does not change pro/enterprise.
+ */
+const MIN_SCOPE_BURST_CAPACITY = 10;
+
 function resolveScopeConfig(scope: string, tenantContext: TenantContext | undefined) {
   const base = tokenBucketManager.getDefaultConfig(scope);
   const tierConfig = tenantContext?.tier ? getTierConfig(tenantContext.tier) : null;
@@ -92,17 +115,29 @@ function resolveScopeConfig(scope: string, tenantContext: TenantContext | undefi
 
   switch (scope) {
     case 'organization': {
-      const capacity = Math.max(tierConfig.requestsPerMinute, 10);
+      const capacity = Math.max(tierConfig.requestsPerMinute, MIN_SCOPE_BURST_CAPACITY);
       const refillRate = Math.max(capacity / 60, 1);
       return { capacity, refillRate };
     }
     case 'api-key': {
-      const capacity = Math.max(Math.round(tierConfig.requestsPerMinute * 0.8), 10);
+      const capacity = Math.max(
+        Math.round(tierConfig.requestsPerMinute * 0.8),
+        MIN_SCOPE_BURST_CAPACITY
+      );
       const refillRate = Math.max(capacity / 60, 1);
       return { capacity, refillRate };
     }
     case 'user': {
-      const capacity = Math.max(Math.round(tierConfig.requestsPerMinute / 4), 5);
+      // This was the actual bottleneck (floor of 5, half the other two
+      // scopes' floor of 10) — since api-key/user/organization all run via
+      // Promise.all and EVERY enabled tier must allow the request (see
+      // tokenBucketRateLimitMiddleware below), a fresh free-tier org's
+      // effective burst ceiling was min(10, 10, 5) = 5, not 10. Aligning this
+      // floor with the other two scopes raises the effective ceiling to 10.
+      const capacity = Math.max(
+        Math.round(tierConfig.requestsPerMinute / 4),
+        MIN_SCOPE_BURST_CAPACITY
+      );
       const refillRate = Math.max(capacity / 60, 1);
       return { capacity, refillRate };
     }

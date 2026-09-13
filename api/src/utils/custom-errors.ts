@@ -115,6 +115,34 @@ export class InvalidRequestError extends ValidationError {
 }
 
 /**
+ * Context-window preflight audit (2026-09): thrown when a user-pinned model
+ * (`request.model` set to a concrete id, not `'auto'`) cannot fit the
+ * request's estimated context size. Pinned-model selection must "always win
+ * outright" — silently truncating the request or silently substituting a
+ * different model would both violate that contract — so this is a clean,
+ * honest, well-classified failure (`code: 'context_exceeded'`, `statusCode:
+ * 400`) instead of letting the request reach the provider raw and surface as
+ * an unclassified 500 once the provider rejects it.
+ *
+ * `extractStatusCode`/`extractErrorCodeFromObject` (utils/type-guards.ts)
+ * read `.statusCode`/`.code` directly off any thrown object, so this flows
+ * through chat-routes.ts's existing generic 4xx branch with no additional
+ * wiring needed on the non-streaming path. The streaming path additionally
+ * checks `instanceof ContextWindowExceededError` to send a distinguishable
+ * SSE error instead of the blanket "Upstream provider error" redaction.
+ */
+export class ContextWindowExceededError extends ValidationError {
+  constructor(
+    message: string,
+    details?: { modelId?: string; contextSize?: number; contextWindow?: number }
+  ) {
+    super(message, details);
+    this.name = 'ContextWindowExceededError';
+    this.code = 'context_exceeded';
+  }
+}
+
+/**
  * Authentication & Authorization Errors
  */
 export class AuthenticationError extends ApplicationError {

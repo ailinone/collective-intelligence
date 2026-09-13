@@ -232,6 +232,17 @@ const PINNED_NON_ROUTE_EXECUTION_MODULES: ReadonlyArray<string> = [
   'services/search-orchestration-service.ts',
   'services/tool-execution-service.ts',
   'services/video-orchestration-service.ts',
+  // LOTE AP. Serves video_understanding / video_to_text / video_transcription
+  // by demuxing the upload and fanning the two signals into pipelines that
+  // BILL: the audio track goes to audio-orchestration-service (one STT call),
+  // and each sampled frame goes to capability-execution-service (one vision
+  // call per frame, bounded by VIDEO_UNDERSTANDING_MAX_FRAMES, default 6),
+  // plus one synthesis call for video_understanding. So a single request costs
+  // up to maxFrames + 2 provider calls — the highest per-request fan-out of
+  // any module in this list, which is exactly why it is pinned here rather
+  // than left to be noticed later. Reached only through
+  // routes/capabilities/capabilities-routes.ts, which IS gated.
+  'services/video-understanding-service.ts',
   'workers/batch-worker.ts',
   'workers/chat-request-worker.ts',
   'workers/thread-run-worker.ts',

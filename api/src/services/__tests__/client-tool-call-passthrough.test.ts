@@ -136,6 +136,21 @@ describe('source guards are actually wired in', () => {
     expect(src).toContain('safeForStrategies');
   });
 
+  it('base-strategy also gates strategyExecutionMode:"quorumOnly" tools on computeQuorumToolCall() agreement (PR2)', () => {
+    // The safeForStrategies gate above is unconditional; quorumOnly is the
+    // narrower SECOND path added for billable/slow generation tools
+    // (generate_video, generate_media) — a tool call only auto-executes
+    // there when the collective's voters independently agree on it, reusing
+    // the SAME response-aggregator mechanism the aggregator itself uses for
+    // its own tool_calls policy (never a parallel implementation).
+    const src = read('../../core/orchestration/base-strategy.ts');
+    expect(src).toContain('strategyExecutionMode');
+    expect(src).toContain('quorumOnly');
+    expect(src).toContain('computeQuorumToolCall');
+    expect(src).toContain('toolCallsMatch');
+    expect(src).toContain('executeQuorumApprovedToolForStrategy');
+  });
+
   it('chat-request-processor gates auto-execution on server ownership', () => {
     const src = read('../chat-request-processor.ts');
     expect(src).toContain('serverOwnsEveryToolCall');

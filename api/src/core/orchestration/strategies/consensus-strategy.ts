@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, safeResponseContent, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, safeResponseContent, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
   ChatRequest,
@@ -45,6 +45,7 @@ import type {
   SynthesizerSelectionSource,
 } from './consensus/consensus-artifacts';
 import type { ConsensusExecutionPlan } from './consensus-execution-planner';
+import { resolveReasoningEffort } from '@/utils/reasoning-effort';
 
 const log = logger.child({ component: 'consensus-strategy' });
 
@@ -301,6 +302,14 @@ export class ConsensusStrategy extends BaseStrategy {
     // quantitatively justified.
     const evaluator = this.getEvaluator();
     const evalTask = this.buildEvaluationTask(request, context);
+    // LOTE AZ (2026-09) — resolve ONCE from the original request and thread
+    // into every evaluate() call below (voters + synthesis) so a high-effort
+    // original request doesn't silently get a low-effort judge.
+    const resolvedReasoning = resolveReasoningEffort(request);
+    const originalRequestReasoning =
+      resolvedReasoning.effort !== undefined || resolvedReasoning.thinkingBudget !== undefined
+        ? resolvedReasoning
+        : undefined;
 
     // Evaluate all voters CONCURRENTLY (2026-07-03). This loop was sequential,
     // putting N judge sub-calls in SERIES on the response path — the dominant
@@ -322,6 +331,7 @@ export class ConsensusStrategy extends BaseStrategy {
           // Plan-driven judge id flows through to LLMJudgeEvaluator; other
           // evaluators ignore the field by contract.
           judgeModelOverride: plannedJudgeModelId,
+          originalRequestReasoning,
         });
         const outlierDetection = detectOutlier({
           executionFailed: !e.success,
@@ -447,6 +457,7 @@ export class ConsensusStrategy extends BaseStrategy {
         totalCost: votersTotalCost,
         totalDuration: Date.now() - startTime,
         qualityScore: bestVoter.evaluation.score ?? 0,
+        toolArtifacts: mergeArtifacts(executions),
         metadata: {
           strategyId: metadata.id,
           effectiveStrategyId: 'consensus_degraded_best_individual' as ConsensusEffectiveStrategyId,
@@ -551,6 +562,7 @@ export class ConsensusStrategy extends BaseStrategy {
           totalCost: votersTotalCost,
           totalDuration: Date.now() - startTime,
           qualityScore: shortCircuit.voter.evaluation.score ?? shortCircuit.confidence,
+          toolArtifacts: mergeArtifacts(executions),
           metadata: {
             strategyId: metadata.id,
             effectiveStrategyId: shortCircuit.effectiveStrategyId,
@@ -624,6 +636,17 @@ export class ConsensusStrategy extends BaseStrategy {
       // Forward the client's max_tokens so the coordinator honors it (up to 128k)
       // instead of the aggregator's fallback default.
       maxTokens: Number(request.max_tokens) > 0 ? Number(request.max_tokens) : undefined,
+      // Prefer a coordinator that just answered this request. The aggregator's
+      // own fallback scans the whole catalog for the highest-quality model and
+      // ignores credentials, operability and adapter registration — which is how
+      // synthesis silently degraded to the concatenation digest.
+      coordinatorCandidateModelIds: validVoters.map((v) => v.execution.modelId),
+      // LOTE AZ (2026-09) — thread the original request's reasoning-effort
+      // signal onto the coordinator's own ChatRequest (see
+      // response-aggregator.ts). Previously the synthesis call was built
+      // from scratch with no knowledge of the caller's effort intent.
+      reasoningEffort: resolvedReasoning.effort,
+      thinkingBudget: resolvedReasoning.thinkingBudget,
     });
 
     // Cost-accounting integrity (TIER 0): the synthesizer/coordinator is a real
@@ -656,11 +679,16 @@ export class ConsensusStrategy extends BaseStrategy {
       executionFailed: false,
       strategyName: 'consensus',
       role: 'synthesis',
+      originalRequestReasoning,
       judgeModelOverride: plannedJudgeModelId,
     });
 
     let selection: FinalSelectionResult = selectFinal({
-      synthesisAvailable: true,
+      // Was hardcoded `true`, which made the final selector's
+      // `synthesis_not_available` rule permanently unreachable — so when
+      // synthesis fell back to the internal `### From <model>` digest, the judge
+      // scored the digest as if it were an answer and it was served to the user.
+      synthesisAvailable: !aggregated.synthesisUnavailable,
       synthesisEvaluation,
       bestIndividualScore: bestVoter.evaluation.score,
       bestIndividualModelId: bestVoter.execution.modelId,
@@ -1027,6 +1055,7 @@ export class ConsensusStrategy extends BaseStrategy {
       totalCost: args.totalCost,
       totalDuration: Date.now() - args.startTime,
       qualityScore,
+      toolArtifacts: mergeArtifacts(args.executions),
       metadata: {
         strategyId: args.metadata.id,
         effectiveStrategyId: effective,

@@ -9,7 +9,7 @@
 
 /**
  * Extended Thinking Routes
- * Claude/Gemini-compatible extended thinking modes with REAL implementation
+ * Claude/Gemini-compatible extended thinking modes
  *
  * Features:
  * - Extended thinking (Claude-style prolonged reasoning)
@@ -19,7 +19,24 @@
  * - Full orchestration integration
  *
  * NO HARDCODED MODELS - All selection is dynamic via capabilities
- * REAL IMPLEMENTATION - Uses orchestration engine with thinking-capable models
+ *
+ * NATIVE-WHEN-AVAILABLE, PROMPT-ENGINEERED FALLBACK OTHERWISE (LOTE AZ
+ * follow-up, 2026-09). Both routes below resolve the caller's intent through
+ * the canonical `resolveReasoningEffort()` (`@/utils/reasoning-effort`) and,
+ * for a candidate/model that carries the `thinking_mode` capability (or the
+ * defensive name heuristic in `modelHasNativeThinking()`), attach
+ * `reasoning_effort`/`thinking_budget` directly onto the `ChatRequest`
+ * forwarded to the orchestration engine — the SAME request shape
+ * `resolveReasoningEffort()` callers everywhere else in the codebase consume
+ * (base-strategy.ts's native-thinking budget, and the per-provider
+ * Anthropic/Google/OpenAI/xAI native mappings), so a model with real native
+ * extended-thinking support gets the ACTUAL provider mechanism (thinking
+ * budget / reasoning-effort tier), not just a text instruction. The
+ * prompt-injection ("wrap your reasoning in <thinking> tags") plus
+ * regex-parsing approach that used to run unconditionally for EVERY model is
+ * now used ONLY as the graceful fallback for models with no native thinking
+ * support at all — see `executeExtendedThinking`/`executeUltraThinking`
+ * below for the per-branch detail.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -32,7 +49,9 @@ import type {
   ChatResponse,
   ChatMessage,
   OrchestrationContext,
+  OrchestrationResult,
   ExecutionStrategyName,
+  ReasoningEffort,
 } from '@/types';
 import type { ExtendedFastifyRequest } from '@/types/fastify-extended';
 import { createOrchestrationContext } from '@/utils/orchestration-context';
@@ -44,6 +63,11 @@ import { ModelRepository } from '@/services/model-repository';
 import { nanoid } from 'nanoid';
 import { trackChatUsage } from '@/services/billing-usage-tracker';
 import { evaluateOrchestrationGate } from '@/services/orchestration-gate';
+import {
+  EFFORT_THINKING_BUDGETS,
+  modelHasNativeThinking,
+  resolveReasoningEffort,
+} from '@/utils/reasoning-effort';
 // SSE helpers reserved for future streaming support; route currently
 // returns full responses synchronously.
 
@@ -58,7 +82,10 @@ interface ExtendedThinkingRequest {
   model?: string;
   max_tokens?: number;
   temperature?: number;
-  thinking_budget?: number; // Max tokens for thinking (Claude-style)
+  thinking_budget?: number; // Max tokens for thinking (Claude-style). Wins verbatim over reasoning_effort — see resolveReasoningEffort().
+  /** Canonical graded effort dial (LOTE AZ). Resolved together with
+   *  `thinking_budget` via `resolveReasoningEffort()` — see module doc. */
+  reasoning_effort?: ReasoningEffort;
   stream?: boolean;
   // Ailin extensions
   quality_target?: number;
@@ -109,7 +136,7 @@ interface ExtendedThinkingResponse {
 // Extended Thinking Service
 // ==
 
-class ExtendedThinkingService {
+export class ExtendedThinkingService {
   private modelRepo: ModelRepository;
 
   constructor() {
@@ -170,9 +197,25 @@ class ExtendedThinkingService {
       }
     }
 
-    // Step 3: Prepare request with thinking instruction
+    // Step 3: Resolve the caller's reasoning-effort intent ONCE via the
+    // canonical resolver (LOTE AZ). Hitting this endpoint at all is an
+    // explicit ask for extended thinking, so — unlike the generic
+    // `/v1/chat/completions` resolution — a caller who supplied neither
+    // `reasoning_effort` nor `thinking_budget` still gets a concrete budget
+    // here (`EFFORT_THINKING_BUDGETS.medium`) rather than "no signal at all".
+    const resolvedEffort = resolveReasoningEffort({
+      reasoning_effort: request.reasoning_effort,
+      thinking_budget: request.thinking_budget,
+    });
+    const effectiveEffort: ReasoningEffort = resolvedEffort.effort ?? 'medium';
+    const effectiveThinkingBudget = resolvedEffort.thinkingBudget ?? EFFORT_THINKING_BUDGETS.medium;
+
+    // Prompt-injection fallback messages — built once, used ONLY for
+    // candidates that fail the native-thinking check below (`buildThinkingSystemPrompt`
+    // asks the model to narrate its reasoning as text; this is the fallback,
+    // not the primary mechanism, see module doc).
     const thinkingSystemPrompt = this.buildThinkingSystemPrompt(request.thinking_budget);
-    const enhancedMessages: ChatMessage[] = [
+    const fallbackMessages: ChatMessage[] = [
       { role: 'system', content: thinkingSystemPrompt },
       ...request.messages,
     ];
@@ -184,31 +227,71 @@ class ExtendedThinkingService {
 
     const engine = getOrchestrationEngine();
     let selectedModel = candidates[0];
+    let selectedModelIsNative = modelHasNativeThinking(selectedModel);
     let result: Awaited<ReturnType<typeof engine.execute>> | null = null;
     let lastError: unknown = null;
 
     for (const candidate of candidates) {
+      // Per-candidate, NOT assumed from the `thinking_mode` capability filter
+      // above: `thinkingModels` should already all be native, but the
+      // zero-results fallback pushes in `reasoning`-capability models too
+      // (line ~164), which are not necessarily native. Checking per-candidate
+      // means a mixed candidate chain still gets the right treatment for
+      // EACH model it actually tries, not just the first one.
+      const isNative = modelHasNativeThinking(candidate);
+
       log.info(
         {
           requestId: context.requestId,
           model: candidate.name,
           provider: candidate.provider,
+          nativeThinking: isNative,
         },
         'Selected thinking model'
       );
 
       const chatRequest: ChatRequest = {
         model: candidate.id,
-        messages: enhancedMessages,
+        // Native models: send the caller's own messages untouched — no
+        // <thinking>-tag prompt engineering, the provider's real
+        // extended-thinking mechanism (activated below) produces genuine
+        // internal reasoning without being asked to narrate it as text.
+        // Non-native models: keep today's prompt-injection fallback exactly
+        // as before.
+        messages: isNative ? request.messages : fallbackMessages,
         temperature: request.temperature ?? 0.7,
         max_tokens: request.max_tokens ?? 8192,
         quality_target: request.quality_target ?? 0.9,
         max_cost: request.max_cost,
+        ...(isNative
+          ? {
+              // THE actual fix: attach the canonical fields to the ChatRequest
+              // forwarded to the orchestration engine, in the exact shape
+              // `resolveReasoningEffort()` callers everywhere else consume
+              // (base-strategy.ts's native-thinking budget today; the
+              // per-provider Anthropic/Google/OpenAI/xAI native mappings once
+              // those land). `thinking_budget` is ALSO read directly by
+              // adapters that don't go through executeModelWithReasoning
+              // (byteplus-adapter.ts, groq-adapter.ts,
+              // openai-compatible-hub-adapter.ts), so this activates real
+              // native thinking regardless of which internal strategy path
+              // the orchestration engine picks for this request.
+              reasoning_effort: effectiveEffort,
+              thinking_budget: effectiveThinkingBudget,
+              // Also enables base-strategy's own reasoning_traces capture
+              // (executeModelWithReasoning -> extractReasoning) for
+              // strategies that gate on it — a no-op prompt-wise for native
+              // models specifically, since withReasoningPrompt() already
+              // skips injection when hasNativeThinking(model) is true.
+              ailin_constraints: { enable_reasoning: true },
+            }
+          : {}),
       };
 
       try {
         result = await engine.execute(chatRequest, context.organizationId, context.userId);
         selectedModel = candidate;
+        selectedModelIsNative = isNative;
         break;
       } catch (candidateError: unknown) {
         lastError = candidateError;
@@ -232,10 +315,29 @@ class ExtendedThinkingService {
         : new Error(`All extended-thinking candidates failed (${candidates.length} tried)`);
     }
 
-    // Step 5: Parse response to extract thinking blocks
+    // Step 5: Extract the thinking content. For a native model, prefer the
+    // orchestration engine's own `reasoning_traces` (populated by
+    // executeModelWithReasoning -> extractReasoning when the strategy path
+    // honors `ailin_constraints.enable_reasoning`) — that is genuine
+    // provider-native reasoning, not text we asked the model to produce.
+    // Falls back to the <thinking>/<think>-tag regex parse (today's only
+    // mechanism) whenever native traces aren't available: a non-native
+    // candidate, or a native one whose selected strategy path didn't run
+    // through executeModelWithReasoning but may still have emitted its raw
+    // native <think> tags straight into the content untouched.
     const responseContent = this.extractContent(result.finalResponse);
-    const { thinkingBlocks, textBlocks, thinkingTokens } =
-      this.parseThinkingContent(responseContent);
+    const nativeReasoning = selectedModelIsNative ? this.extractNativeReasoningTraces(result) : [];
+
+    let thinkingBlocks: string[];
+    let textBlocks: string[];
+    let thinkingTokens: number;
+    if (nativeReasoning.length > 0) {
+      thinkingBlocks = nativeReasoning;
+      textBlocks = responseContent.trim() ? [responseContent.trim()] : [];
+      thinkingTokens = Math.ceil(nativeReasoning.reduce((sum, t) => sum + t.length, 0) / 4);
+    } else {
+      ({ thinkingBlocks, textBlocks, thinkingTokens } = this.parseThinkingContent(responseContent));
+    }
 
     const contentBlocks: ContentBlock[] = [
       ...thinkingBlocks.map((t): ThinkingBlock => ({ type: 'thinking', thinking: t })),
@@ -248,6 +350,8 @@ class ExtendedThinkingService {
       {
         requestId: context.requestId,
         model: selectedModel.name,
+        nativeThinking: selectedModelIsNative,
+        usedNativeReasoningTraces: nativeReasoning.length > 0,
         thinkingBlocks: thinkingBlocks.length,
         textBlocks: textBlocks.length,
         durationMs,
@@ -323,12 +427,33 @@ class ExtendedThinkingService {
       'Selected models for ultra thinking'
     );
 
-    // Step 2: Prepare enhanced request with collective intelligence prompt
+    // Step 2: Prepare enhanced request with collective intelligence prompt.
+    // Kept UNCONDITIONALLY here (unlike executeExtendedThinking's single-model
+    // pin) because ultra-thinking fans one ChatRequest out across up to 9
+    // heterogeneous models at once — some may have native thinking, some may
+    // not, and there is no per-model message customization hook at this
+    // level. The prompt stays a harmless, low-cost nudge for whichever
+    // participants lack native support; models that DO have it still get the
+    // real mechanism via `reasoning_effort`/`thinking_budget` below (and
+    // `withReasoningPrompt()` in base-strategy.ts already skips its OWN
+    // reasoning-tag injection for a model where `hasNativeThinking()` is
+    // true, so native participants don't see duplicated instructions).
     const ultraSystemPrompt = this.buildUltraThinkingSystemPrompt();
     const enhancedMessages: ChatMessage[] = [
       { role: 'system', content: ultraSystemPrompt },
       ...request.messages,
     ];
+
+    // Step 2.5: Resolve the caller's reasoning-effort intent (LOTE AZ). Ultra
+    // thinking's whole point is maximum reasoning depth, so — same rationale
+    // as executeExtendedThinking — an unset caller value here defaults to
+    // 'high' rather than 'medium' or "no signal".
+    const resolvedEffort = resolveReasoningEffort({
+      reasoning_effort: request.reasoning_effort,
+      thinking_budget: request.thinking_budget,
+    });
+    const effectiveEffort: ReasoningEffort = resolvedEffort.effort ?? 'high';
+    const effectiveThinkingBudget = resolvedEffort.thinkingBudget ?? EFFORT_THINKING_BUDGETS.high;
 
     // Step 3: Determine strategy based on model count
     let strategy: ExecutionStrategyName = 'collaborative';
@@ -346,6 +471,13 @@ class ExtendedThinkingService {
       strategy,
       quality_target: request.quality_target ?? 0.95,
       max_cost: request.max_cost,
+      // THE actual fix (see module doc): attach the canonical fields so any
+      // participant with real native thinking support (`thinking_mode`
+      // capability) activates the actual provider mechanism instead of only
+      // ever getting the prompt-engineered narration above.
+      reasoning_effort: effectiveEffort,
+      thinking_budget: effectiveThinkingBudget,
+      ailin_constraints: { enable_reasoning: true },
     };
 
     // Step 4: Execute via orchestration engine with selected strategy
@@ -369,10 +501,23 @@ class ExtendedThinkingService {
       ultraContext.userId
     );
 
-    // Step 5: Build response with collective thinking metadata
+    // Step 5: Build response with collective thinking metadata. Prefer real
+    // native reasoning traces (see executeExtendedThinking's Step 5 doc for
+    // why) over the prompt-injection regex parse whenever the collective
+    // strategy actually populated them.
     const responseContent = this.extractContent(result.finalResponse);
-    const { thinkingBlocks, textBlocks, thinkingTokens } =
-      this.parseThinkingContent(responseContent);
+    const nativeReasoning = this.extractNativeReasoningTraces(result);
+
+    let thinkingBlocks: string[];
+    let textBlocks: string[];
+    let thinkingTokens: number;
+    if (nativeReasoning.length > 0) {
+      thinkingBlocks = nativeReasoning;
+      textBlocks = responseContent.trim() ? [responseContent.trim()] : [];
+      thinkingTokens = Math.ceil(nativeReasoning.reduce((sum, t) => sum + t.length, 0) / 4);
+    } else {
+      ({ thinkingBlocks, textBlocks, thinkingTokens } = this.parseThinkingContent(responseContent));
+    }
 
     const contentBlocks: ContentBlock[] = [
       ...thinkingBlocks.map((t): ThinkingBlock => ({ type: 'thinking', thinking: t })),
@@ -498,7 +643,34 @@ Focus on quality, accuracy, and completeness.`;
   }
 
   /**
-   * Parse content to extract thinking blocks and text blocks
+   * Real native-thinking traces from the orchestration engine, if the
+   * selected strategy path actually populated them. `metadata.reasoning_traces`
+   * is the established, codebase-wide convention every strategy uses to
+   * surface `ModelExecution.reasoning` (populated by
+   * `executeModelWithReasoning` -> `extractReasoning`) — see
+   * `single-model-strategy.ts`, `consensus-strategy.ts`, and the ~25 other
+   * strategies that build this same shape. Reading it here (rather than only
+   * ever regexing the final response text) is what lets a genuinely native
+   * model's real internal reasoning surface as a `thinking` block even after
+   * it has already been stripped out of the visible response content.
+   */
+  private extractNativeReasoningTraces(result: Pick<OrchestrationResult, 'metadata'>): string[] {
+    const traces = result.metadata?.reasoning_traces;
+    if (!Array.isArray(traces)) return [];
+    return (traces as Array<{ reasoning?: unknown }>)
+      .map((t) => t.reasoning)
+      .filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+      .map((r) => r.trim());
+  }
+
+  /**
+   * Parse content to extract thinking blocks and text blocks.
+   * Matches BOTH `<thinking>...</thinking>` (the prompt-injection fallback's
+   * own convention, asked for by `buildThinkingSystemPrompt`/
+   * `buildUltraThinkingSystemPrompt`) and `<think>...</think>` (the raw
+   * native format some models — DeepSeek-R1, QwQ — emit directly into their
+   * completion text when nothing upstream already stripped it out via
+   * `extractNativeReasoningTraces`).
    */
   private parseThinkingContent(content: string): {
     thinkingBlocks: string[];
@@ -508,8 +680,9 @@ Focus on quality, accuracy, and completeness.`;
     const thinkingBlocks: string[] = [];
     const textBlocks: string[] = [];
 
-    // Extract <thinking> blocks
-    const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/gi;
+    // Extract <thinking>...</thinking> or <think>...</think> blocks (tag
+    // name captured and back-referenced so open/close always match).
+    const thinkingRegex = /<(thinking|think)>([\s\S]*?)<\/\1>/gi;
     let match: RegExpExecArray | null;
     let lastIndex = 0;
 
@@ -522,7 +695,7 @@ Focus on quality, accuracy, and completeness.`;
         }
       }
 
-      thinkingBlocks.push(match[1].trim());
+      thinkingBlocks.push(match[2].trim());
       lastIndex = match.index + match[0].length;
     }
 
@@ -623,7 +796,13 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
               minimum: 100,
               maximum: 32000,
               description:
-                'Maximum tokens allocated specifically for the thinking/reasoning process (separate from response tokens). Range: 100-32000',
+                'Maximum tokens allocated specifically for the thinking/reasoning process (separate from response tokens). Range: 100-32000. Wins verbatim over reasoning_effort when both are set.',
+            },
+            reasoning_effort: {
+              type: 'string',
+              enum: ['low', 'medium', 'high'],
+              description:
+                'Canonical graded reasoning-effort dial. For a model with real native extended-thinking support, maps to a documented thinking_budget tier (low=1024, medium=4096, high=16384 tokens) and activates the actual native mechanism. Defaults to "medium" when neither this nor thinking_budget is set.',
             },
             stream: {
               type: 'boolean',
@@ -924,6 +1103,19 @@ export async function registerExtendedThinkingRoutes(server: FastifyInstance): P
               default: 0.7,
               description:
                 'Sampling temperature (0-2). Higher values increase randomness. Default: 0.7 for balanced reasoning',
+            },
+            thinking_budget: {
+              type: 'integer',
+              minimum: 100,
+              maximum: 32000,
+              description:
+                'Maximum tokens allocated for native extended-thinking, for any collective participant with real native support. Wins verbatim over reasoning_effort when both are set.',
+            },
+            reasoning_effort: {
+              type: 'string',
+              enum: ['low', 'medium', 'high'],
+              description:
+                'Canonical graded reasoning-effort dial, applied to every native-thinking-capable participant in the collective. Defaults to "high" when neither this nor thinking_budget is set.',
             },
             stream: {
               type: 'boolean',

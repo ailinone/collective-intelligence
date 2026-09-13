@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Source: https://github.com/ailinone/collective-intelligence
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor, withPreferredFirst } from './preferred-model-helper';
 import type { ProviderAdapter } from '@/providers/base/provider-adapter';
 import { distributedCircuitBreakerManager } from '@/core/resilience/distributed-circuit-breaker';
@@ -22,6 +22,7 @@ import type {
   ModelExecution,
   Model,
   ModelRole,
+  ArtifactRef,
 } from '@/types';
 
 /**
@@ -540,6 +541,10 @@ export class CostCascadeStrategy extends BaseStrategy {
       qualityScore?: number;
       usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
       error?: string;
+      /** Tool-call artifacts surfaced by this rung's execution, mirrored
+       *  from the underlying `ModelExecution.artifacts` so they survive
+       *  into `allExecutions` and reach `mergeArtifacts()`. */
+      artifacts?: ArtifactRef[];
     }
     const attempts: ExecutionAttempt[] = [];
     let bestExecution: ExecutionAttempt | null = null;
@@ -651,6 +656,7 @@ export class CostCascadeStrategy extends BaseStrategy {
         cost: exec.cost,
         durationMs: exec.durationMs,
         success: exec.success,
+        artifacts: exec.artifacts,
       };
       if (exec.error) {
         execution.error = exec.error;
@@ -665,6 +671,7 @@ export class CostCascadeStrategy extends BaseStrategy {
       totalCost,
       totalDuration: duration,
       qualityScore: bestExecution.qualityScore || 0,
+      toolArtifacts: mergeArtifacts(allExecutions),
       metadata: {
         cascadeLevels: attempts.length,
         qualityThreshold,
@@ -1152,6 +1159,10 @@ export class CostCascadeStrategy extends BaseStrategy {
     qualityScore?: number;
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
     error?: string;
+    /** Tool-call artifacts surfaced by this rung's execution, mirrored
+     *  from the underlying `ModelExecution.artifacts` so they survive
+     *  into `allExecutions` and reach `mergeArtifacts()`. */
+    artifacts?: ArtifactRef[];
   }> {
     const execStart = Date.now();
 
@@ -1214,6 +1225,7 @@ export class CostCascadeStrategy extends BaseStrategy {
         success: hasUsableResponse,
         error: executionError,
         qualityScore: 0, // Will be set later
+        artifacts: exec.artifacts,
       };
 
       return execution;

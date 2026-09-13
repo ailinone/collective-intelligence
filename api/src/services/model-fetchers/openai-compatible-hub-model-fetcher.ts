@@ -57,6 +57,19 @@ type RawModelRecord = Record<string, unknown>;
  * models (independently cross-checked against fastrouter/vercel-ai-gateway/
  * phala/huggingface listings already in the catalog, which agree within a
  * normal cross-reseller margin) — not estimated ratios.
+ *
+ * Re-verified 2026-09-09 directly against `https://openrouter.ai/api/v1/models`
+ * (live JSON, not a scraped/summarized pricing page) — this table had drifted
+ * for glm-4.6, glm-5 and glm-5.2 (all repriced downward since the table was
+ * last touched) and was missing glm-5.3 / glm-5.3-flash entirely, so those
+ * three models fell all the way through to the $0/8192 generic default
+ * despite `zai` re-listing glm-5.3 on bigmodel.cn. glm-4.5, glm-4.5-air,
+ * glm-4.7, glm-5.1 and glm-5-turbo matched OpenRouter's current numbers
+ * exactly and are unchanged. (Z.AI's own docs.z.ai marketing pricing page was
+ * also checked but repeats identical $/1M figures across adjacent GLM
+ * versions in a way that reads as a stale/templated table, not a reliable
+ * per-model source — OpenRouter's raw API was used as ground truth instead,
+ * consistent with this table's original sourcing.)
  */
 const HUB_METADATA_GAP_FILL: Record<
   string,
@@ -65,11 +78,13 @@ const HUB_METADATA_GAP_FILL: Record<
   zai: {
     'glm-4.5': { contextWindow: 131_072, inputCostPer1M: 0.6, outputCostPer1M: 2.2 },
     'glm-4.5-air': { contextWindow: 131_072, inputCostPer1M: 0.13, outputCostPer1M: 0.85 },
-    'glm-4.6': { contextWindow: 202_752, inputCostPer1M: 0.5, outputCostPer1M: 2.0 },
-    'glm-4.7': { contextWindow: 202_752, inputCostPer1M: 0.4, outputCostPer1M: 1.75 },
-    'glm-5': { contextWindow: 202_752, inputCostPer1M: 0.95, outputCostPer1M: 2.55 },
-    'glm-5.1': { contextWindow: 202_752, inputCostPer1M: 0.966, outputCostPer1M: 3.036 },
-    'glm-5.2': { contextWindow: 1_048_576, inputCostPer1M: 0.965, outputCostPer1M: 3.032 },
+    'glm-4.6': { contextWindow: 204_800, inputCostPer1M: 0.43, outputCostPer1M: 1.75 },
+    'glm-4.7': { contextWindow: 204_800, inputCostPer1M: 0.4, outputCostPer1M: 1.75 },
+    'glm-5': { contextWindow: 204_800, inputCostPer1M: 0.6, outputCostPer1M: 1.92 },
+    'glm-5.1': { contextWindow: 204_800, inputCostPer1M: 0.966, outputCostPer1M: 3.036 },
+    'glm-5.2': { contextWindow: 1_048_576, inputCostPer1M: 0.28, outputCostPer1M: 0.88 },
+    'glm-5.3': { contextWindow: 1_048_576, inputCostPer1M: 1.4, outputCostPer1M: 4.4 },
+    'glm-5.3-flash': { contextWindow: 1_310_720, inputCostPer1M: 0.075, outputCostPer1M: 0.25 },
     'glm-5-turbo': { contextWindow: 202_752, inputCostPer1M: 1.2, outputCostPer1M: 4.0 },
   },
 };
@@ -96,19 +111,37 @@ function normalizeHubModelId(rawModelId: string): string {
     return trimmed;
   }
 
-  // Already canonical or workspace-scoped (e.g., workspace@provider/model)
-  if (trimmed.includes('/')) {
+  const atIndex = trimmed.indexOf('@');
+  const slashIndex = trimmed.indexOf('/');
+
+  // No '@' at all, or the first '/' comes at-or-before the first '@': any
+  // '@' here is NOT a provider-prefix separator, it's part of an
+  // already-slash-delimited id — e.g. Vertex/ORQ-style version suffixes
+  // (`google/claude-opus-4-1@20250805`, live-verified 2026-09-12 against
+  // ORQ.ai's /v2/router/models). Converting that '@' would corrupt a
+  // genuinely-routable id, so leave it untouched.
+  if (atIndex === -1 || (slashIndex !== -1 && slashIndex <= atIndex)) {
     return trimmed;
   }
 
-  // Some hubs expose IDs as provider@model. Normalize to provider/model for execution.
-  const atIndex = trimmed.indexOf('@');
-  if (atIndex > 0 && atIndex < trimmed.length - 1) {
-    const provider = trimmed.slice(0, atIndex).trim();
-    const model = trimmed.slice(atIndex + 1).trim();
-    if (provider && model && !model.includes('/')) {
-      return `${provider}/${model}`;
-    }
+  // The '@' precedes any '/' (or there is no '/' yet): this is a
+  // provider-prefix separator — `provider@model` or `provider@nested/path`.
+  // Convert the FIRST '@' to '/' regardless of how many more '/' segments
+  // follow in the model part, so nested hub-of-hub ids normalize fully
+  // instead of being left half-converted. Root-caused 2026-09-12: ids like
+  // `groq@meta-llama/llama-4-scout-17b-16e-instruct` or
+  // `togetherai@deepseek-ai/DeepSeek-V3` (live-verified real shapes on
+  // ORQ.ai's router listing, which already emits most of these pre-slashed
+  // as `groq/meta-llama/...` — but the same provider@nested/path shape can
+  // still arrive from other hubs or historical rows) were previously left
+  // as `vendor@nested/path` because the old check bailed out early on
+  // seeing ANY '/' in the string, never reaching this conversion — causing
+  // 25 of 27 DB rows to be misdiagnosed as "missing" when they were only
+  // unnormalized.
+  const provider = trimmed.slice(0, atIndex).trim();
+  const model = trimmed.slice(atIndex + 1).trim();
+  if (provider && model) {
+    return `${provider}/${model}`;
   }
 
   return trimmed;
@@ -321,7 +354,7 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   }
 
   private convertRawModel(rawModel: RawModelRecord, sourcePath: string): ProviderModel | null {
-    const rawModelId = this.extractString(rawModel, ['id', 'model', 'model_id', 'name', 'slug']);
+    const rawModelId = this.resolveRawModelId(rawModel);
 
     if (!rawModelId) {
       return null;
@@ -338,15 +371,56 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
         'context_length',
         'max_context_length',
         'maxContextLength',
+        // vLLM/SGLang-hosted surfaces (wafer serverless) expose the hard
+        // context cap under this name at the top level of each model card.
+        'max_model_len',
       ]) || HUB_FETCHER_DEFAULT_CONTEXT_WINDOW;
 
-    const maxOutputTokens =
+    let maxOutputTokens =
       this.extractNumber(rawModel, [
         'max_output_tokens',
         'maxOutputTokens',
         'max_completion_tokens',
         'maxCompletionTokens',
       ]) || 4096;
+
+    const vendorExt = this.extractVendorExtension(rawModel);
+    if (vendorExt && contextWindow === HUB_FETCHER_DEFAULT_CONTEXT_WINDOW) {
+      contextWindow =
+        this.extractNumber(vendorExt, ['context_length', 'context_window']) ||
+        HUB_FETCHER_DEFAULT_CONTEXT_WINDOW;
+    }
+
+    // Poe (and other OpenRouter-style hubs) nest the per-model output cap
+    // under a `context_window` OBJECT — `{ context_length, max_output_tokens }`
+    // — rather than at the top level. The key-list lookup above only reads
+    // scalar values, so this object is (correctly) skipped by `contextWindow`
+    // there, but nothing previously looked inside it for `max_output_tokens`.
+    // Live-verified 2026-09 against Poe's own /v1/models: every one of its
+    // 344 catalog models carries a real value here (e.g. gpt-4o: 8192,
+    // claude-haiku-4.5: 64000), yet 100% of Poe rows showed the generic 4096
+    // default because Poe has no top-level duplicate of this field the way
+    // it duplicates `context_length`. Only fills in when still at the
+    // generic default, same convention as the wafer/zai gap-fills above —
+    // never overrides a real top-level value.
+    const nestedContextWindow =
+      rawModel.context_window &&
+      typeof rawModel.context_window === 'object' &&
+      !Array.isArray(rawModel.context_window)
+        ? (rawModel.context_window as RawModelRecord)
+        : undefined;
+    if (nestedContextWindow) {
+      if (contextWindow === HUB_FETCHER_DEFAULT_CONTEXT_WINDOW) {
+        contextWindow =
+          this.extractNumber(nestedContextWindow, ['context_length', 'contextWindow']) ||
+          HUB_FETCHER_DEFAULT_CONTEXT_WINDOW;
+      }
+      if (maxOutputTokens === 4096) {
+        maxOutputTokens =
+          this.extractNumber(nestedContextWindow, ['max_output_tokens', 'maxOutputTokens']) ||
+          maxOutputTokens;
+      }
+    }
 
     const metadata = this.buildMetadata(rawModel, sourcePath, modelId, rawModelId);
     let capabilities = this.extractCapabilities(metadata, modelId);
@@ -452,22 +526,64 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
       'supported_capabilities',
       'supportedCapabilities',
     ]) as ModelCapability[];
-    if (declaredCapabilities.length > 0) {
+
+    // Vendor-extension capabilities (wafer serverless): per-surface boolean
+    // flags under `wafer.capabilities` — {vision, tools, reasoning, ...} —
+    // are the declared source of truth, not the model-id heuristics.
+    const vendorExt = this.extractVendorExtension(rawModel);
+    const vendorCapabilityFlags = vendorExt?.capabilities as
+      | Record<string, unknown>
+      | undefined;
+    if (vendorCapabilityFlags && typeof vendorCapabilityFlags === 'object') {
+      const inferred: ModelCapability[] = [];
+      if (vendorCapabilityFlags.reasoning === true) inferred.push('reasoning');
+      if (vendorCapabilityFlags.vision === true) inferred.push('vision');
+      if (vendorCapabilityFlags.tools === true) {
+        inferred.push('tool_use', 'function_calling');
+      }
+      if (inferred.length > 0) {
+        metadata.capabilities = [...declaredCapabilities, ...inferred];
+      }
+    } else if (declaredCapabilities.length > 0) {
       metadata.capabilities = declaredCapabilities;
     }
 
-    const inputModalities = this.extractStringArray(rawModel, [
-      'input_modalities',
-      'inputModalities',
-    ]);
-    const outputModalities = this.extractStringArray(rawModel, [
-      'output_modalities',
-      'outputModalities',
-    ]);
+    // OpenRouter-style hubs (Poe included) nest the modality declaration
+    // under an `architecture` OBJECT — `{ input_modalities, output_modalities,
+    // modality }` — rather than at the top level. Only the top-level shape
+    // was read here, so this structured, provider-declared "modality-derived"
+    // signal (the strongest source after an explicit capability list — see
+    // model-capability-merger.ts) was silently dropped for every Poe model:
+    // vision detection fell through to the weak description-text keyword
+    // regex instead, which live-verified 2026-09 MISSED real vision-capable
+    // models whose description just doesn't happen to say "image"/"vision"
+    // (e.g. Poe's `claude-haiku-4.5`: `architecture.input_modalities:
+    // ["text","image"]`, i.e. genuinely accepts image input, but its
+    // description text never uses either word, so the regex fallback never
+    // fired and the row carried no `vision` capability at all).
+    const nestedArchitecture =
+      rawModel.architecture &&
+      typeof rawModel.architecture === 'object' &&
+      !Array.isArray(rawModel.architecture)
+        ? (rawModel.architecture as RawModelRecord)
+        : undefined;
+
+    const inputModalities = [
+      ...this.extractStringArray(rawModel, ['input_modalities', 'inputModalities']),
+      ...(nestedArchitecture
+        ? this.extractStringArray(nestedArchitecture, ['input_modalities', 'inputModalities'])
+        : []),
+    ];
+    const outputModalities = [
+      ...this.extractStringArray(rawModel, ['output_modalities', 'outputModalities']),
+      ...(nestedArchitecture
+        ? this.extractStringArray(nestedArchitecture, ['output_modalities', 'outputModalities'])
+        : []),
+    ];
     if (inputModalities.length > 0 || outputModalities.length > 0) {
       metadata.architecture = {
-        input_modalities: inputModalities,
-        output_modalities: outputModalities,
+        input_modalities: [...new Set(inputModalities)],
+        output_modalities: [...new Set(outputModalities)],
       };
     }
 
@@ -490,7 +606,43 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
     return undefined;
   }
 
+  /**
+   * Vendor-extension blob on the model card. Wafer serverless layers its
+   * capabilities/pricing under a `wafer` key on an otherwise standard
+   * OpenAI-shaped /v1/models entry; extract it here so lookups below can
+   * consult it without special-casing every call site per provider.
+   */
+  private extractVendorExtension(rawModel: RawModelRecord): Record<string, unknown> | undefined {
+    const vendor = rawModel.wafer;
+    return vendor && typeof vendor === 'object' && !Array.isArray(vendor)
+      ? (vendor as Record<string, unknown>)
+      : undefined;
+  }
+
   private extractPricing(rawModel: RawModelRecord): ProviderModel['pricing'] {
+    // Wafer serverless reports prices as CENTS per million tokens under
+    // `wafer.pricing.input_cents_per_million` / `output_cents_per_million`.
+    // Convert to the USD-per-1M unit every other path in this file emits.
+    const vendorExt = this.extractVendorExtension(rawModel);
+    const vendorPricing = vendorExt?.pricing as Record<string, unknown> | undefined;
+    if (vendorPricing && typeof vendorPricing === 'object') {
+      const inputCents = this.extractNumber(vendorPricing, [
+        'input_cents_per_million',
+        'inputCentsPerMillion',
+      ]);
+      const outputCents = this.extractNumber(vendorPricing, [
+        'output_cents_per_million',
+        'outputCentsPerMillion',
+      ]);
+      if (inputCents !== undefined || outputCents !== undefined) {
+        return {
+          inputCostPer1M: inputCents !== undefined ? inputCents / 100 : 0,
+          outputCostPer1M: outputCents !== undefined ? outputCents / 100 : 0,
+          currency: 'USD',
+        };
+      }
+    }
+
     const directInputCostPer1M = this.extractNumber(rawModel, [
       'inputCostPer1M',
       'input_cost_per_1m',
@@ -542,6 +694,12 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
   // heuristic below, which then poisoned the experiment budget governor
   // (H-B mini-run: quality_multipass blew a $20 arm cap on 2 executions).
   private static readonly PLAUSIBLE_MAX_PER_1M = 100;
+
+  // Canonical (v4/v1) UUID shape — used to detect an opaque internal id so
+  // `resolveRawModelId` can fall back to `refId`. See that method's doc
+  // comment for the live-verified ORQ.ai case this guards against.
+  private static readonly OPAQUE_UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   private normalizeTokenPriceToPer1M(value: number | undefined): number {
     if (value === undefined || !Number.isFinite(value) || value <= 0) {
@@ -615,6 +773,39 @@ export class OpenAICompatibleHubModelFetcher extends BaseProviderModelFetcher {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Some hubs' catalog listings key each row by an opaque internal id (a
+   * UUID) instead of the human-readable "vendor/model" slug every other
+   * source in this fetcher's coverage uses (execution routing and the DB's
+   * established id convention both depend on that slug). ORQ.ai's Platform
+   * API (`GET /v2/models`) is the confirmed live case: `id` is a UUID like
+   * `e48808a5-afa1-4428-a080-259340e89ab0`, while a separate `refId` field
+   * carries the real identity, always exactly `${provider}/${model_id}`
+   * (live-verified 2026-09-12 against all 244 rows on that endpoint — zero
+   * exceptions). Discovery is now pointed at ORQ.ai's router listing
+   * (`/v2/router/models`, a plain OpenAI-shaped list that already returns
+   * the correct slug directly — see central-model-discovery-service.ts's
+   * orqai-hub source) so this branch should not fire in normal operation;
+   * it exists as a fallback in case that endpoint is ever unreachable and
+   * discovery falls through to the Platform API path.
+   *
+   * Scoped narrowly to the UUID case so it cannot affect any other hub:
+   * no other provider's id convention produces bare UUIDs (see
+   * hub-fetcher-model-list-shapes.test.ts for the full set of real shapes
+   * this fetcher already parses), and `refId` is not a field name any other
+   * hub uses for anything else.
+   */
+  private resolveRawModelId(rawModel: RawModelRecord): string | undefined {
+    const candidate = this.extractString(rawModel, ['id', 'model', 'model_id', 'name', 'slug']);
+    if (candidate && OpenAICompatibleHubModelFetcher.OPAQUE_UUID_PATTERN.test(candidate)) {
+      const refId = this.extractString(rawModel, ['refId']);
+      if (refId && !OpenAICompatibleHubModelFetcher.OPAQUE_UUID_PATTERN.test(refId)) {
+        return refId;
+      }
+    }
+    return candidate;
   }
 
   private extractStringArray(source: RawModelRecord, keys: string[]): string[] {

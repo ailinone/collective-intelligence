@@ -27,7 +27,18 @@
  *    score and forces `validationStatus = 'unavailable'` on the
  *    artifact. The strategy must still produce a result, but its
  *    fallback-vs-synthesis decision becomes explicitly non-comparable.
+ *
+ * 4. LOTE AT — media widening. `EvaluatorInput.output` remains a required
+ *    `string` and every existing evaluator keeps reading only that field,
+ *    UNCHANGED. `EvaluatorInput.candidate` is a new, ADDITIVE, optional
+ *    field: when a caller (e.g. `MediaConsensusStrategy`) is scoring a
+ *    non-text artifact, it populates `candidate` alongside `output`
+ *    (`output` stays `''` or a best-effort text rendering for evaluators
+ *    that don't know about `candidate`). Only `MediaJudgeEvaluator` reads
+ *    `candidate`; every other evaluator implementation is unaffected by
+ *    its presence.
  */
+import type { AilinArtifact, ReasoningEffort } from '@/types';
 
 /**
  * What kind of evaluator produced this result?
@@ -206,7 +217,62 @@ export interface EvaluatorInput {
    * ignore this field.
    */
   readonly judgeModelOverride?: string;
+  /**
+   * LOTE AT — additive. A non-text candidate (an `AilinArtifact` — image,
+   * video, audio, file — plus whatever the caller already sampled from it)
+   * for evaluators that know how to judge media. ONLY `MediaJudgeEvaluator`
+   * reads this field; every text-only evaluator (structural, task-specific,
+   * llm_judge, composite, mock, heuristic) MUST continue to ignore it and
+   * score `output` exactly as before — this field's presence changes
+   * nothing for them.
+   */
+  readonly candidate?: CandidateArtifact;
+  /**
+   * LOTE AZ (2026-09) — carries the ORIGINAL user request's resolved
+   * reasoning-effort signal (via `resolveReasoningEffort()`, see
+   * `@/utils/reasoning-effort`) down to whichever evaluator ends up making a
+   * real LLM sub-call. Without this, a high-effort original request silently
+   * got a low-/no-effort judge — the judge/synthesis call was built from
+   * scratch with no knowledge of what the caller asked for. Only
+   * `LLMJudgeEvaluator` reads it today (forwarding it into `LLMJudgeInput`);
+   * every other evaluator (structural, task-specific, mock, heuristic)
+   * ignores it by contract, exactly like `candidate` above.
+   */
+  readonly originalRequestReasoning?: {
+    readonly effort?: ReasoningEffort;
+    readonly thinkingBudget?: number;
+  };
 }
+
+/** A text candidate — the shape every existing evaluator already assumes
+ *  via `EvaluatorInput.output`. Included here only so `CandidateArtifact`
+ *  can be a discriminated union; text-only evaluators keep reading
+ *  `EvaluatorInput.output` directly and never need to look at this type. */
+export interface TextCandidateArtifact {
+  readonly kind: 'text';
+  readonly content: string;
+}
+
+/**
+ * A non-text candidate produced by a media-generation step (video/image/
+ * audio/file). `sampledFrames` and `transcript` are populated by the
+ * CALLER (e.g. `MediaConsensusStrategy`, via the shared
+ * `services/media/ffmpeg-media-toolkit.ts` sampler) — `MediaJudgeEvaluator`
+ * never samples frames or transcribes audio itself; it only judges what it
+ * is handed.
+ */
+export interface MediaCandidateArtifact {
+  readonly kind: 'media';
+  readonly artifact: AilinArtifact;
+  /** Base64-encoded sampled frames for video/image judging. For an image
+   *  candidate this is typically a single element (the image itself). */
+  readonly sampledFrames?: readonly string[];
+  /** Transcript text for an audio candidate. */
+  readonly transcript?: string;
+}
+
+/** Discriminated union of what an evaluator may be asked to score. */
+export type CandidateArtifact = TextCandidateArtifact | MediaCandidateArtifact;
 
 export interface StrategyOutputEvaluator {
   /** Identifies the kind of evaluator — recorded in artifacts. */

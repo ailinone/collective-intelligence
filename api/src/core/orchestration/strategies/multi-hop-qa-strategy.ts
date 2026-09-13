@@ -24,7 +24,7 @@
  *   5. Synthesizer combines all sub-answers into final response
  */
 
-import { BaseStrategy, type StrategyMetadata } from '../base-strategy';
+import { BaseStrategy, mergeArtifacts, type StrategyMetadata } from '../base-strategy';
 import { resolvePreferredExecutor, assembleExecutors } from './preferred-model-helper';
 import { PROMPTS } from '../prompts/sota-system-prompts';
 import type {
@@ -93,6 +93,7 @@ export class MultiHopQAStrategy extends BaseStrategy {
         modelsUsed: prep.executions,
         totalCost: prep.executions.reduce((s, e) => s + e.cost, 0),
         totalDuration: Date.now() - startTime,
+        toolArtifacts: mergeArtifacts(prep.executions),
         metadata: { strategy: 'multi-hop-qa', hops: 0, fallback: true },
       };
     }
@@ -138,6 +139,7 @@ export class MultiHopQAStrategy extends BaseStrategy {
       modelsUsed: prep.executions,
       totalCost: prep.executions.reduce((s, e) => s + e.cost, 0),
       totalDuration: Date.now() - startTime,
+      toolArtifacts: mergeArtifacts(prep.executions),
       metadata: {
         strategy: 'multi-hop-qa',
         subQuestions: prep.subQuestionsCount,

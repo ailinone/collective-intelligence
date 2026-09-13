@@ -20,9 +20,9 @@ Related:
 - `docker/backup/restore-drill.sh` — the runnable drill (this doc's subject).
 - `api/scripts/backup-database.sh` — takes the backups the drill restores.
 - `api/scripts/restore-database.sh` — the real (destructive) production restore.
-- `docker/docker-compose.production.yml` — the **`ci-db-backup` service** that now
+- `docker/docker-compose.production.yml` — the **`db-backup` service** that now
   runs scheduled, off-host, encrypted backups in the deployed stack (see §5.1),
-  plus the `ci-db` / `ci-redis` SPOF comments.
+  plus the `db` / `redis` SPOF comments.
 - `api/scripts/setup-cron-backups.sh` — HOST-cron **fallback** for scheduling
   backups on a non-swarm host (the compose service is the primary mechanism).
 
@@ -30,12 +30,12 @@ Related:
 
 ## 1. Why this exists
 
-Production Postgres (`ci-db`) and Redis (`ci-redis`) are **single instances on
+Production Postgres (`db`) and Redis (`redis`) are **single instances on
 one host's local volume** — a single point of failure. See the `WARNING` blocks
 on those services in `docker/docker-compose.production.yml`. Until they are moved
 to a managed, replicated service, the only durability guarantee is:
 
-1. the local named volume `ci-db-data`, and
+1. the local named volume `db-data`, and
 2. logical backups (`pg_dump` custom format) produced by
    `api/scripts/backup-database.sh`.
 
@@ -79,12 +79,12 @@ docker/backup/restore-drill.sh
 # Drill a specific backup file:
 docker/backup/restore-drill.sh /var/backups/ailin-dev/ailin_dev_20260716_020000.sql.gz
 
-# Override defaults if your environment differs. The scheduled `ci-db-backup`
-# service stages its local dumps in /var/backups/ci-db (its named volume), so
+# Override defaults if your environment differs. The scheduled `db-backup`
+# service stages its local dumps in /var/backups/db (its named volume), so
 # point BACKUP_DIR there when drilling those — or pass an explicit file, or one
 # pulled from S3:
-BACKUP_DIR=/var/backups/ci-db \
-DRILL_DB=ci_db DRILL_USER=ci_user \
+BACKUP_DIR=/var/backups/db \
+DRILL_DB=app_db DRILL_USER=app_user \
 DRILL_TABLES="organizations api_keys request_logs invoices" \
   docker/backup/restore-drill.sh
 ```
@@ -94,19 +94,19 @@ Exit status is `0` on PASS, `1` on FAIL — so it can gate CI or a scheduled job
 ### Producing a backup to drill
 
 In the deployed stack backups are produced **automatically** by the
-`ci-db-backup` service (see §5.1) — you normally drill the newest of those. To
+`db-backup` service (see §5.1) — you normally drill the newest of those. To
 produce one **on demand** (e.g. right before a risky migration), on the
-production host or anywhere with network access to `ci-db`:
+production host or anywhere with network access to `db`:
 
 ```bash
-# Defaults now target prod ci-db (DB_NAME=ci_db, DB_USER=ci_user, DB_HOST=ci-db),
-# so those can be omitted on a host that can resolve `ci-db`. The backup file is
+# Defaults now target prod db (DB_NAME=app_db, DB_USER=app_user, DB_HOST=db),
+# so those can be omitted on a host that can resolve `db`. The backup file is
 # named ailin_dev_<timestamp>.sql.gz — a legacy label kept so restore-drill.sh's
-# default glob matches; the DATABASE dumped is DB_NAME (ci_db).
+# default glob matches; the DATABASE dumped is DB_NAME (app_db).
 DB_HOST=<db-host> DB_PORT=5432 \
-DB_NAME=ci_db DB_USER=ci_user \
-DB_PASSWORD_FILE=/run/secrets/ci_db_password \
-BACKUP_DIR=/var/backups/ci-db \
+DB_NAME=app_db DB_USER=app_user \
+DB_PASSWORD_FILE=/run/secrets/db_password \
+BACKUP_DIR=/var/backups/db \
 S3_BUCKET=<your-backup-bucket> \
   api/scripts/backup-database.sh
 ```
@@ -148,17 +148,17 @@ actual drill + restore.
 
 | Metric | Current capability (logical dumps) | Recommended target | What it needs |
 | --- | --- | --- | --- |
-| **RPO** (max data loss) | **≤ 24h** — the `ci-db-backup` service now runs a `pg_dump` every 24h by default (`BACKUP_INTERVAL_SECONDS`), so at most a day of writes is lost between backups. Lower the interval (e.g. 6h) to tighten it. | ≤ 15m | WAL archiving / PITR, or a managed DB with continuous backup |
+| **RPO** (max data loss) | **≤ 24h** — the `db-backup` service now runs a `pg_dump` every 24h by default (`BACKUP_INTERVAL_SECONDS`), so at most a day of writes is lost between backups. Lower the interval (e.g. 6h) to tighten it. | ≤ 15m | WAL archiving / PITR, or a managed DB with continuous backup |
 | **RTO** (time to restore) | Restore of a dump into a fresh instance; scales with DB size (validate by timing the drill) | ≤ 1h | Pre-provisioned standby / managed failover; rehearsed runbook |
 
-- **RPO ≤ 24h is achieved today** by the scheduled `ci-db-backup` service (§5.1)
+- **RPO ≤ 24h is achieved today** by the scheduled `db-backup` service (§5.1)
   — an automated, encrypted, off-host `pg_dump` runs every 24h without any
   manual step. (Before that service existed, no backup ran automatically in the
   deployed stack and the effective RPO was "whenever someone last ran the
   script" — i.e. unbounded.) Tighten RPO below 24h by lowering
   `BACKUP_INTERVAL_SECONDS`; reach minutes-level RPO only with WAL/PITR below.
 - **RPO ≤ 15m** requires **WAL/PITR** — continuous WAL archiving so you can
-  replay to a point in time. That is not configured on the single-host `ci-db`
+  replay to a point in time. That is not configured on the single-host `db`
   and requires either `archive_mode=on` + an `archive_command` shipping WAL
   off-host, or a managed database that does it for you.
 - **RTO ≤ 1h** requires a rehearsed procedure and enough headroom to stand up a
@@ -172,10 +172,10 @@ restore takes on a production-sized backup.
 
 ## 5. Known gaps (be honest about these)
 
-### 5.1 Scheduled backups ARE now wired into the deploy (`ci-db-backup`)
+### 5.1 Scheduled backups ARE now wired into the deploy (`db-backup`)
 
 **Status: FIXED for logical dumps (OPS-02).** `docker/docker-compose.production.yml`
-now includes a first-class **`ci-db-backup`** service that runs
+now includes a first-class **`db-backup`** service that runs
 `api/scripts/backup-database.sh` on a schedule inside the swarm stack — no manual
 host step. What it does:
 
@@ -183,10 +183,10 @@ host step. What it does:
 | --- | --- |
 | **Image** | `postgres:16-alpine` (pg16 client, matches the server; `bash`/`gzip`/`aws-cli` provisioned once at container start) |
 | **Schedule** | loop with `sleep`; **every 24h** by default (`BACKUP_INTERVAL_SECONDS`, default `86400`) → **RPO ≤ 24h** |
-| **Database** | the **same** DB as `ci-db` — `DB_NAME=ci_db`, `DB_USER=ci_user`, password from the **same** `ci_db_password` swarm secret via `DB_PASSWORD_FILE`. No `ailin_dev`. |
+| **Database** | the **same** DB as `db` — `DB_NAME=app_db`, `DB_USER=app_user`, password from the **same** `db_password` swarm secret via `DB_PASSWORD_FILE`. No `ailin_dev`. |
 | **Encryption / offsite** | `pg_dump` custom format + gzip, uploaded to `s3://$S3_BUCKET/$S3_PREFIX/` with server-side encryption (`S3_SSE`, default `AES256`; set `aws:kms` + `S3_SSE_KMS_KEY_ID` for KMS) |
 | **Retention** | local rotation via `RETENTION_DAYS` (default 30); off-host retention should be an **S3 lifecycle policy** on the bucket |
-| **No duplicate runs** | `replicas: 1`, pinned to the manager node next to `ci-db` (`placement: node.role == manager`) so it never runs duplicated across tasks |
+| **No duplicate runs** | `replicas: 1`, pinned to the manager node next to `db` (`placement: node.role == manager`) so it never runs duplicated across tasks |
 | **On failure** | a failed cycle logs `ERROR: backup cycle FAILED` and retries after `BACKUP_RETRY_SECONDS` (default 1800s); the scheduler stays alive |
 
 **Enabling off-host (do this in the deploy env)** — the service runs even
@@ -203,12 +203,12 @@ AWS_DEFAULT_REGION=<region>
 
 **How to verify a backup actually ran:**
 - **S3 object** — a fresh key appears under `s3://$S3_BUCKET/$S3_PREFIX/` named
-  `ailin_dev_<timestamp>.sql.gz` (legacy label; the DB is `ci_db`). Check with:
+  `ailin_dev_<timestamp>.sql.gz` (legacy label; the DB is `app_db`). Check with:
   `aws s3 ls s3://$S3_BUCKET/backups/ --recursive | tail`.
 - **Log line** — the service logs a distinctive success line per cycle:
-  `BACKUP SUCCESS db=ci_db file=... offsite=yes`. Check with:
-  `docker service logs ci_ci-db-backup 2>&1 | grep "BACKUP SUCCESS"`.
-- **Service health** — `docker service ps ci_ci-db-backup` shows the task
+  `BACKUP SUCCESS db=app_db file=... offsite=yes`. Check with:
+  `docker service logs app_db-backup 2>&1 | grep "BACKUP SUCCESS"`.
+- **Service health** — `docker service ps app_db-backup` shows the task
   `Running`/healthy (the healthcheck confirms the scheduler loop is alive; it is
   **not** a staleness check — see below).
 
@@ -222,12 +222,12 @@ AWS_DEFAULT_REGION=<region>
 - Run this **drill on a schedule** against the newest off-host backup and alert
   on a `FAIL`.
 - (Non-swarm hosts) `api/scripts/setup-cron-backups.sh` is the host-cron
-  fallback; it sources an env file (`/etc/ci-db-backup.env`) so cron runs with
+  fallback; it sources an env file (`/etc/db-backup.env`) so cron runs with
   the correct prod DB/S3 settings.
 
 ### 5.2 No HA and no PITR on the single-host DB/Redis
 
-`ci-db` and `ci-redis` are single instances (see the `WARNING` comments in the
+`db` and `redis` are single instances (see the `WARNING` comments in the
 compose file). They **must stay at `replicas: 1`** — scaling them on a single
 local volume would corrupt data (multiple primaries) or split queues/locks.
 
@@ -238,11 +238,30 @@ inside this repo**. They require infrastructure provisioning outside it:
   continuous backups/PITR (e.g. **Cloud SQL for PostgreSQL** in HA/regional
   config), or a self-managed primary/standby with streaming replication + WAL
   archiving.
-- **Redis**: a managed, replicated service (e.g. **Memorystore for Redis** HA)
-  or Redis Sentinel/Cluster.
+- **Postgres HA remains entirely outside this repo** — no compose-level
+  primary/standby topology exists for it today.
 
 Until then, this drill + off-host encrypted dumps are the DR backstop — good
 enough to recover from data loss with bounded RPO, **not** a substitute for HA.
+
+**Redis update (audit 2026-09-08):** the money-path `redis` service (BullMQ
+queues + the idempotency store — the one this section's Redis SPOF warning is
+about; `redis-cache`, the general/evictable cache instance, is explicitly not
+this concern) now has a real Sentinel-monitored primary + replica + 3-sentinel
+topology **defined** in `docker/docker-compose.redis-sentinel.yml`, an
+additive overlay applied with `docker stack deploy -c
+docker-compose.production.yml -c docker-compose.redis-sentinel.yml`. The
+application side (`REDIS_QUEUE_SENTINEL_ENABLED`/`REDIS_QUEUE_SENTINELS`/
+`REDIS_QUEUE_SENTINEL_NAME` in `api/src/config/index.ts`, consumed by
+`api/src/cache/redis-client.ts`'s ioredis Sentinel-mode branch) already
+supports this transparently for every BullMQ Queue/Worker/QueueEvents
+consumer and the idempotency store. This closes the "Redis: ... Sentinel/
+Cluster" recommendation below **in code**, but the overlay is intentionally
+NOT wired into `.github/workflows/flexible-cicd.yml` — applying it to the
+running production stack, and giving the 3 Sentinels real hardware failure
+isolation via multi-node Swarm placement, is a separate, operator-scheduled
+step. See that file's header comment for the full topology, the quorum
+reasoning, and the expected failover behavior.
 
 ---
 
@@ -254,20 +273,33 @@ enough to recover from data loss with bounded RPO, **not** a substitute for HA.
   cleans up. Runnable now given Docker + a backup file.
 - `api/scripts/backup-database.sh` / `restore-database.sh` — working logical
   backup/restore scripts (custom-format `pg_dump`, encrypted S3 upload). The
-  backup script now targets prod (`ci_db`) by default, refuses the dev DB, and
+  backup script now targets prod (`app_db`) by default, refuses the dev DB, and
   fails the run if a requested off-host upload fails.
-- **`ci-db-backup` service** in `docker/docker-compose.production.yml` — a
+- **`db-backup` service** in `docker/docker-compose.production.yml` — a
   scheduled (default 24h), off-host, encrypted backup job wired into the deployed
-  stack, using the same DB creds/secret as `ci-db` and running at `replicas: 1`
+  stack, using the same DB creds/secret as `db` and running at `replicas: 1`
   so it never duplicates. This is what makes RPO **bounded (≤ 24h)** today (§5.1).
 - The 2-replica stateless `api` service + `USE_BULLMQ_CRONS=true` (single cron
   execution across replicas) in `docker/docker-compose.production.yml`.
+- `docker/docker-compose.redis-sentinel.yml` — a real Sentinel-monitored
+  primary + replica + 3-sentinel topology for the money-path `redis` service,
+  plus the application-side `REDIS_QUEUE_SENTINEL_*` config/connection
+  plumbing it relies on (already shipped, covered by
+  `api/src/cache/__tests__/redis-client.test.ts`). Validated with `docker
+  compose config` (a full merge with `docker-compose.production.yml`
+  resolves cleanly). **Defined and testable, NOT yet applied to
+  production** — see §5.2.
 
 **Documented recommendations — require infra provisioning outside this repo:**
-- Managed, replicated Postgres HA + PITR (Cloud SQL HA or equivalent).
-- Managed, replicated Redis HA (Memorystore HA or Sentinel/Cluster).
+- Managed, replicated Postgres HA + PITR (Cloud SQL HA or equivalent) — no
+  compose-level topology exists for this yet, unlike Redis below.
+- ~~Managed, replicated Redis HA (Memorystore HA or Sentinel/Cluster)~~ — the
+  Sentinel/Cluster half of this is now defined in-repo (see above); what
+  remains outside this repo is actually *applying* it to production and
+  giving the 3 Sentinels independent hardware/AZ failure isolation (multi-node
+  Swarm placement).
 - **WAL archiving / PITR to reach the ≤15m RPO target — still MANUAL / not done.**
-  The scheduled `ci-db-backup` service gives ≤24h RPO with logical dumps but
+  The scheduled `db-backup` service gives ≤24h RPO with logical dumps but
   **no** point-in-time recovery. Continuous WAL archiving (`archive_mode=on` +
   an `archive_command` shipping WAL off-host, or a managed DB that does it) is a
   separate follow-up not covered by the backup service.

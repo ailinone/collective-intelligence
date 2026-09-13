@@ -38,6 +38,7 @@ import type {
   ExecutionStrategyName,
 } from '@/types';
 import { nanoid } from 'nanoid';
+import { normalizeOutboundResponse } from '@/utils/outbound-content-normalizer';
 
 // ============================================
 // Types
@@ -271,6 +272,7 @@ export class CapabilityExecutionService {
         options.organizationId,
         options.userId
       );
+      result.finalResponse = normalizeOutboundResponse(result.finalResponse);
 
       const executionTimeMs = Date.now() - startTime;
 
